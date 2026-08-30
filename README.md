@@ -1,43 +1,104 @@
-# API用量统计 — SillyTavern 原生扩展（RE 3.0）
+# API用量统计 — SillyTavern 原生扩展
 
-> 样式对齐 `https://platform.deepseek.com/usage`（浅色 `F6F7F8` 卡 / 黑 pill / 橙柱），内容与 `DeepSeek使用预测.js` 1:1。
+实时统计与可视化 DeepSeek 及兼容 API 的调用成本，按官方用量页的极简浅色重塑交互（`Vite + ECharts`）。
+
+## 预览
+
+> 扩展主面板为全屏独立页（`#aus-panel`），左侧可收起导航，右侧多视图切换，样式对齐 `https://platform.deepseek.com/usage`（`#F6F7F8` 卡片 / 黑色 `pill` / 橙色柱状图）。
+
+## 功能
+
+- **实时统计**：自动记录每次调用的 `token / 费用 / 命中率 / 时长 / 首字延迟 / 速率 / 思维链` 等全量数据
+- **峰谷计费**：按北京时区区分高/低峰（多时段、支持跨天，周末全天低谷），仅对 `deepseek*` 模型生效
+- **余额**：同步官方余额或自定义余额，自动校准间隔可配，`XOR` 混淆存储
+- **可视化**：`7` 图（`Token/费用/命中率/请求数/耗时速率/模型占比` 等）+ 热力图 + 主图标（`Y` 8 选 × `X` 5 维度，双轴可读）
+- **历史**：倒序列表（`6px` 三色占比条）+ 内联详情（`520px` 固定展开，`15` 字段四块 + `4 Tab` 原始数据）+ 缓存断点对比（`旧/新` 并排 `diff`）
+- **设置**：`API 密钥 / 余额 / 峰谷时段 / 模型与价格（内置可覆写+自定义增删，三价 ¥/百万）/ 调试（批量模拟）/ 峰值圆点（可拖动，红/黄/绿）/ WebDAV`
+- **导入导出**：白名单 `deepseek-stat-export v1`，`覆盖/合并`（按 `timestamp` 去重，合并保留本地余额设置）
+- **云同步**：`WebDAV` `pull-merge-push` 双向合并（`history` 去重、`_mtime`/`_ts` 晚者胜），严格白名单，不含密钥与聊天内容，`https` 强制，支持 `CORS` 代理
 
 ## 安装
 
-1. 将 `RE3.0` 文件夹作为 `SillyTavern/data/default-user/extensions/api-usage-stat` 或 `third-party/api-usage-stat` 放置
-2. `manifest.json: js=index.js css=style.css`，ST 自动加载
-3. 或 `npm run build` 后将产物 `index.js + style.css + manifest.json` 打包安装
+### 扩展管理（推荐）
 
-## 功能（阶段 0-3 已完成）
+1. `SillyTavern → 扩展管理 → 从 URL 安装` 填 `https://github.com/janmk1453/Api-Usage`
+2. 启用后刷新，左下角魔法棒出现 `API用量统计` 入口
 
-- **拦截**：`GENERATION_ENDED → extra.api_usage`，`processUsage` 1:1（含 `cached_tokens` 回退、推理 `thinkTokens`、`TTFT`、`tokenRate`）
-- **定价**：`PRICING` 三模型峰谷、`isPeakHour/isWeekendDay` 北京时区、`calcCost/calcSavings`、`recalcAllCosts`
-- **存储**：`extensionSettings[api_usage_stat]` 热 50 + `IndexedDB api_usage_stat_db` 冷分页，旧 `ds_*` 自动迁移备份，`XOR` 密钥兼容
-- **面板**：`inline-drawer` 浅色隔离 `data-ds-theme="light"`，双余额卡/筛选条/18 统计卡（`F6F7F8` 网格）/橙柱 `ECharts` + 热力 + 历史旧/新/详情 + 缓存断点 Diff + 设置（API Key/余额/WebDAV/峰值圆点）+ 峰值圆点可拖动
-- **导入导出**：白名单 `deepseek-stat-export v1`，`overwrite/merge` 按 `timestamp` 去重
-- **WebDAV**：`pull-merge-push` 双向合并（`_mtime` 晚者胜），`https` 强制，`proxy?url=` 双代理
+### 手动
 
-## 样式
+1. 克隆至 `SillyTavern/data/default-user/extensions/Api-Usage` 或 `public/scripts/extensions/third-party/Api-Usage`
+2. `npm run build` 后确保 `index.js / style.css / manifest.json` 在扩展根
+3. 重启 SillyTavern
 
-- 底 `#FFFFFF`，卡 `#F6F7F8` 14px 圆角，文字 `#111827 / #6B7280 / #9CA3AF`，黑 pill `#111827`，橙 `#FF6A00` 柱圆角 4px，薄荷 `#E6F8EC` 标签，`Inter/tabular-nums`
+## 快速开始
+
+1. **设置 → API 密钥** 输入并保存
+2. **设置 → 查询余额** 或开启自动校准
+3. 正常对话，扩展自动记录
+4. **魔法棒 → API用量统计** 查看：用量概览为日报，用量统计按维度筛选，历史记录对比缓存
+
+## 详细说明
+
+### 用量概览
+
+- **双余额卡**：充值余额（`CNY`）与累计消费（`CNY + tokens`）
+- **双明细**：历史消耗（`总/命中/未命中/输出`）与支出明细（预计节省/支出输入/输出，分两行，`token` 灰色）
+- **四小块**：每轮费用 `CNY`/每轮 `Token`/平均耗时 `s`/输出速率 `t/s`
+
+### 用量统计
+
+- **双维度**：时间维度（`全部/今天/昨天/近 7 天/近 30 天/本月/上月/自定义`，自定义时双月日历支持 `‹/›` 切换）仅影响 `三块+模型汇总`；模型维度（全部 + 已记录模型）影响本页所有内容；二者取交集
+- **三块**：消费金额 `CNY` / `API 请求次数` / `Tokens`
+- **模型汇总表**：`10` 列（模型/调用/命中/未命中/输出/总/总/平均成本/平均耗时/平均速率）
+- **图表**：主图 `Y` 8 选（`命中/未命中/输出/总 Token/命中/未命中/输出/总费用`）× `X` 5 选（轮次/每小时/每日/每周/每月）双轴堆叠/曲线，悬浮分 `¥/tokens` 明细；下方 `6` 图 `2×3` 网格（`Token/费用` 堆叠同柱 + 曲线、`命中` 面积、`请求` 柱、`耗时/速率` 双轴、`模型` 环 `Token/次数` 切换），均支持独立 `Y/X` 配置
+
+### 历史记录
+
+- 每条含 `模型·日期 / in/out/duration/rate / ¥cost / 旧/新/详情`，底部 `6px` 三色占比条
+- 详情为内联 `520px` 展开（`基础/性能/Token/费用` 四块 + `请求参数/完整响应/Raw 用量/消息内容` 四 `Tab`），`收起` 回合
+
+### 缓存断点对比
+
+- 列表中前者点 `旧`、后者点 `新`，并排高亮差异，差异起点即发散位置
+
+### 设置
+
+- 按 `设置` 视图内浅色卡片分组，改后自动 `recalcAllCosts + refreshUI`
+- 调试批量可按日期区间生成模拟数据，便于图表压测
+
+### WebDAV 云同步
+
+- 填写 `https` 地址、用户名、应用密码与子路径，`CORS 代理` 可选（推荐 `config.yaml: enableCorsProxy: true` 后填 `http://127.0.0.1:8000/proxy?url=`）
+- 同步包为单一历史聚合，`history` 按 `timestamp` 去重，`balance/settings` 按 `_ts` 晚者胜
 
 ## 构建
 
 ```bash
 npm install
 npm run typecheck
-npm run build  # 产出 index.js + style.css
+npm run build  # 产出 index.js（`~150k` + ECharts 分包）+ style.css
 ```
 
-## 迁移
+## 数据
 
-- 旧脚本 `ds_saves/ds_settings/...` 首次启动自动搬至 `extensionSettings`，冷历史进 `IndexedDB`，备份 `migration_backup_*`
-- 独立仓库：脚本主线不变，`RE3.0` 本地开发，暂不建仓
+- 存储于 `extensionSettings[api_usage_stat]`（热 `50`）+ `IndexedDB api_usage_stat_db`（冷 `cold_history`），旧 `ds_saves` 自动合并为单一历史并备份 `migration_backup_*`
+- 导出不含密钥，`history` 中 `messages/fullRequest/fullResponse` 仅保留近 `10` 条详情，其余裁剪
 
-## 待办（阶段 4）
+## 常见问题
 
-- 统计卡显隐排序、`Popup` 确认统一、文档与发布清单
+- **面板在窄屏消失**：已改为 `absolute` 视口计算 + `scroll/resize` 监听，规避 `transform` 祖先影响
+- **图表空白**：`vite.config.ts` 已 `define: process.env.NODE_ENV`，分包已提交，需确保扩展目录包含 `Axis-*` 等产物或重新构建
+- **WebDAV CORS**：坚果云等不返回 `CORS` 头，需配置代理
 
-## 版本
+## 更新
 
-- `manifest 3.0.0 / 1.11.0`
+- `3.0.0`：`Tavern Helper` 脚本迁移至原生扩展，重塑为官方浅色，`Vite` 构建，单一历史，`Y/X` 可配置图表等
+
+## 技术说明
+
+- 统一数据框架 `src/data/`：`repository` 唯一写（`addEntry/recalcAll/replaceAll/hydrate`）、`computed` 唯一算（`computeOverview`）、`events` 订阅刷新，禁止在 `UI` 直写 `state`
+- 拦截：`GENERATION_ENDED → extra.api_usage`，`process` 合规
+
+## 许可证
+
+[MIT](LICENSE) © 2026 janmk
