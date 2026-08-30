@@ -101,7 +101,7 @@ export function createPanel() {
   panel.id = 'aus-panel';
   panel.setAttribute('data-extension', 'api-usage-stat');
   panel.setAttribute('data-ds-theme', 'light');
-  panel.style.cssText = 'position:fixed;inset:0;z-index:100001;background:#FFFFFF;color:#111827;font-family:Inter,system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;';
+  panel.style.cssText = 'position:fixed;inset:0;z-index:100001;background:#FFFFFF;color:#111827;font-family:\'Microsoft YaHei\',\'微软雅黑\',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;';
   panel.innerHTML = `
     <div style="flex-shrink:0;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid #E5E7EB;background:#fff;">
       <div style="display:flex;align-items:center;gap:10px;">
