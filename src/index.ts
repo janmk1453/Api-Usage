@@ -4,7 +4,8 @@
  * 面板：独立于酒馆的 #aus-overlay + #aus-panel 全屏页面，DeepSeek 浅色风格
  */
 import { state, createNewSave } from './store/index';
-import { loadHot, saveHot } from './store/persistence';
+import { repository } from './data/repository';
+import { saveHot } from './store/persistence';
 import { installInterception } from './services/interception';
 import { createPanel, openPanel, closePanel, togglePanel, refreshUI } from './ui/panel';
 import { createPeakDot, updatePeakDot } from './ui/peak-dot';
@@ -15,15 +16,7 @@ function getDoc(): Document { return (window.parent as any)?.document ?? documen
 function ensureStyleScope() { document.documentElement.setAttribute('data-extension', 'api-usage-stat'); }
 
 async function initStore() {
-  const hot = await loadHot();
-  if (hot) {
-    if (hot.saves) state.saves = hot.saves;
-    if (hot.currentSave) state.currentSave = hot.currentSave;
-    if (hot.settings) state.settings = { ...state.settings, ...hot.settings };
-    if (hot.balance) state.balance = hot.balance;
-    if (hot.customBalance) state.customBalance = hot.customBalance;
-    if (hot.messageCount) state.messageCount = hot.messageCount;
-  }
+  await repository.hydrate();
   if (!state.currentSave || !state.saves[state.currentSave as string]) {
     const keys = Object.keys(state.saves);
     if (keys.length) state.currentSave = keys[0];

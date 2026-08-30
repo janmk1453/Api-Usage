@@ -38,6 +38,7 @@ const DEFAULT_PEAK_HOURS = [
   { start: "14:00", end: "18:00" }
 ];
 const MAX_HISTORY = 500;
+const DETAIL_KEEP = 10;
 const STORAGE_KEYS = {
   KEY: "ds_api_key",
   BALANCE: "ds_balance_data",
@@ -401,6 +402,209 @@ function calcSavings(u, settings) {
   } else p = pricing.offpeak;
   return (u.prompt_cache_hit_tokens || 0) / 1e6 * (p.miss - p.hit);
 }
+const map = /* @__PURE__ */ new Map();
+const DataEvents = {
+  UPDATED: "data:updated",
+  // 任何数据变更（存储/修改/导入/同步后）
+  HISTORY_ADDED: "data:history:added",
+  SETTINGS_CHANGED: "data:settings:changed",
+  BALANCE_CHANGED: "data:balance:changed"
+};
+function emit(event, payload) {
+  map.get(event)?.forEach((fn) => {
+    try {
+      fn(payload);
+    } catch {
+    }
+  });
+}
+function pruneDetails() {
+  for (const k of Object.keys(state.saves)) {
+    const s = state.saves[k];
+    if (!s?.history || s.history.length <= DETAIL_KEEP) continue;
+    const hs = [...s.history].sort((a, b) => b.timestamp - a.timestamp);
+    for (let i = DETAIL_KEEP; i < hs.length; i++) {
+      delete hs[i].messages;
+      delete hs[i].fullRequest;
+      delete hs[i].fullResponse;
+    }
+  }
+}
+function persist() {
+  pruneDetails();
+  saveHot({
+    saves: state.saves,
+    currentSave: state.currentSave,
+    settings: state.settings,
+    balance: state.balance,
+    customBalance: state.customBalance,
+    messageCount: state.messageCount,
+    lastUsage: state.lastUsage
+  });
+  emit(DataEvents.UPDATED);
+}
+const repository = {
+  // 读：快照（供导出/同步）
+  snapshot() {
+    return {
+      saves: state.saves,
+      currentSave: state.currentSave,
+      settings: state.settings,
+      balance: state.balance,
+      customBalance: state.customBalance,
+      messageCount: state.messageCount,
+      lastUsage: state.lastUsage
+    };
+  },
+  // 读：聚合视图（用量概览/统计唯一调用）
+  getAggregated() {
+    return getSelectedSave();
+  },
+  // 读：按时间过滤（用量统计）
+  getHistoryByRange(range) {
+    const s = getSelectedSave();
+    if (!s?.history) return [];
+    const toDay = (ts) => new Date(ts + 8 * 3600 * 1e3).toISOString().slice(0, 10);
+    return s.history.filter((h) => {
+      const k = toDay(h.timestamp);
+      return k >= range.start && k <= range.end;
+    });
+  },
+  // 读：冷数据（按需）
+  async getColdHistory(saveKey) {
+    return loadHistoryCold(saveKey);
+  },
+  // 写：新增一条对话（未来数据的唯一入口，替代 interception 直接 push）
+  addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft = 0, thinkTime = 0) {
+    messages = messages || [];
+    if (!model) try {
+      model = globalThis.SillyTavern?.getContext?.().model || "deepseek-v4-flash";
+    } catch {
+      model = "deepseek-v4-flash";
+    }
+    let hit = usage.prompt_cache_hit_tokens || 0;
+    if (!hit && usage.prompt_tokens_details?.cached_tokens) hit = usage.prompt_tokens_details.cached_tokens;
+    let miss = usage.prompt_cache_miss_tokens;
+    if (miss === void 0 || miss === null) {
+      miss = (usage.prompt_tokens || usage.input_tokens || 0) - hit;
+      if (miss < 0) miss = 0;
+    }
+    const comp = usage.completion_tokens || usage.output_tokens || 0;
+    const total = usage.total_tokens || hit + miss + comp;
+    const lu = { timestamp: Date.now(), model, prompt_tokens: hit + miss, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp, total_tokens: total };
+    const duration = startTime ? Date.now() - startTime : 0;
+    const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || 0;
+    lu.duration = duration;
+    lu.tokenRate = duration - (ttft || 0) > 50 && comp > 0 ? Math.round(comp / (duration - (ttft || 0)) * 1e3) : 0;
+    lu.ttft = ttft || 0;
+    lu.thinkTime = thinkTime || 0;
+    lu.thinkTokens = thinkTokens;
+    lu.messages = messages;
+    const c = calcCost({ timestamp: lu.timestamp, model, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp }, state.settings);
+    lu.cost = c.total;
+    lu.input_cost = c.input;
+    lu.output_cost = c.output;
+    lu.priceType = c.priceType;
+    lu.raw_usage = usage;
+    lu.fullRequest = fullRequest;
+    lu.fullResponse = fullResponse;
+    state.lastUsage = lu;
+    let s = null;
+    if (state.currentSave === "__all__") {
+      let lt = 0, real = null;
+      for (const k of Object.keys(state.saves)) {
+        const sv = state.saves[k];
+        if (sv && sv.startTime > lt) {
+          lt = sv.startTime;
+          real = sv;
+        }
+      }
+      s = real || state.saves[Object.keys(state.saves)[0]];
+    } else s = state.saves[state.currentSave];
+    if (!s) return null;
+    const entry = {
+      timestamp: lu.timestamp,
+      model,
+      prompt_tokens: hit + miss,
+      cache_hit_tokens: hit,
+      cache_miss_tokens: miss,
+      completion_tokens: comp,
+      total_tokens: total,
+      input_cost: lu.input_cost,
+      output_cost: lu.output_cost,
+      cost: lu.cost,
+      cache_hit_rate: hit + miss > 0 ? hit / (hit + miss) * 100 : 0,
+      priceType: lu.priceType,
+      raw_usage: usage,
+      messages,
+      duration,
+      ttft,
+      thinkTime,
+      thinkTokens,
+      tokenRate: lu.tokenRate,
+      fullRequest,
+      fullResponse
+    };
+    s.history.unshift(entry);
+    s.total_tokens += total;
+    s.total_cost += lu.cost;
+    s.input_tokens += hit + miss;
+    s.output_tokens += comp;
+    s.cache_hit_tokens += hit;
+    s.cache_miss_tokens += miss;
+    s.input_cost += lu.input_cost;
+    s.output_cost += lu.output_cost;
+    if (isDeepSeekOfficialModel(model)) s.rounds += 1;
+    if (s.history.length > MAX_HISTORY) s.history = s.history.slice(0, MAX_HISTORY);
+    s._mtime = Date.now();
+    persist();
+    emit(DataEvents.HISTORY_ADDED, entry);
+    return entry;
+  },
+  // 写：批量重算（定价变更后）
+  recalcAll() {
+    for (const k of Object.keys(state.saves)) {
+      const s = state.saves[k];
+      for (const h of s.history || []) {
+        const c = calcCost({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state.settings);
+        h.input_cost = c.input;
+        h.output_cost = c.output;
+        h.cost = c.total;
+        h.priceType = c.priceType;
+        h.cache_hit_rate = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) > 0 ? (h.cache_hit_tokens || 0) / ((h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0)) * 100 : 0;
+      }
+    }
+    persist();
+  },
+  // 写：设置/余额/导入/同步等批量替换（受控）
+  replaceAll(next) {
+    if (next.saves !== void 0) state.saves = next.saves;
+    if (next.currentSave !== void 0) state.currentSave = next.currentSave;
+    if (next.settings !== void 0) state.settings = next.settings;
+    if (next.balance !== void 0) state.balance = next.balance;
+    if (next.customBalance !== void 0) state.customBalance = next.customBalance;
+    if (next.messageCount !== void 0) state.messageCount = next.messageCount;
+    if (next.lastUsage !== void 0) state.lastUsage = next.lastUsage;
+    persist();
+    if (next.settings) emit(DataEvents.SETTINGS_CHANGED);
+    if (next.balance !== void 0 || next.customBalance !== void 0) emit(DataEvents.BALANCE_CHANGED);
+  },
+  // 读：初始化加载（过去数据的唯一入口）
+  async hydrate() {
+    const hot = await loadHot();
+    if (hot) {
+      if (hot.saves) state.saves = hot.saves;
+      if (hot.currentSave) state.currentSave = hot.currentSave;
+      if (hot.settings) state.settings = { ...state.settings, ...hot.settings };
+      if (hot.balance) state.balance = hot.balance;
+      if (hot.customBalance) state.customBalance = hot.customBalance;
+      if (hot.messageCount) state.messageCount = hot.messageCount;
+      if (hot.lastUsage) state.lastUsage = hot.lastUsage;
+    }
+    emit(DataEvents.UPDATED);
+    return this.snapshot();
+  }
+};
 let lastMessages = [];
 let lastStart = 0;
 function setLastRequest(messages, start) {
@@ -451,112 +655,11 @@ function refresh() {
   }
 }
 function processUsage(usage, model, messages, startTime, fullRequest = null, fullResponse = null, ttft = 0, thinkTime = 0) {
-  messages = messages || [];
-  if (!model) {
-    try {
-      model = globalThis.SillyTavern?.getContext?.().model || "deepseek-v4-flash";
-    } catch {
-      model = "deepseek-v4-flash";
-    }
-  }
-  let hit = usage.prompt_cache_hit_tokens || 0;
-  if (!hit && usage.prompt_tokens_details?.cached_tokens) hit = usage.prompt_tokens_details.cached_tokens;
-  let miss = usage.prompt_cache_miss_tokens;
-  if (miss === void 0 || miss === null) {
-    miss = (usage.prompt_tokens || usage.input_tokens || 0) - hit;
-    if (miss < 0) miss = 0;
-  }
-  const comp = usage.completion_tokens || usage.output_tokens || 0;
-  const total = usage.total_tokens || hit + miss + comp;
-  const lu = {
-    timestamp: Date.now(),
-    model,
-    prompt_tokens: hit + miss,
-    prompt_cache_hit_tokens: hit,
-    prompt_cache_miss_tokens: miss,
-    completion_tokens: comp,
-    total_tokens: total
-  };
-  const duration = startTime ? Date.now() - startTime : 0;
-  const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || 0;
-  lu.duration = duration;
-  lu.tokenRate = duration - (ttft || 0) > 50 && comp > 0 ? Math.round(comp / (duration - (ttft || 0)) * 1e3) : 0;
-  lu.ttft = ttft || 0;
-  lu.thinkTime = thinkTime || 0;
-  lu.thinkTokens = thinkTokens;
-  lu.messages = messages;
-  const c = calcCost({ timestamp: lu.timestamp, model, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp }, state.settings);
-  lu.cost = c.total;
-  lu.input_cost = c.input;
-  lu.output_cost = c.output;
-  lu.priceType = c.priceType;
-  lu.raw_usage = usage;
-  lu.fullRequest = fullRequest;
-  lu.fullResponse = fullResponse;
-  state.lastUsage = lu;
-  let s = null;
-  if (state.currentSave === "__all__") {
-    let lt = 0, real = null;
-    for (const k of Object.keys(state.saves)) {
-      const sv = state.saves[k];
-      if (sv && sv.startTime > lt) {
-        lt = sv.startTime;
-        real = sv;
-      }
-    }
-    s = real || state.saves[Object.keys(state.saves)[0]];
-  } else s = state.saves[state.currentSave];
-  if (!s) return;
-  const priceType = lu.priceType;
-  const entry = {
-    timestamp: lu.timestamp,
-    model,
-    prompt_tokens: hit + miss,
-    cache_hit_tokens: hit,
-    cache_miss_tokens: miss,
-    completion_tokens: comp,
-    total_tokens: total,
-    input_cost: lu.input_cost,
-    output_cost: lu.output_cost,
-    cost: lu.cost,
-    cache_hit_rate: hit + miss > 0 ? hit / (hit + miss) * 100 : 0,
-    priceType,
-    raw_usage: usage,
-    messages,
-    duration,
-    ttft,
-    thinkTime,
-    thinkTokens,
-    tokenRate: lu.tokenRate,
-    fullRequest,
-    fullResponse
-  };
-  s.history.unshift(entry);
-  s.total_tokens += total;
-  s.total_cost += lu.cost;
-  s.input_tokens += hit + miss;
-  s.output_tokens += comp;
-  s.cache_hit_tokens += hit;
-  s.cache_miss_tokens += miss;
-  s.input_cost += lu.input_cost;
-  s.output_cost += lu.output_cost;
-  if (isDeepSeekOfficialModel(model)) s.rounds += 1;
-  if (s.history.length > 500) s.history = s.history.slice(0, 500);
-  s._mtime = Date.now();
+  repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime);
   refresh();
 }
 function recalcAllCosts() {
-  for (const k of Object.keys(state.saves)) {
-    const s = state.saves[k];
-    for (const h of s.history || []) {
-      const c = calcCost({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state.settings);
-      h.input_cost = c.input;
-      h.output_cost = c.output;
-      h.cost = c.total;
-      h.priceType = c.priceType;
-      h.cache_hit_rate = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) > 0 ? (h.cache_hit_tokens || 0) / ((h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0)) * 100 : 0;
-    }
-  }
+  repository.recalcAll();
 }
 const interception = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
@@ -1699,6 +1802,42 @@ function renderUsageDetail(ts) {
     }
   }, { once: true });
 }
+function computeOverview() {
+  const s = getSelectedSave();
+  if (!s) return { balanceText: "¥0.00 CNY", totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0 };
+  const totalCost = s.total_cost || 0;
+  const totalTokens = s.total_tokens || 0;
+  const hit = s.cache_hit_tokens || 0, miss = s.cache_miss_tokens || 0, output = s.output_tokens || 0;
+  const hitRate = hit + miss > 0 ? hit / (hit + miss) * 100 : 0;
+  let savings = 0;
+  try {
+    for (const h of s.history || []) savings += calcSavings({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state.settings);
+  } catch {
+  }
+  const rounds = s.rounds || 0;
+  const avgCost = rounds ? totalCost / rounds : 0;
+  const avgTokens = rounds ? totalTokens / rounds : 0;
+  const avgDuration = s.history?.length ? s.history.reduce((a, h) => a + (h.duration || 0), 0) / s.history.length / 1e3 : 0;
+  const avgRate = s.history?.length ? s.history.reduce((a, h) => a + (h.tokenRate || 0), 0) / s.history.length : 0;
+  const bal = state.customBalance || state.balance?.balance;
+  return {
+    balanceText: bal ? "¥" + bal + " CNY" : "¥0.00 CNY",
+    totalCost,
+    totalTokens,
+    hit,
+    miss,
+    output,
+    hitRate,
+    savings,
+    inputCost: s.input_cost || 0,
+    outputCost: s.output_cost || 0,
+    avgCost,
+    avgTokens,
+    avgDuration,
+    avgRate,
+    rounds
+  };
+}
 function fmt(n) {
   return n.toLocaleString("zh-CN");
 }
@@ -1707,64 +1846,43 @@ function CNY(n) {
 }
 function renderOverview() {
   const doc = window.parent?.document ?? document;
-  const s = getSelectedSave();
-  if (!s) return;
-  const bal = state.customBalance || state.balance?.balance;
+  const v = computeOverview();
   const balEl = doc.getElementById("aus-balance");
-  if (balEl) balEl.textContent = bal ? "¥" + bal + " CNY" : "¥0.00 CNY";
-  const totalCost = s.total_cost || 0;
-  const totalTokens = s.total_tokens || 0;
+  if (balEl) balEl.textContent = v.balanceText;
   const costEl = doc.getElementById("aus-total-cost");
-  if (costEl) costEl.textContent = "¥" + totalCost.toFixed(4) + " CNY";
+  if (costEl) costEl.textContent = "¥" + v.totalCost.toFixed(4) + " CNY";
   const tokEl = doc.getElementById("aus-total-tokens");
-  if (tokEl) tokEl.textContent = fmt(totalTokens) + " tokens";
+  if (tokEl) tokEl.textContent = fmt(v.totalTokens) + " tokens";
   const histHost = doc.getElementById("aus-overview-history");
   if (histHost) {
-    const hit = s.cache_hit_tokens || 0;
-    const miss = s.cache_miss_tokens || 0;
-    const out = s.output_tokens || 0;
     histHost.innerHTML = `
       <div style="font-size:12px;font-weight:600;color:#111827;margin-bottom:8px;">历史消耗</div>
       <div style="display:grid;gap:6px;font-size:11px;">
-        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">Token 历史消耗</span><span style="font-weight:600;color:#111827;">${fmt(totalTokens)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">输入（命中缓存）</span><span style="font-weight:600;color:#0BA25E;">${fmt(hit)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">输入（未命中缓存）</span><span style="font-weight:600;color:#DC2626;">${fmt(miss)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">输出</span><span style="font-weight:600;color:#111827;">${fmt(out)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">Token 历史消耗</span><span style="font-weight:600;color:#111827;">${fmt(v.totalTokens)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">输入（命中缓存）</span><span style="font-weight:600;color:#0BA25E;">${fmt(v.hit)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">输入（未命中缓存）</span><span style="font-weight:600;color:#DC2626;">${fmt(v.miss)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">输出</span><span style="font-weight:600;color:#111827;">${fmt(v.output)} tokens</span></div>
       </div>
     `;
   }
   const spendHost = doc.getElementById("aus-overview-spend");
   if (spendHost) {
-    let savings = 0;
-    try {
-      for (const h of s.history || []) savings += calcSavings({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state.settings);
-    } catch {
-    }
-    const inCost = s.input_cost || 0;
-    const outCost = s.output_cost || 0;
-    const inTok = (s.cache_hit_tokens || 0) + (s.cache_miss_tokens || 0);
-    const outTok = s.output_tokens || 0;
     spendHost.innerHTML = `
       <div style="font-size:12px;font-weight:600;color:#111827;margin-bottom:8px;">支出明细</div>
       <div style="display:grid;gap:6px;font-size:11px;">
-        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">预计节省</span><span style="font-weight:600;color:#0BA25E;">${CNY(savings)} · ${fmt(s.cache_hit_tokens || 0)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">支出在输入</span><span style="font-weight:600;color:#111827;">${CNY(inCost)} · ${fmt(inTok)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">支出在输出</span><span style="font-weight:600;color:#111827;">${CNY(outCost)} · ${fmt(outTok)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">预计节省</span><span style="font-weight:600;color:#0BA25E;">${CNY(v.savings)} · ${fmt(v.hit)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">支出在输入</span><span style="font-weight:600;color:#111827;">${CNY(v.inputCost)} · ${fmt(v.hit + v.miss)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">支出在输出</span><span style="font-weight:600;color:#111827;">${CNY(v.outputCost)} · ${fmt(v.output)} tokens</span></div>
       </div>
     `;
   }
   const fourHost = doc.getElementById("aus-overview-four");
   if (fourHost) {
-    s.rounds || 1;
-    const avgCost = totalCost / (s.rounds || 1);
-    const avgTok = totalTokens / (s.rounds || 1);
-    const avgDur = (s.history || []).length ? s.history.reduce((a, h) => a + (h.duration || 0), 0) / s.history.length / 1e3 : 0;
-    const avgRate = (s.history || []).length ? s.history.reduce((a, h) => a + (h.tokenRate || 0), 0) / s.history.length : 0;
     fourHost.innerHTML = `
-      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:#6B7280;">每轮费用</div><div style="font-size:18px;font-weight:600;color:#111827;margin-top:4px;">¥${avgCost.toFixed(4)} <span style="font-size:11px;color:#9CA3AF;font-weight:400;">CNY</span></div></div>
-      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:#6B7280;">每轮 Token</div><div style="font-size:18px;font-weight:600;color:#111827;margin-top:4px;">${Math.round(avgTok).toLocaleString("zh-CN")}</div></div>
-      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:#6B7280;">平均耗时</div><div style="font-size:18px;font-weight:600;color:#111827;margin-top:4px;">${avgDur.toFixed(1)} <span style="font-size:11px;color:#9CA3AF;font-weight:400;">s</span></div></div>
-      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:#6B7280;">输出速率</div><div style="font-size:18px;font-weight:600;color:#0BA25E;margin-top:4px;">${Math.round(avgRate)} <span style="font-size:11px;color:#9CA3AF;font-weight:400;">t/s</span></div></div>
+      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:#6B7280;">每轮费用</div><div style="font-size:18px;font-weight:600;color:#111827;margin-top:4px;">¥${v.avgCost.toFixed(4)} <span style="font-size:11px;color:#9CA3AF;font-weight:400;">CNY</span></div></div>
+      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:#6B7280;">每轮 Token</div><div style="font-size:18px;font-weight:600;color:#111827;margin-top:4px;">${Math.round(v.avgTokens).toLocaleString("zh-CN")}</div></div>
+      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:#6B7280;">平均耗时</div><div style="font-size:18px;font-weight:600;color:#111827;margin-top:4px;">${v.avgDuration.toFixed(1)} <span style="font-size:11px;color:#9CA3AF;font-weight:400;">s</span></div></div>
+      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:#6B7280;">输出速率</div><div style="font-size:18px;font-weight:600;color:#0BA25E;margin-top:4px;">${Math.round(v.avgRate)} <span style="font-size:11px;color:#9CA3AF;font-weight:400;">t/s</span></div></div>
     `;
   }
 }
@@ -1877,10 +1995,10 @@ function updatePickerLabel() {
   const doc = getDoc$2();
   const label = doc.getElementById("aus-range-label");
   if (!label) return;
-  const map = { today: "今天", yesterday: "昨天", "7d": "近 7 天", "30d": "近 30 天", month: "本月", lastMonth: "上月", custom: "自定义" };
+  const map2 = { today: "今天", yesterday: "昨天", "7d": "近 7 天", "30d": "近 30 天", month: "本月", lastMonth: "上月", custom: "自定义" };
   if (currentRange === "custom" && customStart && customEnd) {
     label.textContent = customStart === customEnd ? customStart : `${customStart} ~ ${customEnd}`;
-  } else label.textContent = map[currentRange] || "近 30 天";
+  } else label.textContent = map2[currentRange] || "近 30 天";
 }
 function bindPicker() {
   const doc = getDoc$2();
@@ -2371,15 +2489,7 @@ function ensureStyleScope() {
   document.documentElement.setAttribute("data-extension", "api-usage-stat");
 }
 async function initStore() {
-  const hot = await loadHot();
-  if (hot) {
-    if (hot.saves) state.saves = hot.saves;
-    if (hot.currentSave) state.currentSave = hot.currentSave;
-    if (hot.settings) state.settings = { ...state.settings, ...hot.settings };
-    if (hot.balance) state.balance = hot.balance;
-    if (hot.customBalance) state.customBalance = hot.customBalance;
-    if (hot.messageCount) state.messageCount = hot.messageCount;
-  }
+  await repository.hydrate();
   if (!state.currentSave || !state.saves[state.currentSave]) {
     const keys = Object.keys(state.saves);
     if (keys.length) state.currentSave = keys[0];

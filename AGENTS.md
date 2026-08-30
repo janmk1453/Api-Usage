@@ -30,13 +30,18 @@ Api-Usage/
 ├── i18n/zh-cn.json
 ├── templates/panel.html   # 预留 Handlebars
 ├── src/
-│   ├── index.ts           # 入口：store 初始化 + 魔法棒注入 + 全屏面板 + 峰值圆点
+│   ├── index.ts           # 入口：repository.hydrate + 魔法棒注入 + 全屏面板 + 峰值圆点
 │   ├── constants/pricing.ts  # PRICING/DEFAULT_PEAK_HOURS/MAX_HISTORY/DETAIL_KEEP/STORAGE_KEYS
 │   ├── types/save.ts, settings.ts
-│   ├── store/index.ts, persistence.ts
-│   ├── services/pricing.ts, interception.ts, balance.ts, import-export.ts, sync.ts
+│   ├── data/              # ★ 统一数据框架（所有存/取/算/展的唯一通路）
+│   │   ├── types.ts       # Snapshot/Aggregated/TimeRange/OverviewView/StatsView
+│   │   ├── repository.ts  # 唯一写入口：addEntry/recalcAll/replaceAll/hydrate + persist
+│   │   ├── computed.ts    # 唯一算入口：computeOverview/computeStats/getFilteredHistory
+│   │   └── events.ts      # DataEvents.UPDATED/HISTORY_ADDED/SETTINGS_CHANGED
+│   ├── store/index.ts, persistence.ts # 底层状态与冷热分页（仅 repository 调用）
+│   ├── services/pricing.ts, interception.ts(delegates→repository), balance.ts, import-export.ts, sync.ts
 │   ├── utils/date.ts, crypto.ts, logger.ts
-│   └── ui/panel.ts, stats.ts, charts.ts, compare.ts, settings.ts, peak-dot.ts, customize.ts
+│   └── ui/panel.ts, overview.ts, stats-view.ts, stats.ts, charts.ts, compare.ts, settings.ts, peak-dot.ts, customize.ts
 ├── README.md
 ├── 迁移重构计划.md        # 同步自 RE3.0 的计划副本（可选）
 └── LICENSE
@@ -56,7 +61,8 @@ node --check index.js
 - **面板**：`createPanel/openPanel/closePanel/togglePanel`（单例，`will-change:auto` 即时销毁合成层，`display:flex` + `overflow:auto`，无 `backdrop-filter/阴影` 干扰）
 - **样式**：`[data-extension="api-usage-stat"][data-ds-theme="light"]` 隔离，卡片 `1px solid #E5E7EB` 实线，无 `box-shadow`，字重 `600`，`Microsoft YaHei` 保证锐利
 - **拦截**：`GENERATION_ENDED → chat[].extra.api_usage` 主路径，`ApiUsageStatInterceptor` 辅路径，`processUsage/recalcAllCosts` 1:1 脚本
-- **持久化**：`saveHot` 节流 `300ms`，`loadHot/migrateIfNeeded` 处理旧 `ds_*`
+- **数据框架**：所有存/取/算/展必须走 `src/data/` — `repository` 唯一写（`addEntry/recalcAll/replaceAll/hydrate`）、`computed` 唯一算（`computeOverview/computeStats`）、`events` 订阅刷新；禁止在 UI 中直接读写 `state.saves` 或手算 `history` 求和
+- **持久化**：`saveHot` 节流 `300ms`，`loadHot/migrateIfNeeded` 仅由 `repository` 调用，UI 不直连 `persistence`
 
 ## 样式规范（DeepSeek 截图定版）
 
