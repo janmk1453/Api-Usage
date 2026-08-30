@@ -1,5 +1,5 @@
-import { V as createHashMap, p as isString, g as each, h as extend, f as defaults, o as isObject, a8 as retrieve, n as isFunction, d as curry, q as map, l as isArray } from "./graphic-ClH5Uwd8.js";
-import { bO as isSourceInstance, bP as createSourceFromSeriesDataOption, bQ as shouldOmitUnusedDimensions, bR as ensureSourceDimNameMap, bS as createDimNameMap, bT as CtorInt32Array, bk as normalizeToArray, bU as VISUAL_DIMENSIONS, bV as guessOrdinal, bW as BE_ORDINAL, bX as SeriesDataSchema, bY as SeriesDimensionDefine, bI as SINGLE_REFERRING, bZ as SOURCE_FORMAT_ORIGINAL, bB as makeSeriesEncodeForAxisCoordSys, e as enableDataStack, af as SeriesData, bt as CoordinateSystemManager, bA as getDimensionTypeByAxis, b_ as getDataItemValue } from "./Axis-DJa7LvDr.js";
+import { V as createHashMap, p as isString, g as each, h as extend, f as defaults, o as isObject, n as isFunction, d as curry, q as map, l as isArray } from "./graphic-B6pfdUzY.js";
+import { bK as isSourceInstance, bL as createSourceFromSeriesDataOption, bM as shouldOmitUnusedDimensions, bN as ensureSourceDimNameMap, bO as createDimNameMap, bP as CtorInt32Array, bj as normalizeToArray, bQ as VISUAL_DIMENSIONS, bR as guessOrdinal, bS as BE_ORDINAL, bT as SeriesDataSchema, bU as SeriesDimensionDefine, bF as SINGLE_REFERRING, bV as SOURCE_FORMAT_ORIGINAL, bA as makeSeriesEncodeForAxisCoordSys, e as enableDataStack, ag as SeriesData, bs as CoordinateSystemManager, bz as getDimensionTypeByAxis, bW as getDataItemValue } from "./Axis-JyrlqAeP.js";
 function createDimensions(source, opt) {
   return prepareSeriesDataSchema(source, opt).dimensions;
 }
@@ -228,14 +228,6 @@ var fetchers = {
   cartesian2d: function(seriesModel, result, axisMap, categoryAxisMap) {
     var xAxisModel = seriesModel.getReferringComponents("xAxis", SINGLE_REFERRING).models[0];
     var yAxisModel = seriesModel.getReferringComponents("yAxis", SINGLE_REFERRING).models[0];
-    if (process.env.NODE_ENV !== "production") {
-      if (!xAxisModel) {
-        throw new Error('xAxis "' + retrieve(seriesModel.get("xAxisIndex"), seriesModel.get("xAxisId"), 0) + '" not found');
-      }
-      if (!yAxisModel) {
-        throw new Error('yAxis "' + retrieve(seriesModel.get("xAxisIndex"), seriesModel.get("yAxisId"), 0) + '" not found');
-      }
-    }
     result.coordSysDims = ["x", "y"];
     axisMap.set("x", xAxisModel);
     axisMap.set("y", yAxisModel);
@@ -250,11 +242,6 @@ var fetchers = {
   },
   singleAxis: function(seriesModel, result, axisMap, categoryAxisMap) {
     var singleAxisModel = seriesModel.getReferringComponents("singleAxis", SINGLE_REFERRING).models[0];
-    if (process.env.NODE_ENV !== "production") {
-      if (!singleAxisModel) {
-        throw new Error("singleAxis should be specified.");
-      }
-    }
     result.coordSysDims = ["single"];
     axisMap.set("single", singleAxisModel);
     if (isCategory(singleAxisModel)) {
@@ -266,14 +253,6 @@ var fetchers = {
     var polarModel = seriesModel.getReferringComponents("polar", SINGLE_REFERRING).models[0];
     var radiusAxisModel = polarModel.findAxisModel("radiusAxis");
     var angleAxisModel = polarModel.findAxisModel("angleAxis");
-    if (process.env.NODE_ENV !== "production") {
-      if (!angleAxisModel) {
-        throw new Error("angleAxis option not found");
-      }
-      if (!radiusAxisModel) {
-        throw new Error("radiusAxis option not found");
-      }
-    }
     result.coordSysDims = ["radius", "angle"];
     axisMap.set("radius", radiusAxisModel);
     axisMap.set("angle", angleAxisModel);

@@ -6,6 +6,7 @@ import { renderSettings } from './settings';
 import { bindHistoryCompare, renderUsageDetail } from './compare';
 import { renderOverview } from './overview';
 import { initStatsView, renderStatsView } from './stats-view';
+import { initExtraCharts, renderExtraCharts } from './extra-charts';
 
 function getDoc(): Document { return (window.parent as any)?.document ?? document; }
 
@@ -176,19 +177,15 @@ function switchView(view: typeof currentView) {
   if (titleEl) titleEl.textContent = titles[view] || '';
   refreshUI();
   if (view === 'stats') {
-    // 图表在 display:none 时初始化会零尺寸，延迟确保可见后重绘
-    setTimeout(async () => {
+    setTimeout(() => {
       try {
-        const m = await import('./stats-view');
         const doc2 = getDoc();
         const el = doc2.getElementById('aus-stats-chart');
         if (el && (el.clientWidth === 0 || el.clientHeight === 0)) {
-          // 仍不可见则再等一帧
-          setTimeout(() => m.renderStatsView(), 80);
+          setTimeout(() => { try { renderStatsView(); } catch {} }, 80);
         } else {
-          m.renderStatsView();
+          renderStatsView();
         }
-        if ((m as any).resizeChart) (m as any).resizeChart();
       } catch {}
     }, 60);
   }
@@ -305,6 +302,14 @@ export function createPanel() {
               </table>
             </div>
             <div class="ds-card" style="margin-top:12px;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:#111827;">图表</span><div style="display:flex;gap:8px;position:relative;"><div id="aus-chart-y-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;"><span style="color:#6B7280;">Y</span><span id="aus-chart-y-label" style="font-weight:600;color:#111827;">总费用</span><span style="font-size:10px;">▼</span></div><div id="aus-chart-x-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;"><span style="color:#6B7280;">X</span><span id="aus-chart-x-label" style="font-weight:600;color:#111827;">每日</span><span style="font-size:10px;">▼</span></div><div id="aus-chart-y-dropdown" style="display:none;position:absolute;top:34px;left:0;z-index:10;background:#fff;border:1px solid #E5E7EB;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;"></div><div id="aus-chart-x-dropdown" style="display:none;position:absolute;top:34px;right:0;z-index:10;background:#fff;border:1px solid #E5E7EB;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:140px;"></div></div></div><div id="aus-stats-chart" style="height:300px;"></div></div>
+            <div id="aus-extra-charts" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px;">
+              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:#111827;">Token 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-y-token" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:10px;cursor:pointer;"><span id="aus-extra-y-label-token">3 项</span> ▼</div><div id="aus-extra-x-token" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:10px;cursor:pointer;"><span id="aus-extra-x-label-token">每日</span> ▼</div></div></div><div id="aus-extra-y-drop-token" style="display:none;position:absolute;top:32px;left:8px;z-index:5;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:4px;min-width:180px;max-height:200px;overflow:auto;"></div><div id="aus-extra-x-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-token" style="height:220px;"></div></div>
+              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:#111827;">费用 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-y-cost" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:10px;cursor:pointer;"><span id="aus-extra-y-label-cost">1 项</span> ▼</div><div id="aus-extra-x-cost" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:10px;cursor:pointer;"><span id="aus-extra-x-label-cost">每日</span> ▼</div></div></div><div id="aus-extra-y-drop-cost" style="display:none;position:absolute;top:32px;left:8px;z-index:5;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:4px;min-width:180px;max-height:200px;overflow:auto;"></div><div id="aus-extra-x-drop-cost" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-cost" style="height:220px;"></div></div>
+              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:#111827;">缓存命中 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-x-hit" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:10px;cursor:pointer;"><span id="aus-extra-x-label-hit">每日</span> ▼</div></div></div><div id="aus-extra-x-drop-hit" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-hit" style="height:220px;"></div></div>
+              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:#111827;">API请求数 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-x-req" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:10px;cursor:pointer;"><span id="aus-extra-x-label-req">每日</span> ▼</div></div></div><div id="aus-extra-x-drop-req" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-req" style="height:220px;"></div></div>
+              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:#111827;">耗时与速率 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-x-dur" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:10px;cursor:pointer;"><span id="aus-extra-x-label-dur">每日</span> ▼</div></div></div><div id="aus-extra-x-drop-dur" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-dur" style="height:220px;"></div></div>
+              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:#111827;">模型用量占比</span><div id="aus-pie-toggle" style="padding:4px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#111827;color:#fff;font-size:10px;cursor:pointer;">Token</div></div><div id="aus-chart-pie" style="height:220px;"></div></div>
+            </div>
           </div>
           <!-- 历史记录 -->
           <div data-view="history" style="display:none;">
@@ -407,7 +412,8 @@ export function createPanel() {
   bindImportExport(doc);
   renderSettings(doc);
   bindHistoryCompare();
-  import('./stats-view').then(m => m.initStatsView());
+  initStatsView();
+  initExtraCharts();
   switchView('overview');
   refreshUI();
 }

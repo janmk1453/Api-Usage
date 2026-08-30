@@ -1,6 +1,7 @@
 import { getSelectedSave } from '../store/index';
 import { localDay } from '../utils/date';
 import { Y_OPTIONS, X_OPTIONS, getYSelected, getXSelected, toggleY, setXSelected, aggregateForChart } from './chart-config';
+import { renderExtraCharts } from './extra-charts';
 
 type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom';
 let currentRange: RangeKey = '30d';
@@ -395,6 +396,7 @@ export function renderStatsView() {
   renderChart(chartFiltered);
   renderModelPicker();
   renderChartSelectors();
+  renderExtraCharts(chartFiltered);
 }
 
 export function initStatsView() {

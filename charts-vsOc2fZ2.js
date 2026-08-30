@@ -1,7 +1,7 @@
-import { P as Point, E as retrieve2, f as defaults, F as dist, H as lerp, _ as __extends, G as Group$1, q as map, I as isNumber, J as PathProxy, K as cubicRootAt, L as Path, M as cubicAt, R as Rect$1, n as isFunction, b as bind, Z as ZRText, g as each$2, N as lerp$1, p as isString, O as calculateTextPosition, l as isArray, Q as parsePercent, h as extend, d as curry, S as normalizeArcAngles, T as retrieve3, B as BoundingRect, U as find, a as ZRImage, c as clone, V as createHashMap, r as merge, W as fromPoints, X as concatArray, Y as assert, $ as keys, j as indexOf, a0 as noop, a1 as translate, a2 as scale, a3 as normalizeCssArray, a4 as Displayable, a5 as create, a6 as modifyHSL, a7 as modifyAlpha, a8 as retrieve, i as filter, a9 as clone$1, aa as normalize$2, ab as scale$1, ac as create$1, ad as sub, ae as len, af as set, ag as copy, ah as scaleAndAdd$1, ai as quadraticSubdivide, aj as quadraticAt$1, ak as distSquare, m as mixin, al as eqNaN, o as isObject, am as clone$2, an as quadraticDerivativeAt, ao as containStroke, ap as containStroke$1, aq as mergeAll, ar as platformApi, as as normalizeRadian, at as lift, au as hasOwn } from "./graphic-ClH5Uwd8.js";
-import { aL as DISPLAY_STATES, K as Polyline$1, aM as SPECIAL_STATES, b as createSymbol, ad as SeriesModel, i as isDimensionStacked, aN as createFloat32Array, C as round, S as Sector, Y as initProps, aO as convertToColorString, aP as setStatesStylesFromModel, f as getECData, aQ as toggleHoverEmphasis, aR as queryDataIndex, aa as ChartView, aS as setStatesFlag, aT as setLabelStyle, aU as getLabelStatesModels, aV as interpolateRawValues, aW as labelInner, a2 as updateProps, J as LinearGradient, aX as createRenderPlanner, aY as inheritDefaultOption, aZ as warn, a_ as traverseElements, a$ as saveOldStyle, b0 as removeElementWithFadeOut, b1 as setLabelValueAnimation, aI as throttle, b2 as layout, b3 as createProgressiveLayout, s as linearMap, h as getLayoutRect, b4 as parsePercent$1, b5 as makeInner, af as SeriesData, b6 as makeSeriesEncodeForNameBased, b7 as getPercentSeats, b8 as defaultEmphasis, b9 as createLegacyDataSelectAction, aJ as use, P as Polygon, ba as graphic, bb as normalizeSymbolSize, bc as retrieveVisualColorForTooltipMarker, bd as createTooltipMarkup, G as Circle, be as Z2_EMPHASIS_LIFT, bf as HOVER_STATE_BLUR, bg as removeElement, F as BezierCurve, bh as setDefaultStateProxy, bi as convertOptionIdName, M as Model, bj as getDecalFromPalette, bk as normalizeToArray, bl as positionElement, bm as getAvailableSize, a as createTextStyle, bn as DataDiffer, bo as windowOpen, bp as isHighDownDispatcher, bq as setAsHighDownDispatcher, br as enableHoverFocus, bs as makeStyleMapper, j as MAX_SAFE_INTEGER, bt as CoordinateSystemManager, bu as defaultSeriesFormatTooltip, L as Line, bv as setCommonECData, bw as animateLabelValue, u as numericToNumber, bx as enterEmphasis, by as leaveEmphasis, bz as groupData, bA as getDimensionTypeByAxis, bB as makeSeriesEncodeForAxisCoordSys, k as asc, w as quantile, bC as SOURCE_FORMAT_ARRAY_ROWS, bD as makePrintable, bE as throwError, bF as subPixelOptimize, bG as normalizeSymbolOffset, bH as error, q as isNumeric, bI as SINGLE_REFERRING, bJ as createOrUpdatePatternFromDecal, r as isRadianAroundZero, bK as deprecateReplaceLog, bL as createTextConfig, bM as getLayoutOnAxis, bN as getFont, _ as makePath, W as getShapeClass } from "./Axis-DJa7LvDr.js";
-import { c as createSeriesData, p as prepareSeriesDataSchema } from "./createSeriesData-Du5qr83X.js";
-import { S as SymbolDraw, a as Symbol$1, i as isCoordinateSystemType, g as getDefaultInterpolatedLabel, b as getDefaultLabel, s as shiftLayoutOnY, c as install$m, d as install$n, M as MapDraw, e as geoSourceManager, f as install$o, R as RoamController, V as View, o as onIrrelevantElement, u as updateViewOnPan, h as updateViewOnZoom, j as updateCenterAndZoom, k as VisualMapping, L as LineDraw, l as install$p, m as Line$1, n as applyLeaveTransition, w as warnDeprecated, p as convertToEC4StyleForCustomSerise, q as stopPreviousKeyframeAnimationAndRestore, r as applyUpdateTransition, t as applyKeyframeAnimation, v as isEC4CompatibleStyle, x as convertFromEC4CompatibleStyle } from "./customGraphicKeyframeAnimation-De9JSPSE.js";
+import { P as Point, E as retrieve2, f as defaults, F as dist, H as lerp, _ as __extends, G as Group$1, q as map, I as isNumber, J as PathProxy, K as cubicRootAt, L as Path, M as cubicAt, R as Rect$1, n as isFunction, b as bind, Z as ZRText, g as each$2, N as lerp$1, p as isString, O as calculateTextPosition, l as isArray, Q as parsePercent, h as extend, d as curry, S as normalizeArcAngles, T as retrieve3, B as BoundingRect, U as find, a as ZRImage, c as clone, V as createHashMap, r as merge, W as fromPoints, X as concatArray, Y as assert, $ as keys, j as indexOf, a0 as noop, a1 as translate, a2 as scale, a3 as normalizeCssArray, a4 as Displayable, a5 as create, a6 as modifyHSL, a7 as modifyAlpha, a8 as retrieve, i as filter, a9 as clone$1, aa as normalize$2, ab as scale$1, ac as create$1, ad as sub, ae as len, af as set, ag as copy, ah as scaleAndAdd$1, ai as quadraticSubdivide, aj as quadraticAt$1, ak as distSquare, m as mixin, al as eqNaN, o as isObject, am as clone$2, an as quadraticDerivativeAt, ao as containStroke, ap as containStroke$1, aq as mergeAll, ar as platformApi, as as normalizeRadian, at as lift, au as hasOwn } from "./graphic-B6pfdUzY.js";
+import { aL as DISPLAY_STATES, K as Polyline$1, aM as SPECIAL_STATES, b as createSymbol, ad as SeriesModel, i as isDimensionStacked, aN as createFloat32Array, C as round, S as Sector, Y as initProps, aO as convertToColorString, aP as setStatesStylesFromModel, f as getECData, aQ as toggleHoverEmphasis, aR as queryDataIndex, aa as ChartView, aS as setStatesFlag, aT as setLabelStyle, aU as getLabelStatesModels, aV as interpolateRawValues, aW as labelInner, a2 as updateProps, J as LinearGradient, aX as createRenderPlanner, aY as inheritDefaultOption, aZ as traverseElements, a_ as saveOldStyle, a$ as removeElementWithFadeOut, b0 as setLabelValueAnimation, aJ as throttle, b1 as layout, b2 as createProgressiveLayout, s as linearMap, h as getLayoutRect, b3 as parsePercent$1, b4 as makeInner, ag as SeriesData, b5 as makeSeriesEncodeForNameBased, b6 as getPercentSeats, b7 as defaultEmphasis, b8 as createLegacyDataSelectAction, ae as use, P as Polygon, b9 as graphic, ba as normalizeSymbolSize, bb as retrieveVisualColorForTooltipMarker, bc as createTooltipMarkup, G as Circle, bd as Z2_EMPHASIS_LIFT, be as HOVER_STATE_BLUR, bf as removeElement, F as BezierCurve, bg as setDefaultStateProxy, bh as convertOptionIdName, M as Model, bi as getDecalFromPalette, bj as normalizeToArray, bk as positionElement, bl as getAvailableSize, a as createTextStyle, bm as DataDiffer, bn as windowOpen, bo as isHighDownDispatcher, bp as setAsHighDownDispatcher, bq as enableHoverFocus, br as makeStyleMapper, j as MAX_SAFE_INTEGER, bs as CoordinateSystemManager, bt as defaultSeriesFormatTooltip, L as Line, bu as setCommonECData, bv as animateLabelValue, u as numericToNumber, bw as enterEmphasis, bx as leaveEmphasis, by as groupData, bz as getDimensionTypeByAxis, bA as makeSeriesEncodeForAxisCoordSys, k as asc, w as quantile, bB as SOURCE_FORMAT_ARRAY_ROWS, bC as throwError, bD as subPixelOptimize, bE as normalizeSymbolOffset, q as isNumeric, bF as SINGLE_REFERRING, bG as createOrUpdatePatternFromDecal, r as isRadianAroundZero, bH as createTextConfig, bI as getLayoutOnAxis, bJ as getFont, _ as makePath, W as getShapeClass } from "./Axis-JyrlqAeP.js";
+import { c as createSeriesData, p as prepareSeriesDataSchema } from "./createSeriesData-DNoKGaVn.js";
+import { S as SymbolDraw, a as Symbol$1, i as isCoordinateSystemType, g as getDefaultInterpolatedLabel, b as getDefaultLabel, s as shiftLayoutOnY, c as install$m, d as install$n, M as MapDraw, e as geoSourceManager, f as install$o, R as RoamController, V as View, o as onIrrelevantElement, u as updateViewOnPan, h as updateViewOnZoom, j as updateCenterAndZoom, k as VisualMapping, L as LineDraw, l as install$p, m as Line$1, n as applyLeaveTransition, p as convertToEC4StyleForCustomSerise, q as stopPreviousKeyframeAnimationAndRestore, r as applyUpdateTransition, t as applyKeyframeAnimation, v as isEC4CompatibleStyle, w as convertFromEC4CompatibleStyle } from "./customGraphicKeyframeAnimation-eUF5MR8P.js";
 function projectPointToLine(x1, y1, x2, y2, x, y, out, limitToEnds) {
   var dx = x - x1;
   var dy = y - y1;
@@ -216,12 +216,6 @@ var LineSeriesModel = (
       return _this;
     }
     LineSeriesModel2.prototype.getInitialData = function(option) {
-      if (process.env.NODE_ENV !== "production") {
-        var coordSys = option.coordinateSystem;
-        if (coordSys !== "polar" && coordSys !== "cartesian2d") {
-          throw new Error("Line not support coordinateSystem besides cartesian and polar");
-        }
-      }
       return createSeriesData(null, this, {
         useEncodeDefaulter: true
       });
@@ -1022,9 +1016,6 @@ function getVisualGradient(data, coordSys, api) {
     return;
   }
   if (coordSys.type !== "cartesian2d") {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("Visual map on line style is only supported on cartesian2d.");
-    }
     return;
   }
   var coordDim;
@@ -1038,9 +1029,6 @@ function getVisualGradient(data, coordSys, api) {
     }
   }
   if (!visualMeta) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("Visual map on line style only support x or y dimension.");
-    }
     return;
   }
   var axis = coordSys.getAxis(coordDim);
@@ -1218,11 +1206,6 @@ function createLineClipPath(lineView, coordSys, hasAnimation, seriesModel) {
     }
     return clipPath;
   } else {
-    if (process.env.NODE_ENV !== "production") {
-      if (seriesModel.get(["endLabel", "show"])) {
-        console.warn("endLabel is not supported for lines in polar systems.");
-      }
-    }
     return createPolarClipPath(coordSys, hasAnimation, seriesModel);
   }
 }
@@ -2400,8 +2383,6 @@ var BarView = (
       if (coordinateSystemType === "cartesian2d" || coordinateSystemType === "polar") {
         this._progressiveEls = null;
         this._isLargeDraw ? this._renderLarge(seriesModel, ecModel, api) : this._renderNormal(seriesModel, ecModel, api, payload);
-      } else if (process.env.NODE_ENV !== "production") {
-        warn("Only cartesian2d and polar supported for bar.");
       }
     };
     BarView2.prototype.incrementalPrepareRender = function(seriesModel) {
@@ -2823,16 +2804,6 @@ var elementCreator = {
 function shouldRealtimeSort(seriesModel, coordSys) {
   var realtimeSortOption = seriesModel.get("realtimeSort", true);
   var baseAxis = coordSys.getBaseAxis();
-  if (process.env.NODE_ENV !== "production") {
-    if (realtimeSortOption) {
-      if (baseAxis.type !== "category") {
-        warn("`realtimeSort` will not work because this bar series is not based on a category axis.");
-      }
-      if (coordSys.type !== "cartesian2d") {
-        warn("`realtimeSort` will not work because this bar series is not on cartesian2d.");
-      }
-    }
-  }
   if (realtimeSortOption && baseAxis.type === "category" && coordSys.type === "cartesian2d") {
     return {
       baseAxis,
@@ -5817,10 +5788,6 @@ function drawEdge(seriesModel, node, virtualRoot, symbolEl, sourceOldLayout, sou
             childPoints
           }
         }, seriesModel);
-      }
-    } else {
-      if (process.env.NODE_ENV !== "production") {
-        throw new Error("The polyline edgeShape can only be used in orthogonal layout");
       }
     }
   }
@@ -9353,9 +9320,6 @@ var Graph = (
       id = id == null ? "" + dataIndex : "" + id;
       var nodesMap = this._nodesMap;
       if (nodesMap[generateNodeKey(id)]) {
-        if (process.env.NODE_ENV !== "production") {
-          console.error("Graph nodes have duplicate name or id");
-        }
         return;
       }
       var node = new GraphNode(id, dataIndex);
@@ -10981,16 +10945,6 @@ function labelLayout(data) {
       var x2 = void 0;
       var y2 = void 0;
       var labelLineLen = labelLineModel.get("length");
-      if (process.env.NODE_ENV !== "production") {
-        if (orient === "vertical" && ["top", "bottom"].indexOf(labelPosition) > -1) {
-          labelPosition = "left";
-          console.warn("Position error: Funnel chart on vertical orient dose not support top and bottom.");
-        }
-        if (orient === "horizontal" && ["left", "right"].indexOf(labelPosition) > -1) {
-          labelPosition = "bottom";
-          console.warn("Position error: Funnel chart on horizontal orient dose not support left and right.");
-        }
-      }
       if (labelPosition === "left") {
         x1 = (points[3][0] + points[0][0]) / 2;
         y1 = (points[3][1] + points[0][1]) / 2;
@@ -11758,10 +11712,6 @@ var SankeySeriesModel = (
       for (var i = 0; i < levels.length; i++) {
         if (levels[i].depth != null && levels[i].depth >= 0) {
           levelModels[levels[i].depth] = new Model(levels[i], this, ecModel);
-        } else {
-          if (process.env.NODE_ENV !== "production") {
-            throw new Error("levels[i].depth is mandatory and should be natural number");
-          }
         }
       }
       var graph = createGraphFromNodeEdge(nodes, links, this, true, beforeLink);
@@ -12769,9 +12719,6 @@ var boxplotTransform = {
     var upstream = params.upstream;
     if (upstream.sourceFormat !== SOURCE_FORMAT_ARRAY_ROWS) {
       var errMsg = "";
-      if (process.env.NODE_ENV !== "production") {
-        errMsg = makePrintable("source data is not applicable for this boxplot transform. Expect number[][].");
-      }
       throwError(errMsg);
     }
     var result = prepareBoxplotData(upstream.getRawData(), params.config);
@@ -14128,9 +14075,6 @@ var linesLayout = {
   reset: function(seriesModel) {
     var coordSys = seriesModel.coordinateSystem;
     if (!coordSys) {
-      if (process.env.NODE_ENV !== "production") {
-        error("The lines series must have a coordinate system.");
-      }
       return;
     }
     var isPolyline = seriesModel.get("polyline");
@@ -14218,8 +14162,6 @@ var LinesView = (
             motionBlur: true,
             lastFrameAlpha: Math.max(Math.min(trailLength / 10 + 0.9, 1), 0)
           });
-        } else if (process.env.NODE_ENV !== "production") {
-          console.warn("SVG render mode doesn't support lines with trail effect");
         }
       }
       lineDraw.updateData(data);
@@ -14272,11 +14214,6 @@ var LinesView = (
       var isPolyline = !!seriesModel.get("polyline");
       var pipelineContext = seriesModel.pipelineContext;
       var isLargeDraw = pipelineContext.large;
-      if (process.env.NODE_ENV !== "production") {
-        if (hasEffect && isLargeDraw) {
-          console.warn("Large lines not support effect");
-        }
-      }
       if (!lineDraw || hasEffect !== this._hasEffet || isPolyline !== this._isPolyline || isLargeDraw !== this._isLargeDraw) {
         if (lineDraw) {
           lineDraw.remove();
@@ -14316,9 +14253,6 @@ var Float64Arr = typeof Float64Array === "undefined" ? Array : Float64Array;
 function compatEc2(seriesOpt) {
   var data = seriesOpt.data;
   if (data && data[0] && data[0][0] && data[0][0].coord) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("Lines data configuration has been changed to { coords:[[1,2],[2,3]] }");
-    }
     seriesOpt.data = map(data, function(itemOpt) {
       var coords = [itemOpt[0].coord, itemOpt[1].coord];
       var target = {
@@ -14385,11 +14319,6 @@ var LinesSeriesModel = (
     LinesSeriesModel2.prototype._getCoordsFromItemModel = function(idx) {
       var itemModel = this.getData().getItemModel(idx);
       var coords = itemModel.option instanceof Array ? itemModel.option : itemModel.getShallow("coords");
-      if (process.env.NODE_ENV !== "production") {
-        if (!(coords instanceof Array && coords.length > 0 && coords[0] instanceof Array)) {
-          throw new Error("Invalid coords " + JSON.stringify(coords) + ". Lines must have 2d coords array in data item.");
-        }
-      }
       return coords;
     };
     LinesSeriesModel2.prototype.getLineCoordsCount = function(idx) {
@@ -14441,11 +14370,6 @@ var LinesSeriesModel = (
             var y = data[i++];
             coordsStorage[coordsCursor++] = x;
             coordsStorage[coordsCursor++] = y;
-            if (i > len2) {
-              if (process.env.NODE_ENV !== "production") {
-                throw new Error("Invalid data format.");
-              }
-            }
           }
         }
         return {
@@ -14461,12 +14385,6 @@ var LinesSeriesModel = (
       };
     };
     LinesSeriesModel2.prototype.getInitialData = function(option, ecModel) {
-      if (process.env.NODE_ENV !== "production") {
-        var CoordSys = CoordinateSystemManager.get(option.coordinateSystem);
-        if (!CoordSys) {
-          throw new Error("Unknown coordinate system " + option.coordinateSystem);
-        }
-      }
       var lineData = new SeriesData(["value"], this);
       lineData.hasItemOption = false;
       lineData.initData(option.data, [], function(dataItem, dimName, dataIndex, dimIndex) {
@@ -14752,11 +14670,6 @@ var HeatmapView = (
           }
         });
       });
-      if (process.env.NODE_ENV !== "production") {
-        if (!visualMapOfThisSeries) {
-          throw new Error("Heatmap must use with visualMap");
-        }
-      }
       this._progressiveEls = null;
       this.group.removeAll();
       var coordSys = seriesModel.coordinateSystem;
@@ -14793,14 +14706,6 @@ var HeatmapView = (
       if (isCartesian2d) {
         var xAxis = coordSys.getAxis("x");
         var yAxis = coordSys.getAxis("y");
-        if (process.env.NODE_ENV !== "production") {
-          if (!(xAxis.type === "category" && yAxis.type === "category")) {
-            throw new Error("Heatmap on cartesian must have two category axes");
-          }
-          if (!(xAxis.onBand && yAxis.onBand)) {
-            throw new Error("Heatmap on cartesian must have two axes with boundaryGap true");
-          }
-        }
         width = xAxis.getBandWidth() + 0.5;
         height = yAxis.getBandWidth() + 0.5;
         xAxisExtent = xAxis.scale.getExtent();
@@ -15601,8 +15506,8 @@ var ThemeRiverView = (
       }
       var dataDiffer = new DataDiffer(this._layersSeries || [], layersSeries, keyGetter, keyGetter);
       var newLayersGroups = [];
-      dataDiffer.add(bind(process2, this, "add")).update(bind(process2, this, "update")).remove(bind(process2, this, "remove")).execute();
-      function process2(status, idx, oldIdx) {
+      dataDiffer.add(bind(process, this, "add")).update(bind(process, this, "update")).remove(bind(process, this, "remove")).execute();
+      function process(status, idx, oldIdx) {
         var oldLayersGroups = self._layers;
         if (status === "remove") {
           group.remove(oldLayersGroups[idx]);
@@ -16188,9 +16093,6 @@ function installSunburstAction(registers) {
         payload.dataIndex = targetInfo.node.dataIndex;
       }
     }
-    if (process.env.NODE_ENV !== "production") {
-      deprecateReplaceLog("sunburstHighlight", "highlight");
-    }
     api.dispatchAction(extend(payload, {
       type: "highlight"
     }));
@@ -16200,9 +16102,6 @@ function installSunburstAction(registers) {
     update: "updateView"
   }, function(payload, ecModel, api) {
     payload = extend({}, payload);
-    if (process.env.NODE_ENV !== "production") {
-      deprecateReplaceLog("sunburstUnhighlight", "downplay");
-    }
     api.dispatchAction(extend(payload, {
       type: "downplay"
     }));
@@ -17028,9 +16927,6 @@ function createEl(elOption) {
     var Clz = getShapeClass(graphicType);
     if (!Clz) {
       var errMsg = "";
-      if (process.env.NODE_ENV !== "production") {
-        errMsg = 'graphic type "' + graphicType + '" can not be found.';
-      }
       throwError(errMsg);
     }
     el = new Clz();
@@ -17129,10 +17025,6 @@ function makeRenderItem(customSeries, data, ecModel, api) {
   var coordSys = customSeries.coordinateSystem;
   var prepareResult = {};
   if (coordSys) {
-    if (process.env.NODE_ENV !== "production") {
-      assert(renderItem, "series.render is required.");
-      assert(coordSys.prepareCustoms || prepareCustoms[coordSys.type], "This coordSys does not support custom series.");
-    }
     prepareResult = coordSys.prepareCustoms ? coordSys.prepareCustoms(coordSys) : prepareCustoms[coordSys.type](coordSys);
   }
   var userAPI = defaults({
@@ -17210,9 +17102,6 @@ function makeRenderItem(customSeries, data, ecModel, api) {
     return ordinalMeta ? ordinalMeta.categories[val] : val;
   }
   function style(userProps, dataIndexInside) {
-    if (process.env.NODE_ENV !== "production") {
-      warnDeprecated("api.style", "Please write literal style directly instead.");
-    }
     dataIndexInside == null && (dataIndexInside = currDataIndexInside);
     var style2 = data.getItemVisual(dataIndexInside, "style");
     var visualColor = style2 && style2.fill;
@@ -17234,9 +17123,6 @@ function makeRenderItem(customSeries, data, ecModel, api) {
     return itemStyle;
   }
   function styleEmphasis(userProps, dataIndexInside) {
-    if (process.env.NODE_ENV !== "production") {
-      warnDeprecated("api.styleEmphasis", "Please write literal style directly instead.");
-    }
     dataIndexInside == null && (dataIndexInside = currDataIndexInside);
     var itemStyle = getItemStyleModel(dataIndexInside, EMPHASIS).getItemStyle();
     var labelModel = getLabelModel(dataIndexInside, EMPHASIS);
@@ -17310,9 +17196,6 @@ function createOrUpdateItem(api, existsEl, dataIndex, elOption, seriesModel, gro
   return el;
 }
 function doCreateOrUpdateEl(api, existsEl, dataIndex, elOption, seriesModel, group) {
-  if (process.env.NODE_ENV !== "production") {
-    assert(elOption, "should not have an null/undefined element setting");
-  }
   var toBeReplacedIdx = -1;
   var oldEl = existsEl;
   if (existsEl && doesElNeedRecreate(existsEl, elOption, seriesModel)) {
@@ -17383,9 +17266,6 @@ function doCreateOrUpdateClipPath(el, dataIndex, elOption, seriesModel, isInit) 
     }
     if (!clipPath) {
       clipPath = createEl(clipPathOpt);
-      if (process.env.NODE_ENV !== "production") {
-        assert(isPath(clipPath), "Only any type of `path` can be used in `clipPath`, rather than " + clipPath.type + ".");
-      }
       el.setClipPath(clipPath);
     }
     updateElNormal(null, clipPath, dataIndex, clipPathOpt, null, seriesModel, isInit);
@@ -17450,9 +17330,6 @@ function processTxInfo(elOption, state, attachedTxInfo) {
   if (!state && txConOpt) {
     var txConOptNormal_1 = txConOpt;
     !txConOptNormal_1.type && (txConOptNormal_1.type = "text");
-    if (process.env.NODE_ENV !== "production") {
-      assert(txConOptNormal_1.type === "text", 'textContent.type must be "text"');
-    }
   }
   var info = !state ? attachedTxInfo.normal : attachedTxInfo[state];
   info.cfg = txCfg;
@@ -17499,9 +17376,6 @@ function mergeChildren(api, el, dataIndex, elOption, seriesModel) {
       }
       doCreateOrUpdateEl(api, oldChild, dataIndex, newChild, seriesModel, el);
     } else {
-      if (process.env.NODE_ENV !== "production") {
-        assert(oldChild, "renderItem should not return a group containing elements as null/undefined/{} if they do not exist before.");
-      }
       oldChild.ignore = true;
     }
   }

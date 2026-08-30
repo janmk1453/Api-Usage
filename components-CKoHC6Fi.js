@@ -1,7 +1,7 @@
-import { y as getAxisInfo$1, A as AxisBuilder, z as layout$2, B as makeKey, C as AxisView, D as collect, c as install$r, E as axisModelCreator, F as rectCoordAxisHandleRemove, G as rectCoordAxisBuildSplitArea, v as isEC4CompatibleStyle, x as convertFromEC4CompatibleStyle, q as stopPreviousKeyframeAnimationAndRestore, r as applyUpdateTransition, H as updateLeaveTo, t as applyKeyframeAnimation, I as isTransitionAll, n as applyLeaveTransition, J as sliderMove, K as makeLinearBrushOtherExtent, N as makeRectIsTargetByCursor, O as makeRectPanelClipPath, P as BrushController, k as VisualMapping, S as SymbolDraw, L as LineDraw, i as isCoordinateSystemType, R as RoamController } from "./customGraphicKeyframeAnimation-De9JSPSE.js";
-import { f, l, d } from "./customGraphicKeyframeAnimation-De9JSPSE.js";
-import { G as Group$2, d as curry$1, Z as ZRText, av as stop, l as isArray$1, c as clone$1, b as bind$1, o as isObject, g as each$9, aw as rotate, a1 as translate, ax as getBoundingRect, p as isString, n as isFunction, a5 as create$1, _ as __extends, v as env, q as map, h as extend, m as mixin, a8 as retrieve, f as defaults, i as filter, R as Rect$1, ay as logError, Y as assert, r as merge, V as createHashMap, j as indexOf, au as hasOwn, E as retrieve2, a4 as Displayable, $ as keys, a as ZRImage, az as isDom, aA as addEventListener, aB as normalizeEvent, aC as transformLocalCoord, aD as trim$1, e as encodeHTML, a0 as noop, B as BoundingRect, Q as parsePercent$1, I as isNumber, a7 as modifyAlpha, aq as mergeAll, aE as parse, aF as stringify, P as Point, aG as isArrayLike, aH as isRegExp } from "./graphic-ClH5Uwd8.js";
-import { ba as graphic, T as createIcon, b$ as createOrUpdate, c0 as clear$1, a2 as updateProps$1, b5 as makeInner, c1 as applyTransform, a8 as normalizeCssArray, a as createTextStyle, c2 as getAxisRawValue, ab as ComponentModel, ac as ComponentView, aR as queryDataIndex, aJ as use, bI as SINGLE_REFERRING, A as AxisModelCommonMixin, ae as Axis, c3 as getDataDimensionsOnAxis, n as niceScaleExtent, c as createScaleByModel$1, b4 as parsePercent, S as Sector, $ as mergePath, L as Line, M as Model, f as getECData, N as Ring, c4 as groupTransition, G as Circle, i as isDimensionStacked, c5 as subPixelOptimizeLine, h as getLayoutRect, c6 as getLayoutParams, c7 as sizeCalculable, c8 as mergeLayoutParam, K as Polyline, c9 as formatTplSimple, ca as getLocaleModel, v as parseDate, cb as mappingToExists, cc as copyLayoutParams, bi as convertOptionIdName, cd as setTooltipConfig, bl as positionElement, ce as LOCATION_PARAMS, W as getShapeClass, cf as MULTIPLE_REFERRING, s as linearMap$2, m as getPixelPrecision, cg as unionAxisExtentFromData, ch as ensureScaleRawExtentInfo, k as asc$2, ci as box, bn as DataDiffer, cj as getUID, bx as enterEmphasis, by as leaveEmphasis, bN as getFont, at as registerAction, aZ as warn, ck as parseFinder$1, X as getTransform, cl as registerInternalOptionCreator, cm as makeInternalComponentId, a9 as toCamelCase, aO as convertToColorString, cn as getPaddingFromTooltipModel, bE as throwError, co as getTooltipRenderMode, cp as findEventDispatcher, bd as createTooltipMarkup, cq as TooltipMarkupStyleCreator, cr as normalizeTooltipFormatResult, cs as buildTooltipMarkup, D as format, a6 as formatTpl, ct as preParseFinder, cu as queryReferringComponents, bk as normalizeToArray, cv as getItemVisualFromData, cw as setItemVisualFromData, cx as contain, cy as linePolygonIntersect, bo as windowOpen, b_ as getDataItemValue, af as SeriesData, aY as inheritDefaultOption, cz as DataFormatMixin, d as enableHoverEmphasis, cA as IntervalScale, cB as TimeScale, cC as OrdinalScale, b as createSymbol, bb as normalizeSymbolSize, bG as normalizeSymbolOffset, b8 as defaultEmphasis, cD as parseDataValue, o as getPrecision, cE as enterBlur, cF as leaveBlur, cG as getVisualFromData, g as getStackedDimension, P as Polygon, aT as setLabelStyle, aU as getLabelStatesModels, aP as setStatesStylesFromModel, aQ as toggleHoverEmphasis, cH as isNameSpecified, bJ as createOrUpdatePatternFromDecal, cI as symbolBuildProxies, cJ as deprecateLog, cK as transformDirection, bq as setAsHighDownDispatcher, J as LinearGradient, cL as compressBatches, z as reformIntervals, bj as getDecalFromPalette, bD as makePrintable, cM as getRawValueParser, cN as createFilterComparator, cO as SortOrderComparator, bC as SOURCE_FORMAT_ARRAY_ROWS, cP as SOURCE_FORMAT_OBJECT_ROWS, cQ as SourceManager, cR as disableTransformOptionMerge, cS as SERIES_LAYOUT_BY_COLUMN } from "./Axis-DJa7LvDr.js";
+import { x as getAxisInfo$1, A as AxisBuilder, y as layout$2, z as makeKey, B as AxisView, C as collect, c as install$r, D as axisModelCreator, E as rectCoordAxisHandleRemove, F as rectCoordAxisBuildSplitArea, v as isEC4CompatibleStyle, w as convertFromEC4CompatibleStyle, q as stopPreviousKeyframeAnimationAndRestore, r as applyUpdateTransition, G as updateLeaveTo, t as applyKeyframeAnimation, H as isTransitionAll, n as applyLeaveTransition, I as sliderMove, J as makeLinearBrushOtherExtent, K as makeRectIsTargetByCursor, N as makeRectPanelClipPath, O as BrushController, k as VisualMapping, S as SymbolDraw, L as LineDraw, i as isCoordinateSystemType, R as RoamController } from "./customGraphicKeyframeAnimation-eUF5MR8P.js";
+import { f, l, d } from "./customGraphicKeyframeAnimation-eUF5MR8P.js";
+import { G as Group$2, d as curry$1, Z as ZRText, av as stop, l as isArray$1, c as clone$1, b as bind$1, o as isObject, g as each$9, aw as rotate, a1 as translate, ax as getBoundingRect, p as isString, n as isFunction, a5 as create$1, _ as __extends, v as env, q as map, h as extend, m as mixin, f as defaults, i as filter, a8 as retrieve, R as Rect$1, r as merge, V as createHashMap, j as indexOf, au as hasOwn, E as retrieve2, a4 as Displayable, $ as keys, a as ZRImage, ay as isDom, az as addEventListener, aA as normalizeEvent, aB as transformLocalCoord, aC as trim$1, e as encodeHTML, a0 as noop, B as BoundingRect, Q as parsePercent$1, I as isNumber, a7 as modifyAlpha, aq as mergeAll, aD as parse, aE as stringify, P as Point, aF as isArrayLike, aG as isRegExp } from "./graphic-B6pfdUzY.js";
+import { b9 as graphic, T as createIcon, bX as createOrUpdate, bY as clear$1, a2 as updateProps$1, b4 as makeInner, bZ as applyTransform, a8 as normalizeCssArray, a as createTextStyle, b_ as getAxisRawValue, ab as ComponentModel, ac as ComponentView, aR as queryDataIndex, ae as use, bF as SINGLE_REFERRING, A as AxisModelCommonMixin, af as Axis, b$ as getDataDimensionsOnAxis, n as niceScaleExtent, c as createScaleByModel$1, b3 as parsePercent, S as Sector, $ as mergePath, L as Line, M as Model, f as getECData, N as Ring, c0 as groupTransition, G as Circle, i as isDimensionStacked, c1 as subPixelOptimizeLine, h as getLayoutRect, c2 as getLayoutParams, c3 as sizeCalculable, c4 as mergeLayoutParam, K as Polyline, c5 as formatTplSimple, c6 as getLocaleModel, v as parseDate, c7 as mappingToExists, c8 as copyLayoutParams, bh as convertOptionIdName, c9 as setTooltipConfig, bk as positionElement, ca as LOCATION_PARAMS, W as getShapeClass, cb as MULTIPLE_REFERRING, s as linearMap$2, m as getPixelPrecision, cc as unionAxisExtentFromData, cd as ensureScaleRawExtentInfo, k as asc$2, ce as box, bm as DataDiffer, cf as getUID, bw as enterEmphasis, bx as leaveEmphasis, bJ as getFont, au as registerAction, cg as parseFinder$1, X as getTransform, ch as registerInternalOptionCreator, ci as makeInternalComponentId, a9 as toCamelCase, aO as convertToColorString, cj as getPaddingFromTooltipModel, bC as throwError, ck as getTooltipRenderMode, cl as findEventDispatcher, bc as createTooltipMarkup, cm as TooltipMarkupStyleCreator, cn as normalizeTooltipFormatResult, co as buildTooltipMarkup, D as format, a6 as formatTpl, cp as preParseFinder, cq as queryReferringComponents, bj as normalizeToArray, cr as getItemVisualFromData, cs as setItemVisualFromData, ct as contain, cu as linePolygonIntersect, bn as windowOpen, bW as getDataItemValue, ag as SeriesData, aY as inheritDefaultOption, cv as DataFormatMixin, d as enableHoverEmphasis, cw as IntervalScale, cx as TimeScale, cy as OrdinalScale, b as createSymbol, ba as normalizeSymbolSize, bE as normalizeSymbolOffset, b7 as defaultEmphasis, cz as parseDataValue, o as getPrecision, cA as enterBlur, cB as leaveBlur, cC as getVisualFromData, g as getStackedDimension, P as Polygon, aT as setLabelStyle, aU as getLabelStatesModels, aP as setStatesStylesFromModel, aQ as toggleHoverEmphasis, cD as isNameSpecified, bG as createOrUpdatePatternFromDecal, cE as symbolBuildProxies, cF as transformDirection, bp as setAsHighDownDispatcher, J as LinearGradient, cG as compressBatches, z as reformIntervals, bi as getDecalFromPalette, cH as getRawValueParser, cI as createFilterComparator, cJ as SortOrderComparator, bB as SOURCE_FORMAT_ARRAY_ROWS, cK as SOURCE_FORMAT_OBJECT_ROWS, cL as SourceManager, cM as disableTransformOptionMerge, cN as SERIES_LAYOUT_BY_COLUMN } from "./Axis-JyrlqAeP.js";
 var inner$b = makeInner();
 var clone = clone$1;
 var bind = bind$1;
@@ -1489,11 +1489,6 @@ var polarCreator = {
     ecModel.eachSeries(function(seriesModel) {
       if (seriesModel.get("coordinateSystem") === "polar") {
         var polarModel = seriesModel.getReferringComponents("polar", SINGLE_REFERRING).models[0];
-        if (process.env.NODE_ENV !== "production") {
-          if (!polarModel) {
-            throw new Error('Polar "' + retrieve(seriesModel.get("polarIndex"), seriesModel.get("polarId"), 0) + '" not found');
-          }
-        }
         seriesModel.coordinateSystem = polarModel.coordinateSystem;
       }
     });
@@ -3244,9 +3239,6 @@ var Calendar = (
         normalizedRange = range;
       }
       if (!normalizedRange) {
-        if (process.env.NODE_ENV !== "production") {
-          logError("Invalid date range.");
-        }
         return range;
       }
       var tmp = this._getRangeInfo(normalizedRange);
@@ -3356,10 +3348,6 @@ function mergeNewElOptionToExist(existList, index, newElOption) {
   var $action = newElOption.$action || "merge";
   if ($action === "merge") {
     if (existElOption) {
-      if (process.env.NODE_ENV !== "production") {
-        var newType = newElOption.type;
-        assert(!newType || existElOption.type === newType, 'Please set $action: "replace" to change `type`');
-      }
       merge(existElOption, newElOptCopy, true);
       mergeLayoutParam(existElOption, newElOptCopy, {
         ignoreSize: true
@@ -3443,9 +3431,6 @@ var GraphicComponentModel = (
       var elOptionsToUpdate = this._elOptionsToUpdate = [];
       each$9(mappingResult, function(resultItem, index) {
         var newElOption = resultItem.newOption;
-        if (process.env.NODE_ENV !== "production") {
-          assert(isObject(newElOption) || resultItem.existing, "Empty graphic option definition");
-        }
         if (!newElOption) {
           return;
         }
@@ -3551,9 +3536,6 @@ var GraphicComponentView = (
           }
         }
         var elOptionCleaned = getCleanedElOption(elOption);
-        if (process.env.NODE_ENV !== "production") {
-          elExisting && assert(targetElParent === elExisting.parent, "Changing parent is not supported.");
-        }
         var $action = elOption.$action || "merge";
         var isMerge = $action === "merge";
         var isReplace = $action === "replace";
@@ -3704,13 +3686,7 @@ var GraphicComponentView = (
   }(ComponentView)
 );
 function newEl(graphicType) {
-  if (process.env.NODE_ENV !== "production") {
-    assert(graphicType, "graphic type MUST be set");
-  }
   var Clz = hasOwn(nonShapeGraphicElements, graphicType) ? nonShapeGraphicElements[graphicType] : getShapeClass(graphicType);
-  if (process.env.NODE_ENV !== "production") {
-    assert(Clz, "graphic type " + graphicType + " can not be found");
-  }
   var el = new Clz({});
   inner$7(el).type = graphicType;
   return el;
@@ -3811,9 +3787,6 @@ function isCoordSupported(seriesModel) {
   return indexOf(SERIES_COORDS, coordType) >= 0;
 }
 function getAxisMainType(axisDim) {
-  if (process.env.NODE_ENV !== "production") {
-    assert(axisDim);
-  }
   return axisDim + "Axis";
 }
 function findEffectedDataZooms(ecModel, payload) {
@@ -4091,9 +4064,6 @@ var DataZoomModel = (
       }
     };
     DataZoomModel2.prototype.getAxisModel = function(axisDim, axisIndex) {
-      if (process.env.NODE_ENV !== "production") {
-        assert(axisDim && axisIndex != null);
-      }
       var axisInfo = this._targetAxisInfoMap.get(axisDim);
       if (axisInfo && axisInfo.indexMap[axisIndex]) {
         return this.ecModel.getComponent(getAxisMainType(axisDim), axisIndex);
@@ -4157,9 +4127,6 @@ var DataZoomModel = (
       return this._rangePropMode.slice();
     };
     DataZoomModel2.prototype.getOrient = function() {
-      if (process.env.NODE_ENV !== "production") {
-        assert(this._orient);
-      }
       return this._orient;
     };
     DataZoomModel2.type = "dataZoom";
@@ -5322,9 +5289,6 @@ var DataView = (
       addEventListener(closeButton, "click", close);
       addEventListener(refreshButton, "click", function() {
         if (contentToOption == null && optionToContent != null || contentToOption != null && optionToContent == null) {
-          if (process.env.NODE_ENV !== "production") {
-            warn("It seems you have just provided one of `contentToOption` and `optionToContent` functions but missed the other one. Data change is ignored.");
-          }
           close();
           return;
         }
@@ -5565,10 +5529,6 @@ var BrushTargetManager = (
     BrushTargetManager2.prototype.setInputRanges = function(areas, ecModel) {
       each$9(areas, function(area) {
         var targetInfo = this.findTargetInfo(area, ecModel);
-        if (process.env.NODE_ENV !== "production") {
-          assert(!targetInfo || targetInfo === true || area.coordRange, "coordRange must be specified when coord index specified.");
-          assert(!targetInfo || targetInfo !== true || area.range, "range must be specified in global brush.");
-        }
         area.range = area.range || [];
         if (targetInfo && targetInfo !== true) {
           area.panelId = targetInfo.panelId;
@@ -5743,9 +5703,6 @@ var coordConvert = {
   }
 };
 function axisConvert(axisNameIndex, to, coordSys, rangeOrCoordRange) {
-  if (process.env.NODE_ENV !== "production") {
-    assert(coordSys.type === "cartesian2d", "lineX/lineY brush is available only in cartesian2d.");
-  }
   var axis = coordSys.getAxis(["x", "y"][axisNameIndex]);
   var values = formatMinMax(map([0, 1], function(i) {
     return to ? axis.coordToData(axis.toLocalCoord(rangeOrCoordRange[i]), true) : axis.toGlobalCoord(axis.dataToCoord(rangeOrCoordRange[i]));
@@ -6412,7 +6369,7 @@ var TooltipRichContent = (
     TooltipRichContent2.prototype.setContent = function(content, markupStyleCreator, tooltipModel, borderColor, arrowPosition) {
       var _this = this;
       if (isObject(content)) {
-        throwError(process.env.NODE_ENV !== "production" ? "Passing DOM nodes as content is not supported in richText tooltip!" : "");
+        throwError("");
       }
       if (this.el) {
         this._zr.remove(this.el);
@@ -7695,12 +7652,6 @@ var BrushModel = (
       }
     };
     BrushModel2.prototype.setAreas = function(areas) {
-      if (process.env.NODE_ENV !== "production") {
-        assert(isArray$1(areas));
-        each$9(areas, function(area) {
-          assert(area.brushType, "Illegal areas");
-        });
-      }
       if (!areas) {
         return;
       }
@@ -8969,11 +8920,6 @@ var MarkerModel = (
       return _this;
     }
     MarkerModel2.prototype.init = function(option, parentModel, ecModel) {
-      if (process.env.NODE_ENV !== "production") {
-        if (this.type === "marker") {
-          throw new Error("Marker component is abstract component. Use markLine, markPoint, markArea instead.");
-        }
-      }
       this.mergeDefaultAndTheme(option, ecModel);
       this._mergeOption(option, ecModel, false, true);
     };
@@ -9488,9 +9434,6 @@ var markLineTransform = function(seriesModel, coordSys, mlModel, item) {
         value
       }];
     } else {
-      if (process.env.NODE_ENV !== "production") {
-        logError("Invalid markLine data.");
-      }
       itemArray = [];
     }
   } else {
@@ -10429,11 +10372,6 @@ var LegendView = (
               legendDrawnMap.set(name, true);
             }
           }, this);
-        }
-        if (process.env.NODE_ENV !== "production") {
-          if (!legendDrawnMap.get(name)) {
-            console.warn(name + " series not exists. Legend data should be same with series name or data name.");
-          }
         }
       }, this);
       if (selector2) {
@@ -11904,9 +11842,6 @@ var SliderZoomView = (
         var iconStr = dataZoomModel.get("handleIcon");
         if (!symbolBuildProxies[iconStr] && iconStr.indexOf("path://") < 0 && iconStr.indexOf("image://") < 0) {
           iconStr = "path://" + iconStr;
-          if (process.env.NODE_ENV !== "production") {
-            deprecateLog("handleIcon now needs 'path://' prefix when using a path string");
-          }
         }
         var path = createSymbol(iconStr, -1, 0, 2, 2, null, true);
         path.attr({
@@ -13849,11 +13784,6 @@ var resetMethods = {
         }
         useMinMax[0] && interval[1] === Infinity && (close_1[0] = 0);
         useMinMax[1] && interval[0] === -Infinity && (close_1[1] = 0);
-        if (process.env.NODE_ENV !== "production") {
-          if (interval[0] > interval[1]) {
-            console.warn("Piece " + index + "is illegal: " + interval + " lower bound should not greater then uppper bound.");
-          }
-        }
         if (interval[0] === interval[1] && close_1[0] && close_1[1]) {
           item.value = interval[0];
         }
@@ -14275,9 +14205,6 @@ var RegExpEvaluator = (
       var condValue = this._condVal = isString(rVal) ? new RegExp(rVal) : isRegExp(rVal) ? rVal : null;
       if (condValue == null) {
         var errMsg = "";
-        if (process.env.NODE_ENV !== "production") {
-          errMsg = makePrintable("Illegal regexp", rVal, "in");
-        }
         throwError(errMsg);
       }
     }
@@ -14372,9 +14299,6 @@ function parseOption(exprOption, getters) {
   }
   var errMsg = "";
   if (!isObjectNotArray(exprOption)) {
-    if (process.env.NODE_ENV !== "production") {
-      errMsg = makePrintable("Illegal config. Expect a plain object but actually", exprOption);
-    }
     throwError(errMsg);
   }
   if (exprOption.and) {
@@ -14389,9 +14313,6 @@ function parseOption(exprOption, getters) {
 function parseAndOrOption(op, exprOption, getters) {
   var subOptionArr = exprOption[op];
   var errMsg = "";
-  if (process.env.NODE_ENV !== "production") {
-    errMsg = makePrintable('"and"/"or" condition should only be `' + op + ": [...]` and must not be empty array.", "Illegal condition:", exprOption);
-  }
   if (!isArray$1(subOptionArr)) {
     throwError(errMsg);
   }
@@ -14410,9 +14331,6 @@ function parseAndOrOption(op, exprOption, getters) {
 function parseNotOption(exprOption, getters) {
   var subOption = exprOption.not;
   var errMsg = "";
-  if (process.env.NODE_ENV !== "production") {
-    errMsg = makePrintable('"not" condition should only be `not: {}`.', "Illegal condition:", exprOption);
-  }
   if (!isObjectNotArray(subOption)) {
     throwError(errMsg);
   }
@@ -14440,17 +14358,11 @@ function parseRelationalOption(exprOption, getters) {
     var condValueParsed = valueParser ? valueParser(condValueRaw) : condValueRaw;
     var evaluator = createFilterComparator(op, condValueParsed) || op === "reg" && new RegExpEvaluator(condValueParsed);
     if (!evaluator) {
-      if (process.env.NODE_ENV !== "production") {
-        errMsg = makePrintable('Illegal relational operation: "' + keyRaw + '" in condition:', exprOption);
-      }
       throwError(errMsg);
     }
     subCondList.push(evaluator);
   }
   if (!subCondList.length) {
-    if (process.env.NODE_ENV !== "production") {
-      errMsg = makePrintable("Relational condition must have at least one operator.", "Illegal condition:", exprOption);
-    }
     throwError(errMsg);
   }
   var cond = new RelationalConditionInternal();
@@ -14492,16 +14404,10 @@ var filterTransform = {
         var errMsg = "";
         var dimLoose = exprOption.dimension;
         if (!hasOwn(exprOption, "dimension")) {
-          if (process.env.NODE_ENV !== "production") {
-            errMsg = makePrintable('Relation condition must has prop "dimension" specified.', "Illegal condition:", exprOption);
-          }
           throwError(errMsg);
         }
         var dimInfo = upstream.getDimensionInfo(dimLoose);
         if (!dimInfo) {
-          if (process.env.NODE_ENV !== "production") {
-            errMsg = makePrintable("Can not find dimension info via: " + dimLoose + ".\n", "Existing dimensions: ", upstream.cloneAllDimensionInfo(), ".\n", "Illegal condition:", exprOption, ".\n");
-          }
           throwError(errMsg);
         }
         return {
@@ -14524,10 +14430,6 @@ var filterTransform = {
     };
   }
 };
-var sampleLog = "";
-if (process.env.NODE_ENV !== "production") {
-  sampleLog = ["Valid config is like:", '{ dimension: "age", order: "asc" }', 'or [{ dimension: "age", order: "asc"], { dimension: "date", order: "desc" }]'].join(" ");
-}
 var sortTransform = {
   type: "echarts:sort",
   transform: function(params) {
@@ -14536,9 +14438,6 @@ var sortTransform = {
     var errMsg = "";
     var orderExprList = normalizeToArray(config);
     if (!orderExprList.length) {
-      if (process.env.NODE_ENV !== "production") {
-        errMsg = "Empty `config` in sort transform.";
-      }
       throwError(errMsg);
     }
     var orderDefList = [];
@@ -14548,43 +14447,25 @@ var sortTransform = {
       var parserName = orderExpr.parser;
       var incomparable = orderExpr.incomparable;
       if (dimLoose == null) {
-        if (process.env.NODE_ENV !== "production") {
-          errMsg = 'Sort transform config must has "dimension" specified.' + sampleLog;
-        }
         throwError(errMsg);
       }
       if (order !== "asc" && order !== "desc") {
-        if (process.env.NODE_ENV !== "production") {
-          errMsg = 'Sort transform config must has "order" specified.' + sampleLog;
-        }
         throwError(errMsg);
       }
       if (incomparable && incomparable !== "min" && incomparable !== "max") {
         var errMsg_1 = "";
-        if (process.env.NODE_ENV !== "production") {
-          errMsg_1 = 'incomparable must be "min" or "max" rather than "' + incomparable + '".';
-        }
         throwError(errMsg_1);
       }
       if (order !== "asc" && order !== "desc") {
         var errMsg_2 = "";
-        if (process.env.NODE_ENV !== "production") {
-          errMsg_2 = 'order must be "asc" or "desc" rather than "' + order + '".';
-        }
         throwError(errMsg_2);
       }
       var dimInfo = upstream.getDimensionInfo(dimLoose);
       if (!dimInfo) {
-        if (process.env.NODE_ENV !== "production") {
-          errMsg = makePrintable("Can not find dimension info via: " + dimLoose + ".\n", "Existing dimensions: ", upstream.cloneAllDimensionInfo(), ".\n", "Illegal config:", orderExpr, ".\n");
-        }
         throwError(errMsg);
       }
       var parser = parserName ? getRawValueParser(parserName) : null;
       if (parserName && !parser) {
-        if (process.env.NODE_ENV !== "production") {
-          errMsg = makePrintable("Invalid parser name " + parserName + ".\n", "Illegal config:", orderExpr, ".\n");
-        }
         throwError(errMsg);
       }
       orderDefList.push({
@@ -14595,9 +14476,6 @@ var sortTransform = {
     });
     var sourceFormat = upstream.sourceFormat;
     if (sourceFormat !== SOURCE_FORMAT_ARRAY_ROWS && sourceFormat !== SOURCE_FORMAT_OBJECT_ROWS) {
-      if (process.env.NODE_ENV !== "production") {
-        errMsg = 'sourceFormat "' + sourceFormat + '" is not supported yet';
-      }
       throwError(errMsg);
     }
     var resultData = [];
