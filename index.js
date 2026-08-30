@@ -2188,15 +2188,34 @@ function renderHistory(doc, s) {
         <div style="display:flex;gap:8px;"><span style="color:#0BA25E;font-weight:500;">${hps}% 命中</span><span style="color:#DC2626;font-weight:500;">${mps}% 未命中</span><span style="color:#6366F1;font-weight:500;">${ops}% 输出</span></div>
         <span style="color:#6B7280;">${total.toLocaleString()}t</span>
       </div>
-      <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;margin-top:8px;border-top:1px solid #E5E7EB;padding-top:8px;height:180px;overflow:auto;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;">
-          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;">输入命中</div><div style="font-weight:600;color:#0BA25E;margin-top:2px;">${(h.cache_hit_tokens || 0).toLocaleString()} tokens</div><div style="color:#9CA3AF;font-size:10px;">¥${(h.input_cost || 0).toFixed(4)}</div></div>
-          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;">输入未命中</div><div style="font-weight:600;color:#DC2626;margin-top:2px;">${(h.cache_miss_tokens || 0).toLocaleString()} tokens</div></div>
-          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;">输出</div><div style="font-weight:600;color:#6366F1;margin-top:2px;">${(h.completion_tokens || 0).toLocaleString()} tokens</div><div style="color:#9CA3AF;font-size:10px;">¥${(h.output_cost || 0).toFixed(4)}</div></div>
-          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;">总费用</div><div style="font-weight:700;color:#111827;margin-top:2px;">¥${(h.cost || 0).toFixed(4)}</div><div style="color:#9CA3AF;font-size:10px;">${h.priceType || "—"}</div></div>
-          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;">耗时 / 首延</div><div style="font-weight:600;color:#111827;margin-top:2px;">${h.duration || 0}ms / ${h.ttft || 0}ms</div><div style="color:#9CA3AF;font-size:10px;">${h.tokenRate || 0} t/s</div></div>
-          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;">思维链</div><div style="font-weight:600;color:#111827;margin-top:2px;">${h.thinkTokens || 0} tk</div><div style="color:#9CA3AF;font-size:10px;">${h.thinkTime || 0}ms</div></div>
+      <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;margin-top:8px;border-top:1px solid #E5E7EB;padding-top:8px;height:320px;overflow:hidden;display:none;flex-direction:column;">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:11px;">
+          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;font-size:10px;">模型</div><div style="font-weight:600;color:#111827;margin-top:2px;word-break:break-all;">${esc$1(h.model || "—")}</div></div>
+          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;font-size:10px;">时间</div><div style="font-weight:600;color:#111827;margin-top:2px;">${new Date(h.timestamp).toLocaleString("zh-CN")}</div></div>
+          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;font-size:10px;">时段</div><div style="font-weight:600;margin-top:2px;">${h.priceType === "new-peak" ? "🔴 高峰" : h.priceType === "new-offpeak" ? "🟢 非高峰" : "⚪ 旧价格"}</div></div>
+          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;font-size:10px;">耗时</div><div style="font-weight:600;color:#111827;margin-top:2px;">${((h.duration || 0) / 1e3).toFixed(1)}s</div></div>
+          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;font-size:10px;">首字延迟</div><div style="font-weight:600;color:#111827;margin-top:2px;">${((h.ttft || 0) / 1e3).toFixed(1)}s</div></div>
+          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;font-size:10px;">速率</div><div style="font-weight:600;color:#0BA25E;margin-top:2px;">${h.tokenRate || 0} t/s</div></div>
+          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;font-size:10px;">思维链耗时</div><div style="font-weight:600;color:#111827;margin-top:2px;">${((h.thinkTime || 0) / 1e3).toFixed(1)}s</div></div>
+          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;font-size:10px;">思维链 Token</div><div style="font-weight:600;color:#111827;margin-top:2px;">${h.thinkTokens || 0}</div></div>
+          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;font-size:10px;">总费用</div><div style="font-weight:700;color:#111827;margin-top:2px;">¥${(h.cost || 0).toFixed(6)}</div></div>
+          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;font-size:10px;">缓存命中</div><div style="font-weight:600;color:#0BA25E;margin-top:2px;">${(h.cache_hit_tokens || 0).toLocaleString()}</div></div>
+          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;font-size:10px;">缓存未命中</div><div style="font-weight:600;color:#DC2626;margin-top:2px;">${(h.cache_miss_tokens || 0).toLocaleString()}</div></div>
+          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;font-size:10px;">输出 Token</div><div style="font-weight:600;color:#6366F1;margin-top:2px;">${(h.completion_tokens || 0).toLocaleString()}</div></div>
+          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;font-size:10px;">总 Token</div><div style="font-weight:600;color:#111827;margin-top:2px;">${(h.total_tokens || 0).toLocaleString()}</div></div>
+          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;font-size:10px;">输入费用</div><div style="font-weight:600;color:#111827;margin-top:2px;">¥${(h.input_cost || 0).toFixed(6)}</div></div>
+          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;"><div style="color:#6B7280;font-size:10px;">输出费用</div><div style="font-weight:600;color:#111827;margin-top:2px;">¥${(h.output_cost || 0).toFixed(6)}</div></div>
         </div>
+        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="aus-tab-btn" data-tab="req" data-ts="${h.timestamp}" style="padding:4px 8px;border:1px solid #111827;border-radius:999px;background:#111827;color:#fff;font-size:10px;cursor:pointer;">请求参数 (Request Body)</button>
+          <button class="aus-tab-btn" data-tab="res" data-ts="${h.timestamp}" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:10px;cursor:pointer;">API 完整响应 (Full Response)</button>
+          <button class="aus-tab-btn" data-tab="raw" data-ts="${h.timestamp}" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:10px;cursor:pointer;">原始 Token 用量 (Raw Usage)</button>
+          <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:10px;cursor:pointer;">消息内容 (Messages)</button>
+        </div>
+        <pre class="aus-tab-content" data-content="req-${h.timestamp}" style="margin-top:6px;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;font-size:11px;max-height:120px;overflow:auto;white-space:pre-wrap;word-break:break-all;">${esc$1(JSON.stringify(h.fullRequest || h.raw_usage || {}, null, 2))}</pre>
+        <pre class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;margin-top:6px;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;font-size:11px;max-height:120px;overflow:auto;white-space:pre-wrap;word-break:break-all;">${esc$1(JSON.stringify(h.fullResponse || {}, null, 2))}</pre>
+        <pre class="aus-tab-content" data-content="raw-${h.timestamp}" style="display:none;margin-top:6px;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;font-size:11px;max-height:120px;overflow:auto;white-space:pre-wrap;word-break:break-all;">${esc$1(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
+        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;margin-top:6px;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px;font-size:11px;max-height:120px;overflow:auto;white-space:pre-wrap;word-break:break-all;">${esc$1(JSON.stringify(h.messages || [], null, 2))}</pre>
       </div>
     </div>
   `;
@@ -2206,11 +2225,41 @@ function renderHistory(doc, s) {
       const ts = btn.getAttribute("data-ts");
       const panel = host.querySelector(`[data-detail="${ts}"]`);
       if (!panel) return;
-      const isOpen = panel.style.display !== "none";
-      panel.style.display = isOpen ? "none" : "block";
-      btn.textContent = isOpen ? "详情" : "收起";
-      btn.style.background = isOpen ? "#111827" : "#fff";
-      btn.style.color = isOpen ? "#fff" : "#111827";
+      const isOpen = panel.style.display !== "none" && panel.style.display !== "";
+      if (isOpen) {
+        panel.style.display = "none";
+        btn.textContent = "详情";
+        btn.style.background = "#111827";
+        btn.style.color = "#fff";
+      } else {
+        panel.style.display = "flex";
+        panel.style.flexDirection = "column";
+        btn.textContent = "收起";
+        btn.style.background = "#fff";
+        btn.style.color = "#111827";
+        btn.style.borderColor = "#111827";
+      }
+    });
+  });
+  host.querySelectorAll(".aus-tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const ts = btn.getAttribute("data-ts");
+      const tab = btn.getAttribute("data-tab");
+      const root = btn.closest(".aus-detail-panel");
+      if (!root) return;
+      root.querySelectorAll(".aus-tab-btn").forEach((b) => {
+        b.style.background = "#fff";
+        b.style.color = "#111827";
+        b.style.borderColor = "#E5E7EB";
+      });
+      btn.style.background = "#111827";
+      btn.style.color = "#fff";
+      btn.style.borderColor = "#111827";
+      root.querySelectorAll(".aus-tab-content").forEach((c) => {
+        c.style.display = "none";
+      });
+      const target = root.querySelector(`[data-content="${tab}-${ts}"]`);
+      if (target) target.style.display = "block";
     });
   });
 }
