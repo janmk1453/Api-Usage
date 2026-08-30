@@ -110,6 +110,7 @@ git commit -m "feat/fix: ..."
 git push origin main
 ```
 
+- **自动提交规则**：完整完成一项独立修改后必须立即执行提交推送，无需等待用户二次确认。单项定义：通过 `typecheck + build + node --check` 且满足用户当轮需求即视为完成。提交需包含 `src/` 源码与 `index.js/style.css` 产物，`commit` 信息遵循 `fix/feat/docs:` 前缀并简述本次变更点。
 - 产物 `index.js 150k` + `ECharts` 分包（`Axis-*` 等 9 个）随仓库提交以保离线加载，`style.css` 直出，勿手改产物；`vite.config.ts` 已 `define: process.env.NODE_ENV` 防浏览器 `process` 报错
 - `RE3.0` 仅同步产物备份，不作为提交源
 
