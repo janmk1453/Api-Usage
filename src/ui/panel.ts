@@ -341,26 +341,29 @@ export function createPanel() {
     if (!sb) return;
     const isMobile = (window.parent as any)?.innerWidth <= 760 || window.innerWidth <= 760;
     if (isMobile) {
-      // 覆盖式：收起 60px 常驻，展开 220px 浮于内容之上
       if (collapsed) {
-        sb.style.width = '60px'; sb.style.minWidth = '60px'; sb.style.maxWidth = '60px';
+        sb.style.setProperty('width', '60px', 'important');
+        sb.style.setProperty('min-width', '60px', 'important');
+        sb.style.setProperty('max-width', '60px', 'important');
         sb.style.position = ''; sb.style.left = ''; sb.style.top = ''; sb.style.bottom = ''; sb.style.zIndex = ''; sb.style.boxShadow = '';
         if (overlay) overlay.style.display = 'none';
       } else {
-        sb.style.width = '220px'; sb.style.minWidth = '220px'; sb.style.maxWidth = '220px';
+        sb.style.setProperty('width', '220px', 'important');
+        sb.style.setProperty('min-width', '220px', 'important');
+        sb.style.setProperty('max-width', '220px', 'important');
         sb.style.position = 'absolute'; sb.style.left = '0'; sb.style.top = '0'; sb.style.bottom = '0'; sb.style.zIndex = '5'; sb.style.boxShadow = '4px 0 16px rgba(0,0,0,0.12)';
         if (overlay) overlay.style.display = 'block';
       }
     } else {
-      sb.style.width = collapsed ? '60px' : '220px';
-      sb.style.minWidth = collapsed ? '60px' : '220px';
-      sb.style.maxWidth = collapsed ? '60px' : '220px';
+      sb.style.setProperty('width', collapsed ? '60px' : '220px', 'important');
+      sb.style.setProperty('min-width', collapsed ? '60px' : '220px', 'important');
+      sb.style.setProperty('max-width', collapsed ? '60px' : '220px', 'important');
       sb.style.position = ''; sb.style.left = ''; sb.style.top = ''; sb.style.bottom = ''; sb.style.zIndex = ''; sb.style.boxShadow = '';
       if (overlay) overlay.style.display = 'none';
     }
-    if (brand) brand.style.display = collapsed ? 'none' : 'flex';
+    if (brand) brand.style.setProperty('display', collapsed ? 'none' : 'flex', 'important');
     if (btn) btn.textContent = collapsed ? '›' : '‹';
-    doc.querySelectorAll('.aus-nav-label').forEach((el: any) => { (el as HTMLElement).style.display = collapsed ? 'none' : 'inline'; });
+    doc.querySelectorAll('.aus-nav-label').forEach((el: any) => { (el as HTMLElement).style.setProperty('display', collapsed ? 'none' : 'inline', 'important'); });
     doc.querySelectorAll('.aus-nav-item').forEach((el: any) => { (el as HTMLElement).style.justifyContent = collapsed ? 'center' : 'flex-start'; });
   };
   doc.getElementById('aus-sidebar-toggle')?.addEventListener('click', () => applyCollapsed(!collapsed));

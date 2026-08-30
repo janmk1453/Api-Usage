@@ -2481,9 +2481,9 @@ function createPanel() {
     const isMobile = window.parent?.innerWidth <= 760 || window.innerWidth <= 760;
     if (isMobile) {
       if (collapsed) {
-        sb.style.width = "60px";
-        sb.style.minWidth = "60px";
-        sb.style.maxWidth = "60px";
+        sb.style.setProperty("width", "60px", "important");
+        sb.style.setProperty("min-width", "60px", "important");
+        sb.style.setProperty("max-width", "60px", "important");
         sb.style.position = "";
         sb.style.left = "";
         sb.style.top = "";
@@ -2492,9 +2492,9 @@ function createPanel() {
         sb.style.boxShadow = "";
         if (overlay2) overlay2.style.display = "none";
       } else {
-        sb.style.width = "220px";
-        sb.style.minWidth = "220px";
-        sb.style.maxWidth = "220px";
+        sb.style.setProperty("width", "220px", "important");
+        sb.style.setProperty("min-width", "220px", "important");
+        sb.style.setProperty("max-width", "220px", "important");
         sb.style.position = "absolute";
         sb.style.left = "0";
         sb.style.top = "0";
@@ -2504,9 +2504,9 @@ function createPanel() {
         if (overlay2) overlay2.style.display = "block";
       }
     } else {
-      sb.style.width = collapsed ? "60px" : "220px";
-      sb.style.minWidth = collapsed ? "60px" : "220px";
-      sb.style.maxWidth = collapsed ? "60px" : "220px";
+      sb.style.setProperty("width", collapsed ? "60px" : "220px", "important");
+      sb.style.setProperty("min-width", collapsed ? "60px" : "220px", "important");
+      sb.style.setProperty("max-width", collapsed ? "60px" : "220px", "important");
       sb.style.position = "";
       sb.style.left = "";
       sb.style.top = "";
@@ -2515,10 +2515,10 @@ function createPanel() {
       sb.style.boxShadow = "";
       if (overlay2) overlay2.style.display = "none";
     }
-    if (brand) brand.style.display = collapsed ? "none" : "flex";
+    if (brand) brand.style.setProperty("display", collapsed ? "none" : "flex", "important");
     if (btn) btn.textContent = collapsed ? "›" : "‹";
     doc.querySelectorAll(".aus-nav-label").forEach((el) => {
-      el.style.display = collapsed ? "none" : "inline";
+      el.style.setProperty("display", collapsed ? "none" : "inline", "important");
     });
     doc.querySelectorAll(".aus-nav-item").forEach((el) => {
       el.style.justifyContent = collapsed ? "center" : "flex-start";
