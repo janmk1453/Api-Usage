@@ -25,10 +25,11 @@
 
 [data-extension="api-usage-stat"] .ds-card {
   background: var(--ds-card);
-  border: 1px solid transparent;
+  border: 1px solid #E5E7EB;
   border-radius: var(--ds-radius-card);
   padding: 16px 20px;
-  box-shadow: var(--ds-shadow);
+  box-shadow: none;
+  filter: none;
 }
 [data-extension="api-usage-stat"] .ds-card-title {
   font-size: 12px;
@@ -38,10 +39,11 @@
 }
 [data-extension="api-usage-stat"] .ds-card-val {
   font-size: 26px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--ds-text);
-  font-variant-numeric: tabular-nums;
   line-height: 1;
+  text-shadow: none;
+  filter: none;
 }
 [data-extension="api-usage-stat"] .ds-card-val small {
   font-size: 14px;
@@ -77,22 +79,21 @@
   [data-extension="api-usage-stat"] .ds-grid-3 { grid-template-columns: 1fr; }
 }
 
-/* 全屏独立面板 — 完全对齐原脚本：无滤镜/无合成层/系统默认光栅化 */
+/* 全屏独立面板 — 完全对齐原脚本：无滤镜/无合成层/系统默认光栅化，移除阴影干扰 */
 #aus-overlay { background: rgba(0,0,0,0.45); backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 #aus-panel {
   background: #FFFFFF;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  box-shadow: none;
+  border: none;
   transform: none !important;
   filter: none !important;
   will-change: auto !important;
-  -webkit-font-smoothing: auto;
-  -moz-osx-font-smoothing: auto;
-  text-rendering: auto;
+  text-shadow: none !important;
 }
 #aus-panel * {
-  -webkit-font-smoothing: auto;
-  -moz-osx-font-smoothing: auto;
-  text-rendering: auto;
+  text-shadow: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
   will-change: auto !important;
 }
 #aus-panel #aus-panel-scroll::-webkit-scrollbar { width: 6px; }
