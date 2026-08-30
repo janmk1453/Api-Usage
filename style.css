@@ -105,3 +105,36 @@
 #aus_wand_entry { cursor: pointer; }
 #aus_wand_entry:hover { background: transparent !important; }
 #aus_wand_entry.list-group-item:hover { background: transparent !important; }
+
+/* 移动端自适应 — 侧边栏转为顶部横向，不影响桌面 */
+@media (max-width: 760px) {
+  #aus-panel { flex-direction: column !important; }
+  #aus-sidebar {
+    width: 100% !important;
+    height: auto !important;
+    flex-direction: row !important;
+    border-right: none !important;
+    border-bottom: 1px solid #E5E7EB;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  #aus-sidebar > div:last-child { flex-direction: row !important; gap: 6px !important; }
+  #aus-sidebar .aus-nav-group { flex-direction: row !important; }
+  #aus-sidebar [style*="flex:1;"] { display: none !important; }
+  #aus-sidebar #aus-brand { display: flex !important; }
+  #aus-sidebar .aus-nav-label { display: inline !important; }
+  #aus-main { padding: 12px !important; }
+  /* 概览四块 2 列 */
+  #aus-overview-four { grid-template-columns: repeat(2, 1fr) !important; }
+  /* 概览双块单列 */
+  [data-view="overview"] > div:first-child { grid-template-columns: 1fr !important; }
+  [data-view="overview"] > div:nth-child(2) { grid-template-columns: 1fr !important; }
+  /* 统计三块单列 */
+  [data-view="stats"] > div:nth-child(2) { grid-template-columns: 1fr !important; }
+  /* 详情 3 列改 1 列 */
+  .aus-detail-panel > div:first-child { grid-template-columns: 1fr !important; }
+  .aus-detail-panel > div:nth-child(2) { grid-template-columns: 1fr !important; }
+}
+@media (max-width: 480px) {
+  #aus-overview-four { grid-template-columns: 1fr !important; }
+}
