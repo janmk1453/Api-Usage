@@ -332,8 +332,6 @@ export function createPanel() {
     const brand = doc.getElementById('aus-brand') as HTMLElement | null;
     const btn = doc.getElementById('aus-sidebar-toggle') as HTMLElement | null;
     if (!sb) return;
-    const isMobile = (window.parent as any)?.innerWidth <= 760 || window.innerWidth <= 760;
-    // 移动端展开时需覆盖媒体查询的 60px 限制
     sb.style.width = collapsed ? '60px' : '220px';
     sb.style.minWidth = collapsed ? '60px' : '220px';
     sb.style.maxWidth = collapsed ? '60px' : '220px';
@@ -341,8 +339,6 @@ export function createPanel() {
     if (btn) btn.textContent = collapsed ? '›' : '‹';
     doc.querySelectorAll('.aus-nav-label').forEach((el: any) => { (el as HTMLElement).style.display = collapsed ? 'none' : 'inline'; });
     doc.querySelectorAll('.aus-nav-item').forEach((el: any) => { (el as HTMLElement).style.justifyContent = collapsed ? 'center' : 'flex-start'; });
-    if (isMobile && !collapsed) { sb.style.position = 'absolute'; sb.style.left = '0'; sb.style.top = '0'; sb.style.bottom = '0'; sb.style.zIndex = '2'; sb.style.boxShadow = '2px 0 8px rgba(0,0,0,0.08)'; }
-    else { sb.style.position = ''; sb.style.left = ''; sb.style.top = ''; sb.style.bottom = ''; sb.style.zIndex = ''; sb.style.boxShadow = ''; }
   };
   doc.getElementById('aus-sidebar-toggle')?.addEventListener('click', () => applyCollapsed(!collapsed));
   // 移动端默认收缩

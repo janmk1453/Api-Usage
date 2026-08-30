@@ -2472,7 +2472,6 @@ function createPanel() {
     const brand = doc.getElementById("aus-brand");
     const btn = doc.getElementById("aus-sidebar-toggle");
     if (!sb) return;
-    const isMobile = window.parent?.innerWidth <= 760 || window.innerWidth <= 760;
     sb.style.width = collapsed ? "60px" : "220px";
     sb.style.minWidth = collapsed ? "60px" : "220px";
     sb.style.maxWidth = collapsed ? "60px" : "220px";
@@ -2484,21 +2483,6 @@ function createPanel() {
     doc.querySelectorAll(".aus-nav-item").forEach((el) => {
       el.style.justifyContent = collapsed ? "center" : "flex-start";
     });
-    if (isMobile && !collapsed) {
-      sb.style.position = "absolute";
-      sb.style.left = "0";
-      sb.style.top = "0";
-      sb.style.bottom = "0";
-      sb.style.zIndex = "2";
-      sb.style.boxShadow = "2px 0 8px rgba(0,0,0,0.08)";
-    } else {
-      sb.style.position = "";
-      sb.style.left = "";
-      sb.style.top = "";
-      sb.style.bottom = "";
-      sb.style.zIndex = "";
-      sb.style.boxShadow = "";
-    }
   };
   doc.getElementById("aus-sidebar-toggle")?.addEventListener("click", () => applyCollapsed(!collapsed));
   try {
