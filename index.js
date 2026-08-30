@@ -1611,139 +1611,6 @@ function fillDebugModelSelect(doc) {
   if (uniq.indexOf(cur) === -1) state.settings.debugModel = uniq[0] || "deepseek-v4-flash";
   sel.value = state.settings.debugModel;
 }
-function getDoc$5() {
-  return window.parent?.document ?? document;
-}
-function fmt(n) {
-  return n.toLocaleString("zh-CN");
-}
-function renderStats() {
-  const doc = getDoc$5();
-  const s = getSelectedSave();
-  if (!s) return;
-  const host = doc.getElementById("aus-stats");
-  if (!host) return;
-  const totalCost = s.total_cost || 0;
-  const totalTokens = s.total_tokens || 0;
-  const hit = s.cache_hit_tokens || 0, miss = s.cache_miss_tokens || 0;
-  const rounds = s.rounds || 0;
-  const hitRate = hit + miss > 0 ? hit / (hit + miss) * 100 : 0;
-  const avgCost = rounds ? totalCost / rounds : 0;
-  const avgTokens = rounds ? totalTokens / rounds : 0;
-  let savings = 0;
-  try {
-    for (const h of s.history || []) savings += calcSavings({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state.settings);
-  } catch {
-  }
-  const inputCost = s.input_cost || 0, outputCost = s.output_cost || 0;
-  const latest = (s.history || [])[0];
-  const latestRate = latest ? latest.cache_hit_rate || 0 : 0;
-  let maxCost = 0, minCost = Infinity, maxTok = 0, minTok = Infinity;
-  for (const h of s.history || []) {
-    const c = h.cost || 0, t = h.total_tokens || 0;
-    if (c > maxCost) maxCost = c;
-    if (c < minCost) minCost = c;
-    if (t > maxTok) maxTok = t;
-    if (t < minTok) minTok = t;
-  }
-  if (!isFinite(minCost)) minCost = 0;
-  if (!isFinite(minTok)) minTok = 0;
-  const avgIn = rounds ? (s.input_tokens || 0) / rounds : 0;
-  const avgOut = rounds ? (s.output_tokens || 0) / rounds : 0;
-  const avgDur = rounds ? (s.history || []).reduce((a, h) => a + (h.duration || 0), 0) / rounds / 1e3 : 0;
-  const avgSpeed = rounds ? (s.history || []).reduce((a, h) => a + (h.tokenRate || 0), 0) / rounds : 0;
-  const cards = [
-    { title: "总消耗", val: "¥" + totalCost.toFixed(4), sub: fmt(totalTokens) + " tokens" },
-    { title: "加权命中率", val: hitRate.toFixed(1) + "%", sub: "基于 " + rounds + " 轮", accent: true },
-    { title: "平均每轮", val: "¥" + avgCost.toFixed(4), sub: Math.round(avgTokens) + " tokens" },
-    { title: "预计节省", val: "¥" + savings.toFixed(4), sub: fmt(hit) + " hit tokens", accent: true },
-    { title: "输入费用", val: "¥" + inputCost.toFixed(4), sub: fmt(s.input_tokens || 0) + " tokens" },
-    { title: "输出费用", val: "¥" + outputCost.toFixed(4), sub: fmt(s.output_tokens || 0) + " tokens" },
-    { title: "总 Tokens", val: fmt(totalTokens), sub: "平均 " + Math.round(avgTokens) + "/轮" },
-    { title: "命中 Tokens", val: fmt(hit), sub: "占输入 " + (hit + miss > 0 ? (hit / (hit + miss) * 100).toFixed(1) : "0") + "%" },
-    { title: "未命中 Tokens", val: fmt(miss), sub: "占输入 " + (hit + miss > 0 ? (miss / (hit + miss) * 100).toFixed(1) : "0") + "%" },
-    { title: "对话轮数", val: String(rounds), sub: "轮对话" },
-    { title: "单轮最大", val: "¥" + maxCost.toFixed(4), sub: maxCost ? fmt(maxTok) + " tokens" : "暂无数据" },
-    { title: "单轮最小", val: "¥" + minCost.toFixed(4), sub: s.history?.length ? fmt(minTok) + " tokens" : "暂无数据" },
-    { title: "最新命中率", val: latest ? latestRate.toFixed(1) + "%" : "-", sub: latest ? latest.model : "暂无数据", accent: true },
-    { title: "平均输入", val: Math.round(avgIn).toString(), sub: "tokens/轮" },
-    { title: "平均输出", val: Math.round(avgOut).toString(), sub: "tokens/轮" },
-    { title: "平均耗时", val: avgDur.toFixed(1) + "s", sub: "首延 " + (s.history?.[0]?.ttft ? (s.history[0].ttft / 1e3).toFixed(1) + "s" : "-") },
-    { title: "平均速率", val: Math.round(avgSpeed) + " t/s", sub: avgSpeed ? "tokens/秒" : "暂无数据", accent: true },
-    { title: "思维链", val: (latest?.thinkTokens || 0) + " tk", sub: latest?.thinkTime ? (latest.thinkTime / 1e3).toFixed(1) + "s" : "—" }
-  ];
-  host.innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">` + cards.map((c) => `
-    <div class="ds-card" style="padding:12px 14px;">
-      <div class="ds-card-title" style="font-size:11px;">${c.title}</div>
-      <div class="${c.accent ? "ds-card-val" : "ds-card-val"}" style="${c.accent ? "color:#0BA25E;" : ""}font-size:18px;">${c.val}</div>
-      <div style="font-size:11px;color:#9CA3AF;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.sub}</div>
-    </div>
-  `).join("") + `</div>`;
-}
-let chart = null;
-let heatChart = null;
-async function getECharts() {
-  const echarts = await import("./core-DHCzIie4.js");
-  const { BarChart, HeatmapChart } = await import("./charts-C377pMlY.js");
-  const { GridComponent, TooltipComponent, VisualMapComponent } = await import("./components-DIeLoJQ9.js");
-  const { CanvasRenderer } = await import("./renderers-B8lc3lud.js");
-  echarts.use([BarChart, HeatmapChart, GridComponent, TooltipComponent, VisualMapComponent, CanvasRenderer]);
-  return echarts;
-}
-function getDoc$4() {
-  return window.parent?.document ?? document;
-}
-function aggregateByDay(entries) {
-  const map = {};
-  for (const e of entries) {
-    const k = localDay$1(e.timestamp);
-    if (!map[k]) map[k] = { cost: 0, tokens: 0, count: 0 };
-    map[k].cost += e.cost || 0;
-    map[k].tokens += e.total_tokens || 0;
-    map[k].count++;
-  }
-  const keys = Object.keys(map).sort();
-  return keys.map((k) => ({ day: k.slice(5).replace("-", "/"), cost: map[k].cost, tokens: map[k].tokens, count: map[k].count }));
-}
-async function renderCharts() {
-  const doc = getDoc$4();
-  const s = getSelectedSave();
-  if (!s) return;
-  const barEl = doc.getElementById("aus-chart-bar");
-  if (!barEl) return;
-  const entries = s.history || [];
-  if (!entries.length) {
-    barEl.innerHTML = '<div style="text-align:center;padding:24px;color:#9CA3AF;font-size:12px;">暂无数据，发起一次对话后自动统计</div>';
-    return;
-  }
-  const echarts = await getECharts();
-  const agg = aggregateByDay(entries);
-  const days = agg.map((a) => a.day);
-  const costs = agg.map((a) => Number(a.cost.toFixed(4)));
-  if (!chart) chart = echarts.init(barEl);
-  chart.setOption({
-    backgroundColor: "transparent",
-    grid: { left: 32, right: 12, top: 12, bottom: 28 },
-    tooltip: { trigger: "axis", backgroundColor: "#111827", textStyle: { color: "#fff", fontSize: 11 }, borderWidth: 0 },
-    xAxis: { type: "category", data: days, axisLine: { lineStyle: { color: "#E5E7EB" } }, axisLabel: { color: "#9CA3AF", fontSize: 11 }, axisTick: { show: false } },
-    yAxis: { type: "value", axisLine: { show: false }, splitLine: { lineStyle: { color: "#E5E7EB" } }, axisLabel: { color: "#9CA3AF", fontSize: 11 } },
-    series: [{ type: "bar", data: costs, itemStyle: { color: "#FF6A00", borderRadius: [4, 4, 0, 0] }, barWidth: 14, emphasis: { itemStyle: { color: "#FF7A00" } } }]
-  });
-  const heatEl = doc.getElementById("aus-heatmap");
-  if (heatEl) {
-    if (!heatChart) heatChart = echarts.init(heatEl);
-    const max = Math.max(...agg.map((a) => a.tokens), 1);
-    heatChart.setOption({
-      backgroundColor: "transparent",
-      tooltip: { formatter: (p) => `${p.data[0]}: ${p.data[1]} tokens` },
-      grid: { left: 40, right: 12, top: 8, bottom: 24 },
-      xAxis: { type: "category", data: days, axisLabel: { color: "#9CA3AF", fontSize: 10 }, axisLine: { lineStyle: { color: "#E5E7EB" } } },
-      yAxis: { type: "category", data: ["Tokens"], axisLabel: { color: "#9CA3AF" }, axisLine: { show: false }, splitLine: { show: false } },
-      visualMap: { min: 0, max, show: false, inRange: { color: ["#FFF7ED", "#FF6A00"] } },
-      series: [{ type: "heatmap", data: agg.map((a, i) => [i, 0, a.tokens]), label: { show: false }, emphasis: { itemStyle: { shadowBlur: 6, shadowColor: "rgba(0,0,0,0.2)" } } }]
-    });
-  }
-}
 let selOld = null;
 let selNew = null;
 function getDoc$3() {
@@ -1832,24 +1699,315 @@ function renderUsageDetail(ts) {
     }
   }, { once: true });
 }
+function fmt(n) {
+  return n.toLocaleString("zh-CN");
+}
+function CNY(n) {
+  return "¥" + n.toFixed(4) + " CNY";
+}
+function renderOverview() {
+  const doc = window.parent?.document ?? document;
+  const s = getSelectedSave();
+  if (!s) return;
+  const bal = state.customBalance || state.balance?.balance;
+  const balEl = doc.getElementById("aus-balance");
+  if (balEl) balEl.textContent = bal ? "¥" + bal + " CNY" : "¥0.00 CNY";
+  const totalCost = s.total_cost || 0;
+  const totalTokens = s.total_tokens || 0;
+  const costEl = doc.getElementById("aus-total-cost");
+  if (costEl) costEl.textContent = "¥" + totalCost.toFixed(4) + " CNY";
+  const tokEl = doc.getElementById("aus-total-tokens");
+  if (tokEl) tokEl.textContent = fmt(totalTokens) + " tokens";
+  const histHost = doc.getElementById("aus-overview-history");
+  if (histHost) {
+    const hit = s.cache_hit_tokens || 0;
+    const miss = s.cache_miss_tokens || 0;
+    const out = s.output_tokens || 0;
+    histHost.innerHTML = `
+      <div style="font-size:12px;font-weight:600;color:#111827;margin-bottom:8px;">历史消耗</div>
+      <div style="display:grid;gap:6px;font-size:11px;">
+        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">Token 历史消耗</span><span style="font-weight:600;color:#111827;">${fmt(totalTokens)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">输入（命中缓存）</span><span style="font-weight:600;color:#0BA25E;">${fmt(hit)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">输入（未命中缓存）</span><span style="font-weight:600;color:#DC2626;">${fmt(miss)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">输出</span><span style="font-weight:600;color:#111827;">${fmt(out)} tokens</span></div>
+      </div>
+    `;
+  }
+  const spendHost = doc.getElementById("aus-overview-spend");
+  if (spendHost) {
+    let savings = 0;
+    try {
+      for (const h of s.history || []) savings += calcSavings({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state.settings);
+    } catch {
+    }
+    const inCost = s.input_cost || 0;
+    const outCost = s.output_cost || 0;
+    const inTok = (s.cache_hit_tokens || 0) + (s.cache_miss_tokens || 0);
+    const outTok = s.output_tokens || 0;
+    spendHost.innerHTML = `
+      <div style="font-size:12px;font-weight:600;color:#111827;margin-bottom:8px;">支出明细</div>
+      <div style="display:grid;gap:6px;font-size:11px;">
+        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">预计节省</span><span style="font-weight:600;color:#0BA25E;">${CNY(savings)} · ${fmt(s.cache_hit_tokens || 0)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">支出在输入</span><span style="font-weight:600;color:#111827;">${CNY(inCost)} · ${fmt(inTok)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">支出在输出</span><span style="font-weight:600;color:#111827;">${CNY(outCost)} · ${fmt(outTok)} tokens</span></div>
+      </div>
+    `;
+  }
+  const fourHost = doc.getElementById("aus-overview-four");
+  if (fourHost) {
+    s.rounds || 1;
+    const avgCost = totalCost / (s.rounds || 1);
+    const avgTok = totalTokens / (s.rounds || 1);
+    const avgDur = (s.history || []).length ? s.history.reduce((a, h) => a + (h.duration || 0), 0) / s.history.length / 1e3 : 0;
+    const avgRate = (s.history || []).length ? s.history.reduce((a, h) => a + (h.tokenRate || 0), 0) / s.history.length : 0;
+    fourHost.innerHTML = `
+      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:#6B7280;">每轮费用</div><div style="font-size:18px;font-weight:600;color:#111827;margin-top:4px;">¥${avgCost.toFixed(4)} <span style="font-size:11px;color:#9CA3AF;font-weight:400;">CNY</span></div></div>
+      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:#6B7280;">每轮 Token</div><div style="font-size:18px;font-weight:600;color:#111827;margin-top:4px;">${Math.round(avgTok).toLocaleString("zh-CN")}</div></div>
+      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:#6B7280;">平均耗时</div><div style="font-size:18px;font-weight:600;color:#111827;margin-top:4px;">${avgDur.toFixed(1)} <span style="font-size:11px;color:#9CA3AF;font-weight:400;">s</span></div></div>
+      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:#6B7280;">输出速率</div><div style="font-size:18px;font-weight:600;color:#0BA25E;margin-top:4px;">${Math.round(avgRate)} <span style="font-size:11px;color:#9CA3AF;font-weight:400;">t/s</span></div></div>
+    `;
+  }
+}
+let currentRange = "30d";
+let customStart = "";
+let customEnd = "";
+let pickerOpen = false;
 function getDoc$2() {
   return window.parent?.document ?? document;
 }
-function renderCustomizer() {
-  const doc = getDoc$2();
-  const host = doc.getElementById("aus-customizer");
-  if (!host) return;
-  const allKeys = ["总消耗", "加权命中率", "平均每轮", "预计节省", "输入费用", "输出费用", "总 Tokens", "命中 Tokens", "未命中 Tokens", "对话轮数", "单轮最大", "单轮最小", "最新命中率", "平均输入", "平均输出", "平均耗时", "平均速率", "思维链"];
-  host.innerHTML = `
-    <details style="background:#F6F7F8;border-radius:10px;padding:10px 12px;">
-      <summary style="font-size:12px;font-weight:600;color:#111827;cursor:pointer;list-style:none;">显示设置（${allKeys.length} 项）</summary>
-      <div style="font-size:11px;color:#6B7280;margin-top:8px;">后续可按需显隐，当前已按脚本 1:1 全部展示。对齐 DeepSeek 浅色卡，无删减。</div>
-      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
-        ${allKeys.map((k) => `<span style="padding:4px 8px;background:#fff;border:1px solid #E5E7EB;border-radius:999px;font-size:11px;color:#111827;">${k}</span>`).join("")}
-      </div>
-    </details>
-  `;
+function getRangeDates() {
+  const today = localDay$1(Date.now());
+  const d = /* @__PURE__ */ new Date(today + "T00:00:00Z");
+  const fmt2 = (x) => x.toISOString().slice(0, 10);
+  switch (currentRange) {
+    case "today":
+      return { start: today, end: today };
+    case "yesterday": {
+      const y = new Date(d);
+      y.setUTCDate(y.getUTCDate() - 1);
+      const s = fmt2(y);
+      return { start: s, end: s };
+    }
+    case "7d": {
+      const s = new Date(d);
+      s.setUTCDate(s.getUTCDate() - 6);
+      return { start: fmt2(s), end: today };
+    }
+    case "30d": {
+      const s = new Date(d);
+      s.setUTCDate(s.getUTCDate() - 29);
+      return { start: fmt2(s), end: today };
+    }
+    case "month": {
+      const s = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+      return { start: fmt2(s), end: today };
+    }
+    case "lastMonth": {
+      const s = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1));
+      const e = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 0));
+      return { start: fmt2(s), end: fmt2(e) };
+    }
+    case "custom":
+      return { start: customStart || today, end: customEnd || today };
+  }
+  return { start: today, end: today };
 }
+function filterByRange(entries) {
+  const { start, end } = getRangeDates();
+  return entries.filter((e) => {
+    const k = localDay$1(e.timestamp);
+    return k >= start && k <= end;
+  });
+}
+function renderCalendar() {
+  const doc = getDoc$2();
+  const cal = doc.getElementById("aus-date-calendar");
+  if (!cal) return;
+  const todayStr = localDay$1(Date.now());
+  const today = /* @__PURE__ */ new Date(todayStr + "T00:00:00Z");
+  const months = [];
+  months.push(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1)));
+  months.push(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)));
+  let html = '<div style="display:flex;gap:16px;">';
+  for (const m of months) {
+    const y = m.getUTCFullYear(), mo = m.getUTCMonth();
+    const first = new Date(Date.UTC(y, mo, 1));
+    const daysInMonth = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate();
+    const startDow = first.getUTCDay();
+    html += `<div style="min-width:220px;"><div style="text-align:center;font-weight:600;font-size:13px;margin-bottom:8px;">${y}年${mo + 1}月</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:11px;">`;
+    const week = ["日", "一", "二", "三", "四", "五", "六"];
+    for (const w of week) html += `<div style="text-align:center;color:#9CA3AF;padding:4px;">${w}</div>`;
+    for (let i = 0; i < startDow; i++) html += `<div></div>`;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(Date.UTC(y, mo, d));
+      const key = date.toISOString().slice(0, 10);
+      const { start, end } = getRangeDates();
+      const inRange = key >= start && key <= end;
+      const isToday = key === todayStr;
+      const bg = inRange ? "#111827" : "#fff";
+      const color = inRange ? "#fff" : "#111827";
+      const ring = isToday && !inRange ? "border:1px solid #111827;" : "";
+      html += `<div data-date="${key}" style="text-align:center;padding:6px;border-radius:999px;background:${bg};color:${color};cursor:pointer;${ring}">${d}</div>`;
+    }
+    html += `</div></div>`;
+  }
+  html += "</div>";
+  cal.innerHTML = html;
+  cal.querySelectorAll("[data-date]").forEach((el) => {
+    el.addEventListener("click", () => {
+      if (currentRange !== "custom") {
+        currentRange = "custom";
+        customStart = el.getAttribute("data-date");
+        customEnd = el.getAttribute("data-date");
+      } else {
+        const clicked = el.getAttribute("data-date");
+        if (!customStart) customStart = clicked;
+        else if (clicked < customStart) {
+          customEnd = customStart;
+          customStart = clicked;
+        } else customEnd = clicked;
+      }
+      updatePickerLabel();
+      renderStatsView();
+      renderCalendar();
+    });
+  });
+}
+function updatePickerLabel() {
+  const doc = getDoc$2();
+  const label = doc.getElementById("aus-range-label");
+  if (!label) return;
+  const map = { today: "今天", yesterday: "昨天", "7d": "近 7 天", "30d": "近 30 天", month: "本月", lastMonth: "上月", custom: "自定义" };
+  if (currentRange === "custom" && customStart && customEnd) {
+    label.textContent = customStart === customEnd ? customStart : `${customStart} ~ ${customEnd}`;
+  } else label.textContent = map[currentRange] || "近 30 天";
+}
+function bindPicker() {
+  const doc = getDoc$2();
+  const btn = doc.getElementById("aus-range-btn");
+  const dropdown = doc.getElementById("aus-range-dropdown");
+  if (!btn || !dropdown) return;
+  btn.onclick = () => {
+    pickerOpen = !pickerOpen;
+    dropdown.style.display = pickerOpen ? "flex" : "none";
+    if (pickerOpen) renderCalendar();
+  };
+  doc.querySelectorAll("[data-range]").forEach((el) => {
+    el.onclick = () => {
+      const r = el.getAttribute("data-range");
+      currentRange = r;
+      if (r !== "custom") {
+        customStart = "";
+        customEnd = "";
+      }
+      pickerOpen = false;
+      dropdown.style.display = "none";
+      updatePickerLabel();
+      renderStatsView();
+    };
+  });
+  doc.addEventListener("click", (e) => {
+    if (!pickerOpen) return;
+    const t = e.target;
+    if (!t.closest("#aus-range-dropdown") && !t.closest("#aus-range-btn")) {
+      pickerOpen = false;
+      dropdown.style.display = "none";
+    }
+  });
+}
+let stackedChart = null;
+async function renderStackedChart(filtered) {
+  const doc = getDoc$2();
+  const el = doc.getElementById("aus-stats-chart");
+  if (!el) return;
+  if (!filtered.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:12px;">该时间段无数据</div>';
+    return;
+  }
+  el.innerHTML = "";
+  const dayMap = {};
+  const models = /* @__PURE__ */ new Set();
+  for (const e of filtered) {
+    const k = localDay$1(e.timestamp);
+    if (!dayMap[k]) dayMap[k] = {};
+    const m = e.model || "unknown";
+    models.add(m);
+    dayMap[k][m] = (dayMap[k][m] || 0) + (e.cost || 0);
+  }
+  const days = Object.keys(dayMap).sort();
+  const modelList = Array.from(models);
+  const colors = ["#FF6A00", "#FF9A00", "#FFB800", "#0BA25E", "#6366F1", "#06B6D4", "#8B5CF6", "#EC4899"];
+  const echarts = await import("./core-4qmyf-VR.js").then(async (ec) => {
+    const { BarChart } = await import("./charts-CzKPy1hm.js");
+    const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-mQVYgrGD.js");
+    const { CanvasRenderer } = await import("./renderers-BZeVs9I2.js");
+    ec.use([BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
+    return ec;
+  });
+  if (!stackedChart) stackedChart = echarts.init(el);
+  const series = modelList.map((m, i) => ({
+    name: m,
+    type: "bar",
+    stack: "total",
+    data: days.map((k) => Number((dayMap[k][m] || 0).toFixed(4))),
+    itemStyle: { color: colors[i % colors.length], borderRadius: [4, 4, 0, 0] },
+    barWidth: 12
+  }));
+  stackedChart.setOption({
+    backgroundColor: "transparent",
+    tooltip: {
+      trigger: "axis",
+      backgroundColor: "#fff",
+      borderColor: "#E5E7EB",
+      borderWidth: 1,
+      textStyle: { color: "#111827", fontSize: 11 },
+      formatter: (params) => {
+        if (!params?.length) return "";
+        const day = params[0].axisValue;
+        const total = params.reduce((a, p) => a + (p.value || 0), 0);
+        let html = `<div style="font-weight:600;margin-bottom:6px;">${day} <span style="float:right;">¥${total.toFixed(2)}</span></div>`;
+        for (const p of params) {
+          if (!p.value) continue;
+          html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:10px;height:10px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;">¥${p.value.toFixed(2)}</span></div>`;
+        }
+        return `<div style="padding:4px 2px;">${html}</div>`;
+      }
+    },
+    legend: { show: false },
+    grid: { left: 40, right: 12, top: 8, bottom: 24 },
+    xAxis: { type: "category", data: days.map((k) => k.slice(5).replace("-", "/")), axisLine: { lineStyle: { color: "#E5E7EB" } }, axisLabel: { color: "#9CA3AF", fontSize: 11 } },
+    yAxis: { type: "value", axisLine: { show: false }, splitLine: { lineStyle: { color: "#E5E7EB" } }, axisLabel: { color: "#9CA3AF", fontSize: 11 } },
+    series
+  });
+}
+function renderStatsView() {
+  const doc = getDoc$2();
+  const s = getSelectedSave();
+  if (!s) return;
+  const filtered = filterByRange(s.history || []);
+  let totalCost = 0, totalReq = filtered.length, totalTok = 0;
+  for (const e of filtered) {
+    totalCost += e.cost || 0;
+    totalTok += e.total_tokens || 0;
+  }
+  const costEl = doc.getElementById("aus-stats-cost");
+  if (costEl) costEl.textContent = "¥" + totalCost.toFixed(2) + " CNY";
+  const reqEl = doc.getElementById("aus-stats-req");
+  if (reqEl) reqEl.textContent = String(totalReq);
+  const tokEl = doc.getElementById("aus-stats-tok");
+  if (tokEl) tokEl.textContent = totalTok.toLocaleString("zh-CN");
+  renderStackedChart(filtered);
+}
+function initStatsView() {
+  bindPicker();
+  updatePickerLabel();
+  renderStatsView();
+}
+const statsView = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  initStatsView,
+  renderStatsView
+}, Symbol.toStringTag, { value: "Module" }));
 function getDoc$1() {
   return window.parent?.document ?? document;
 }
@@ -1861,32 +2019,18 @@ function refreshUI() {
     const doc = getDoc$1();
     const s = getSelectedSave();
     if (!s) return;
-    const totalCostEl = doc.getElementById("aus-total-cost");
-    const totalTokensEl = doc.getElementById("aus-total-tokens");
-    const roundsEl = doc.getElementById("aus-rounds");
-    const hitRateEl = doc.getElementById("aus-hit-rate");
-    const balanceEl = doc.getElementById("aus-balance");
-    const cost = (s.total_cost || 0).toFixed(4);
-    const tokens = s.total_tokens || 0;
-    const hitRate = (s.cache_hit_tokens || 0) + (s.cache_miss_tokens || 0) > 0 ? (s.cache_hit_tokens / (s.cache_hit_tokens + s.cache_miss_tokens) * 100).toFixed(1) : "0.0";
-    if (totalCostEl) totalCostEl.textContent = "¥" + cost;
-    if (totalTokensEl) totalTokensEl.textContent = String(tokens);
-    if (roundsEl) roundsEl.textContent = String(s.rounds || 0) + " 轮";
-    if (hitRateEl) hitRateEl.textContent = hitRate + "%";
     const bal = state.customBalance || state.balance?.balance;
-    if (balanceEl) balanceEl.textContent = bal ? "¥" + bal + " CNY" : "¥0.00 CNY";
+    const balEl = doc.getElementById("aus-balance");
+    if (balEl) balEl.textContent = bal ? "¥" + bal + " CNY" : "¥0.00 CNY";
+    const totalCostEl = doc.getElementById("aus-total-cost");
+    if (totalCostEl) totalCostEl.textContent = "¥" + (s.total_cost || 0).toFixed(4) + " CNY";
+    const tokEl = doc.getElementById("aus-total-tokens");
+    if (tokEl) tokEl.textContent = (s.total_tokens || 0).toLocaleString("zh-CN") + " tokens";
     renderHistory(doc, s);
-    renderStats();
-    renderCharts();
-    refreshSaveSelect(doc);
+    renderOverview();
+    renderStatsView();
   } catch {
   }
-}
-function refreshSaveSelect(doc) {
-  const sel = doc.getElementById("aus-save-select");
-  if (!sel) return;
-  const cur = state.currentSave;
-  sel.innerHTML = '<option value="__all__"' + (cur === "__all__" ? " selected" : "") + ">全部存档（合并统计）</option>" + Object.keys(state.saves).sort((a, b) => (state.saves[b].startTime || 0) - (state.saves[a].startTime || 0)).map((k) => `<option value="${esc$1(k)}"${k === cur ? " selected" : ""}>${esc$1(state.saves[k].name)} (${state.saves[k].history?.length || 0}条)</option>`).join("");
 }
 function renderHistory(doc, s) {
   const host = doc.getElementById("aus-history");
@@ -1925,15 +2069,6 @@ function renderHistory(doc, s) {
 function bindPanel(doc) {
   const q = doc.getElementById("aus-btn-query-balance");
   if (q) q.onclick = () => queryBalance();
-  const sel = doc.getElementById("aus-save-select");
-  if (sel) sel.onchange = (e) => {
-    state.currentSave = e.target.value;
-    try {
-      globalThis.SillyTavern?.getContext?.().saveSettingsDebounced?.();
-    } catch {
-    }
-    refreshUI();
-  };
 }
 function switchView(view) {
   const doc = getDoc$1();
@@ -2007,25 +2142,41 @@ function createPanel() {
       </div>
       <div id="aus-main" style="flex:1;overflow:auto;padding:20px;background:#FFFFFF;">
         <div style="max-width:1100px;margin:0 auto;display:grid;gap:16px;">
-          <!-- 用量概览 -->
+          <!-- 用量概览：新布局 -->
           <div data-view="overview">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
               <div class="ds-card"><div class="ds-card-title">充值余额</div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:11px;">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">导出</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">导入</button></div></div>
-              <div class="ds-card"><div class="ds-card-title">累计消费</div><div class="ds-card-val" id="aus-total-cost">¥0.00</div><div style="font-size:11px;color:#9CA3AF;margin-top:4px;" id="aus-total-tokens">0 tokens</div></div>
+              <div class="ds-card"><div class="ds-card-title">累计消费</div><div class="ds-card-val" id="aus-total-cost">¥0.0000<small>CNY</small></div><div style="font-size:11px;color:#9CA3AF;margin-top:2px;" id="aus-total-tokens">0 tokens</div></div>
             </div>
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
-              <select id="aus-save-select" style="flex:1;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;"></select>
-              <span style="font-size:11px;color:#6B7280;">共 <span id="aus-rounds">0 轮</span> · 命中 <span id="aus-hit-rate">0%</span></span>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+              <div class="ds-card" id="aus-overview-history"></div>
+              <div class="ds-card" id="aus-overview-spend"></div>
             </div>
-            <div style="display:grid;gap:12px;">
-              <div class="ds-card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:#111827;">消费金额 (CNY)</span><span style="font-size:11px;color:#6B7280;">近 30 天</span></div><div id="aus-chart-bar" style="height:180px;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-size:12px;">加载中…</div></div>
-            </div>
+            <div id="aus-overview-four" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px;"></div>
           </div>
-          <!-- 用量统计 -->
+          <!-- 用量统计：日历 + 三卡 + 堆叠柱 -->
           <div data-view="stats" style="display:none;">
-            <div id="aus-stats"></div>
-            <div id="aus-customizer" style="margin-top:12px;"></div>
-            <div class="ds-card" style="margin-top:12px;"><div style="font-size:12px;font-weight:600;color:#111827;margin-bottom:8px;">Tokens 热力</div><div id="aus-heatmap" style="height:120px;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-size:12px;">加载中…</div></div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;">
+              <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:12px;cursor:pointer;"><span style="color:#6B7280;">时间维度</span><span id="aus-range-label" style="font-weight:600;color:#111827;">近 30 天</span><span style="font-size:10px;">▼</span></div>
+              <div id="aus-range-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);overflow:hidden;flex-direction:row;">
+                <div style="min-width:120px;border-right:1px solid #F6F7F8;padding:8px;display:grid;gap:2px;">
+                  <div data-range="today" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">今天</div>
+                  <div data-range="yesterday" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">昨天</div>
+                  <div data-range="7d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">近 7 天</div>
+                  <div data-range="30d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;background:#F6F7F8;">近 30 天</div>
+                  <div data-range="month" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">本月</div>
+                  <div data-range="lastMonth" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">上月</div>
+                  <div data-range="custom" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">自定义</div>
+                </div>
+                <div id="aus-date-calendar" style="padding:12px;"></div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+              <div class="ds-card"><div style="font-size:11px;color:#6B7280;">消费金额</div><div id="aus-stats-cost" style="font-size:22px;font-weight:700;color:#111827;margin-top:6px;">¥0.00 CNY</div></div>
+              <div class="ds-card"><div style="font-size:11px;color:#6B7280;">API 请求次数</div><div id="aus-stats-req" style="font-size:22px;font-weight:700;color:#111827;margin-top:6px;">0</div></div>
+              <div class="ds-card"><div style="font-size:11px;color:#6B7280;">Tokens</div><div id="aus-stats-tok" style="font-size:22px;font-weight:700;color:#111827;margin-top:6px;">0</div></div>
+            </div>
+            <div class="ds-card" style="margin-top:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:#111827;">消费金额（CNY）</span><span style="font-size:11px;color:#6B7280;">多模型堆叠</span></div><div id="aus-stats-chart" style="height:280px;"></div></div>
           </div>
           <!-- 历史记录 -->
           <div data-view="history" style="display:none;">
@@ -2085,7 +2236,7 @@ function createPanel() {
   bindImportExport(doc);
   renderSettings(doc);
   bindHistoryCompare();
-  renderCustomizer();
+  Promise.resolve().then(() => statsView).then((m) => m.initStatsView());
   switchView("overview");
   refreshUI();
 }

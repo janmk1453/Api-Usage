@@ -3,10 +3,9 @@ import { esc, localDay } from '../utils/date';
 import { queryBalance } from '../services/balance';
 import { bindImportExport } from '../services/import-export';
 import { renderSettings } from './settings';
-import { renderStats } from './stats';
-import { renderCharts } from './charts';
 import { bindHistoryCompare, renderUsageDetail } from './compare';
-import { renderCustomizer } from './customize';
+import { renderOverview } from './overview';
+import { initStatsView, renderStatsView } from './stats-view';
 
 function getDoc(): Document { return (window.parent as any)?.document ?? document; }
 
@@ -20,35 +19,18 @@ export function refreshUI() {
     const doc = getDoc();
     const s: any = getSelectedSave();
     if (!s) return;
-    const totalCostEl = doc.getElementById('aus-total-cost');
-    const totalTokensEl = doc.getElementById('aus-total-tokens');
-    const roundsEl = doc.getElementById('aus-rounds');
-    const hitRateEl = doc.getElementById('aus-hit-rate');
-    const balanceEl = doc.getElementById('aus-balance');
-    const cost = (s.total_cost || 0).toFixed(4);
-    const tokens = s.total_tokens || 0;
-    const hitRate = (s.cache_hit_tokens || 0) + (s.cache_miss_tokens || 0) > 0
-      ? ((s.cache_hit_tokens / (s.cache_hit_tokens + s.cache_miss_tokens)) * 100).toFixed(1) : '0.0';
-    if (totalCostEl) totalCostEl.textContent = '¥' + cost;
-    if (totalTokensEl) totalTokensEl.textContent = String(tokens);
-    if (roundsEl) roundsEl.textContent = String(s.rounds || 0) + ' 轮';
-    if (hitRateEl) hitRateEl.textContent = hitRate + '%';
     const bal = state.customBalance || state.balance?.balance;
-    if (balanceEl) balanceEl.textContent = bal ? '¥' + bal + ' CNY' : '¥0.00 CNY';
+    const balEl = doc.getElementById('aus-balance');
+    if (balEl) balEl.textContent = bal ? '¥' + bal + ' CNY' : '¥0.00 CNY';
+    // 兼容旧 id 同时刷新新概览
+    const totalCostEl = doc.getElementById('aus-total-cost');
+    if (totalCostEl) totalCostEl.textContent = '¥' + (s.total_cost || 0).toFixed(4) + ' CNY';
+    const tokEl = doc.getElementById('aus-total-tokens');
+    if (tokEl) tokEl.textContent = (s.total_tokens || 0).toLocaleString('zh-CN') + ' tokens';
     renderHistory(doc, s);
-    renderStats();
-    renderCharts();
-    refreshSaveSelect(doc);
+    renderOverview();
+    renderStatsView();
   } catch {}
-}
-
-function refreshSaveSelect(doc: Document) {
-  const sel = doc.getElementById('aus-save-select') as HTMLSelectElement | null;
-  if (!sel) return;
-  const cur = state.currentSave as string;
-  sel.innerHTML = '<option value="__all__"' + (cur === '__all__' ? ' selected' : '') + '>全部存档（合并统计）</option>' +
-    Object.keys(state.saves).sort((a, b) => ((state.saves[b] as any).startTime || 0) - ((state.saves[a] as any).startTime || 0))
-      .map(k => `<option value="${esc(k)}"${k === cur ? ' selected' : ''}>${esc((state.saves as any)[k].name)} (${(state.saves as any)[k].history?.length || 0}条)</option>`).join('');
 }
 
 function renderHistory(doc: Document, s: any) {
@@ -86,8 +68,6 @@ function renderHistory(doc: Document, s: any) {
 export function bindPanel(doc: Document) {
   const q = doc.getElementById('aus-btn-query-balance') as HTMLButtonElement | null;
   if (q) q.onclick = () => queryBalance();
-  const sel = doc.getElementById('aus-save-select') as HTMLSelectElement | null;
-  if (sel) sel.onchange = (e: any) => { state.currentSave = e.target.value; try { (globalThis as any).SillyTavern?.getContext?.().saveSettingsDebounced?.(); } catch {} refreshUI(); };
 }
 
 function switchView(view: typeof currentView) {
@@ -154,25 +134,41 @@ export function createPanel() {
       </div>
       <div id="aus-main" style="flex:1;overflow:auto;padding:20px;background:#FFFFFF;">
         <div style="max-width:1100px;margin:0 auto;display:grid;gap:16px;">
-          <!-- 用量概览 -->
+          <!-- 用量概览：新布局 -->
           <div data-view="overview">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
               <div class="ds-card"><div class="ds-card-title">充值余额</div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:11px;">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">导出</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">导入</button></div></div>
-              <div class="ds-card"><div class="ds-card-title">累计消费</div><div class="ds-card-val" id="aus-total-cost">¥0.00</div><div style="font-size:11px;color:#9CA3AF;margin-top:4px;" id="aus-total-tokens">0 tokens</div></div>
+              <div class="ds-card"><div class="ds-card-title">累计消费</div><div class="ds-card-val" id="aus-total-cost">¥0.0000<small>CNY</small></div><div style="font-size:11px;color:#9CA3AF;margin-top:2px;" id="aus-total-tokens">0 tokens</div></div>
             </div>
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
-              <select id="aus-save-select" style="flex:1;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;"></select>
-              <span style="font-size:11px;color:#6B7280;">共 <span id="aus-rounds">0 轮</span> · 命中 <span id="aus-hit-rate">0%</span></span>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+              <div class="ds-card" id="aus-overview-history"></div>
+              <div class="ds-card" id="aus-overview-spend"></div>
             </div>
-            <div style="display:grid;gap:12px;">
-              <div class="ds-card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:#111827;">消费金额 (CNY)</span><span style="font-size:11px;color:#6B7280;">近 30 天</span></div><div id="aus-chart-bar" style="height:180px;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-size:12px;">加载中…</div></div>
-            </div>
+            <div id="aus-overview-four" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px;"></div>
           </div>
-          <!-- 用量统计 -->
+          <!-- 用量统计：日历 + 三卡 + 堆叠柱 -->
           <div data-view="stats" style="display:none;">
-            <div id="aus-stats"></div>
-            <div id="aus-customizer" style="margin-top:12px;"></div>
-            <div class="ds-card" style="margin-top:12px;"><div style="font-size:12px;font-weight:600;color:#111827;margin-bottom:8px;">Tokens 热力</div><div id="aus-heatmap" style="height:120px;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-size:12px;">加载中…</div></div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;">
+              <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:12px;cursor:pointer;"><span style="color:#6B7280;">时间维度</span><span id="aus-range-label" style="font-weight:600;color:#111827;">近 30 天</span><span style="font-size:10px;">▼</span></div>
+              <div id="aus-range-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);overflow:hidden;flex-direction:row;">
+                <div style="min-width:120px;border-right:1px solid #F6F7F8;padding:8px;display:grid;gap:2px;">
+                  <div data-range="today" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">今天</div>
+                  <div data-range="yesterday" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">昨天</div>
+                  <div data-range="7d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">近 7 天</div>
+                  <div data-range="30d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;background:#F6F7F8;">近 30 天</div>
+                  <div data-range="month" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">本月</div>
+                  <div data-range="lastMonth" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">上月</div>
+                  <div data-range="custom" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">自定义</div>
+                </div>
+                <div id="aus-date-calendar" style="padding:12px;"></div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+              <div class="ds-card"><div style="font-size:11px;color:#6B7280;">消费金额</div><div id="aus-stats-cost" style="font-size:22px;font-weight:700;color:#111827;margin-top:6px;">¥0.00 CNY</div></div>
+              <div class="ds-card"><div style="font-size:11px;color:#6B7280;">API 请求次数</div><div id="aus-stats-req" style="font-size:22px;font-weight:700;color:#111827;margin-top:6px;">0</div></div>
+              <div class="ds-card"><div style="font-size:11px;color:#6B7280;">Tokens</div><div id="aus-stats-tok" style="font-size:22px;font-weight:700;color:#111827;margin-top:6px;">0</div></div>
+            </div>
+            <div class="ds-card" style="margin-top:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:#111827;">消费金额（CNY）</span><span style="font-size:11px;color:#6B7280;">多模型堆叠</span></div><div id="aus-stats-chart" style="height:280px;"></div></div>
           </div>
           <!-- 历史记录 -->
           <div data-view="history" style="display:none;">
@@ -209,7 +205,6 @@ export function createPanel() {
   doc.body.appendChild(overlay);
   doc.body.appendChild(panel);
   doc.getElementById('aus-panel-close')?.addEventListener('click', closePanel);
-  // 导航
   doc.querySelectorAll('.aus-nav-item').forEach((el: any) => {
     el.addEventListener('click', () => {
       const v = el.getAttribute('data-nav');
@@ -231,7 +226,7 @@ export function createPanel() {
   bindImportExport(doc);
   renderSettings(doc);
   bindHistoryCompare();
-  renderCustomizer();
+  import('./stats-view').then(m => m.initStatsView());
   switchView('overview');
   refreshUI();
 }
