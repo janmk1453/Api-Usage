@@ -77,10 +77,19 @@
   [data-extension="api-usage-stat"] .ds-grid-3 { grid-template-columns: 1fr; }
 }
 
-/* 全屏独立面板 */
-#aus-overlay { backdrop-filter: blur(2px); }
-#aus-panel { box-shadow: 0 8px 32px rgba(0,0,0,0.12); }
+/* 全屏独立面板 — 修复：移除 blur/transform 避免文字羽化，跟随酒馆 hover 不白底 */
+#aus-overlay { backdrop-filter: none; -webkit-backdrop-filter: none; }
+#aus-panel {
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  transform: none;
+  filter: none;
+}
+#aus-panel * { -webkit-font-smoothing: antialiased; }
 #aus-panel #aus-panel-scroll::-webkit-scrollbar { width: 6px; }
 #aus-panel #aus-panel-scroll::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 999px; }
 #aus_wand_entry { cursor: pointer; }
-#aus_wand_entry:hover { background: #F6F7F8; }
+#aus_wand_entry:hover { background: transparent !important; }
+#aus_wand_entry.list-group-item:hover { background: transparent !important; }
