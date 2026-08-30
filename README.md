@@ -98,4 +98,4 @@ npm run build  # 产出 index.js（`~150k` + ECharts 分包）+ style.css
 
 ## 许可证
 
-[MIT](LICENSE) © 2026 janmk
+MIT
