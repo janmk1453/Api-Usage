@@ -1,0 +1,24 @@
+{
+  "display_name": "API用量统计",
+  "loading_order": 20,
+  "requires": [],
+  "optional": [],
+  "js": "index.js",
+  "css": "style.css",
+  "author": "janmk1453",
+  "version": "3.0.0",
+  "homePage": "",
+  "auto_update": true,
+  "minimum_client_version": "1.11.0",
+  "i18n": {
+    "zh-cn": "i18n/zh-cn.json"
+  },
+  "hooks": {
+    "install": "onInstall",
+    "update": "onUpdate",
+    "delete": "onDelete",
+    "enable": "onEnable",
+    "disable": "onDisable",
+    "activate": "onActivate"
+  }
+}

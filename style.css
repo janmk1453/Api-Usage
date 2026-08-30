@@ -1,0 +1,85 @@
+/* API用量统计 — DeepSeek 官方用量页浅色隔离风格 */
+[data-extension="api-usage-stat"][data-ds-theme="light"] {
+  --ds-bg: #FFFFFF;
+  --ds-card: #F6F7F8;
+  --ds-card-hover: #EEF0F2;
+  --ds-border: #E5E7EB;
+  --ds-text: #111827;
+  --ds-text-2: #6B7280;
+  --ds-text-3: #9CA3AF;
+  --ds-black: #111827;
+  --ds-orange: #FF6A00;
+  --ds-orange-light: #FF7A00;
+  --ds-green-bg: #E6F8EC;
+  --ds-green: #0BA25E;
+  --ds-radius-card: 14px;
+  --ds-radius-pill: 999px;
+  --ds-gap: 12px;
+  --ds-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  background: var(--ds-bg);
+  color: var(--ds-text);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  box-sizing: border-box;
+}
+[data-extension="api-usage-stat"] * { box-sizing: border-box; }
+
+[data-extension="api-usage-stat"] .ds-card {
+  background: var(--ds-card);
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius-card);
+  padding: 16px 20px;
+  box-shadow: var(--ds-shadow);
+}
+[data-extension="api-usage-stat"] .ds-card-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ds-text-2);
+  margin-bottom: 6px;
+}
+[data-extension="api-usage-stat"] .ds-card-val {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--ds-text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+[data-extension="api-usage-stat"] .ds-card-val small {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--ds-text-3);
+  margin-left: 4px;
+}
+[data-extension="api-usage-stat"] .ds-btn-pill {
+  background: var(--ds-black);
+  color: #fff;
+  border: none;
+  border-radius: var(--ds-radius-pill);
+  padding: 8px 18px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+[data-extension="api-usage-stat"] .ds-btn-pill:hover { background: #1F2937; }
+[data-extension="api-usage-stat"] .ds-tag-green {
+  background: var(--ds-green-bg);
+  color: var(--ds-green);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+}
+[data-extension="api-usage-stat"] .ds-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--ds-gap);
+}
+@media (max-width: 760px) {
+  [data-extension="api-usage-stat"] .ds-grid-3 { grid-template-columns: 1fr; }
+}
+
+/* 占位：空扩展验证用 */
+#api-usage-stat-root {
+  padding: 12px;
+  font-size: 13px;
+  color: var(--ds-text-2);
+}

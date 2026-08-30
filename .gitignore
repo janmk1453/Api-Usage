@@ -1,0 +1,14 @@
+node_modules/
+.DS_Store
+*.log
+# Vite 拆分产物不在仓库中保留，发布时重新构建
+Axis-*.js
+Image-*.js
+barGrid-*.js
+charts-*.js
+components-*.js
+core-*.js
+createSeriesData-*.js
+graphic-*.js
+renderers-*.js
+index-DU4kKh3S.js
