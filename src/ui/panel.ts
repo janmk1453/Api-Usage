@@ -326,17 +326,34 @@ export function createPanel() {
       if (v) switchView(v as any);
     });
   });
-  doc.getElementById('aus-sidebar-toggle')?.addEventListener('click', () => {
-    collapsed = !collapsed;
+  const applyCollapsed = (v: boolean) => {
+    collapsed = v;
     const sb = doc.getElementById('aus-sidebar') as HTMLElement | null;
     const brand = doc.getElementById('aus-brand') as HTMLElement | null;
     const btn = doc.getElementById('aus-sidebar-toggle') as HTMLElement | null;
     if (!sb) return;
+    const isMobile = (window.parent as any)?.innerWidth <= 760 || window.innerWidth <= 760;
+    // 移动端展开时需覆盖媒体查询的 60px 限制
     sb.style.width = collapsed ? '60px' : '220px';
+    sb.style.minWidth = collapsed ? '60px' : '220px';
+    sb.style.maxWidth = collapsed ? '60px' : '220px';
     if (brand) brand.style.display = collapsed ? 'none' : 'flex';
     if (btn) btn.textContent = collapsed ? '›' : '‹';
-    doc.querySelectorAll('.aus-nav-label').forEach((el: any) => { el.style.display = collapsed ? 'none' : 'inline'; });
-  });
+    doc.querySelectorAll('.aus-nav-label').forEach((el: any) => { (el as HTMLElement).style.display = collapsed ? 'none' : 'inline'; });
+    doc.querySelectorAll('.aus-nav-item').forEach((el: any) => { (el as HTMLElement).style.justifyContent = collapsed ? 'center' : 'flex-start'; });
+    if (isMobile && !collapsed) { sb.style.position = 'absolute'; sb.style.left = '0'; sb.style.top = '0'; sb.style.bottom = '0'; sb.style.zIndex = '2'; sb.style.boxShadow = '2px 0 8px rgba(0,0,0,0.08)'; }
+    else { sb.style.position = ''; sb.style.left = ''; sb.style.top = ''; sb.style.bottom = ''; sb.style.zIndex = ''; sb.style.boxShadow = ''; }
+  };
+  doc.getElementById('aus-sidebar-toggle')?.addEventListener('click', () => applyCollapsed(!collapsed));
+  // 移动端默认收缩
+  try {
+    const isMobile = (window.parent as any)?.innerWidth <= 760 || window.innerWidth <= 760;
+    if (isMobile) applyCollapsed(true);
+    (window.parent as any)?.addEventListener('resize', () => {
+      const nowMobile = (window.parent as any)?.innerWidth <= 760;
+      if (nowMobile && !collapsed) { /* 保持展开直到用户收起 */ }
+    });
+  } catch {}
   bindPanel(doc);
   bindImportExport(doc);
   renderSettings(doc);
