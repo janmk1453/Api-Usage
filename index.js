@@ -1882,6 +1882,139 @@ function renderOverview() {
     `;
   }
 }
+const Y_OPTIONS = [
+  { key: "input_hit_token", label: "输入(命中) token", unit: "tokens", kind: "token", color: "#0BA25E" },
+  { key: "input_miss_token", label: "输入(未命中) token", unit: "tokens", kind: "token", color: "#F87171" },
+  { key: "output_token", label: "输出 token", unit: "tokens", kind: "token", color: "#6366F1" },
+  { key: "total_token", label: "总 Token", unit: "tokens", kind: "token", color: "#111827" },
+  { key: "input_hit_cost", label: "输入(命中)费用", unit: "CNY", kind: "cost", color: "#10B981" },
+  { key: "input_miss_cost", label: "输入(未命中)费用", unit: "CNY", kind: "cost", color: "#F59E0B" },
+  { key: "output_cost", label: "输出费用", unit: "CNY", kind: "cost", color: "#8B5CF6" },
+  { key: "total_cost", label: "总费用", unit: "CNY", kind: "cost", color: "#FF6A00" }
+];
+const X_OPTIONS = [
+  { key: "round", label: "轮次" },
+  { key: "hour", label: "每小时" },
+  { key: "day", label: "每日" },
+  { key: "week", label: "每周" },
+  { key: "month", label: "每月" }
+];
+let ySelected = /* @__PURE__ */ new Set(["total_cost"]);
+let xSelected = "day";
+function getYSelected() {
+  return Array.from(ySelected);
+}
+function getXSelected() {
+  return xSelected;
+}
+function setXSelected(k) {
+  xSelected = k;
+}
+function toggleY(key) {
+  if (ySelected.has(key)) {
+    if (ySelected.size > 1) ySelected.delete(key);
+  } else ySelected.add(key);
+}
+function toHourKey(ts) {
+  const d = new Date(ts + 8 * 3600 * 1e3);
+  const y = d.getUTCFullYear(), m = String(d.getUTCMonth() + 1).padStart(2, "0"), day = String(d.getUTCDate()).padStart(2, "0"), h = String(d.getUTCHours()).padStart(2, "0");
+  return `${y}-${m}-${day} ${h}:00`;
+}
+function toWeekKey(ts) {
+  const d = new Date(ts);
+  const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = tmp.getUTCDay() || 7;
+  tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((tmp - yearStart) / 864e5 + 1) / 7);
+  return `${tmp.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+}
+function toMonthKey(ts) {
+  const d = new Date(ts + 8 * 3600 * 1e3);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+function getBucketKey(e, x, idx) {
+  if (x === "round") return `#${idx + 1}`;
+  if (x === "hour") return toHourKey(e.timestamp);
+  if (x === "day") return localDay$1(e.timestamp);
+  if (x === "week") return toWeekKey(e.timestamp);
+  if (x === "month") return toMonthKey(e.timestamp);
+  return localDay$1(e.timestamp);
+}
+function getYValue(e, y) {
+  switch (y) {
+    case "input_hit_token":
+      return e.cache_hit_tokens || 0;
+    case "input_miss_token":
+      return e.cache_miss_tokens || 0;
+    case "output_token":
+      return e.completion_tokens || 0;
+    case "total_token":
+      return e.total_tokens || 0;
+    case "input_hit_cost": {
+      const hit = e.cache_hit_tokens || 0, miss = e.cache_miss_tokens || 0, tot = hit + miss;
+      const ic = e.input_cost || 0;
+      return tot ? ic * (hit / tot) : 0;
+    }
+    case "input_miss_cost": {
+      const hit = e.cache_hit_tokens || 0, miss = e.cache_miss_tokens || 0, tot = hit + miss;
+      const ic = e.input_cost || 0;
+      return tot ? ic * (miss / tot) : 0;
+    }
+    case "output_cost":
+      return e.output_cost || 0;
+    case "total_cost":
+      return e.cost || 0;
+  }
+  return 0;
+}
+function aggregateForChart(entries, yKeys, xKey) {
+  const yMeta = new Map(Y_OPTIONS.map((o) => [o.key, o]));
+  if (!yKeys.length) yKeys = ["total_cost"];
+  if (xKey === "round") {
+    const labels2 = entries.map((_, i) => `#${i + 1}`);
+    const series2 = yKeys.map((k) => {
+      const meta = yMeta.get(k);
+      return { name: meta.label, data: entries.map((e) => Number(getYValue(e, k).toFixed(String(k).includes("cost") ? 6 : 0))), kind: meta.kind, color: meta.color };
+    });
+    return { labels: labels2, series: series2 };
+  }
+  const buckets = /* @__PURE__ */ new Map();
+  entries.forEach((e) => {
+    const key = getBucketKey(e, xKey, 0);
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(e);
+  });
+  const sortedKeys = Array.from(buckets.keys()).sort();
+  const labels = sortedKeys.map((k) => {
+    if (xKey === "hour") return k.slice(5);
+    if (xKey === "day") return k.slice(5).replace("-", "/");
+    if (xKey === "week") return k;
+    if (xKey === "month") return k;
+    return k;
+  });
+  const series = yKeys.map((k) => {
+    const meta = yMeta.get(k);
+    const data = sortedKeys.map((bucket) => {
+      const arr = buckets.get(bucket);
+      let sum = 0;
+      for (const e of arr) sum += getYValue(e, k);
+      return Number(sum.toFixed(String(k).includes("cost") ? 4 : 0));
+    });
+    return { name: meta.label, data, kind: meta.kind, color: meta.color };
+  });
+  return { labels, series };
+}
+const chartConfig = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  X_OPTIONS,
+  Y_OPTIONS,
+  aggregateForChart,
+  getXSelected,
+  getYSelected,
+  setXSelected,
+  toggleY
+}, Symbol.toStringTag, { value: "Module" }));
 let currentRange = "30d";
 let customStart = "";
 let customEnd = "";
@@ -2090,45 +2223,146 @@ function bindPicker() {
     }
   });
 }
-let stackedChart = null;
-async function renderStackedChart(filtered) {
+let chartYOpen = false;
+let chartXOpen = false;
+function renderChartSelectors() {
+  const doc = getDoc$2();
+  const yBtn = doc.getElementById("aus-chart-y-btn");
+  const xBtn = doc.getElementById("aus-chart-x-btn");
+  const yDrop = doc.getElementById("aus-chart-y-dropdown");
+  const xDrop = doc.getElementById("aus-chart-x-dropdown");
+  const yLabel = doc.getElementById("aus-chart-y-label");
+  const xLabel = doc.getElementById("aus-chart-x-label");
+  if (!yBtn || !xBtn || !yDrop || !xDrop) return;
+  const ySel = getYSelected();
+  if (yLabel) yLabel.textContent = ySel.length ? `${ySel.length} 项` : "选择";
+  let yHtml = "";
+  for (const opt of Y_OPTIONS) {
+    const checked = ySel.includes(opt.key);
+    yHtml += `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;${checked ? "background:#F6F7F8;" : ""}"><input type="checkbox" data-ykey="${opt.key}" ${checked ? "checked" : ""} style="accent-color:#111827;" /><span style="display:inline-block;width:8px;height:8px;background:${opt.color};border-radius:2px;"></span>${opt.label}<span style="margin-left:auto;color:#9CA3AF;font-size:10px;">${opt.unit}</span></label>`;
+  }
+  yDrop.innerHTML = yHtml;
+  yDrop.querySelectorAll("input[data-ykey]").forEach((el) => {
+    el.onchange = () => {
+      toggleY(el.getAttribute("data-ykey"));
+      renderChartSelectors();
+      const s = getSelectedSave();
+      const filtered = filterByModel(filterByRange(s.history || []));
+      renderChart(filtered);
+    };
+  });
+  const xSel = getXSelected();
+  const xMap = { round: "轮次", hour: "每小时", day: "每日", week: "每周", month: "每月" };
+  if (xLabel) xLabel.textContent = xMap[xSel] || xSel;
+  let xHtml = "";
+  for (const opt of X_OPTIONS) {
+    const active = opt.key === xSel;
+    xHtml += `<div data-xkey="${opt.key}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active ? "background:#F6F7F8;font-weight:600;" : ""}">${opt.label}</div>`;
+  }
+  xDrop.innerHTML = xHtml;
+  xDrop.querySelectorAll("[data-xkey]").forEach((el) => {
+    el.onclick = () => {
+      setXSelected(el.getAttribute("data-xkey"));
+      chartXOpen = false;
+      xDrop.style.display = "none";
+      renderChartSelectors();
+      const s = getSelectedSave();
+      const filtered = filterByModel(filterByRange(s.history || []));
+      renderChart(filtered);
+    };
+  });
+}
+function bindChartSelectors() {
+  const doc = getDoc$2();
+  const yBtn = doc.getElementById("aus-chart-y-btn");
+  const yDrop = doc.getElementById("aus-chart-y-dropdown");
+  const xBtn = doc.getElementById("aus-chart-x-btn");
+  const xDrop = doc.getElementById("aus-chart-x-dropdown");
+  if (yBtn && yDrop) {
+    yBtn.onclick = () => {
+      chartYOpen = !chartYOpen;
+      yDrop.style.display = chartYOpen ? "block" : "none";
+      if (chartYOpen) {
+        const xD = doc.getElementById("aus-chart-x-dropdown");
+        if (xD) {
+          xD.style.display = "none";
+          chartXOpen = false;
+        }
+        renderChartSelectors();
+      }
+    };
+  }
+  if (xBtn && xDrop) {
+    xBtn.onclick = () => {
+      chartXOpen = !chartXOpen;
+      xDrop.style.display = chartXOpen ? "block" : "none";
+      if (chartXOpen) {
+        const yD = doc.getElementById("aus-chart-y-dropdown");
+        if (yD) {
+          yD.style.display = "none";
+          chartYOpen = false;
+        }
+        renderChartSelectors();
+      }
+    };
+  }
+  doc.addEventListener("click", (e) => {
+    const t = e.target;
+    if (chartYOpen && !t.closest("#aus-chart-y-dropdown") && !t.closest("#aus-chart-y-btn")) {
+      chartYOpen = false;
+      const d = doc.getElementById("aus-chart-y-dropdown");
+      if (d) d.style.display = "none";
+    }
+    if (chartXOpen && !t.closest("#aus-chart-x-dropdown") && !t.closest("#aus-chart-x-btn")) {
+      chartXOpen = false;
+      const d = doc.getElementById("aus-chart-x-dropdown");
+      if (d) d.style.display = "none";
+    }
+  });
+}
+let chart = null;
+async function renderChart(filteredRaw) {
   const doc = getDoc$2();
   const el = doc.getElementById("aus-stats-chart");
   if (!el) return;
-  if (!filtered.length) {
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:12px;">该时间段无数据</div>';
+  const { aggregateForChart: aggregateForChart2, getYSelected: getYSelected2, getXSelected: getXSelected2, Y_OPTIONS: Y_OPTIONS2 } = await Promise.resolve().then(() => chartConfig);
+  const yKeys = getYSelected2();
+  const xKey = getXSelected2();
+  const { labels, series } = aggregateForChart2(filteredRaw, yKeys, xKey);
+  if (!labels.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:12px;">该筛选无数据</div>';
+    if (chart) chart.dispose();
+    chart = null;
     return;
   }
   el.innerHTML = "";
-  const dayMap = {};
-  const models = /* @__PURE__ */ new Set();
-  for (const e of filtered) {
-    const k = localDay$1(e.timestamp);
-    if (!dayMap[k]) dayMap[k] = {};
-    const m = e.model || "unknown";
-    models.add(m);
-    dayMap[k][m] = (dayMap[k][m] || 0) + (e.cost || 0);
-  }
-  const days = Object.keys(dayMap).sort();
-  const modelList = Array.from(models);
-  const colors = ["#FF6A00", "#FF9A00", "#FFB800", "#0BA25E", "#6366F1", "#06B6D4", "#8B5CF6", "#EC4899"];
-  const echarts = await import("./core-4qmyf-VR.js").then(async (ec) => {
-    const { BarChart } = await import("./charts-CzKPy1hm.js");
-    const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-mQVYgrGD.js");
-    const { CanvasRenderer } = await import("./renderers-BZeVs9I2.js");
-    ec.use([BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
+  const echarts = await import("./core-Ptd1xcE-.js").then(async (ec) => {
+    const { BarChart, LineChart } = await import("./charts-qoz8v_ng.js");
+    const { GridComponent, TooltipComponent } = await import("./components-Ou40IODK.js");
+    const { CanvasRenderer } = await import("./renderers-QbUXzgc_.js");
+    ec.use([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
     return ec;
   });
-  if (!stackedChart) stackedChart = echarts.init(el);
-  const series = modelList.map((m, i) => ({
-    name: m,
-    type: "bar",
-    stack: "total",
-    data: days.map((k) => Number((dayMap[k][m] || 0).toFixed(4))),
-    itemStyle: { color: colors[i % colors.length], borderRadius: [4, 4, 0, 0] },
-    barWidth: 12
-  }));
-  stackedChart.setOption({
+  if (!chart) chart = echarts.init(el);
+  const hasToken = series.some((s) => s.kind === "token");
+  const hasCost = series.some((s) => s.kind === "cost");
+  const yAxis = [];
+  if (hasToken) yAxis.push({ type: "value", name: "tokens", position: "left", axisLine: { show: false }, splitLine: { lineStyle: { color: "#F6F7F8" } }, axisLabel: { color: "#9CA3AF", fontSize: 10 } });
+  if (hasCost) yAxis.push({ type: "value", name: "CNY", position: hasToken ? "right" : "left", axisLine: { show: false }, splitLine: { show: false }, axisLabel: { color: "#9CA3AF", fontSize: 10, formatter: (v) => "¥" + v } });
+  const seriesOpt = series.map((s) => {
+    const isCost = s.kind === "cost";
+    const yIndex = hasToken && hasCost ? isCost ? 1 : 0 : 0;
+    return {
+      name: s.name,
+      type: isCost ? "bar" : "bar",
+      yAxisIndex: yIndex,
+      data: s.data,
+      itemStyle: { color: s.color, borderRadius: [4, 4, 0, 0] },
+      barMaxWidth: 18,
+      emphasis: { focus: "series" }
+    };
+  });
+  chart.setOption({
     backgroundColor: "transparent",
     tooltip: {
       trigger: "axis",
@@ -2138,21 +2372,21 @@ async function renderStackedChart(filtered) {
       textStyle: { color: "#111827", fontSize: 11 },
       formatter: (params) => {
         if (!params?.length) return "";
-        const day = params[0].axisValue;
-        const total = params.reduce((a, p) => a + (p.value || 0), 0);
-        let html = `<div style="font-weight:600;margin-bottom:6px;">${day} <span style="float:right;">¥${total.toFixed(2)}</span></div>`;
+        const idx = params[0].dataIndex;
+        const label = labels[idx];
+        let html = `<div style="font-weight:600;margin-bottom:6px;">${label}</div>`;
         for (const p of params) {
-          if (!p.value) continue;
-          html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:10px;height:10px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;">¥${p.value.toFixed(2)}</span></div>`;
+          const v = p.value;
+          const unit = Y_OPTIONS2.find((o) => o.label === p.seriesName)?.unit || "";
+          html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${unit === "CNY" ? "¥" + Number(v).toFixed(4) : Number(v).toLocaleString() + " " + unit}</span></div>`;
         }
-        return `<div style="padding:4px 2px;">${html}</div>`;
+        return `<div style="padding:4px 2px;min-width:180px;">${html}</div>`;
       }
     },
-    legend: { show: false },
-    grid: { left: 40, right: 12, top: 8, bottom: 24 },
-    xAxis: { type: "category", data: days.map((k) => k.slice(5).replace("-", "/")), axisLine: { lineStyle: { color: "#E5E7EB" } }, axisLabel: { color: "#9CA3AF", fontSize: 11 } },
-    yAxis: { type: "value", axisLine: { show: false }, splitLine: { lineStyle: { color: "#E5E7EB" } }, axisLabel: { color: "#9CA3AF", fontSize: 11 } },
-    series
+    grid: { left: 50, right: hasToken && hasCost ? 50 : 20, top: 8, bottom: 28 },
+    xAxis: { type: "category", data: labels, axisLine: { lineStyle: { color: "#E5E7EB" } }, axisLabel: { color: "#9CA3AF", fontSize: 10, interval: 0, rotate: labels.length > 20 ? 30 : 0, hideOverlap: true } },
+    yAxis: yAxis.length ? yAxis : { type: "value", axisLabel: { color: "#9CA3AF", fontSize: 10 } },
+    series: seriesOpt
   });
 }
 function renderModelSummary(filtered) {
@@ -2211,11 +2445,13 @@ function renderStatsView() {
   const tokEl = doc.getElementById("aus-stats-tok");
   if (tokEl) tokEl.textContent = totalTok.toLocaleString("zh-CN");
   renderModelSummary(summaryFiltered);
-  renderStackedChart(chartFiltered);
+  renderChart(chartFiltered);
   renderModelPicker();
+  renderChartSelectors();
 }
 function initStatsView() {
   bindPicker();
+  bindChartSelectors();
   updatePickerLabel();
   renderStatsView();
 }
@@ -2528,7 +2764,7 @@ function createPanel() {
                 <tbody id="aus-summary-tbody"><tr><td colspan="10" style="text-align:center;padding:16px;color:#9CA3AF;">暂无数据</td></tr></tbody>
               </table>
             </div>
-            <div class="ds-card" style="margin-top:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:#111827;">消费金额（CNY）</span><span style="font-size:11px;color:#6B7280;">多模型堆叠</span></div><div id="aus-stats-chart" style="height:280px;"></div></div>
+            <div class="ds-card" style="margin-top:12px;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:#111827;">图表</span><div style="display:flex;gap:8px;position:relative;"><div id="aus-chart-y-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;"><span style="color:#6B7280;">Y</span><span id="aus-chart-y-label" style="font-weight:600;color:#111827;">总费用</span><span style="font-size:10px;">▼</span></div><div id="aus-chart-x-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;"><span style="color:#6B7280;">X</span><span id="aus-chart-x-label" style="font-weight:600;color:#111827;">每日</span><span style="font-size:10px;">▼</span></div><div id="aus-chart-y-dropdown" style="display:none;position:absolute;top:34px;left:0;z-index:10;background:#fff;border:1px solid #E5E7EB;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;"></div><div id="aus-chart-x-dropdown" style="display:none;position:absolute;top:34px;right:0;z-index:10;background:#fff;border:1px solid #E5E7EB;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:140px;"></div></div></div><div id="aus-stats-chart" style="height:300px;"></div></div>
           </div>
           <!-- 历史记录 -->
           <div data-view="history" style="display:none;">

@@ -191,44 +191,123 @@ function bindPicker() {
   });
 }
 
-// 堆叠柱状图（多模型）
-let stackedChart: any = null;
-async function renderStackedChart(filtered: any[]) {
+let chartYOpen = false;
+let chartXOpen = false;
+
+import { Y_OPTIONS, X_OPTIONS, getYSelected, getXSelected, toggleY, setXSelected } from './chart-config';
+
+function renderChartSelectors() {
+  const doc = getDoc();
+  const yBtn = doc.getElementById('aus-chart-y-btn');
+  const xBtn = doc.getElementById('aus-chart-x-btn');
+  const yDrop = doc.getElementById('aus-chart-y-dropdown');
+  const xDrop = doc.getElementById('aus-chart-x-dropdown');
+  const yLabel = doc.getElementById('aus-chart-y-label');
+  const xLabel = doc.getElementById('aus-chart-x-label');
+  if (!yBtn || !xBtn || !yDrop || !xDrop) return;
+  // Y 多选
+  const ySel: string[] = getYSelected() as any;
+  if (yLabel) yLabel.textContent = ySel.length ? `${ySel.length} 项` : '选择';
+  let yHtml = '';
+  for (const opt of Y_OPTIONS) {
+    const checked = ySel.includes(opt.key);
+    yHtml += `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;${checked?'background:#F6F7F8;':''}"><input type="checkbox" data-ykey="${opt.key}" ${checked?'checked':''} style="accent-color:#111827;" /><span style="display:inline-block;width:8px;height:8px;background:${opt.color};border-radius:2px;"></span>${opt.label}<span style="margin-left:auto;color:#9CA3AF;font-size:10px;">${opt.unit}</span></label>`;
+  }
+  yDrop.innerHTML = yHtml;
+  yDrop.querySelectorAll('input[data-ykey]').forEach((el: any)=>{
+    el.onchange = () => {
+      toggleY(el.getAttribute('data-ykey') as any);
+      renderChartSelectors();
+      const s:any = getSelectedSave(); const filtered = filterByModel(filterByRange(s.history||[])); renderChart(filtered);
+    };
+  });
+  // X 单选
+  const xSel = getXSelected();
+  const xMap: any = { round:'轮次', hour:'每小时', day:'每日', week:'每周', month:'每月' };
+  if (xLabel) xLabel.textContent = xMap[xSel] || xSel;
+  let xHtml = '';
+  for (const opt of X_OPTIONS) {
+    const active = opt.key===xSel;
+    xHtml += `<div data-xkey="${opt.key}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active?'background:#F6F7F8;font-weight:600;':''}">${opt.label}</div>`;
+  }
+  xDrop.innerHTML = xHtml;
+  xDrop.querySelectorAll('[data-xkey]').forEach((el:any)=>{
+    el.onclick = () => {
+      setXSelected(el.getAttribute('data-xkey') as any);
+      chartXOpen=false; xDrop.style.display='none';
+      renderChartSelectors();
+      const s:any = getSelectedSave(); const filtered = filterByModel(filterByRange(s.history||[])); renderChart(filtered);
+    };
+  });
+}
+
+function bindChartSelectors() {
+  const doc = getDoc();
+  const yBtn = doc.getElementById('aus-chart-y-btn');
+  const yDrop = doc.getElementById('aus-chart-y-dropdown');
+  const xBtn = doc.getElementById('aus-chart-x-btn');
+  const xDrop = doc.getElementById('aus-chart-x-dropdown');
+  if (yBtn && yDrop) {
+    yBtn.onclick = () => {
+      chartYOpen = !chartYOpen;
+      yDrop.style.display = chartYOpen ? 'block' : 'none';
+      if (chartYOpen) { const xD = doc.getElementById('aus-chart-x-dropdown'); if (xD) { xD.style.display='none'; chartXOpen=false; } renderChartSelectors(); }
+    };
+  }
+  if (xBtn && xDrop) {
+    xBtn.onclick = () => {
+      chartXOpen = !chartXOpen;
+      xDrop.style.display = chartXOpen ? 'block' : 'none';
+      if (chartXOpen) { const yD = doc.getElementById('aus-chart-y-dropdown'); if (yD) { yD.style.display='none'; chartYOpen=false; } renderChartSelectors(); }
+    };
+  }
+  doc.addEventListener('click', (e:any)=>{
+    const t = e.target as HTMLElement;
+    if (chartYOpen && !t.closest('#aus-chart-y-dropdown') && !t.closest('#aus-chart-y-btn')) { chartYOpen=false; const d=doc.getElementById('aus-chart-y-dropdown'); if(d) d.style.display='none'; }
+    if (chartXOpen && !t.closest('#aus-chart-x-dropdown') && !t.closest('#aus-chart-x-btn')) { chartXOpen=false; const d=doc.getElementById('aus-chart-x-dropdown'); if(d) d.style.display='none'; }
+  });
+}
+
+// 可配置图表（Y多选 X单选，双轴）
+let chart: any = null;
+async function renderChart(filteredRaw: any[]) {
   const doc = getDoc();
   const el = doc.getElementById('aus-stats-chart');
   if (!el) return;
-  if (!filtered.length) { el.innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:12px;">该时间段无数据</div>'; return; }
+  // 过滤已在外部完成，此处仅按图表的 Y/X 配置聚合
+  const { aggregateForChart, getYSelected, getXSelected, Y_OPTIONS } = await import('./chart-config');
+  const yKeys = getYSelected() as any;
+  const xKey = getXSelected() as any;
+  const { labels, series } = aggregateForChart(filteredRaw, yKeys, xKey);
+  if (!labels.length) { el.innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:12px;">该筛选无数据</div>'; if (chart) chart.dispose(); chart=null; return; }
   el.innerHTML = '';
-  // 按日聚合，模型分色
-  const dayMap: Record<string, Record<string, number>> = {};
-  const models = new Set<string>();
-  for (const e of filtered) {
-    const k = localDay(e.timestamp);
-    if (!dayMap[k]) dayMap[k] = {};
-    const m = e.model || 'unknown';
-    models.add(m);
-    dayMap[k][m] = (dayMap[k][m] || 0) + (e.cost || 0);
-  }
-  const days = Object.keys(dayMap).sort();
-  const modelList = Array.from(models);
-  const colors = ['#FF6A00','#FF9A00','#FFB800','#0BA25E','#6366F1','#06B6D4','#8B5CF6','#EC4899'];
   const echarts: any = await import('echarts/core').then(async (ec: any) => {
-    const { BarChart } = await import('echarts/charts');
-    const { GridComponent, TooltipComponent, LegendComponent } = await import('echarts/components');
+    const { BarChart, LineChart } = await import('echarts/charts');
+    const { GridComponent, TooltipComponent } = await import('echarts/components');
     const { CanvasRenderer } = await import('echarts/renderers');
-    ec.use([BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
+    ec.use([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
     return ec;
   });
-  if (!stackedChart) stackedChart = echarts.init(el);
-  const series = modelList.map((m, i) => ({
-    name: m,
-    type: 'bar',
-    stack: 'total',
-    data: days.map(k => Number((dayMap[k][m] || 0).toFixed(4))),
-    itemStyle: { color: colors[i % colors.length], borderRadius: [4,4,0,0] },
-    barWidth: 12,
-  }));
-  stackedChart.setOption({
+  if (!chart) chart = echarts.init(el);
+  const hasToken = series.some(s=>s.kind==='token');
+  const hasCost = series.some(s=>s.kind==='cost');
+  const yAxis: any[] = [];
+  if (hasToken) yAxis.push({ type:'value', name:'tokens', position:'left', axisLine:{show:false}, splitLine:{lineStyle:{color:'#F6F7F8'}}, axisLabel:{color:'#9CA3AF',fontSize:10} });
+  if (hasCost) yAxis.push({ type:'value', name:'CNY', position: hasToken?'right':'left', axisLine:{show:false}, splitLine:{show:false}, axisLabel:{color:'#9CA3AF',fontSize:10,formatter:(v:number)=>'¥'+v} });
+  const seriesOpt = series.map(s=>{
+    const isCost = s.kind==='cost';
+    const yIndex = hasToken && hasCost ? (isCost?1:0) : 0;
+    return {
+      name: s.name,
+      type: isCost ? 'bar' : 'bar',
+      yAxisIndex: yIndex,
+      data: s.data,
+      itemStyle: { color: s.color, borderRadius: [4,4,0,0] },
+      barMaxWidth: 18,
+      emphasis: { focus: 'series' },
+    };
+  });
+  chart.setOption({
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
@@ -236,23 +315,23 @@ async function renderStackedChart(filtered: any[]) {
       borderColor: '#E5E7EB',
       borderWidth: 1,
       textStyle: { color: '#111827', fontSize: 11 },
-      formatter: (params: any) => {
+      formatter: (params:any)=>{
         if (!params?.length) return '';
-        const day = params[0].axisValue;
-        const total = params.reduce((a: number, p: any) => a + (p.value || 0), 0);
-        let html = `<div style="font-weight:600;margin-bottom:6px;">${day} <span style="float:right;">¥${total.toFixed(2)}</span></div>`;
+        const idx = params[0].dataIndex;
+        const label = labels[idx];
+        let html = `<div style="font-weight:600;margin-bottom:6px;">${label}</div>`;
         for (const p of params) {
-          if (!p.value) continue;
-          html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:10px;height:10px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;">¥${p.value.toFixed(2)}</span></div>`;
+          const v = p.value;
+          const unit = Y_OPTIONS.find((o:any)=>o.label===p.seriesName)?.unit || '';
+          html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${unit==='CNY'?'¥'+Number(v).toFixed(4):Number(v).toLocaleString()+' '+unit}</span></div>`;
         }
-        return `<div style="padding:4px 2px;">${html}</div>`;
+        return `<div style="padding:4px 2px;min-width:180px;">${html}</div>`;
       }
     },
-    legend: { show: false },
-    grid: { left: 40, right: 12, top: 8, bottom: 24 },
-    xAxis: { type: 'category', data: days.map(k => k.slice(5).replace('-','/')), axisLine: { lineStyle: { color: '#E5E7EB' } }, axisLabel: { color: '#9CA3AF', fontSize: 11 } },
-    yAxis: { type: 'value', axisLine: { show: false }, splitLine: { lineStyle: { color: '#E5E7EB' } }, axisLabel: { color: '#9CA3AF', fontSize: 11 } },
-    series,
+    grid: { left: 50, right: hasToken&&hasCost?50:20, top: 8, bottom: 28 },
+    xAxis: { type:'category', data: labels, axisLine:{lineStyle:{color:'#E5E7EB'}}, axisLabel:{color:'#9CA3AF',fontSize:10,interval:0,rotate: labels.length>20?30:0, hideOverlap:true} },
+    yAxis: yAxis.length?yAxis:{ type:'value', axisLabel:{color:'#9CA3AF',fontSize:10} },
+    series: seriesOpt,
   });
 }
 
@@ -284,13 +363,9 @@ export function renderStatsView() {
   const s: any = getSelectedSave();
   if (!s) return;
   const allHistory: any[] = s.history || [];
-  // 时间维度仅影响 三块 + 汇总表
   const timeFiltered = filterByRange(allHistory);
   const summaryFiltered = filterByModel(timeFiltered);
-  // 模型维度影响所有内容（图表也受模型过滤，但不受时间限制按新规，图表受模型影响但此处图表按 time+model 双重过滤以保持一致性）
-  // 按用户要求：时间仅影响三块与汇总，模型影响所有；此处图表受模型影响，同时若需保持时间独立可改为 filterByModel(allHistory)
   const chartFiltered = filterByModel(timeFiltered);
-  // 三块与汇总用 time+model
   let totalCost = 0, totalReq = summaryFiltered.length, totalTok = 0;
   for (const e of summaryFiltered) { totalCost += e.cost || 0; totalTok += e.total_tokens || 0; }
   const costEl = doc.getElementById('aus-stats-cost');
@@ -300,12 +375,14 @@ export function renderStatsView() {
   const tokEl = doc.getElementById('aus-stats-tok');
   if (tokEl) tokEl.textContent = totalTok.toLocaleString('zh-CN');
   renderModelSummary(summaryFiltered);
-  renderStackedChart(chartFiltered);
+  renderChart(chartFiltered);
   renderModelPicker();
+  renderChartSelectors();
 }
 
 export function initStatsView() {
   bindPicker();
+  bindChartSelectors();
   updatePickerLabel();
   renderStatsView();
 }
