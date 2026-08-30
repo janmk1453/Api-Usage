@@ -328,11 +328,11 @@ function isPeakHour$1(timestamp, peakHours) {
   }
   return false;
 }
-function localDay(ts) {
+function localDay$1(ts) {
   const t = typeof ts === "number" ? ts : ts.getTime();
   return new Date(t + 8 * 3600 * 1e3).toISOString().slice(0, 10);
 }
-function esc(s) {
+function esc$1(s) {
   return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 function mergePrices(base, custom) {
@@ -343,7 +343,7 @@ function mergePrices(base, custom) {
     output: custom.output !== void 0 && custom.output !== "" ? parseFloat(custom.output) : base.output
   };
 }
-function getPricing(model, settings) {
+function getPricing$1(model, settings) {
   const m = model || "deepseek-v4-flash";
   const base = PRICING[m] || PRICING["deepseek-v4-flash"];
   for (const cm of settings.customModels || []) {
@@ -373,7 +373,7 @@ function isPeakHour(timestamp, settings) {
 function calcCost(u, settings) {
   const model = u.model || "deepseek-v4-flash";
   if (!hasPriceForModel(model, settings)) return { input: 0, output: 0, total: 0, priceType: "old" };
-  const pricing = getPricing(model, settings);
+  const pricing = getPricing$1(model, settings);
   const useNewPricing = settings.useNewPricing && u.timestamp >= settings.newPricingDate;
   let p;
   let priceType;
@@ -393,7 +393,7 @@ function calcCost(u, settings) {
 function calcSavings(u, settings) {
   const model = u.model || "deepseek-v4-flash";
   if (!hasPriceForModel(model, settings)) return 0;
-  const pricing = getPricing(model, settings);
+  const pricing = getPricing$1(model, settings);
   const useNewPricing = settings.useNewPricing && u.timestamp >= settings.newPricingDate;
   let p;
   if (useNewPricing && pricing.usePeakPricing !== false && isDeepSeekOfficialModel(model)) {
@@ -1085,21 +1085,122 @@ function saveWebdavPass(pass) {
   } catch {
   }
 }
+function generateDebugBatch() {
+  const saves = state.saves;
+  const cur = state.currentSave;
+  const s = saves[cur] && cur !== "__all__" ? saves[cur] : saves[Object.keys(saves)[0]];
+  if (!s) return alert("请先选择存档");
+  const startStr = state.settings.debugDateStart;
+  const endStr = state.settings.debugDateEnd;
+  if (!startStr || !endStr) return alert("请设置起始与结束日期");
+  const startDate = /* @__PURE__ */ new Date(startStr + "T00:00:00Z");
+  const endDate = /* @__PURE__ */ new Date(endStr + "T00:00:00Z");
+  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || endDate < startDate) return alert("日期范围无效");
+  const count = state.settings.debugBatchCount || 30;
+  const model = state.settings.debugModel || "deepseek-v4-flash";
+  const hit = state.settings.debugHit || 1e4;
+  const miss = state.settings.debugMiss || 5e3;
+  const output = state.settings.debugOutput || 2e3;
+  const totalDays = Math.round((endDate.getTime() - startDate.getTime()) / 864e5) + 1;
+  const perDay = Math.ceil(count / totalDays);
+  let generated = 0;
+  for (let d = 0; d < totalDays && generated < count; d++) {
+    const curDate = new Date(startDate);
+    curDate.setUTCDate(startDate.getUTCDate() + d);
+    for (let i = 0; i < perDay && generated < count; i++) {
+      const rv = (base) => Math.round(base * (0.3 + Math.random() * 1.4));
+      const h = rv(hit), m = rv(miss), o = rv(output);
+      const total = h + m + o;
+      const ts = new Date(curDate);
+      ts.setUTCHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60), Math.floor(Math.random() * 60), 0);
+      const dur = Math.floor(Math.random() * 5e3) + 500;
+      const ttft = Math.floor(Math.random() * 1e3) + 100;
+      const c = calcCost({ timestamp: ts.getTime(), model, prompt_cache_hit_tokens: h, prompt_cache_miss_tokens: m, completion_tokens: o }, state.settings);
+      s.total_tokens += total;
+      s.total_cost += c.total;
+      s.input_tokens += h + m;
+      s.output_tokens += o;
+      s.cache_hit_tokens += h;
+      s.cache_miss_tokens += m;
+      s.input_cost += c.input;
+      s.output_cost += c.output;
+      if (isDeepSeekOfficialModel(model)) s.rounds += 1;
+      s.history.unshift({ timestamp: ts.getTime(), model, prompt_tokens: h + m, cache_hit_tokens: h, cache_miss_tokens: m, completion_tokens: o, total_tokens: total, input_cost: c.input, output_cost: c.output, cost: c.total, cache_hit_rate: h + m > 0 ? h / (h + m) * 100 : 0, priceType: c.priceType, raw_usage: { prompt_cache_hit_tokens: h, prompt_cache_miss_tokens: m, completion_tokens: o, total_tokens: total }, messages: [], duration: dur, ttft, thinkTime: 300, thinkTokens: Math.floor(o * 0.2), tokenRate: Math.round(o / (dur - ttft) * 1e3), fullRequest: null, fullResponse: null });
+      generated++;
+    }
+  }
+  s.history.sort((a, b) => b.timestamp - a.timestamp);
+  try {
+    recalcAllCosts();
+  } catch {
+  }
+  s._mtime = Date.now();
+  saveHot({ saves: state.saves });
+  try {
+    globalThis.ApiUsageStat?.refreshUI?.();
+  } catch {
+  }
+  alert("已生成 " + generated + " 条模拟数据");
+}
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function localDay(ts) {
+  return new Date(ts + 8 * 3600 * 1e3).toISOString().slice(0, 10);
+}
 function renderSettings(doc) {
   const host = doc.getElementById("aus-settings");
   if (!host) return;
+  const s = state.settings;
   host.innerHTML = `
     <div style="display:grid;gap:12px;">
-      <div class="ds-card"><div class="ds-card-title">API 密钥</div><div style="display:flex;gap:8px;"><input id="aus-api-key" type="password" placeholder="sk-..." style="flex:1;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:12px;" value="" /><button id="aus-save-key" class="ds-btn-pill" style="padding:8px 14px;">保存</button></div><div id="aus-key-status" style="font-size:11px;color:#6B7280;margin-top:6px;"></div></div>
-      <div class="ds-card"><div class="ds-card-title">自定义余额</div><div style="display:flex;gap:8px;"><input id="aus-custom-balance" placeholder="如 50.00" style="flex:1;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:12px;" /><button id="aus-save-balance" class="ds-btn-pill" style="padding:8px 14px;">保存</button><button id="aus-clear-balance" style="padding:8px 14px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:12px;cursor:pointer;">清除</button></div><div id="aus-balance-status" style="font-size:11px;color:#6B7280;margin-top:6px;"></div></div>
-      <div class="ds-card"><div class="ds-card-title">峰值提示小圆点</div><label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;"><input type="checkbox" id="aus-peak-dot" /> 启用峰值圆点（红/黄/绿）</label><button id="aus-reset-dot" style="margin-top:8px;padding:6px 12px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">重置位置</button></div>
-      <div class="ds-card"><div class="ds-card-title">WebDAV 云同步</div><div style="font-size:11px;color:#6B7280;margin-bottom:8px;">双向合并，仅同步统计/设置/余额，不含聊天内容与密钥。强制 https。</div>
+      <!-- API 密钥 -->
+      <div class="ds-card"><div style="font-size:11px;color:#6B7280;font-weight:500;margin-bottom:6px;">API 密钥</div><div style="display:flex;gap:8px;"><input id="aus-api-key" type="password" placeholder="输入 DeepSeek API 密钥" style="flex:1;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;outline:none;" /><button id="aus-save-key" class="ds-btn-pill" style="padding:8px 14px;">保存</button></div><div id="aus-key-status" style="font-size:11px;color:#6B7280;margin-top:6px;"></div></div>
+
+      <!-- 余额 -->
+      <div class="ds-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:#111827;">自动校准余额</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-auto-balance" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:#E5E7EB;border-radius:12px;transition:0.2s;"><span id="aus-auto-balance-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div id="aus-auto-balance-interval" style="display:${s.autoBalance ? "block" : "none"};margin-top:8px;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;color:#111827;">校准间隔（分钟）</span><input type="number" id="aus-balance-interval" min="1" max="1440" style="width:90px;padding:6px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;text-align:center;" /></div></div>
+        <div style="margin-top:12px;display:flex;gap:8px;"><input id="aus-custom-balance" placeholder="自定义余额（覆盖 API 查询）" style="flex:1;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /><button id="aus-save-balance" class="ds-btn-pill" style="padding:8px 14px;">保存</button><button id="aus-clear-balance" style="padding:8px 12px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">清除</button></div><div id="aus-balance-status" style="font-size:11px;color:#6B7280;margin-top:6px;"></div>
+      </div>
+
+      <!-- 新价格机制 -->
+      <div class="ds-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:#111827;">新价格机制（峰谷计费）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-use-new-pricing" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:#E5E7EB;border-radius:12px;transition:0.2s;"><span id="aus-use-new-pricing-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div id="aus-new-pricing-panel" style="display:${s.useNewPricing ? "block" : "none"};margin-top:10px;display:grid;gap:8px;">
+          <div style="display:flex;gap:8px;align-items:center;"><input type="date" id="aus-new-pricing-date" style="flex:1;padding:7px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /><button id="aus-btn-pricing-today" style="padding:7px 12px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:11px;cursor:pointer;white-space:nowrap;">设为今日</button></div>
+          <div style="font-size:11px;color:#6B7280;">生效日期前按旧价，之后按峰谷价（仅 deepseek* 模型，周末全天低谷）。</div>
+        </div>
+      </div>
+
+      <!-- 高峰时段 -->
+      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:#111827;">高峰时段</span><button id="aus-btn-add-peak-hour" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">+ 添加</button></div><div id="aus-peak-hours-list" style="display:grid;gap:6px;margin-top:8px;"></div><div style="font-size:10px;color:#9CA3AF;margin-top:6px;">支持跨天（如 22:00-02:00），周末自动低谷。</div></div>
+
+      <!-- 模型与价格 -->
+      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:#111827;">模型与价格（¥/百万 tokens）</span><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">+ 自定义模型</button></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
+
+      <!-- 调试 -->
+      <div class="ds-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:#111827;">调试模式（模拟数据，不计费）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-debug-mode" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:#E5E7EB;border-radius:12px;transition:0.2s;"><span id="aus-debug-mode-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div id="aus-debug-panel" style="display:${s.debug ? "block" : "none"};margin-top:10px;display:grid;gap:8px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:11px;color:#6B7280;margin-bottom:4px;">命中</div><input type="number" id="aus-debug-hit" style="width:100%;padding:7px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /></div><div><div style="font-size:11px;color:#6B7280;margin-bottom:4px;">未命中</div><input type="number" id="aus-debug-miss" style="width:100%;padding:7px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /></div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:11px;color:#6B7280;margin-bottom:4px;">输出</div><input type="number" id="aus-debug-output" style="width:100%;padding:7px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /></div><div><div style="font-size:11px;color:#6B7280;margin-bottom:4px;">模型</div><select id="aus-debug-model" style="width:100%;padding:7px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;"></select></div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="date" id="aus-debug-date-start" style="padding:7px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /><input type="date" id="aus-debug-date-end" style="padding:7px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /><input type="number" id="aus-debug-batch-count" min="1" placeholder="条数" style="padding:7px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /></div>
+          <button id="aus-btn-debug-batch" class="ds-btn-pill" style="width:100%;">生成模拟数据</button><div id="aus-debug-status" style="font-size:11px;color:#6B7280;"></div>
+        </div>
+      </div>
+
+      <!-- 峰值圆点 -->
+      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:#111827;">峰值提示小圆点</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-peak-dot" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:#E5E7EB;border-radius:12px;transition:0.2s;"><span id="aus-peak-dot-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div><button id="aus-reset-dot" style="margin-top:8px;padding:6px 12px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">重置位置</button></div>
+
+      <!-- WebDAV -->
+      <div class="ds-card"><div style="font-size:12px;font-weight:600;color:#111827;margin-bottom:6px;">WebDAV 云同步</div><div style="font-size:11px;color:#6B7280;margin-bottom:8px;">双向合并，仅同步统计/设置/余额，不含聊天内容与密钥。强制 https。</div>
         <div style="display:grid;gap:8px;">
-          <input id="aus-webdav-url" placeholder="https://dav.jianguoyun.com/dav/" style="padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:12px;" />
-          <div style="display:flex;gap:8px;"><input id="aus-webdav-user" placeholder="用户名" style="flex:1;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:12px;" /><input id="aus-webdav-pass" type="password" placeholder="应用密码" style="flex:1;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:12px;" /></div>
-          <input id="aus-webdav-path" placeholder="远程子路径（可空）" style="padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:12px;" />
-          <input id="aus-webdav-proxy" placeholder="CORS 代理（可选，http://127.0.0.1:8000/proxy?url=）" style="padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:12px;" />
-          <button id="aus-webdav-sync" class="ds-btn-pill">☁️ 立即同步</button><div id="aus-webdav-status" style="font-size:11px;color:#6B7280;"></div>
+          <input id="aus-webdav-url" placeholder="https://dav.jianguoyun.com/dav/" style="padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" />
+          <div style="display:flex;gap:8px;"><input id="aus-webdav-user" placeholder="用户名" style="flex:1;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /><input id="aus-webdav-pass" type="password" placeholder="应用密码" style="flex:1;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /></div>
+          <input id="aus-webdav-path" placeholder="远程子路径（可空）" style="padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" />
+          <input id="aus-webdav-proxy" placeholder="CORS 代理（可选，http://127.0.0.1:8000/proxy?url=）" style="padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" />
+          <button id="aus-webdav-sync" class="ds-btn-pill">☁️ 立即同步</button>
         </div>
       </div>
     </div>
@@ -1113,10 +1214,33 @@ function renderSettings(doc) {
   }
   doc.getElementById("aus-custom-balance").value = state.customBalance || "";
   doc.getElementById("aus-peak-dot").checked = state.settings.peakDot !== false;
-  doc.getElementById("aus-webdav-url").value = state.settings.webdav?.url || "";
-  doc.getElementById("aus-webdav-user").value = state.settings.webdav?.username || "";
-  doc.getElementById("aus-webdav-path").value = state.settings.webdav?.path || "";
-  doc.getElementById("aus-webdav-proxy").value = state.settings.webdav?.proxy || "";
+  const peakSlider = doc.getElementById("aus-peak-dot-slider");
+  if (peakSlider) peakSlider.style.left = state.settings.peakDot !== false ? "23px" : "3px";
+  const autoCb = doc.getElementById("aus-auto-balance");
+  const autoSlider = doc.getElementById("aus-auto-balance-slider");
+  if (autoCb) autoCb.checked = !!s.autoBalance;
+  if (autoSlider) autoSlider.style.left = s.autoBalance ? "23px" : "3px";
+  doc.getElementById("aus-balance-interval").value = String(s.balanceInterval ?? 10);
+  const newCb = doc.getElementById("aus-use-new-pricing");
+  const newSlider = doc.getElementById("aus-use-new-pricing-slider");
+  if (newCb) newCb.checked = !!s.useNewPricing;
+  if (newSlider) newSlider.style.left = s.useNewPricing ? "23px" : "3px";
+  const newDate = doc.getElementById("aus-new-pricing-date");
+  if (newDate) newDate.value = s.newPricingDate ? localDay(s.newPricingDate) : "";
+  const dbgCb = doc.getElementById("aus-debug-mode");
+  const dbgSlider = doc.getElementById("aus-debug-mode-slider");
+  if (dbgCb) dbgCb.checked = !!s.debug;
+  if (dbgSlider) dbgSlider.style.left = s.debug ? "23px" : "3px";
+  doc.getElementById("aus-debug-hit").value = String(s.debugHit ?? 1e4);
+  doc.getElementById("aus-debug-miss").value = String(s.debugMiss ?? 5e3);
+  doc.getElementById("aus-debug-output").value = String(s.debugOutput ?? 2e3);
+  doc.getElementById("aus-debug-date-start").value = s.debugDateStart || "";
+  doc.getElementById("aus-debug-date-end").value = s.debugDateEnd || "";
+  doc.getElementById("aus-debug-batch-count").value = String(s.debugBatchCount ?? 30);
+  doc.getElementById("aus-webdav-url").value = s.webdav?.url || "";
+  doc.getElementById("aus-webdav-user").value = s.webdav?.username || "";
+  doc.getElementById("aus-webdav-path").value = s.webdav?.path || "";
+  doc.getElementById("aus-webdav-proxy").value = s.webdav?.proxy || "";
   try {
     const pass = localStorage.getItem("ds_ds_webdav_pass") || "";
     const el = doc.getElementById("aus-webdav-pass");
@@ -1126,8 +1250,8 @@ function renderSettings(doc) {
   doc.getElementById("aus-save-key").onclick = () => {
     const v = doc.getElementById("aus-api-key").value.trim();
     saveApiKey(v);
-    const s = doc.getElementById("aus-key-status");
-    s.textContent = v ? "已保存" : "已清空";
+    const sEl = doc.getElementById("aus-key-status");
+    sEl.textContent = v ? "已保存" : "已清空";
   };
   doc.getElementById("aus-save-balance").onclick = () => {
     const v = doc.getElementById("aus-custom-balance").value.trim();
@@ -1150,8 +1274,98 @@ function renderSettings(doc) {
     } catch {
     }
   };
+  if (autoCb) autoCb.onchange = () => {
+    state.settings.autoBalance = autoCb.checked;
+    if (autoSlider) autoSlider.style.left = autoCb.checked ? "23px" : "3px";
+    doc.getElementById("aus-auto-balance-interval").style.display = autoCb.checked ? "block" : "none";
+    saveHot({ settings: state.settings });
+  };
+  doc.getElementById("aus-balance-interval").onchange = (e) => {
+    state.settings.balanceInterval = parseInt(e.target.value) || 10;
+    saveHot({ settings: state.settings });
+  };
+  if (newCb) newCb.onchange = () => {
+    state.settings.useNewPricing = newCb.checked;
+    if (newSlider) newSlider.style.left = newCb.checked ? "23px" : "3px";
+    doc.getElementById("aus-new-pricing-panel").style.display = newCb.checked ? "block" : "none";
+    saveHot({ settings: state.settings });
+    recalcAllCosts();
+    try {
+      globalThis.ApiUsageStat?.refreshUI?.();
+    } catch {
+    }
+  };
+  if (newDate) newDate.onchange = () => {
+    if (newDate.value) {
+      const p = newDate.value.split("-");
+      state.settings.newPricingDate = (/* @__PURE__ */ new Date(p[0] + "-" + p[1] + "-" + p[2] + "T00:00:00+08:00")).getTime();
+    } else state.settings.newPricingDate = 0;
+    saveHot({ settings: state.settings });
+    recalcAllCosts();
+    try {
+      globalThis.ApiUsageStat?.refreshUI?.();
+    } catch {
+    }
+  };
+  doc.getElementById("aus-btn-pricing-today").onclick = () => {
+    const d = /* @__PURE__ */ new Date();
+    d.setHours(0, 0, 0, 0);
+    state.settings.newPricingDate = d.getTime();
+    if (newDate) newDate.value = localDay(d.getTime());
+    if (newCb && !newCb.checked) {
+      newCb.checked = true;
+      if (newSlider) newSlider.style.left = "23px";
+      doc.getElementById("aus-new-pricing-panel").style.display = "block";
+    }
+    saveHot({ settings: state.settings });
+    recalcAllCosts();
+    try {
+      globalThis.ApiUsageStat?.refreshUI?.();
+    } catch {
+    }
+  };
+  if (dbgCb) dbgCb.onchange = () => {
+    state.settings.debug = dbgCb.checked;
+    if (dbgSlider) dbgSlider.style.left = dbgCb.checked ? "23px" : "3px";
+    doc.getElementById("aus-debug-panel").style.display = dbgCb.checked ? "block" : "none";
+    const st = doc.getElementById("aus-debug-status");
+    if (st) st.textContent = dbgCb.checked ? "调试模式已开启，下次对话将使用模拟参数，不计费" : "";
+    saveHot({ settings: state.settings });
+  };
+  doc.getElementById("aus-debug-hit").onchange = (e) => {
+    state.settings.debugHit = parseInt(e.target.value) || 0;
+    saveHot({ settings: state.settings });
+  };
+  doc.getElementById("aus-debug-miss").onchange = (e) => {
+    state.settings.debugMiss = parseInt(e.target.value) || 0;
+    saveHot({ settings: state.settings });
+  };
+  doc.getElementById("aus-debug-output").onchange = (e) => {
+    state.settings.debugOutput = parseInt(e.target.value) || 0;
+    saveHot({ settings: state.settings });
+  };
+  const dbgModel = doc.getElementById("aus-debug-model");
+  if (dbgModel) dbgModel.onchange = (e) => {
+    state.settings.debugModel = e.target.value;
+    saveHot({ settings: state.settings });
+  };
+  doc.getElementById("aus-debug-date-start").onchange = (e) => {
+    state.settings.debugDateStart = e.target.value;
+    saveHot({ settings: state.settings });
+  };
+  doc.getElementById("aus-debug-date-end").onchange = (e) => {
+    state.settings.debugDateEnd = e.target.value;
+    saveHot({ settings: state.settings });
+  };
+  doc.getElementById("aus-debug-batch-count").onchange = (e) => {
+    state.settings.debugBatchCount = parseInt(e.target.value) || 1;
+    saveHot({ settings: state.settings });
+  };
+  doc.getElementById("aus-btn-debug-batch").onclick = () => generateDebugBatch();
   doc.getElementById("aus-peak-dot").onchange = (e) => {
     state.settings.peakDot = e.target.checked;
+    const sl = doc.getElementById("aus-peak-dot-slider");
+    if (sl) sl.style.left = e.target.checked ? "23px" : "3px";
     saveHot({ settings: state.settings });
     try {
       globalThis.ApiUsageStat?.updatePeakDot?.();
@@ -1161,6 +1375,12 @@ function renderSettings(doc) {
   doc.getElementById("aus-reset-dot").onclick = () => {
     try {
       localStorage.removeItem("ds_ds_peak_dot_pos");
+      const dot = window.parent?.document?.getElementById("aus-peak-dot-indicator");
+      if (dot) {
+        dot.style.left = "";
+        dot.style.top = "60px";
+        dot.style.right = "16px";
+      }
     } catch {
     }
     alert("已重置");
@@ -1188,6 +1408,208 @@ function renderSettings(doc) {
   };
   if (wPass) wPass.onchange = () => saveWebdavPass(wPass.value);
   doc.getElementById("aus-webdav-sync").onclick = () => doSyncNow();
+  renderPeakHoursEditor(doc);
+  renderModelsEditor(doc);
+  fillDebugModelSelect(doc);
+}
+function renderPeakHoursEditor(doc) {
+  const list = doc.getElementById("aus-peak-hours-list");
+  if (!list) return;
+  const hours = state.settings.peakHours || [];
+  list.innerHTML = hours.map((h, i) => `
+    <div style="display:flex;align-items:center;gap:6px;">
+      <input type="time" value="${esc(h.start || "")}" data-idx="${i}" data-field="start" style="flex:1;padding:6px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" />
+      <span style="font-size:11px;color:#6B7280;">至</span>
+      <input type="time" value="${esc(h.end || "")}" data-idx="${i}" data-field="end" style="flex:1;padding:6px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" />
+      <button data-del="${i}" style="padding:6px 8px;border:1px solid #FCA5A5;border-radius:8px;background:#FEF2F2;color:#DC2626;font-size:11px;cursor:pointer;">删除</button>
+    </div>
+  `).join("");
+  list.querySelectorAll('input[type="time"]').forEach((el) => {
+    el.onchange = () => {
+      const idx = parseInt(el.getAttribute("data-idx"));
+      const field2 = el.getAttribute("data-field");
+      state.settings.peakHours[idx][field2] = el.value;
+      saveHot({ settings: state.settings });
+      recalcAllCosts();
+      try {
+        globalThis.ApiUsageStat?.refreshUI?.();
+      } catch {
+      }
+    };
+  });
+  list.querySelectorAll("button[data-del]").forEach((el) => {
+    el.onclick = () => {
+      const idx = parseInt(el.getAttribute("data-del"));
+      state.settings.peakHours.splice(idx, 1);
+      if (!state.settings.peakHours.length) state.settings.peakHours = JSON.parse(JSON.stringify(DEFAULT_PEAK_HOURS));
+      saveHot({ settings: state.settings });
+      renderPeakHoursEditor(doc);
+      recalcAllCosts();
+      try {
+        globalThis.ApiUsageStat?.refreshUI?.();
+      } catch {
+      }
+    };
+  });
+  const addBtn = doc.getElementById("aus-btn-add-peak-hour");
+  if (addBtn) addBtn.onclick = () => {
+    state.settings.peakHours.push({ start: "09:00", end: "12:00" });
+    saveHot({ settings: state.settings });
+    renderPeakHoursEditor(doc);
+  };
+}
+function renderModelsEditor(doc) {
+  const list = doc.getElementById("aus-custom-models-list");
+  if (!list) return;
+  const builtin = Object.keys(PRICING);
+  const cms = state.settings.customModels || [];
+  const rows = [];
+  for (const m of builtin) {
+    const p = getPricing(m);
+    const usePeak = p.usePeakPricing !== false;
+    rows.push(modelRow(m, p, true, usePeak));
+  }
+  for (const e of cms) {
+    if (e?.model && builtin.indexOf(e.model) === -1) {
+      const p = getPricing(e.model);
+      rows.push(modelRow(e.model, p, false, p.usePeakPricing !== false));
+    }
+  }
+  list.innerHTML = rows.join("");
+  list.querySelectorAll('input[type="checkbox"].aus-cm-peak').forEach((el) => {
+    el.onchange = () => {
+      const row = el.closest("[data-model]");
+      const model = row.getAttribute("data-model") || "";
+      const usePeak = el.checked;
+      upsertCustom(model, { usePeakPricing: usePeak });
+      saveHot({ settings: state.settings });
+      renderModelsEditor(doc);
+      recalcAllCosts();
+      try {
+        globalThis.ApiUsageStat?.refreshUI?.();
+      } catch {
+      }
+    };
+  });
+  list.querySelectorAll("input[data-price]").forEach((el) => {
+    el.onchange = () => {
+      const row = el.closest("[data-model]");
+      const model = row.getAttribute("data-model") || "";
+      const isBuiltin = row.getAttribute("data-builtin") === "1";
+      const prices = readRow(row);
+      saveCustomRow(model, prices, isBuiltin);
+    };
+  });
+  list.querySelectorAll("button[data-del]").forEach((el) => {
+    el.onclick = () => {
+      const row = el.closest("[data-model]");
+      const model = row.getAttribute("data-model") || "";
+      state.settings.customModels = state.settings.customModels.filter((c) => c.model !== model);
+      saveHot({ settings: state.settings });
+      renderModelsEditor(doc);
+      fillDebugModelSelect(doc);
+      recalcAllCosts();
+      try {
+        globalThis.ApiUsageStat?.refreshUI?.();
+      } catch {
+      }
+    };
+  });
+  const addBtn = doc.getElementById("aus-btn-add-model");
+  if (addBtn) addBtn.onclick = () => {
+    const name = "custom-model-" + (state.settings.customModels.length + 1);
+    state.settings.customModels.push({ model: name, usePeakPricing: true, offpeak: {}, peak: {} });
+    saveHot({ settings: state.settings });
+    renderModelsEditor(doc);
+    fillDebugModelSelect(doc);
+  };
+}
+function modelRow(model, p, isBuiltin, usePeak) {
+  const hit = (v) => v !== void 0 && v !== "" ? v : "";
+  return `<div data-model="${esc(model)}" data-builtin="${isBuiltin ? "1" : "0"}" style="border:1px solid #E5E7EB;border-radius:10px;padding:10px;background:#fff;display:grid;gap:8px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <input value="${esc(model)}" ${isBuiltin ? "readonly" : ""} style="flex:1;padding:6px 8px;border:1px solid #E5E7EB;border-radius:8px;background:${isBuiltin ? "#F9FAFB" : "#fff"};font-size:12px;" />
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#6B7280;cursor:pointer;"><input type="checkbox" class="aus-cm-peak" ${usePeak ? "checked" : ""} /> 峰谷</label>
+      ${isBuiltin ? "" : '<button data-del="1" style="padding:4px 8px;border:1px solid #FCA5A5;border-radius:6px;background:#FEF2F2;color:#DC2626;font-size:11px;cursor:pointer;">删除</button>'}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <div style="background:#F9FAFB;border-radius:8px;padding:8px;display:grid;gap:6px;">
+        <div style="font-size:10px;font-weight:600;color:#0BA25E;">非峰</div>
+        ${field("offpeak.hit", hit(p.offpeak.hit))}${field("offpeak.miss", hit(p.offpeak.miss))}${field("offpeak.output", hit(p.offpeak.output))}
+      </div>
+      <div style="background:#FFFBEB;border-radius:8px;padding:8px;display:grid;gap:6px;${usePeak ? "" : "opacity:0.45;pointer-events:none;"}">
+        <div style="font-size:10px;font-weight:600;color:#D97706;">高峰</div>
+        ${field("peak.hit", hit(p.peak.hit))}${field("peak.miss", hit(p.peak.miss))}${field("peak.output", hit(p.peak.output))}
+      </div>
+    </div>
+    <div style="font-size:10px;color:#9CA3AF;">单位：¥/百万 tokens · 内置模型不可删除，价格可覆盖</div>
+  </div>`;
+}
+function field(key, val) {
+  const label = key.endsWith(".hit") ? "命中" : key.endsWith(".miss") ? "未命中" : "输出";
+  return `<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:11px;color:#6B7280;width:44px;">${label}</span><input type="number" step="0.001" min="0" data-price="${key}" value="${esc(val)}" style="flex:1;padding:6px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /></div>`;
+}
+function readRow(row) {
+  const peak = row.querySelector(".aus-cm-peak")?.checked ?? true;
+  const out = { usePeakPricing: peak, offpeak: {}, peak: {} };
+  row.querySelectorAll("input[data-price]").forEach((el) => {
+    const k = el.getAttribute("data-price");
+    const v = el.value.trim();
+    const num = v === "" ? "" : parseFloat(v);
+    const [zone, field2] = k.split(".");
+    out[zone][field2] = v === "" || isNaN(num) ? "" : num;
+  });
+  return out;
+}
+function upsertCustom(model, patch) {
+  const cms = state.settings.customModels;
+  let found = cms.find((c) => c.model === model);
+  if (found) Object.assign(found, patch);
+  else cms.push({ model, usePeakPricing: patch.usePeakPricing, offpeak: {}, peak: {} });
+}
+function saveCustomRow(model, prices, isBuiltin) {
+  const base = PRICING[model];
+  let same = true;
+  for (const f of ["hit", "miss", "output"]) {
+    if (prices.offpeak[f] !== "" && prices.offpeak[f] !== base?.offpeak?.[f]) same = false;
+    if (prices.peak[f] !== "" && prices.peak[f] !== base?.peak?.[f]) same = false;
+  }
+  const cms = state.settings.customModels;
+  const idx = cms.findIndex((c) => c.model === model);
+  if (isBuiltin && prices.usePeakPricing && same) {
+    if (idx !== -1) cms.splice(idx, 1);
+  } else {
+    const entry = { model, usePeakPricing: prices.usePeakPricing, offpeak: prices.offpeak, peak: prices.peak };
+    if (idx !== -1) cms[idx] = entry;
+    else cms.push(entry);
+  }
+  saveHot({ settings: state.settings });
+  recalcAllCosts();
+  try {
+    globalThis.ApiUsageStat?.refreshUI?.();
+  } catch {
+  }
+}
+function getPricing(model) {
+  const m = model || "deepseek-v4-flash";
+  const base = PRICING[m] || PRICING["deepseek-v4-flash"];
+  for (const cm of state.settings.customModels || []) {
+    if (cm?.model === m) {
+      const merge = (b, c) => ({ hit: c?.hit !== "" && c?.hit !== void 0 ? parseFloat(c.hit) : b.hit, miss: c?.miss !== "" && c?.miss !== void 0 ? parseFloat(c.miss) : b.miss, output: c?.output !== "" && c?.output !== void 0 ? parseFloat(c.output) : b.output });
+      return { usePeakPricing: cm.usePeakPricing !== false, offpeak: merge(base.offpeak, cm.offpeak), peak: merge(base.peak, cm.peak) };
+    }
+  }
+  return base;
+}
+function fillDebugModelSelect(doc) {
+  const sel = doc.getElementById("aus-debug-model");
+  if (!sel) return;
+  const models = Object.keys(PRICING).concat((state.settings.customModels || []).map((c) => c.model).filter(Boolean));
+  const uniq = Array.from(new Set(models));
+  sel.innerHTML = uniq.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
+  const cur = state.settings.debugModel;
+  if (uniq.indexOf(cur) === -1) state.settings.debugModel = uniq[0] || "deepseek-v4-flash";
+  sel.value = state.settings.debugModel;
 }
 function getDoc$5() {
   return window.parent?.document ?? document;
@@ -1274,7 +1696,7 @@ function getDoc$4() {
 function aggregateByDay(entries) {
   const map = {};
   for (const e of entries) {
-    const k = localDay(e.timestamp);
+    const k = localDay$1(e.timestamp);
     if (!map[k]) map[k] = { cost: 0, tokens: 0, count: 0 };
     map[k].cost += e.cost || 0;
     map[k].tokens += e.total_tokens || 0;
@@ -1335,8 +1757,8 @@ function diffMessages(oldMsgs, newMsgs) {
   while (i < a.length && i < b.length && a[i] === b[i]) i++;
   if (i === a.length && i === b.length) return '<span style="color:#6B7280;">两条请求完全一致（缓存命中段完整）</span>';
   const ctx = 80;
-  const aCtx = a.slice(Math.max(0, i - ctx), i) + '<span style="background:#FEE2E2;color:#B91C1C;padding:0 2px;border-radius:3px;">' + esc(a.slice(i, i + 200)) + "</span>" + esc(a.slice(i + 200, i + 280));
-  const bCtx = b.slice(Math.max(0, i - ctx), i) + '<span style="background:#DCFCE7;color:#15803D;padding:0 2px;border-radius:3px;">' + esc(b.slice(i, i + 200)) + "</span>" + esc(b.slice(i + 200, i + 280));
+  const aCtx = a.slice(Math.max(0, i - ctx), i) + '<span style="background:#FEE2E2;color:#B91C1C;padding:0 2px;border-radius:3px;">' + esc$1(a.slice(i, i + 200)) + "</span>" + esc$1(a.slice(i + 200, i + 280));
+  const bCtx = b.slice(Math.max(0, i - ctx), i) + '<span style="background:#DCFCE7;color:#15803D;padding:0 2px;border-radius:3px;">' + esc$1(b.slice(i, i + 200)) + "</span>" + esc$1(b.slice(i + 200, i + 280));
   return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:10px;font-size:11px;white-space:pre-wrap;word-break:break-all;">旧：${aCtx}</div><div style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:10px;font-size:11px;white-space:pre-wrap;word-break:break-all;">新：${bCtx}</div></div><div style="font-size:11px;color:#6B7280;margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
 }
 function bindHistoryCompare() {
@@ -1394,7 +1816,7 @@ function renderUsageDetail(ts) {
   box.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><b style="font-size:14px;color:#111827;">使用详情</b><button onclick="document.getElementById('aus-usage-overlay').style.display='none'" style="border:1px solid #E5E7EB;border-radius:999px;background:#fff;padding:6px 10px;cursor:pointer;">✕</button></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
-      <div style="background:#F6F7F8;border-radius:10px;padding:10px;"><div style="color:#6B7280;font-size:11px;">模型</div><div style="font-weight:600;color:#111827;">${esc(h.model)}</div></div>
+      <div style="background:#F6F7F8;border-radius:10px;padding:10px;"><div style="color:#6B7280;font-size:11px;">模型</div><div style="font-weight:600;color:#111827;">${esc$1(h.model)}</div></div>
       <div style="background:#F6F7F8;border-radius:10px;padding:10px;"><div style="color:#6B7280;font-size:11px;">费用</div><div style="font-weight:700;color:#111827;">¥${(h.cost || 0).toFixed(4)}</div></div>
       <div style="background:#F6F7F8;border-radius:10px;padding:10px;"><div style="color:#6B7280;font-size:11px;">Tokens</div><div>${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · ${h.total_tokens || 0} 总</div></div>
       <div style="background:#F6F7F8;border-radius:10px;padding:10px;"><div style="color:#6B7280;font-size:11px;">命中率</div><div>${(h.cache_hit_rate || 0).toFixed(1)}%</div></div>
@@ -1464,7 +1886,7 @@ function refreshSaveSelect(doc) {
   const sel = doc.getElementById("aus-save-select");
   if (!sel) return;
   const cur = state.currentSave;
-  sel.innerHTML = '<option value="__all__"' + (cur === "__all__" ? " selected" : "") + ">全部存档（合并统计）</option>" + Object.keys(state.saves).sort((a, b) => (state.saves[b].startTime || 0) - (state.saves[a].startTime || 0)).map((k) => `<option value="${esc(k)}"${k === cur ? " selected" : ""}>${esc(state.saves[k].name)} (${state.saves[k].history?.length || 0}条)</option>`).join("");
+  sel.innerHTML = '<option value="__all__"' + (cur === "__all__" ? " selected" : "") + ">全部存档（合并统计）</option>" + Object.keys(state.saves).sort((a, b) => (state.saves[b].startTime || 0) - (state.saves[a].startTime || 0)).map((k) => `<option value="${esc$1(k)}"${k === cur ? " selected" : ""}>${esc$1(state.saves[k].name)} (${state.saves[k].history?.length || 0}条)</option>`).join("");
 }
 function renderHistory(doc, s) {
   const host = doc.getElementById("aus-history");
@@ -1477,7 +1899,7 @@ function renderHistory(doc, s) {
   host.innerHTML = hist.slice(0, 50).map((h) => `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#F6F7F8;border-radius:10px;margin-bottom:6px;font-size:12px;">
       <div style="min-width:0;flex:1;">
-        <div style="font-weight:600;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(h.model)} · ${esc(localDay(h.timestamp))}</div>
+        <div style="font-weight:600;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc$1(h.model)} · ${esc$1(localDay$1(h.timestamp))}</div>
         <div style="color:#6B7280;margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · ${h.duration || 0}ms · ${h.tokenRate || 0} t/s</div>
       </div>
       <div style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">

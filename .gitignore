@@ -1,7 +1,7 @@
 node_modules/
 .DS_Store
 *.log
-# Vite 拆分产物不在仓库中保留，发布时重新构建
+# Vite 拆分产物不在仓库中保留，发布时重新构建（仅保留 index.js/style.css 产物）
 Axis-*.js
 Image-*.js
 barGrid-*.js
@@ -11,4 +11,5 @@ core-*.js
 createSeriesData-*.js
 graphic-*.js
 renderers-*.js
-index-DU4kKh3S.js
+index-*.js
+!index.js
