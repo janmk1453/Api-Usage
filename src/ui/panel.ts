@@ -312,6 +312,12 @@ export function createPanel() {
       </div>
     </div>
   `;
+  // 侧边栏展开时的移动端遮罩（覆盖主内容）
+  const sbOverlay = doc.createElement('div');
+  sbOverlay.id = 'aus-sidebar-overlay';
+  sbOverlay.style.cssText = 'display:none;position:absolute;left:60px;top:0;right:0;bottom:0;background:rgba(0,0,0,0.08);z-index:4;';
+  sbOverlay.addEventListener('click', () => applyCollapsed(true));
+  panel.appendChild(sbOverlay);
   doc.body.appendChild(overlay);
   doc.body.appendChild(panel);
   try {
@@ -331,10 +337,27 @@ export function createPanel() {
     const sb = doc.getElementById('aus-sidebar') as HTMLElement | null;
     const brand = doc.getElementById('aus-brand') as HTMLElement | null;
     const btn = doc.getElementById('aus-sidebar-toggle') as HTMLElement | null;
+    const overlay = doc.getElementById('aus-sidebar-overlay') as HTMLElement | null;
     if (!sb) return;
-    sb.style.width = collapsed ? '60px' : '220px';
-    sb.style.minWidth = collapsed ? '60px' : '220px';
-    sb.style.maxWidth = collapsed ? '60px' : '220px';
+    const isMobile = (window.parent as any)?.innerWidth <= 760 || window.innerWidth <= 760;
+    if (isMobile) {
+      // 覆盖式：收起 60px 常驻，展开 220px 浮于内容之上
+      if (collapsed) {
+        sb.style.width = '60px'; sb.style.minWidth = '60px'; sb.style.maxWidth = '60px';
+        sb.style.position = ''; sb.style.left = ''; sb.style.top = ''; sb.style.bottom = ''; sb.style.zIndex = ''; sb.style.boxShadow = '';
+        if (overlay) overlay.style.display = 'none';
+      } else {
+        sb.style.width = '220px'; sb.style.minWidth = '220px'; sb.style.maxWidth = '220px';
+        sb.style.position = 'absolute'; sb.style.left = '0'; sb.style.top = '0'; sb.style.bottom = '0'; sb.style.zIndex = '5'; sb.style.boxShadow = '4px 0 16px rgba(0,0,0,0.12)';
+        if (overlay) overlay.style.display = 'block';
+      }
+    } else {
+      sb.style.width = collapsed ? '60px' : '220px';
+      sb.style.minWidth = collapsed ? '60px' : '220px';
+      sb.style.maxWidth = collapsed ? '60px' : '220px';
+      sb.style.position = ''; sb.style.left = ''; sb.style.top = ''; sb.style.bottom = ''; sb.style.zIndex = ''; sb.style.boxShadow = '';
+      if (overlay) overlay.style.display = 'none';
+    }
     if (brand) brand.style.display = collapsed ? 'none' : 'flex';
     if (btn) btn.textContent = collapsed ? '›' : '‹';
     doc.querySelectorAll('.aus-nav-label').forEach((el: any) => { (el as HTMLElement).style.display = collapsed ? 'none' : 'inline'; });
