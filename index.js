@@ -38591,16 +38591,30 @@ async function initStore() {
 }
 function injectWandEntry() {
   const doc = getDoc();
-  const menu = doc.getElementById("extensionsMenu") || doc.querySelector("#extensionsMenu, #extensions_menu");
-  if (!menu) return;
-  if (doc.getElementById("aus_wand_container")) return;
+  const menu = doc.getElementById("extensionsMenu") || doc.getElementById("extensions_menu") || doc.querySelector("#extensionsMenu") || doc.querySelector("#extensions_menu") || doc.querySelector(".extensionsMenu") || doc.getElementById("extensions_settings") || doc.querySelector("#rm_extensions_block");
+  if (!menu) return false;
+  if (doc.getElementById("aus_wand_container")) return true;
   const container = doc.createElement("div");
   container.id = "aus_wand_container";
   container.className = "extension_container";
-  container.innerHTML = '<div id="aus_wand_entry" class="list-group-item flex-container flexGap5"><div class="fa-solid fa-chart-column extensionsMenuExtensionButton"></div>API用量统计</div>';
-  menu.appendChild(container);
+  container.innerHTML = '<div id="aus_wand_entry" class="list-group-item flex-container flexGap5" style="cursor:pointer;"><div class="fa-solid fa-chart-column extensionsMenuExtensionButton"></div>API用量统计</div>';
+  try {
+    menu.appendChild(container);
+  } catch {
+    return false;
+  }
   const btn = doc.getElementById("aus_wand_entry");
   if (btn) btn.addEventListener("click", () => togglePanel());
+  console.log("[API用量统计] 魔法棒入口已注入");
+  return true;
+}
+function ensureWandEntry() {
+  if (injectWandEntry()) return;
+  let tries = 0;
+  const timer = setInterval(() => {
+    tries++;
+    if (injectWandEntry() || tries > 20) clearInterval(timer);
+  }, 500);
 }
 async function onInstall() {
   console.log("[API用量统计] installed");
@@ -38632,25 +38646,64 @@ function onDisable() {
 }
 async function onActivate() {
   ensureStyleScope();
+  try {
+    injectWandEntry();
+    ensureWandEntry();
+  } catch {
+  }
 }
 async function init() {
   ensureStyleScope();
-  await initStore();
-  installInterception();
+  try {
+    await initStore();
+  } catch (e2) {
+    console.error("[API用量统计] initStore 失败", e2);
+  }
+  try {
+    installInterception();
+  } catch {
+  }
   const mount = () => {
-    createPanel();
-    injectWandEntry();
-    createPeakDot();
-    refreshUI();
+    try {
+      createPanel();
+    } catch {
+    }
+    try {
+      ensureWandEntry();
+    } catch {
+    }
+    try {
+      createPeakDot();
+    } catch {
+    }
+    try {
+      refreshUI();
+    } catch {
+    }
   };
   if (globalThis.SillyTavern?.getContext) mount();
   else window.setTimeout(mount, 1500);
   try {
     const ctx = globalThis.SillyTavern?.getContext?.();
     ctx?.eventSource?.on?.(ctx?.event_types?.APP_READY, () => {
-      createPanel();
-      injectWandEntry();
-      refreshUI();
+      try {
+        createPanel();
+      } catch {
+      }
+      try {
+        ensureWandEntry();
+      } catch {
+      }
+      try {
+        refreshUI();
+      } catch {
+      }
+    });
+    ctx?.eventSource?.on?.(ctx?.event_types?.APP_INITIALIZED, () => {
+      try {
+        ensureWandEntry();
+      } catch {
+      }
     });
   } catch {
   }
@@ -38660,7 +38713,7 @@ async function init() {
     });
   } catch {
   }
-  globalThis.ApiUsageStat = { MODULE, refreshUI, updatePeakDot, openPanel, closePanel, togglePanel, state };
+  globalThis.ApiUsageStat = { MODULE, refreshUI, updatePeakDot, openPanel, closePanel, togglePanel, state, injectWandEntry: ensureWandEntry };
 }
 init();
 export {
