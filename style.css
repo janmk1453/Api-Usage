@@ -77,9 +77,10 @@
   [data-extension="api-usage-stat"] .ds-grid-3 { grid-template-columns: 1fr; }
 }
 
-/* 占位：空扩展验证用 */
-#api-usage-stat-root {
-  padding: 12px;
-  font-size: 13px;
-  color: var(--ds-text-2);
-}
+/* 全屏独立面板 */
+#aus-overlay { backdrop-filter: blur(2px); }
+#aus-panel { box-shadow: 0 8px 32px rgba(0,0,0,0.12); }
+#aus-panel #aus-panel-scroll::-webkit-scrollbar { width: 6px; }
+#aus-panel #aus-panel-scroll::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 999px; }
+#aus_wand_entry { cursor: pointer; }
+#aus_wand_entry:hover { background: #F6F7F8; }

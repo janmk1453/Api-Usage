@@ -1431,6 +1431,8 @@ function renderCustomizer() {
 function getDoc$1() {
   return window.parent?.document ?? document;
 }
+let panelCreated = false;
+let panelOpen = false;
 function refreshUI() {
   try {
     const doc = getDoc$1();
@@ -1453,8 +1455,15 @@ function refreshUI() {
     renderHistory(doc, s);
     renderStats();
     renderCharts();
+    refreshSaveSelect(doc);
   } catch {
   }
+}
+function refreshSaveSelect(doc) {
+  const sel = doc.getElementById("aus-save-select");
+  if (!sel) return;
+  const cur = state.currentSave;
+  sel.innerHTML = '<option value="__all__"' + (cur === "__all__" ? " selected" : "") + ">全部存档（合并统计）</option>" + Object.keys(state.saves).sort((a, b) => (state.saves[b].startTime || 0) - (state.saves[a].startTime || 0)).map((k) => `<option value="${esc(k)}"${k === cur ? " selected" : ""}>${esc(state.saves[k].name)} (${state.saves[k].history?.length || 0}条)</option>`).join("");
 }
 function renderHistory(doc, s) {
   const host = doc.getElementById("aus-history");
@@ -1503,43 +1512,97 @@ function bindPanel(doc) {
     refreshUI();
   };
 }
-function injectPanel() {
+function createPanel() {
+  if (panelCreated) return;
   const doc = getDoc$1();
-  if (doc.getElementById("api-usage-stat-panel")) return;
-  const host = doc.getElementById("api-usage-stat-root");
-  if (!host) return;
-  const content = host.querySelector(".inline-drawer-content");
-  if (!content) return;
+  if (doc.getElementById("aus-panel")) {
+    panelCreated = true;
+    return;
+  }
+  panelCreated = true;
+  const overlay = doc.createElement("div");
+  overlay.id = "aus-overlay";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:100000;display:none;opacity:0;transition:opacity 0.2s;";
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closePanel();
+  });
   const panel = doc.createElement("div");
-  panel.id = "api-usage-stat-panel";
+  panel.id = "aus-panel";
   panel.setAttribute("data-extension", "api-usage-stat");
   panel.setAttribute("data-ds-theme", "light");
+  panel.style.cssText = "position:fixed;inset:0;z-index:100001;background:#FFFFFF;color:#111827;font-family:Inter,system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;";
   panel.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
-      <div class="ds-card"><div class="ds-card-title">充值余额</div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:11px;">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">导出</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">导入</button></div></div>
-      <div class="ds-card"><div class="ds-card-title">累计消费</div><div class="ds-card-val" id="aus-total-cost">¥0.00</div><div style="font-size:11px;color:#9CA3AF;margin-top:4px;" id="aus-total-tokens">0 tokens</div></div>
+    <div style="flex-shrink:0;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid #E5E7EB;background:#fff;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:16px;font-weight:700;color:#111827;">API用量统计</span>
+        <span style="font-size:11px;color:#6B7280;background:#F6F7F8;padding:3px 8px;border-radius:999px;">用量信息</span>
+      </div>
+      <button id="aus-panel-close" style="width:32px;height:32px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;color:#6B7280;cursor:pointer;font-size:14px;">✕</button>
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">
-      <select id="aus-save-select" style="flex:1;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;"></select>
-      <span style="font-size:11px;color:#6B7280;">共 <span id="aus-rounds">0 轮</span> · 命中 <span id="aus-hit-rate">0%</span></span>
+    <div id="aus-panel-scroll" style="flex:1;overflow:auto;padding:20px;background:#FFFFFF;">
+      <div style="max-width:1100px;margin:0 auto;display:grid;gap:12px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="ds-card"><div class="ds-card-title">充值余额</div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:11px;">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">导出</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">导入</button></div></div>
+          <div class="ds-card"><div class="ds-card-title">累计消费</div><div class="ds-card-val" id="aus-total-cost">¥0.00</div><div style="font-size:11px;color:#9CA3AF;margin-top:4px;" id="aus-total-tokens">0 tokens</div></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <select id="aus-save-select" style="flex:1;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;"></select>
+          <span style="font-size:11px;color:#6B7280;">共 <span id="aus-rounds">0 轮</span> · 命中 <span id="aus-hit-rate">0%</span></span>
+        </div>
+        <div id="aus-stats"></div>
+        <div id="aus-customizer"></div>
+        <div style="display:grid;gap:12px;">
+          <div class="ds-card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:#111827;">消费金额 (CNY)</span><span style="font-size:11px;color:#6B7280;">近 30 天</span></div><div id="aus-chart-bar" style="height:180px;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-size:12px;">加载中…</div></div>
+          <div class="ds-card"><div style="font-size:12px;font-weight:600;color:#111827;margin-bottom:8px;">Tokens 热力</div><div id="aus-heatmap" style="height:120px;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-size:12px;">加载中…</div></div>
+        </div>
+        <div id="aus-diff" class="ds-card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:#111827;">缓存断点</span><button id="aus-diff-fullscreen" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:6px;background:#fff;font-size:11px;cursor:pointer;">全屏</button></div><div style="font-size:11px;color:#9CA3AF;">在历史中各选一条 旧/新 对比，橙/绿高亮即发散点</div></div>
+        <div id="aus-history"></div>
+        <div id="aus-settings" style="border-top:1px solid #E5E7EB;padding-top:12px;"></div>
+      </div>
     </div>
-    <div id="aus-stats" style="margin-bottom:12px;"></div>
-    <div id="aus-customizer" style="margin-bottom:12px;"></div>
-    <div style="display:grid;gap:12px;margin-bottom:12px;">
-      <div class="ds-card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:#111827;">消费金额 (CNY)</span><span style="font-size:11px;color:#6B7280;">近 30 天</span></div><div id="aus-chart-bar" style="height:180px;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-size:12px;">加载中…</div></div>
-      <div class="ds-card"><div style="font-size:12px;font-weight:600;color:#111827;margin-bottom:8px;">Tokens 热力</div><div id="aus-heatmap" style="height:120px;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-size:12px;">加载中…</div></div>
-    </div>
-    <div id="aus-diff" class="ds-card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:#111827;">缓存断点</span><button id="aus-diff-fullscreen" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:6px;background:#fff;font-size:11px;cursor:pointer;">全屏</button></div><div style="font-size:11px;color:#9CA3AF;">在历史中各选一条 旧/新 对比，橙/绿高亮即发散点</div></div>
-    <div id="aus-history"></div>
-    <div id="aus-settings" style="margin-top:16px;border-top:1px solid #E5E7EB;padding-top:12px;"></div>
   `;
-  content.appendChild(panel);
+  doc.body.appendChild(overlay);
+  doc.body.appendChild(panel);
+  doc.getElementById("aus-panel-close")?.addEventListener("click", closePanel);
   bindPanel(doc);
   bindImportExport(doc);
   renderSettings(doc);
   bindHistoryCompare();
   renderCustomizer();
   refreshUI();
+}
+function openPanel() {
+  const doc = getDoc$1();
+  const ov = doc.getElementById("aus-overlay");
+  const pn = doc.getElementById("aus-panel");
+  if (!ov || !pn) {
+    createPanel();
+    return openPanel();
+  }
+  ov.style.display = "block";
+  pn.style.display = "flex";
+  requestAnimationFrame(() => {
+    ov.style.opacity = "1";
+  });
+  panelOpen = true;
+  refreshUI();
+}
+function closePanel() {
+  const doc = getDoc$1();
+  const ov = doc.getElementById("aus-overlay");
+  const pn = doc.getElementById("aus-panel");
+  if (ov) {
+    ov.style.opacity = "0";
+    setTimeout(() => {
+      ov.style.display = "none";
+    }, 200);
+  }
+  if (pn) pn.style.display = "none";
+  panelOpen = false;
+}
+function togglePanel() {
+  if (panelOpen) closePanel();
+  else openPanel();
 }
 function isWeekend(ts) {
   const d = new Date(ts + 8 * 3600 * 1e3).getUTCDay();
@@ -1655,41 +1718,18 @@ async function initStore() {
     saveHot({ saves: state.saves, currentSave: state.currentSave, settings: state.settings, balance: state.balance, customBalance: state.customBalance });
   }
 }
-async function renderPlaceholder() {
-  try {
-    const ctx = globalThis.SillyTavern?.getContext?.();
-    if (ctx?.renderExtensionTemplateAsync) {
-    }
-  } catch {
-  }
-  fallbackPlaceholder();
-}
-function fallbackPlaceholder() {
+function injectWandEntry() {
   const doc = getDoc();
-  const host = doc.getElementById("extensions_settings2") ?? doc.getElementById("extensions_settings");
-  if (!host) return;
-  if (doc.getElementById("api-usage-stat-root")) return;
-  const wrap = doc.createElement("div");
-  wrap.id = "api-usage-stat-root";
-  wrap.setAttribute("data-extension", "api-usage-stat");
-  wrap.setAttribute("data-ds-theme", "light");
-  wrap.innerHTML = `
-    <div class="inline-drawer">
-      <div class="inline-drawer-toggle inline-drawer-header"><b>API用量统计</b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div></div>
-      <div class="inline-drawer-content" style="padding:12px;background:#fff;">
-        <div data-extension="api-usage-stat" data-ds-theme="light">
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px;">
-            <div class="ds-card"><div class="ds-card-title">消费金额</div><div class="ds-card-val">¥0.00<small style="font-size:14px;color:#9CA3AF;margin-left:4px;">CNY</small></div></div>
-            <div class="ds-card"><div class="ds-card-title">API 请求次数</div><div class="ds-card-val">0</div></div>
-            <div class="ds-card"><div class="ds-card-title">Tokens</div><div class="ds-card-val">0</div></div>
-          </div>
-          <div style="font-size:11px;color:#9CA3AF;text-align:center;padding:6px;">样式已对齐 DeepSeek 官方 · 阶段 1 已接通定价/存储/拦截</div>
-        </div>
-      </div>
-    </div>
-  `;
-  host.appendChild(wrap);
-  setTimeout(() => injectPanel(), 100);
+  const menu = doc.getElementById("extensionsMenu") || doc.querySelector("#extensionsMenu, #extensions_menu");
+  if (!menu) return;
+  if (doc.getElementById("aus_wand_container")) return;
+  const container = doc.createElement("div");
+  container.id = "aus_wand_container";
+  container.className = "extension_container";
+  container.innerHTML = '<div id="aus_wand_entry" class="list-group-item flex-container flexGap5"><div class="fa-solid fa-chart-column extensionsMenuExtensionButton"></div>API用量统计</div>';
+  menu.appendChild(container);
+  const btn = doc.getElementById("aus_wand_entry");
+  if (btn) btn.addEventListener("click", () => togglePanel());
 }
 async function onInstall() {
   console.log("[API用量统计] installed");
@@ -1705,11 +1745,11 @@ async function onUpdate() {
 async function onDelete() {
   console.log("[API用量统计] deleted");
   try {
-    const doc = window.parent?.document ?? document;
-    const root = doc.getElementById("api-usage-stat-root");
-    if (root) root.remove();
-    const dot = doc.getElementById("aus-peak-dot-indicator");
-    if (dot) dot.remove();
+    const doc = getDoc();
+    doc.getElementById("aus-overlay")?.remove();
+    doc.getElementById("aus-panel")?.remove();
+    doc.getElementById("aus_wand_container")?.remove();
+    doc.getElementById("aus-peak-dot-indicator")?.remove();
   } catch {
   }
 }
@@ -1726,22 +1766,30 @@ async function init() {
   ensureStyleScope();
   await initStore();
   installInterception();
-  const tryMount = () => {
-    renderPlaceholder();
-    setTimeout(() => {
-      injectPanel();
-      refreshUI();
-      createPeakDot();
-    }, 300);
+  const mount = () => {
+    createPanel();
+    injectWandEntry();
+    createPeakDot();
+    refreshUI();
   };
-  if (globalThis.SillyTavern?.getContext) tryMount();
-  else window.setTimeout(tryMount, 1500);
+  if (globalThis.SillyTavern?.getContext) mount();
+  else window.setTimeout(mount, 1500);
   try {
     const ctx = globalThis.SillyTavern?.getContext?.();
-    ctx?.eventSource?.on?.(ctx?.event_types?.APP_READY, tryMount);
+    ctx?.eventSource?.on?.(ctx?.event_types?.APP_READY, () => {
+      createPanel();
+      injectWandEntry();
+      refreshUI();
+    });
   } catch {
   }
-  globalThis.ApiUsageStat = { MODULE, refreshUI, updatePeakDot, state };
+  try {
+    getDoc().addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closePanel();
+    });
+  } catch {
+  }
+  globalThis.ApiUsageStat = { MODULE, refreshUI, updatePeakDot, openPanel, closePanel, togglePanel, state };
 }
 init();
 export {
