@@ -8,6 +8,7 @@ import { repository } from './data/repository';
 import { installInterception } from './services/interception';
 import { createPanel, openPanel, closePanel, togglePanel, refreshUI } from './ui/panel';
 import { createPeakDot, updatePeakDot } from './ui/peak-dot';
+import { applyTheme } from './services/theme';
 
 const MODULE = 'api_usage_stat';
 
@@ -68,10 +69,12 @@ export async function onActivate() { ensureStyleScope(); try { injectWandEntry()
 
 async function init() {
   ensureStyleScope();
+  try { applyTheme((state.settings as any).theme); } catch {}
   // 隔离数据初始化错误，不影响入口注入
   try { await initStore(); } catch (e) { console.error('[API用量统计] initStore 失败', e); }
   try { installInterception(); } catch {}
   const mount = () => {
+    try { applyTheme((state.settings as any).theme); } catch {}
     try { createPanel(); } catch {}
     try { ensureWandEntry(); } catch {}
     try { createPeakDot(); } catch {}

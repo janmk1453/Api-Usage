@@ -12,6 +12,14 @@ let selectedModel: string = '__all__';
 let modelPickerOpen = false;
 
 function getDoc() { return (window.parent as any)?.document ?? document; }
+function themeColor(name: string, fallback: string) {
+  try {
+    const doc = getDoc();
+    const el = doc.getElementById('aus-panel') || doc.documentElement;
+    const v = getComputedStyle(el).getPropertyValue(name).trim();
+    return v || fallback;
+  } catch { return fallback; }
+}
 
 function getRangeDates(): { start: string; end: string } {
   const today = localDay(Date.now());
@@ -56,7 +64,7 @@ function updateRangeHighlight() {
   const doc = getDoc();
   doc.querySelectorAll('[data-range]').forEach((el: any) => {
     const r = el.getAttribute('data-range');
-    if (r === currentRange) { el.style.background = '#F6F7F8'; el.style.fontWeight = '600'; }
+    if (r === currentRange) { el.style.background = 'var(--ds-card)'; el.style.fontWeight = '600'; }
     else { el.style.background = ''; el.style.fontWeight = ''; }
   });
   // 日历仅自定义时显示
@@ -77,7 +85,7 @@ function renderCalendar() {
   months.push(new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth()-1, 1)));
   months.push(new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), 1)));
   let html = '<div style="display:flex;gap:12px;align-items:flex-start;">';
-  html += `<button id="aus-cal-prev" style="margin-top:32px;padding:4px 8px;border:1px solid #E5E7EB;border-radius:6px;background:#fff;cursor:pointer;">‹</button>`;
+  html += `<button id="aus-cal-prev" style="margin-top:32px;padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);cursor:pointer;">‹</button>`;
   html += '<div style="display:flex;gap:16px;">';
   for (const m of months) {
     const y = m.getUTCFullYear(), mo = m.getUTCMonth();
@@ -86,7 +94,7 @@ function renderCalendar() {
     const startDow = first.getUTCDay();
     html += `<div style="min-width:220px;"><div style="text-align:center;font-weight:600;font-size:13px;margin-bottom:8px;">${y}年${mo+1}月</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:11px;">`;
     const week = ['日','一','二','三','四','五','六'];
-    for (const w of week) html += `<div style="text-align:center;color:#9CA3AF;padding:4px;">${w}</div>`;
+    for (const w of week) html += `<div style="text-align:center;color:var(--ds-text-3);padding:4px;">${w}</div>`;
     for (let i=0;i<startDow;i++) html += `<div></div>`;
     for (let d=1; d<=daysInMonth; d++) {
       const date = new Date(Date.UTC(y, mo, d));
@@ -94,15 +102,15 @@ function renderCalendar() {
       const { start, end } = getRangeDates();
       const inRange = key >= start && key <= end;
       const isToday = key === todayStr;
-      const bg = inRange ? '#111827' : '#fff';
-      const color = inRange ? '#fff' : '#111827';
-      const ring = isToday && !inRange ? 'border:1px solid #111827;' : '';
+      const bg = inRange ? 'var(--ds-text)' : 'var(--ds-card-inner)';
+      const color = inRange ? 'var(--ds-card-inner)' : 'var(--ds-text)';
+      const ring = isToday && !inRange ? 'border:1px solid var(--ds-text);' : '';
       html += `<div data-date="${key}" style="text-align:center;padding:6px;border-radius:999px;background:${bg};color:${color};cursor:pointer;${ring}">${d}</div>`;
     }
     html += `</div></div>`;
   }
   html += '</div>';
-  html += `<button id="aus-cal-next" style="margin-top:32px;padding:4px 8px;border:1px solid #E5E7EB;border-radius:6px;background:#fff;cursor:pointer;">›</button>`;
+  html += `<button id="aus-cal-next" style="margin-top:32px;padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);cursor:pointer;">›</button>`;
   html += '</div>';
   cal.innerHTML = html;
   const prev = doc.getElementById('aus-cal-prev');
@@ -147,12 +155,12 @@ function renderModelPicker() {
   if (!dropdown || !label) return;
   const models = getRecordedModels();
   label.textContent = selectedModel === '__all__' ? '全部' : selectedModel;
-  let html = `<div data-model="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${selectedModel==='__all__'?'background:#F6F7F8;font-weight:600;':''}">全部</div>`;
+  let html = `<div data-model="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${selectedModel==='__all__'?'background:var(--ds-card);font-weight:600;':''}">全部</div>`;
   for (const m of models) {
-    const active = m === selectedModel ? 'background:#F6F7F8;font-weight:600;' : '';
+    const active = m === selectedModel ? 'background:var(--ds-card);font-weight:600;' : '';
     html += `<div data-model="${m}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${m}</div>`;
   }
-  if (!models.length) html += '<div style="padding:8px 10px;color:#9CA3AF;font-size:12px;">暂无模型</div>';
+  if (!models.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">暂无模型</div>';
   dropdown.innerHTML = html;
   dropdown.querySelectorAll('[data-model]').forEach((el: any) => {
     el.onclick = () => {
@@ -235,7 +243,7 @@ function renderChartSelectors() {
   let yHtml = '';
   for (const opt of Y_OPTIONS) {
     const checked = ySel.includes(opt.key);
-    yHtml += `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;${checked?'background:#F6F7F8;':''}"><input type="checkbox" data-ykey="${opt.key}" ${checked?'checked':''} style="accent-color:#111827;" /><span style="display:inline-block;width:8px;height:8px;background:${opt.color};border-radius:2px;"></span>${opt.label}<span style="margin-left:auto;color:#9CA3AF;font-size:10px;">${opt.unit}</span></label>`;
+    yHtml += `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;${checked?'background:var(--ds-card);':''}"><input type="checkbox" data-ykey="${opt.key}" ${checked?'checked':''} style="accent-color:var(--ds-text);" /><span style="display:inline-block;width:8px;height:8px;background:${opt.color};border-radius:2px;"></span>${opt.label}<span style="margin-left:auto;color:var(--ds-text-3);font-size:10px;">${opt.unit}</span></label>`;
   }
   yDrop.innerHTML = yHtml;
   yDrop.querySelectorAll('input[data-ykey]').forEach((el: any)=>{
@@ -252,7 +260,7 @@ function renderChartSelectors() {
   let xHtml = '';
   for (const opt of X_OPTIONS) {
     const active = opt.key===xSel;
-    xHtml += `<div data-xkey="${opt.key}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active?'background:#F6F7F8;font-weight:600;':''}">${opt.label}</div>`;
+    xHtml += `<div data-xkey="${opt.key}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active?'background:var(--ds-card);font-weight:600;':''}">${opt.label}</div>`;
   }
   xDrop.innerHTML = xHtml;
   xDrop.querySelectorAll('[data-xkey]').forEach((el:any)=>{
@@ -303,7 +311,7 @@ async function renderChart(filteredRaw: any[]) {
   const { labels, series } = aggregateForChart(filteredRaw, yKeys, xKey);
   if (!labels.length) {
     if (chart) { try { chart.dispose(); } catch {} chart = null; }
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:12px;">该筛选无数据（历史 ' + filteredRaw.length + ' 条）</div>';
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--ds-text-3);font-size:12px;">该筛选无数据（历史 ' + filteredRaw.length + ' 条）</div>';
     return;
   }
   const w = (el as HTMLElement).clientWidth, h = (el as HTMLElement).clientHeight;
@@ -332,9 +340,12 @@ async function renderChart(filteredRaw: any[]) {
   }
   const hasToken = series.some(s=>s.kind==='token');
   const hasCost = series.some(s=>s.kind==='cost');
+  const cBorder = themeColor('--ds-border', '#E5E7EB');
+  const cCard = themeColor('--ds-card', '#F6F7F8');
+  const cText3 = themeColor('--ds-text-3', '#9CA3AF');
   const yAxis: any[] = [];
-  if (hasToken) yAxis.push({ type:'value', name:'tokens', position:'left', axisLine:{show:false}, splitLine:{lineStyle:{color:'#F6F7F8'}}, axisLabel:{color:'#9CA3AF',fontSize:10} });
-  if (hasCost) yAxis.push({ type:'value', name:'CNY', position: hasToken?'right':'left', axisLine:{show:false}, splitLine:{show:false}, axisLabel:{color:'#9CA3AF',fontSize:10,formatter:(v:number)=>'¥'+v} });
+  if (hasToken) yAxis.push({ type:'value', name:'tokens', position:'left', axisLine:{show:false}, splitLine:{lineStyle:{color:cCard}}, axisLabel:{color:cText3,fontSize:10} });
+  if (hasCost) yAxis.push({ type:'value', name:'CNY', position: hasToken?'right':'left', axisLine:{show:false}, splitLine:{show:false}, axisLabel:{color:cText3,fontSize:10,formatter:(v:number)=>'¥'+v} });
   const seriesOpt = series.map(s=>{
     const isCost = s.kind==='cost';
     const yIndex = hasToken && hasCost ? (isCost?1:0) : 0;
@@ -348,14 +359,16 @@ async function renderChart(filteredRaw: any[]) {
       emphasis: { focus: 'series' },
     };
   });
+  const cCardInner = themeColor('--ds-card-inner', '#FFFFFF');
+  const cText = themeColor('--ds-text', '#111827');
   chart.setOption({
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
-      backgroundColor: '#fff',
-      borderColor: '#E5E7EB',
+      backgroundColor: cCardInner,
+      borderColor: cBorder,
       borderWidth: 1,
-      textStyle: { color: '#111827', fontSize: 11 },
+      textStyle: { color: cText, fontSize: 11 },
       formatter: (params:any)=>{
         if (!params?.length) return '';
         const idx = params[0].dataIndex;
@@ -370,8 +383,8 @@ async function renderChart(filteredRaw: any[]) {
       }
     },
     grid: { left: 50, right: hasToken&&hasCost?50:20, top: 8, bottom: 28 },
-    xAxis: { type:'category', data: labels, axisLine:{lineStyle:{color:'#E5E7EB'}}, axisLabel:{color:'#9CA3AF',fontSize:10,interval:0,rotate: labels.length>20?30:0, hideOverlap:true} },
-    yAxis: yAxis.length?yAxis:{ type:'value', axisLabel:{color:'#9CA3AF',fontSize:10} },
+    xAxis: { type:'category', data: labels, axisLine:{lineStyle:{color:cBorder}}, axisLabel:{color:cText3,fontSize:10,interval:0,rotate: labels.length>20?30:0, hideOverlap:true} },
+    yAxis: yAxis.length?yAxis:{ type:'value', axisLabel:{color:cText3,fontSize:10} },
     series: seriesOpt,
   }, true);
   setTimeout(()=>{ try{ chart.resize(); }catch{} }, 60);
@@ -381,7 +394,7 @@ function renderModelSummary(filtered: any[]) {
   const doc = getDoc();
   const tbody = doc.getElementById('aus-summary-tbody');
   if (!tbody) return;
-  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:16px;color:#9CA3AF;">暂无数据</td></tr>'; return; }
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr>'; return; }
   const map: Record<string, { count: number; hit: number; miss: number; out: number; total: number; cost: number; dur: number; rate: number; rateCnt: number }> = {};
   for (const h of filtered) {
     const m = h.model || 'unknown';
@@ -395,7 +408,7 @@ function renderModelSummary(filtered: any[]) {
     const avgCost = e.count ? e.cost / e.count : 0;
     const avgDur = e.count ? (e.dur / e.count / 1000).toFixed(1) + 's' : '—';
     const avgRate = e.rateCnt ? Math.round(e.rate / e.rateCnt) + ' t/s' : '—';
-    return `<tr style="border-bottom:1px solid #F6F7F8;"><td style="padding:6px 8px;text-align:left;color:#111827;font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${m}</td><td style="padding:6px 8px;text-align:right;">${e.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${e.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${e.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${e.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${e.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#111827;">¥${e.cost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;">¥${avgCost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;color:#6B7280;">${avgDur}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${avgRate}</td></tr>`;
+    return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${m}</td><td style="padding:6px 8px;text-align:right;">${e.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${e.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${e.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${e.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${e.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">¥${e.cost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;">¥${avgCost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${avgDur}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${avgRate}</td></tr>`;
   }).join('');
   tbody.innerHTML = rows;
 }

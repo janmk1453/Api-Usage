@@ -8,7 +8,7 @@ export const Y_OPTIONS: Array<{key:YKey,label:string,unit:string,kind:'token'|'c
   { key:'input_hit_token', label:'输入(命中) token', unit:'tokens', kind:'token', color:'#0BA25E' },
   { key:'input_miss_token', label:'输入(未命中) token', unit:'tokens', kind:'token', color:'#F87171' },
   { key:'output_token', label:'输出 token', unit:'tokens', kind:'token', color:'#6366F1' },
-  { key:'total_token', label:'总 Token', unit:'tokens', kind:'token', color:'#111827' },
+  { key:'total_token', label:'总 Token', unit:'tokens', kind:'token', color:'var(--ds-text)' },
   { key:'input_hit_cost', label:'输入(命中)费用', unit:'CNY', kind:'cost', color:'#10B981' },
   { key:'input_miss_cost', label:'输入(未命中)费用', unit:'CNY', kind:'cost', color:'#F59E0B' },
   { key:'output_cost', label:'输出费用', unit:'CNY', kind:'cost', color:'#8B5CF6' },

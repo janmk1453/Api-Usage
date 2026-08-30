@@ -23,6 +23,14 @@ const state: Record<ChartId, {y:Set<string>,x:XKey,pieMode:'token'|'count'}> = {
 };
 
 function getDoc(){ return (window.parent as any)?.document ?? document; }
+function themeColor(name: string, fallback: string) {
+  try {
+    const doc = getDoc();
+    const el = doc.getElementById('aus-panel') || doc.documentElement;
+    const v = getComputedStyle(el).getPropertyValue(name).trim();
+    return v || fallback;
+  } catch { return fallback; }
+}
 
 function bucketKey(ts:number, x:XKey, idx:number):string {
   if (x==='round') return `#${idx+1}`;
@@ -75,7 +83,7 @@ async function renderOne(id:ChartId, filtered:any[]){
   // pie special
   if (id==='pie'){
     const mode = state.pie.pieMode;
-    if (!filtered.length){ el.innerHTML='<div style="text-align:center;padding:40px;color:#9CA3AF;">暂无数据</div>'; return; }
+    if (!filtered.length){ el.innerHTML='<div style="text-align:center;padding:40px;color:var(--ds-text-3);">暂无数据</div>'; return; }
     const map: Record<string, number> = {};
     for (const e of filtered){ const m=e.model||'unknown'; const v = mode==='token' ? (e.total_tokens||0) : 1; map[m]=(map[m]||0)+v; }
     const data = Object.entries(map).map(([name,value])=>({name, value}));
@@ -85,22 +93,22 @@ async function renderOne(id:ChartId, filtered:any[]){
     const c = charts[id]=ec.init(el);
     c.setOption({
       backgroundColor:'transparent',
-      tooltip:{ trigger:'item', backgroundColor:'#fff', borderColor:'#E5E7EB', textStyle:{fontSize:11} },
-      legend:{ bottom:0, textStyle:{fontSize:10,color:'#6B7280'} },
-      series:[{ type:'pie', radius:['40%','70%'], itemStyle:{borderRadius:6,borderColor:'#fff',borderWidth:2}, label:{fontSize:11}, data }],
+      tooltip:{ trigger:'item', backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize:11, color:themeColor('--ds-text','#111827')} },
+      legend:{ bottom:0, textStyle:{fontSize:10,color:themeColor('--ds-text-2','#6B7280')} },
+      series:[{ type:'pie', radius:['40%','70%'], itemStyle:{borderRadius:6,borderColor:themeColor('--ds-card-inner','#FFFFFF'),borderWidth:2}, label:{fontSize:11}, data }],
     });
     return;
   }
   const yKeys = Array.from(state[id].y);
   const xKey = state[id].x;
-  if (!yKeys.length){ el.innerHTML='<div style="text-align:center;padding:30px;color:#9CA3AF;font-size:11px;">请选择 Y 轴</div>'; return; }
+  if (!yKeys.length){ el.innerHTML='<div style="text-align:center;padding:30px;color:var(--ds-text-3);font-size:11px;">请选择 Y 轴</div>'; return; }
   // 聚合
   if (xKey==='round'){
     const labels = filtered.map((_,i)=>`#${i+1}`);
     const yMeta = new Map(CHART_DEFS[id].yOpts.map(o=>[o.key,o] as any));
     // hit/req/duration 需特殊：hit_rate 按单点直接值
     const series = yKeys.map(k=>{
-      const meta:any = yMeta.get(k) || Y_OPTIONS.find(o=>o.key===k) || {label:k,color:'#6B7280'};
+      const meta:any = yMeta.get(k) || Y_OPTIONS.find(o=>o.key===k) || {label:k,color:'var(--ds-text-2)'};
       const data = filtered.map(e=> {
         const v=getYValue(e,k);
         return Number(v.toFixed(k.includes('cost')||k==='hit_rate'?2:0));
@@ -123,7 +131,7 @@ async function renderOne(id:ChartId, filtered:any[]){
   // 补充 Y_OPTIONS 中未在 CHART_DEFS 的 hit_rate 等
   const fullMap = new Map([...Y_OPTIONS, ...CHART_DEFS[id].yOpts].map(o=>[o.key,o] as any));
   const series = yKeys.map(k=>{
-    const meta:any = fullMap.get(k) || {label:k,color:'#6B7280',kind:'token'};
+    const meta:any = fullMap.get(k) || {label:k,color:'var(--ds-text-2)',kind:'token'};
     let data: number[];
     if (k==='hit_rate'){
       data = sortedKeys.map(key=>{
@@ -166,10 +174,10 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
   const isTokenCost = id==='token' || id==='cost';
   const opts:any = {
     backgroundColor:'transparent',
-    tooltip:{ trigger:'axis', backgroundColor:'#fff', borderColor:'#E5E7EB', textStyle:{fontSize:11} },
+    tooltip:{ trigger:'axis', backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize:11} },
     grid:{ left:40, right:20, top:8, bottom:24 },
-    xAxis:{ type:'category', data: labels, axisLine:{lineStyle:{color:'#E5E7EB'}}, axisLabel:{fontSize:10,color:'#9CA3AF',rotate: labels.length>12?30:0, interval:0} },
-    yAxis:{ type:'value', axisLabel:{fontSize:10,color:'#9CA3AF'}, splitLine:{lineStyle:{color:'#F6F7F8'}} },
+    xAxis:{ type:'category', data: labels, axisLine:{lineStyle:{color:themeColor('--ds-border','#E5E7EB')}}, axisLabel:{fontSize:10,color:themeColor('--ds-text-3','#9CA3AF'),rotate: labels.length>12?30:0, interval:0} },
+    yAxis:{ type:'value', axisLabel:{fontSize:10,color:themeColor('--ds-text-3','#9CA3AF')}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F6F7F8')}} },
     series: series.map(s=>{
       const isTotal = s.name.includes('总');
       if (isTokenCost && isTotal) return { name:s.name, type:'line', data:s.data, smooth:true, lineStyle:{color:s.color,width:2}, itemStyle:{color:s.color}, symbolSize:2 };
@@ -242,7 +250,7 @@ function renderExtraY(id:ChartId){
   if (label) label.textContent = sel.size? `${sel.size} 项` : '选择';
   drop.innerHTML = opts.map(o=>{
     const checked = sel.has(o.key);
-    return `<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;${checked?'background:#F6F7F8;':''}"><input type="checkbox" data-y="${o.key}" data-chart="${id}" ${checked?'checked':''} style="accent-color:#111827;" /><span style="width:8px;height:8px;background:${o.color};border-radius:2px;"></span>${o.label}</label>`;
+    return `<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;${checked?'background:var(--ds-active-bg);':''}"><input type="checkbox" data-y="${o.key}" data-chart="${id}" ${checked?'checked':''} style="accent-color:var(--ds-text);" /><span style="width:8px;height:8px;background:${o.color};border-radius:2px;"></span>${o.label}</label>`;
   }).join('');
   drop.querySelectorAll('input[data-y]').forEach((el:any)=>{
     el.onchange=()=>{
@@ -264,7 +272,7 @@ function renderExtraX(id:ChartId){
   if (label) label.textContent = X_OPTIONS.find(o=>o.key===cur)?.label || cur;
   drop.innerHTML = X_OPTIONS.map(o=>{
     const active=o.key===cur;
-    return `<div data-x="${o.key}" data-chart="${id}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active?'background:#F6F7F8;font-weight:600;':''}">${o.label}</div>`;
+    return `<div data-x="${o.key}" data-chart="${id}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active?'background:var(--ds-active-bg);font-weight:600;':''}">${o.label}</div>`;
   }).join('');
   drop.querySelectorAll('[data-x]').forEach((el:any)=>{
     el.onclick=()=>{

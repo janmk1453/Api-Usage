@@ -65,7 +65,7 @@ export function renderStats() {
     <div class="ds-card" style="padding:12px 14px;">
       <div class="ds-card-title" style="font-size:11px;">${c.title}</div>
       <div class="${c.accent ? 'ds-card-val' : 'ds-card-val'}" style="${c.accent ? 'color:#0BA25E;' : ''}font-size:18px;">${c.val}</div>
-      <div style="font-size:11px;color:#9CA3AF;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.sub}</div>
+      <div style="font-size:11px;color:var(--ds-text-3);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.sub}</div>
     </div>
   `).join('') + `</div>`;
 }

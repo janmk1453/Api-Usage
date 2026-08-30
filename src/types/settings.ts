@@ -13,7 +13,10 @@ export type WebdavSettings = {
   proxy: string;
 };
 
+export type ThemeMode = 'light' | 'dark';
+
 export type Settings = {
+  theme: ThemeMode;
   autoBalance: boolean;
   balanceInterval: number;
   debug: boolean;
@@ -33,6 +36,7 @@ export type Settings = {
 };
 
 export const defaultSettings = (): Settings => ({
+  theme: 'light',
   autoBalance: false,
   balanceInterval: 10,
   debug: false,

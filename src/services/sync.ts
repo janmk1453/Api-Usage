@@ -109,10 +109,10 @@ function mergeBundles(remote: any, local: any) {
   const rseen = new Set(rh.map((h: any) => h.timestamp));
   let pulled = 0, pushed = 0;
   const merged: any[] = [...rh.filter((h: any) => { if (!lseen.has(h.timestamp)) { pulled++; return true; } return false }), ...lh.filter((h: any) => { if (!rseen.has(h.timestamp)) { pushed++; return true; } return false }), ...lh.filter((h: any) => rseen.has(h.timestamp))];
-  // 去重并保留本地更完整条目（已通过上式实现），排序截断
+  // 去重并保留本地更完整条目（已通过上式实现），排序；截断由 repository.replaceAll 统一处理溢出进冷
   const dedup = new Map<number, any>();
   for (const h of merged) dedup.set(h.timestamp, h);
-  let hist = Array.from(dedup.values()).sort((a, b) => b.timestamp - a.timestamp).slice(0, MAX_HISTORY);
+  let hist = Array.from(dedup.values()).sort((a, b) => b.timestamp - a.timestamp);
   // 重新聚合（以本地为准，远程仅补历史）
   const data = {
     history: hist,

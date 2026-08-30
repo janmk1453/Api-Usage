@@ -3,7 +3,7 @@
  * 已废弃多存档，所有数据归一至 state.history + 聚合字段
  */
 import { state, getSelectedSave } from '../store/index';
-import { saveHot, loadHot, loadHistoryCold } from '../store/persistence';
+import { saveHot, loadHot, loadHistoryCold, appendHistoryCold, getAllHistory } from '../store/persistence';
 import { calcCost, isDeepSeekOfficialModel } from '../services/pricing';
 import { MAX_HISTORY, DETAIL_KEEP } from '../constants/pricing';
 import { emit, DataEvents } from './events';
@@ -72,6 +72,8 @@ export const repository = {
 
   async getColdHistory() { return loadHistoryCold(); },
 
+  async getAllHistory() { return getAllHistory(); },
+
   addEntry(usage: any, model: string, messages: any[], startTime: number, fullRequest?: any, fullResponse?: any, ttft = 0, thinkTime = 0) {
     messages = messages || [];
     if (!model) try { model = (globalThis as any).SillyTavern?.getContext?.().model || 'deepseek-v4-flash'; } catch { model = 'deepseek-v4-flash'; }
@@ -102,7 +104,12 @@ export const repository = {
     state.total_tokens += total; state.total_cost += lu.cost; state.input_tokens += hit + miss; state.output_tokens += comp;
     state.cache_hit_tokens += hit; state.cache_miss_tokens += miss; state.input_cost += lu.input_cost; state.output_cost += lu.output_cost;
     if (isDeepSeekOfficialModel(model)) state.rounds += 1;
-    if (state.history.length > MAX_HISTORY) state.history = state.history.slice(0, MAX_HISTORY);
+    if (state.history.length > MAX_HISTORY) {
+      const overflow = state.history.slice(MAX_HISTORY);
+      // 关键修复：溢出不再静默丢弃，转入冷存储（IndexedDB），fire-and-forget
+      appendHistoryCold(overflow).catch(() => {});
+      state.history = state.history.slice(0, MAX_HISTORY);
+    }
     state.startTime = state.startTime || Date.now();
     persist();
     emit(DataEvents.HISTORY_ADDED, entry);
@@ -119,7 +126,16 @@ export const repository = {
   },
 
   replaceAll(next: Partial<Snapshot> & any) {
-    if (next.history !== undefined) state.history = next.history as any;
+    if (next.history !== undefined) {
+      const h = next.history as any[];
+      if (h.length > MAX_HISTORY) {
+        const overflow = h.slice(MAX_HISTORY);
+        appendHistoryCold(overflow).catch(() => {});
+        state.history = h.slice(0, MAX_HISTORY);
+      } else {
+        state.history = h as any;
+      }
+    }
     if (next.total_tokens !== undefined) state.total_tokens = next.total_tokens as any;
     if (next.total_cost !== undefined) state.total_cost = next.total_cost as any;
     if (next.input_tokens !== undefined) state.input_tokens = next.input_tokens as any;
@@ -150,6 +166,10 @@ export const repository = {
       const seen = new Set<number>();
       const dedup: any[] = [];
       for (const h of all) { if (!seen.has(h.timestamp)) { seen.add(h.timestamp); dedup.push(h); } }
+      if (dedup.length > MAX_HISTORY) {
+        const overflow = dedup.slice(MAX_HISTORY);
+        appendHistoryCold(overflow).catch(() => {});
+      }
       state.history = dedup.slice(0, MAX_HISTORY);
     }
     if (next.settings !== undefined) state.settings = next.settings as any;

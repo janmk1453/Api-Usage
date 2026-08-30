@@ -5,7 +5,7 @@
 import { STORAGE_KEYS } from '../constants/pricing';
 
 const MODULE = 'api_usage_stat';
-const HOT_KEEP = 50;
+export const HOT_KEEP = 50;
 const DB_NAME = 'api_usage_stat_db';
 const STORE_NAME = 'kv';
 
@@ -208,6 +208,25 @@ export async function loadHistoryCold(): Promise<any[]> {
 export async function appendHistoryCold(entries: any[]) {
   if (!entries.length) return;
   const cold = await loadHistoryCold();
-  const next = [...entries, ...cold];
+  // 去重：按 timestamp，已存在则跳过，避免重复写入
+  const seen = new Set(cold.map((h: any) => h.timestamp));
+  const toAdd = entries.filter((h: any) => !seen.has(h.timestamp));
+  if (!toAdd.length) return;
+  const next = [...toAdd, ...cold];
   await dbSet('cold_history', JSON.stringify(next));
+  // 同步热中的 _coldCount，便于调试
+  try {
+    const cur = getExtensionSettings();
+    if (cur) saveExtensionSettings({ ...cur, _coldCount: next.length, _updated: Date.now() });
+  } catch {}
+}
+
+export async function getAllHistory(): Promise<any[]> {
+  const hot = getExtensionSettings()?.history || [];
+  const cold = await loadHistoryCold();
+  const merged = [...hot, ...cold].sort((a: any, b: any) => b.timestamp - a.timestamp);
+  const seen = new Set<number>();
+  const dedup: any[] = [];
+  for (const h of merged) { if (!seen.has(h.timestamp)) { seen.add(h.timestamp); dedup.push(h); } }
+  return dedup;
 }

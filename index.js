@@ -1,4 +1,5 @@
 const defaultSettings = () => ({
+  theme: "light",
   autoBalance: false,
   balanceInterval: 10,
   debug: false,
@@ -330,12 +331,36 @@ async function loadHistoryCold() {
 async function appendHistoryCold(entries) {
   if (!entries.length) return;
   const cold = await loadHistoryCold();
-  const next = [...entries, ...cold];
+  const seen = new Set(cold.map((h) => h.timestamp));
+  const toAdd = entries.filter((h) => !seen.has(h.timestamp));
+  if (!toAdd.length) return;
+  const next = [...toAdd, ...cold];
   await dbSet("cold_history", JSON.stringify(next));
+  try {
+    const cur = getExtensionSettings();
+    if (cur) saveExtensionSettings({ ...cur, _coldCount: next.length, _updated: Date.now() });
+  } catch {
+  }
+}
+async function getAllHistory() {
+  const hot = getExtensionSettings()?.history || [];
+  const cold = await loadHistoryCold();
+  const merged = [...hot, ...cold].sort((a, b) => b.timestamp - a.timestamp);
+  const seen = /* @__PURE__ */ new Set();
+  const dedup = [];
+  for (const h of merged) {
+    if (!seen.has(h.timestamp)) {
+      seen.add(h.timestamp);
+      dedup.push(h);
+    }
+  }
+  return dedup;
 }
 const persistence = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
+  HOT_KEEP,
   appendHistoryCold,
+  getAllHistory,
   getExtensionSettings,
   loadHistoryCold,
   loadHot,
@@ -516,6 +541,9 @@ const repository = {
   async getColdHistory() {
     return loadHistoryCold();
   },
+  async getAllHistory() {
+    return getAllHistory();
+  },
   addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft = 0, thinkTime = 0) {
     messages = messages || [];
     if (!model) try {
@@ -583,7 +611,12 @@ const repository = {
     state$1.input_cost += lu.input_cost;
     state$1.output_cost += lu.output_cost;
     if (isDeepSeekOfficialModel(model)) state$1.rounds += 1;
-    if (state$1.history.length > MAX_HISTORY) state$1.history = state$1.history.slice(0, MAX_HISTORY);
+    if (state$1.history.length > MAX_HISTORY) {
+      const overflow = state$1.history.slice(MAX_HISTORY);
+      appendHistoryCold(overflow).catch(() => {
+      });
+      state$1.history = state$1.history.slice(0, MAX_HISTORY);
+    }
     state$1.startTime = state$1.startTime || Date.now();
     persist();
     emit(DataEvents.HISTORY_ADDED, entry);
@@ -601,7 +634,17 @@ const repository = {
     persist();
   },
   replaceAll(next) {
-    if (next.history !== void 0) state$1.history = next.history;
+    if (next.history !== void 0) {
+      const h = next.history;
+      if (h.length > MAX_HISTORY) {
+        const overflow = h.slice(MAX_HISTORY);
+        appendHistoryCold(overflow).catch(() => {
+        });
+        state$1.history = h.slice(0, MAX_HISTORY);
+      } else {
+        state$1.history = h;
+      }
+    }
     if (next.total_tokens !== void 0) state$1.total_tokens = next.total_tokens;
     if (next.total_cost !== void 0) state$1.total_cost = next.total_cost;
     if (next.input_tokens !== void 0) state$1.input_tokens = next.input_tokens;
@@ -635,6 +678,11 @@ const repository = {
           seen.add(h.timestamp);
           dedup.push(h);
         }
+      }
+      if (dedup.length > MAX_HISTORY) {
+        const overflow = dedup.slice(MAX_HISTORY);
+        appendHistoryCold(overflow).catch(() => {
+        });
       }
       state$1.history = dedup.slice(0, MAX_HISTORY);
     }
@@ -920,7 +968,7 @@ function normalizeImportData(raw) {
 function applyImportedData(d, mode) {
   if (mode === "overwrite") {
     repository.replaceAll({
-      history: (d.history || []).slice(0, MAX_HISTORY),
+      history: d.history || [],
       total_tokens: d.total_tokens ?? (d.history || []).reduce((a, h) => a + (h.total_tokens || 0), 0),
       total_cost: d.total_cost ?? (d.history || []).reduce((a, h) => a + (h.cost || 0), 0),
       input_tokens: d.input_tokens ?? 0,
@@ -945,7 +993,7 @@ function applyImportedData(d, mode) {
         toAdd.push(h);
       }
     }
-    const merged = [...toAdd, ...state$1.history].sort((a, b) => b.timestamp - a.timestamp).slice(0, MAX_HISTORY);
+    const merged = [...toAdd, ...state$1.history].sort((a, b) => b.timestamp - a.timestamp);
     repository.replaceAll({ history: merged });
   }
   try {
@@ -1147,7 +1195,7 @@ function mergeBundles(remote, local) {
   }), ...lh.filter((h) => rseen.has(h.timestamp))];
   const dedup = /* @__PURE__ */ new Map();
   for (const h of merged) dedup.set(h.timestamp, h);
-  let hist = Array.from(dedup.values()).sort((a, b) => b.timestamp - a.timestamp).slice(0, MAX_HISTORY);
+  let hist = Array.from(dedup.values()).sort((a, b) => b.timestamp - a.timestamp);
   const data = {
     history: hist,
     total_tokens: ld.total_tokens ?? rd.total_tokens ?? hist.reduce((a, h) => a + (h.total_tokens || 0), 0),
@@ -1230,6 +1278,18 @@ function saveWebdavPass(pass) {
   } catch {
   }
 }
+function applyTheme(theme) {
+  const t = theme || state$1.settings.theme || "light";
+  const mode = t === "dark" ? "dark" : "light";
+  try {
+    const doc = window.parent?.document ?? document;
+    const panel = doc.getElementById("aus-panel");
+    if (panel) panel.setAttribute("data-ds-theme", mode);
+    document.documentElement.setAttribute("data-ds-theme", mode);
+    doc.documentElement.setAttribute("data-ds-theme", mode);
+  } catch {
+  }
+}
 function generateDebugBatch() {
   const startStr = state$1.settings.debugDateStart;
   const endStr = state$1.settings.debugDateEnd;
@@ -1290,52 +1350,55 @@ function renderSettings(doc) {
   const s = state$1.settings;
   host.innerHTML = `
     <div style="display:grid;gap:12px;">
+      <!-- 颜色模式 -->
+      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">颜色模式</span><select id="aus-theme-select" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;"><option value="light">浅色</option><option value="dark">深色</option></select></div><div style="font-size:11px;color:var(--ds-text-2);margin-top:6px;">切换后立即生效，深色模式针对夜间可读性优化</div></div>
+
       <!-- API 密钥 -->
-      <div class="ds-card"><div style="font-size:11px;color:#6B7280;font-weight:500;margin-bottom:6px;">API 密钥</div><div style="display:flex;gap:8px;"><input id="aus-api-key" type="password" placeholder="输入 DeepSeek API 密钥" style="flex:1;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;outline:none;" /><button id="aus-save-key" class="ds-btn-pill" style="padding:8px 14px;">保存</button></div><div id="aus-key-status" style="font-size:11px;color:#6B7280;margin-top:6px;"></div></div>
+      <div class="ds-card"><div style="font-size:11px;color:var(--ds-text-2);font-weight:500;margin-bottom:6px;">API 密钥</div><div style="display:flex;gap:8px;"><input id="aus-api-key" type="password" placeholder="输入 DeepSeek API 密钥" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;outline:none;" /><button id="aus-save-key" class="ds-btn-pill" style="padding:8px 14px;">保存</button></div><div id="aus-key-status" style="font-size:11px;color:var(--ds-text-2);margin-top:6px;"></div></div>
 
       <!-- 余额 -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:#111827;">自动校准余额</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-auto-balance" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:#E5E7EB;border-radius:12px;transition:0.2s;"><span id="aus-auto-balance-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
-        <div id="aus-auto-balance-interval" style="display:${s.autoBalance ? "block" : "none"};margin-top:8px;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;color:#111827;">校准间隔（分钟）</span><input type="number" id="aus-balance-interval" min="1" max="1440" style="width:90px;padding:6px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;text-align:center;" /></div></div>
-        <div style="margin-top:12px;display:flex;gap:8px;"><input id="aus-custom-balance" placeholder="自定义余额（覆盖 API 查询）" style="flex:1;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /><button id="aus-save-balance" class="ds-btn-pill" style="padding:8px 14px;">保存</button><button id="aus-clear-balance" style="padding:8px 12px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">清除</button></div><div id="aus-balance-status" style="font-size:11px;color:#6B7280;margin-top:6px;"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">自动校准余额</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-auto-balance" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-auto-balance-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div id="aus-auto-balance-interval" style="display:${s.autoBalance ? "block" : "none"};margin-top:8px;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;color:var(--ds-text);">校准间隔（分钟）</span><input type="number" id="aus-balance-interval" min="1" max="1440" style="width:90px;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;text-align:center;" /></div></div>
+        <div style="margin-top:12px;display:flex;gap:8px;"><input id="aus-custom-balance" placeholder="自定义余额（覆盖 API 查询）" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><button id="aus-save-balance" class="ds-btn-pill" style="padding:8px 14px;">保存</button><button id="aus-clear-balance" style="padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">清除</button></div><div id="aus-balance-status" style="font-size:11px;color:var(--ds-text-2);margin-top:6px;"></div>
       </div>
 
       <!-- 新价格机制 -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:#111827;">新价格机制（峰谷计费）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-use-new-pricing" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:#E5E7EB;border-radius:12px;transition:0.2s;"><span id="aus-use-new-pricing-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">新价格机制（峰谷计费）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-use-new-pricing" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-use-new-pricing-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
         <div id="aus-new-pricing-panel" style="display:${s.useNewPricing ? "block" : "none"};margin-top:10px;display:grid;gap:8px;">
-          <div style="display:flex;gap:8px;align-items:center;"><input type="date" id="aus-new-pricing-date" style="flex:1;padding:7px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /><button id="aus-btn-pricing-today" style="padding:7px 12px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:11px;cursor:pointer;white-space:nowrap;">设为今日</button></div>
-          <div style="font-size:11px;color:#6B7280;">生效日期前按旧价，之后按峰谷价（仅 deepseek* 模型，周末全天低谷）。</div>
+          <div style="display:flex;gap:8px;align-items:center;"><input type="date" id="aus-new-pricing-date" style="flex:1;padding:7px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><button id="aus-btn-pricing-today" style="padding:7px 12px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;white-space:nowrap;">设为今日</button></div>
+          <div style="font-size:11px;color:var(--ds-text-2);">生效日期前按旧价，之后按峰谷价（仅 deepseek* 模型，周末全天低谷）。</div>
         </div>
       </div>
 
       <!-- 高峰时段 -->
-      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:#111827;">高峰时段</span><button id="aus-btn-add-peak-hour" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">+ 添加</button></div><div id="aus-peak-hours-list" style="display:grid;gap:6px;margin-top:8px;"></div><div style="font-size:10px;color:#9CA3AF;margin-top:6px;">支持跨天（如 22:00-02:00），周末自动低谷。</div></div>
+      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">高峰时段</span><button id="aus-btn-add-peak-hour" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 添加</button></div><div id="aus-peak-hours-list" style="display:grid;gap:6px;margin-top:8px;"></div><div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;">支持跨天（如 22:00-02:00），周末自动低谷。</div></div>
 
       <!-- 模型与价格 -->
-      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:#111827;">模型与价格（¥/百万 tokens）</span><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">+ 自定义模型</button></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
+      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型与价格（¥/百万 tokens）</span><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 自定义模型</button></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
 
       <!-- 调试 -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:#111827;">调试模式（模拟数据，不计费）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-debug-mode" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:#E5E7EB;border-radius:12px;transition:0.2s;"><span id="aus-debug-mode-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">调试模式（模拟数据，不计费）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-debug-mode" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-debug-mode-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
         <div id="aus-debug-panel" style="display:${s.debug ? "block" : "none"};margin-top:10px;display:grid;gap:8px;">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:11px;color:#6B7280;margin-bottom:4px;">命中</div><input type="number" id="aus-debug-hit" style="width:100%;padding:7px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /></div><div><div style="font-size:11px;color:#6B7280;margin-bottom:4px;">未命中</div><input type="number" id="aus-debug-miss" style="width:100%;padding:7px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /></div></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:11px;color:#6B7280;margin-bottom:4px;">输出</div><input type="number" id="aus-debug-output" style="width:100%;padding:7px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /></div><div><div style="font-size:11px;color:#6B7280;margin-bottom:4px;">模型</div><select id="aus-debug-model" style="width:100%;padding:7px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;"></select></div></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="date" id="aus-debug-date-start" style="padding:7px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /><input type="date" id="aus-debug-date-end" style="padding:7px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /><input type="number" id="aus-debug-batch-count" min="1" placeholder="条数" style="padding:7px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /></div>
-          <button id="aus-btn-debug-batch" class="ds-btn-pill" style="width:100%;">生成模拟数据</button><div id="aus-debug-status" style="font-size:11px;color:#6B7280;"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">命中</div><input type="number" id="aus-debug-hit" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">未命中</div><input type="number" id="aus-debug-miss" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">输出</div><input type="number" id="aus-debug-output" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">模型</div><select id="aus-debug-model" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;"></select></div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="date" id="aus-debug-date-start" style="padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><input type="date" id="aus-debug-date-end" style="padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><input type="number" id="aus-debug-batch-count" min="1" placeholder="条数" style="padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div>
+          <button id="aus-btn-debug-batch" class="ds-btn-pill" style="width:100%;">生成模拟数据</button><div id="aus-debug-status" style="font-size:11px;color:var(--ds-text-2);"></div>
         </div>
       </div>
 
       <!-- 峰值圆点 -->
-      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:#111827;">峰值提示小圆点</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-peak-dot" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:#E5E7EB;border-radius:12px;transition:0.2s;"><span id="aus-peak-dot-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div><button id="aus-reset-dot" style="margin-top:8px;padding:6px 12px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">重置位置</button></div>
+      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">峰值提示小圆点</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-peak-dot" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-peak-dot-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div><button id="aus-reset-dot" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">重置位置</button></div>
 
       <!-- WebDAV -->
-      <div class="ds-card"><div style="font-size:12px;font-weight:600;color:#111827;margin-bottom:6px;">WebDAV 云同步</div><div style="font-size:11px;color:#6B7280;margin-bottom:8px;">双向合并，仅同步统计/设置/余额，不含聊天内容与密钥。强制 https。</div>
+      <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:6px;">WebDAV 云同步</div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:8px;">双向合并，仅同步统计/设置/余额，不含聊天内容与密钥。强制 https。</div>
         <div style="display:grid;gap:8px;">
-          <input id="aus-webdav-url" placeholder="https://dav.jianguoyun.com/dav/" style="padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" />
-          <div style="display:flex;gap:8px;"><input id="aus-webdav-user" placeholder="用户名" style="flex:1;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /><input id="aus-webdav-pass" type="password" placeholder="应用密码" style="flex:1;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /></div>
-          <input id="aus-webdav-path" placeholder="远程子路径（可空）" style="padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" />
-          <input id="aus-webdav-proxy" placeholder="CORS 代理（可选，http://127.0.0.1:8000/proxy?url=）" style="padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" />
+          <input id="aus-webdav-url" placeholder="https://dav.jianguoyun.com/dav/" style="padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" />
+          <div style="display:flex;gap:8px;"><input id="aus-webdav-user" placeholder="用户名" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><input id="aus-webdav-pass" type="password" placeholder="应用密码" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div>
+          <input id="aus-webdav-path" placeholder="远程子路径（可空）" style="padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" />
+          <input id="aus-webdav-proxy" placeholder="CORS 代理（可选，http://127.0.0.1:8000/proxy?url=）" style="padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" />
           <button id="aus-webdav-sync" class="ds-btn-pill">☁️ 立即同步</button>
         </div>
       </div>
@@ -1382,6 +1445,20 @@ function renderSettings(doc) {
     const el = doc.getElementById("aus-webdav-pass");
     if (pass && el) el.value = decryptKey(pass);
   } catch {
+  }
+  const themeSel = doc.getElementById("aus-theme-select");
+  if (themeSel) {
+    themeSel.value = s.theme || "light";
+    themeSel.onchange = () => {
+      const v = themeSel.value;
+      state$1.settings.theme = v;
+      saveHot({ settings: state$1.settings });
+      applyTheme(v);
+      try {
+        globalThis.ApiUsageStat?.refreshUI?.();
+      } catch {
+      }
+    };
   }
   doc.getElementById("aus-save-key").onclick = () => {
     const v = doc.getElementById("aus-api-key").value.trim();
@@ -1554,10 +1631,10 @@ function renderPeakHoursEditor(doc) {
   const hours = state$1.settings.peakHours || [];
   list.innerHTML = hours.map((h, i) => `
     <div style="display:flex;align-items:center;gap:6px;">
-      <input type="time" value="${esc(h.start || "")}" data-idx="${i}" data-field="start" style="flex:1;padding:6px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" />
-      <span style="font-size:11px;color:#6B7280;">至</span>
-      <input type="time" value="${esc(h.end || "")}" data-idx="${i}" data-field="end" style="flex:1;padding:6px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" />
-      <button data-del="${i}" style="padding:6px 8px;border:1px solid #FCA5A5;border-radius:8px;background:#FEF2F2;color:#DC2626;font-size:11px;cursor:pointer;">删除</button>
+      <input type="time" value="${esc(h.start || "")}" data-idx="${i}" data-field="start" style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" />
+      <span style="font-size:11px;color:var(--ds-text-2);">至</span>
+      <input type="time" value="${esc(h.end || "")}" data-idx="${i}" data-field="end" style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" />
+      <button data-del="${i}" style="padding:6px 8px;border:1px solid var(--ds-red-border);border-radius:8px;background:var(--ds-red-bg);color:var(--ds-red);font-size:11px;cursor:pointer;">删除</button>
     </div>
   `).join("");
   list.querySelectorAll('input[type="time"]').forEach((el) => {
@@ -1662,28 +1739,28 @@ function renderModelsEditor(doc) {
 }
 function modelRow(model, p, isBuiltin, usePeak) {
   const hit = (v) => v !== void 0 && v !== "" ? v : "";
-  return `<div data-model="${esc(model)}" data-builtin="${isBuiltin ? "1" : "0"}" style="border:1px solid #E5E7EB;border-radius:10px;padding:10px;background:#fff;display:grid;gap:8px;">
+  return `<div data-model="${esc(model)}" data-builtin="${isBuiltin ? "1" : "0"}" style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;background:var(--ds-card-inner);display:grid;gap:8px;">
     <div style="display:flex;align-items:center;gap:8px;">
-      <input value="${esc(model)}" ${isBuiltin ? "readonly" : ""} style="flex:1;padding:6px 8px;border:1px solid #E5E7EB;border-radius:8px;background:${isBuiltin ? "#F9FAFB" : "#fff"};font-size:12px;" />
-      <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#6B7280;cursor:pointer;"><input type="checkbox" class="aus-cm-peak" ${usePeak ? "checked" : ""} /> 峰谷</label>
-      ${isBuiltin ? "" : '<button data-del="1" style="padding:4px 8px;border:1px solid #FCA5A5;border-radius:6px;background:#FEF2F2;color:#DC2626;font-size:11px;cursor:pointer;">删除</button>'}
+      <input value="${esc(model)}" ${isBuiltin ? "readonly" : ""} style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:${isBuiltin ? "var(--ds-sidebar-bg)" : "var(--ds-card-inner)"};font-size:12px;" />
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" class="aus-cm-peak" ${usePeak ? "checked" : ""} /> 峰谷</label>
+      ${isBuiltin ? "" : '<button data-del="1" style="padding:4px 8px;border:1px solid var(--ds-red-border);border-radius:6px;background:var(--ds-red-bg);color:var(--ds-red);font-size:11px;cursor:pointer;">删除</button>'}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-      <div style="background:#F9FAFB;border-radius:8px;padding:8px;display:grid;gap:6px;">
-        <div style="font-size:10px;font-weight:600;color:#0BA25E;">非峰</div>
+      <div style="background:var(--ds-sidebar-bg);border-radius:8px;padding:8px;display:grid;gap:6px;">
+        <div style="font-size:10px;font-weight:600;color:var(--ds-green);">非峰</div>
         ${field("offpeak.hit", hit(p.offpeak.hit))}${field("offpeak.miss", hit(p.offpeak.miss))}${field("offpeak.output", hit(p.offpeak.output))}
       </div>
-      <div style="background:#FFFBEB;border-radius:8px;padding:8px;display:grid;gap:6px;${usePeak ? "" : "opacity:0.45;pointer-events:none;"}">
+      <div style="background:var(--ds-card-inner)BEB;border-radius:8px;padding:8px;display:grid;gap:6px;${usePeak ? "" : "opacity:0.45;pointer-events:none;"}">
         <div style="font-size:10px;font-weight:600;color:#D97706;">高峰</div>
         ${field("peak.hit", hit(p.peak.hit))}${field("peak.miss", hit(p.peak.miss))}${field("peak.output", hit(p.peak.output))}
       </div>
     </div>
-    <div style="font-size:10px;color:#9CA3AF;">单位：¥/百万 tokens · 内置模型不可删除，价格可覆盖</div>
+    <div style="font-size:10px;color:var(--ds-text-3);">单位：¥/百万 tokens · 内置模型不可删除，价格可覆盖</div>
   </div>`;
 }
 function field(key, val) {
   const label = key.endsWith(".hit") ? "命中" : key.endsWith(".miss") ? "未命中" : "输出";
-  return `<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:11px;color:#6B7280;width:44px;">${label}</span><input type="number" step="0.001" min="0" data-price="${key}" value="${esc(val)}" style="flex:1;padding:6px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;font-size:12px;" /></div>`;
+  return `<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:11px;color:var(--ds-text-2);width:44px;">${label}</span><input type="number" step="0.001" min="0" data-price="${key}" value="${esc(val)}" style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div>`;
 }
 function readRow(row) {
   const peak = row.querySelector(".aus-cm-peak")?.checked ?? true;
@@ -1758,11 +1835,11 @@ function diffMessages(oldMsgs, newMsgs) {
   const b = (newMsgs || []).map(toText).join("\n");
   let i = 0;
   while (i < a.length && i < b.length && a[i] === b[i]) i++;
-  if (i === a.length && i === b.length) return '<span style="color:#6B7280;">两条请求完全一致（缓存命中段完整）</span>';
+  if (i === a.length && i === b.length) return '<span style="color:var(--ds-text-2);">两条请求完全一致（缓存命中段完整）</span>';
   const ctx = 80;
-  const aCtx = a.slice(Math.max(0, i - ctx), i) + '<span style="background:#FEE2E2;color:#B91C1C;padding:0 2px;border-radius:3px;">' + esc$1(a.slice(i, i + 200)) + "</span>" + esc$1(a.slice(i + 200, i + 280));
-  const bCtx = b.slice(Math.max(0, i - ctx), i) + '<span style="background:#DCFCE7;color:#15803D;padding:0 2px;border-radius:3px;">' + esc$1(b.slice(i, i + 200)) + "</span>" + esc$1(b.slice(i + 200, i + 280));
-  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:10px;font-size:11px;white-space:pre-wrap;word-break:break-all;">旧：${aCtx}</div><div style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:10px;font-size:11px;white-space:pre-wrap;word-break:break-all;">新：${bCtx}</div></div><div style="font-size:11px;color:#6B7280;margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
+  const aCtx = esc$1(a.slice(Math.max(0, i - ctx), i)) + '<span style="background:var(--ds-red-bg);color:var(--ds-red);padding:0 2px;border-radius:3px;">' + esc$1(a.slice(i, i + 200)) + "</span>" + esc$1(a.slice(i + 200, i + 280));
+  const bCtx = esc$1(b.slice(Math.max(0, i - ctx), i)) + '<span style="background:var(--ds-green-bg);color:var(--ds-green);padding:0 2px;border-radius:3px;">' + esc$1(b.slice(i, i + 200)) + "</span>" + esc$1(b.slice(i + 200, i + 280));
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${aCtx}</div><div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${bCtx}</div></div><div style="font-size:11px;color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
 }
 function bindHistoryCompare() {
   const doc = getDoc$4();
@@ -1786,14 +1863,14 @@ function renderDiff() {
   const host = doc.getElementById("aus-diff");
   if (!host) return;
   if (selOld == null || selNew == null) {
-    host.innerHTML = '<div style="text-align:center;padding:16px;color:#9CA3AF;font-size:12px;">已选 ' + (selOld != null ? "旧 " : "") + (selNew != null ? "新 " : "") + "，请在历史中各选一条 旧/新 进行对比</div>";
+    host.innerHTML = '<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;">已选 ' + (selOld != null ? "旧 " : "") + (selNew != null ? "新 " : "") + "，请在历史中各选一条 旧/新 进行对比</div>";
     return;
   }
   const s = getSelectedSave();
   const oldEntry = (s?.history || []).find((h) => h.timestamp === selOld);
   const newEntry = (s?.history || []).find((h) => h.timestamp === selNew);
   if (!oldEntry || !newEntry) {
-    host.innerHTML = '<div style="color:#B91C1C;font-size:12px;">未找到对应记录</div>';
+    host.innerHTML = '<div style="color:var(--ds-red);font-size:12px;">未找到对应记录</div>';
     return;
   }
   host.innerHTML = diffMessages(oldEntry.messages || [], newEntry.messages || []);
@@ -1852,33 +1929,33 @@ function renderOverview() {
   const histHost = doc.getElementById("aus-overview-history");
   if (histHost) {
     histHost.innerHTML = `
-      <div style="font-size:12px;font-weight:600;color:#111827;margin-bottom:8px;">历史消耗</div>
+      <div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">历史消耗</div>
       <div style="display:grid;gap:6px;font-size:11px;">
-        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">Token 历史消耗</span><span style="font-weight:600;color:#111827;">${fmt(v.totalTokens)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">输入（命中缓存）</span><span style="font-weight:600;color:#0BA25E;">${fmt(v.hit)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">输入（未命中缓存）</span><span style="font-weight:600;color:#DC2626;">${fmt(v.miss)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">输出</span><span style="font-weight:600;color:#111827;">${fmt(v.output)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">Token 历史消耗</span><span style="font-weight:600;color:var(--ds-text);">${fmt(v.totalTokens)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输入（命中缓存）</span><span style="font-weight:600;color:var(--ds-green);">${fmt(v.hit)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输入（未命中缓存）</span><span style="font-weight:600;color:var(--ds-red);">${fmt(v.miss)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输出</span><span style="font-weight:600;color:var(--ds-text);">${fmt(v.output)} tokens</span></div>
       </div>
     `;
   }
   const spendHost = doc.getElementById("aus-overview-spend");
   if (spendHost) {
     spendHost.innerHTML = `
-      <div style="font-size:12px;font-weight:600;color:#111827;margin-bottom:8px;">支出明细</div>
+      <div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">支出明细</div>
       <div style="display:grid;gap:10px;font-size:11px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:#6B7280;padding-top:2px;">预计节省</span><span style="text-align:right;"><div style="font-weight:600;color:#0BA25E;">${CNY(v.savings)}</div><div style="font-size:10px;color:#9CA3AF;margin-top:1px;">${fmt(v.hit)} tokens</div></span></div>
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:#6B7280;padding-top:2px;">支出在输入</span><span style="text-align:right;"><div style="font-weight:600;color:#111827;">${CNY(v.inputCost)}</div><div style="font-size:10px;color:#9CA3AF;margin-top:1px;">${fmt(v.hit + v.miss)} tokens</div></span></div>
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:#6B7280;padding-top:2px;">支出在输出</span><span style="text-align:right;"><div style="font-weight:600;color:#111827;">${CNY(v.outputCost)}</div><div style="font-size:10px;color:#9CA3AF;margin-top:1px;">${fmt(v.output)} tokens</div></span></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:var(--ds-text-2);padding-top:2px;">预计节省</span><span style="text-align:right;"><div style="font-weight:600;color:var(--ds-green);">${CNY(v.savings)}</div><div style="font-size:10px;color:var(--ds-text-3);margin-top:1px;">${fmt(v.hit)} tokens</div></span></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:var(--ds-text-2);padding-top:2px;">支出在输入</span><span style="text-align:right;"><div style="font-weight:600;color:var(--ds-text);">${CNY(v.inputCost)}</div><div style="font-size:10px;color:var(--ds-text-3);margin-top:1px;">${fmt(v.hit + v.miss)} tokens</div></span></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:var(--ds-text-2);padding-top:2px;">支出在输出</span><span style="text-align:right;"><div style="font-weight:600;color:var(--ds-text);">${CNY(v.outputCost)}</div><div style="font-size:10px;color:var(--ds-text-3);margin-top:1px;">${fmt(v.output)} tokens</div></span></div>
       </div>
     `;
   }
   const fourHost = doc.getElementById("aus-overview-four");
   if (fourHost) {
     fourHost.innerHTML = `
-      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:#6B7280;">每轮费用</div><div style="font-size:18px;font-weight:600;color:#111827;margin-top:4px;">¥${v.avgCost.toFixed(4)} <span style="font-size:11px;color:#9CA3AF;font-weight:400;">CNY</span></div></div>
-      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:#6B7280;">每轮 Token</div><div style="font-size:18px;font-weight:600;color:#111827;margin-top:4px;">${Math.round(v.avgTokens).toLocaleString("zh-CN")}</div></div>
-      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:#6B7280;">平均耗时</div><div style="font-size:18px;font-weight:600;color:#111827;margin-top:4px;">${v.avgDuration.toFixed(1)} <span style="font-size:11px;color:#9CA3AF;font-weight:400;">s</span></div></div>
-      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:#6B7280;">输出速率</div><div style="font-size:18px;font-weight:600;color:#0BA25E;margin-top:4px;">${Math.round(v.avgRate)} <span style="font-size:11px;color:#9CA3AF;font-weight:400;">t/s</span></div></div>
+      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:var(--ds-text-2);">每轮费用</div><div style="font-size:18px;font-weight:600;color:var(--ds-text);margin-top:4px;">¥${v.avgCost.toFixed(4)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span></div></div>
+      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:var(--ds-text-2);">每轮 Token</div><div style="font-size:18px;font-weight:600;color:var(--ds-text);margin-top:4px;">${Math.round(v.avgTokens).toLocaleString("zh-CN")}</div></div>
+      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:var(--ds-text-2);">平均耗时</div><div style="font-size:18px;font-weight:600;color:var(--ds-text);margin-top:4px;">${v.avgDuration.toFixed(1)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">s</span></div></div>
+      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:var(--ds-text-2);">输出速率</div><div style="font-size:18px;font-weight:600;color:var(--ds-green);margin-top:4px;">${Math.round(v.avgRate)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">t/s</span></div></div>
     `;
   }
 }
@@ -1886,7 +1963,7 @@ const Y_OPTIONS = [
   { key: "input_hit_token", label: "输入(命中) token", unit: "tokens", kind: "token", color: "#0BA25E" },
   { key: "input_miss_token", label: "输入(未命中) token", unit: "tokens", kind: "token", color: "#F87171" },
   { key: "output_token", label: "输出 token", unit: "tokens", kind: "token", color: "#6366F1" },
-  { key: "total_token", label: "总 Token", unit: "tokens", kind: "token", color: "#111827" },
+  { key: "total_token", label: "总 Token", unit: "tokens", kind: "token", color: "var(--ds-text)" },
   { key: "input_hit_cost", label: "输入(命中)费用", unit: "CNY", kind: "cost", color: "#10B981" },
   { key: "input_miss_cost", label: "输入(未命中)费用", unit: "CNY", kind: "cost", color: "#F59E0B" },
   { key: "output_cost", label: "输出费用", unit: "CNY", kind: "cost", color: "#8B5CF6" },
@@ -2024,6 +2101,16 @@ const state = {
 function getDoc$3() {
   return window.parent?.document ?? document;
 }
+function themeColor$1(name, fallback) {
+  try {
+    const doc = getDoc$3();
+    const el = doc.getElementById("aus-panel") || doc.documentElement;
+    const v = getComputedStyle(el).getPropertyValue(name).trim();
+    return v || fallback;
+  } catch {
+    return fallback;
+  }
+}
 function bucketKey(ts, x, idx) {
   if (x === "round") return `#${idx + 1}`;
   if (x === "hour") {
@@ -2102,7 +2189,7 @@ async function renderOne(id, filtered) {
   if (id === "pie") {
     const mode = state.pie.pieMode;
     if (!filtered.length) {
-      el.innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;">暂无数据</div>';
+      el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--ds-text-3);">暂无数据</div>';
       return;
     }
     const map2 = {};
@@ -2122,23 +2209,23 @@ async function renderOne(id, filtered) {
     const c = charts[id] = ec.init(el);
     c.setOption({
       backgroundColor: "transparent",
-      tooltip: { trigger: "item", backgroundColor: "#fff", borderColor: "#E5E7EB", textStyle: { fontSize: 11 } },
-      legend: { bottom: 0, textStyle: { fontSize: 10, color: "#6B7280" } },
-      series: [{ type: "pie", radius: ["40%", "70%"], itemStyle: { borderRadius: 6, borderColor: "#fff", borderWidth: 2 }, label: { fontSize: 11 }, data }]
+      tooltip: { trigger: "item", backgroundColor: themeColor$1("--ds-card-inner", "#FFFFFF"), borderColor: themeColor$1("--ds-border", "#E5E7EB"), textStyle: { fontSize: 11, color: themeColor$1("--ds-text", "#111827") } },
+      legend: { bottom: 0, textStyle: { fontSize: 10, color: themeColor$1("--ds-text-2", "#6B7280") } },
+      series: [{ type: "pie", radius: ["40%", "70%"], itemStyle: { borderRadius: 6, borderColor: themeColor$1("--ds-card-inner", "#FFFFFF"), borderWidth: 2 }, label: { fontSize: 11 }, data }]
     });
     return;
   }
   const yKeys = Array.from(state[id].y);
   const xKey = state[id].x;
   if (!yKeys.length) {
-    el.innerHTML = '<div style="text-align:center;padding:30px;color:#9CA3AF;font-size:11px;">请选择 Y 轴</div>';
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ds-text-3);font-size:11px;">请选择 Y 轴</div>';
     return;
   }
   if (xKey === "round") {
     const labels2 = filtered.map((_, i) => `#${i + 1}`);
     const yMeta = new Map(CHART_DEFS[id].yOpts.map((o) => [o.key, o]));
     const series2 = yKeys.map((k) => {
-      const meta = yMeta.get(k) || Y_OPTIONS.find((o) => o.key === k) || { label: k, color: "#6B7280" };
+      const meta = yMeta.get(k) || Y_OPTIONS.find((o) => o.key === k) || { label: k, color: "var(--ds-text-2)" };
       const data = filtered.map((e) => {
         const v = getYValue(e, k);
         return Number(v.toFixed(k.includes("cost") || k === "hit_rate" ? 2 : 0));
@@ -2159,7 +2246,7 @@ async function renderOne(id, filtered) {
   new Map(CHART_DEFS[id].yOpts.map((o) => [o.key, o]));
   const fullMap = new Map([...Y_OPTIONS, ...CHART_DEFS[id].yOpts].map((o) => [o.key, o]));
   const series = yKeys.map((k) => {
-    const meta = fullMap.get(k) || { label: k, color: "#6B7280", kind: "token" };
+    const meta = fullMap.get(k) || { label: k, color: "var(--ds-text-2)", kind: "token" };
     let data;
     if (k === "hit_rate") {
       data = sortedKeys.map((key) => {
@@ -2209,10 +2296,10 @@ async function drawBarLine(el, id, labels, series) {
   const isTokenCost = id === "token" || id === "cost";
   const opts = {
     backgroundColor: "transparent",
-    tooltip: { trigger: "axis", backgroundColor: "#fff", borderColor: "#E5E7EB", textStyle: { fontSize: 11 } },
+    tooltip: { trigger: "axis", backgroundColor: themeColor$1("--ds-card-inner", "#FFFFFF"), borderColor: themeColor$1("--ds-border", "#E5E7EB"), textStyle: { fontSize: 11 } },
     grid: { left: 40, right: 20, top: 8, bottom: 24 },
-    xAxis: { type: "category", data: labels, axisLine: { lineStyle: { color: "#E5E7EB" } }, axisLabel: { fontSize: 10, color: "#9CA3AF", rotate: labels.length > 12 ? 30 : 0, interval: 0 } },
-    yAxis: { type: "value", axisLabel: { fontSize: 10, color: "#9CA3AF" }, splitLine: { lineStyle: { color: "#F6F7F8" } } },
+    xAxis: { type: "category", data: labels, axisLine: { lineStyle: { color: themeColor$1("--ds-border", "#E5E7EB") } }, axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF"), rotate: labels.length > 12 ? 30 : 0, interval: 0 } },
+    yAxis: { type: "value", axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF") }, splitLine: { lineStyle: { color: themeColor$1("--ds-card", "#F6F7F8") } } },
     series: series.map((s) => {
       const isTotal = s.name.includes("总");
       if (isTokenCost && isTotal) return { name: s.name, type: "line", data: s.data, smooth: true, lineStyle: { color: s.color, width: 2 }, itemStyle: { color: s.color }, symbolSize: 2 };
@@ -2283,7 +2370,7 @@ function renderExtraY(id) {
   if (label) label.textContent = sel.size ? `${sel.size} 项` : "选择";
   drop.innerHTML = opts.map((o) => {
     const checked = sel.has(o.key);
-    return `<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;${checked ? "background:#F6F7F8;" : ""}"><input type="checkbox" data-y="${o.key}" data-chart="${id}" ${checked ? "checked" : ""} style="accent-color:#111827;" /><span style="width:8px;height:8px;background:${o.color};border-radius:2px;"></span>${o.label}</label>`;
+    return `<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;${checked ? "background:var(--ds-active-bg);" : ""}"><input type="checkbox" data-y="${o.key}" data-chart="${id}" ${checked ? "checked" : ""} style="accent-color:var(--ds-text);" /><span style="width:8px;height:8px;background:${o.color};border-radius:2px;"></span>${o.label}</label>`;
   }).join("");
   drop.querySelectorAll("input[data-y]").forEach((el) => {
     el.onchange = () => {
@@ -2308,7 +2395,7 @@ function renderExtraX(id) {
   if (label) label.textContent = X_OPTIONS.find((o) => o.key === cur)?.label || cur;
   drop.innerHTML = X_OPTIONS.map((o) => {
     const active = o.key === cur;
-    return `<div data-x="${o.key}" data-chart="${id}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active ? "background:#F6F7F8;font-weight:600;" : ""}">${o.label}</div>`;
+    return `<div data-x="${o.key}" data-chart="${id}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active ? "background:var(--ds-active-bg);font-weight:600;" : ""}">${o.label}</div>`;
   }).join("");
   drop.querySelectorAll("[data-x]").forEach((el) => {
     el.onclick = () => {
@@ -2329,6 +2416,16 @@ let selectedModel = "__all__";
 let modelPickerOpen = false;
 function getDoc$2() {
   return window.parent?.document ?? document;
+}
+function themeColor(name, fallback) {
+  try {
+    const doc = getDoc$2();
+    const el = doc.getElementById("aus-panel") || doc.documentElement;
+    const v = getComputedStyle(el).getPropertyValue(name).trim();
+    return v || fallback;
+  } catch {
+    return fallback;
+  }
 }
 function getRangeDates() {
   const today = localDay$1(Date.now());
@@ -2392,7 +2489,7 @@ function updateRangeHighlight() {
   doc.querySelectorAll("[data-range]").forEach((el) => {
     const r = el.getAttribute("data-range");
     if (r === currentRange) {
-      el.style.background = "#F6F7F8";
+      el.style.background = "var(--ds-card)";
       el.style.fontWeight = "600";
     } else {
       el.style.background = "";
@@ -2415,7 +2512,7 @@ function renderCalendar() {
   months.push(new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() - 1, 1)));
   months.push(new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), 1)));
   let html = '<div style="display:flex;gap:12px;align-items:flex-start;">';
-  html += `<button id="aus-cal-prev" style="margin-top:32px;padding:4px 8px;border:1px solid #E5E7EB;border-radius:6px;background:#fff;cursor:pointer;">‹</button>`;
+  html += `<button id="aus-cal-prev" style="margin-top:32px;padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);cursor:pointer;">‹</button>`;
   html += '<div style="display:flex;gap:16px;">';
   for (const m of months) {
     const y = m.getUTCFullYear(), mo = m.getUTCMonth();
@@ -2424,7 +2521,7 @@ function renderCalendar() {
     const startDow = first.getUTCDay();
     html += `<div style="min-width:220px;"><div style="text-align:center;font-weight:600;font-size:13px;margin-bottom:8px;">${y}年${mo + 1}月</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:11px;">`;
     const week = ["日", "一", "二", "三", "四", "五", "六"];
-    for (const w of week) html += `<div style="text-align:center;color:#9CA3AF;padding:4px;">${w}</div>`;
+    for (const w of week) html += `<div style="text-align:center;color:var(--ds-text-3);padding:4px;">${w}</div>`;
     for (let i = 0; i < startDow; i++) html += `<div></div>`;
     for (let d = 1; d <= daysInMonth; d++) {
       const date = new Date(Date.UTC(y, mo, d));
@@ -2432,15 +2529,15 @@ function renderCalendar() {
       const { start, end } = getRangeDates();
       const inRange = key >= start && key <= end;
       const isToday = key === todayStr;
-      const bg = inRange ? "#111827" : "#fff";
-      const color = inRange ? "#fff" : "#111827";
-      const ring = isToday && !inRange ? "border:1px solid #111827;" : "";
+      const bg = inRange ? "var(--ds-text)" : "var(--ds-card-inner)";
+      const color = inRange ? "var(--ds-card-inner)" : "var(--ds-text)";
+      const ring = isToday && !inRange ? "border:1px solid var(--ds-text);" : "";
       html += `<div data-date="${key}" style="text-align:center;padding:6px;border-radius:999px;background:${bg};color:${color};cursor:pointer;${ring}">${d}</div>`;
     }
     html += `</div></div>`;
   }
   html += "</div>";
-  html += `<button id="aus-cal-next" style="margin-top:32px;padding:4px 8px;border:1px solid #E5E7EB;border-radius:6px;background:#fff;cursor:pointer;">›</button>`;
+  html += `<button id="aus-cal-next" style="margin-top:32px;padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);cursor:pointer;">›</button>`;
   html += "</div>";
   cal.innerHTML = html;
   const prev = doc.getElementById("aus-cal-prev");
@@ -2491,12 +2588,12 @@ function renderModelPicker() {
   if (!dropdown || !label) return;
   const models = getRecordedModels();
   label.textContent = selectedModel === "__all__" ? "全部" : selectedModel;
-  let html = `<div data-model="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${selectedModel === "__all__" ? "background:#F6F7F8;font-weight:600;" : ""}">全部</div>`;
+  let html = `<div data-model="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${selectedModel === "__all__" ? "background:var(--ds-card);font-weight:600;" : ""}">全部</div>`;
   for (const m of models) {
-    const active = m === selectedModel ? "background:#F6F7F8;font-weight:600;" : "";
+    const active = m === selectedModel ? "background:var(--ds-card);font-weight:600;" : "";
     html += `<div data-model="${m}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${m}</div>`;
   }
-  if (!models.length) html += '<div style="padding:8px 10px;color:#9CA3AF;font-size:12px;">暂无模型</div>';
+  if (!models.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">暂无模型</div>';
   dropdown.innerHTML = html;
   dropdown.querySelectorAll("[data-model]").forEach((el) => {
     el.onclick = () => {
@@ -2582,7 +2679,7 @@ function renderChartSelectors() {
   let yHtml = "";
   for (const opt of Y_OPTIONS) {
     const checked = ySel.includes(opt.key);
-    yHtml += `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;${checked ? "background:#F6F7F8;" : ""}"><input type="checkbox" data-ykey="${opt.key}" ${checked ? "checked" : ""} style="accent-color:#111827;" /><span style="display:inline-block;width:8px;height:8px;background:${opt.color};border-radius:2px;"></span>${opt.label}<span style="margin-left:auto;color:#9CA3AF;font-size:10px;">${opt.unit}</span></label>`;
+    yHtml += `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;${checked ? "background:var(--ds-card);" : ""}"><input type="checkbox" data-ykey="${opt.key}" ${checked ? "checked" : ""} style="accent-color:var(--ds-text);" /><span style="display:inline-block;width:8px;height:8px;background:${opt.color};border-radius:2px;"></span>${opt.label}<span style="margin-left:auto;color:var(--ds-text-3);font-size:10px;">${opt.unit}</span></label>`;
   }
   yDrop.innerHTML = yHtml;
   yDrop.querySelectorAll("input[data-ykey]").forEach((el) => {
@@ -2600,7 +2697,7 @@ function renderChartSelectors() {
   let xHtml = "";
   for (const opt of X_OPTIONS) {
     const active = opt.key === xSel;
-    xHtml += `<div data-xkey="${opt.key}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active ? "background:#F6F7F8;font-weight:600;" : ""}">${opt.label}</div>`;
+    xHtml += `<div data-xkey="${opt.key}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active ? "background:var(--ds-card);font-weight:600;" : ""}">${opt.label}</div>`;
   }
   xDrop.innerHTML = xHtml;
   xDrop.querySelectorAll("[data-xkey]").forEach((el) => {
@@ -2679,7 +2776,7 @@ async function renderChart(filteredRaw) {
       }
       chart = null;
     }
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:12px;">该筛选无数据（历史 ' + filteredRaw.length + " 条）</div>";
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--ds-text-3);font-size:12px;">该筛选无数据（历史 ' + filteredRaw.length + " 条）</div>";
     return;
   }
   const w = el.clientWidth, h = el.clientHeight;
@@ -2711,9 +2808,12 @@ async function renderChart(filteredRaw) {
   }
   const hasToken = series.some((s) => s.kind === "token");
   const hasCost = series.some((s) => s.kind === "cost");
+  const cBorder = themeColor("--ds-border", "#E5E7EB");
+  const cCard = themeColor("--ds-card", "#F6F7F8");
+  const cText3 = themeColor("--ds-text-3", "#9CA3AF");
   const yAxis = [];
-  if (hasToken) yAxis.push({ type: "value", name: "tokens", position: "left", axisLine: { show: false }, splitLine: { lineStyle: { color: "#F6F7F8" } }, axisLabel: { color: "#9CA3AF", fontSize: 10 } });
-  if (hasCost) yAxis.push({ type: "value", name: "CNY", position: hasToken ? "right" : "left", axisLine: { show: false }, splitLine: { show: false }, axisLabel: { color: "#9CA3AF", fontSize: 10, formatter: (v) => "¥" + v } });
+  if (hasToken) yAxis.push({ type: "value", name: "tokens", position: "left", axisLine: { show: false }, splitLine: { lineStyle: { color: cCard } }, axisLabel: { color: cText3, fontSize: 10 } });
+  if (hasCost) yAxis.push({ type: "value", name: "CNY", position: hasToken ? "right" : "left", axisLine: { show: false }, splitLine: { show: false }, axisLabel: { color: cText3, fontSize: 10, formatter: (v) => "¥" + v } });
   const seriesOpt = series.map((s) => {
     const isCost = s.kind === "cost";
     const yIndex = hasToken && hasCost ? isCost ? 1 : 0 : 0;
@@ -2727,14 +2827,16 @@ async function renderChart(filteredRaw) {
       emphasis: { focus: "series" }
     };
   });
+  const cCardInner = themeColor("--ds-card-inner", "#FFFFFF");
+  const cText = themeColor("--ds-text", "#111827");
   chart.setOption({
     backgroundColor: "transparent",
     tooltip: {
       trigger: "axis",
-      backgroundColor: "#fff",
-      borderColor: "#E5E7EB",
+      backgroundColor: cCardInner,
+      borderColor: cBorder,
       borderWidth: 1,
-      textStyle: { color: "#111827", fontSize: 11 },
+      textStyle: { color: cText, fontSize: 11 },
       formatter: (params) => {
         if (!params?.length) return "";
         const idx = params[0].dataIndex;
@@ -2749,8 +2851,8 @@ async function renderChart(filteredRaw) {
       }
     },
     grid: { left: 50, right: hasToken && hasCost ? 50 : 20, top: 8, bottom: 28 },
-    xAxis: { type: "category", data: labels, axisLine: { lineStyle: { color: "#E5E7EB" } }, axisLabel: { color: "#9CA3AF", fontSize: 10, interval: 0, rotate: labels.length > 20 ? 30 : 0, hideOverlap: true } },
-    yAxis: yAxis.length ? yAxis : { type: "value", axisLabel: { color: "#9CA3AF", fontSize: 10 } },
+    xAxis: { type: "category", data: labels, axisLine: { lineStyle: { color: cBorder } }, axisLabel: { color: cText3, fontSize: 10, interval: 0, rotate: labels.length > 20 ? 30 : 0, hideOverlap: true } },
+    yAxis: yAxis.length ? yAxis : { type: "value", axisLabel: { color: cText3, fontSize: 10 } },
     series: seriesOpt
   }, true);
   setTimeout(() => {
@@ -2765,7 +2867,7 @@ function renderModelSummary(filtered) {
   const tbody = doc.getElementById("aus-summary-tbody");
   if (!tbody) return;
   if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:16px;color:#9CA3AF;">暂无数据</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr>';
     return;
   }
   const map2 = {};
@@ -2792,7 +2894,7 @@ function renderModelSummary(filtered) {
     const avgCost = e.count ? e.cost / e.count : 0;
     const avgDur = e.count ? (e.dur / e.count / 1e3).toFixed(1) + "s" : "—";
     const avgRate = e.rateCnt ? Math.round(e.rate / e.rateCnt) + " t/s" : "—";
-    return `<tr style="border-bottom:1px solid #F6F7F8;"><td style="padding:6px 8px;text-align:left;color:#111827;font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${m}</td><td style="padding:6px 8px;text-align:right;">${e.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${e.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${e.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${e.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${e.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#111827;">¥${e.cost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;">¥${avgCost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;color:#6B7280;">${avgDur}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${avgRate}</td></tr>`;
+    return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${m}</td><td style="padding:6px 8px;text-align:right;">${e.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${e.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${e.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${e.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${e.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">¥${e.cost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;">¥${avgCost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${avgDur}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${avgRate}</td></tr>`;
   }).join("");
   tbody.innerHTML = rows;
 }
@@ -2856,7 +2958,7 @@ function renderHistory(doc, s) {
   if (!host) return;
   const hist = s.history || [];
   if (!hist.length) {
-    host.innerHTML = '<div style="text-align:center;padding:16px;color:#9CA3AF;font-size:12px;">暂无历史记录</div>';
+    host.innerHTML = '<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;">暂无历史记录</div>';
     return;
   }
   host.innerHTML = hist.slice(0, 50).map((h) => {
@@ -2866,84 +2968,83 @@ function renderHistory(doc, s) {
     const op = (h.completion_tokens || 0) / total * 100;
     const hps = hp.toFixed(1), mps = mp.toFixed(1), ops = op.toFixed(1);
     return `
-    <div style="padding:10px 12px;background:#F6F7F8;border-radius:10px;margin-bottom:8px;font-size:12px;">
+    <div style="padding:10px 12px;background:var(--ds-card);border-radius:10px;margin-bottom:8px;font-size:12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <div style="min-width:0;flex:1;">
-          <div style="font-weight:600;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc$1(h.model)} · ${esc$1(localDay$1(h.timestamp))}</div>
-          <div style="color:#6B7280;margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · ${h.duration || 0}ms · ${h.tokenRate || 0} t/s</div>
+          <div style="font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc$1(h.model)} · ${esc$1(localDay$1(h.timestamp))}</div>
+          <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · ${h.duration || 0}ms · ${h.tokenRate || 0} t/s</div>
         </div>
         <div style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
           <div>
-            <div style="font-weight:700;color:#111827;">¥${(h.cost || 0).toFixed(4)}</div>
+            <div style="font-weight:700;color:var(--ds-text);">¥${(h.cost || 0).toFixed(4)}</div>
           </div>
           <div style="display:flex;gap:4px;">
-            <button class="aus-compare-old" data-ts="${h.timestamp}" style="padding:4px 6px;border:1px solid #E5E7EB;border-radius:6px;background:#fff;font-size:10px;cursor:pointer;">旧</button>
-            <button class="aus-compare-new" data-ts="${h.timestamp}" style="padding:4px 6px;border:1px solid #E5E7EB;border-radius:6px;background:#fff;font-size:10px;cursor:pointer;">新</button>
-            <button class="aus-detail-toggle" data-ts="${h.timestamp}" style="padding:4px 8px;border:1px solid #111827;border-radius:6px;background:#111827;color:#fff;font-size:10px;cursor:pointer;">详情</button>
+            <button class="aus-compare-old" data-ts="${h.timestamp}" style="padding:4px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;">旧</button>
+            <button class="aus-compare-new" data-ts="${h.timestamp}" style="padding:4px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;">新</button>
+            <button class="aus-detail-toggle" data-ts="${h.timestamp}" style="padding:4px 8px;border:1px solid var(--ds-black);border-radius:6px;background:var(--ds-black);color:var(--ds-black-text);font-size:10px;cursor:pointer;">详情</button>
           </div>
         </div>
       </div>
-      <div style="background:#E5E7EB;border-radius:999px;height:6px;overflow:hidden;margin-top:8px;display:flex;">
-        <div style="background:#0BA25E;width:${hp}%;height:100%;"></div>
-        <div style="background:#FCA5A5;width:${mp}%;height:100%;"></div>
-        <div style="background:#A5B4FC;width:${op}%;height:100%;"></div>
+      <div style="background:var(--ds-border);border-radius:999px;height:6px;overflow:hidden;margin-top:8px;display:flex;">
+        <div style="background:var(--ds-green);width:${hp}%;height:100%;"></div>
+        <div style="background:var(--ds-red-border);width:${mp}%;height:100%;"></div>
+        <div style="background:var(--ds-purple-bg);width:${op}%;height:100%;"></div>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:10px;margin-top:4px;">
-        <div style="display:flex;gap:8px;"><span style="color:#0BA25E;font-weight:500;">${hps}% 命中</span><span style="color:#DC2626;font-weight:500;">${mps}% 未命中</span><span style="color:#6366F1;font-weight:500;">${ops}% 输出</span></div>
-        <span style="color:#6B7280;">${total.toLocaleString()}t</span>
+        <div style="display:flex;gap:8px;"><span style="color:var(--ds-green);font-weight:500;">${hps}% 命中</span><span style="color:var(--ds-red);font-weight:500;">${mps}% 未命中</span><span style="color:var(--ds-purple);font-weight:500;">${ops}% 输出</span></div>
+        <span style="color:var(--ds-text-2);">${total.toLocaleString()}t</span>
       </div>
-      <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;margin-top:8px;border-top:1px solid #E5E7EB;padding-top:8px;height:520px;overflow:hidden;display:none;flex-direction:column;gap:8px;">
-        <!-- 归类块 -->
+      <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;margin-top:8px;border-top:1px solid var(--ds-border);padding-top:8px;height:520px;overflow:hidden;display:none;flex-direction:column;gap:8px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:10px;">
-            <div style="font-size:10px;color:#9CA3AF;font-weight:600;letter-spacing:0.5px;">基础信息</div>
+          <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
+            <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">基础信息</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;font-size:11px;">
-              <div><div style="color:#6B7280;font-size:10px;">模型</div><div style="font-weight:600;color:#111827;margin-top:2px;word-break:break-all;">${esc$1(h.model || "—")}</div></div>
-              <div><div style="color:#6B7280;font-size:10px;">时段</div><div style="font-weight:600;margin-top:2px;">${h.priceType === "new-peak" ? "🔴 高峰" : h.priceType === "new-offpeak" ? "🟢 非高峰" : "⚪ 旧价格"}</div></div>
-              <div style="grid-column:1/-1;"><div style="color:#6B7280;font-size:10px;">时间</div><div style="font-weight:600;color:#111827;margin-top:2px;">${new Date(h.timestamp).toLocaleString("zh-CN")}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">模型</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${esc$1(h.model || "—")}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">时段</div><div style="font-weight:600;margin-top:2px;color:var(--ds-text);">${h.priceType === "new-peak" ? "🔴 高峰" : h.priceType === "new-offpeak" ? "🟢 非高峰" : "⚪ 旧价格"}</div></div>
+              <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">时间</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${new Date(h.timestamp).toLocaleString("zh-CN")}</div></div>
             </div>
           </div>
-          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:10px;">
-            <div style="font-size:10px;color:#9CA3AF;font-weight:600;letter-spacing:0.5px;">性能</div>
+          <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
+            <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">性能</div>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;font-size:11px;">
-              <div><div style="color:#6B7280;font-size:10px;">耗时</div><div style="font-weight:600;color:#111827;margin-top:2px;">${((h.duration || 0) / 1e3).toFixed(1)}s</div></div>
-              <div><div style="color:#6B7280;font-size:10px;">首字延迟</div><div style="font-weight:600;color:#111827;margin-top:2px;">${((h.ttft || 0) / 1e3).toFixed(1)}s</div></div>
-              <div><div style="color:#6B7280;font-size:10px;">速率</div><div style="font-weight:600;color:#0BA25E;margin-top:2px;">${h.tokenRate || 0} t/s</div></div>
-              <div><div style="color:#6B7280;font-size:10px;">思维链耗时</div><div style="font-weight:600;color:#111827;margin-top:2px;">${((h.thinkTime || 0) / 1e3).toFixed(1)}s</div></div>
-              <div><div style="color:#6B7280;font-size:10px;">思维链 Token</div><div style="font-weight:600;color:#111827;margin-top:2px;">${h.thinkTokens || 0}</div></div>
-              <div><div style="color:#6B7280;font-size:10px;">总时长</div><div style="font-weight:600;color:#111827;margin-top:2px;">${((h.duration || 0) / 1e3).toFixed(1)}s</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">耗时</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${((h.duration || 0) / 1e3).toFixed(1)}s</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">首字延迟</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${((h.ttft || 0) / 1e3).toFixed(1)}s</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">速率</div><div style="font-weight:600;color:var(--ds-green);margin-top:2px;">${h.tokenRate || 0} t/s</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">思维链耗时</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${((h.thinkTime || 0) / 1e3).toFixed(1)}s</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">思维链 Token</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${h.thinkTokens || 0}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">总时长</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${((h.duration || 0) / 1e3).toFixed(1)}s</div></div>
             </div>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:10px;">
-            <div style="font-size:10px;color:#9CA3AF;font-weight:600;letter-spacing:0.5px;">Token 消耗</div>
+          <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
+            <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">Token 消耗</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;font-size:11px;">
-              <div><div style="color:#6B7280;font-size:10px;">缓存命中</div><div style="font-weight:600;color:#0BA25E;margin-top:2px;">${(h.cache_hit_tokens || 0).toLocaleString()}</div></div>
-              <div><div style="color:#6B7280;font-size:10px;">缓存未命中</div><div style="font-weight:600;color:#DC2626;margin-top:2px;">${(h.cache_miss_tokens || 0).toLocaleString()}</div></div>
-              <div><div style="color:#6B7280;font-size:10px;">输出 Token</div><div style="font-weight:600;color:#6366F1;margin-top:2px;">${(h.completion_tokens || 0).toLocaleString()}</div></div>
-              <div><div style="color:#6B7280;font-size:10px;">总 Token</div><div style="font-weight:700;color:#111827;margin-top:2px;">${(h.total_tokens || 0).toLocaleString()}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">缓存命中</div><div style="font-weight:600;color:var(--ds-green);margin-top:2px;">${(h.cache_hit_tokens || 0).toLocaleString()}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">缓存未命中</div><div style="font-weight:600;color:var(--ds-red);margin-top:2px;">${(h.cache_miss_tokens || 0).toLocaleString()}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">输出 Token</div><div style="font-weight:600;color:var(--ds-purple);margin-top:2px;">${(h.completion_tokens || 0).toLocaleString()}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">总 Token</div><div style="font-weight:700;color:var(--ds-text);margin-top:2px;">${(h.total_tokens || 0).toLocaleString()}</div></div>
             </div>
           </div>
-          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:10px;">
-            <div style="font-size:10px;color:#9CA3AF;font-weight:600;letter-spacing:0.5px;">费用明细</div>
+          <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
+            <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">费用明细</div>
             <div style="display:grid;gap:6px;margin-top:6px;font-size:11px;">
-              <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">输入费用</span><span style="font-weight:600;color:#111827;">¥${(h.input_cost || 0).toFixed(6)}</span></div>
-              <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">输出费用</span><span style="font-weight:600;color:#111827;">¥${(h.output_cost || 0).toFixed(6)}</span></div>
-              <div style="display:flex;justify-content:space-between;border-top:1px solid #F6F7F8;padding-top:6px;margin-top:2px;"><span style="color:#111827;font-weight:600;">总费用</span><span style="font-weight:700;color:#111827;">¥${(h.cost || 0).toFixed(6)}</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输入费用</span><span style="font-weight:600;color:var(--ds-text);">¥${(h.input_cost || 0).toFixed(6)}</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输出费用</span><span style="font-weight:600;color:var(--ds-text);">¥${(h.output_cost || 0).toFixed(6)}</span></div>
+              <div style="display:flex;justify-content:space-between;border-top:1px solid var(--ds-card);padding-top:6px;margin-top:2px;"><span style="color:var(--ds-text);font-weight:600;">总费用</span><span style="font-weight:700;color:var(--ds-text);">¥${(h.cost || 0).toFixed(6)}</span></div>
             </div>
           </div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button class="aus-tab-btn" data-tab="req" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid #111827;border-radius:999px;background:#111827;color:#fff;font-size:11px;cursor:pointer;">请求参数 (Request Body)</button>
-          <button class="aus-tab-btn" data-tab="res" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">API 完整响应 (Full Response)</button>
-          <button class="aus-tab-btn" data-tab="raw" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">原始 Token 用量 (Raw Usage)</button>
-          <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">消息内容 (Messages)</button>
+          <button class="aus-tab-btn" data-tab="req" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:11px;cursor:pointer;">请求参数 (Request Body)</button>
+          <button class="aus-tab-btn" data-tab="res" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">API 完整响应 (Full Response)</button>
+          <button class="aus-tab-btn" data-tab="raw" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">原始 Token 用量 (Raw Usage)</button>
+          <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">消息内容 (Messages)</button>
         </div>
-        <pre class="aus-tab-content" data-content="req-${h.timestamp}" style="flex:1;min-height:160px;margin-top:2px;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;">${esc$1(JSON.stringify(h.fullRequest || h.raw_usage || {}, null, 2))}</pre>
-        <pre class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;">${esc$1(JSON.stringify(h.fullResponse || {}, null, 2))}</pre>
-        <pre class="aus-tab-content" data-content="raw-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;">${esc$1(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
-        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;">${esc$1(JSON.stringify(h.messages || [], null, 2))}</pre>
+        <pre class="aus-tab-content" data-content="req-${h.timestamp}" style="flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(JSON.stringify(h.fullRequest || h.raw_usage || {}, null, 2))}</pre>
+        <pre class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(JSON.stringify(h.fullResponse || {}, null, 2))}</pre>
+        <pre class="aus-tab-content" data-content="raw-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
+        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(JSON.stringify(h.messages || [], null, 2))}</pre>
       </div>
     </div>
   `;
@@ -2957,15 +3058,15 @@ function renderHistory(doc, s) {
       if (isOpen) {
         panel.style.display = "none";
         btn.textContent = "详情";
-        btn.style.background = "#111827";
-        btn.style.color = "#fff";
+        btn.style.background = "var(--ds-black)";
+        btn.style.color = "var(--ds-black-text)";
       } else {
         panel.style.display = "flex";
         panel.style.flexDirection = "column";
         btn.textContent = "收起";
-        btn.style.background = "#fff";
-        btn.style.color = "#111827";
-        btn.style.borderColor = "#111827";
+        btn.style.background = "var(--ds-card-inner)";
+        btn.style.color = "var(--ds-text)";
+        btn.style.borderColor = "var(--ds-black)";
       }
     });
   });
@@ -2976,13 +3077,13 @@ function renderHistory(doc, s) {
       const root = btn.closest(".aus-detail-panel");
       if (!root) return;
       root.querySelectorAll(".aus-tab-btn").forEach((b) => {
-        b.style.background = "#fff";
-        b.style.color = "#111827";
-        b.style.borderColor = "#E5E7EB";
+        b.style.background = "var(--ds-card-inner)";
+        b.style.color = "var(--ds-text)";
+        b.style.borderColor = "var(--ds-border)";
       });
-      btn.style.background = "#111827";
-      btn.style.color = "#fff";
-      btn.style.borderColor = "#111827";
+      btn.style.background = "var(--ds-black)";
+      btn.style.color = "var(--ds-black-text)";
+      btn.style.borderColor = "var(--ds-black)";
       root.querySelectorAll(".aus-tab-content").forEach((c) => {
         c.style.display = "none";
       });
@@ -3066,52 +3167,52 @@ function createPanel() {
     return;
   }
   panelCreated = true;
+  const theme = state$1.settings.theme || "light";
   const overlay = doc.createElement("div");
   overlay.id = "aus-overlay";
-  overlay.style.cssText = "position:absolute;top:0;left:0;background:rgba(0,0,0,0.45);z-index:100000;display:none;opacity:0;transition:opacity 0.2s;";
+  overlay.style.cssText = "position:absolute;top:0;left:0;background:var(--ds-overlay);z-index:100000;display:none;opacity:0;transition:opacity 0.2s;";
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) closePanel();
   });
   const panel = doc.createElement("div");
   panel.id = "aus-panel";
   panel.setAttribute("data-extension", "api-usage-stat");
-  panel.setAttribute("data-ds-theme", "light");
-  panel.style.cssText = "position:absolute;top:0;left:0;z-index:100001;background:#FFFFFF;color:#111827;font-family:'Microsoft YaHei','微软雅黑',system-ui,-apple-system,sans-serif;display:none;flex-direction:row;overflow:hidden;transform:none;filter:none;will-change:auto;";
+  panel.setAttribute("data-ds-theme", theme);
+  panel.style.cssText = "position:absolute;top:0;left:0;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:'Microsoft YaHei','微软雅黑',system-ui,-apple-system,sans-serif;display:none;flex-direction:row;overflow:hidden;transform:none;filter:none;will-change:auto;";
   panel.innerHTML = `
-    <div id="aus-sidebar" style="width:220px;flex-shrink:0;background:#F9FAFB;border-right:1px solid #E5E7EB;display:flex;flex-direction:column;transition:width 0.2s ease;overflow:hidden;">
+    <div id="aus-sidebar" style="width:220px;flex-shrink:0;background:var(--ds-sidebar-bg);border-right:1px solid var(--ds-border);display:flex;flex-direction:column;transition:width 0.2s ease;overflow:hidden;">
       <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;">
         <div style="display:flex;flex-direction:column;min-width:0;" id="aus-brand">
-          <span style="font-size:13px;font-weight:700;color:#111827;white-space:nowrap;">API用量统计</span>
-          <span style="font-size:11px;color:#6B7280;white-space:nowrap;">v3.0.0</span>
+          <span style="font-size:13px;font-weight:700;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
+          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v3.0.0</span>
         </div>
-        <button id="aus-sidebar-toggle" style="width:28px;height:28px;border:1px solid #E5E7EB;border-radius:6px;background:#fff;color:#6B7280;cursor:pointer;flex-shrink:0;">‹</button>
+        <button id="aus-sidebar-toggle" style="width:28px;height:28px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;">‹</button>
       </div>
       <div style="flex:1;overflow:auto;padding:8px;display:flex;flex-direction:column;gap:4px;">
         <div class="aus-nav-group" style="display:flex;flex-direction:column;gap:2px;">
-          <div class="aus-nav-item" data-nav="overview" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:#111827;"><span>◈</span><span class="aus-nav-label">用量概览</span></div>
-          <div class="aus-nav-item" data-nav="stats" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:#6B7280;"><span>▦</span><span class="aus-nav-label">用量统计</span></div>
-          <div class="aus-nav-item" data-nav="history" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:#6B7280;"><span>≡</span><span class="aus-nav-label">历史记录</span></div>
+          <div class="aus-nav-item active" data-nav="overview" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span>◈</span><span class="aus-nav-label">用量概览</span></div>
+          <div class="aus-nav-item" data-nav="stats" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span>▦</span><span class="aus-nav-label">用量统计</span></div>
+          <div class="aus-nav-item" data-nav="history" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span>≡</span><span class="aus-nav-label">历史记录</span></div>
         </div>
         <div style="flex:1;"></div>
-        <div class="aus-nav-group" style="display:flex;flex-direction:column;gap:2px;border-top:1px solid #E5E7EB;padding-top:8px;">
-          <div class="aus-nav-item" data-nav="settings" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:#6B7280;"><span>⚙</span><span class="aus-nav-label">设置</span></div>
-          <div class="aus-nav-item" data-nav="help" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:#6B7280;"><span>?</span><span class="aus-nav-label">使用说明</span></div>
-          <div class="aus-nav-item" data-nav="about" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:#6B7280;"><span>ⓘ</span><span class="aus-nav-label">关于</span></div>
+        <div class="aus-nav-group" style="display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--ds-border);padding-top:8px;">
+          <div class="aus-nav-item" data-nav="settings" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span>⚙</span><span class="aus-nav-label">设置</span></div>
+          <div class="aus-nav-item" data-nav="help" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span>?</span><span class="aus-nav-label">使用说明</span></div>
+          <div class="aus-nav-item" data-nav="about" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span>ⓘ</span><span class="aus-nav-label">关于</span></div>
         </div>
       </div>
     </div>
-    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:#FFFFFF;">
-      <div style="flex-shrink:0;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid #E5E7EB;background:#fff;">
-        <span id="aus-page-title" style="font-size:14px;font-weight:600;color:#111827;">用量概览</span>
-        <button id="aus-panel-close" style="width:32px;height:32px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;color:#6B7280;cursor:pointer;font-size:14px;">✕</button>
+    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--ds-panel-bg);">
+      <div style="flex-shrink:0;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--ds-border);background:var(--ds-card-inner);">
+        <span id="aus-page-title" style="font-size:14px;font-weight:600;color:var(--ds-text);">用量概览</span>
+        <button id="aus-panel-close" style="width:32px;height:32px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:14px;">✕</button>
       </div>
-      <div id="aus-main" style="flex:1;overflow:auto;padding:20px;background:#FFFFFF;">
+      <div id="aus-main" style="flex:1;overflow:auto;padding:20px;background:var(--ds-panel-bg);">
         <div style="max-width:1100px;margin:0 auto;display:grid;gap:16px;">
-          <!-- 用量概览：新布局 -->
           <div data-view="overview">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div class="ds-card"><div class="ds-card-title">充值余额</div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:11px;">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">导出</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;">导入</button></div></div>
-              <div class="ds-card"><div class="ds-card-title">累计消费</div><div class="ds-card-val" id="aus-total-cost">¥0.0000<small>CNY</small></div><div style="font-size:11px;color:#9CA3AF;margin-top:2px;" id="aus-total-tokens">0 tokens</div></div>
+              <div class="ds-card"><div class="ds-card-title">充值余额</div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:11px;">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导出</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导入</button></div></div>
+              <div class="ds-card"><div class="ds-card-title">累计消费</div><div class="ds-card-val" id="aus-total-cost">¥0.0000<small>CNY</small></div><div style="font-size:11px;color:var(--ds-text-3);margin-top:2px;" id="aus-total-tokens">0 tokens</div></div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
               <div class="ds-card" id="aus-overview-history"></div>
@@ -3119,75 +3220,70 @@ function createPanel() {
             </div>
             <div id="aus-overview-four" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px;"></div>
           </div>
-          <!-- 用量统计：日历 + 三卡 + 堆叠柱 -->
           <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
-              <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:12px;cursor:pointer;"><span style="color:#6B7280;">时间维度</span><span id="aus-range-label" style="font-weight:600;color:#111827;">近 30 天</span><span style="font-size:10px;">▼</span></div>
-              <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:12px;cursor:pointer;"><span style="color:#6B7280;">模型</span><span id="aus-model-label" style="font-weight:600;color:#111827;">全部</span><span style="font-size:10px;">▼</span></div>
-              <div id="aus-range-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);overflow:hidden;flex-direction:row;">
-                <div style="min-width:120px;border-right:1px solid #F6F7F8;padding:8px;display:grid;gap:2px;">
-                  <div data-range="all" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">全部</div>
-                  <div data-range="today" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">今天</div>
-                  <div data-range="yesterday" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">昨天</div>
-                  <div data-range="7d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">近 7 天</div>
-                  <div data-range="30d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">近 30 天</div>
-                  <div data-range="month" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">本月</div>
-                  <div data-range="lastMonth" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">上月</div>
-                  <div data-range="custom" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">自定义</div>
+              <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span><span style="font-size:10px;">▼</span></div>
+              <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);">全部</span><span style="font-size:10px;">▼</span></div>
+              <div id="aus-range-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);overflow:hidden;flex-direction:row;">
+                <div style="min-width:120px;border-right:1px solid var(--ds-card);padding:8px;display:grid;gap:2px;">
+                  <div data-range="all" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">全部</div>
+                  <div data-range="today" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">今天</div>
+                  <div data-range="yesterday" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">昨天</div>
+                  <div data-range="7d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">近 7 天</div>
+                  <div data-range="30d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">近 30 天</div>
+                  <div data-range="month" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">本月</div>
+                  <div data-range="lastMonth" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">上月</div>
+                  <div data-range="custom" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">自定义</div>
                 </div>
                 <div id="aus-date-calendar" style="padding:12px;display:none;"></div>
               </div>
-              <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:160px;z-index:10;background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
+              <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:160px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
             </div>
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
-              <div class="ds-card"><div style="font-size:11px;color:#6B7280;">消费金额</div><div id="aus-stats-cost" style="font-size:22px;font-weight:700;color:#111827;margin-top:6px;">¥0.00 CNY</div></div>
-              <div class="ds-card"><div style="font-size:11px;color:#6B7280;">API 请求次数</div><div id="aus-stats-req" style="font-size:22px;font-weight:700;color:#111827;margin-top:6px;">0</div></div>
-              <div class="ds-card"><div style="font-size:11px;color:#6B7280;">Tokens</div><div id="aus-stats-tok" style="font-size:22px;font-weight:700;color:#111827;margin-top:6px;">0</div></div>
+              <div class="ds-card"><div style="font-size:11px;color:var(--ds-text-2);">消费金额</div><div id="aus-stats-cost" style="font-size:22px;font-weight:700;color:var(--ds-text);margin-top:6px;">¥0.00 CNY</div></div>
+              <div class="ds-card"><div style="font-size:11px;color:var(--ds-text-2);">API 请求次数</div><div id="aus-stats-req" style="font-size:22px;font-weight:700;color:var(--ds-text);margin-top:6px;">0</div></div>
+              <div class="ds-card"><div style="font-size:11px;color:var(--ds-text-2);">Tokens</div><div id="aus-stats-tok" style="font-size:22px;font-weight:700;color:var(--ds-text);margin-top:6px;">0</div></div>
             </div>
             <div id="aus-model-summary" class="ds-card" style="margin-top:12px;overflow:auto;">
-              <div style="font-size:12px;font-weight:600;color:#111827;margin-bottom:8px;">模型汇总</div>
+              <div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">模型汇总</div>
               <table style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap;">
-                <thead><tr style="color:#6B7280;border-bottom:1px solid #E5E7EB;text-align:right;"><th style="text-align:left;padding:6px 8px;">模型</th><th style="padding:6px 8px;">调用次数</th><th style="padding:6px 8px;">输入(命中)</th><th style="padding:6px 8px;">输入(未命中)</th><th style="padding:6px 8px;">输出</th><th style="padding:6px 8px;">总 Tokens</th><th style="padding:6px 8px;">总成本</th><th style="padding:6px 8px;">平均成本</th><th style="padding:6px 8px;">平均耗时</th><th style="padding:6px 8px;">平均速率</th></tr></thead>
-                <tbody id="aus-summary-tbody"><tr><td colspan="10" style="text-align:center;padding:16px;color:#9CA3AF;">暂无数据</td></tr></tbody>
+                <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">模型</th><th style="padding:6px 8px;">调用次数</th><th style="padding:6px 8px;">输入(命中)</th><th style="padding:6px 8px;">输入(未命中)</th><th style="padding:6px 8px;">输出</th><th style="padding:6px 8px;">总 Tokens</th><th style="padding:6px 8px;">总成本</th><th style="padding:6px 8px;">平均成本</th><th style="padding:6px 8px;">平均耗时</th><th style="padding:6px 8px;">平均速率</th></tr></thead>
+                <tbody id="aus-summary-tbody"><tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
               </table>
             </div>
-            <div class="ds-card" style="margin-top:12px;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:#111827;">图表</span><div style="display:flex;gap:8px;position:relative;"><div id="aus-chart-y-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;"><span style="color:#6B7280;">Y</span><span id="aus-chart-y-label" style="font-weight:600;color:#111827;">总费用</span><span style="font-size:10px;">▼</span></div><div id="aus-chart-x-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:11px;cursor:pointer;"><span style="color:#6B7280;">X</span><span id="aus-chart-x-label" style="font-weight:600;color:#111827;">每日</span><span style="font-size:10px;">▼</span></div><div id="aus-chart-y-dropdown" style="display:none;position:absolute;top:34px;left:0;z-index:10;background:#fff;border:1px solid #E5E7EB;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;"></div><div id="aus-chart-x-dropdown" style="display:none;position:absolute;top:34px;right:0;z-index:10;background:#fff;border:1px solid #E5E7EB;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:140px;"></div></div></div><div id="aus-stats-chart" style="height:300px;"></div></div>
+            <div class="ds-card" style="margin-top:12px;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">图表</span><div style="display:flex;gap:8px;position:relative;"><div id="aus-chart-y-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;"><span style="color:var(--ds-text-2);">Y</span><span id="aus-chart-y-label" style="font-weight:600;color:var(--ds-text);">总费用</span><span style="font-size:10px;">▼</span></div><div id="aus-chart-x-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;"><span style="color:var(--ds-text-2);">X</span><span id="aus-chart-x-label" style="font-weight:600;color:var(--ds-text);">每日</span><span style="font-size:10px;">▼</span></div><div id="aus-chart-y-dropdown" style="display:none;position:absolute;top:34px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;"></div><div id="aus-chart-x-dropdown" style="display:none;position:absolute;top:34px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:140px;"></div></div></div><div id="aus-stats-chart" style="height:300px;"></div></div>
             <div id="aus-extra-charts" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px;">
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:#111827;">Token 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-y-token" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:10px;cursor:pointer;"><span id="aus-extra-y-label-token">3 项</span> ▼</div><div id="aus-extra-x-token" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:10px;cursor:pointer;"><span id="aus-extra-x-label-token">每日</span> ▼</div></div></div><div id="aus-extra-y-drop-token" style="display:none;position:absolute;top:32px;left:8px;z-index:5;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:4px;min-width:180px;max-height:200px;overflow:auto;"></div><div id="aus-extra-x-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-token" style="height:220px;"></div></div>
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:#111827;">费用 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-y-cost" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:10px;cursor:pointer;"><span id="aus-extra-y-label-cost">1 项</span> ▼</div><div id="aus-extra-x-cost" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:10px;cursor:pointer;"><span id="aus-extra-x-label-cost">每日</span> ▼</div></div></div><div id="aus-extra-y-drop-cost" style="display:none;position:absolute;top:32px;left:8px;z-index:5;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:4px;min-width:180px;max-height:200px;overflow:auto;"></div><div id="aus-extra-x-drop-cost" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-cost" style="height:220px;"></div></div>
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:#111827;">缓存命中 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-x-hit" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:10px;cursor:pointer;"><span id="aus-extra-x-label-hit">每日</span> ▼</div></div></div><div id="aus-extra-x-drop-hit" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-hit" style="height:220px;"></div></div>
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:#111827;">API请求数 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-x-req" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:10px;cursor:pointer;"><span id="aus-extra-x-label-req">每日</span> ▼</div></div></div><div id="aus-extra-x-drop-req" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-req" style="height:220px;"></div></div>
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:#111827;">耗时与速率 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-x-dur" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:10px;cursor:pointer;"><span id="aus-extra-x-label-dur">每日</span> ▼</div></div></div><div id="aus-extra-x-drop-dur" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-dur" style="height:220px;"></div></div>
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:#111827;">模型用量占比</span><div id="aus-pie-toggle" style="padding:4px 10px;border:1px solid #E5E7EB;border-radius:999px;background:#111827;color:#fff;font-size:10px;cursor:pointer;">Token</div></div><div id="aus-chart-pie" style="height:220px;"></div></div>
+              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:var(--ds-text);">Token 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-y-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;"><span id="aus-extra-y-label-token">3 项</span> ▼</div><div id="aus-extra-x-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;"><span id="aus-extra-x-label-token">每日</span> ▼</div></div></div><div id="aus-extra-y-drop-token" style="display:none;position:absolute;top:32px;left:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:180px;max-height:200px;overflow:auto;"></div><div id="aus-extra-x-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-token" style="height:220px;"></div></div>
+              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:var(--ds-text);">费用 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-y-cost" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;"><span id="aus-extra-y-label-cost">1 项</span> ▼</div><div id="aus-extra-x-cost" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;"><span id="aus-extra-x-label-cost">每日</span> ▼</div></div></div><div id="aus-extra-y-drop-cost" style="display:none;position:absolute;top:32px;left:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:180px;max-height:200px;overflow:auto;"></div><div id="aus-extra-x-drop-cost" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-cost" style="height:220px;"></div></div>
+              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:var(--ds-text);">缓存命中 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-x-hit" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;"><span id="aus-extra-x-label-hit">每日</span> ▼</div></div></div><div id="aus-extra-x-drop-hit" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-hit" style="height:220px;"></div></div>
+              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:var(--ds-text);">API请求数 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-x-req" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;"><span id="aus-extra-x-label-req">每日</span> ▼</div></div></div><div id="aus-extra-x-drop-req" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-req" style="height:220px;"></div></div>
+              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:var(--ds-text);">耗时与速率 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-x-dur" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;"><span id="aus-extra-x-label-dur">每日</span> ▼</div></div></div><div id="aus-extra-x-drop-dur" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-dur" style="height:220px;"></div></div>
+              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:var(--ds-text);">模型用量占比</span><div id="aus-pie-toggle" style="padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:10px;cursor:pointer;">Token</div></div><div id="aus-chart-pie" style="height:220px;"></div></div>
             </div>
           </div>
-          <!-- 历史记录 -->
           <div data-view="history" style="display:none;">
-            <div id="aus-diff" class="ds-card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:#111827;">缓存断点</span><button id="aus-diff-fullscreen" style="padding:4px 8px;border:1px solid #E5E7EB;border-radius:6px;background:#fff;font-size:11px;cursor:pointer;">全屏</button></div><div style="font-size:11px;color:#9CA3AF;">在历史中各选一条 旧/新 对比，橙/绿高亮即发散点</div></div>
+            <div id="aus-diff" class="ds-card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">缓存断点</span><button id="aus-diff-fullscreen" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">全屏</button></div><div style="font-size:11px;color:var(--ds-text-3);">在历史中各选一条 旧/新 对比，橙/绿高亮即发散点</div></div>
             <div id="aus-history"></div>
           </div>
-          <!-- 设置 -->
           <div data-view="settings" style="display:none;">
             <div id="aus-settings"></div>
           </div>
-          <!-- 使用说明（完整迁移自原脚本） -->
           <div data-view="help" style="display:none;">
             <div style="display:grid;gap:12px;">
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DC2626;font-weight:600;margin-bottom:6px;">⚠️ 安全提示</div><div style="color:#6B7280;">在本扩展中填入 API 密钥存在安全风险。密钥仅经 XOR 混淆后存储于 SillyTavern 设置中，建议使用权限受限的 API 密钥。</div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:#6B7280;display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（余额和缓存命中仅支持 DeepSeek 官方）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div><div>3. 切换时间维度或模型查看不同范围的统计</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0BA25E;font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:#6B7280;display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DB2777;font-weight:600;margin-bottom:6px;">🔄 消息对比</div><div style="color:#6B7280;display:grid;gap:4px;"><div>1. 在历史记录中找到想对比的两条消息，前者点“旧”，后者点“新”</div><div>2. 系统并排显示请求消息的文字差异</div><div>3. 差异点即缓存发散起始位置（前 N 条相同为缓存命中段）</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:#6B7280;display:grid;gap:4px;"><div>1. 在用量统计中按时间维度筛选数据</div><div>2. 橙色堆叠柱展示多模型消费金额占比，悬浮查看分模型明细</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:#6B7280;display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”展开固定区域</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div><div>3. 兼容峰谷计价分段</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0891B2;font-weight:600;margin-bottom:6px;">🧡 模型兼容</div><div style="color:#6B7280;display:grid;gap:4px;"><div>1. 完全兼容 DeepSeek 官方 API</div><div>2. 尽量兼容不同厂商/渠道的请求格式，部分模型可能无命中数</div><div>3. 如数据异常，请携带完整请求与响应反馈</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#6B7280;font-weight:600;margin-bottom:6px;">✨ 关于</div><div style="color:#6B7280;">本扩展由原脚本迁移重构（Vite + ECharts，浅色隔离）。原脚本由 AI 编写 <span style="color:#111827;">@janmk</span> · 仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:#111827;text-decoration:underline;">janmk1453/Api-Usage</a></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DC2626;font-weight:600;margin-bottom:6px;">⚠️ 安全提示</div><div style="color:var(--ds-text-2);">在本扩展中填入 API 密钥存在安全风险。密钥仅经 XOR 混淆后存储于 SillyTavern 设置中，建议使用权限受限的 API 密钥。</div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（余额和缓存命中仅支持 DeepSeek 官方）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div><div>3. 切换时间维度或模型查看不同范围的统计</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DB2777;font-weight:600;margin-bottom:6px;">🔄 消息对比</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中找到想对比的两条消息，前者点“旧”，后者点“新”</div><div>2. 系统并排显示请求消息的文字差异</div><div>3. 差异点即缓存发散起始位置（前 N 条相同为缓存命中段）</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在用量统计中按时间维度筛选数据</div><div>2. 橙色堆叠柱展示多模型消费金额占比，悬浮查看分模型明细</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”展开固定区域</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div><div>3. 兼容峰谷计价分段</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0891B2;font-weight:600;margin-bottom:6px;">🧡 模型兼容</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 完全兼容 DeepSeek 官方 API</div><div>2. 尽量兼容不同厂商/渠道的请求格式，部分模型可能无命中数</div><div>3. 如数据异常，请携带完整请求与响应反馈</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-text-3);font-weight:600;margin-bottom:6px;">✨ 关于</div><div style="color:var(--ds-text-2);">本扩展由原脚本迁移重构（Vite + ECharts，浅色隔离）。原脚本由 AI 编写 <span style="color:var(--ds-text);">@janmk</span> · 仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);text-decoration:underline;">janmk1453/Api-Usage</a></div></div>
             </div>
           </div>
-          <!-- 关于 -->
           <div data-view="about" style="display:none;">
-            <div class="ds-card" style="line-height:1.7;font-size:12px;color:#111827;">
+            <div class="ds-card" style="line-height:1.7;font-size:12px;color:var(--ds-text);">
               <div style="font-size:14px;font-weight:600;">关于</div>
-              <div style="margin-top:8px;color:#6B7280;">API用量统计 v3.0.0 · SillyTavern 原生扩展<br/>DeepSeek 官方浅色风格 · Vite + ECharts · 内容与脚本 1:1<br/><br/>仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:#111827;">janmk1453/Api-Usage</a></div>
+              <div style="margin-top:8px;color:var(--ds-text-2);">API用量统计 v3.0.0 · SillyTavern 原生扩展<br/>DeepSeek 官方浅色风格 · Vite + ECharts · 内容与脚本 1:1<br/><br/>仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);">janmk1453/Api-Usage</a></div>
             </div>
           </div>
         </div>
@@ -3201,6 +3297,10 @@ function createPanel() {
   panel.appendChild(sbOverlay);
   doc.body.appendChild(overlay);
   doc.body.appendChild(panel);
+  try {
+    applyTheme(theme);
+  } catch {
+  }
   try {
     const p = window.parent || window;
     p.addEventListener("scroll", positionPanel, { capture: true, passive: true });
@@ -3488,6 +3588,10 @@ async function onActivate() {
 async function init() {
   ensureStyleScope();
   try {
+    applyTheme(state$1.settings.theme);
+  } catch {
+  }
+  try {
     await initStore();
   } catch (e) {
     console.error("[API用量统计] initStore 失败", e);
@@ -3497,6 +3601,10 @@ async function init() {
   } catch {
   }
   const mount = () => {
+    try {
+      applyTheme(state$1.settings.theme);
+    } catch {
+    }
     try {
       createPanel();
     } catch {

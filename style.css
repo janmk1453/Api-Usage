@@ -1,31 +1,97 @@
-/* API用量统计 — DeepSeek 官方用量页浅色隔离风格 */
+/* API用量统计 — DeepSeek 官方用量页浅色隔离风格 + 深色模式 */
+
+/* 基础隔离，所有主题共用 */
+[data-extension="api-usage-stat"] {
+  font-family: 'Microsoft YaHei', '微软雅黑', system-ui, -apple-system, sans-serif;
+  box-sizing: border-box;
+}
+[data-extension="api-usage-stat"] * { box-sizing: border-box; }
+
+/* 浅色主题 */
 [data-extension="api-usage-stat"][data-ds-theme="light"] {
   --ds-bg: #FFFFFF;
+  --ds-panel-bg: #FFFFFF;
+  --ds-sidebar-bg: #F9FAFB;
   --ds-card: #F6F7F8;
+  --ds-card-inner: #FFFFFF;
   --ds-card-hover: #EEF0F2;
   --ds-border: #E5E7EB;
+  --ds-border-strong: #D1D5DB;
   --ds-text: #111827;
   --ds-text-2: #6B7280;
   --ds-text-3: #9CA3AF;
   --ds-black: #111827;
+  --ds-black-text: #FFFFFF;
+  --ds-input-bg: #FFFFFF;
+  --ds-input-border: #E5E7EB;
+  --ds-hover-bg: #FFFFFF;
+  --ds-active-bg: #F6F7F8;
+  --ds-overlay: rgba(0,0,0,0.45);
+  --ds-scrollbar: #E5E7EB;
   --ds-orange: #FF6A00;
   --ds-orange-light: #FF7A00;
   --ds-green-bg: #E6F8EC;
   --ds-green: #0BA25E;
+  --ds-green-soft: #DCFCE7;
+  --ds-red: #DC2626;
+  --ds-red-bg: #FEF2F2;
+  --ds-red-border: #FCA5A5;
+  --ds-purple: #6366F1;
+  --ds-purple-bg: #A5B4FC;
+  --ds-yellow-bg: #FFFBEB;
+  --ds-yellow-border: #FDE68A;
   --ds-radius-card: 14px;
   --ds-radius-pill: 999px;
   --ds-gap: 12px;
   --ds-shadow: 0 1px 2px rgba(0,0,0,0.06);
   background: var(--ds-bg);
   color: var(--ds-text);
-  font-family: 'Microsoft YaHei', '微软雅黑', system-ui, -apple-system, sans-serif;
-  box-sizing: border-box;
 }
-[data-extension="api-usage-stat"] * { box-sizing: border-box; }
+
+/* 深色主题 — 高对比度保证可读性，WCAG AA */
+[data-extension="api-usage-stat"][data-ds-theme="dark"] {
+  --ds-bg: #0F1419;
+  --ds-panel-bg: #111827;
+  --ds-sidebar-bg: #0F1419;
+  --ds-card: #1E242E;
+  --ds-card-inner: #242B36;
+  --ds-card-hover: #252D3A;
+  --ds-border: #2A3342;
+  --ds-border-strong: #334155;
+  --ds-text: #E5E7EB;
+  --ds-text-2: #9CA3AF;
+  --ds-text-3: #6B7280;
+  --ds-black: #E5E7EB;
+  --ds-black-text: #111827;
+  --ds-input-bg: #1E242E;
+  --ds-input-border: #2A3342;
+  --ds-hover-bg: #242B36;
+  --ds-active-bg: #252D3A;
+  --ds-overlay: rgba(0,0,0,0.65);
+  --ds-scrollbar: #2A3342;
+  --ds-orange: #FF7A3D;
+  --ds-orange-light: #FF8C42;
+  --ds-green-bg: #0A2E1F;
+  --ds-green: #34D399;
+  --ds-green-soft: #064E3B;
+  --ds-red: #F87171;
+  --ds-red-bg: #2A1515;
+  --ds-red-border: #7F1D1D;
+  --ds-purple: #818CF8;
+  --ds-purple-bg: #4F46E5;
+  --ds-yellow-bg: #1F1A0A;
+  --ds-yellow-border: #92400E;
+  --ds-radius-card: 14px;
+  --ds-radius-pill: 999px;
+  --ds-gap: 12px;
+  --ds-shadow: 0 1px 8px rgba(0,0,0,0.4);
+  background: var(--ds-bg);
+  color: var(--ds-text);
+}
 
 [data-extension="api-usage-stat"] .ds-card {
   background: var(--ds-card);
-  border: 1px solid #E5E7EB;
+  border: 1px solid var(--ds-border);
   border-radius: var(--ds-radius-card);
   padding: 16px 20px;
   box-shadow: none;
@@ -53,7 +119,7 @@
 }
 [data-extension="api-usage-stat"] .ds-btn-pill {
   background: var(--ds-black);
-  color: #fff;
+  color: var(--ds-black-text);
   border: none;
   border-radius: var(--ds-radius-pill);
   padding: 8px 18px;
@@ -61,7 +127,7 @@
   font-weight: 600;
   cursor: pointer;
 }
-[data-extension="api-usage-stat"] .ds-btn-pill:hover { background: #1F2937; }
+[data-extension="api-usage-stat"] .ds-btn-pill:hover { filter: brightness(1.08); }
 [data-extension="api-usage-stat"] .ds-tag-green {
   background: var(--ds-green-bg);
   color: var(--ds-green);
@@ -79,10 +145,11 @@
   [data-extension="api-usage-stat"] .ds-grid-3 { grid-template-columns: 1fr; }
 }
 
-/* 全屏独立面板 — 完全对齐原脚本：无滤镜/无合成层/系统默认光栅化，移除阴影干扰 */
-#aus-overlay { background: rgba(0,0,0,0.45); backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+/* 全屏独立面板 */
+#aus-overlay { background: var(--ds-overlay); backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 #aus-panel {
-  background: #FFFFFF;
+  background: var(--ds-panel-bg);
+  color: var(--ds-text);
   box-shadow: none;
   border: none;
   transform: none !important;
@@ -96,17 +163,27 @@
   backdrop-filter: none !important;
   will-change: auto !important;
 }
-#aus-sidebar { transition: width 0.2s ease; }
-.aus-nav-item { transition: background 0.15s, color 0.15s; }
-.aus-nav-item:hover { background: #FFFFFF; }
-.aus-nav-item.active { background: #F6F7F8; color: #111827 !important; font-weight: 600; }
+#aus-sidebar { transition: width 0.2s ease; background: var(--ds-sidebar-bg) !important; border-right: 1px solid var(--ds-border) !important; }
+.aus-nav-item { transition: background 0.15s, color 0.15s; color: var(--ds-text-2); }
+.aus-nav-item:hover { background: var(--ds-hover-bg) !important; }
+.aus-nav-item.active { background: var(--ds-active-bg) !important; color: var(--ds-text) !important; font-weight: 600; }
 #aus-panel #aus-panel-scroll::-webkit-scrollbar { width: 6px; }
-#aus-panel #aus-panel-scroll::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 999px; }
+#aus-panel #aus-panel-scroll::-webkit-scrollbar-thumb { background: var(--ds-scrollbar); border-radius: 999px; }
 #aus_wand_entry { cursor: pointer; }
 #aus_wand_entry:hover { background: transparent !important; }
 #aus_wand_entry.list-group-item:hover { background: transparent !important; }
 
-/* 移动端自适应 — 自动收缩为图标栏（60px），不转横向，保持纵向可点击 */
+/* 输入框与按钮的主题化覆盖 */
+[data-extension="api-usage-stat"] input,
+[data-extension="api-usage-stat"] select,
+[data-extension="api-usage-stat"] textarea {
+  background: var(--ds-input-bg) !important;
+  color: var(--ds-text) !important;
+  border-color: var(--ds-input-border) !important;
+}
+[data-extension="api-usage-stat"] input::placeholder { color: var(--ds-text-3); }
+
+/* 移动端自适应 */
 @media (max-width: 760px) {
   #aus-panel { flex-direction: row !important; }
   #aus-sidebar {
@@ -119,14 +196,10 @@
   #aus-sidebar .aus-nav-item { justify-content: center !important; padding: 10px 0 !important; }
   #aus-sidebar #aus-sidebar-toggle { display: flex !important; }
   #aus-main { padding: 12px !important; }
-  /* 概览四块 2 列 */
   #aus-overview-four { grid-template-columns: repeat(2, 1fr) !important; }
-  /* 概览双块单列 */
   [data-view="overview"] > div:first-child { grid-template-columns: 1fr !important; }
   [data-view="overview"] > div:nth-child(2) { grid-template-columns: 1fr !important; }
-  /* 统计三块单列 */
   [data-view="stats"] > div:nth-child(2) { grid-template-columns: 1fr !important; }
-  /* 详情 3 列改 1 列 */
   .aus-detail-panel > div:first-child { grid-template-columns: 1fr !important; }
   .aus-detail-panel > div:nth-child(2) { grid-template-columns: 1fr !important; }
 }

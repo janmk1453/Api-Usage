@@ -1,5 +1,5 @@
 import { state } from '../store/index';
-import { EXPORT_FORMAT_VERSION, MAX_HISTORY } from '../constants/pricing';
+import { EXPORT_FORMAT_VERSION } from '../constants/pricing';
 import { repository } from '../data/repository';
 
 function isUnsafeKey(k: string) { return k === '__proto__' || k === 'constructor' || k === 'prototype'; }
@@ -82,7 +82,7 @@ export function normalizeImportData(raw: any): { data?: any; error?: string; ski
 export function applyImportedData(d: any, mode: 'overwrite' | 'merge') {
   if (mode === 'overwrite') {
     repository.replaceAll({
-      history: (d.history || []).slice(0, MAX_HISTORY),
+      history: (d.history || []),
       total_tokens: d.total_tokens ?? (d.history || []).reduce((a: number, h: any) => a + (h.total_tokens || 0), 0),
       total_cost: d.total_cost ?? (d.history || []).reduce((a: number, h: any) => a + (h.cost || 0), 0),
       input_tokens: d.input_tokens ?? 0,
@@ -105,7 +105,7 @@ export function applyImportedData(d: any, mode: 'overwrite' | 'merge') {
     for (const h of d.history || []) {
       if (!seen.has(h.timestamp)) { seen.add(h.timestamp); toAdd.push(h); }
     }
-    const merged = [...toAdd, ...state.history].sort((a: any, b: any) => b.timestamp - a.timestamp).slice(0, MAX_HISTORY);
+    const merged = [...toAdd, ...state.history].sort((a: any, b: any) => b.timestamp - a.timestamp);
     // 合并时不覆盖余额/设置
     repository.replaceAll({ history: merged } as any);
   }
