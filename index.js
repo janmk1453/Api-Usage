@@ -56,81 +56,37 @@ const EXPORT_FORMAT_VERSION = 1;
 const WEBDAV_SYNC_FILE = "DeepSeekStatSync.json";
 const WEBDAV_REMOTE_VERSION = 1;
 const state = {
-  currentSave: null,
-  saves: {},
+  history: [],
+  total_tokens: 0,
+  total_cost: 0,
+  input_tokens: 0,
+  output_tokens: 0,
+  cache_hit_tokens: 0,
+  cache_miss_tokens: 0,
+  input_cost: 0,
+  output_cost: 0,
+  rounds: 0,
+  startTime: Date.now(),
   lastUsage: null,
   settings: defaultSettings(),
   balance: null,
   customBalance: null,
-  messageCount: 0,
-  overviewModel: "__all__",
-  chartModel: "__all__"
+  messageCount: 0
 };
 function getSelectedSave() {
-  if (state.currentSave === "__all__") return getMergedStats();
-  return state.currentSave && state.saves[state.currentSave] || null;
-}
-function getMergedStats() {
-  const m = {
-    total_tokens: 0,
-    total_cost: 0,
-    input_tokens: 0,
-    output_tokens: 0,
-    cache_hit_tokens: 0,
-    cache_miss_tokens: 0,
-    input_cost: 0,
-    output_cost: 0,
-    rounds: 0,
-    history: [],
-    startTime: Date.now()
+  return {
+    history: state.history,
+    total_tokens: state.total_tokens,
+    total_cost: state.total_cost,
+    input_tokens: state.input_tokens,
+    output_tokens: state.output_tokens,
+    cache_hit_tokens: state.cache_hit_tokens,
+    cache_miss_tokens: state.cache_miss_tokens,
+    input_cost: state.input_cost,
+    output_cost: state.output_cost,
+    rounds: state.rounds,
+    startTime: state.startTime
   };
-  let ah = [];
-  let es = Date.now();
-  for (const k of Object.keys(state.saves)) {
-    const s = state.saves[k];
-    m.total_tokens += s.total_tokens || 0;
-    m.total_cost += s.total_cost || 0;
-    m.input_tokens += s.input_tokens || 0;
-    m.output_tokens += s.output_tokens || 0;
-    m.cache_hit_tokens += s.cache_hit_tokens || 0;
-    m.cache_miss_tokens += s.cache_miss_tokens || 0;
-    m.input_cost += s.input_cost || 0;
-    m.output_cost += s.output_cost || 0;
-    m.rounds += s.rounds || 0;
-    if (s.startTime && s.startTime < es) es = s.startTime;
-    ah = ah.concat(s.history || []);
-  }
-  m.startTime = es;
-  ah.sort((a, b) => b.timestamp - a.timestamp);
-  m.history = ah.slice(0, MAX_HISTORY);
-  return m;
-}
-function createNewSave() {
-  let cn = "";
-  try {
-    cn = globalThis.SillyTavern?.getContext?.().name2 || "";
-  } catch {
-  }
-  const n = /* @__PURE__ */ new Date();
-  const key = `${n.getFullYear()}${String(n.getMonth() + 1).padStart(2, "0")}${String(n.getDate()).padStart(2, "0")}_${String(n.getHours()).padStart(2, "0")}${String(n.getMinutes()).padStart(2, "0")}${String(n.getSeconds()).padStart(2, "0")}_${cn || "unknown"}`;
-  state.saves[key] = {
-    name: key,
-    character: cn,
-    startTime: n.getTime(),
-    _mtime: n.getTime(),
-    total_tokens: 0,
-    total_cost: 0,
-    input_tokens: 0,
-    output_tokens: 0,
-    cache_hit_tokens: 0,
-    cache_miss_tokens: 0,
-    input_cost: 0,
-    output_cost: 0,
-    rounds: 0,
-    history: []
-  };
-  state.currentSave = key;
-  return key;
 }
 const MODULE$1 = "api_usage_stat";
 const HOT_KEEP = 50;
@@ -224,10 +180,55 @@ function saveHot(patch) {
 }
 async function migrateIfNeeded() {
   const cur = getExtensionSettings();
-  if (cur && cur._migrated) return;
+  if (cur && cur._migrated) {
+    if (cur.saves && !cur.history) {
+      try {
+        let allHistory = [];
+        let agg = { total_tokens: 0, total_cost: 0, input_tokens: 0, output_tokens: 0, cache_hit_tokens: 0, cache_miss_tokens: 0, input_cost: 0, output_cost: 0, rounds: 0, startTime: Date.now() };
+        let earliest = Date.now();
+        for (const s of Object.values(cur.saves)) {
+          const h = s.history || [];
+          allHistory = allHistory.concat(h);
+          agg.total_tokens += s.total_tokens || 0;
+          agg.total_cost += s.total_cost || 0;
+          agg.input_tokens += s.input_tokens || 0;
+          agg.output_tokens += s.output_tokens || 0;
+          agg.cache_hit_tokens += s.cache_hit_tokens || 0;
+          agg.cache_miss_tokens += s.cache_miss_tokens || 0;
+          agg.input_cost += s.input_cost || 0;
+          agg.output_cost += s.output_cost || 0;
+          agg.rounds += s.rounds || 0;
+          if (s.startTime && s.startTime < earliest) earliest = s.startTime;
+          try {
+            const coldRaw = await dbGet("cold_" + s.name);
+            if (coldRaw) {
+              const cold2 = JSON.parse(coldRaw);
+              allHistory = allHistory.concat(cold2);
+            }
+          } catch {
+          }
+        }
+        allHistory.sort((a, b) => b.timestamp - a.timestamp);
+        const hot = allHistory.slice(0, HOT_KEEP);
+        const cold = allHistory.slice(HOT_KEEP);
+        if (cold.length) await dbSet("cold_history", JSON.stringify(cold));
+        const next = { history: hot, _coldCount: cold.length, total_tokens: agg.total_tokens, total_cost: agg.total_cost, input_tokens: agg.input_tokens, output_tokens: agg.output_tokens, cache_hit_tokens: agg.cache_hit_tokens, cache_miss_tokens: agg.cache_miss_tokens, input_cost: agg.input_cost, output_cost: agg.output_cost, rounds: agg.rounds, startTime: earliest, _migratedArchive: true };
+        delete next.saves;
+        delete next.currentSave;
+        saveExtensionSettings({ ...cur, ...next });
+      } catch {
+      }
+    }
+    return;
+  }
   const legacySaves = loadLegacy(STORAGE_KEYS.SAVES);
+  const hasNewHistory = cur?.history;
   if (!legacySaves && !cur) {
-    saveExtensionSettings({ _migrated: true, _updated: Date.now() });
+    saveExtensionSettings({ _migrated: true, _updated: Date.now(), history: [], total_tokens: 0, total_cost: 0, input_tokens: 0, output_tokens: 0, cache_hit_tokens: 0, cache_miss_tokens: 0, input_cost: 0, output_cost: 0, rounds: 0, startTime: Date.now() });
+    return;
+  }
+  if (hasNewHistory) {
+    saveExtensionSettings({ ...cur, _migrated: true, _updated: Date.now() });
     return;
   }
   try {
@@ -242,7 +243,6 @@ async function migrateIfNeeded() {
   try {
     const savesRaw = loadLegacy(STORAGE_KEYS.SAVES);
     const settingsRaw = loadLegacy(STORAGE_KEYS.SETTINGS);
-    const curSave = loadLegacy(STORAGE_KEYS.CURRENT_SAVE);
     const balanceRaw = loadLegacy(STORAGE_KEYS.BALANCE);
     const customBal = loadLegacy(STORAGE_KEYS.CUSTOM_BALANCE);
     const msgCount = loadLegacy(STORAGE_KEYS.MESSAGE_COUNT);
@@ -250,23 +250,60 @@ async function migrateIfNeeded() {
     if (savesRaw) {
       try {
         const saves = JSON.parse(savesRaw);
-        const hotSaves = {};
-        for (const [k, s] of Object.entries(saves)) {
-          const hist = s.history || [];
-          const hot = hist.slice(0, HOT_KEEP);
-          const cold = hist.slice(HOT_KEEP);
-          hotSaves[k] = { ...s, history: hot, _coldCount: cold.length };
-          if (cold.length) await dbSet("cold_" + k, JSON.stringify(cold));
+        let allHistory = [];
+        let agg = { total_tokens: 0, total_cost: 0, input_tokens: 0, output_tokens: 0, cache_hit_tokens: 0, cache_miss_tokens: 0, input_cost: 0, output_cost: 0, rounds: 0, startTime: Date.now() };
+        let earliest = Date.now();
+        let count = 0;
+        for (const s of Object.values(saves)) {
+          const h = s.history || [];
+          allHistory = allHistory.concat(h);
+          agg.total_tokens += s.total_tokens || 0;
+          agg.total_cost += s.total_cost || 0;
+          agg.input_tokens += s.input_tokens || 0;
+          agg.output_tokens += s.output_tokens || 0;
+          agg.cache_hit_tokens += s.cache_hit_tokens || 0;
+          agg.cache_miss_tokens += s.cache_miss_tokens || 0;
+          agg.input_cost += s.input_cost || 0;
+          agg.output_cost += s.output_cost || 0;
+          agg.rounds += s.rounds || 0;
+          if (s.startTime && s.startTime < earliest) earliest = s.startTime;
+          count++;
         }
-        next.saves = hotSaves;
+        allHistory.sort((a, b) => b.timestamp - a.timestamp);
+        const hot = allHistory.slice(0, HOT_KEEP);
+        const cold = allHistory.slice(HOT_KEEP);
+        if (cold.length) await dbSet("cold_history", JSON.stringify(cold));
+        next.history = hot;
+        next._coldCount = cold.length;
+        next.total_tokens = agg.total_tokens;
+        next.total_cost = agg.total_cost;
+        next.input_tokens = agg.input_tokens;
+        next.output_tokens = agg.output_tokens;
+        next.cache_hit_tokens = agg.cache_hit_tokens;
+        next.cache_miss_tokens = agg.cache_miss_tokens;
+        next.input_cost = agg.input_cost;
+        next.output_cost = agg.output_cost;
+        next.rounds = agg.rounds;
+        next.startTime = count ? earliest : Date.now();
       } catch {
       }
+    } else {
+      next.history = [];
+      next.total_tokens = 0;
+      next.total_cost = 0;
+      next.input_tokens = 0;
+      next.output_tokens = 0;
+      next.cache_hit_tokens = 0;
+      next.cache_miss_tokens = 0;
+      next.input_cost = 0;
+      next.output_cost = 0;
+      next.rounds = 0;
+      next.startTime = Date.now();
     }
     if (settingsRaw) try {
       next.settings = JSON.parse(settingsRaw);
     } catch {
     }
-    if (curSave) next.currentSave = curSave;
     if (balanceRaw) try {
       next.balance = JSON.parse(balanceRaw);
     } catch {
@@ -282,19 +319,19 @@ async function loadHot() {
   await migrateIfNeeded();
   return getExtensionSettings();
 }
-async function loadHistoryCold(saveKey) {
+async function loadHistoryCold() {
   try {
-    const raw = await dbGet("cold_" + saveKey);
+    const raw = await dbGet("cold_history");
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
   }
 }
-async function appendHistoryCold(saveKey, entries) {
+async function appendHistoryCold(entries) {
   if (!entries.length) return;
-  const cold = await loadHistoryCold(saveKey);
+  const cold = await loadHistoryCold();
   const next = [...entries, ...cold];
-  await dbSet("cold_" + saveKey, JSON.stringify(next));
+  await dbSet("cold_history", JSON.stringify(next));
 }
 const persistence = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
@@ -419,22 +456,28 @@ function emit(event, payload) {
   });
 }
 function pruneDetails() {
-  for (const k of Object.keys(state.saves)) {
-    const s = state.saves[k];
-    if (!s?.history || s.history.length <= DETAIL_KEEP) continue;
-    const hs = [...s.history].sort((a, b) => b.timestamp - a.timestamp);
-    for (let i = DETAIL_KEEP; i < hs.length; i++) {
-      delete hs[i].messages;
-      delete hs[i].fullRequest;
-      delete hs[i].fullResponse;
-    }
+  if (!state.history || state.history.length <= DETAIL_KEEP) return;
+  const hs = [...state.history].sort((a, b) => b.timestamp - a.timestamp);
+  for (let i = DETAIL_KEEP; i < hs.length; i++) {
+    delete hs[i].messages;
+    delete hs[i].fullRequest;
+    delete hs[i].fullResponse;
   }
 }
 function persist() {
   pruneDetails();
   saveHot({
-    saves: state.saves,
-    currentSave: state.currentSave,
+    history: state.history,
+    total_tokens: state.total_tokens,
+    total_cost: state.total_cost,
+    input_tokens: state.input_tokens,
+    output_tokens: state.output_tokens,
+    cache_hit_tokens: state.cache_hit_tokens,
+    cache_miss_tokens: state.cache_miss_tokens,
+    input_cost: state.input_cost,
+    output_cost: state.output_cost,
+    rounds: state.rounds,
+    startTime: state.startTime,
     settings: state.settings,
     balance: state.balance,
     customBalance: state.customBalance,
@@ -444,23 +487,23 @@ function persist() {
   emit(DataEvents.UPDATED);
 }
 const repository = {
-  // 读：快照（供导出/同步）
   snapshot() {
     return {
-      saves: state.saves,
-      currentSave: state.currentSave,
+      saves: {},
+      currentSave: null,
       settings: state.settings,
       balance: state.balance,
       customBalance: state.customBalance,
       messageCount: state.messageCount,
-      lastUsage: state.lastUsage
+      lastUsage: state.lastUsage,
+      history: state.history,
+      total_tokens: state.total_tokens,
+      total_cost: state.total_cost
     };
   },
-  // 读：聚合视图（用量概览/统计唯一调用）
   getAggregated() {
     return getSelectedSave();
   },
-  // 读：按时间过滤（用量统计）
   getHistoryByRange(range) {
     const s = getSelectedSave();
     if (!s?.history) return [];
@@ -470,11 +513,9 @@ const repository = {
       return k >= range.start && k <= range.end;
     });
   },
-  // 读：冷数据（按需）
-  async getColdHistory(saveKey) {
-    return loadHistoryCold(saveKey);
+  async getColdHistory() {
+    return loadHistoryCold();
   },
-  // 写：新增一条对话（未来数据的唯一入口，替代 interception 直接 push）
   addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft = 0, thinkTime = 0) {
     messages = messages || [];
     if (!model) try {
@@ -509,19 +550,6 @@ const repository = {
     lu.fullRequest = fullRequest;
     lu.fullResponse = fullResponse;
     state.lastUsage = lu;
-    let s = null;
-    if (state.currentSave === "__all__") {
-      let lt = 0, real = null;
-      for (const k of Object.keys(state.saves)) {
-        const sv = state.saves[k];
-        if (sv && sv.startTime > lt) {
-          lt = sv.startTime;
-          real = sv;
-        }
-      }
-      s = real || state.saves[Object.keys(state.saves)[0]];
-    } else s = state.saves[state.currentSave];
-    if (!s) return null;
     const entry = {
       timestamp: lu.timestamp,
       model,
@@ -545,41 +573,71 @@ const repository = {
       fullRequest,
       fullResponse
     };
-    s.history.unshift(entry);
-    s.total_tokens += total;
-    s.total_cost += lu.cost;
-    s.input_tokens += hit + miss;
-    s.output_tokens += comp;
-    s.cache_hit_tokens += hit;
-    s.cache_miss_tokens += miss;
-    s.input_cost += lu.input_cost;
-    s.output_cost += lu.output_cost;
-    if (isDeepSeekOfficialModel(model)) s.rounds += 1;
-    if (s.history.length > MAX_HISTORY) s.history = s.history.slice(0, MAX_HISTORY);
-    s._mtime = Date.now();
+    state.history.unshift(entry);
+    state.total_tokens += total;
+    state.total_cost += lu.cost;
+    state.input_tokens += hit + miss;
+    state.output_tokens += comp;
+    state.cache_hit_tokens += hit;
+    state.cache_miss_tokens += miss;
+    state.input_cost += lu.input_cost;
+    state.output_cost += lu.output_cost;
+    if (isDeepSeekOfficialModel(model)) state.rounds += 1;
+    if (state.history.length > MAX_HISTORY) state.history = state.history.slice(0, MAX_HISTORY);
+    state.startTime = state.startTime || Date.now();
     persist();
     emit(DataEvents.HISTORY_ADDED, entry);
     return entry;
   },
-  // 写：批量重算（定价变更后）
   recalcAll() {
-    for (const k of Object.keys(state.saves)) {
-      const s = state.saves[k];
-      for (const h of s.history || []) {
-        const c = calcCost({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state.settings);
-        h.input_cost = c.input;
-        h.output_cost = c.output;
-        h.cost = c.total;
-        h.priceType = c.priceType;
-        h.cache_hit_rate = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) > 0 ? (h.cache_hit_tokens || 0) / ((h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0)) * 100 : 0;
-      }
+    for (const h of state.history || []) {
+      const c = calcCost({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state.settings);
+      h.input_cost = c.input;
+      h.output_cost = c.output;
+      h.cost = c.total;
+      h.priceType = c.priceType;
+      h.cache_hit_rate = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) > 0 ? (h.cache_hit_tokens || 0) / ((h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0)) * 100 : 0;
     }
     persist();
   },
-  // 写：设置/余额/导入/同步等批量替换（受控）
   replaceAll(next) {
-    if (next.saves !== void 0) state.saves = next.saves;
-    if (next.currentSave !== void 0) state.currentSave = next.currentSave;
+    if (next.history !== void 0) state.history = next.history;
+    if (next.total_tokens !== void 0) state.total_tokens = next.total_tokens;
+    if (next.total_cost !== void 0) state.total_cost = next.total_cost;
+    if (next.input_tokens !== void 0) state.input_tokens = next.input_tokens;
+    if (next.output_tokens !== void 0) state.output_tokens = next.output_tokens;
+    if (next.cache_hit_tokens !== void 0) state.cache_hit_tokens = next.cache_hit_tokens;
+    if (next.cache_miss_tokens !== void 0) state.cache_miss_tokens = next.cache_miss_tokens;
+    if (next.input_cost !== void 0) state.input_cost = next.input_cost;
+    if (next.output_cost !== void 0) state.output_cost = next.output_cost;
+    if (next.rounds !== void 0) state.rounds = next.rounds;
+    if (next.startTime !== void 0) state.startTime = next.startTime;
+    if (next.saves) {
+      let all = [...state.history || []];
+      for (const s of Object.values(next.saves)) {
+        const h = s.history || [];
+        all = all.concat(h);
+        state.total_tokens += s.total_tokens || 0;
+        state.total_cost += s.total_cost || 0;
+        state.input_tokens += s.input_tokens || 0;
+        state.output_tokens += s.output_tokens || 0;
+        state.cache_hit_tokens += s.cache_hit_tokens || 0;
+        state.cache_miss_tokens += s.cache_miss_tokens || 0;
+        state.input_cost += s.input_cost || 0;
+        state.output_cost += s.output_cost || 0;
+        state.rounds += s.rounds || 0;
+      }
+      all.sort((a, b) => b.timestamp - a.timestamp);
+      const seen = /* @__PURE__ */ new Set();
+      const dedup = [];
+      for (const h of all) {
+        if (!seen.has(h.timestamp)) {
+          seen.add(h.timestamp);
+          dedup.push(h);
+        }
+      }
+      state.history = dedup.slice(0, MAX_HISTORY);
+    }
     if (next.settings !== void 0) state.settings = next.settings;
     if (next.balance !== void 0) state.balance = next.balance;
     if (next.customBalance !== void 0) state.customBalance = next.customBalance;
@@ -589,12 +647,20 @@ const repository = {
     if (next.settings) emit(DataEvents.SETTINGS_CHANGED);
     if (next.balance !== void 0 || next.customBalance !== void 0) emit(DataEvents.BALANCE_CHANGED);
   },
-  // 读：初始化加载（过去数据的唯一入口）
   async hydrate() {
     const hot = await loadHot();
     if (hot) {
-      if (hot.saves) state.saves = hot.saves;
-      if (hot.currentSave) state.currentSave = hot.currentSave;
+      if (hot.history) state.history = hot.history;
+      if (hot.total_tokens !== void 0) state.total_tokens = hot.total_tokens;
+      if (hot.total_cost !== void 0) state.total_cost = hot.total_cost;
+      if (hot.input_tokens !== void 0) state.input_tokens = hot.input_tokens;
+      if (hot.output_tokens !== void 0) state.output_tokens = hot.output_tokens;
+      if (hot.cache_hit_tokens !== void 0) state.cache_hit_tokens = hot.cache_hit_tokens;
+      if (hot.cache_miss_tokens !== void 0) state.cache_miss_tokens = hot.cache_miss_tokens;
+      if (hot.input_cost !== void 0) state.input_cost = hot.input_cost;
+      if (hot.output_cost !== void 0) state.output_cost = hot.output_cost;
+      if (hot.rounds !== void 0) state.rounds = hot.rounds;
+      if (hot.startTime !== void 0) state.startTime = hot.startTime;
       if (hot.settings) state.settings = { ...state.settings, ...hot.settings };
       if (hot.balance) state.balance = hot.balance;
       if (hot.customBalance) state.customBalance = hot.customBalance;
@@ -661,13 +727,6 @@ function processUsage(usage, model, messages, startTime, fullRequest = null, ful
 function recalcAllCosts() {
   repository.recalcAll();
 }
-const interception = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
-  __proto__: null,
-  installInterception,
-  processUsage,
-  recalcAllCosts,
-  setLastRequest
-}, Symbol.toStringTag, { value: "Module" }));
 const XOR_KEY = "ds-stats-v1-xor-key!@#$%^&*";
 function encryptKey(plaintext) {
   if (!plaintext) return "";
@@ -772,17 +831,14 @@ async function queryBalance(apiKey) {
 function isUnsafeKey(k) {
   return k === "__proto__" || k === "constructor" || k === "prototype";
 }
-function stripDetails(saves) {
-  const out = JSON.parse(JSON.stringify(saves || {}));
-  for (const k of Object.keys(out)) {
-    const sv = out[k];
-    if (sv?.history) for (const h of sv.history) {
-      delete h.messages;
-      delete h.fullRequest;
-      delete h.fullResponse;
-    }
-  }
-  return out;
+function stripHistory$1(history) {
+  return history.map((h) => {
+    const c = { ...h };
+    delete c.messages;
+    delete c.fullRequest;
+    delete c.fullResponse;
+    return c;
+  });
 }
 function exportHistory() {
   const doc = window.parent?.document ?? document;
@@ -794,12 +850,24 @@ function exportHistory() {
     exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
     appVersion: "3.0.0",
     data: {
-      saves: stripDetails(state.saves),
-      currentSave: state.currentSave,
+      history: stripHistory$1(state.history),
+      total_tokens: state.total_tokens,
+      total_cost: state.total_cost,
+      input_tokens: state.input_tokens,
+      output_tokens: state.output_tokens,
+      cache_hit_tokens: state.cache_hit_tokens,
+      cache_miss_tokens: state.cache_miss_tokens,
+      input_cost: state.input_cost,
+      output_cost: state.output_cost,
+      rounds: state.rounds,
+      startTime: state.startTime,
       balance: state.balance,
       customBalance: state.customBalance,
       settings: JSON.parse(JSON.stringify(state.settings)),
-      messageCount: state.messageCount
+      messageCount: state.messageCount,
+      // 兼容旧多存档导入：额外提供 saves 包装
+      saves: { default: { name: "default", history: stripHistory$1(state.history), total_tokens: state.total_tokens, total_cost: state.total_cost, input_tokens: state.input_tokens, output_tokens: state.output_tokens, cache_hit_tokens: state.cache_hit_tokens, cache_miss_tokens: state.cache_miss_tokens, input_cost: state.input_cost, output_cost: state.output_cost, rounds: state.rounds, startTime: state.startTime } },
+      currentSave: "default"
     }
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -823,88 +891,63 @@ function normalizeImportData(raw) {
   if (version > EXPORT_FORMAT_VERSION) return { error: `文件版本 v${version} 高于当前 v${EXPORT_FORMAT_VERSION}，请升级扩展` };
   const d = raw.data;
   if (!d || typeof d !== "object") return { error: "文件中缺少数据" };
-  if (!d.saves || typeof d.saves !== "object") d.saves = {};
-  const saves = {};
-  let skipped = { saves: 0, entries: 0 };
-  for (const k of Object.keys(d.saves)) {
-    if (isUnsafeKey(k)) continue;
-    const s = d.saves[k];
-    if (!s || typeof s !== "object") {
-      skipped.saves++;
+  let history = [];
+  if (Array.isArray(d.history)) history = d.history;
+  else if (d.saves && typeof d.saves === "object") {
+    for (const s of Object.values(d.saves)) {
+      const h = s.history || [];
+      history = history.concat(h);
+    }
+  }
+  const cleaned = [];
+  let skipped = 0;
+  for (const h of history) {
+    if (!h || typeof h !== "object" || h.timestamp === void 0 || isNaN(h.timestamp)) {
+      skipped++;
       continue;
     }
-    const ns = { name: s.name || k, character: s.character ?? "", customBalance: s.customBalance ?? null };
-    if (s.startTime !== void 0) ns.startTime = s.startTime;
-    const hs = [];
-    if (Array.isArray(s.history)) for (const h of s.history) {
-      if (!h || typeof h !== "object" || h.timestamp === void 0 || isNaN(h.timestamp)) {
-        skipped.entries++;
-        continue;
-      }
-      const nh = { timestamp: h.timestamp, model: h.model || "unknown", prompt_tokens: h.prompt_tokens || 0, cache_hit_tokens: h.cache_hit_tokens || 0, cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0, total_tokens: h.total_tokens || 0, priceType: h.priceType || "old" };
-      for (const f of Object.keys(h)) {
-        if (isUnsafeKey(f)) continue;
-        if (nh[f] === void 0) nh[f] = h[f];
-      }
-      hs.push(nh);
+    if (isUnsafeKey(String(h.model))) continue;
+    const nh = { timestamp: h.timestamp, model: h.model || "unknown", prompt_tokens: h.prompt_tokens || 0, cache_hit_tokens: h.cache_hit_tokens || 0, cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0, total_tokens: h.total_tokens || 0, priceType: h.priceType || "old" };
+    for (const f of Object.keys(h)) {
+      if (isUnsafeKey(f)) continue;
+      if (nh[f] === void 0) nh[f] = h[f];
     }
-    ns.history = hs;
-    for (const f of Object.keys(s)) {
-      if (isUnsafeKey(f) || f === "history") continue;
-      if (ns[f] === void 0) ns[f] = s[f];
-    }
-    saves[k] = ns;
+    cleaned.push(nh);
   }
-  d.saves = saves;
-  return { data: d, skipped };
+  cleaned.sort((a, b) => b.timestamp - a.timestamp);
+  return { data: { history: cleaned, balance: d.balance, customBalance: d.customBalance, settings: d.settings, messageCount: d.messageCount, total_tokens: d.total_tokens, total_cost: d.total_cost, input_tokens: d.input_tokens, output_tokens: d.output_tokens, cache_hit_tokens: d.cache_hit_tokens, cache_miss_tokens: d.cache_miss_tokens, input_cost: d.input_cost, output_cost: d.output_cost, rounds: d.rounds, startTime: d.startTime }, skipped: { entries: skipped } };
 }
 function applyImportedData(d, mode) {
-  for (const k of Object.keys(d.saves || {})) {
-    if (isUnsafeKey(k)) continue;
-    const s = d.saves[k];
-    if (!s) continue;
-    s.name = s.name || k;
-    if (s.character === void 0) s.character = "";
-    if (s.customBalance === void 0) s.customBalance = null;
-    s.history = Array.isArray(s.history) ? s.history : [];
-    s.history.forEach((h) => {
-      if (h && h.priceType === void 0) h.priceType = "old";
-    });
-  }
   if (mode === "overwrite") {
-    state.saves = d.saves || {};
-    state.currentSave = d.currentSave && d.saves[d.currentSave] ? d.currentSave : null;
-    if (d.balance !== void 0) state.balance = d.balance;
-    if (d.customBalance !== void 0) state.customBalance = d.customBalance;
-    if (d.settings) state.settings = d.settings;
-    if (d.messageCount !== void 0) state.messageCount = d.messageCount;
+    repository.replaceAll({
+      history: (d.history || []).slice(0, MAX_HISTORY),
+      total_tokens: d.total_tokens ?? (d.history || []).reduce((a, h) => a + (h.total_tokens || 0), 0),
+      total_cost: d.total_cost ?? (d.history || []).reduce((a, h) => a + (h.cost || 0), 0),
+      input_tokens: d.input_tokens ?? 0,
+      output_tokens: d.output_tokens ?? 0,
+      cache_hit_tokens: d.cache_hit_tokens ?? 0,
+      cache_miss_tokens: d.cache_miss_tokens ?? 0,
+      input_cost: d.input_cost ?? 0,
+      output_cost: d.output_cost ?? 0,
+      rounds: d.rounds ?? d.history?.length ?? 0,
+      startTime: d.startTime ?? Date.now(),
+      balance: d.balance,
+      customBalance: d.customBalance,
+      settings: d.settings,
+      messageCount: d.messageCount
+    });
   } else {
-    for (const k of Object.keys(d.saves || {})) {
-      if (isUnsafeKey(k)) continue;
-      const s = d.saves[k];
-      if (!state.saves[k]) state.saves[k] = s;
-      else {
-        const seen = {};
-        (state.saves[k].history || []).forEach((h) => {
-          if (h) seen[h.timestamp] = true;
-        });
-        (s.history || []).forEach((h) => {
-          if (h && !seen[h.timestamp]) {
-            seen[h.timestamp] = true;
-            state.saves[k].history.push(h);
-          }
-        });
-        state.saves[k].history.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-        if (state.saves[k].history.length > MAX_HISTORY) state.saves[k].history = state.saves[k].history.slice(0, MAX_HISTORY);
+    const seen = new Set((state.history || []).map((h) => h.timestamp));
+    const toAdd = [];
+    for (const h of d.history || []) {
+      if (!seen.has(h.timestamp)) {
+        seen.add(h.timestamp);
+        toAdd.push(h);
       }
     }
+    const merged = [...toAdd, ...state.history].sort((a, b) => b.timestamp - a.timestamp).slice(0, MAX_HISTORY);
+    repository.replaceAll({ history: merged });
   }
-  if (!state.currentSave || !state.saves[state.currentSave]) {
-    const keys = Object.keys(state.saves);
-    state.currentSave = keys.length ? keys[0] : null;
-  }
-  recalcAllCosts();
-  saveHot({ saves: state.saves, currentSave: state.currentSave, settings: state.settings, balance: state.balance, customBalance: state.customBalance, messageCount: state.messageCount });
   try {
     globalThis.ApiUsageStat?.refreshUI?.();
   } catch {
@@ -1040,81 +1083,88 @@ async function webdavPut(text) {
   const r = await rawFetch()(url, { method: "PUT", headers: { Authorization: authHeader(), "Content-Type": "application/json; charset=utf-8" }, body: text });
   if (!r.ok) throw new Error("上传失败 HTTP " + r.status);
 }
+function stripHistory(history) {
+  return history.map((h) => {
+    const c = { ...h };
+    delete c.messages;
+    delete c.fullRequest;
+    delete c.fullResponse;
+    return c;
+  });
+}
 function buildLocalBundle() {
-  const saves = {};
-  for (const k of Object.keys(state.saves)) {
-    const ns = JSON.parse(JSON.stringify(state.saves[k] || {}));
-    if (ns.history) for (const h of ns.history) {
-      delete h.messages;
-      delete h.fullRequest;
-      delete h.fullResponse;
-    }
-    saves[k] = ns;
-  }
-  return { format: "deepseek-stat-sync", version: WEBDAV_REMOTE_VERSION, syncedAt: Date.now(), data: { saves, currentSave: state.currentSave, balance: state.balance, customBalance: state.customBalance, settings: JSON.parse(JSON.stringify(state.settings)), messageCount: state.messageCount }, _ts: {} };
+  return {
+    format: "deepseek-stat-sync",
+    version: WEBDAV_REMOTE_VERSION,
+    syncedAt: Date.now(),
+    data: {
+      history: stripHistory(state.history),
+      total_tokens: state.total_tokens,
+      total_cost: state.total_cost,
+      input_tokens: state.input_tokens,
+      output_tokens: state.output_tokens,
+      cache_hit_tokens: state.cache_hit_tokens,
+      cache_miss_tokens: state.cache_miss_tokens,
+      input_cost: state.input_cost,
+      output_cost: state.output_cost,
+      rounds: state.rounds,
+      startTime: state.startTime,
+      balance: state.balance,
+      customBalance: state.customBalance,
+      settings: JSON.parse(JSON.stringify(state.settings)),
+      messageCount: state.messageCount
+    },
+    _ts: {}
+  };
 }
 function mergeBundles(remote, local) {
   const rd = remote.data || {}, ld = local.data || {};
-  let saves = {};
-  const keys = {};
-  Object.keys(ld.saves || {}).forEach((k) => keys[k] = 1);
-  Object.keys(rd.saves || {}).forEach((k) => keys[k] = 1);
+  const toHistory = (d) => {
+    if (Array.isArray(d.history)) return d.history;
+    if (d.saves && typeof d.saves === "object") {
+      let arr = [];
+      for (const s of Object.values(d.saves)) arr = arr.concat(s.history || []);
+      return arr;
+    }
+    return [];
+  };
+  const lh = toHistory(ld), rh = toHistory(rd);
+  const lseen = new Set(lh.map((h) => h.timestamp));
+  const rseen = new Set(rh.map((h) => h.timestamp));
   let pulled = 0, pushed = 0;
-  for (const k of Object.keys(keys)) {
-    const ls = ld.saves?.[k], rs = rd.saves?.[k];
-    if (!rs) {
-      saves[k] = JSON.parse(JSON.stringify(ls));
-      pushed += ls?.history?.length || 0;
-      continue;
+  const merged = [...rh.filter((h) => {
+    if (!lseen.has(h.timestamp)) {
+      pulled++;
+      return true;
     }
-    if (!ls) {
-      saves[k] = JSON.parse(JSON.stringify(rs));
-      pulled += rs?.history?.length || 0;
-      continue;
+    return false;
+  }), ...lh.filter((h) => {
+    if (!rseen.has(h.timestamp)) {
+      pushed++;
+      return true;
     }
-    const lseen = {}, rseen = {};
-    (ls.history || []).forEach((h) => {
-      if (h?.timestamp !== void 0) lseen[h.timestamp] = true;
-    });
-    (rs.history || []).forEach((h) => {
-      if (h?.timestamp !== void 0) rseen[h.timestamp] = true;
-    });
-    const hist = [];
-    (rs.history || []).forEach((h) => {
-      if (h?.timestamp !== void 0 && !lseen[h.timestamp]) {
-        pulled++;
-        hist.push(h);
-      }
-    });
-    (ls.history || []).forEach((h) => {
-      if (!h || h.timestamp === void 0) return;
-      if (!rseen[h.timestamp]) {
-        pushed++;
-        hist.push(h);
-      } else {
-        for (let i = 0; i < hist.length; i++) if (hist[i].timestamp === h.timestamp) {
-          hist[i] = h;
-          break;
-        }
-      }
-    });
-    hist.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-    const outHist = hist.length > MAX_HISTORY ? hist.slice(0, MAX_HISTORY) : hist;
-    const lm = ls._mtime || ls.startTime || 0, rm = rs._mtime || rs.startTime || 0;
-    const ns = {};
-    ["name", "character", "customBalance", "startTime", "total_tokens", "total_cost", "input_tokens", "output_tokens", "cache_hit_tokens", "cache_miss_tokens", "input_cost", "output_cost", "rounds"].forEach((f) => {
-      ns[f] = lm >= rm ? ls[f] !== void 0 ? ls[f] : rs[f] : rs[f] !== void 0 ? rs[f] : ls[f];
-    });
-    ns._mtime = Math.max(lm, rm);
-    ns.history = outHist;
-    [ls, rs].forEach((src) => {
-      if (src) {
-        for (const f of Object.keys(src)) if (ns[f] === void 0) ns[f] = src[f];
-      }
-    });
-    saves[k] = ns;
-  }
-  const data = { saves, currentSave: ld.currentSave ?? rd.currentSave, balance: ld.balance ?? rd.balance, customBalance: ld.customBalance ?? rd.customBalance, messageCount: ld.messageCount ?? rd.messageCount, settings: ld.settings ?? rd.settings };
+    return false;
+  }), ...lh.filter((h) => rseen.has(h.timestamp))];
+  const dedup = /* @__PURE__ */ new Map();
+  for (const h of merged) dedup.set(h.timestamp, h);
+  let hist = Array.from(dedup.values()).sort((a, b) => b.timestamp - a.timestamp).slice(0, MAX_HISTORY);
+  const data = {
+    history: hist,
+    total_tokens: ld.total_tokens ?? rd.total_tokens ?? hist.reduce((a, h) => a + (h.total_tokens || 0), 0),
+    total_cost: ld.total_cost ?? rd.total_cost ?? hist.reduce((a, h) => a + (h.cost || 0), 0),
+    input_tokens: ld.input_tokens ?? rd.input_tokens ?? 0,
+    output_tokens: ld.output_tokens ?? rd.output_tokens ?? 0,
+    cache_hit_tokens: ld.cache_hit_tokens ?? rd.cache_hit_tokens ?? 0,
+    cache_miss_tokens: ld.cache_miss_tokens ?? rd.cache_miss_tokens ?? 0,
+    input_cost: ld.input_cost ?? rd.input_cost ?? 0,
+    output_cost: ld.output_cost ?? rd.output_cost ?? 0,
+    rounds: ld.rounds ?? rd.rounds ?? hist.length,
+    startTime: ld.startTime ?? rd.startTime ?? Date.now(),
+    balance: ld.balance ?? rd.balance,
+    customBalance: ld.customBalance ?? rd.customBalance,
+    messageCount: ld.messageCount ?? rd.messageCount,
+    settings: ld.settings ?? rd.settings
+  };
   return { mergedData: data, pulled, pushed };
 }
 let syncing = false;
@@ -1150,16 +1200,8 @@ async function doSyncNow() {
       if (remote.version > WEBDAV_REMOTE_VERSION) throw new Error("云端版本过高，请升级扩展");
       merged = mergeBundles(remote, local);
     }
-    state.saves = merged.mergedData.saves || {};
-    state.currentSave = merged.mergedData.currentSave;
-    state.balance = merged.mergedData.balance;
-    state.customBalance = merged.mergedData.customBalance;
-    state.messageCount = merged.mergedData.messageCount || 0;
-    if (merged.mergedData.settings) state.settings = merged.mergedData.settings;
-    const { recalcAllCosts: recalcAllCosts2 } = await Promise.resolve().then(() => interception);
-    recalcAllCosts2();
-    const { saveHot: saveHot2 } = await Promise.resolve().then(() => persistence);
-    saveHot2({ saves: state.saves, currentSave: state.currentSave, settings: state.settings, balance: state.balance, customBalance: state.customBalance, messageCount: state.messageCount });
+    repository.replaceAll(merged.mergedData);
+    repository.recalcAll();
     await webdavPut(JSON.stringify(buildLocalBundle()));
     alert(`同步完成${merged.pulled ? `（拉取 ${merged.pulled} 条）` : ""}${merged.pushed ? `（上传 ${merged.pushed} 条）` : ""}`);
     try {
@@ -1189,10 +1231,6 @@ function saveWebdavPass(pass) {
   }
 }
 function generateDebugBatch() {
-  const saves = state.saves;
-  const cur = state.currentSave;
-  const s = saves[cur] && cur !== "__all__" ? saves[cur] : saves[Object.keys(saves)[0]];
-  if (!s) return alert("请先选择存档");
   const startStr = state.settings.debugDateStart;
   const endStr = state.settings.debugDateEnd;
   if (!startStr || !endStr) return alert("请设置起始与结束日期");
@@ -1219,26 +1257,21 @@ function generateDebugBatch() {
       const dur = Math.floor(Math.random() * 5e3) + 500;
       const ttft = Math.floor(Math.random() * 1e3) + 100;
       const c = calcCost({ timestamp: ts.getTime(), model, prompt_cache_hit_tokens: h, prompt_cache_miss_tokens: m, completion_tokens: o }, state.settings);
-      s.total_tokens += total;
-      s.total_cost += c.total;
-      s.input_tokens += h + m;
-      s.output_tokens += o;
-      s.cache_hit_tokens += h;
-      s.cache_miss_tokens += m;
-      s.input_cost += c.input;
-      s.output_cost += c.output;
-      if (isDeepSeekOfficialModel(model)) s.rounds += 1;
-      s.history.unshift({ timestamp: ts.getTime(), model, prompt_tokens: h + m, cache_hit_tokens: h, cache_miss_tokens: m, completion_tokens: o, total_tokens: total, input_cost: c.input, output_cost: c.output, cost: c.total, cache_hit_rate: h + m > 0 ? h / (h + m) * 100 : 0, priceType: c.priceType, raw_usage: { prompt_cache_hit_tokens: h, prompt_cache_miss_tokens: m, completion_tokens: o, total_tokens: total }, messages: [], duration: dur, ttft, thinkTime: 300, thinkTokens: Math.floor(o * 0.2), tokenRate: Math.round(o / (dur - ttft) * 1e3), fullRequest: null, fullResponse: null });
+      state.total_tokens += total;
+      state.total_cost += c.total;
+      state.input_tokens += h + m;
+      state.output_tokens += o;
+      state.cache_hit_tokens += h;
+      state.cache_miss_tokens += m;
+      state.input_cost += c.input;
+      state.output_cost += c.output;
+      if (isDeepSeekOfficialModel(model)) state.rounds += 1;
+      state.history.unshift({ timestamp: ts.getTime(), model, prompt_tokens: h + m, cache_hit_tokens: h, cache_miss_tokens: m, completion_tokens: o, total_tokens: total, input_cost: c.input, output_cost: c.output, cost: c.total, cache_hit_rate: h + m > 0 ? h / (h + m) * 100 : 0, priceType: c.priceType, raw_usage: { prompt_cache_hit_tokens: h, prompt_cache_miss_tokens: m, completion_tokens: o, total_tokens: total }, messages: [], duration: dur, ttft, thinkTime: 300, thinkTokens: Math.floor(o * 0.2), tokenRate: Math.round(o / (dur - ttft) * 1e3), fullRequest: null, fullResponse: null });
       generated++;
     }
   }
-  s.history.sort((a, b) => b.timestamp - a.timestamp);
-  try {
-    recalcAllCosts();
-  } catch {
-  }
-  s._mtime = Date.now();
-  saveHot({ saves: state.saves });
+  state.history.sort((a, b) => b.timestamp - a.timestamp);
+  repository.recalcAll();
   try {
     globalThis.ApiUsageStat?.refreshUI?.();
   } catch {
@@ -2490,12 +2523,6 @@ function ensureStyleScope() {
 }
 async function initStore() {
   await repository.hydrate();
-  if (!state.currentSave || !state.saves[state.currentSave]) {
-    const keys = Object.keys(state.saves);
-    if (keys.length) state.currentSave = keys[0];
-    else createNewSave();
-    saveHot({ saves: state.saves, currentSave: state.currentSave, settings: state.settings, balance: state.balance, customBalance: state.customBalance });
-  }
 }
 function injectWandEntry() {
   const doc = getDoc();

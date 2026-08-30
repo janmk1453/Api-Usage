@@ -3,9 +3,8 @@
  * 入口：酒馆左下角魔法棒（#extensionsMenu） → 点击打开全屏用量页
  * 面板：独立于酒馆的 #aus-overlay + #aus-panel 全屏页面，DeepSeek 浅色风格
  */
-import { state, createNewSave } from './store/index';
+import { state } from './store/index';
 import { repository } from './data/repository';
-import { saveHot } from './store/persistence';
 import { installInterception } from './services/interception';
 import { createPanel, openPanel, closePanel, togglePanel, refreshUI } from './ui/panel';
 import { createPeakDot, updatePeakDot } from './ui/peak-dot';
@@ -17,12 +16,6 @@ function ensureStyleScope() { document.documentElement.setAttribute('data-extens
 
 async function initStore() {
   await repository.hydrate();
-  if (!state.currentSave || !state.saves[state.currentSave as string]) {
-    const keys = Object.keys(state.saves);
-    if (keys.length) state.currentSave = keys[0];
-    else createNewSave();
-    saveHot({ saves: state.saves, currentSave: state.currentSave, settings: state.settings, balance: state.balance, customBalance: state.customBalance });
-  }
 }
 
 function injectWandEntry() {

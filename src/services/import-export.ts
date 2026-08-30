@@ -1,17 +1,15 @@
 import { state } from '../store/index';
 import { EXPORT_FORMAT_VERSION, MAX_HISTORY } from '../constants/pricing';
-import { recalcAllCosts } from './interception';
-import { saveHot } from '../store/persistence';
+import { repository } from '../data/repository';
 
 function isUnsafeKey(k: string) { return k === '__proto__' || k === 'constructor' || k === 'prototype'; }
 
-function stripDetails(saves: any) {
-  const out = JSON.parse(JSON.stringify(saves || {}));
-  for (const k of Object.keys(out)) {
-    const sv: any = out[k];
-    if (sv?.history) for (const h of sv.history) { delete h.messages; delete h.fullRequest; delete h.fullResponse; }
-  }
-  return out;
+function stripHistory(history: any[]) {
+  return history.map((h: any) => {
+    const c = { ...h };
+    delete c.messages; delete c.fullRequest; delete c.fullResponse;
+    return c;
+  });
 }
 
 export function exportHistory() {
@@ -24,12 +22,24 @@ export function exportHistory() {
     exportedAt: new Date().toISOString(),
     appVersion: '3.0.0',
     data: {
-      saves: stripDetails(state.saves),
-      currentSave: state.currentSave,
+      history: stripHistory(state.history),
+      total_tokens: state.total_tokens,
+      total_cost: state.total_cost,
+      input_tokens: state.input_tokens,
+      output_tokens: state.output_tokens,
+      cache_hit_tokens: state.cache_hit_tokens,
+      cache_miss_tokens: state.cache_miss_tokens,
+      input_cost: state.input_cost,
+      output_cost: state.output_cost,
+      rounds: state.rounds,
+      startTime: state.startTime,
       balance: state.balance,
       customBalance: state.customBalance,
       settings: JSON.parse(JSON.stringify(state.settings)),
       messageCount: state.messageCount,
+      // 兼容旧多存档导入：额外提供 saves 包装
+      saves: { default: { name: 'default', history: stripHistory(state.history), total_tokens: state.total_tokens, total_cost: state.total_cost, input_tokens: state.input_tokens, output_tokens: state.output_tokens, cache_hit_tokens: state.cache_hit_tokens, cache_miss_tokens: state.cache_miss_tokens, input_cost: state.input_cost, output_cost: state.output_cost, rounds: state.rounds, startTime: state.startTime } },
+      currentSave: 'default',
     },
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -47,67 +57,58 @@ export function normalizeImportData(raw: any): { data?: any; error?: string; ski
   if (version > EXPORT_FORMAT_VERSION) return { error: `文件版本 v${version} 高于当前 v${EXPORT_FORMAT_VERSION}，请升级扩展` };
   const d = raw.data;
   if (!d || typeof d !== 'object') return { error: '文件中缺少数据' };
-  if (!d.saves || typeof d.saves !== 'object') d.saves = {};
-  const saves: any = {}; let skipped = { saves: 0, entries: 0 };
-  for (const k of Object.keys(d.saves)) {
-    if (isUnsafeKey(k)) continue;
-    const s = d.saves[k];
-    if (!s || typeof s !== 'object') { skipped.saves++; continue; }
-    const ns: any = { name: s.name || k, character: s.character ?? '', customBalance: s.customBalance ?? null };
-    if (s.startTime !== undefined) ns.startTime = s.startTime;
-    const hs: any[] = [];
-    if (Array.isArray(s.history)) for (const h of s.history) {
-      if (!h || typeof h !== 'object' || h.timestamp === undefined || isNaN(h.timestamp)) { skipped.entries++; continue; }
-      const nh: any = { timestamp: h.timestamp, model: h.model || 'unknown', prompt_tokens: h.prompt_tokens || 0, cache_hit_tokens: h.cache_hit_tokens || 0, cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0, total_tokens: h.total_tokens || 0, priceType: h.priceType || 'old' };
-      for (const f of Object.keys(h)) { if (isUnsafeKey(f)) continue; if (nh[f] === undefined) nh[f] = h[f]; }
-      hs.push(nh);
+  // 兼容旧 saves / 新 history
+  let history: any[] = [];
+  if (Array.isArray(d.history)) history = d.history;
+  else if (d.saves && typeof d.saves === 'object') {
+    for (const s of Object.values(d.saves as any)) {
+      const h = (s as any).history || [];
+      history = history.concat(h);
     }
-    ns.history = hs;
-    for (const f of Object.keys(s)) { if (isUnsafeKey(f) || f === 'history') continue; if (ns[f] === undefined) ns[f] = s[f]; }
-    saves[k] = ns;
   }
-  d.saves = saves;
-  return { data: d, skipped } as any;
+  const cleaned: any[] = [];
+  let skipped = 0;
+  for (const h of history) {
+    if (!h || typeof h !== 'object' || h.timestamp === undefined || isNaN(h.timestamp)) { skipped++; continue; }
+    if (isUnsafeKey(String(h.model))) continue;
+    const nh: any = { timestamp: h.timestamp, model: h.model || 'unknown', prompt_tokens: h.prompt_tokens || 0, cache_hit_tokens: h.cache_hit_tokens || 0, cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0, total_tokens: h.total_tokens || 0, priceType: h.priceType || 'old' };
+    for (const f of Object.keys(h)) { if (isUnsafeKey(f)) continue; if (nh[f] === undefined) nh[f] = h[f]; }
+    cleaned.push(nh);
+  }
+  cleaned.sort((a, b) => b.timestamp - a.timestamp);
+  return { data: { history: cleaned, balance: d.balance, customBalance: d.customBalance, settings: d.settings, messageCount: d.messageCount, total_tokens: d.total_tokens, total_cost: d.total_cost, input_tokens: d.input_tokens, output_tokens: d.output_tokens, cache_hit_tokens: d.cache_hit_tokens, cache_miss_tokens: d.cache_miss_tokens, input_cost: d.input_cost, output_cost: d.output_cost, rounds: d.rounds, startTime: d.startTime }, skipped: { entries: skipped } } as any;
 }
 
 export function applyImportedData(d: any, mode: 'overwrite' | 'merge') {
-  for (const k of Object.keys(d.saves || {})) {
-    if (isUnsafeKey(k)) continue;
-    const s = d.saves[k];
-    if (!s) continue;
-    s.name = s.name || k;
-    if (s.character === undefined) s.character = '';
-    if (s.customBalance === undefined) s.customBalance = null;
-    s.history = Array.isArray(s.history) ? s.history : [];
-    s.history.forEach((h: any) => { if (h && h.priceType === undefined) h.priceType = 'old'; });
-  }
   if (mode === 'overwrite') {
-    state.saves = d.saves || {};
-    state.currentSave = d.currentSave && (d.saves as any)[d.currentSave] ? d.currentSave : null;
-    if (d.balance !== undefined) state.balance = d.balance;
-    if (d.customBalance !== undefined) state.customBalance = d.customBalance;
-    if (d.settings) state.settings = d.settings;
-    if (d.messageCount !== undefined) state.messageCount = d.messageCount;
+    repository.replaceAll({
+      history: (d.history || []).slice(0, MAX_HISTORY),
+      total_tokens: d.total_tokens ?? (d.history || []).reduce((a: number, h: any) => a + (h.total_tokens || 0), 0),
+      total_cost: d.total_cost ?? (d.history || []).reduce((a: number, h: any) => a + (h.cost || 0), 0),
+      input_tokens: d.input_tokens ?? 0,
+      output_tokens: d.output_tokens ?? 0,
+      cache_hit_tokens: d.cache_hit_tokens ?? 0,
+      cache_miss_tokens: d.cache_miss_tokens ?? 0,
+      input_cost: d.input_cost ?? 0,
+      output_cost: d.output_cost ?? 0,
+      rounds: d.rounds ?? d.history?.length ?? 0,
+      startTime: d.startTime ?? Date.now(),
+      balance: d.balance,
+      customBalance: d.customBalance,
+      settings: d.settings,
+      messageCount: d.messageCount,
+    } as any);
   } else {
-    for (const k of Object.keys(d.saves || {})) {
-      if (isUnsafeKey(k)) continue;
-      const s = d.saves[k];
-      if (!state.saves[k]) state.saves[k] = s;
-      else {
-        const seen: any = {};
-        (state.saves[k].history || []).forEach((h: any) => { if (h) seen[h.timestamp] = true; });
-        (s.history || []).forEach((h: any) => { if (h && !seen[h.timestamp]) { seen[h.timestamp] = true; state.saves[k].history.push(h); } });
-        state.saves[k].history.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0));
-        if (state.saves[k].history.length > MAX_HISTORY) state.saves[k].history = state.saves[k].history.slice(0, MAX_HISTORY);
-      }
+    // 合并：按 timestamp 去重
+    const seen = new Set((state.history || []).map((h: any) => h.timestamp));
+    const toAdd: any[] = [];
+    for (const h of d.history || []) {
+      if (!seen.has(h.timestamp)) { seen.add(h.timestamp); toAdd.push(h); }
     }
+    const merged = [...toAdd, ...state.history].sort((a: any, b: any) => b.timestamp - a.timestamp).slice(0, MAX_HISTORY);
+    // 合并时不覆盖余额/设置
+    repository.replaceAll({ history: merged } as any);
   }
-  if (!state.currentSave || !state.saves[state.currentSave as string]) {
-    const keys = Object.keys(state.saves);
-    state.currentSave = keys.length ? keys[0] : null;
-  }
-  recalcAllCosts();
-  saveHot({ saves: state.saves, currentSave: state.currentSave, settings: state.settings, balance: state.balance, customBalance: state.customBalance, messageCount: state.messageCount });
   try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
 }
 

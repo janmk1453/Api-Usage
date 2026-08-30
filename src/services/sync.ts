@@ -1,6 +1,7 @@
 import { state } from '../store/index';
 import { WEBDAV_SYNC_FILE, WEBDAV_REMOTE_VERSION, MAX_HISTORY } from '../constants/pricing';
 import { decryptKey, encryptKey } from '../utils/crypto';
+import { repository } from '../data/repository';
 
 const WEBDAV_PASS_KEY = 'ds_webdav_pass';
 
@@ -61,48 +62,75 @@ async function webdavPut(text: string) {
   if (!r.ok) throw new Error('上传失败 HTTP ' + r.status);
 }
 
+function stripHistory(history: any[]) {
+  return history.map((h: any) => { const c = { ...h }; delete c.messages; delete c.fullRequest; delete c.fullResponse; return c; });
+}
+
 function buildLocalBundle(): any {
-  const saves: any = {};
-  for (const k of Object.keys(state.saves)) {
-    const ns = JSON.parse(JSON.stringify((state.saves as any)[k] || {}));
-    if (ns.history) for (const h of ns.history) { delete h.messages; delete h.fullRequest; delete h.fullResponse; }
-    saves[k] = ns;
-  }
-  return { format: 'deepseek-stat-sync', version: WEBDAV_REMOTE_VERSION, syncedAt: Date.now(), data: { saves, currentSave: state.currentSave, balance: state.balance, customBalance: state.customBalance, settings: JSON.parse(JSON.stringify(state.settings)), messageCount: state.messageCount }, _ts: {} as any };
+  return {
+    format: 'deepseek-stat-sync',
+    version: WEBDAV_REMOTE_VERSION,
+    syncedAt: Date.now(),
+    data: {
+      history: stripHistory(state.history),
+      total_tokens: state.total_tokens,
+      total_cost: state.total_cost,
+      input_tokens: state.input_tokens,
+      output_tokens: state.output_tokens,
+      cache_hit_tokens: state.cache_hit_tokens,
+      cache_miss_tokens: state.cache_miss_tokens,
+      input_cost: state.input_cost,
+      output_cost: state.output_cost,
+      rounds: state.rounds,
+      startTime: state.startTime,
+      balance: state.balance,
+      customBalance: state.customBalance,
+      settings: JSON.parse(JSON.stringify(state.settings)),
+      messageCount: state.messageCount,
+    },
+    _ts: {} as any,
+  };
 }
 
 function mergeBundles(remote: any, local: any) {
   const rd = remote.data || {}, ld = local.data || {};
-  let saves: any = {}; const keys: any = {};
-  Object.keys(ld.saves || {}).forEach((k) => (keys[k] = 1));
-  Object.keys(rd.saves || {}).forEach((k) => (keys[k] = 1));
+  // 兼容旧 saves 结构：转单一历史
+  const toHistory = (d: any): any[] => {
+    if (Array.isArray(d.history)) return d.history;
+    if (d.saves && typeof d.saves === 'object') {
+      let arr: any[] = [];
+      for (const s of Object.values(d.saves as any)) arr = arr.concat((s as any).history || []);
+      return arr;
+    }
+    return [];
+  };
+  const lh = toHistory(ld), rh = toHistory(rd);
+  const lseen = new Set(lh.map((h: any) => h.timestamp));
+  const rseen = new Set(rh.map((h: any) => h.timestamp));
   let pulled = 0, pushed = 0;
-  for (const k of Object.keys(keys)) {
-    const ls = ld.saves?.[k], rs = rd.saves?.[k];
-    if (!rs) { saves[k] = JSON.parse(JSON.stringify(ls)); pushed += ls?.history?.length || 0; continue; }
-    if (!ls) { saves[k] = JSON.parse(JSON.stringify(rs)); pulled += rs?.history?.length || 0; continue; }
-    const lseen: any = {}, rseen: any = {};
-    (ls.history || []).forEach((h: any) => { if (h?.timestamp !== undefined) lseen[h.timestamp] = true; });
-    (rs.history || []).forEach((h: any) => { if (h?.timestamp !== undefined) rseen[h.timestamp] = true; });
-    const hist: any[] = [];
-    (rs.history || []).forEach((h: any) => { if (h?.timestamp !== undefined && !lseen[h.timestamp]) { pulled++; hist.push(h); } });
-    (ls.history || []).forEach((h: any) => {
-      if (!h || h.timestamp === undefined) return;
-      if (!rseen[h.timestamp]) { pushed++; hist.push(h); }
-      else { for (let i = 0; i < hist.length; i++) if (hist[i].timestamp === h.timestamp) { hist[i] = h; break; } }
-    });
-    hist.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0));
-    const outHist = hist.length > MAX_HISTORY ? hist.slice(0, MAX_HISTORY) : hist;
-    const lm = ls._mtime || ls.startTime || 0, rm = rs._mtime || rs.startTime || 0;
-    const ns: any = {};
-    ['name', 'character', 'customBalance', 'startTime', 'total_tokens', 'total_cost', 'input_tokens', 'output_tokens', 'cache_hit_tokens', 'cache_miss_tokens', 'input_cost', 'output_cost', 'rounds'].forEach((f) => {
-      ns[f] = lm >= rm ? (ls[f] !== undefined ? ls[f] : rs[f]) : (rs[f] !== undefined ? rs[f] : ls[f]);
-    });
-    ns._mtime = Math.max(lm, rm); ns.history = outHist;
-    [ls, rs].forEach((src: any) => { if (src) for (const f of Object.keys(src)) if (ns[f] === undefined) ns[f] = src[f]; });
-    saves[k] = ns;
-  }
-  const data = { saves, currentSave: ld.currentSave ?? rd.currentSave, balance: ld.balance ?? rd.balance, customBalance: ld.customBalance ?? rd.customBalance, messageCount: ld.messageCount ?? rd.messageCount, settings: ld.settings ?? rd.settings };
+  const merged: any[] = [...rh.filter((h: any) => { if (!lseen.has(h.timestamp)) { pulled++; return true; } return false }), ...lh.filter((h: any) => { if (!rseen.has(h.timestamp)) { pushed++; return true; } return false }), ...lh.filter((h: any) => rseen.has(h.timestamp))];
+  // 去重并保留本地更完整条目（已通过上式实现），排序截断
+  const dedup = new Map<number, any>();
+  for (const h of merged) dedup.set(h.timestamp, h);
+  let hist = Array.from(dedup.values()).sort((a, b) => b.timestamp - a.timestamp).slice(0, MAX_HISTORY);
+  // 重新聚合（以本地为准，远程仅补历史）
+  const data = {
+    history: hist,
+    total_tokens: ld.total_tokens ?? rd.total_tokens ?? hist.reduce((a: number, h: any) => a + (h.total_tokens || 0), 0),
+    total_cost: ld.total_cost ?? rd.total_cost ?? hist.reduce((a: number, h: any) => a + (h.cost || 0), 0),
+    input_tokens: ld.input_tokens ?? rd.input_tokens ?? 0,
+    output_tokens: ld.output_tokens ?? rd.output_tokens ?? 0,
+    cache_hit_tokens: ld.cache_hit_tokens ?? rd.cache_hit_tokens ?? 0,
+    cache_miss_tokens: ld.cache_miss_tokens ?? rd.cache_miss_tokens ?? 0,
+    input_cost: ld.input_cost ?? rd.input_cost ?? 0,
+    output_cost: ld.output_cost ?? rd.output_cost ?? 0,
+    rounds: ld.rounds ?? rd.rounds ?? hist.length,
+    startTime: ld.startTime ?? rd.startTime ?? Date.now(),
+    balance: ld.balance ?? rd.balance,
+    customBalance: ld.customBalance ?? rd.customBalance,
+    messageCount: ld.messageCount ?? rd.messageCount,
+    settings: ld.settings ?? rd.settings,
+  };
   return { mergedData: data, pulled, pushed };
 }
 
@@ -131,18 +159,8 @@ export async function doSyncNow() {
       if (remote.version > WEBDAV_REMOTE_VERSION) throw new Error('云端版本过高，请升级扩展');
       merged = mergeBundles(remote, local);
     }
-    // 应用
-    state.saves = merged.mergedData.saves || {};
-    state.currentSave = merged.mergedData.currentSave;
-    state.balance = merged.mergedData.balance;
-    state.customBalance = merged.mergedData.customBalance;
-    state.messageCount = merged.mergedData.messageCount || 0;
-    if (merged.mergedData.settings) state.settings = merged.mergedData.settings as any;
-    // 重算
-    const { recalcAllCosts } = await import('./interception');
-    recalcAllCosts();
-    const { saveHot } = await import('../store/persistence');
-    saveHot({ saves: state.saves, currentSave: state.currentSave, settings: state.settings, balance: state.balance, customBalance: state.customBalance, messageCount: state.messageCount });
+    repository.replaceAll(merged.mergedData as any);
+    repository.recalcAll();
     await webdavPut(JSON.stringify(buildLocalBundle()));
     alert(`同步完成${merged.pulled ? `（拉取 ${merged.pulled} 条）` : ''}${merged.pushed ? `（上传 ${merged.pushed} 条）` : ''}`);
     try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}

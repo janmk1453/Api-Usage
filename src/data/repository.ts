@@ -1,7 +1,6 @@
 /**
- * 统一仓库 — 所有对话数据的唯一 储存/调用/修改 入口
- * 过去（IndexedDB 冷数据）· 现在（extensionSettings 热数据 + 内存 state）· 未来（新增写入）
- * 任何直接读写 state.saves / saveHot / localStorage 的行为视为违规，应走本模块
+ * 统一仓库 — 单一历史的唯一 储存/调用/修改 入口
+ * 已废弃多存档，所有数据归一至 state.history + 聚合字段
  */
 import { state, getSelectedSave } from '../store/index';
 import { saveHot, loadHot, loadHistoryCold } from '../store/persistence';
@@ -10,25 +9,30 @@ import { MAX_HISTORY, DETAIL_KEEP } from '../constants/pricing';
 import { emit, DataEvents } from './events';
 import type { Snapshot } from './types';
 
-// 内部：裁剪详情（与 store/pruneHistoryDetails 同逻辑，但收敛于此）
 function pruneDetails() {
-  for (const k of Object.keys(state.saves)) {
-    const s: any = state.saves[k];
-    if (!s?.history || s.history.length <= DETAIL_KEEP) continue;
-    const hs = [...s.history].sort((a: any, b: any) => b.timestamp - a.timestamp);
-    for (let i = DETAIL_KEEP; i < hs.length; i++) {
-      delete (hs[i] as any).messages;
-      delete (hs[i] as any).fullRequest;
-      delete (hs[i] as any).fullResponse;
-    }
+  if (!state.history || state.history.length <= DETAIL_KEEP) return;
+  const hs = [...state.history].sort((a: any, b: any) => b.timestamp - a.timestamp);
+  for (let i = DETAIL_KEEP; i < hs.length; i++) {
+    delete (hs[i] as any).messages;
+    delete (hs[i] as any).fullRequest;
+    delete (hs[i] as any).fullResponse;
   }
 }
 
 function persist() {
   pruneDetails();
   saveHot({
-    saves: state.saves,
-    currentSave: state.currentSave,
+    history: state.history,
+    total_tokens: state.total_tokens,
+    total_cost: state.total_cost,
+    input_tokens: state.input_tokens,
+    output_tokens: state.output_tokens,
+    cache_hit_tokens: state.cache_hit_tokens,
+    cache_miss_tokens: state.cache_miss_tokens,
+    input_cost: state.input_cost,
+    output_cost: state.output_cost,
+    rounds: state.rounds,
+    startTime: state.startTime,
     settings: state.settings,
     balance: state.balance,
     customBalance: state.customBalance,
@@ -39,27 +43,26 @@ function persist() {
 }
 
 export const repository = {
-  // 读：快照（供导出/同步）
   snapshot(): Snapshot {
     return {
-      saves: state.saves,
-      currentSave: state.currentSave,
+      saves: {} as any,
+      currentSave: null as any,
       settings: state.settings,
       balance: state.balance,
       customBalance: state.customBalance,
       messageCount: state.messageCount,
       lastUsage: state.lastUsage,
-    };
+      history: state.history as any,
+      total_tokens: state.total_tokens as any,
+      total_cost: state.total_cost as any,
+    } as any;
   },
 
-  // 读：聚合视图（用量概览/统计唯一调用）
   getAggregated() { return getSelectedSave(); },
 
-  // 读：按时间过滤（用量统计）
   getHistoryByRange(range: { start: string; end: string }) {
     const s: any = getSelectedSave();
     if (!s?.history) return [];
-    // localDay 已在 computed 中处理，此处仅按字符串比较（YYYY-MM-DD）
     const toDay = (ts: number) => new Date(ts + 8*3600*1000).toISOString().slice(0,10);
     return s.history.filter((h: any) => {
       const k = toDay(h.timestamp);
@@ -67,10 +70,8 @@ export const repository = {
     });
   },
 
-  // 读：冷数据（按需）
-  async getColdHistory(saveKey: string) { return loadHistoryCold(saveKey); },
+  async getColdHistory() { return loadHistoryCold(); },
 
-  // 写：新增一条对话（未来数据的唯一入口，替代 interception 直接 push）
   addEntry(usage: any, model: string, messages: any[], startTime: number, fullRequest?: any, fullResponse?: any, ttft = 0, thinkTime = 0) {
     messages = messages || [];
     if (!model) try { model = (globalThis as any).SillyTavern?.getContext?.().model || 'deepseek-v4-flash'; } catch { model = 'deepseek-v4-flash'; }
@@ -91,48 +92,66 @@ export const repository = {
     lu.raw_usage = usage; lu.fullRequest = fullRequest; lu.fullResponse = fullResponse;
     state.lastUsage = lu;
 
-    let s: any = null;
-    if (state.currentSave === '__all__') {
-      let lt = 0, real: any = null;
-      for (const k of Object.keys(state.saves)) { const sv: any = state.saves[k]; if (sv && sv.startTime > lt) { lt = sv.startTime; real = sv; } }
-      s = real || state.saves[Object.keys(state.saves)[0]];
-    } else s = state.saves[state.currentSave as string];
-    if (!s) return null;
-
     const entry: any = {
       timestamp: lu.timestamp, model, prompt_tokens: hit + miss, cache_hit_tokens: hit, cache_miss_tokens: miss,
       completion_tokens: comp, total_tokens: total, input_cost: lu.input_cost, output_cost: lu.output_cost,
       cost: lu.cost, cache_hit_rate: (hit + miss) > 0 ? (hit / (hit + miss) * 100) : 0, priceType: lu.priceType,
       raw_usage: usage, messages, duration, ttft, thinkTime, thinkTokens, tokenRate: lu.tokenRate, fullRequest, fullResponse,
     };
-    s.history.unshift(entry);
-    s.total_tokens += total; s.total_cost += lu.cost; s.input_tokens += hit + miss; s.output_tokens += comp;
-    s.cache_hit_tokens += hit; s.cache_miss_tokens += miss; s.input_cost += lu.input_cost; s.output_cost += lu.output_cost;
-    if (isDeepSeekOfficialModel(model)) s.rounds += 1;
-    if (s.history.length > MAX_HISTORY) s.history = s.history.slice(0, MAX_HISTORY);
-    s._mtime = Date.now();
+    state.history.unshift(entry);
+    state.total_tokens += total; state.total_cost += lu.cost; state.input_tokens += hit + miss; state.output_tokens += comp;
+    state.cache_hit_tokens += hit; state.cache_miss_tokens += miss; state.input_cost += lu.input_cost; state.output_cost += lu.output_cost;
+    if (isDeepSeekOfficialModel(model)) state.rounds += 1;
+    if (state.history.length > MAX_HISTORY) state.history = state.history.slice(0, MAX_HISTORY);
+    state.startTime = state.startTime || Date.now();
     persist();
     emit(DataEvents.HISTORY_ADDED, entry);
     return entry;
   },
 
-  // 写：批量重算（定价变更后）
   recalcAll() {
-    for (const k of Object.keys(state.saves)) {
-      const s: any = state.saves[k];
-      for (const h of s.history || []) {
-        const c: any = calcCost({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state.settings as any);
-        h.input_cost = c.input; h.output_cost = c.output; h.cost = c.total; h.priceType = c.priceType;
-        h.cache_hit_rate = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) > 0 ? ((h.cache_hit_tokens || 0) / ((h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0)) * 100) : 0;
-      }
+    for (const h of state.history || []) {
+      const c: any = calcCost({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state.settings as any);
+      h.input_cost = c.input; h.output_cost = c.output; h.cost = c.total; h.priceType = c.priceType;
+      h.cache_hit_rate = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) > 0 ? ((h.cache_hit_tokens || 0) / ((h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0)) * 100) : 0;
     }
     persist();
   },
 
-  // 写：设置/余额/导入/同步等批量替换（受控）
-  replaceAll(next: Partial<Snapshot>) {
-    if (next.saves !== undefined) state.saves = next.saves as any;
-    if (next.currentSave !== undefined) state.currentSave = next.currentSave as any;
+  replaceAll(next: Partial<Snapshot> & any) {
+    if (next.history !== undefined) state.history = next.history as any;
+    if (next.total_tokens !== undefined) state.total_tokens = next.total_tokens as any;
+    if (next.total_cost !== undefined) state.total_cost = next.total_cost as any;
+    if (next.input_tokens !== undefined) state.input_tokens = next.input_tokens as any;
+    if (next.output_tokens !== undefined) state.output_tokens = next.output_tokens as any;
+    if (next.cache_hit_tokens !== undefined) state.cache_hit_tokens = next.cache_hit_tokens as any;
+    if (next.cache_miss_tokens !== undefined) state.cache_miss_tokens = next.cache_miss_tokens as any;
+    if (next.input_cost !== undefined) state.input_cost = next.input_cost as any;
+    if (next.output_cost !== undefined) state.output_cost = next.output_cost as any;
+    if (next.rounds !== undefined) state.rounds = next.rounds as any;
+    if (next.startTime !== undefined) state.startTime = next.startTime as any;
+    // 兼容旧 saves 导入：合并至单一历史
+    if (next.saves) {
+      let all: any[] = [...(state.history || [])];
+      for (const s of Object.values(next.saves as any)) {
+        const h = (s as any).history || [];
+        all = all.concat(h);
+        state.total_tokens += (s as any).total_tokens || 0;
+        state.total_cost += (s as any).total_cost || 0;
+        state.input_tokens += (s as any).input_tokens || 0;
+        state.output_tokens += (s as any).output_tokens || 0;
+        state.cache_hit_tokens += (s as any).cache_hit_tokens || 0;
+        state.cache_miss_tokens += (s as any).cache_miss_tokens || 0;
+        state.input_cost += (s as any).input_cost || 0;
+        state.output_cost += (s as any).output_cost || 0;
+        state.rounds += (s as any).rounds || 0;
+      }
+      all.sort((a: any, b: any) => b.timestamp - a.timestamp);
+      const seen = new Set<number>();
+      const dedup: any[] = [];
+      for (const h of all) { if (!seen.has(h.timestamp)) { seen.add(h.timestamp); dedup.push(h); } }
+      state.history = dedup.slice(0, MAX_HISTORY);
+    }
     if (next.settings !== undefined) state.settings = next.settings as any;
     if (next.balance !== undefined) state.balance = next.balance;
     if (next.customBalance !== undefined) state.customBalance = next.customBalance as any;
@@ -143,19 +162,26 @@ export const repository = {
     if (next.balance !== undefined || next.customBalance !== undefined) emit(DataEvents.BALANCE_CHANGED);
   },
 
-  // 读：初始化加载（过去数据的唯一入口）
   async hydrate() {
     const hot: any = await loadHot();
     if (hot) {
-      if (hot.saves) state.saves = hot.saves;
-      if (hot.currentSave) state.currentSave = hot.currentSave;
+      if (hot.history) state.history = hot.history;
+      if (hot.total_tokens !== undefined) state.total_tokens = hot.total_tokens;
+      if (hot.total_cost !== undefined) state.total_cost = hot.total_cost;
+      if (hot.input_tokens !== undefined) state.input_tokens = hot.input_tokens;
+      if (hot.output_tokens !== undefined) state.output_tokens = hot.output_tokens;
+      if (hot.cache_hit_tokens !== undefined) state.cache_hit_tokens = hot.cache_hit_tokens;
+      if (hot.cache_miss_tokens !== undefined) state.cache_miss_tokens = hot.cache_miss_tokens;
+      if (hot.input_cost !== undefined) state.input_cost = hot.input_cost;
+      if (hot.output_cost !== undefined) state.output_cost = hot.output_cost;
+      if (hot.rounds !== undefined) state.rounds = hot.rounds;
+      if (hot.startTime !== undefined) state.startTime = hot.startTime;
       if (hot.settings) state.settings = { ...state.settings, ...hot.settings };
       if (hot.balance) state.balance = hot.balance;
       if (hot.customBalance) state.customBalance = hot.customBalance;
       if (hot.messageCount) state.messageCount = hot.messageCount;
       if (hot.lastUsage) state.lastUsage = hot.lastUsage;
     }
-    // 存档兜底由 store/createNewSave 保证，hydrate 不擅自创建以保持可预测
     emit(DataEvents.UPDATED);
     return this.snapshot();
   },
