@@ -8,15 +8,15 @@ SillyTavern 原生扩展 `API用量统计`（`manifest: api-usage-stat@3.0.0`）
 - **归档**：`pr/RE3.0/迁移重构计划.md` 仅作设计归档，不作为开发目录
 - **脚本主线不变**：`pr/DeepSeek使用预测.js` 仍为脚本真源，扩展与脚本数据通过 `deepseek-stat-export v1` 互通，不自动覆盖
 
-**规则：所有有关重构迁移版的修改一律在 `Api-Usage` 下进行，所有产物亦在此。禁止在 `pr/RE3.0` 继续开发。**
+**规则：所有有关重构迁移版的修改一律在 `Api-Usage` 下进行，所有产物亦在此。禁止在 `pr/RE3.0` 继续开发。后续构建与提交均以 `Api-Usage` 为准，`RE3.0` 仅同步产物备份。**
 
 ## 技术栈（已确认）
 
-- **打包**：`Vite 5`（`lib: es / cssCodeSplit:false`，产物 `index.js + style.css` 直出根目录）
+- **打包**：`Vite 5`（`lib: es / cssCodeSplit:false`，产物 `index.js + style.css` 直出根目录，当前 `~138kB`）
 - **语言**：`TypeScript 5 strict`
-- **图表**：`ECharts 5` 按需 `echarts/core + Bar/Heatmap + Grid/Tooltip/VisualMap/CanvasRenderer`，懒加载分包（首屏 `~73kB`）
-- **样式**：无框架，`SmartTheme` 隔离 + `DeepSeek 官方浅色`（`#FFFFFF/#F6F7F8/#111827/#FF6A00/#E6F8EC`，`Microsoft YaHei`，`14px` 圆角，无阴影/无滤镜以保锐利）
-- **存储**：`extensionSettings[api_usage_stat]` 热 50 条 + `IndexedDB api_usage_stat_db` 冷分页（`maxHistoryItems=500` 热，`IndexedDB` 兜 `5000`），`XOR` 密钥兼容，旧 `ds_*` 自动迁移备份
+- **图表**：`ECharts 5` 按需 `echarts/core + Bar/Heatmap + Grid/Tooltip/VisualMap/CanvasRenderer`，懒加载分包（`barGrid` 等按需）
+- **样式**：无框架，`SmartTheme` 隔离 + `DeepSeek 官方浅色`（`#FFFFFF/#F6F7F8/#111827/#FF6A00/#E6F8EC`，`Microsoft YaHei`，`14px` 圆角，无阴影/无滤镜以保锐利，`absolute` 定位置换修复窄屏 `fixed` 漂移）
+- **存储**：`extensionSettings[api_usage_stat]` 热 `50` 条 + `IndexedDB api_usage_stat_db` 冷分页（旧多存档已合并为单一历史，`XOR` 密钥兼容，自动迁移备份）
 - **最低版本**：`manifest.minimum_client_version 1.11.0`
 
 ## 目录
@@ -35,15 +35,14 @@ Api-Usage/
 │   ├── types/save.ts, settings.ts
 │   ├── data/              # ★ 统一数据框架（所有存/取/算/展的唯一通路）
 │   │   ├── types.ts       # Snapshot/Aggregated/TimeRange/OverviewView/StatsView
-│   │   ├── repository.ts  # 唯一写入口：addEntry/recalcAll/replaceAll/hydrate + persist
+│   │   ├── repository.ts  # 唯一写入口：addEntry/recalcAll/replaceAll/hydrate + persist（单一历史）
 │   │   ├── computed.ts    # 唯一算入口：computeOverview/computeStats/getFilteredHistory
 │   │   └── events.ts      # DataEvents.UPDATED/HISTORY_ADDED/SETTINGS_CHANGED
-│   ├── store/index.ts, persistence.ts # 底层状态与冷热分页（仅 repository 调用）
-│   ├── services/pricing.ts, interception.ts(delegates→repository), balance.ts, import-export.ts, sync.ts
+│   ├── store/index.ts, persistence.ts # 单一历史聚合（已废弃多存档，saves 仅作迁移兼容）
+│   ├── services/pricing.ts, interception.ts(delegates→repository), balance.ts, import-export.ts(单一历史), sync.ts(单一历史), debug.ts
 │   ├── utils/date.ts, crypto.ts, logger.ts
-│   └── ui/panel.ts, overview.ts, stats-view.ts, stats.ts, charts.ts, compare.ts, settings.ts, peak-dot.ts, customize.ts
+│   └── ui/panel.ts(全屏+侧边导航), overview.ts(双明细+四块), stats-view.ts(日历+双维度+堆叠柱+汇总表), stats.ts(旧统计卡), charts.ts, compare.ts(内联详情), settings.ts(完整设置), peak-dot.ts, customize.ts
 ├── README.md
-├── 迁移重构计划.md        # 同步自 RE3.0 的计划副本（可选）
 └── LICENSE
 ```
 
@@ -53,29 +52,55 @@ Api-Usage/
 cd Api-Usage
 npm install
 npm run typecheck   # tsc --noEmit 必须通过
-npm run build       # 产出 index.js + 拆分 chunk（barGrid等懒加载）
+npm run build       # 产出 index.js + 拆分 chunk
 node --check index.js
 ```
 
-- **入口**：酒馆左下角魔法棒 `#extensionsMenu → #aus_wand_entry`（`list-group-item`），点击 `togglePanel()` 打开全屏 `#aus-overlay + #aus-panel`（`fixed inset:0` 白底，非 `inline-drawer`）
-- **面板**：`createPanel/openPanel/closePanel/togglePanel`（单例，`will-change:auto` 即时销毁合成层，`display:flex` + `overflow:auto`，无 `backdrop-filter/阴影` 干扰）
-- **样式**：`[data-extension="api-usage-stat"][data-ds-theme="light"]` 隔离，卡片 `1px solid #E5E7EB` 实线，无 `box-shadow`，字重 `600`，`Microsoft YaHei` 保证锐利
-- **拦截**：`GENERATION_ENDED → chat[].extra.api_usage` 主路径，`ApiUsageStatInterceptor` 辅路径，`processUsage/recalcAllCosts` 1:1 脚本
-- **数据框架**：所有存/取/算/展必须走 `src/data/` — `repository` 唯一写（`addEntry/recalcAll/replaceAll/hydrate`）、`computed` 唯一算（`computeOverview/computeStats`）、`events` 订阅刷新；禁止在 UI 中直接读写 `state.saves` 或手算 `history` 求和
-- **持久化**：`saveHot` 节流 `300ms`，`loadHot/migrateIfNeeded` 仅由 `repository` 调用，UI 不直连 `persistence`
+- **入口**：酒馆左下角魔法棒 `#extensionsMenu → #aus_wand_entry`（`list-group-item`），点击 `togglePanel()` 打开全屏 `#aus-overlay + #aus-panel`（`absolute` 视口计算，监听 `scroll/resize`，非 `fixed` 以规避 `transform` 祖先在窄屏漂移）
+- **面板**：全屏 `absolute` 定位置换 + 侧边导航（`220px ↔ 60px`，`≤760px` 自动收起 `60px` 图标栏，展开 `220px` 覆盖式 + 遮罩），`6` 视图（用量概览/统计/历史/设置/使用说明/关于）经 `data-view` + `opacity 0.15s` 切换，`sidebar-toggle` 同步宽度与标签显隐
+- **样式**：`[data-extension="api-usage-stat"][data-ds-theme="light"]` 隔离，卡片 `1px solid #E5E7EB` 实线，无 `box-shadow`，字重 `600`，`Microsoft YaHei` 保证锐利；`#aus-sidebar` 过渡 `width 0.2s`，移动端横向可滚动
+- **拦截**：`GENERATION_ENDED → chat[].extra.api_usage` 主路径，`ApiUsageStatInterceptor` 辅路径，`repository.addEntry/recalcAll` 1:1 脚本
+- **数据框架**：所有存/取/算/展必须走 `src/data/` — `repository` 唯一写、`computed` 唯一算（`computeOverview` 供概览 8 块，`computeStats` 供统计）、`events` 订阅刷新；禁止在 UI 直接读写 `state.history` 聚合或手算
+- **持久化**：`saveHot` 节流 `300ms`，`loadHot/migrateIfNeeded` 仅由 `repository.hydrate` 调用，已自动将旧多存档合并为单一历史（`hot 50` + `cold_history`）
+
+## 页面与数据
+
+### 用量概览（overview）
+- **双余额卡**：充值余额（`customBalance|balance`）+ 累计消费（`¥ + CNY` + `tokens`）
+- **双明细**：历史消耗（Token 历史/命中/未命中/输出，右对齐）与支出明细（预计节省/支出输入/输出，分两行，`token` 灰 `10px #9CA3AF`）并列
+- **四小块**：每轮费用（`CNY`）/每轮 Token/平均耗时 `s`/输出速率 `t/s`（`computeOverview` 单源）
+
+### 用量统计（stats）
+- **双维度**：时间维度（`今天/昨天/近 7 天/近 30 天/本月/上月/自定义` 双月日历，`时间维度` 胶囊）仅影响 `消费金额/API 次数/Tokens/模型汇总`；模型维度（同款胶囊，列表为所有已记录模型 + 全部）影响本页所有内容（`三块`+`汇总表`+`堆叠柱`）；筛选为 `time ∩ model`
+- **三块**：消费金额 `CNY`/API 请求次数/Tokens
+- **模型汇总表**：`10` 列（模型/调用/命中/未命中/输出/总/总成本/平均成本/平均耗时/平均速率），横向可滚动，随双维度联动
+- **堆叠柱**：多模型按日 `cost` 堆叠（`ECharts` 橙系），悬浮显示 `分模型 ¥` 明细
+
+### 历史记录
+- 列表按 `timestamp` 倒序，卡片含模型/时间、`in/out/duration/rate`、费用、旧/新/详情
+- **占比条**：`6px` 圆角三段（命中 `#0BA25E`/未命中 `#FCA5A5`/输出 `#A5B4FC`）
+- **内联详情**：点击详情向下展开固定 `320→520px`（`15` 字段按 `基础/性能/Token/费用` 四块 + `4 Tab`：请求参数/完整响应/Raw 用量/消息内容，`pre` `160px` 滚动，收起切换）
+
+### 设置（完整迁移原脚本）
+- `API 密钥 / 自动校准余额（开关+间隔）/ 自定义余额 / 新价格机制（开关+日期+今日）/ 高峰时段（可增删跨天，改后重算）/ 模型与价格（内置 3 模型可覆写+自定义增删，峰谷开关，三价 ¥/百万）/ 调试（开关+hit/miss/output/model/date/batchCount+生成）/ 峰值圆点（开关+重置）/ WebDAV（url/user/pass/path/proxy+同步，`https` 强制，`pull-merge-push`）`，全部浅色卡片，改后 `recalcAll`+`refreshUI`
+
+### 存档
+- **已废弃**：移除 `saves/currentSave` 多存档，收敛为单一 `history` 聚合；保留 `saves` 在导入/同步/迁移中的兼容解析，旧文件自动合并去重，不影响现有功能
 
 ## 样式规范（DeepSeek 截图定版）
 
 - 变量：`--ds-bg:#FFFFFF --ds-card:#F6F7F8 --ds-text:#111827 --ds-border:#E5E7EB --ds-black:#111827 --ds-orange:#FF6A00 --ds-green-bg:#E6F8EC --ds-green:#0BA25E --ds-radius-card:14px --ds-radius-pill:999px`
-- 魔法棒悬停：`background: transparent !important`（跟随酒馆，不白底）
-- 文字：`Microsoft YaHei`，无 `antialiased/optimizeLegibility` 干预，交还系统默认以保清晰
+- 魔法棒悬停：`background: transparent !important`
+- 文字：`Microsoft YaHei`，无 `antialiased/optimizeLegibility` 干预
+- 移动端：`≤760px` 侧边栏自动收起 `60px`，展开 `220px` 覆盖式（`absolute` + 遮罩），网格 `4→2→1` 列自适应
 
 ## 常见任务
 
-- **改定价/峰谷**：`src/constants/pricing.ts` + `src/services/pricing.ts`（纯函数，`isPeakHour(timestamp, peakHours)` 不读全局）
-- **改面板**：`src/ui/panel.ts`（全屏结构）+ `style.css`（浅色卡）
-- **改图表**：`src/ui/charts.ts`（按需 ECharts）
-- **改同步**：`src/services/sync.ts`（`pull-merge-push`，`https` 强制，`proxy?url=`）
+- **改定价/峰谷**：`src/constants/pricing.ts` + `src/services/pricing.ts`（纯函数，`isPeakHour(ts, peakHours)` 不读全局）
+- **改面板/导航**：`src/ui/panel.ts`（全屏+`positionPanel` 定位置换+`applyCollapsed`）+ `style.css`
+- **改概览/统计**：`src/ui/overview.ts` + `src/ui/stats-view.ts`（双维度过滤）+ `src/data/computed.ts`
+- **改历史详情/占比**：`src/ui/panel.ts`（`renderHistory` 内联展开 + 三色条）
+- **改同步/导入**：`src/services/sync.ts` + `src/services/import-export.ts`（单一历史）
 
 ## 提交与发布
 
@@ -83,11 +108,9 @@ node --check index.js
 git add src/ style.css manifest.json index.js
 git commit -m "feat/fix: ..."
 git push origin main
-# 发版（可选）
-gh release create v3.0.0 --title "3.0.0" --notes "..." 
 ```
 
-- 产物 `index.js` 为构建后单文件（`73kB`）+ 拆分 `barGrid-*` 等按需，`style.css` 直出，勿手改产物
+- 产物 `index.js` 为构建后主文件（`~138kB`）+ 拆分 `barGrid-*` 等按需，`style.css` 直出，勿手改产物
 - `RE3.0` 仅同步产物备份，不作为提交源
 
 ## 注意事项
@@ -95,3 +118,4 @@ gh release create v3.0.0 --title "3.0.0" --notes "..."
 - **编码**：`UTF-8`，中文路径/注释保持，勿用 PowerShell `>` 重定向破坏编码
 - **中文**：所有思考与输出保持中文（最高优先级）
 - **脚本隔离**：勿改 `pr/DeepSeek使用预测.js`，扩展与脚本独立演进
+- **数据唯一**：所有存/取/算/展必经 `src/data/`，禁止绕过
