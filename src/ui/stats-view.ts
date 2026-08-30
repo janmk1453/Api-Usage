@@ -1,10 +1,6 @@
 import { getSelectedSave } from '../store/index';
 import { localDay } from '../utils/date';
-import * as echarts from 'echarts/core';
-import { BarChart, LineChart } from 'echarts/charts';
-import { GridComponent, TooltipComponent } from 'echarts/components';
-import { CanvasRenderer } from 'echarts/renderers';
-echarts.use([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
+import { Y_OPTIONS, X_OPTIONS, getYSelected, getXSelected, toggleY, setXSelected, aggregateForChart } from './chart-config';
 
 type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom';
 let currentRange: RangeKey = '30d';
@@ -196,8 +192,6 @@ function bindPicker() {
   });
 }
 
-import { Y_OPTIONS, X_OPTIONS, getYSelected, getXSelected, toggleY, setXSelected, aggregateForChart } from './chart-config';
-
 let chartYOpen = false;
 let chartXOpen = false;
 
@@ -275,7 +269,6 @@ function bindChartSelectors() {
 
 // 可配置图表（Y多选 X单选，双轴）
 let chart: any = null;
-export function resizeChart() { try { if (chart) chart.resize(); } catch {} }
 async function renderChart(filteredRaw: any[]) {
   const doc = getDoc();
   const el = doc.getElementById('aus-stats-chart');
@@ -285,22 +278,28 @@ async function renderChart(filteredRaw: any[]) {
   const { labels, series } = aggregateForChart(filteredRaw, yKeys, xKey);
   if (!labels.length) {
     if (chart) { try { chart.dispose(); } catch {} chart = null; }
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:12px;">该筛选无数据（历史 ' + filteredRaw.length + ' 条）</div>';
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:12px;">该筛选无数据</div>';
     return;
   }
-  // 确保容器有尺寸（stats 视图可能刚切换为可见，panel 可能刚打开）
-  const w = (el as HTMLElement).clientWidth, h = (el as HTMLElement).clientHeight;
-  if (w === 0 || h === 0) {
-    setTimeout(() => renderChart(filteredRaw), 80);
+  // 确保容器有尺寸（stats 视图可能刚切换为可见）
+  if (el.clientWidth === 0 || el.clientHeight === 0) {
+    // 延迟一帧重试
+    setTimeout(() => renderChart(filteredRaw), 50);
     return;
   }
-  // 每次重建以避免旧实例尺寸污染（比复用更稳）
-  if (chart) { try { chart.dispose(); } catch {} chart = null; }
-  el.innerHTML = '';
-  // 强制给定尺寸的容器
-  (el as HTMLElement).style.width = '100%';
-  (el as HTMLElement).style.height = '300px';
-  chart = echarts.init(el);
+  const echarts: any = await import('echarts/core').then(async (ec: any) => {
+    const { BarChart, LineChart } = await import('echarts/charts');
+    const { GridComponent, TooltipComponent } = await import('echarts/components');
+    const { CanvasRenderer } = await import('echarts/renderers');
+    ec.use([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
+    return ec;
+  });
+  if (!chart) {
+    chart = echarts.init(el);
+  } else {
+    // 复用实例但需先清空并确保尺寸
+    try { chart.resize(); } catch {}
+  }
   const hasToken = series.some(s=>s.kind==='token');
   const hasCost = series.some(s=>s.kind==='cost');
   const yAxis: any[] = [];

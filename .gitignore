@@ -1,4 +1,3 @@
 node_modules/
 .DS_Store
 *.log
-# 已静态打包为单 index.js，无需额外 chunk
