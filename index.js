@@ -2311,6 +2311,12 @@ function bindChartSelectors() {
   });
 }
 let chart = null;
+function resizeChart() {
+  try {
+    if (chart) chart.resize();
+  } catch {
+  }
+}
 async function renderChart(filteredRaw) {
   const doc = getDoc$2();
   const el = doc.getElementById("aus-stats-chart");
@@ -2326,28 +2332,39 @@ async function renderChart(filteredRaw) {
       }
       chart = null;
     }
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:12px;">该筛选无数据</div>';
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:12px;">该筛选无数据（历史 ' + filteredRaw.length + " 条）</div>";
     return;
   }
-  if (el.clientWidth === 0 || el.clientHeight === 0) {
-    setTimeout(() => renderChart(filteredRaw), 50);
+  const w = el.clientWidth, h = el.clientHeight;
+  if (w === 0 || h === 0) {
+    setTimeout(() => renderChart(filteredRaw), 80);
     return;
   }
-  const echarts = await import("./core-Ptd1xcE-.js").then(async (ec) => {
-    const { BarChart, LineChart } = await import("./charts-qoz8v_ng.js");
-    const { GridComponent, TooltipComponent } = await import("./components-Ou40IODK.js");
-    const { CanvasRenderer } = await import("./renderers-QbUXzgc_.js");
-    ec.use([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
-    return ec;
-  });
-  if (!chart) {
-    chart = echarts.init(el);
-  } else {
+  let echarts;
+  try {
+    echarts = await import("./core-h1zIkrZP.js").then(async (ec) => {
+      const { BarChart, LineChart } = await import("./charts-ClVDDtF6.js");
+      const { GridComponent, TooltipComponent } = await import("./components-BooKNVQy.js");
+      const { CanvasRenderer } = await import("./renderers-Bj6PQWPa.js");
+      ec.use([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
+      return ec;
+    });
+  } catch (e) {
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:#DC2626;font-size:12px;">图表加载失败，请检查网络后重试</div>';
+    console.error("[Api-Usage] echarts load failed", e);
+    return;
+  }
+  if (chart) {
     try {
-      chart.resize();
+      chart.dispose();
     } catch {
     }
+    chart = null;
   }
+  el.innerHTML = "";
+  el.style.width = "100%";
+  el.style.height = "300px";
+  chart = echarts.init(el);
   const hasToken = series.some((s) => s.kind === "token");
   const hasCost = series.some((s) => s.kind === "cost");
   const yAxis = [];
@@ -2468,7 +2485,8 @@ function initStatsView() {
 const statsView = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   initStatsView,
-  renderStatsView
+  renderStatsView,
+  resizeChart
 }, Symbol.toStringTag, { value: "Module" }));
 function getDoc$1() {
   return window.parent?.document ?? document;
@@ -2660,6 +2678,22 @@ function switchView(view) {
   const titleEl = doc.getElementById("aus-page-title");
   if (titleEl) titleEl.textContent = titles[view] || "";
   refreshUI();
+  if (view === "stats") {
+    setTimeout(async () => {
+      try {
+        const m = await Promise.resolve().then(() => statsView);
+        const doc2 = getDoc$1();
+        const el = doc2.getElementById("aus-stats-chart");
+        if (el && (el.clientWidth === 0 || el.clientHeight === 0)) {
+          setTimeout(() => m.renderStatsView(), 80);
+        } else {
+          m.renderStatsView();
+        }
+        if (m.resizeChart) m.resizeChart();
+      } catch {
+      }
+    }, 60);
+  }
 }
 function positionPanel() {
   const doc = getDoc$1();

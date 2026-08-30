@@ -175,6 +175,23 @@ function switchView(view: typeof currentView) {
   const titleEl = doc.getElementById('aus-page-title');
   if (titleEl) titleEl.textContent = titles[view] || '';
   refreshUI();
+  if (view === 'stats') {
+    // 图表在 display:none 时初始化会零尺寸，延迟确保可见后重绘
+    setTimeout(async () => {
+      try {
+        const m = await import('./stats-view');
+        const doc2 = getDoc();
+        const el = doc2.getElementById('aus-stats-chart');
+        if (el && (el.clientWidth === 0 || el.clientHeight === 0)) {
+          // 仍不可见则再等一帧
+          setTimeout(() => m.renderStatsView(), 80);
+        } else {
+          m.renderStatsView();
+        }
+        if ((m as any).resizeChart) (m as any).resizeChart();
+      } catch {}
+    }, 60);
+  }
 }
 
 function positionPanel() {
