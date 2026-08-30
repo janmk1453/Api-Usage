@@ -191,10 +191,10 @@ function bindPicker() {
   });
 }
 
+import { Y_OPTIONS, X_OPTIONS, getYSelected, getXSelected, toggleY, setXSelected, aggregateForChart } from './chart-config';
+
 let chartYOpen = false;
 let chartXOpen = false;
-
-import { Y_OPTIONS, X_OPTIONS, getYSelected, getXSelected, toggleY, setXSelected } from './chart-config';
 
 function renderChartSelectors() {
   const doc = getDoc();
@@ -274,13 +274,20 @@ async function renderChart(filteredRaw: any[]) {
   const doc = getDoc();
   const el = doc.getElementById('aus-stats-chart');
   if (!el) return;
-  // 过滤已在外部完成，此处仅按图表的 Y/X 配置聚合
-  const { aggregateForChart, getYSelected, getXSelected, Y_OPTIONS } = await import('./chart-config');
   const yKeys = getYSelected() as any;
   const xKey = getXSelected() as any;
   const { labels, series } = aggregateForChart(filteredRaw, yKeys, xKey);
-  if (!labels.length) { el.innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:12px;">该筛选无数据</div>'; if (chart) chart.dispose(); chart=null; return; }
-  el.innerHTML = '';
+  if (!labels.length) {
+    if (chart) { try { chart.dispose(); } catch {} chart = null; }
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:12px;">该筛选无数据</div>';
+    return;
+  }
+  // 确保容器有尺寸（stats 视图可能刚切换为可见）
+  if (el.clientWidth === 0 || el.clientHeight === 0) {
+    // 延迟一帧重试
+    setTimeout(() => renderChart(filteredRaw), 50);
+    return;
+  }
   const echarts: any = await import('echarts/core').then(async (ec: any) => {
     const { BarChart, LineChart } = await import('echarts/charts');
     const { GridComponent, TooltipComponent } = await import('echarts/components');
@@ -288,7 +295,12 @@ async function renderChart(filteredRaw: any[]) {
     ec.use([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
     return ec;
   });
-  if (!chart) chart = echarts.init(el);
+  if (!chart) {
+    chart = echarts.init(el);
+  } else {
+    // 复用实例但需先清空并确保尺寸
+    try { chart.resize(); } catch {}
+  }
   const hasToken = series.some(s=>s.kind==='token');
   const hasCost = series.some(s=>s.kind==='cost');
   const yAxis: any[] = [];
@@ -332,7 +344,9 @@ async function renderChart(filteredRaw: any[]) {
     xAxis: { type:'category', data: labels, axisLine:{lineStyle:{color:'#E5E7EB'}}, axisLabel:{color:'#9CA3AF',fontSize:10,interval:0,rotate: labels.length>20?30:0, hideOverlap:true} },
     yAxis: yAxis.length?yAxis:{ type:'value', axisLabel:{color:'#9CA3AF',fontSize:10} },
     series: seriesOpt,
-  });
+  }, true);
+  // 确保在视图切换后尺寸正确
+  setTimeout(()=>{ try{ chart.resize(); }catch{} }, 60);
 }
 
 function renderModelSummary(filtered: any[]) {

@@ -2005,16 +2005,6 @@ function aggregateForChart(entries, yKeys, xKey) {
   });
   return { labels, series };
 }
-const chartConfig = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
-  __proto__: null,
-  X_OPTIONS,
-  Y_OPTIONS,
-  aggregateForChart,
-  getXSelected,
-  getYSelected,
-  setXSelected,
-  toggleY
-}, Symbol.toStringTag, { value: "Module" }));
 let currentRange = "30d";
 let customStart = "";
 let customEnd = "";
@@ -2325,17 +2315,24 @@ async function renderChart(filteredRaw) {
   const doc = getDoc$2();
   const el = doc.getElementById("aus-stats-chart");
   if (!el) return;
-  const { aggregateForChart: aggregateForChart2, getYSelected: getYSelected2, getXSelected: getXSelected2, Y_OPTIONS: Y_OPTIONS2 } = await Promise.resolve().then(() => chartConfig);
-  const yKeys = getYSelected2();
-  const xKey = getXSelected2();
-  const { labels, series } = aggregateForChart2(filteredRaw, yKeys, xKey);
+  const yKeys = getYSelected();
+  const xKey = getXSelected();
+  const { labels, series } = aggregateForChart(filteredRaw, yKeys, xKey);
   if (!labels.length) {
+    if (chart) {
+      try {
+        chart.dispose();
+      } catch {
+      }
+      chart = null;
+    }
     el.innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:12px;">该筛选无数据</div>';
-    if (chart) chart.dispose();
-    chart = null;
     return;
   }
-  el.innerHTML = "";
+  if (el.clientWidth === 0 || el.clientHeight === 0) {
+    setTimeout(() => renderChart(filteredRaw), 50);
+    return;
+  }
   const echarts = await import("./core-Ptd1xcE-.js").then(async (ec) => {
     const { BarChart, LineChart } = await import("./charts-qoz8v_ng.js");
     const { GridComponent, TooltipComponent } = await import("./components-Ou40IODK.js");
@@ -2343,7 +2340,14 @@ async function renderChart(filteredRaw) {
     ec.use([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
     return ec;
   });
-  if (!chart) chart = echarts.init(el);
+  if (!chart) {
+    chart = echarts.init(el);
+  } else {
+    try {
+      chart.resize();
+    } catch {
+    }
+  }
   const hasToken = series.some((s) => s.kind === "token");
   const hasCost = series.some((s) => s.kind === "cost");
   const yAxis = [];
@@ -2377,7 +2381,7 @@ async function renderChart(filteredRaw) {
         let html = `<div style="font-weight:600;margin-bottom:6px;">${label}</div>`;
         for (const p of params) {
           const v = p.value;
-          const unit = Y_OPTIONS2.find((o) => o.label === p.seriesName)?.unit || "";
+          const unit = Y_OPTIONS.find((o) => o.label === p.seriesName)?.unit || "";
           html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${unit === "CNY" ? "¥" + Number(v).toFixed(4) : Number(v).toLocaleString() + " " + unit}</span></div>`;
         }
         return `<div style="padding:4px 2px;min-width:180px;">${html}</div>`;
@@ -2387,7 +2391,13 @@ async function renderChart(filteredRaw) {
     xAxis: { type: "category", data: labels, axisLine: { lineStyle: { color: "#E5E7EB" } }, axisLabel: { color: "#9CA3AF", fontSize: 10, interval: 0, rotate: labels.length > 20 ? 30 : 0, hideOverlap: true } },
     yAxis: yAxis.length ? yAxis : { type: "value", axisLabel: { color: "#9CA3AF", fontSize: 10 } },
     series: seriesOpt
-  });
+  }, true);
+  setTimeout(() => {
+    try {
+      chart.resize();
+    } catch {
+    }
+  }, 60);
 }
 function renderModelSummary(filtered) {
   const doc = getDoc$2();
