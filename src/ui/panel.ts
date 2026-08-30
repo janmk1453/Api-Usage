@@ -177,6 +177,29 @@ function switchView(view: typeof currentView) {
   refreshUI();
 }
 
+function positionPanel() {
+  const doc = getDoc();
+  const overlay = doc.getElementById('aus-overlay') as HTMLElement | null;
+  const panel = doc.getElementById('aus-panel') as HTMLElement | null;
+  if (!overlay || !panel || overlay.style.display === 'none') return;
+  const vw = doc.documentElement.clientWidth || (window.parent as any)?.innerWidth || 0;
+  const vh = doc.documentElement.clientHeight || (window.parent as any)?.innerHeight || 0;
+  // 将面板临时置于原点以测得文档原点偏移
+  panel.style.left = '0px';
+  panel.style.top = '0px';
+  const rect = panel.getBoundingClientRect();
+  const docOffX = -rect.left;
+  const docOffY = -rect.top;
+  overlay.style.left = docOffX + 'px';
+  overlay.style.top = docOffY + 'px';
+  overlay.style.width = vw + 'px';
+  overlay.style.height = vh + 'px';
+  panel.style.left = docOffX + 'px';
+  panel.style.top = docOffY + 'px';
+  panel.style.width = vw + 'px';
+  panel.style.height = vh + 'px';
+}
+
 export function createPanel() {
   if (panelCreated) return;
   const doc = getDoc();
@@ -184,13 +207,13 @@ export function createPanel() {
   panelCreated = true;
   const overlay = doc.createElement('div');
   overlay.id = 'aus-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:100000;display:none;opacity:0;transition:opacity 0.2s;';
+  overlay.style.cssText = 'position:absolute;top:0;left:0;background:rgba(0,0,0,0.45);z-index:100000;display:none;opacity:0;transition:opacity 0.2s;';
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closePanel(); });
   const panel = doc.createElement('div');
   panel.id = 'aus-panel';
   panel.setAttribute('data-extension', 'api-usage-stat');
   panel.setAttribute('data-ds-theme', 'light');
-  panel.style.cssText = 'position:fixed;inset:0;z-index:100001;background:#FFFFFF;color:#111827;font-family:\'Microsoft YaHei\',\'微软雅黑\',system-ui,-apple-system,sans-serif;display:none;flex-direction:row;overflow:hidden;transform:none;filter:none;will-change:auto;';
+  panel.style.cssText = 'position:absolute;top:0;left:0;z-index:100001;background:#FFFFFF;color:#111827;font-family:\'Microsoft YaHei\',\'微软雅黑\',system-ui,-apple-system,sans-serif;display:none;flex-direction:row;overflow:hidden;transform:none;filter:none;will-change:auto;';
   panel.innerHTML = `
     <div id="aus-sidebar" style="width:220px;flex-shrink:0;background:#F9FAFB;border-right:1px solid #E5E7EB;display:flex;flex-direction:column;transition:width 0.2s ease;overflow:hidden;">
       <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;">
@@ -291,6 +314,11 @@ export function createPanel() {
   `;
   doc.body.appendChild(overlay);
   doc.body.appendChild(panel);
+  try {
+    const p = (window.parent as any) || window;
+    p.addEventListener('scroll', positionPanel, { capture: true, passive: true } as any);
+    p.addEventListener('resize', positionPanel, { passive: true } as any);
+  } catch {}
   doc.getElementById('aus-panel-close')?.addEventListener('click', closePanel);
   doc.querySelectorAll('.aus-nav-item').forEach((el: any) => {
     el.addEventListener('click', () => {
@@ -325,7 +353,8 @@ export function openPanel() {
   if (!ov || !pn) { createPanel(); return openPanel(); }
   ov.style.display = 'block';
   pn.style.display = 'flex';
-  requestAnimationFrame(() => { ov.style.opacity = '1'; });
+  positionPanel();
+  requestAnimationFrame(() => { ov.style.opacity = '1'; positionPanel(); });
   panelOpen = true;
   refreshUI();
 }

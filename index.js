@@ -2313,6 +2313,27 @@ function switchView(view) {
   if (titleEl) titleEl.textContent = titles[view] || "";
   refreshUI();
 }
+function positionPanel() {
+  const doc = getDoc$1();
+  const overlay = doc.getElementById("aus-overlay");
+  const panel = doc.getElementById("aus-panel");
+  if (!overlay || !panel || overlay.style.display === "none") return;
+  const vw = doc.documentElement.clientWidth || window.parent?.innerWidth || 0;
+  const vh = doc.documentElement.clientHeight || window.parent?.innerHeight || 0;
+  panel.style.left = "0px";
+  panel.style.top = "0px";
+  const rect = panel.getBoundingClientRect();
+  const docOffX = -rect.left;
+  const docOffY = -rect.top;
+  overlay.style.left = docOffX + "px";
+  overlay.style.top = docOffY + "px";
+  overlay.style.width = vw + "px";
+  overlay.style.height = vh + "px";
+  panel.style.left = docOffX + "px";
+  panel.style.top = docOffY + "px";
+  panel.style.width = vw + "px";
+  panel.style.height = vh + "px";
+}
 function createPanel() {
   if (panelCreated) return;
   const doc = getDoc$1();
@@ -2323,7 +2344,7 @@ function createPanel() {
   panelCreated = true;
   const overlay = doc.createElement("div");
   overlay.id = "aus-overlay";
-  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:100000;display:none;opacity:0;transition:opacity 0.2s;";
+  overlay.style.cssText = "position:absolute;top:0;left:0;background:rgba(0,0,0,0.45);z-index:100000;display:none;opacity:0;transition:opacity 0.2s;";
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) closePanel();
   });
@@ -2331,7 +2352,7 @@ function createPanel() {
   panel.id = "aus-panel";
   panel.setAttribute("data-extension", "api-usage-stat");
   panel.setAttribute("data-ds-theme", "light");
-  panel.style.cssText = "position:fixed;inset:0;z-index:100001;background:#FFFFFF;color:#111827;font-family:'Microsoft YaHei','微软雅黑',system-ui,-apple-system,sans-serif;display:none;flex-direction:row;overflow:hidden;transform:none;filter:none;will-change:auto;";
+  panel.style.cssText = "position:absolute;top:0;left:0;z-index:100001;background:#FFFFFF;color:#111827;font-family:'Microsoft YaHei','微软雅黑',system-ui,-apple-system,sans-serif;display:none;flex-direction:row;overflow:hidden;transform:none;filter:none;will-change:auto;";
   panel.innerHTML = `
     <div id="aus-sidebar" style="width:220px;flex-shrink:0;background:#F9FAFB;border-right:1px solid #E5E7EB;display:flex;flex-direction:column;transition:width 0.2s ease;overflow:hidden;">
       <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;">
@@ -2432,6 +2453,12 @@ function createPanel() {
   `;
   doc.body.appendChild(overlay);
   doc.body.appendChild(panel);
+  try {
+    const p = window.parent || window;
+    p.addEventListener("scroll", positionPanel, { capture: true, passive: true });
+    p.addEventListener("resize", positionPanel, { passive: true });
+  } catch {
+  }
   doc.getElementById("aus-panel-close")?.addEventListener("click", closePanel);
   doc.querySelectorAll(".aus-nav-item").forEach((el) => {
     el.addEventListener("click", () => {
@@ -2470,8 +2497,10 @@ function openPanel() {
   }
   ov.style.display = "block";
   pn.style.display = "flex";
+  positionPanel();
   requestAnimationFrame(() => {
     ov.style.opacity = "1";
+    positionPanel();
   });
   panelOpen = true;
   refreshUI();
