@@ -1865,10 +1865,10 @@ function renderOverview() {
   if (spendHost) {
     spendHost.innerHTML = `
       <div style="font-size:12px;font-weight:600;color:#111827;margin-bottom:8px;">支出明细</div>
-      <div style="display:grid;gap:6px;font-size:11px;">
-        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">预计节省</span><span style="font-weight:600;color:#0BA25E;">${CNY(v.savings)} · ${fmt(v.hit)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">支出在输入</span><span style="font-weight:600;color:#111827;">${CNY(v.inputCost)} · ${fmt(v.hit + v.miss)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">支出在输出</span><span style="font-weight:600;color:#111827;">${CNY(v.outputCost)} · ${fmt(v.output)} tokens</span></div>
+      <div style="display:grid;gap:10px;font-size:11px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:#6B7280;padding-top:2px;">预计节省</span><span style="text-align:right;"><div style="font-weight:600;color:#0BA25E;">${CNY(v.savings)}</div><div style="font-size:10px;color:#9CA3AF;margin-top:1px;">${fmt(v.hit)} tokens</div></span></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:#6B7280;padding-top:2px;">支出在输入</span><span style="text-align:right;"><div style="font-weight:600;color:#111827;">${CNY(v.inputCost)}</div><div style="font-size:10px;color:#9CA3AF;margin-top:1px;">${fmt(v.hit + v.miss)} tokens</div></span></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:#6B7280;padding-top:2px;">支出在输出</span><span style="text-align:right;"><div style="font-weight:600;color:#111827;">${CNY(v.outputCost)}</div><div style="font-size:10px;color:#9CA3AF;margin-top:1px;">${fmt(v.output)} tokens</div></span></div>
       </div>
     `;
   }
@@ -2170,7 +2170,6 @@ function renderHistory(doc, s) {
         <div style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
           <div>
             <div style="font-weight:700;color:#111827;">¥${(h.cost || 0).toFixed(4)}</div>
-            <div style="color:#9CA3AF;font-size:11px;">${(h.cache_hit_rate || 0).toFixed(1)}% 命中</div>
           </div>
           <div style="display:flex;gap:4px;">
             <button class="aus-compare-old" data-ts="${h.timestamp}" style="padding:4px 6px;border:1px solid #E5E7EB;border-radius:6px;background:#fff;font-size:10px;cursor:pointer;">旧</button>

@@ -31,10 +31,10 @@ export function renderOverview() {
   if (spendHost) {
     spendHost.innerHTML = `
       <div style="font-size:12px;font-weight:600;color:#111827;margin-bottom:8px;">支出明细</div>
-      <div style="display:grid;gap:6px;font-size:11px;">
-        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">预计节省</span><span style="font-weight:600;color:#0BA25E;">${CNY(v.savings)} · ${fmt(v.hit)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">支出在输入</span><span style="font-weight:600;color:#111827;">${CNY(v.inputCost)} · ${fmt(v.hit + v.miss)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;"><span style="color:#6B7280;">支出在输出</span><span style="font-weight:600;color:#111827;">${CNY(v.outputCost)} · ${fmt(v.output)} tokens</span></div>
+      <div style="display:grid;gap:10px;font-size:11px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:#6B7280;padding-top:2px;">预计节省</span><span style="text-align:right;"><div style="font-weight:600;color:#0BA25E;">${CNY(v.savings)}</div><div style="font-size:10px;color:#9CA3AF;margin-top:1px;">${fmt(v.hit)} tokens</div></span></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:#6B7280;padding-top:2px;">支出在输入</span><span style="text-align:right;"><div style="font-weight:600;color:#111827;">${CNY(v.inputCost)}</div><div style="font-size:10px;color:#9CA3AF;margin-top:1px;">${fmt(v.hit + v.miss)} tokens</div></span></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:#6B7280;padding-top:2px;">支出在输出</span><span style="text-align:right;"><div style="font-weight:600;color:#111827;">${CNY(v.outputCost)}</div><div style="font-size:10px;color:#9CA3AF;margin-top:1px;">${fmt(v.output)} tokens</div></span></div>
       </div>
     `;
   }
