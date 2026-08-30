@@ -1886,6 +1886,8 @@ let currentRange = "30d";
 let customStart = "";
 let customEnd = "";
 let pickerOpen = false;
+let selectedModel = "__all__";
+let modelPickerOpen = false;
 function getDoc$2() {
   return window.parent?.document ?? document;
 }
@@ -1932,6 +1934,16 @@ function filterByRange(entries) {
     const k = localDay$1(e.timestamp);
     return k >= start && k <= end;
   });
+}
+function getRecordedModels() {
+  const s = getSelectedSave();
+  const set = /* @__PURE__ */ new Set();
+  for (const h of s?.history || []) if (h?.model) set.add(h.model);
+  return Array.from(set).sort();
+}
+function filterByModel(entries) {
+  if (selectedModel === "__all__") return entries;
+  return entries.filter((e) => e.model === selectedModel);
 }
 function renderCalendar() {
   const doc = getDoc$2();
@@ -1996,36 +2008,85 @@ function updatePickerLabel() {
     label.textContent = customStart === customEnd ? customStart : `${customStart} ~ ${customEnd}`;
   } else label.textContent = map2[currentRange] || "近 30 天";
 }
+function renderModelPicker() {
+  const doc = getDoc$2();
+  const dropdown = doc.getElementById("aus-model-dropdown");
+  const label = doc.getElementById("aus-model-label");
+  if (!dropdown || !label) return;
+  const models = getRecordedModels();
+  label.textContent = selectedModel === "__all__" ? "全部" : selectedModel;
+  let html = `<div data-model="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${selectedModel === "__all__" ? "background:#F6F7F8;font-weight:600;" : ""}">全部</div>`;
+  for (const m of models) {
+    const active = m === selectedModel ? "background:#F6F7F8;font-weight:600;" : "";
+    html += `<div data-model="${m}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${m}</div>`;
+  }
+  if (!models.length) html += '<div style="padding:8px 10px;color:#9CA3AF;font-size:12px;">暂无模型</div>';
+  dropdown.innerHTML = html;
+  dropdown.querySelectorAll("[data-model]").forEach((el) => {
+    el.onclick = () => {
+      selectedModel = el.getAttribute("data-model") || "__all__";
+      modelPickerOpen = false;
+      dropdown.style.display = "none";
+      renderModelPicker();
+      renderStatsView();
+    };
+  });
+}
 function bindPicker() {
   const doc = getDoc$2();
   const btn = doc.getElementById("aus-range-btn");
   const dropdown = doc.getElementById("aus-range-dropdown");
-  if (!btn || !dropdown) return;
-  btn.onclick = () => {
-    pickerOpen = !pickerOpen;
-    dropdown.style.display = pickerOpen ? "flex" : "none";
-    if (pickerOpen) renderCalendar();
-  };
-  doc.querySelectorAll("[data-range]").forEach((el) => {
-    el.onclick = () => {
-      const r = el.getAttribute("data-range");
-      currentRange = r;
-      if (r !== "custom") {
-        customStart = "";
-        customEnd = "";
+  if (btn && dropdown) {
+    btn.onclick = () => {
+      pickerOpen = !pickerOpen;
+      dropdown.style.display = pickerOpen ? "flex" : "none";
+      const md = doc.getElementById("aus-model-dropdown");
+      if (md) {
+        md.style.display = "none";
+        modelPickerOpen = false;
       }
-      pickerOpen = false;
-      dropdown.style.display = "none";
-      updatePickerLabel();
-      renderStatsView();
+      if (pickerOpen) renderCalendar();
     };
-  });
+    doc.querySelectorAll("[data-range]").forEach((el) => {
+      el.onclick = () => {
+        const r = el.getAttribute("data-range");
+        currentRange = r;
+        if (r !== "custom") {
+          customStart = "";
+          customEnd = "";
+        }
+        pickerOpen = false;
+        dropdown.style.display = "none";
+        updatePickerLabel();
+        renderStatsView();
+      };
+    });
+  }
+  const mBtn = doc.getElementById("aus-model-btn");
+  const mDropdown = doc.getElementById("aus-model-dropdown");
+  if (mBtn && mDropdown) {
+    mBtn.onclick = () => {
+      modelPickerOpen = !modelPickerOpen;
+      mDropdown.style.display = modelPickerOpen ? "block" : "none";
+      const rDrop = doc.getElementById("aus-range-dropdown");
+      if (rDrop) {
+        rDrop.style.display = "none";
+        pickerOpen = false;
+      }
+      if (modelPickerOpen) renderModelPicker();
+    };
+  }
   doc.addEventListener("click", (e) => {
-    if (!pickerOpen) return;
     const t = e.target;
-    if (!t.closest("#aus-range-dropdown") && !t.closest("#aus-range-btn")) {
+    if (pickerOpen && !t.closest("#aus-range-dropdown") && !t.closest("#aus-range-btn")) {
       pickerOpen = false;
-      dropdown.style.display = "none";
+      const d = doc.getElementById("aus-range-dropdown");
+      if (d) d.style.display = "none";
+    }
+    if (modelPickerOpen && !t.closest("#aus-model-dropdown") && !t.closest("#aus-model-btn")) {
+      modelPickerOpen = false;
+      const d = doc.getElementById("aus-model-dropdown");
+      if (d) d.style.display = "none";
     }
   });
 }
@@ -2134,9 +2195,12 @@ function renderStatsView() {
   const doc = getDoc$2();
   const s = getSelectedSave();
   if (!s) return;
-  const filtered = filterByRange(s.history || []);
-  let totalCost = 0, totalReq = filtered.length, totalTok = 0;
-  for (const e of filtered) {
+  const allHistory = s.history || [];
+  const timeFiltered = filterByRange(allHistory);
+  const summaryFiltered = filterByModel(timeFiltered);
+  const chartFiltered = filterByModel(timeFiltered);
+  let totalCost = 0, totalReq = summaryFiltered.length, totalTok = 0;
+  for (const e of summaryFiltered) {
     totalCost += e.cost || 0;
     totalTok += e.total_tokens || 0;
   }
@@ -2146,8 +2210,9 @@ function renderStatsView() {
   if (reqEl) reqEl.textContent = String(totalReq);
   const tokEl = doc.getElementById("aus-stats-tok");
   if (tokEl) tokEl.textContent = totalTok.toLocaleString("zh-CN");
-  renderModelSummary(filtered);
-  renderStackedChart(filtered);
+  renderModelSummary(summaryFiltered);
+  renderStackedChart(chartFiltered);
+  renderModelPicker();
 }
 function initStatsView() {
   bindPicker();
@@ -2434,8 +2499,9 @@ function createPanel() {
           </div>
           <!-- 用量统计：日历 + 三卡 + 堆叠柱 -->
           <div data-view="stats" style="display:none;">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:12px;cursor:pointer;"><span style="color:#6B7280;">时间维度</span><span id="aus-range-label" style="font-weight:600;color:#111827;">近 30 天</span><span style="font-size:10px;">▼</span></div>
+              <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:12px;cursor:pointer;"><span style="color:#6B7280;">模型</span><span id="aus-model-label" style="font-weight:600;color:#111827;">全部</span><span style="font-size:10px;">▼</span></div>
               <div id="aus-range-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);overflow:hidden;flex-direction:row;">
                 <div style="min-width:120px;border-right:1px solid #F6F7F8;padding:8px;display:grid;gap:2px;">
                   <div data-range="today" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">今天</div>
@@ -2448,6 +2514,7 @@ function createPanel() {
                 </div>
                 <div id="aus-date-calendar" style="padding:12px;"></div>
               </div>
+              <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:160px;z-index:10;background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
             </div>
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
               <div class="ds-card"><div style="font-size:11px;color:#6B7280;">消费金额</div><div id="aus-stats-cost" style="font-size:22px;font-weight:700;color:#111827;margin-top:6px;">¥0.00 CNY</div></div>

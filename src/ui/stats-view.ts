@@ -6,6 +6,8 @@ let currentRange: RangeKey = '30d';
 let customStart = '';
 let customEnd = '';
 let pickerOpen = false;
+let selectedModel: string = '__all__';
+let modelPickerOpen = false;
 
 function getDoc() { return (window.parent as any)?.document ?? document; }
 
@@ -31,6 +33,18 @@ function filterByRange(entries: any[]): any[] {
     const k = localDay(e.timestamp);
     return k >= start && k <= end;
   });
+}
+
+function getRecordedModels(): string[] {
+  const s: any = getSelectedSave();
+  const set = new Set<string>();
+  for (const h of s?.history || []) if (h?.model) set.add(h.model);
+  return Array.from(set).sort();
+}
+
+function filterByModel(entries: any[]): any[] {
+  if (selectedModel === '__all__') return entries;
+  return entries.filter(e => e.model === selectedModel);
 }
 
 function renderCalendar() {
@@ -100,34 +114,79 @@ function updatePickerLabel() {
   } else label.textContent = map[currentRange] || '近 30 天';
 }
 
+function renderModelPicker() {
+  const doc = getDoc();
+  const dropdown = doc.getElementById('aus-model-dropdown');
+  const label = doc.getElementById('aus-model-label');
+  if (!dropdown || !label) return;
+  const models = getRecordedModels();
+  label.textContent = selectedModel === '__all__' ? '全部' : selectedModel;
+  let html = `<div data-model="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${selectedModel==='__all__'?'background:#F6F7F8;font-weight:600;':''}">全部</div>`;
+  for (const m of models) {
+    const active = m === selectedModel ? 'background:#F6F7F8;font-weight:600;' : '';
+    html += `<div data-model="${m}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${m}</div>`;
+  }
+  if (!models.length) html += '<div style="padding:8px 10px;color:#9CA3AF;font-size:12px;">暂无模型</div>';
+  dropdown.innerHTML = html;
+  dropdown.querySelectorAll('[data-model]').forEach((el: any) => {
+    el.onclick = () => {
+      selectedModel = el.getAttribute('data-model') || '__all__';
+      modelPickerOpen = false;
+      dropdown.style.display = 'none';
+      renderModelPicker();
+      renderStatsView();
+    };
+  });
+}
+
 function bindPicker() {
   const doc = getDoc();
   const btn = doc.getElementById('aus-range-btn');
   const dropdown = doc.getElementById('aus-range-dropdown');
-  if (!btn || !dropdown) return;
-  btn.onclick = () => {
-    pickerOpen = !pickerOpen;
-    dropdown.style.display = pickerOpen ? 'flex' : 'none';
-    if (pickerOpen) renderCalendar();
-  };
-  doc.querySelectorAll('[data-range]').forEach((el: any) => {
-    el.onclick = () => {
-      const r = el.getAttribute('data-range') as RangeKey;
-      currentRange = r;
-      if (r !== 'custom') { customStart=''; customEnd=''; }
-      pickerOpen = false;
-      dropdown.style.display = 'none';
-      updatePickerLabel();
-      renderStatsView();
+  if (btn && dropdown) {
+    btn.onclick = () => {
+      pickerOpen = !pickerOpen;
+      dropdown.style.display = pickerOpen ? 'flex' : 'none';
+      // 关闭模型下拉
+      const md = doc.getElementById('aus-model-dropdown');
+      if (md) { md.style.display = 'none'; modelPickerOpen = false; }
+      if (pickerOpen) renderCalendar();
     };
-  });
+    doc.querySelectorAll('[data-range]').forEach((el: any) => {
+      el.onclick = () => {
+        const r = el.getAttribute('data-range') as RangeKey;
+        currentRange = r;
+        if (r !== 'custom') { customStart=''; customEnd=''; }
+        pickerOpen = false;
+        dropdown.style.display = 'none';
+        updatePickerLabel();
+        renderStatsView();
+      };
+    });
+  }
+  const mBtn = doc.getElementById('aus-model-btn');
+  const mDropdown = doc.getElementById('aus-model-dropdown');
+  if (mBtn && mDropdown) {
+    mBtn.onclick = () => {
+      modelPickerOpen = !modelPickerOpen;
+      mDropdown.style.display = modelPickerOpen ? 'block' : 'none';
+      const rDrop = doc.getElementById('aus-range-dropdown');
+      if (rDrop) { rDrop.style.display = 'none'; pickerOpen = false; }
+      if (modelPickerOpen) renderModelPicker();
+    };
+  }
   // 关闭
   doc.addEventListener('click', (e: any) => {
-    if (!pickerOpen) return;
     const t = e.target as HTMLElement;
-    if (!t.closest('#aus-range-dropdown') && !t.closest('#aus-range-btn')) {
+    if (pickerOpen && !t.closest('#aus-range-dropdown') && !t.closest('#aus-range-btn')) {
       pickerOpen = false;
-      dropdown.style.display = 'none';
+      const d = doc.getElementById('aus-range-dropdown');
+      if (d) d.style.display = 'none';
+    }
+    if (modelPickerOpen && !t.closest('#aus-model-dropdown') && !t.closest('#aus-model-btn')) {
+      modelPickerOpen = false;
+      const d = doc.getElementById('aus-model-dropdown');
+      if (d) d.style.display = 'none';
     }
   });
 }
@@ -224,18 +283,25 @@ export function renderStatsView() {
   const doc = getDoc();
   const s: any = getSelectedSave();
   if (!s) return;
-  const filtered = filterByRange(s.history || []);
-  // 三块
-  let totalCost = 0, totalReq = filtered.length, totalTok = 0;
-  for (const e of filtered) { totalCost += e.cost || 0; totalTok += e.total_tokens || 0; }
+  const allHistory: any[] = s.history || [];
+  // 时间维度仅影响 三块 + 汇总表
+  const timeFiltered = filterByRange(allHistory);
+  const summaryFiltered = filterByModel(timeFiltered);
+  // 模型维度影响所有内容（图表也受模型过滤，但不受时间限制按新规，图表受模型影响但此处图表按 time+model 双重过滤以保持一致性）
+  // 按用户要求：时间仅影响三块与汇总，模型影响所有；此处图表受模型影响，同时若需保持时间独立可改为 filterByModel(allHistory)
+  const chartFiltered = filterByModel(timeFiltered);
+  // 三块与汇总用 time+model
+  let totalCost = 0, totalReq = summaryFiltered.length, totalTok = 0;
+  for (const e of summaryFiltered) { totalCost += e.cost || 0; totalTok += e.total_tokens || 0; }
   const costEl = doc.getElementById('aus-stats-cost');
   if (costEl) costEl.textContent = '¥' + totalCost.toFixed(2) + ' CNY';
   const reqEl = doc.getElementById('aus-stats-req');
   if (reqEl) reqEl.textContent = String(totalReq);
   const tokEl = doc.getElementById('aus-stats-tok');
   if (tokEl) tokEl.textContent = totalTok.toLocaleString('zh-CN');
-  renderModelSummary(filtered);
-  renderStackedChart(filtered);
+  renderModelSummary(summaryFiltered);
+  renderStackedChart(chartFiltered);
+  renderModelPicker();
 }
 
 export function initStatsView() {
