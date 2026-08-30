@@ -2312,18 +2312,12 @@ function bindChartSelectors() {
 }
 let chart = null;
 async function renderChart(filteredRaw) {
-  const LOG = (...a) => console.log("[Api-Usage][Chart]", ...a);
   const doc = getDoc$2();
   const el = doc.getElementById("aus-stats-chart");
-  if (!el) {
-    LOG("no #aus-stats-chart");
-    return;
-  }
+  if (!el) return;
   const yKeys = getYSelected();
   const xKey = getXSelected();
-  LOG("renderChart start", { yKeys, xKey, filtered: filteredRaw.length, elSize: el.clientWidth + "x" + el.clientHeight, display: getComputedStyle(el).display });
   const { labels, series } = aggregateForChart(filteredRaw, yKeys, xKey);
-  LOG("aggregate", { labels: labels.length, series: series.length, firstLabel: labels[0], firstSeriesLen: series[0]?.data?.length });
   if (!labels.length) {
     if (chart) {
       try {
@@ -2333,41 +2327,32 @@ async function renderChart(filteredRaw) {
       chart = null;
     }
     el.innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:12px;">该筛选无数据（历史 ' + filteredRaw.length + " 条）</div>";
-    LOG("empty labels -> show empty");
     return;
   }
   const w = el.clientWidth, h = el.clientHeight;
-  LOG("container size", w + "x" + h, "computed", getComputedStyle(el).width, getComputedStyle(el).height);
   if (w === 0 || h === 0) {
-    LOG("zero size -> retry 80ms");
     setTimeout(() => renderChart(filteredRaw), 80);
     return;
   }
   let echarts;
   try {
-    LOG("loading echarts...");
-    echarts = await import("./core-h1zIkrZP.js").then(async (ec) => {
-      const { BarChart, LineChart } = await import("./charts-ClVDDtF6.js");
-      const { GridComponent, TooltipComponent } = await import("./components-BooKNVQy.js");
-      const { CanvasRenderer } = await import("./renderers-Bj6PQWPa.js");
+    echarts = await import("./core-oAqKyzbd.js").then(async (ec) => {
+      const { BarChart, LineChart } = await import("./charts-BLbEH-Eg.js");
+      const { GridComponent, TooltipComponent } = await import("./components-CA_0Rfm7.js");
+      const { CanvasRenderer } = await import("./renderers-ua0LGD8C.js");
       ec.use([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
       return ec;
     });
-    LOG("echarts loaded");
   } catch (e) {
-    LOG("echarts load failed", e);
-    el.innerHTML = '<div style="text-align:center;padding:20px;color:#DC2626;font-size:12px;">图表加载失败，请检查网络后重试<br/><span style="font-size:10px;color:#9CA3AF;">' + String(e?.message || e) + "</span></div>";
-    console.error("[Api-Usage][Chart] echarts load failed", e);
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:#DC2626;font-size:12px;">图表加载失败，请检查网络后重试</div>';
+    console.error("[Api-Usage] echarts load failed", e);
     return;
   }
   if (!chart) {
-    LOG("init chart");
     chart = echarts.init(el);
-    LOG("chart inited", el.clientWidth + "x" + el.clientHeight);
   } else {
     try {
       chart.resize();
-      LOG("chart resize");
     } catch {
     }
   }
@@ -2389,7 +2374,6 @@ async function renderChart(filteredRaw) {
       emphasis: { focus: "series" }
     };
   });
-  LOG("setOption", { labels: labels.length, series: seriesOpt.length, hasToken, hasCost });
   chart.setOption({
     backgroundColor: "transparent",
     tooltip: {
@@ -2416,13 +2400,10 @@ async function renderChart(filteredRaw) {
     yAxis: yAxis.length ? yAxis : { type: "value", axisLabel: { color: "#9CA3AF", fontSize: 10 } },
     series: seriesOpt
   }, true);
-  LOG("setOption done");
   setTimeout(() => {
     try {
       chart.resize();
-      LOG("resize done", el.clientWidth + "x" + el.clientHeight);
-    } catch (e) {
-      LOG("resize failed", e);
+    } catch {
     }
   }, 60);
 }
