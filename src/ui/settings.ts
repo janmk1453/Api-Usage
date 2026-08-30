@@ -18,8 +18,8 @@ export function renderSettings(doc: Document) {
   const s = state.settings as any;
   host.innerHTML = `
     <div style="display:grid;gap:12px;">
-      <!-- 颜色模式 -->
-      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">颜色模式</span><select id="aus-theme-select" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;"><option value="light">浅色</option><option value="dark">深色</option></select></div><div style="font-size:11px;color:var(--ds-text-2);margin-top:6px;">切换后立即生效，深色模式针对夜间可读性优化</div></div>
+      <!-- 颜色模式（与用量统计·模型选择一致的胶囊下拉） -->
+      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">颜色模式</span><div id="aus-theme-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模式</span><span id="aus-theme-label" style="font-weight:600;color:var(--ds-text);">浅色</span><span style="font-size:10px;">▼</span></div></div><div id="aus-theme-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:140px;padding:8px;"></div><div style="font-size:11px;color:var(--ds-text-2);margin-top:6px;">切换后立即生效，深色模式针对夜间可读性优化</div></div>
 
       <!-- API 密钥 -->
       <div class="ds-card"><div style="font-size:11px;color:var(--ds-text-2);font-weight:500;margin-bottom:6px;">API 密钥</div><div style="display:flex;gap:8px;"><input id="aus-api-key" type="password" placeholder="输入 DeepSeek API 密钥" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;outline:none;" /><button id="aus-save-key" class="ds-btn-pill" style="padding:8px 14px;">保存</button></div><div id="aus-key-status" style="font-size:11px;color:var(--ds-text-2);margin-top:6px;"></div></div>
@@ -116,18 +116,51 @@ export function renderSettings(doc: Document) {
     if (pass && el) el.value = decryptKey(pass);
   } catch {}
 
-  // 颜色模式绑定
-  const themeSel = doc.getElementById('aus-theme-select') as HTMLSelectElement | null;
-  if (themeSel) {
-    themeSel.value = (s.theme || 'light');
-    themeSel.onchange = () => {
-      const v = themeSel.value as any;
-      (state.settings as any).theme = v;
-      saveHot({ settings: state.settings });
-      applyTheme(v);
-      try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+  // 颜色模式（胶囊下拉，与用量统计·模型选择一致）
+  let themePickerOpen = false;
+  function renderThemePicker() {
+    const dropdown = doc.getElementById('aus-theme-dropdown');
+    const label = doc.getElementById('aus-theme-label');
+    if (!label) return;
+    const cur = (state.settings as any).theme || 'light';
+    label.textContent = cur === 'dark' ? '深色' : '浅色';
+    if (!dropdown) return;
+    const opts: Array<{v:string,l:string}> = [{v:'light',l:'浅色'}, {v:'dark',l:'深色'}];
+    dropdown.innerHTML = opts.map(o => {
+      const active = o.v === cur ? 'background:var(--ds-card);font-weight:600;' : '';
+      return `<div data-theme="${o.v}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${o.l}</div>`;
+    }).join('');
+    dropdown.querySelectorAll('[data-theme]').forEach((el: any) => {
+      el.onclick = () => {
+        const v = el.getAttribute('data-theme') as any;
+        (state.settings as any).theme = v;
+        saveHot({ settings: state.settings });
+        applyTheme(v);
+        themePickerOpen = false;
+        dropdown.style.display = 'none';
+        renderThemePicker();
+        try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+      };
+    });
+  }
+  renderThemePicker();
+  const themeBtn = doc.getElementById('aus-theme-btn');
+  const themeDropdown = doc.getElementById('aus-theme-dropdown');
+  if (themeBtn && themeDropdown) {
+    themeBtn.onclick = () => {
+      themePickerOpen = !themePickerOpen;
+      themeDropdown.style.display = themePickerOpen ? 'block' : 'none';
+      if (themePickerOpen) renderThemePicker();
     };
   }
+  doc.addEventListener('click', (e: any) => {
+    const t = e.target as HTMLElement;
+    if (themePickerOpen && !t.closest('#aus-theme-dropdown') && !t.closest('#aus-theme-btn')) {
+      themePickerOpen = false;
+      const d = doc.getElementById('aus-theme-dropdown');
+      if (d) d.style.display = 'none';
+    }
+  });
 
   // 绑定
   doc.getElementById('aus-save-key')!.onclick = () => {
