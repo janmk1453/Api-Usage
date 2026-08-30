@@ -278,6 +278,13 @@ export function createPanel() {
               <div class="ds-card"><div style="font-size:11px;color:#6B7280;">API 请求次数</div><div id="aus-stats-req" style="font-size:22px;font-weight:700;color:#111827;margin-top:6px;">0</div></div>
               <div class="ds-card"><div style="font-size:11px;color:#6B7280;">Tokens</div><div id="aus-stats-tok" style="font-size:22px;font-weight:700;color:#111827;margin-top:6px;">0</div></div>
             </div>
+            <div id="aus-model-summary" class="ds-card" style="margin-top:12px;overflow:auto;">
+              <div style="font-size:12px;font-weight:600;color:#111827;margin-bottom:8px;">模型汇总</div>
+              <table style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap;">
+                <thead><tr style="color:#6B7280;border-bottom:1px solid #E5E7EB;text-align:right;"><th style="text-align:left;padding:6px 8px;">模型</th><th style="padding:6px 8px;">调用次数</th><th style="padding:6px 8px;">输入(命中)</th><th style="padding:6px 8px;">输入(未命中)</th><th style="padding:6px 8px;">输出</th><th style="padding:6px 8px;">总 Tokens</th><th style="padding:6px 8px;">总成本</th><th style="padding:6px 8px;">平均成本</th><th style="padding:6px 8px;">平均耗时</th><th style="padding:6px 8px;">平均速率</th></tr></thead>
+                <tbody id="aus-summary-tbody"><tr><td colspan="10" style="text-align:center;padding:16px;color:#9CA3AF;">暂无数据</td></tr></tbody>
+              </table>
+            </div>
             <div class="ds-card" style="margin-top:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:#111827;">消费金额（CNY）</span><span style="font-size:11px;color:#6B7280;">多模型堆叠</span></div><div id="aus-stats-chart" style="height:280px;"></div></div>
           </div>
           <!-- 历史记录 -->

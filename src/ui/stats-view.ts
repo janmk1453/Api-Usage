@@ -197,6 +197,29 @@ async function renderStackedChart(filtered: any[]) {
   });
 }
 
+function renderModelSummary(filtered: any[]) {
+  const doc = getDoc();
+  const tbody = doc.getElementById('aus-summary-tbody');
+  if (!tbody) return;
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:16px;color:#9CA3AF;">暂无数据</td></tr>'; return; }
+  const map: Record<string, { count: number; hit: number; miss: number; out: number; total: number; cost: number; dur: number; rate: number; rateCnt: number }> = {};
+  for (const h of filtered) {
+    const m = h.model || 'unknown';
+    if (!map[m]) map[m] = { count: 0, hit: 0, miss: 0, out: 0, total: 0, cost: 0, dur: 0, rate: 0, rateCnt: 0 };
+    const e = map[m]; e.count++; e.hit += h.cache_hit_tokens || 0; e.miss += h.cache_miss_tokens || 0; e.out += h.completion_tokens || 0; e.total += h.total_tokens || 0; e.cost += h.cost || 0;
+    if (h.duration) { e.dur += h.duration; }
+    if (h.tokenRate) { e.rate += h.tokenRate; e.rateCnt++; }
+  }
+  const rows = Object.keys(map).sort().map(m => {
+    const e = map[m];
+    const avgCost = e.count ? e.cost / e.count : 0;
+    const avgDur = e.count ? (e.dur / e.count / 1000).toFixed(1) + 's' : '—';
+    const avgRate = e.rateCnt ? Math.round(e.rate / e.rateCnt) + ' t/s' : '—';
+    return `<tr style="border-bottom:1px solid #F6F7F8;"><td style="padding:6px 8px;text-align:left;color:#111827;font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${m}</td><td style="padding:6px 8px;text-align:right;">${e.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${e.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${e.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${e.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${e.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#111827;">¥${e.cost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;">¥${avgCost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;color:#6B7280;">${avgDur}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${avgRate}</td></tr>`;
+  }).join('');
+  tbody.innerHTML = rows;
+}
+
 export function renderStatsView() {
   const doc = getDoc();
   const s: any = getSelectedSave();
@@ -211,6 +234,7 @@ export function renderStatsView() {
   if (reqEl) reqEl.textContent = String(totalReq);
   const tokEl = doc.getElementById('aus-stats-tok');
   if (tokEl) tokEl.textContent = totalTok.toLocaleString('zh-CN');
+  renderModelSummary(filtered);
   renderStackedChart(filtered);
 }
 

@@ -2094,6 +2094,42 @@ async function renderStackedChart(filtered) {
     series
   });
 }
+function renderModelSummary(filtered) {
+  const doc = getDoc$2();
+  const tbody = doc.getElementById("aus-summary-tbody");
+  if (!tbody) return;
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:16px;color:#9CA3AF;">暂无数据</td></tr>';
+    return;
+  }
+  const map2 = {};
+  for (const h of filtered) {
+    const m = h.model || "unknown";
+    if (!map2[m]) map2[m] = { count: 0, hit: 0, miss: 0, out: 0, total: 0, cost: 0, dur: 0, rate: 0, rateCnt: 0 };
+    const e = map2[m];
+    e.count++;
+    e.hit += h.cache_hit_tokens || 0;
+    e.miss += h.cache_miss_tokens || 0;
+    e.out += h.completion_tokens || 0;
+    e.total += h.total_tokens || 0;
+    e.cost += h.cost || 0;
+    if (h.duration) {
+      e.dur += h.duration;
+    }
+    if (h.tokenRate) {
+      e.rate += h.tokenRate;
+      e.rateCnt++;
+    }
+  }
+  const rows = Object.keys(map2).sort().map((m) => {
+    const e = map2[m];
+    const avgCost = e.count ? e.cost / e.count : 0;
+    const avgDur = e.count ? (e.dur / e.count / 1e3).toFixed(1) + "s" : "—";
+    const avgRate = e.rateCnt ? Math.round(e.rate / e.rateCnt) + " t/s" : "—";
+    return `<tr style="border-bottom:1px solid #F6F7F8;"><td style="padding:6px 8px;text-align:left;color:#111827;font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${m}</td><td style="padding:6px 8px;text-align:right;">${e.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${e.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${e.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${e.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${e.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#111827;">¥${e.cost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;">¥${avgCost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;color:#6B7280;">${avgDur}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${avgRate}</td></tr>`;
+  }).join("");
+  tbody.innerHTML = rows;
+}
 function renderStatsView() {
   const doc = getDoc$2();
   const s = getSelectedSave();
@@ -2110,6 +2146,7 @@ function renderStatsView() {
   if (reqEl) reqEl.textContent = String(totalReq);
   const tokEl = doc.getElementById("aus-stats-tok");
   if (tokEl) tokEl.textContent = totalTok.toLocaleString("zh-CN");
+  renderModelSummary(filtered);
   renderStackedChart(filtered);
 }
 function initStatsView() {
@@ -2416,6 +2453,13 @@ function createPanel() {
               <div class="ds-card"><div style="font-size:11px;color:#6B7280;">消费金额</div><div id="aus-stats-cost" style="font-size:22px;font-weight:700;color:#111827;margin-top:6px;">¥0.00 CNY</div></div>
               <div class="ds-card"><div style="font-size:11px;color:#6B7280;">API 请求次数</div><div id="aus-stats-req" style="font-size:22px;font-weight:700;color:#111827;margin-top:6px;">0</div></div>
               <div class="ds-card"><div style="font-size:11px;color:#6B7280;">Tokens</div><div id="aus-stats-tok" style="font-size:22px;font-weight:700;color:#111827;margin-top:6px;">0</div></div>
+            </div>
+            <div id="aus-model-summary" class="ds-card" style="margin-top:12px;overflow:auto;">
+              <div style="font-size:12px;font-weight:600;color:#111827;margin-bottom:8px;">模型汇总</div>
+              <table style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap;">
+                <thead><tr style="color:#6B7280;border-bottom:1px solid #E5E7EB;text-align:right;"><th style="text-align:left;padding:6px 8px;">模型</th><th style="padding:6px 8px;">调用次数</th><th style="padding:6px 8px;">输入(命中)</th><th style="padding:6px 8px;">输入(未命中)</th><th style="padding:6px 8px;">输出</th><th style="padding:6px 8px;">总 Tokens</th><th style="padding:6px 8px;">总成本</th><th style="padding:6px 8px;">平均成本</th><th style="padding:6px 8px;">平均耗时</th><th style="padding:6px 8px;">平均速率</th></tr></thead>
+                <tbody id="aus-summary-tbody"><tr><td colspan="10" style="text-align:center;padding:16px;color:#9CA3AF;">暂无数据</td></tr></tbody>
+              </table>
             </div>
             <div class="ds-card" style="margin-top:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:#111827;">消费金额（CNY）</span><span style="font-size:11px;color:#6B7280;">多模型堆叠</span></div><div id="aus-stats-chart" style="height:280px;"></div></div>
           </div>
