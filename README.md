@@ -1,10 +1,12 @@
-# API用量统计 — SillyTavern 原生扩展
+# API用量统计 — SillyTavern 扩展
 
-实时统计与可视化 DeepSeek 及兼容 API 的调用成本，按官方用量页的极简浅色重塑交互（`Vite + ECharts`）。
+实时统计与可视化 DeepSeek 及兼容 API 的调用成本，按官方用量页的极简浅色重塑交互。
+
+## 早期开发版本尚不完善，仅供体验，如有问题建议请提issues
 
 ## 预览
 
-> 扩展主面板为全屏独立页（`#aus-panel`），左侧可收起导航，右侧多视图切换，样式对齐 `https://platform.deepseek.com/usage`（`#F6F7F8` 卡片 / 黑色 `pill` / 橙色柱状图）。
+> 扩展主面板为全屏独立页（`#aus-panel`），左侧可收起导航，右侧多视图切换，样式对齐 DeepSeek（`#F6F7F8` 卡片 / 黑色 `pill` / 橙色柱状图）。
 
 ## 功能
 
@@ -19,16 +21,12 @@
 
 ## 安装
 
-### 扩展管理（推荐）
+1. `SillyTavern → 扩展程序 → 安装扩展程序 → 输入`https://github.com/janmk1453/Api-Usage`
+2. 启用后刷新网页，左下角魔法棒出现 `API用量统计` 入口
 
-1. `SillyTavern → 扩展管理 → 从 URL 安装` 填 `https://github.com/janmk1453/Api-Usage`
-2. 启用后刷新，左下角魔法棒出现 `API用量统计` 入口
-
-### 手动
-
-1. 克隆至 `SillyTavern/data/default-user/extensions/Api-Usage` 或 `public/scripts/extensions/third-party/Api-Usage`
-2. `npm run build` 后确保 `index.js / style.css / manifest.json` 在扩展根
-3. 重启 SillyTavern
+## 更新
+1. `SillyTavern → 扩展程序 → 管理扩展程序 → 在下方找到`API用量统计`，等待一会右侧会出现更新按钮同时文字变绿
+2. 更新后刷新网页
 
 ## 快速开始
 
@@ -86,8 +84,7 @@ npm run build  # 产出 index.js（`~150k` + ECharts 分包）+ style.css
 
 ## 常见问题
 
-- **面板在窄屏消失**：已改为 `absolute` 视口计算 + `scroll/resize` 监听，规避 `transform` 祖先影响
-- **图表空白**：`vite.config.ts` 已 `define: process.env.NODE_ENV`，分包已提交，需确保扩展目录包含 `Axis-*` 等产物或重新构建
+- 早期开发阶段问题较多，功能不完善，问题与建议请提issues
 - **WebDAV CORS**：坚果云等不返回 `CORS` 头，需配置代理
 
 ## 更新
