@@ -12,9 +12,9 @@ SillyTavern 原生扩展 `API用量统计`（`manifest: api-usage-stat@3.0.0`）
 
 ## 技术栈（已确认）
 
-- **打包**：`Vite 5`（`lib: es / cssCodeSplit:false`，产物 `index.js + style.css` 直出根目录，当前 `~138kB`）
+- **打包**：`Vite 5`（`lib: es / cssCodeSplit:false`，产物 `index.js 150k + ECharts 分包` 直出，`define: process.env.NODE_ENV="production"` 以修复浏览器 `process` 未定义）
 - **语言**：`TypeScript 5 strict`
-- **图表**：`ECharts 5` 按需 `echarts/core + Bar/Heatmap + Grid/Tooltip/VisualMap/CanvasRenderer`，懒加载分包（`barGrid` 等按需）
+- **图表**：`ECharts 5` 按需 `echarts/core + Bar/Line + Grid/Tooltip/CanvasRenderer`，动态分包（`core` 等 9 产物，已提交，随 `index.js` 按需加载），`Y` 8 选项×`X` 5 维度（见下）
 - **样式**：无框架，`SmartTheme` 隔离 + `DeepSeek 官方浅色`（`#FFFFFF/#F6F7F8/#111827/#FF6A00/#E6F8EC`，`Microsoft YaHei`，`14px` 圆角，无阴影/无滤镜以保锐利，`absolute` 定位置换修复窄屏 `fixed` 漂移）
 - **存储**：`extensionSettings[api_usage_stat]` 热 `50` 条 + `IndexedDB api_usage_stat_db` 冷分页（旧多存档已合并为单一历史，`XOR` 密钥兼容，自动迁移备份）
 - **最低版本**：`manifest.minimum_client_version 1.11.0`
@@ -41,7 +41,7 @@ Api-Usage/
 │   ├── store/index.ts, persistence.ts # 单一历史聚合（已废弃多存档，saves 仅作迁移兼容）
 │   ├── services/pricing.ts, interception.ts(delegates→repository), balance.ts, import-export.ts(单一历史), sync.ts(单一历史), debug.ts
 │   ├── utils/date.ts, crypto.ts, logger.ts
-│   └── ui/panel.ts(全屏+侧边导航), overview.ts(双明细+四块), stats-view.ts(日历+双维度+堆叠柱+汇总表), stats.ts(旧统计卡), charts.ts, compare.ts(内联详情), settings.ts(完整设置), peak-dot.ts, customize.ts
+│   └── ui/panel.ts(全屏+侧边导航+absolute 定位), overview.ts(双明细+四块), stats-view.ts(日历+双维度+图表Y/X配置), chart-config.ts(Y 8×X 5 聚合), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情), settings.ts(完整设置), peak-dot.ts, customize.ts
 ├── README.md
 └── LICENSE
 ```
@@ -71,10 +71,10 @@ node --check index.js
 - **四小块**：每轮费用（`CNY`）/每轮 Token/平均耗时 `s`/输出速率 `t/s`（`computeOverview` 单源）
 
 ### 用量统计（stats）
-- **双维度**：时间维度（`今天/昨天/近 7 天/近 30 天/本月/上月/自定义` 双月日历，`时间维度` 胶囊）仅影响 `消费金额/API 次数/Tokens/模型汇总`；模型维度（同款胶囊，列表为所有已记录模型 + 全部）影响本页所有内容（`三块`+`汇总表`+`堆叠柱`）；筛选为 `time ∩ model`
+- **双维度**：时间维度（`今天/昨天/近 7 天/近 30 天/本月/上月/自定义` 双月日历）仅影响 `消费金额/API 次数/Tokens/模型汇总`；模型维度（同款胶囊，列表为所有已记录模型 + 全部）影响本页所有内容（`三块`+`汇总表`+`图表`）；筛选为 `time ∩ model`
 - **三块**：消费金额 `CNY`/API 请求次数/Tokens
 - **模型汇总表**：`10` 列（模型/调用/命中/未命中/输出/总/总成本/平均成本/平均耗时/平均速率），横向可滚动，随双维度联动
-- **堆叠柱**：多模型按日 `cost` 堆叠（`ECharts` 橙系），悬浮显示 `分模型 ¥` 明细
+- **图表**：标题由 `消费金额` 改为通用 `图表`，上方 `Y` 多选（`输入命中/未命中 token、输出/总 Token、输入命中/未命中/输出/总费用` 8 项，`tokens/CNY` 双色）与 `X` 单选（轮次/每小时/每日/每周/每月）双胶囊，`Y` 至少保留一项；`X` 分桶聚合（轮次不聚合，小时 `YYYY-MM-DD HH:00`，日 `YYYY-MM-DD`，周 `YYYY-Www`，月 `YYYY-MM`），双轴（左 `tokens` 右 `CNY`）分组柱在同一图中可读展示，悬浮分 `¥/tokens` 明细，`vite.define` 修复 `process` 未定义
 
 ### 历史记录
 - 列表按 `timestamp` 倒序，卡片含模型/时间、`in/out/duration/rate`、费用、旧/新/详情
@@ -110,7 +110,7 @@ git commit -m "feat/fix: ..."
 git push origin main
 ```
 
-- 产物 `index.js` 为构建后主文件（`~138kB`）+ 拆分 `barGrid-*` 等按需，`style.css` 直出，勿手改产物
+- 产物 `index.js 150k` + `ECharts` 分包（`Axis-*` 等 9 个）随仓库提交以保离线加载，`style.css` 直出，勿手改产物；`vite.config.ts` 已 `define: process.env.NODE_ENV` 防浏览器 `process` 报错
 - `RE3.0` 仅同步产物备份，不作为提交源
 
 ## 注意事项
