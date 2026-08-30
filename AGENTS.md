@@ -15,7 +15,7 @@ SillyTavern 原生扩展 `API用量统计`（`manifest: api-usage-stat@3.0.0`）
 - **打包**：`Vite 5`（`lib: es / cssCodeSplit:false`，产物 `index.js 150k + ECharts 分包` 直出，`define: process.env.NODE_ENV="production"` 以修复浏览器 `process` 未定义）
 - **语言**：`TypeScript 5 strict`
 - **图表**：`ECharts 5` 按需 `echarts/core + Bar/Line + Grid/Tooltip/CanvasRenderer`，动态分包（`core` 等 9 产物，已提交，随 `index.js` 按需加载），`Y` 8 选项×`X` 5 维度（见下）
-- **样式**：无框架，`SmartTheme` 隔离 + `DeepSeek 官方浅色`（`#FFFFFF/#F6F7F8/#111827/#FF6A00/#E6F8EC`，`Microsoft YaHei`，`14px` 圆角，无阴影/无滤镜以保锐利，`absolute` 定位置换修复窄屏 `fixed` 漂移）
+- **样式**：无框架，`SmartTheme` 隔离 + `DeepSeek 官方浅色`（`#FFFFFF/#F6F7F8/#111827/#FF6A00/#E6F8EC`，`Microsoft YaHei`，`14px` 圆角，无阴影/无滤镜以保锐利，`absolute` 定位置换修复窄屏 `fixed` 漂移）+ 双主题（`light/dark`，`style.css` 同名变量覆盖 + `services/theme.ts` 切换 + 设置中胶囊下拉，深色高对比 `#0F1419/#1E242E/#E5E7EB`，ECharts 经 `themeColor()` 动态取变量）
 - **存储**：`extensionSettings[api_usage_stat]` 热 `50` 条 + `IndexedDB api_usage_stat_db` 冷分页（旧多存档已合并为单一历史，`XOR` 密钥兼容，自动迁移备份）
 - **最低版本**：`manifest.minimum_client_version 1.11.0`
 
@@ -39,9 +39,9 @@ Api-Usage/
 │   │   ├── computed.ts    # 唯一算入口：computeOverview/computeStats/getFilteredHistory
 │   │   └── events.ts      # DataEvents.UPDATED/HISTORY_ADDED/SETTINGS_CHANGED
 │   ├── store/index.ts, persistence.ts # 单一历史聚合（已废弃多存档，saves 仅作迁移兼容）
-│   ├── services/pricing.ts, interception.ts(delegates→repository), balance.ts, import-export.ts(单一历史), sync.ts(单一历史), debug.ts
+│   ├── services/pricing.ts, interception.ts(delegates→repository), balance.ts, import-export.ts(单一历史), sync.ts(单一历史), debug.ts, theme.ts(applyTheme/setTheme 深浅切换)
 │   ├── utils/date.ts, crypto.ts, logger.ts
-│   └── ui/panel.ts(全屏+侧边导航+absolute 定位), overview.ts(双明细+四块), stats-view.ts(日历+双维度+图表Y/X配置), chart-config.ts(Y 8×X 5 聚合), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情), settings.ts(完整设置), peak-dot.ts, customize.ts
+│   └── ui/panel.ts(全屏+侧边导航+absolute 定位), overview.ts(双明细+四块), stats-view.ts(日历+双维度+图表Y/X配置), chart-config.ts(Y 8×X 5 聚合), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情), settings.ts(完整设置+颜色模式胶囊下拉), peak-dot.ts, customize.ts
 ├── README.md
 └── LICENSE
 ```
@@ -58,7 +58,7 @@ node --check index.js
 
 - **入口**：酒馆左下角魔法棒 `#extensionsMenu → #aus_wand_entry`（`list-group-item`），点击 `togglePanel()` 打开全屏 `#aus-overlay + #aus-panel`（`absolute` 视口计算，监听 `scroll/resize`，非 `fixed` 以规避 `transform` 祖先在窄屏漂移）
 - **面板**：全屏 `absolute` 定位置换 + 侧边导航（`220px ↔ 60px`，`≤760px` 自动收起 `60px` 图标栏，展开 `220px` 覆盖式 + 遮罩），`6` 视图（用量概览/统计/历史/设置/使用说明/关于）经 `data-view` + `opacity 0.15s` 切换，`sidebar-toggle` 同步宽度与标签显隐
-- **样式**：`[data-extension="api-usage-stat"][data-ds-theme="light"]` 隔离，卡片 `1px solid #E5E7EB` 实线，无 `box-shadow`，字重 `600`，`Microsoft YaHei` 保证锐利；`#aus-sidebar` 过渡 `width 0.2s`，移动端横向可滚动
+- **样式**：`[data-extension="api-usage-stat"][data-ds-theme="light"]` 隔离，卡片 `1px solid #E5E7EB` 实线，无 `box-shadow`，字重 `600`，`Microsoft YaHei` 保证锐利；`#aus-sidebar` 过渡 `width 0.2s`，移动端横向可滚动，`style.css` 定义 `light/dark` 两套同名变量，深色经 `themeColor()` 注入 ECharts
 - **拦截**：`GENERATION_ENDED → chat[].extra.api_usage` 主路径，`ApiUsageStatInterceptor` 辅路径，`repository.addEntry/recalcAll` 1:1 脚本
 - **数据框架**：所有存/取/算/展必须走 `src/data/` — `repository` 唯一写、`computed` 唯一算（`computeOverview` 供概览 8 块，`computeStats` 供统计）、`events` 订阅刷新；禁止在 UI 直接读写 `state.history` 聚合或手算
 - **持久化**：`saveHot` 节流 `300ms`，`loadHot/migrateIfNeeded` 仅由 `repository.hydrate` 调用，已自动将旧多存档合并为单一历史（`hot 50` + `cold_history`）
@@ -82,14 +82,14 @@ node --check index.js
 - **内联详情**：点击详情向下展开固定 `320→520px`（`15` 字段按 `基础/性能/Token/费用` 四块 + `4 Tab`：请求参数/完整响应/Raw 用量/消息内容，`pre` `160px` 滚动，收起切换）
 
 ### 设置（完整迁移原脚本）
-- `API 密钥 / 自动校准余额（开关+间隔）/ 自定义余额 / 新价格机制（开关+日期+今日）/ 高峰时段（可增删跨天，改后重算）/ 模型与价格（内置 3 模型可覆写+自定义增删，峰谷开关，三价 ¥/百万）/ 调试（开关+hit/miss/output/model/date/batchCount+生成）/ 峰值圆点（开关+重置）/ WebDAV（url/user/pass/path/proxy+同步，`https` 强制，`pull-merge-push`）`，全部浅色卡片，改后 `recalcAll`+`refreshUI`
+- `颜色模式（浅色/深色，胶囊下拉，`settings.theme` + `theme.ts:applyTheme` 即时切换，与用量统计·模型选择同款） / API 密钥 / 自动校准余额（开关+间隔）/ 自定义余额 / 新价格机制（开关+日期+今日）/ 高峰时段（可增删跨天，改后重算）/ 模型与价格（内置 3 模型可覆写+自定义增删，峰谷开关，三价 ¥/百万）/ 调试（开关+hit/miss/output/model/date/batchCount+生成）/ 峰值圆点（开关+重置）/ WebDAV（url/user/pass/path/proxy+同步，`https` 强制，`pull-merge-push`）`，全部主题变量卡片，改后 `recalcAll`+`refreshUI`
 
 ### 存档
 - **已废弃**：移除 `saves/currentSave` 多存档，收敛为单一 `history` 聚合；保留 `saves` 在导入/同步/迁移中的兼容解析，旧文件自动合并去重，不影响现有功能
 
 ## 样式规范（DeepSeek 截图定版）
 
-- 变量：`--ds-bg:#FFFFFF --ds-card:#F6F7F8 --ds-text:#111827 --ds-border:#E5E7EB --ds-black:#111827 --ds-orange:#FF6A00 --ds-green-bg:#E6F8EC --ds-green:#0BA25E --ds-radius-card:14px --ds-radius-pill:999px`，深色 `data-ds-theme="dark"` 同名覆盖（`--ds-bg:#0F1419/--ds-card:#1E242E/--ds-text:#E5E7EB` 高对比）
+- 变量：`--ds-bg:#FFFFFF --ds-card:#F6F7F8 --ds-text:#111827 --ds-border:#E5E7EB --ds-black:#111827 --ds-orange:#FF6A00 --ds-green-bg:#E6F8EC --ds-green:#0BA25E --ds-radius-card:14px --ds-radius-pill:999px`，深色 `data-ds-theme="dark"` 同名覆盖（`--ds-bg:#0F1419/--ds-card:#1E242E/--ds-text:#E5E7EB` 高对比，`ECharts` 经 `themeColor()` 动态取变量保证可读性）
 - 选择器统一：所有选择类 UI 必须使用用量统计·模型选择同款胶囊下拉（`#xxx-btn` 胶囊 `999px` + `#xxx-dropdown` 绝对定位 `12px` 圆角 `box-shadow`），禁止原生 `select`，选中态 `background:var(--ds-card)` 加粗
 - 魔法棒悬停：`background: transparent !important`
 - 文字：`Microsoft YaHei`，无 `antialiased/optimizeLegibility` 干预
