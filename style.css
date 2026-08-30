@@ -106,23 +106,42 @@
 #aus_wand_entry:hover { background: transparent !important; }
 #aus_wand_entry.list-group-item:hover { background: transparent !important; }
 
-/* 移动端自适应 — 侧边栏转为顶部横向，不影响桌面 */
+/* 移动端自适应 — 侧边栏转为顶部横向工具栏（水平滚动），不影响桌面 */
 @media (max-width: 760px) {
   #aus-panel { flex-direction: column !important; }
   #aus-sidebar {
     width: 100% !important;
-    height: auto !important;
+    height: 48px !important;
+    min-height: 48px !important;
     flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
     border-right: none !important;
     border-bottom: 1px solid #E5E7EB;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scrollbar-width: none;
   }
-  #aus-sidebar > div:last-child { flex-direction: row !important; gap: 6px !important; }
-  #aus-sidebar .aus-nav-group { flex-direction: row !important; }
-  #aus-sidebar [style*="flex:1;"] { display: none !important; }
+  #aus-sidebar::-webkit-scrollbar { display: none; }
+  #aus-sidebar > div:first-child { flex-shrink: 0; height: 100%; border-bottom: none !important; }
+  #aus-sidebar > div:last-child {
+    flex: 1 !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+    padding: 0 8px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    align-items: center !important;
+    height: 100% !important;
+  }
+  #aus-sidebar > div:last-child::-webkit-scrollbar { display: none; }
+  #aus-sidebar .aus-nav-group { flex-direction: row !important; flex-shrink: 0; border-top: none !important; padding-top: 0 !important; }
+  /* 仅隐藏中间的 flex:1 占位，不隐藏导航容器 */
+  #aus-sidebar > div:last-child > div[style="flex:1;"] { display: none !important; }
   #aus-sidebar #aus-brand { display: flex !important; }
   #aus-sidebar .aus-nav-label { display: inline !important; }
+  #aus-sidebar #aus-sidebar-toggle { display: none !important; }
   #aus-main { padding: 12px !important; }
   /* 概览四块 2 列 */
   #aus-overview-four { grid-template-columns: repeat(2, 1fr) !important; }
