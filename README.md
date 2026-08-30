@@ -96,6 +96,10 @@ npm run build  # 产出 index.js（`~150k` + ECharts 分包）+ style.css
 - 统一数据框架 `src/data/`：`repository` 唯一写（`addEntry/recalcAll/replaceAll/hydrate`）、`computed` 唯一算（`computeOverview`）、`events` 订阅刷新，禁止在 `UI` 直写 `state`
 - 拦截：`GENERATION_ENDED → extra.api_usage`，`process` 合规
 
+## 致谢
+
+部分实现参考了 [cone97218-alt/ds](https://github.com/cone97218-alt/ds)，在此致谢。
+
 ## 许可证
 
 MIT
