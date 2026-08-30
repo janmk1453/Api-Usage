@@ -171,10 +171,10 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
     xAxis:{ type:'category', data: labels, axisLine:{lineStyle:{color:'#E5E7EB'}}, axisLabel:{fontSize:10,color:'#9CA3AF',rotate: labels.length>12?30:0, interval:0} },
     yAxis:{ type:'value', axisLabel:{fontSize:10,color:'#9CA3AF'}, splitLine:{lineStyle:{color:'#F6F7F8'}} },
     series: series.map(s=>{
-      // 前两张中，总量用曲线
       const isTotal = s.name.includes('总');
       if (isTokenCost && isTotal) return { name:s.name, type:'line', data:s.data, smooth:true, lineStyle:{color:s.color,width:2}, itemStyle:{color:s.color}, symbolSize:2 };
-      return { name:s.name, type:'bar', data:s.data, itemStyle:{color:s.color,borderRadius:[4,4,0,0]}, barMaxWidth:14 };
+      // 堆叠在同一柱上
+      return { name:s.name, type:'bar', stack:'total', data:s.data, itemStyle:{color:s.color,borderRadius:[4,4,0,0]}, barMaxWidth:16 };
     }),
   };
   // 命中/请求等单指标改为线+面积更可读

@@ -2216,7 +2216,7 @@ async function drawBarLine(el, id, labels, series) {
     series: series.map((s) => {
       const isTotal = s.name.includes("总");
       if (isTokenCost && isTotal) return { name: s.name, type: "line", data: s.data, smooth: true, lineStyle: { color: s.color, width: 2 }, itemStyle: { color: s.color }, symbolSize: 2 };
-      return { name: s.name, type: "bar", data: s.data, itemStyle: { color: s.color, borderRadius: [4, 4, 0, 0] }, barMaxWidth: 14 };
+      return { name: s.name, type: "bar", stack: "total", data: s.data, itemStyle: { color: s.color, borderRadius: [4, 4, 0, 0] }, barMaxWidth: 16 };
     })
   };
   if (id === "hit") {
@@ -2364,6 +2364,8 @@ function getRangeDates() {
     }
     case "custom":
       return { start: customStart || today, end: customEnd || today };
+    case "all":
+      return { start: "2020-01-01", end: today };
   }
   return { start: today, end: today };
 }
@@ -2384,16 +2386,37 @@ function filterByModel(entries) {
   if (selectedModel === "__all__") return entries;
   return entries.filter((e) => e.model === selectedModel);
 }
+let calendarOffset = 0;
+function updateRangeHighlight() {
+  const doc = getDoc$2();
+  doc.querySelectorAll("[data-range]").forEach((el) => {
+    const r = el.getAttribute("data-range");
+    if (r === currentRange) {
+      el.style.background = "#F6F7F8";
+      el.style.fontWeight = "600";
+    } else {
+      el.style.background = "";
+      el.style.fontWeight = "";
+    }
+  });
+  const calWrap = doc.getElementById("aus-date-calendar");
+  if (calWrap) calWrap.style.display = currentRange === "custom" ? "block" : "none";
+}
 function renderCalendar() {
   const doc = getDoc$2();
   const cal = doc.getElementById("aus-date-calendar");
   if (!cal) return;
+  updateRangeHighlight();
+  if (currentRange !== "custom") return;
   const todayStr = localDay$1(Date.now());
-  const today = /* @__PURE__ */ new Date(todayStr + "T00:00:00Z");
+  const base = /* @__PURE__ */ new Date(todayStr + "T00:00:00Z");
+  base.setUTCMonth(base.getUTCMonth() + calendarOffset);
   const months = [];
-  months.push(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1)));
-  months.push(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)));
-  let html = '<div style="display:flex;gap:16px;">';
+  months.push(new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() - 1, 1)));
+  months.push(new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), 1)));
+  let html = '<div style="display:flex;gap:12px;align-items:flex-start;">';
+  html += `<button id="aus-cal-prev" style="margin-top:32px;padding:4px 8px;border:1px solid #E5E7EB;border-radius:6px;background:#fff;cursor:pointer;">‹</button>`;
+  html += '<div style="display:flex;gap:16px;">';
   for (const m of months) {
     const y = m.getUTCFullYear(), mo = m.getUTCMonth();
     const first = new Date(Date.UTC(y, mo, 1));
@@ -2417,7 +2440,19 @@ function renderCalendar() {
     html += `</div></div>`;
   }
   html += "</div>";
+  html += `<button id="aus-cal-next" style="margin-top:32px;padding:4px 8px;border:1px solid #E5E7EB;border-radius:6px;background:#fff;cursor:pointer;">›</button>`;
+  html += "</div>";
   cal.innerHTML = html;
+  const prev = doc.getElementById("aus-cal-prev");
+  const next = doc.getElementById("aus-cal-next");
+  if (prev) prev.onclick = () => {
+    calendarOffset--;
+    renderCalendar();
+  };
+  if (next) next.onclick = () => {
+    calendarOffset++;
+    renderCalendar();
+  };
   cal.querySelectorAll("[data-date]").forEach((el) => {
     el.addEventListener("click", () => {
       if (currentRange !== "custom") {
@@ -2433,6 +2468,7 @@ function renderCalendar() {
         } else customEnd = clicked;
       }
       updatePickerLabel();
+      updateRangeHighlight();
       renderStatsView();
       renderCalendar();
     });
@@ -2442,10 +2478,11 @@ function updatePickerLabel() {
   const doc = getDoc$2();
   const label = doc.getElementById("aus-range-label");
   if (!label) return;
-  const map2 = { today: "今天", yesterday: "昨天", "7d": "近 7 天", "30d": "近 30 天", month: "本月", lastMonth: "上月", custom: "自定义" };
+  const map2 = { all: "全部", today: "今天", yesterday: "昨天", "7d": "近 7 天", "30d": "近 30 天", month: "本月", lastMonth: "上月", custom: "自定义" };
   if (currentRange === "custom" && customStart && customEnd) {
     label.textContent = customStart === customEnd ? customStart : `${customStart} ~ ${customEnd}`;
   } else label.textContent = map2[currentRange] || "近 30 天";
+  updateRangeHighlight();
 }
 function renderModelPicker() {
   const doc = getDoc$2();
@@ -3089,15 +3126,16 @@ function createPanel() {
               <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:12px;cursor:pointer;"><span style="color:#6B7280;">模型</span><span id="aus-model-label" style="font-weight:600;color:#111827;">全部</span><span style="font-size:10px;">▼</span></div>
               <div id="aus-range-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);overflow:hidden;flex-direction:row;">
                 <div style="min-width:120px;border-right:1px solid #F6F7F8;padding:8px;display:grid;gap:2px;">
+                  <div data-range="all" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">全部</div>
                   <div data-range="today" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">今天</div>
                   <div data-range="yesterday" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">昨天</div>
                   <div data-range="7d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">近 7 天</div>
-                  <div data-range="30d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;background:#F6F7F8;">近 30 天</div>
+                  <div data-range="30d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">近 30 天</div>
                   <div data-range="month" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">本月</div>
                   <div data-range="lastMonth" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">上月</div>
                   <div data-range="custom" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">自定义</div>
                 </div>
-                <div id="aus-date-calendar" style="padding:12px;"></div>
+                <div id="aus-date-calendar" style="padding:12px;display:none;"></div>
               </div>
               <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:160px;z-index:10;background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
             </div>

@@ -3,7 +3,7 @@ import { localDay } from '../utils/date';
 import { Y_OPTIONS, X_OPTIONS, getYSelected, getXSelected, toggleY, setXSelected, aggregateForChart } from './chart-config';
 import { renderExtraCharts } from './extra-charts';
 
-type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom';
+type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom' | 'all';
 let currentRange: RangeKey = '30d';
 let customStart = '';
 let customEnd = '';
@@ -25,6 +25,7 @@ function getRangeDates(): { start: string; end: string } {
     case 'month': { const s=new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(),1)); return { start:fmt(s), end:today }; }
     case 'lastMonth': { const s=new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth()-1,1)); const e=new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(),0)); return { start:fmt(s), end:fmt(e) }; }
     case 'custom': return { start: customStart || today, end: customEnd || today };
+    case 'all': return { start: '2020-01-01', end: today };
   }
   return { start: today, end: today };
 }
@@ -49,24 +50,40 @@ function filterByModel(entries: any[]): any[] {
   return entries.filter(e => e.model === selectedModel);
 }
 
+let calendarOffset = 0;
+
+function updateRangeHighlight() {
+  const doc = getDoc();
+  doc.querySelectorAll('[data-range]').forEach((el: any) => {
+    const r = el.getAttribute('data-range');
+    if (r === currentRange) { el.style.background = '#F6F7F8'; el.style.fontWeight = '600'; }
+    else { el.style.background = ''; el.style.fontWeight = ''; }
+  });
+  // 日历仅自定义时显示
+  const calWrap = doc.getElementById('aus-date-calendar');
+  if (calWrap) calWrap.style.display = currentRange === 'custom' ? 'block' : 'none';
+}
+
 function renderCalendar() {
   const doc = getDoc();
   const cal = doc.getElementById('aus-date-calendar');
   if (!cal) return;
-  // 显示两个月（上月+本月）
+  updateRangeHighlight();
+  if (currentRange !== 'custom') return;
   const todayStr = localDay(Date.now());
-  const today = new Date(todayStr + 'T00:00:00Z');
+  const base = new Date(todayStr + 'T00:00:00Z');
+  base.setUTCMonth(base.getUTCMonth() + calendarOffset);
   const months: Date[] = [];
-  // 显示前一个月的1号和本月1号
-  months.push(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth()-1, 1)));
-  months.push(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)));
-  let html = '<div style="display:flex;gap:16px;">';
+  months.push(new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth()-1, 1)));
+  months.push(new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), 1)));
+  let html = '<div style="display:flex;gap:12px;align-items:flex-start;">';
+  html += `<button id="aus-cal-prev" style="margin-top:32px;padding:4px 8px;border:1px solid #E5E7EB;border-radius:6px;background:#fff;cursor:pointer;">‹</button>`;
+  html += '<div style="display:flex;gap:16px;">';
   for (const m of months) {
     const y = m.getUTCFullYear(), mo = m.getUTCMonth();
     const first = new Date(Date.UTC(y, mo, 1));
     const daysInMonth = new Date(Date.UTC(y, mo+1, 0)).getUTCDate();
-    const startDow = first.getUTCDay(); // 0 Sun
-    // 调整为 周日 开始
+    const startDow = first.getUTCDay();
     html += `<div style="min-width:220px;"><div style="text-align:center;font-weight:600;font-size:13px;margin-bottom:8px;">${y}年${mo+1}月</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:11px;">`;
     const week = ['日','一','二','三','四','五','六'];
     for (const w of week) html += `<div style="text-align:center;color:#9CA3AF;padding:4px;">${w}</div>`;
@@ -85,7 +102,13 @@ function renderCalendar() {
     html += `</div></div>`;
   }
   html += '</div>';
+  html += `<button id="aus-cal-next" style="margin-top:32px;padding:4px 8px;border:1px solid #E5E7EB;border-radius:6px;background:#fff;cursor:pointer;">›</button>`;
+  html += '</div>';
   cal.innerHTML = html;
+  const prev = doc.getElementById('aus-cal-prev');
+  const next = doc.getElementById('aus-cal-next');
+  if (prev) prev.onclick = () => { calendarOffset--; renderCalendar(); };
+  if (next) next.onclick = () => { calendarOffset++; renderCalendar(); };
   cal.querySelectorAll('[data-date]').forEach((el: any) => {
     el.addEventListener('click', () => {
       if (currentRange !== 'custom') {
@@ -93,13 +116,13 @@ function renderCalendar() {
         customStart = el.getAttribute('data-date');
         customEnd = el.getAttribute('data-date');
       } else {
-        // 第二次点击设为结束
         const clicked = el.getAttribute('data-date');
         if (!customStart) customStart = clicked;
         else if (clicked < customStart) { customEnd = customStart; customStart = clicked; }
         else customEnd = clicked;
       }
       updatePickerLabel();
+      updateRangeHighlight();
       renderStatsView();
       renderCalendar();
     });
@@ -110,10 +133,11 @@ function updatePickerLabel() {
   const doc = getDoc();
   const label = doc.getElementById('aus-range-label');
   if (!label) return;
-  const map: any = { today:'今天', yesterday:'昨天', '7d':'近 7 天', '30d':'近 30 天', month:'本月', lastMonth:'上月', custom:'自定义' };
+  const map: any = { all:'全部', today:'今天', yesterday:'昨天', '7d':'近 7 天', '30d':'近 30 天', month:'本月', lastMonth:'上月', custom:'自定义' };
   if (currentRange === 'custom' && customStart && customEnd) {
     label.textContent = customStart === customEnd ? customStart : `${customStart} ~ ${customEnd}`;
   } else label.textContent = map[currentRange] || '近 30 天';
+  updateRangeHighlight();
 }
 
 function renderModelPicker() {

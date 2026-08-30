@@ -277,15 +277,16 @@ export function createPanel() {
               <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #E5E7EB;border-radius:999px;background:#fff;font-size:12px;cursor:pointer;"><span style="color:#6B7280;">模型</span><span id="aus-model-label" style="font-weight:600;color:#111827;">全部</span><span style="font-size:10px;">▼</span></div>
               <div id="aus-range-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);overflow:hidden;flex-direction:row;">
                 <div style="min-width:120px;border-right:1px solid #F6F7F8;padding:8px;display:grid;gap:2px;">
+                  <div data-range="all" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">全部</div>
                   <div data-range="today" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">今天</div>
                   <div data-range="yesterday" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">昨天</div>
                   <div data-range="7d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">近 7 天</div>
-                  <div data-range="30d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;background:#F6F7F8;">近 30 天</div>
+                  <div data-range="30d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">近 30 天</div>
                   <div data-range="month" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">本月</div>
                   <div data-range="lastMonth" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">上月</div>
                   <div data-range="custom" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">自定义</div>
                 </div>
-                <div id="aus-date-calendar" style="padding:12px;"></div>
+                <div id="aus-date-calendar" style="padding:12px;display:none;"></div>
               </div>
               <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:160px;z-index:10;background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
             </div>
