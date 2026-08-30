@@ -1,5 +1,10 @@
 import { getSelectedSave } from '../store/index';
 import { localDay } from '../utils/date';
+import * as echarts from 'echarts/core';
+import { BarChart, LineChart } from 'echarts/charts';
+import { GridComponent, TooltipComponent } from 'echarts/components';
+import { CanvasRenderer } from 'echarts/renderers';
+echarts.use([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
 
 type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom';
 let currentRange: RangeKey = '30d';
@@ -287,20 +292,6 @@ async function renderChart(filteredRaw: any[]) {
   const w = (el as HTMLElement).clientWidth, h = (el as HTMLElement).clientHeight;
   if (w === 0 || h === 0) {
     setTimeout(() => renderChart(filteredRaw), 80);
-    return;
-  }
-  let echarts: any;
-  try {
-    echarts = await import('echarts/core').then(async (ec: any) => {
-      const { BarChart, LineChart } = await import('echarts/charts');
-      const { GridComponent, TooltipComponent } = await import('echarts/components');
-      const { CanvasRenderer } = await import('echarts/renderers');
-      ec.use([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
-      return ec;
-    });
-  } catch (e) {
-    el.innerHTML = '<div style="text-align:center;padding:20px;color:#DC2626;font-size:12px;">图表加载失败，请检查网络后重试</div>';
-    console.error('[Api-Usage] echarts load failed', e);
     return;
   }
   // 每次重建以避免旧实例尺寸污染（比复用更稳）

@@ -1,15 +1,4 @@
 node_modules/
 .DS_Store
 *.log
-# Vite 拆分产物不在仓库中保留，发布时重新构建（仅保留 index.js/style.css 产物）
-Axis-*.js
-Image-*.js
-barGrid-*.js
-charts-*.js
-components-*.js
-core-*.js
-createSeriesData-*.js
-graphic-*.js
-renderers-*.js
-index-*.js
-!index.js
+# 已静态打包为单 index.js，无需额外 chunk
