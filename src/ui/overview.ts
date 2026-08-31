@@ -11,6 +11,14 @@ export function renderOverview() {
 
   const balEl = doc.getElementById('aus-balance');
   if (balEl) balEl.textContent = v.balanceText;
+  const remEl = doc.getElementById('aus-balance-remaining');
+  if (remEl) {
+    if (v.remainingRounds != null) remEl.textContent = '预计还可进行 ' + v.remainingRounds.toLocaleString('zh-CN') + ' 轮对话（仅 DeepSeek 官方）';
+    else {
+      const hasBal = !!(state.customBalance || state.balance?.balance);
+      remEl.textContent = hasBal ? '暂无 DeepSeek 对话数据，无法预测' : '查询余额后可预测剩余轮次';
+    }
+  }
   const costEl = doc.getElementById('aus-total-cost');
   if (costEl) costEl.textContent = '¥' + v.totalCost.toFixed(4) + ' CNY';
   const tokEl = doc.getElementById('aus-total-tokens');

@@ -54,6 +54,7 @@ export type OverviewView = {
   inputCost: number; outputCost: number;
   avgCost: number; avgTokens: number; avgDuration: number; avgRate: number;
   rounds: number;
+  remainingRounds: number | null;
 };
 
 export type StatsView = {

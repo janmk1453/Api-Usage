@@ -197,6 +197,19 @@ export const repository = {
     state.total_tokens += total; state.total_cost += lu.cost; state.input_tokens += hit + miss; state.output_tokens += comp;
     state.cache_hit_tokens += hit; state.cache_miss_tokens += miss; state.input_cost += lu.input_cost; state.output_cost += lu.output_cost;
     if (isDeepSeekOfficialModel(model)) state.rounds += 1;
+    // 余额本地预扣（与原脚本一致，仅作本地估算，查询后校准）
+    try {
+      if (state.customBalance != null && String(state.customBalance).trim() !== '') {
+        const cur = parseFloat(String(state.customBalance));
+        if (!isNaN(cur)) state.customBalance = (cur - lu.cost).toFixed(4);
+      } else if (state.balance && (state.balance as any).balance != null && String((state.balance as any).balance).trim() !== '') {
+        const cur = parseFloat(String((state.balance as any).balance));
+        if (!isNaN(cur)) {
+          (state.balance as any).balance = (cur - lu.cost).toFixed(4);
+          (state.balance as any).timestamp = Date.now();
+        }
+      }
+    } catch {}
     if (state.history.length > MAX_HISTORY) {
       const overflow = state.history.slice(MAX_HISTORY);
       // 关键修复：溢出不再静默丢弃，转入冷存储（IndexedDB），fire-and-forget

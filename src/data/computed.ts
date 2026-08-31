@@ -19,7 +19,7 @@ export function getFilteredHistory(range?: TimeRange): any[] {
 
 export function computeOverview(): OverviewView {
   const s: any = getSelectedSave();
-  if (!s) return { balanceText: '¥0.00 CNY', totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0 } as any;
+  if (!s) return { balanceText: '¥0.00 CNY', totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0, remainingRounds: null } as any;
   const totalCost = s.total_cost || 0;
   const totalTokens = s.total_tokens || 0;
   const hit = s.cache_hit_tokens || 0, miss = s.cache_miss_tokens || 0, output = s.output_tokens || 0;
@@ -32,11 +32,25 @@ export function computeOverview(): OverviewView {
   const avgDuration = s.history?.length ? (s.history.reduce((a: number, h: any) => a + (h.duration || 0), 0) / s.history.length) / 1000 : 0;
   const avgRate = s.history?.length ? (s.history.reduce((a: number, h: any) => a + (h.tokenRate || 0), 0) / s.history.length) : 0;
   const bal = state.customBalance || state.balance?.balance;
+  // 余额预测：仅基于 DeepSeek 官方模型历史（deepseek*），EWMA alpha=0.3，与原脚本一致
+  let remainingRounds: number | null = null;
+  try {
+    const balNum = bal != null && bal !== '' ? parseFloat(String(bal)) : NaN;
+    if (!isNaN(balNum) && s.history?.length) {
+      const dsHist = (s.history || []).filter((h: any) => typeof h.model === 'string' && h.model.toLowerCase().indexOf('deepseek') === 0);
+      if (dsHist.length) {
+        const alpha = 0.3;
+        let ewma = dsHist[dsHist.length - 1].cost || 0;
+        for (let i = dsHist.length - 2; i >= 0; i--) ewma = alpha * (dsHist[i].cost || 0) + (1 - alpha) * ewma;
+        if (ewma > 0) remainingRounds = Math.floor(balNum / ewma);
+      }
+    }
+  } catch {}
   return {
     balanceText: bal ? '¥' + bal + ' CNY' : '¥0.00 CNY',
     totalCost, totalTokens, hit, miss, output, hitRate, savings,
     inputCost: s.input_cost || 0, outputCost: s.output_cost || 0,
-    avgCost, avgTokens, avgDuration, avgRate, rounds,
+    avgCost, avgTokens, avgDuration, avgRate, rounds, remainingRounds,
   };
 }
 

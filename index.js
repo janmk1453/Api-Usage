@@ -774,6 +774,19 @@ const repository = {
     state$1.input_cost += lu.input_cost;
     state$1.output_cost += lu.output_cost;
     if (isDeepSeekOfficialModel(model)) state$1.rounds += 1;
+    try {
+      if (state$1.customBalance != null && String(state$1.customBalance).trim() !== "") {
+        const cur = parseFloat(String(state$1.customBalance));
+        if (!isNaN(cur)) state$1.customBalance = (cur - lu.cost).toFixed(4);
+      } else if (state$1.balance && state$1.balance.balance != null && String(state$1.balance.balance).trim() !== "") {
+        const cur = parseFloat(String(state$1.balance.balance));
+        if (!isNaN(cur)) {
+          state$1.balance.balance = (cur - lu.cost).toFixed(4);
+          state$1.balance.timestamp = Date.now();
+        }
+      }
+    } catch {
+    }
     if (state$1.history.length > MAX_HISTORY) {
       const overflow = state$1.history.slice(MAX_HISTORY);
       appendHistoryCold(overflow).catch(() => {
@@ -2642,7 +2655,7 @@ function renderDiff() {
 }
 function computeOverview() {
   const s = getSelectedSave();
-  if (!s) return { balanceText: "¥0.00 CNY", totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0 };
+  if (!s) return { balanceText: "¥0.00 CNY", totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0, remainingRounds: null };
   const totalCost = s.total_cost || 0;
   const totalTokens = s.total_tokens || 0;
   const hit = s.cache_hit_tokens || 0, miss = s.cache_miss_tokens || 0, output = s.output_tokens || 0;
@@ -2658,6 +2671,20 @@ function computeOverview() {
   const avgDuration = s.history?.length ? s.history.reduce((a, h) => a + (h.duration || 0), 0) / s.history.length / 1e3 : 0;
   const avgRate = s.history?.length ? s.history.reduce((a, h) => a + (h.tokenRate || 0), 0) / s.history.length : 0;
   const bal = state$1.customBalance || state$1.balance?.balance;
+  let remainingRounds = null;
+  try {
+    const balNum = bal != null && bal !== "" ? parseFloat(String(bal)) : NaN;
+    if (!isNaN(balNum) && s.history?.length) {
+      const dsHist = (s.history || []).filter((h) => typeof h.model === "string" && h.model.toLowerCase().indexOf("deepseek") === 0);
+      if (dsHist.length) {
+        const alpha = 0.3;
+        let ewma = dsHist[dsHist.length - 1].cost || 0;
+        for (let i = dsHist.length - 2; i >= 0; i--) ewma = alpha * (dsHist[i].cost || 0) + (1 - alpha) * ewma;
+        if (ewma > 0) remainingRounds = Math.floor(balNum / ewma);
+      }
+    }
+  } catch {
+  }
   return {
     balanceText: bal ? "¥" + bal + " CNY" : "¥0.00 CNY",
     totalCost,
@@ -2673,7 +2700,8 @@ function computeOverview() {
     avgTokens,
     avgDuration,
     avgRate,
-    rounds
+    rounds,
+    remainingRounds
   };
 }
 function getDoc$4() {
@@ -2823,6 +2851,14 @@ function renderOverview() {
   const v = computeOverview();
   const balEl = doc.getElementById("aus-balance");
   if (balEl) balEl.textContent = v.balanceText;
+  const remEl = doc.getElementById("aus-balance-remaining");
+  if (remEl) {
+    if (v.remainingRounds != null) remEl.textContent = "预计还可进行 " + v.remainingRounds.toLocaleString("zh-CN") + " 轮对话（仅 DeepSeek 官方）";
+    else {
+      const hasBal = !!(state$1.customBalance || state$1.balance?.balance);
+      remEl.textContent = hasBal ? "暂无 DeepSeek 对话数据，无法预测" : "查询余额后可预测剩余轮次";
+    }
+  }
   const costEl = doc.getElementById("aus-total-cost");
   if (costEl) costEl.textContent = "¥" + v.totalCost.toFixed(4) + " CNY";
   const tokEl = doc.getElementById("aus-total-tokens");
@@ -4293,7 +4329,7 @@ function createPanel() {
         <div style="max-width:1100px;margin:0 auto;display:grid;gap:16px;">
           <div data-view="overview">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div class="ds-card"><div class="ds-card-title">充值余额</div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:11px;">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导出</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导入</button></div></div>
+              <div class="ds-card"><div class="ds-card-title">充值余额</div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div id="aus-balance-remaining" style="font-size:11px;color:var(--ds-text-2);margin-top:6px;min-height:16px;"></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:11px;">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导出</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导入</button></div></div>
               <div class="ds-card"><div class="ds-card-title">累计消费</div><div class="ds-card-val" id="aus-total-cost">¥0.0000<small>CNY</small></div><div style="font-size:11px;color:var(--ds-text-3);margin-top:2px;" id="aus-total-tokens">0 tokens</div></div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
