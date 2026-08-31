@@ -2793,8 +2793,21 @@ async function drawBarLine(el, id, labels, series) {
     opts.yAxis = { max: 100, axisLabel: { formatter: (v) => v + "%" } };
   }
   if (id === "dur") {
-    opts.yAxis = [{ type: "value", name: "s" }, { type: "value", name: "t/s" }];
-    opts.series = series.map((s, i) => ({ ...series[i], yAxisIndex: s.name.includes("速率") || s.name.includes("rate") ? 1 : 0 }));
+    opts.yAxis = [
+      { type: "value", name: "耗时 s", position: "left", axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF") }, splitLine: { lineStyle: { color: themeColor$1("--ds-card", "#F6F7F8") } } },
+      { type: "value", name: "速率 t/s", position: "right", axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF") }, splitLine: { show: false } }
+    ];
+    opts.series = series.map((s) => ({
+      name: s.name,
+      type: "line",
+      yAxisIndex: s.name.includes("速率") || s.name.toLowerCase().includes("rate") ? 1 : 0,
+      data: s.data,
+      smooth: true,
+      symbolSize: 4,
+      lineStyle: { color: s.color, width: 2 },
+      itemStyle: { color: s.color },
+      areaStyle: s.name.includes("耗时") ? { opacity: 0.08, color: s.color } : void 0
+    }));
   }
   c.setOption(opts);
 }

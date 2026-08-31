@@ -197,7 +197,23 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
   };
   // 命中/请求等单指标改为线+面积更可读
   if (id==='hit'){ opts.series = [{ name:'命中率', type:'line', data: series[0].data, areaStyle:{opacity:0.12,color:series[0].color}, lineStyle:{color:series[0].color}, itemStyle:{color:series[0].color}, smooth:true }]; opts.yAxis={ max:100, axisLabel:{formatter:(v:number)=>v+'%'} } as any; }
-  if (id==='dur'){ opts.yAxis=[{type:'value',name:'s'},{type:'value',name:'t/s'}]; opts.series = series.map((s,i)=>({ ...series[i], yAxisIndex: s.name.includes('速率')||s.name.includes('rate')?1:0 })); }
+  if (id==='dur'){
+    opts.yAxis=[
+      {type:'value', name:'耗时 s', position:'left', axisLabel:{fontSize:10,color:themeColor('--ds-text-3','#9CA3AF')}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F6F7F8')}}},
+      {type:'value', name:'速率 t/s', position:'right', axisLabel:{fontSize:10,color:themeColor('--ds-text-3','#9CA3AF')}, splitLine:{show:false}}
+    ] as any;
+    opts.series = series.map(s=>({
+      name: s.name,
+      type:'line',
+      yAxisIndex: s.name.includes('速率')||s.name.toLowerCase().includes('rate') ? 1 : 0,
+      data: s.data,
+      smooth: true,
+      symbolSize: 4,
+      lineStyle:{ color:s.color, width:2 },
+      itemStyle:{ color:s.color },
+      areaStyle: s.name.includes('耗时') ? { opacity:0.08, color:s.color } : undefined,
+    }));
+  }
   c.setOption(opts);
 }
 
