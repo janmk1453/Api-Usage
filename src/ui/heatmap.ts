@@ -13,10 +13,11 @@ function themeIsDark(): boolean {
 
 export function renderHeatmap(filtered: any[]) {
   const doc = getDoc();
-  const container = doc.getElementById('aus-heatmap-container') as HTMLElement | null;
-  const legendEl = doc.getElementById('aus-heatmap-legend') as HTMLElement | null;
-  const labelsEl = doc.getElementById('aus-heatmap-labels') as HTMLElement | null;
-  const scrollEl = doc.getElementById('aus-heatmap-scroll') as HTMLElement | null;
+  // 兼容：优先概览页容器（当前主位），回退统计页旧容器
+  const container = (doc.getElementById('aus-heatmap-container-overview') || doc.getElementById('aus-heatmap-container')) as HTMLElement | null;
+  const legendEl = (doc.getElementById('aus-heatmap-legend-overview') || doc.getElementById('aus-heatmap-legend')) as HTMLElement | null;
+  const labelsEl = (doc.getElementById('aus-heatmap-labels-overview') || doc.getElementById('aus-heatmap-labels')) as HTMLElement | null;
+  const scrollEl = (doc.getElementById('aus-heatmap-scroll-overview') || doc.getElementById('aus-heatmap-scroll')) as HTMLElement | null;
   if (!container) return;
 
   if (!filtered || filtered.length === 0) {
@@ -35,12 +36,12 @@ export function renderHeatmap(filtered: any[]) {
   const keys = Object.keys(dayMap).sort();
   const isDark = themeIsDark();
 
-  // 时间范围：近 53 周（GitHub 风格）+ 覆盖最早数据
+  // 时间范围：近 2 年（占满右侧空位，与原脚本 2 年一致）+ 覆盖更早数据
   const now = new Date();
   const endStr = localDay(now.getTime());
   const endDate = new Date(endStr + 'T00:00:00Z');
   let startDate = new Date(endDate);
-  startDate.setUTCFullYear(startDate.getUTCFullYear() - 1);
+  startDate.setUTCFullYear(startDate.getUTCFullYear() - 2);
   // 若最早数据更早，则扩展
   if (keys.length > 0) {
     const earliest = new Date(keys[0] + 'T00:00:00Z');

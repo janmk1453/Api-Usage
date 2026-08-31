@@ -2676,6 +2676,142 @@ function computeOverview() {
     rounds
   };
 }
+function getDoc$4() {
+  return window.parent?.document ?? document;
+}
+function themeIsDark() {
+  try {
+    const doc = getDoc$4();
+    const p = doc.getElementById("aus-panel");
+    return p?.getAttribute("data-ds-theme") === "dark";
+  } catch {
+    return false;
+  }
+}
+function renderHeatmap(filtered) {
+  const doc = getDoc$4();
+  const container = doc.getElementById("aus-heatmap-container-overview") || doc.getElementById("aus-heatmap-container");
+  const legendEl = doc.getElementById("aus-heatmap-legend-overview") || doc.getElementById("aus-heatmap-legend");
+  const labelsEl = doc.getElementById("aus-heatmap-labels-overview") || doc.getElementById("aus-heatmap-labels");
+  const scrollEl = doc.getElementById("aus-heatmap-scroll-overview") || doc.getElementById("aus-heatmap-scroll");
+  if (!container) return;
+  if (!filtered || filtered.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--ds-text-3);font-size:12px">暂无数据</div>';
+    if (legendEl) legendEl.innerHTML = "";
+    if (labelsEl) labelsEl.innerHTML = "";
+    return;
+  }
+  const dayMap = {};
+  for (const h of filtered) {
+    const k = localDay$1(h.timestamp);
+    dayMap[k] = (dayMap[k] || 0) + (h.total_tokens || 0);
+  }
+  const keys = Object.keys(dayMap).sort();
+  const isDark = themeIsDark();
+  const now = /* @__PURE__ */ new Date();
+  const endStr = localDay$1(now.getTime());
+  const endDate = /* @__PURE__ */ new Date(endStr + "T00:00:00Z");
+  let startDate = new Date(endDate);
+  startDate.setUTCFullYear(startDate.getUTCFullYear() - 2);
+  if (keys.length > 0) {
+    const earliest = /* @__PURE__ */ new Date(keys[0] + "T00:00:00Z");
+    if (earliest < startDate) startDate = earliest;
+  }
+  const sd = startDate.getUTCDay();
+  startDate.setUTCDate(startDate.getUTCDate() + (sd === 0 ? -6 : 1 - sd));
+  const ed = endDate.getUTCDay();
+  endDate.setUTCDate(endDate.getUTCDate() + (ed === 0 ? 0 : 7 - ed));
+  const totalDays = Math.round((endDate.getTime() - startDate.getTime()) / 864e5);
+  const totalWeeks = Math.ceil(totalDays / 7);
+  const vals = [];
+  for (const k in dayMap) if (dayMap[k] > 0) vals.push(dayMap[k]);
+  vals.sort((a, b) => a - b);
+  const pct = (arr, p) => {
+    if (arr.length === 0) return 0;
+    const idx = Math.ceil(arr.length * p / 100) - 1;
+    return arr[Math.max(0, Math.min(idx, arr.length - 1))];
+  };
+  let p25 = pct(vals, 25), p50 = pct(vals, 50), p75 = pct(vals, 75);
+  if (p25 === 0 && p50 === 0 && p75 === 0) {
+    p25 = 1;
+    p50 = 1e3;
+    p75 = 1e4;
+  } else if (p25 === p50 && p50 === p75) {
+    p25 = Math.max(1, Math.floor(p50 / 2));
+    p75 = p50 * 2;
+  }
+  const getLevel = (t) => {
+    if (t <= 0) return 0;
+    if (t <= p25) return 1;
+    if (t <= p50) return 2;
+    if (t <= p75) return 3;
+    return 4;
+  };
+  const colorsDark = ["#161b22", "#0d3b20", "#1a7f37", "#3fb950", "#aceebb"];
+  const colorsLight = ["#EBEDF0", "#9BE9A8", "#40C463", "#30A14E", "#216E39"];
+  const clr = isDark ? colorsDark : colorsLight;
+  const borderClr = isDark ? "#1f2937" : "#E5E7EB";
+  const mn = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+  const dl = ["周一", "", "周三", "", "周五", "", "周日"];
+  const cs = 12;
+  if (labelsEl) {
+    let lhtml = '<div style="display:flex;flex-direction:column">';
+    lhtml += '<div style="height:16px;width:28px;"></div>';
+    for (let d = 0; d < 7; d++) {
+      const lh = cs + 2;
+      lhtml += '<div style="height:' + lh + "px;width:28px;padding:0 4px 0 0;line-height:" + lh + 'px;font-size:9px;color:var(--ds-text-3);text-align:right;box-sizing:border-box">' + (d % 2 === 0 ? dl[d] : "") + "</div>";
+    }
+    lhtml += "</div>";
+    labelsEl.innerHTML = lhtml;
+  }
+  let html = '<table style="border-collapse:collapse;font-size:10px;color:var(--ds-text-3)"><tr><td style="height:16px;padding:0;line-height:16px"></td>';
+  let lastM = -1;
+  for (let w = 0; w < totalWeeks; w++) {
+    const ws = new Date(startDate);
+    ws.setUTCDate(startDate.getUTCDate() + w * 7);
+    const mk = ws.getUTCFullYear() * 12 + ws.getUTCMonth();
+    if (mk !== lastM) {
+      let span = 1;
+      for (let w2 = w + 1; w2 < totalWeeks; w2++) {
+        const ws2 = new Date(startDate);
+        ws2.setUTCDate(startDate.getUTCDate() + w2 * 7);
+        if (ws2.getUTCFullYear() * 12 + ws2.getUTCMonth() === mk) span++;
+        else break;
+      }
+      let label = mn[ws.getUTCMonth()];
+      if (ws.getUTCMonth() === 0) label = ws.getUTCFullYear() + "年";
+      html += '<td colspan="' + span + '" style="padding:0 0 0 2px;line-height:16px;height:16px;font-size:10px;color:var(--ds-text-3);white-space:nowrap">' + label + "</td>";
+      lastM = mk;
+    }
+  }
+  html += "</tr>";
+  for (let d = 0; d < 7; d++) {
+    html += "<tr>";
+    for (let w = 0; w < totalWeeks; w++) {
+      const cd = new Date(startDate);
+      cd.setUTCDate(startDate.getUTCDate() + w * 7 + d);
+      const key = cd.toISOString().slice(0, 10);
+      const t = dayMap[key] || 0;
+      const lv = getLevel(t);
+      const tip = cd.getUTCFullYear() + "年" + (cd.getUTCMonth() + 1) + "月" + cd.getUTCDate() + "日" + (t > 0 ? " · " + t.toLocaleString() + " Token" : " · 无记录");
+      html += '<td style="padding:1px;line-height:0;font-size:0"><div style="width:' + cs + "px;height:" + cs + "px;border-radius:2px;background:" + clr[lv] + ";border:1px solid " + borderClr + ';cursor:pointer;box-sizing:border-box;" title="' + tip + '"></div></td>';
+    }
+    html += "</tr>";
+  }
+  html += "</table>";
+  container.innerHTML = html;
+  if (legendEl) {
+    let lhtml = "更少 ";
+    for (let i = 0; i < 5; i++) {
+      lhtml += '<span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:' + clr[i] + ";border:1px solid " + borderClr + ';vertical-align:middle;margin:0 0 0 3px"></span>';
+    }
+    lhtml += " 更多";
+    legendEl.innerHTML = lhtml;
+  }
+  setTimeout(() => {
+    if (scrollEl) scrollEl.scrollLeft = scrollEl.scrollWidth;
+  }, 50);
+}
 function fmt(n) {
   return n.toLocaleString("zh-CN");
 }
@@ -2722,6 +2858,11 @@ function renderOverview() {
       <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:var(--ds-text-2);">平均耗时</div><div style="font-size:18px;font-weight:600;color:var(--ds-text);margin-top:4px;">${v.avgDuration.toFixed(1)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">s</span></div></div>
       <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:var(--ds-text-2);">输出速率</div><div style="font-size:18px;font-weight:600;color:var(--ds-green);margin-top:4px;">${Math.round(v.avgRate)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">t/s</span></div></div>
     `;
+  }
+  try {
+    const hist = state$1.history || [];
+    renderHeatmap(hist);
+  } catch {
   }
 }
 const Y_OPTIONS = [
@@ -2863,12 +3004,12 @@ const state = {
   dur: { y: /* @__PURE__ */ new Set(["duration", "rate"]), x: "day", pieMode: "token" },
   pie: { y: /* @__PURE__ */ new Set([]), x: "day", pieMode: "token" }
 };
-function getDoc$4() {
+function getDoc$3() {
   return window.parent?.document ?? document;
 }
 function themeColor$1(name, fallback) {
   try {
-    const doc = getDoc$4();
+    const doc = getDoc$3();
     const el = doc.getElementById("aus-panel") || doc.documentElement;
     const v = getComputedStyle(el).getPropertyValue(name).trim();
     return v || fallback;
@@ -2951,7 +3092,7 @@ function renderExtraCharts(filtered) {
 }
 async function renderOne(id, filtered) {
   try {
-    const doc = getDoc$4();
+    const doc = getDoc$3();
     const el = doc.getElementById(`aus-chart-${id}`);
     if (!el) return;
     if (id === "pie") {
@@ -3053,7 +3194,7 @@ async function renderOne(id, filtered) {
     await drawBarLine(el, id, labels, series);
   } catch (e) {
     try {
-      const doc2 = getDoc$4();
+      const doc2 = getDoc$3();
       const el2 = doc2.getElementById(`aus-chart-${id}`);
       if (el2) el2.innerHTML = '<div style="text-align:center;padding:20px;color:#DC2626;font-size:11px;">图表加载失败: ' + (e?.message || e) + "</div>";
     } catch {
@@ -3135,7 +3276,7 @@ async function drawBarLine(el, id, labels, series) {
   }
 }
 function initExtraCharts() {
-  const doc = getDoc$4();
+  const doc = getDoc$3();
   for (const id of Object.keys(CHART_DEFS)) {
     if (!CHART_DEFS[id].hasX) continue;
     const yBtn = doc.getElementById(`aus-extra-y-${id}`);
@@ -3177,7 +3318,7 @@ function initExtraCharts() {
   });
 }
 function renderExtraY(id) {
-  const doc = getDoc$4();
+  const doc = getDoc$3();
   const drop = doc.getElementById(`aus-extra-y-drop-${id}`);
   const label = doc.getElementById(`aus-extra-y-label-${id}`);
   if (!drop) return;
@@ -3202,7 +3343,7 @@ function renderExtraY(id) {
   });
 }
 function renderExtraX(id) {
-  const doc = getDoc$4();
+  const doc = getDoc$3();
   const drop = doc.getElementById(`aus-extra-x-drop-${id}`);
   const label = doc.getElementById(`aus-extra-x-label-${id}`);
   if (!drop) return;
@@ -3221,142 +3362,6 @@ function renderExtraX(id) {
       renderExtraCharts(lastFiltered);
     };
   });
-}
-function getDoc$3() {
-  return window.parent?.document ?? document;
-}
-function themeIsDark() {
-  try {
-    const doc = getDoc$3();
-    const p = doc.getElementById("aus-panel");
-    return p?.getAttribute("data-ds-theme") === "dark";
-  } catch {
-    return false;
-  }
-}
-function renderHeatmap(filtered) {
-  const doc = getDoc$3();
-  const container = doc.getElementById("aus-heatmap-container");
-  const legendEl = doc.getElementById("aus-heatmap-legend");
-  const labelsEl = doc.getElementById("aus-heatmap-labels");
-  const scrollEl = doc.getElementById("aus-heatmap-scroll");
-  if (!container) return;
-  if (!filtered || filtered.length === 0) {
-    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--ds-text-3);font-size:12px">暂无数据</div>';
-    if (legendEl) legendEl.innerHTML = "";
-    if (labelsEl) labelsEl.innerHTML = "";
-    return;
-  }
-  const dayMap = {};
-  for (const h of filtered) {
-    const k = localDay$1(h.timestamp);
-    dayMap[k] = (dayMap[k] || 0) + (h.total_tokens || 0);
-  }
-  const keys = Object.keys(dayMap).sort();
-  const isDark = themeIsDark();
-  const now = /* @__PURE__ */ new Date();
-  const endStr = localDay$1(now.getTime());
-  const endDate = /* @__PURE__ */ new Date(endStr + "T00:00:00Z");
-  let startDate = new Date(endDate);
-  startDate.setUTCFullYear(startDate.getUTCFullYear() - 1);
-  if (keys.length > 0) {
-    const earliest = /* @__PURE__ */ new Date(keys[0] + "T00:00:00Z");
-    if (earliest < startDate) startDate = earliest;
-  }
-  const sd = startDate.getUTCDay();
-  startDate.setUTCDate(startDate.getUTCDate() + (sd === 0 ? -6 : 1 - sd));
-  const ed = endDate.getUTCDay();
-  endDate.setUTCDate(endDate.getUTCDate() + (ed === 0 ? 0 : 7 - ed));
-  const totalDays = Math.round((endDate.getTime() - startDate.getTime()) / 864e5);
-  const totalWeeks = Math.ceil(totalDays / 7);
-  const vals = [];
-  for (const k in dayMap) if (dayMap[k] > 0) vals.push(dayMap[k]);
-  vals.sort((a, b) => a - b);
-  const pct = (arr, p) => {
-    if (arr.length === 0) return 0;
-    const idx = Math.ceil(arr.length * p / 100) - 1;
-    return arr[Math.max(0, Math.min(idx, arr.length - 1))];
-  };
-  let p25 = pct(vals, 25), p50 = pct(vals, 50), p75 = pct(vals, 75);
-  if (p25 === 0 && p50 === 0 && p75 === 0) {
-    p25 = 1;
-    p50 = 1e3;
-    p75 = 1e4;
-  } else if (p25 === p50 && p50 === p75) {
-    p25 = Math.max(1, Math.floor(p50 / 2));
-    p75 = p50 * 2;
-  }
-  const getLevel = (t) => {
-    if (t <= 0) return 0;
-    if (t <= p25) return 1;
-    if (t <= p50) return 2;
-    if (t <= p75) return 3;
-    return 4;
-  };
-  const colorsDark = ["#161b22", "#0d3b20", "#1a7f37", "#3fb950", "#aceebb"];
-  const colorsLight = ["#EBEDF0", "#9BE9A8", "#40C463", "#30A14E", "#216E39"];
-  const clr = isDark ? colorsDark : colorsLight;
-  const borderClr = isDark ? "#1f2937" : "#E5E7EB";
-  const mn = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
-  const dl = ["周一", "", "周三", "", "周五", "", "周日"];
-  const cs = 12;
-  if (labelsEl) {
-    let lhtml = '<div style="display:flex;flex-direction:column">';
-    lhtml += '<div style="height:16px;width:28px;"></div>';
-    for (let d = 0; d < 7; d++) {
-      const lh = cs + 2;
-      lhtml += '<div style="height:' + lh + "px;width:28px;padding:0 4px 0 0;line-height:" + lh + 'px;font-size:9px;color:var(--ds-text-3);text-align:right;box-sizing:border-box">' + (d % 2 === 0 ? dl[d] : "") + "</div>";
-    }
-    lhtml += "</div>";
-    labelsEl.innerHTML = lhtml;
-  }
-  let html = '<table style="border-collapse:collapse;font-size:10px;color:var(--ds-text-3)"><tr><td style="height:16px;padding:0;line-height:16px"></td>';
-  let lastM = -1;
-  for (let w = 0; w < totalWeeks; w++) {
-    const ws = new Date(startDate);
-    ws.setUTCDate(startDate.getUTCDate() + w * 7);
-    const mk = ws.getUTCFullYear() * 12 + ws.getUTCMonth();
-    if (mk !== lastM) {
-      let span = 1;
-      for (let w2 = w + 1; w2 < totalWeeks; w2++) {
-        const ws2 = new Date(startDate);
-        ws2.setUTCDate(startDate.getUTCDate() + w2 * 7);
-        if (ws2.getUTCFullYear() * 12 + ws2.getUTCMonth() === mk) span++;
-        else break;
-      }
-      let label = mn[ws.getUTCMonth()];
-      if (ws.getUTCMonth() === 0) label = ws.getUTCFullYear() + "年";
-      html += '<td colspan="' + span + '" style="padding:0 0 0 2px;line-height:16px;height:16px;font-size:10px;color:var(--ds-text-3);white-space:nowrap">' + label + "</td>";
-      lastM = mk;
-    }
-  }
-  html += "</tr>";
-  for (let d = 0; d < 7; d++) {
-    html += "<tr>";
-    for (let w = 0; w < totalWeeks; w++) {
-      const cd = new Date(startDate);
-      cd.setUTCDate(startDate.getUTCDate() + w * 7 + d);
-      const key = cd.toISOString().slice(0, 10);
-      const t = dayMap[key] || 0;
-      const lv = getLevel(t);
-      const tip = cd.getUTCFullYear() + "年" + (cd.getUTCMonth() + 1) + "月" + cd.getUTCDate() + "日" + (t > 0 ? " · " + t.toLocaleString() + " Token" : " · 无记录");
-      html += '<td style="padding:1px;line-height:0;font-size:0"><div style="width:' + cs + "px;height:" + cs + "px;border-radius:2px;background:" + clr[lv] + ";border:1px solid " + borderClr + ';cursor:pointer;box-sizing:border-box;" title="' + tip + '"></div></td>';
-    }
-    html += "</tr>";
-  }
-  html += "</table>";
-  container.innerHTML = html;
-  if (legendEl) {
-    let lhtml = "更少 ";
-    for (let i = 0; i < 5; i++) {
-      lhtml += '<span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:' + clr[i] + ";border:1px solid " + borderClr + ';vertical-align:middle;margin:0 0 0 3px"></span>';
-    }
-    lhtml += " 更多";
-    legendEl.innerHTML = lhtml;
-  }
-  setTimeout(() => {
-    if (scrollEl) scrollEl.scrollLeft = scrollEl.scrollWidth;
-  }, 50);
 }
 let currentRange = "30d";
 let customStart = "";
@@ -3916,10 +3921,6 @@ async function renderStatsView() {
   const tokEl = doc.getElementById("aus-stats-tok");
   if (tokEl) tokEl.textContent = totalTok.toLocaleString("zh-CN");
   renderModelSummary(summaryFiltered);
-  try {
-    renderHeatmap(chartFiltered);
-  } catch {
-  }
   renderChart(chartFiltered);
   renderModelPicker();
   renderChartSelectors();
@@ -3946,10 +3947,6 @@ async function renderStatsView() {
         const te2 = doc.getElementById("aus-stats-tok");
         if (te2) te2.textContent = t2.toLocaleString("zh-CN");
         renderModelSummary(sf2);
-        try {
-          renderHeatmap(cf2);
-        } catch {
-        }
         renderChart(cf2);
         renderExtraCharts(cf2);
       }
@@ -4282,8 +4279,24 @@ function createPanel() {
               <div class="ds-card" id="aus-overview-spend"></div>
             </div>
             <div id="aus-overview-four" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px;"></div>
-          </div>
-          <div data-view="stats" style="display:none;">
+            <div class="ds-card" style="margin-top:12px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+                <div style="font-size:12px;font-weight:600;color:var(--ds-text);">Token 使用量热力图</div>
+                <div id="aus-heatmap-legend-overview" style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--ds-text-3);"></div>
+              </div>
+              <div style="display:flex;gap:0;overflow:hidden;">
+                <div id="aus-heatmap-labels-overview" style="flex-shrink:0;padding:4px 0"></div>
+                <div id="aus-heatmap-scroll-overview" style="overflow-x:auto;overflow-y:hidden;flex:1;min-width:0;padding:4px 0;cursor:grab;scrollbar-width:thin;">
+                  <div id="aus-heatmap-container-overview" style="display:inline-block;min-width:100%"></div>
+                </div>
+              </div>
+              <div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;display:flex;justify-content:space-between;">
+                <span>按日聚合 Token，与 GitHub 贡献图一致（深绿=高用量，展示近 2 年）</span>
+                <span style="color:var(--ds-text-2);">悬停查看日期</span>
+              </div>
+            </div>
+           </div>
+           <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span><span style="font-size:10px;">▼</span></div>
               <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);">全部</span><span style="font-size:10px;">▼</span></div>
@@ -4313,22 +4326,6 @@ function createPanel() {
                 <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">模型</th><th style="padding:6px 8px;">调用次数</th><th style="padding:6px 8px;">输入(命中)</th><th style="padding:6px 8px;">输入(未命中)</th><th style="padding:6px 8px;">输出</th><th style="padding:6px 8px;">总 Tokens</th><th style="padding:6px 8px;">总成本</th><th style="padding:6px 8px;">平均成本</th><th style="padding:6px 8px;">平均耗时</th><th style="padding:6px 8px;">平均速率</th></tr></thead>
                 <tbody id="aus-summary-tbody"><tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
               </table>
-            </div>
-            <div class="ds-card" style="margin-top:12px;">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
-                <div style="font-size:12px;font-weight:600;color:var(--ds-text);">Token 使用量热力图</div>
-                <div id="aus-heatmap-legend" style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--ds-text-3);"></div>
-              </div>
-              <div style="display:flex;gap:0;overflow:hidden;">
-                <div id="aus-heatmap-labels" style="flex-shrink:0;padding:4px 0"></div>
-                <div id="aus-heatmap-scroll" style="overflow-x:auto;overflow-y:hidden;flex:1;min-width:0;padding:4px 0;cursor:grab;scrollbar-width:thin;">
-                  <div id="aus-heatmap-container" style="display:inline-block;min-width:100%"></div>
-                </div>
-              </div>
-              <div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;display:flex;justify-content:space-between;">
-                <span>按日聚合 Token，与 GitHub 贡献图一致（深绿=高用量）</span>
-                <span style="color:var(--ds-text-2);">悬停查看日期</span>
-              </div>
             </div>
             <div class="ds-card" style="margin-top:12px;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">图表</span><div style="display:flex;gap:8px;position:relative;"><div id="aus-chart-y-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;"><span style="color:var(--ds-text-2);">Y</span><span id="aus-chart-y-label" style="font-weight:600;color:var(--ds-text);">总费用</span><span style="font-size:10px;">▼</span></div><div id="aus-chart-x-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;"><span style="color:var(--ds-text-2);">X</span><span id="aus-chart-x-label" style="font-weight:600;color:var(--ds-text);">每日</span><span style="font-size:10px;">▼</span></div><div id="aus-chart-y-dropdown" style="display:none;position:absolute;top:34px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;"></div><div id="aus-chart-x-dropdown" style="display:none;position:absolute;top:34px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:140px;"></div></div></div><div id="aus-stats-chart" style="height:300px;"></div></div>
             <div id="aus-extra-charts" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px;">

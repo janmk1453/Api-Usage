@@ -293,8 +293,24 @@ export function createPanel() {
               <div class="ds-card" id="aus-overview-spend"></div>
             </div>
             <div id="aus-overview-four" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px;"></div>
-          </div>
-          <div data-view="stats" style="display:none;">
+            <div class="ds-card" style="margin-top:12px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+                <div style="font-size:12px;font-weight:600;color:var(--ds-text);">Token 使用量热力图</div>
+                <div id="aus-heatmap-legend-overview" style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--ds-text-3);"></div>
+              </div>
+              <div style="display:flex;gap:0;overflow:hidden;">
+                <div id="aus-heatmap-labels-overview" style="flex-shrink:0;padding:4px 0"></div>
+                <div id="aus-heatmap-scroll-overview" style="overflow-x:auto;overflow-y:hidden;flex:1;min-width:0;padding:4px 0;cursor:grab;scrollbar-width:thin;">
+                  <div id="aus-heatmap-container-overview" style="display:inline-block;min-width:100%"></div>
+                </div>
+              </div>
+              <div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;display:flex;justify-content:space-between;">
+                <span>按日聚合 Token，与 GitHub 贡献图一致（深绿=高用量，展示近 2 年）</span>
+                <span style="color:var(--ds-text-2);">悬停查看日期</span>
+              </div>
+            </div>
+           </div>
+           <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span><span style="font-size:10px;">▼</span></div>
               <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);">全部</span><span style="font-size:10px;">▼</span></div>
@@ -324,22 +340,6 @@ export function createPanel() {
                 <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">模型</th><th style="padding:6px 8px;">调用次数</th><th style="padding:6px 8px;">输入(命中)</th><th style="padding:6px 8px;">输入(未命中)</th><th style="padding:6px 8px;">输出</th><th style="padding:6px 8px;">总 Tokens</th><th style="padding:6px 8px;">总成本</th><th style="padding:6px 8px;">平均成本</th><th style="padding:6px 8px;">平均耗时</th><th style="padding:6px 8px;">平均速率</th></tr></thead>
                 <tbody id="aus-summary-tbody"><tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
               </table>
-            </div>
-            <div class="ds-card" style="margin-top:12px;">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
-                <div style="font-size:12px;font-weight:600;color:var(--ds-text);">Token 使用量热力图</div>
-                <div id="aus-heatmap-legend" style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--ds-text-3);"></div>
-              </div>
-              <div style="display:flex;gap:0;overflow:hidden;">
-                <div id="aus-heatmap-labels" style="flex-shrink:0;padding:4px 0"></div>
-                <div id="aus-heatmap-scroll" style="overflow-x:auto;overflow-y:hidden;flex:1;min-width:0;padding:4px 0;cursor:grab;scrollbar-width:thin;">
-                  <div id="aus-heatmap-container" style="display:inline-block;min-width:100%"></div>
-                </div>
-              </div>
-              <div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;display:flex;justify-content:space-between;">
-                <span>按日聚合 Token，与 GitHub 贡献图一致（深绿=高用量）</span>
-                <span style="color:var(--ds-text-2);">悬停查看日期</span>
-              </div>
             </div>
             <div class="ds-card" style="margin-top:12px;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">图表</span><div style="display:flex;gap:8px;position:relative;"><div id="aus-chart-y-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;"><span style="color:var(--ds-text-2);">Y</span><span id="aus-chart-y-label" style="font-weight:600;color:var(--ds-text);">总费用</span><span style="font-size:10px;">▼</span></div><div id="aus-chart-x-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;"><span style="color:var(--ds-text-2);">X</span><span id="aus-chart-x-label" style="font-weight:600;color:var(--ds-text);">每日</span><span style="font-size:10px;">▼</span></div><div id="aus-chart-y-dropdown" style="display:none;position:absolute;top:34px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;"></div><div id="aus-chart-x-dropdown" style="display:none;position:absolute;top:34px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:140px;"></div></div></div><div id="aus-stats-chart" style="height:300px;"></div></div>
             <div id="aus-extra-charts" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px;">

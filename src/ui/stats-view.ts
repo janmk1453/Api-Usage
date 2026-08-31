@@ -2,7 +2,6 @@ import { getSelectedSave } from '../store/index';
 import { localDay, esc } from '../utils/date';
 import { Y_OPTIONS, X_OPTIONS, getYSelected, getXSelected, toggleY, setXSelected, aggregateForChart } from './chart-config';
 import { renderExtraCharts } from './extra-charts';
-import { renderHeatmap } from './heatmap';
 
 type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom' | 'all';
 let currentRange: RangeKey = '30d';
@@ -483,7 +482,6 @@ export async function renderStatsView() {
   const tokEl = doc.getElementById('aus-stats-tok');
   if (tokEl) tokEl.textContent = totalTok.toLocaleString('zh-CN');
   renderModelSummary(summaryFiltered);
-  try { renderHeatmap(chartFiltered); } catch {}
   renderChart(chartFiltered);
   renderModelPicker();
   renderChartSelectors();
@@ -506,7 +504,7 @@ export async function renderStatsView() {
         const ce2 = doc.getElementById('aus-stats-cost'); if(ce2) ce2.textContent='¥'+c2.toFixed(2)+' CNY';
         const re2 = doc.getElementById('aus-stats-req'); if(re2) re2.textContent=String(r2);
         const te2 = doc.getElementById('aus-stats-tok'); if(te2) te2.textContent=t2.toLocaleString('zh-CN');
-        renderModelSummary(sf2); try { renderHeatmap(cf2); } catch {} renderChart(cf2); renderExtraCharts(cf2);
+        renderModelSummary(sf2); renderChart(cf2); renderExtraCharts(cf2);
       }
     } catch {}
   }

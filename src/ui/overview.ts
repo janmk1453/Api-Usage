@@ -1,4 +1,6 @@
 import { computeOverview } from '../data/computed';
+import { renderHeatmap } from './heatmap';
+import { state } from '../store/index';
 
 function fmt(n: number) { return n.toLocaleString('zh-CN'); }
 function CNY(n: number) { return '¥' + n.toFixed(4) + ' CNY'; }
@@ -48,4 +50,10 @@ export function renderOverview() {
       <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:var(--ds-text-2);">输出速率</div><div style="font-size:18px;font-weight:600;color:var(--ds-green);margin-top:4px;">${Math.round(v.avgRate)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">t/s</span></div></div>
     `;
   }
+
+  // 热力图：用量概览页展示全部历史的 token 分布（近 2 年，占满右侧）
+  try {
+    const hist: any[] = (state.history || []) as any[];
+    renderHeatmap(hist);
+  } catch {}
 }
