@@ -145,6 +145,14 @@
   [data-extension="api-usage-stat"] .ds-grid-3 { grid-template-columns: 1fr; }
 }
 
+/* 热力图：块不超出屏幕，内部横向滑动 */
+#aus-heatmap-card-overview { max-width: 100% !important; overflow: hidden !important; box-sizing: border-box !important; }
+#aus-heatmap-scroll-overview { max-width: 100% !important; overflow-x: auto !important; overflow-y: hidden !important; -webkit-overflow-scrolling: touch !important; overscroll-behavior-x: contain !important; }
+#aus-heatmap-container-overview { min-width: max-content !important; }
+@media (max-width: 760px) {
+  #aus-heatmap-card-overview { overflow: hidden !important; }
+}
+
 /* 全屏独立面板 */
 #aus-overlay { background: var(--ds-overlay); backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 .aus-diff-full { position: fixed !important; inset: 0 !important; z-index: 100002 !important; overflow: auto !important; background: var(--ds-panel-bg) !important; padding: 20px !important; }
