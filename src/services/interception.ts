@@ -19,11 +19,16 @@ const TARGET_API = '/api/backends/chat-completions/generate';
 function installFetchCapture() {
   try {
     const p: any = (window as any).parent || window;
-    if (!p || !p.fetch || (p.fetch as any).__aus_patched) return;
+    if (!p || !p.fetch || (p.fetch as any).__aus_patched) {
+      try { console.log('[AUS-TEMP] installFetchCapture 跳过 已 patched 或无 fetch', { hasFetch: !!p?.fetch, patched: !!(p?.fetch as any)?.__aus_patched }); } catch {}
+      return;
+    }
     const rawFetch = p.fetch.bind(p);
+    try { console.log('[AUS-TEMP] installFetchCapture 开始安装', { target: TARGET_API }); } catch {}
     const patched: any = function(this: any) {
       const args: any = arguments;
       const url: string = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+      try { console.log('[AUS-TEMP] fetch 拦截入口', { url: String(url).slice(0, 200), hasBody: !!args[1]?.body }); } catch {}
       if (typeof url === 'string' && url.indexOf(TARGET_API) !== -1) {
         let reqBody: any = null;
         try { reqBody = JSON.parse(args[1]?.body || 'null'); } catch {}
@@ -34,10 +39,13 @@ function installFetchCapture() {
         // 记录 lastMessages 供 processUsage 使用
         try { lastMessages = msgs; lastStart = startTime; } catch {}
         // 直接走原生请求，不做 debug 模拟（扩展 debug 由设置单独控制）
+        try { console.log('[AUS-TEMP] 命中 TARGET_API 即将透传', { url: String(url).slice(0, 120) }); } catch {}
         return rawFetch.apply(p, args).then((res: Response) => {
+          try { console.log('[AUS-TEMP] fetch 响应返回', { url: String(url).slice(0, 120), status: (res as any)?.status, ok: (res as any)?.ok, ct: res.headers.get('content-type') }); } catch {}
           // 关键：任何解析异常都不应影响原 res 返回，避免对话中断
           try {
             const clone = res.clone();
+            try { console.log('[AUS-TEMP] clone 成功，准备解析 text'); } catch {}
             const ttftRef: any = { value: 0 };
             const thinkRef: any = { value: 0 };
             const parseAndProcess = (text: string, ttftVal: number, thinkTimeVal: number) => {
@@ -75,24 +83,30 @@ function installFetchCapture() {
               lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: data, ttft: ttftVal, thinkTime: thinkTimeVal };
               lastFetchModel = typeof model === 'string' ? model : null;
               lastFetchTime = Date.now();
+              try { console.log('[AUS-TEMP] fetch 解析成功 usage', { model, usage }); } catch {}
               try { console.log('[API用量统计][TRACE] fetch 捕获 usage', { url: String(url).slice(0, 80), usage: JSON.stringify(usage).slice(0, 1500), model }); } catch {}
               // 关键：恢复直接落账，但由 repository 5s指纹去重保证不翻倍
-              try { processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal); } catch (e) { console.error('[API用量统计] fetch 用量记录失败', (e as any)?.message || e); }
+              try { console.log('[AUS-TEMP] 即将 processUsage fetch'); } catch {}
+              try { processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal); try { console.log('[AUS-TEMP] processUsage fetch 完成'); } catch {} } catch (e) { console.error('[API用量统计] fetch 用量记录失败', (e as any)?.message || e); }
+            } else {
+              try { console.log('[AUS-TEMP] fetch 解析后无 usage', { textLen: text.length, hasData: !!data, dataKeys: data ? Object.keys(data).slice(0, 10) : [] }); } catch {}
             }
           };
           // 尝试根据 Content-Type 分发解析
           const ct = clone.headers.get('content-type') || '';
+          try { console.log('[AUS-TEMP] 准备 clone.text 解析', { ct }); } catch {}
           if (ct.includes('application/json')) {
-            clone.text().then(t => parseAndProcess(t, 0, 0)).catch(() => {});
+            clone.text().then(t => { try { console.log('[AUS-TEMP] clone.text json 完成', { len: t.length }); } catch {} parseAndProcess(t, 0, 0); }).catch((e: any) => { try { console.log('[AUS-TEMP] clone.text json 失败', e?.message); } catch {} });
           } else {
             // 流式：延迟解析，确保流已完整（原脚本在 res 克隆后异步解析）
-            clone.text().then(t => parseAndProcess(t, 0, 0)).catch(() => {});
+            clone.text().then(t => { try { console.log('[AUS-TEMP] clone.text stream 完成', { len: t.length }); } catch {} parseAndProcess(t, 0, 0); }).catch((e: any) => { try { console.log('[AUS-TEMP] clone.text stream 失败', e?.message); } catch {} });
           }
           } catch (e) {
             console.warn('[API用量统计] fetch 克隆解析异常，不影响原请求', (e as any)?.message || e);
+            try { console.log('[AUS-TEMP] fetch 克隆异常', (e as any)?.message); } catch {}
           }
           return res;
-        }).catch((e: any) => { throw e; });
+        }).catch((e: any) => { try { console.log('[AUS-TEMP] rawFetch 失败', e?.message); } catch {} throw e; });
       }
       // 非目标 API，直接透传
       return rawFetch.apply(p, args);
@@ -112,8 +126,15 @@ export function installInterception() {
     const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
     const es = ctx?.eventSource;
     const et = ctx?.event_types;
-    if (!es || !et) return false;
-    if (interceptionInstalled) return true;
+    try { console.log('[AUS-TEMP] installInterception 调用', { hasCtx: !!ctx, hasEs: !!es, hasEt: !!et, installed: interceptionInstalled }); } catch {}
+    if (!es || !et) {
+      try { console.log('[AUS-TEMP] installInterception 失败 无 es/et'); } catch {}
+      return false;
+    }
+    if (interceptionInstalled) {
+      try { console.log('[AUS-TEMP] installInterception 已安装跳过'); } catch {}
+      return true;
+    }
     // 记录原始 fetch 引用以便 disable 时还原
     try {
       const p: any = (window as any).parent || window;
@@ -124,7 +145,9 @@ export function installInterception() {
     es.on(et.MESSAGE_RECEIVED, messageReceivedHandler);
     // generate_interceptor 记录请求 messages（若 ST 支持）
     (globalThis as any).ApiUsageStatInterceptor = (chat: any[], _ctxSize: number, _abort: any, _type: string) => {
+      try { console.log('[AUS-TEMP] ApiUsageStatInterceptor 触发', { len: chat?.length, type: _type }); } catch {}
       try { setLastRequest(chat?.slice(-10) || [], Date.now()); } catch {}
+      try { console.log('[AUS-TEMP] setLastRequest 完成'); } catch {}
     };
     // 安装 fetch 兜底捕获
     try { installFetchCapture(); } catch {}
@@ -190,6 +213,7 @@ function pickUsageFromExtra(extra: any): any {
 
 function onGenerationEnded(...args: any[]) {
   const TRACE = '[API用量统计][TRACE]';
+  try { console.log('[AUS-TEMP] onGenerationEnded 入口', { argsLen: args.length, arg0Keys: args[0] ? Object.keys(args[0]).slice(0, 10) : [] }); } catch {}
   try {
     // ST 的 chat 尾条常带 extra.api_usage
     const ctx: any = (globalThis as any).SillyTavern?.getContext?.();

@@ -156,6 +156,7 @@ export const repository = {
       return null as any;
     }
     try { console.log(TRACE + ' addEntry 解析', { hit, miss, comp, total }); } catch {}
+    try { console.log('[AUS-TEMP] addEntry 入口', { model, total, hit, miss, comp, hasUsage: !!usage }); } catch {}
     // 指纹去重：5秒内同 model+total 防双记账（fetch 与 GENERATION_ENDED 并发）
     try {
       const now = Date.now();

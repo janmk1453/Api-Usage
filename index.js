@@ -694,6 +694,10 @@ const repository = {
     } catch {
     }
     try {
+      console.log("[AUS-TEMP] addEntry 入口", { model, total, hit, miss, comp, hasUsage: !!usage });
+    } catch {
+    }
+    try {
       const now = Date.now();
       const fp = `${model}|${total}|${hit}|${miss}|${comp}`;
       const lastFp = state$1._lastFp;
@@ -973,11 +977,25 @@ const TARGET_API = "/api/backends/chat-completions/generate";
 function installFetchCapture() {
   try {
     const p = window.parent || window;
-    if (!p || !p.fetch || p.fetch.__aus_patched) return;
+    if (!p || !p.fetch || p.fetch.__aus_patched) {
+      try {
+        console.log("[AUS-TEMP] installFetchCapture 跳过 已 patched 或无 fetch", { hasFetch: !!p?.fetch, patched: !!p?.fetch?.__aus_patched });
+      } catch {
+      }
+      return;
+    }
     const rawFetch2 = p.fetch.bind(p);
+    try {
+      console.log("[AUS-TEMP] installFetchCapture 开始安装", { target: TARGET_API });
+    } catch {
+    }
     const patched = function() {
       const args = arguments;
       const url = typeof args[0] === "string" ? args[0] : args[0]?.url || "";
+      try {
+        console.log("[AUS-TEMP] fetch 拦截入口", { url: String(url).slice(0, 200), hasBody: !!args[1]?.body });
+      } catch {
+      }
       if (typeof url === "string" && url.indexOf(TARGET_API) !== -1) {
         let reqBody = null;
         try {
@@ -996,9 +1014,21 @@ function installFetchCapture() {
           lastStart = startTime;
         } catch {
         }
+        try {
+          console.log("[AUS-TEMP] 命中 TARGET_API 即将透传", { url: String(url).slice(0, 120) });
+        } catch {
+        }
         return rawFetch2.apply(p, args).then((res) => {
           try {
+            console.log("[AUS-TEMP] fetch 响应返回", { url: String(url).slice(0, 120), status: res?.status, ok: res?.ok, ct: res.headers.get("content-type") });
+          } catch {
+          }
+          try {
             const clone = res.clone();
+            try {
+              console.log("[AUS-TEMP] clone 成功，准备解析 text");
+            } catch {
+            }
             const ttftRef = { value: 0 };
             const thinkRef = { value: 0 };
             const parseAndProcess = (text, ttftVal, thinkTimeVal) => {
@@ -1040,29 +1070,78 @@ function installFetchCapture() {
                 lastFetchModel = typeof model === "string" ? model : null;
                 lastFetchTime = Date.now();
                 try {
+                  console.log("[AUS-TEMP] fetch 解析成功 usage", { model, usage });
+                } catch {
+                }
+                try {
                   console.log("[API用量统计][TRACE] fetch 捕获 usage", { url: String(url).slice(0, 80), usage: JSON.stringify(usage).slice(0, 1500), model });
                 } catch {
                 }
                 try {
+                  console.log("[AUS-TEMP] 即将 processUsage fetch");
+                } catch {
+                }
+                try {
                   processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal);
+                  try {
+                    console.log("[AUS-TEMP] processUsage fetch 完成");
+                  } catch {
+                  }
                 } catch (e) {
                   console.error("[API用量统计] fetch 用量记录失败", e?.message || e);
+                }
+              } else {
+                try {
+                  console.log("[AUS-TEMP] fetch 解析后无 usage", { textLen: text.length, hasData: !!data, dataKeys: data ? Object.keys(data).slice(0, 10) : [] });
+                } catch {
                 }
               }
             };
             const ct = clone.headers.get("content-type") || "";
+            try {
+              console.log("[AUS-TEMP] 准备 clone.text 解析", { ct });
+            } catch {
+            }
             if (ct.includes("application/json")) {
-              clone.text().then((t) => parseAndProcess(t, 0, 0)).catch(() => {
+              clone.text().then((t) => {
+                try {
+                  console.log("[AUS-TEMP] clone.text json 完成", { len: t.length });
+                } catch {
+                }
+                parseAndProcess(t, 0, 0);
+              }).catch((e) => {
+                try {
+                  console.log("[AUS-TEMP] clone.text json 失败", e?.message);
+                } catch {
+                }
               });
             } else {
-              clone.text().then((t) => parseAndProcess(t, 0, 0)).catch(() => {
+              clone.text().then((t) => {
+                try {
+                  console.log("[AUS-TEMP] clone.text stream 完成", { len: t.length });
+                } catch {
+                }
+                parseAndProcess(t, 0, 0);
+              }).catch((e) => {
+                try {
+                  console.log("[AUS-TEMP] clone.text stream 失败", e?.message);
+                } catch {
+                }
               });
             }
           } catch (e) {
             console.warn("[API用量统计] fetch 克隆解析异常，不影响原请求", e?.message || e);
+            try {
+              console.log("[AUS-TEMP] fetch 克隆异常", e?.message);
+            } catch {
+            }
           }
           return res;
         }).catch((e) => {
+          try {
+            console.log("[AUS-TEMP] rawFetch 失败", e?.message);
+          } catch {
+          }
           throw e;
         });
       }
@@ -1082,8 +1161,24 @@ function installInterception() {
     const ctx = globalThis.SillyTavern?.getContext?.();
     const es = ctx?.eventSource;
     const et = ctx?.event_types;
-    if (!es || !et) return false;
-    if (interceptionInstalled) return true;
+    try {
+      console.log("[AUS-TEMP] installInterception 调用", { hasCtx: !!ctx, hasEs: !!es, hasEt: !!et, installed: interceptionInstalled });
+    } catch {
+    }
+    if (!es || !et) {
+      try {
+        console.log("[AUS-TEMP] installInterception 失败 无 es/et");
+      } catch {
+      }
+      return false;
+    }
+    if (interceptionInstalled) {
+      try {
+        console.log("[AUS-TEMP] installInterception 已安装跳过");
+      } catch {
+      }
+      return true;
+    }
     try {
       const p = window.parent || window;
       if (p?.fetch && !p.fetch.__aus_patched) rawFetchRef = p.fetch.bind(p);
@@ -1094,7 +1189,15 @@ function installInterception() {
     es.on(et.MESSAGE_RECEIVED, messageReceivedHandler);
     globalThis.ApiUsageStatInterceptor = (chat, _ctxSize, _abort, _type) => {
       try {
+        console.log("[AUS-TEMP] ApiUsageStatInterceptor 触发", { len: chat?.length, type: _type });
+      } catch {
+      }
+      try {
         setLastRequest(chat?.slice(-10) || [], Date.now());
+      } catch {
+      }
+      try {
+        console.log("[AUS-TEMP] setLastRequest 完成");
       } catch {
       }
     };
@@ -1157,6 +1260,10 @@ function pickUsageFromExtra(extra) {
 }
 function onGenerationEnded(...args) {
   const TRACE = "[API用量统计][TRACE]";
+  try {
+    console.log("[AUS-TEMP] onGenerationEnded 入口", { argsLen: args.length, arg0Keys: args[0] ? Object.keys(args[0]).slice(0, 10) : [] });
+  } catch {
+  }
   try {
     const ctx = globalThis.SillyTavern?.getContext?.();
     const chat = ctx?.chat || [];
