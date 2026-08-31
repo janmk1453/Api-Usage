@@ -191,7 +191,7 @@
 #aus-overlay input::placeholder,
 [data-extension="api-usage-stat"]#aus-panel input::placeholder { color: var(--ds-text-3); }
 
-/* 移动端自适应 */
+/* 移动端自适应 — 760 为分界，块不超出屏幕，文字图标可横向滑动，并列块在窄屏下竖排 */
 @media (max-width: 760px) {
   #aus-panel { flex-direction: row !important; }
   #aus-sidebar {
@@ -203,14 +203,46 @@
   #aus-sidebar .aus-nav-label { display: none !important; }
   #aus-sidebar .aus-nav-item { justify-content: center !important; padding: 10px 0 !important; }
   #aus-sidebar #aus-sidebar-toggle { display: flex !important; }
-  #aus-main { padding: 12px !important; }
-  #aus-overview-four { grid-template-columns: repeat(2, 1fr) !important; }
+  #aus-main { padding: 12px !important; max-width: 100vw !important; overflow-x: hidden !important; }
+  #aus-main > div { max-width: 100% !important; margin: 0 !important; width: 100% !important; box-sizing: border-box !important; }
+  /* 所有卡片不超出 */
+  [data-extension="api-usage-stat"] .ds-card { padding: 12px 14px !important; max-width: 100% !important; overflow: hidden !important; box-sizing: border-box !important; }
+  /* 网格全部竖排 */
+  #aus-overview-four { grid-template-columns: 1fr !important; }
   [data-view="overview"] > div:first-child { grid-template-columns: 1fr !important; }
   [data-view="overview"] > div:nth-child(2) { grid-template-columns: 1fr !important; }
   [data-view="stats"] > div:nth-child(2) { grid-template-columns: 1fr !important; }
+  #aus-extra-charts { grid-template-columns: 1fr !important; }
   .aus-detail-panel > div:first-child { grid-template-columns: 1fr !important; }
   .aus-detail-panel > div:nth-child(2) { grid-template-columns: 1fr !important; }
+  /* 通用兜底：任何并排网格在窄屏下竖排 */
+  [data-view="overview"] [style*="grid-template-columns:1fr 1fr"],
+  [data-view="overview"] [style*="grid-template-columns:repeat(2"],
+  [data-view="overview"] [style*="grid-template-columns:repeat(3"],
+  [data-view="overview"] [style*="grid-template-columns:repeat(4"],
+  [data-view="stats"] [style*="grid-template-columns:repeat"],
+  [data-view="stats"] [style*="grid-template-columns:1fr 1fr"],
+  .aus-detail-panel [style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+  /* 表格横向滑动而非超出 */
+  #aus-model-summary { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
+  #aus-model-summary table { min-width: 720px !important; }
+  /* 图表容器自适应 */
+  #aus-stats-chart,
+  #aus-chart-token,
+  #aus-chart-cost,
+  #aus-chart-hit,
+  #aus-chart-req,
+  #aus-chart-dur,
+  #aus-chart-pie { width: 100% !important; max-width: 100% !important; min-width: 0 !important; }
+  /* flex 行在窄屏下可换行或竖排，避免挤压 */
+  #aus-history > div > div:first-child { flex-wrap: wrap !important; gap: 8px !important; }
+  /* 设置页输入区不超出 */
+  #aus-settings input,
+  #aus-settings select { max-width: 100% !important; box-sizing: border-box !important; }
+  /* 减少标题字号防溢出 */
+  [data-extension="api-usage-stat"] .ds-card-val { font-size: 20px !important; word-break: break-all !important; }
 }
 @media (max-width: 480px) {
   #aus-overview-four { grid-template-columns: 1fr !important; }
+  #aus-main { padding: 10px !important; }
 }
