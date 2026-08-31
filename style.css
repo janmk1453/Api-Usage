@@ -145,13 +145,20 @@
   [data-extension="api-usage-stat"] .ds-grid-3 { grid-template-columns: 1fr; }
 }
 
-/* 热力图：块不超出屏幕，内部横向滑动 */
-#aus-heatmap-card-overview { max-width: 100% !important; overflow: hidden !important; box-sizing: border-box !important; }
-#aus-heatmap-scroll-overview { max-width: 100% !important; overflow-x: auto !important; overflow-y: hidden !important; -webkit-overflow-scrolling: touch !important; overscroll-behavior-x: contain !important; }
+/* 热力图：块不超出屏幕，内部横向滑动 - 全宽度适配，复刻 #aus-model-summary 模式 */
+#aus-heatmap-card-overview { width: 100% !important; max-width: 100% !important; overflow: hidden !important; box-sizing: border-box !important; }
+#aus-heatmap-card-overview > div { max-width: 100% !important; box-sizing: border-box !important; }
+#aus-heatmap-scroll-overview { flex: 1 1 0 !important; min-width: 0 !important; max-width: 100% !important; width: 0 !important; overflow-x: auto !important; overflow-y: hidden !important; -webkit-overflow-scrolling: touch !important; overscroll-behavior-x: contain !important; }
 #aus-heatmap-container-overview { min-width: max-content !important; }
+#aus-heatmap-labels-overview { flex-shrink: 0 !important; }
+
+/* 移动端与桌面端一致：卡片内滑动而非卡片撑开 */
 @media (max-width: 760px) {
   #aus-heatmap-card-overview { overflow: hidden !important; }
+  #aus-heatmap-scroll-overview { overflow-x: auto !important; }
 }
+/* 与模型汇总块一致：所有宽度下卡片不超出，内容横向滑动 */
+[data-view="overview"] #aus-heatmap-card-overview { overflow: hidden !important; }
 
 /* 全屏独立面板 */
 #aus-overlay { background: var(--ds-overlay); backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }

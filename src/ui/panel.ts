@@ -293,7 +293,7 @@ export function createPanel() {
               <div class="ds-card" id="aus-overview-spend"></div>
             </div>
             <div id="aus-overview-four" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px;"></div>
-            <div id="aus-heatmap-card-overview" class="ds-card" style="margin-top:12px;max-width:100%;overflow:hidden;box-sizing:border-box;">
+            <div id="aus-heatmap-card-overview" class="ds-card" style="margin-top:12px;width:100%;max-width:100%;overflow:hidden;box-sizing:border-box;">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
                 <div style="font-size:12px;font-weight:600;color:var(--ds-text);">Token 使用量热力图</div>
                 <div id="aus-heatmap-legend-overview" style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--ds-text-3);"></div>
