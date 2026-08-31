@@ -61,35 +61,59 @@ function pickUsageFromExtra(extra: any): any {
 }
 
 function onGenerationEnded(...args: any[]) {
+  const TRACE = '[API用量统计][TRACE]';
   try {
     // ST 的 chat 尾条常带 extra.api_usage
     const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
     const chat: any[] = ctx?.chat || [];
     const tail = chat[chat.length - 1];
     const extra = tail?.extra || {};
+    const tailModel = (tail as any)?.model || null;
+    const extraModel = extra.model || tailModel || ctx?.model || 'deepseek-v4-flash';
+    // 临时详细日志：打印 tail 的关键字段，帮助定位为何无记录
+    try {
+      console.log(TRACE + ' onGenerationEnded 触发', {
+        chatLen: chat.length,
+        tailIdx: chat.length - 1,
+        tailExtraKeys: extra ? Object.keys(extra).slice(0, 20) : [],
+        tailExtraStr: JSON.stringify(extra).slice(0, 2000),
+        args0: args[0] ? JSON.stringify(args[0]).slice(0, 2000) : 'no args0',
+        model: extraModel,
+        hasApiUsage: !!extra.api_usage,
+        hasUsage: !!extra.usage,
+        hasTokenCount: extra.token_count,
+      });
+    } catch {}
     // 优先从 extra 严格校验的 usage 中取，避免把 token_count 数字误判为 usage
     let usage = pickUsageFromExtra(extra);
-    let model = extra.model || (tail as any)?.model || ctx?.model || 'deepseek-v4-flash';
+    let model = extraModel;
+    try { console.log(TRACE + ' pickUsageFromExtra 结果', { hasUsage: !!usage, usageStr: usage ? JSON.stringify(usage).slice(0, 1500) : 'null', isValid: usage ? isValidUsage(usage) : false }); } catch {}
     if (usage && isValidUsage(usage)) {
+      console.log(TRACE + ' 命中主路径 extra usage，准备 processUsage');
       processUsage(usage, model, lastMessages, lastStart);
       return;
     }
     // 兼容：部分渠道的 usage 藏在 message 的 swipe_info 或其他字段
     if (tail?.swipe_info && typeof tail.swipe_info === 'object') {
+      console.log(TRACE + ' 尝试 swipe_info 兼容路径', { swipeKeys: Object.keys(tail.swipe_info as any).slice(0, 5) });
       for (const v of Object.values(tail.swipe_info as any)) {
         const cand = (v as any)?.extra?.api_usage || (v as any)?.extra?.usage;
         if (isValidUsage(cand)) {
           usage = cand;
           model = (v as any)?.extra?.model || model;
+          console.log(TRACE + ' swipe_info 命中', { model, cand: JSON.stringify(cand).slice(0, 1000) });
           processUsage(usage, model, lastMessages, lastStart);
           return;
         }
       }
+      console.log(TRACE + ' swipe_info 未命中有效 usage');
     }
     // 兜底：若未带 usage，尝试从 args 解析（需同样校验）
     const maybeUsage = args[0]?.usage || args[0]?.api_usage;
+    try { console.log(TRACE + ' 尝试 args 兜底', { hasMaybeUsage: !!maybeUsage, maybeUsageStr: maybeUsage ? JSON.stringify(maybeUsage).slice(0, 1500) : 'null', isValid: maybeUsage ? isValidUsage(maybeUsage) : false }); } catch {}
     if (isValidUsage(maybeUsage)) {
       const m = args[0]?.model || model;
+      console.log(TRACE + ' args 命中', { model: m });
       processUsage(maybeUsage, m, lastMessages, lastStart);
       return;
     }
@@ -97,9 +121,13 @@ function onGenerationEnded(...args: any[]) {
     // 之前尝试 token_count 兜底导致 [OR]minimax-m3 产生大量 0 in/7 out 假记录，现回退为严格丢弃
     if (extra.token_count != null && !usage) {
       try { console.warn('[API用量统计] 跳过无效 usage：仅有本地 token_count=' + extra.token_count + ' model=' + model + ' 未生成条目（非 API 真实用量，需完整 usage）'); } catch {}
+      console.log(TRACE + ' 无有效 usage，仅有 token_count，已跳过不记录', { token_count: extra.token_count, model });
       return;
     }
-  } catch {}
+    console.log(TRACE + ' 未找到任何有效 usage，丢弃本次记录', { extraKeys: extra ? Object.keys(extra).slice(0, 20) : [], argsKeys: args[0] ? Object.keys(args[0]).slice(0, 20) : [] });
+  } catch (e) {
+    try { console.error(TRACE + ' onGenerationEnded 异常', e); } catch {}
+  }
 }
 
 function refresh() {

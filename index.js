@@ -663,9 +663,18 @@ const repository = {
     } catch {
       model = "deepseek-v4-flash";
     }
+    const TRACE = "[API用量统计][TRACE]";
+    try {
+      console.log(TRACE + " addEntry 收到", { model, usageStr: JSON.stringify(usage).slice(0, 1500), hasMessages: !!messages?.length, startTime, ttft });
+    } catch {
+    }
     if (!usage || typeof usage !== "object" || Array.isArray(usage)) {
       try {
         console.warn("[API用量统计] addEntry 跳过无效 usage：", usage, " model=", model);
+      } catch {
+      }
+      try {
+        console.log(TRACE + " addEntry 跳过：usage 非对象");
       } catch {
       }
       return null;
@@ -674,6 +683,10 @@ const repository = {
     if (!hasAnyTokenField) {
       try {
         console.warn("[API用量统计] addEntry 跳过无 token 字段的 usage：", JSON.stringify(usage).slice(0, 300));
+      } catch {
+      }
+      try {
+        console.log(TRACE + " addEntry 跳过：无 token 字段");
       } catch {
       }
       return null;
@@ -692,7 +705,15 @@ const repository = {
         console.warn("[API用量统计] addEntry 跳过全 0 token 条目 model=" + model);
       } catch {
       }
+      try {
+        console.log(TRACE + " addEntry 跳过：全 0 token");
+      } catch {
+      }
       return null;
+    }
+    try {
+      console.log(TRACE + " addEntry 解析", { hit, miss, comp, total });
+    } catch {
     }
     const lu = { timestamp: Date.now(), model, prompt_tokens: hit + miss, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp, total_tokens: total };
     const duration = startTime ? Date.now() - startTime : 0;
@@ -741,6 +762,10 @@ const repository = {
       chatId,
       chatName
     };
+    try {
+      console.log(TRACE + " addEntry 即将写入", { timestamp: entry.timestamp, model: entry.model, total: entry.total_tokens, cost: entry.cost, chatId: entry.chatId });
+    } catch {
+    }
     state$1.history.unshift(entry);
     state$1.total_tokens += total;
     state$1.total_cost += lu.cost;
@@ -969,31 +994,61 @@ function pickUsageFromExtra(extra) {
   return null;
 }
 function onGenerationEnded(...args) {
+  const TRACE = "[API用量统计][TRACE]";
   try {
     const ctx = globalThis.SillyTavern?.getContext?.();
     const chat = ctx?.chat || [];
     const tail = chat[chat.length - 1];
     const extra = tail?.extra || {};
+    const tailModel = tail?.model || null;
+    const extraModel = extra.model || tailModel || ctx?.model || "deepseek-v4-flash";
+    try {
+      console.log(TRACE + " onGenerationEnded 触发", {
+        chatLen: chat.length,
+        tailIdx: chat.length - 1,
+        tailExtraKeys: extra ? Object.keys(extra).slice(0, 20) : [],
+        tailExtraStr: JSON.stringify(extra).slice(0, 2e3),
+        args0: args[0] ? JSON.stringify(args[0]).slice(0, 2e3) : "no args0",
+        model: extraModel,
+        hasApiUsage: !!extra.api_usage,
+        hasUsage: !!extra.usage,
+        hasTokenCount: extra.token_count
+      });
+    } catch {
+    }
     let usage = pickUsageFromExtra(extra);
-    let model = extra.model || tail?.model || ctx?.model || "deepseek-v4-flash";
+    let model = extraModel;
+    try {
+      console.log(TRACE + " pickUsageFromExtra 结果", { hasUsage: !!usage, usageStr: usage ? JSON.stringify(usage).slice(0, 1500) : "null", isValid: usage ? isValidUsage(usage) : false });
+    } catch {
+    }
     if (usage && isValidUsage(usage)) {
+      console.log(TRACE + " 命中主路径 extra usage，准备 processUsage");
       processUsage(usage, model, lastMessages, lastStart);
       return;
     }
     if (tail?.swipe_info && typeof tail.swipe_info === "object") {
+      console.log(TRACE + " 尝试 swipe_info 兼容路径", { swipeKeys: Object.keys(tail.swipe_info).slice(0, 5) });
       for (const v of Object.values(tail.swipe_info)) {
         const cand = v?.extra?.api_usage || v?.extra?.usage;
         if (isValidUsage(cand)) {
           usage = cand;
           model = v?.extra?.model || model;
+          console.log(TRACE + " swipe_info 命中", { model, cand: JSON.stringify(cand).slice(0, 1e3) });
           processUsage(usage, model, lastMessages, lastStart);
           return;
         }
       }
+      console.log(TRACE + " swipe_info 未命中有效 usage");
     }
     const maybeUsage = args[0]?.usage || args[0]?.api_usage;
+    try {
+      console.log(TRACE + " 尝试 args 兜底", { hasMaybeUsage: !!maybeUsage, maybeUsageStr: maybeUsage ? JSON.stringify(maybeUsage).slice(0, 1500) : "null", isValid: maybeUsage ? isValidUsage(maybeUsage) : false });
+    } catch {
+    }
     if (isValidUsage(maybeUsage)) {
       const m = args[0]?.model || model;
+      console.log(TRACE + " args 命中", { model: m });
       processUsage(maybeUsage, m, lastMessages, lastStart);
       return;
     }
@@ -1002,9 +1057,15 @@ function onGenerationEnded(...args) {
         console.warn("[API用量统计] 跳过无效 usage：仅有本地 token_count=" + extra.token_count + " model=" + model + " 未生成条目（非 API 真实用量，需完整 usage）");
       } catch {
       }
+      console.log(TRACE + " 无有效 usage，仅有 token_count，已跳过不记录", { token_count: extra.token_count, model });
       return;
     }
-  } catch {
+    console.log(TRACE + " 未找到任何有效 usage，丢弃本次记录", { extraKeys: extra ? Object.keys(extra).slice(0, 20) : [], argsKeys: args[0] ? Object.keys(args[0]).slice(0, 20) : [] });
+  } catch (e) {
+    try {
+      console.error(TRACE + " onGenerationEnded 异常", e);
+    } catch {
+    }
   }
 }
 function refresh() {
