@@ -165,6 +165,14 @@ async function renderOne(id:ChartId, filtered:any[]){
   await drawBarLine(el, id, labels, series);
 }
 
+function calcXInterval(labels: string[], el: HTMLElement): number {
+  const w = el.clientWidth || 320;
+  const minPerLabel = w < 500 ? 42 : w < 760 ? 56 : 68; // 窄屏更密，宽屏更疏
+  const maxLabels = Math.max(8, Math.floor(w / minPerLabel));
+  if (labels.length <= maxLabels) return 0;
+  return Math.ceil(labels.length / maxLabels) - 1;
+}
+
 async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:Array<{name:string,data:number[],color:string,kind:string}>){
   const ec = await getEcharts();
   if (charts[id]) try{ charts[id].dispose(); }catch{}
@@ -172,12 +180,14 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
   const c = charts[id]=ec.init(el);
   // 前两张：重叠柱 + 曲线（Token/费用）
   const isTokenCost = id==='token' || id==='cost';
+  const interval = calcXInterval(labels, el);
   const opts:any = {
     backgroundColor:'transparent',
     tooltip:{ trigger:'axis', backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize:11} },
     grid:{ left:40, right:20, top:8, bottom:24 },
-    xAxis:{ type:'category', data: labels, axisLine:{lineStyle:{color:themeColor('--ds-border','#E5E7EB')}}, axisLabel:{fontSize:10,color:themeColor('--ds-text-3','#9CA3AF'),rotate: labels.length>12?30:0, interval:0} },
+    xAxis:{ type:'category', data: labels, axisLine:{lineStyle:{color:themeColor('--ds-border','#E5E7EB')}}, axisLabel:{fontSize:10,color:themeColor('--ds-text-3','#9CA3AF'),rotate: labels.length>12?30:0, interval: interval, hideOverlap: false} },
     yAxis:{ type:'value', axisLabel:{fontSize:10,color:themeColor('--ds-text-3','#9CA3AF')}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F6F7F8')}} },
+    dataZoom: labels.length > 8 ? [{ type:'inside', xAxisIndex:0, start: Math.max(0, (labels.length - Math.max(8, Math.min(labels.length, Math.floor((el.clientWidth||320)/44)))) / labels.length * 100), end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : undefined,
     series: series.map(s=>{
       const isTotal = s.name.includes('总');
       if (isTokenCost && isTotal) return { name:s.name, type:'line', data:s.data, smooth:true, lineStyle:{color:s.color,width:2}, itemStyle:{color:s.color}, symbolSize:2 };

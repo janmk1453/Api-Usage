@@ -2757,6 +2757,13 @@ async function renderOne(id, filtered) {
   });
   await drawBarLine(el, id, labels, series);
 }
+function calcXInterval(labels, el) {
+  const w = el.clientWidth || 320;
+  const minPerLabel = w < 500 ? 42 : w < 760 ? 56 : 68;
+  const maxLabels = Math.max(8, Math.floor(w / minPerLabel));
+  if (labels.length <= maxLabels) return 0;
+  return Math.ceil(labels.length / maxLabels) - 1;
+}
 async function drawBarLine(el, id, labels, series) {
   const ec = await getEcharts();
   if (charts[id]) try {
@@ -2767,12 +2774,14 @@ async function drawBarLine(el, id, labels, series) {
   el.style.height = "260px";
   const c = charts[id] = ec.init(el);
   const isTokenCost = id === "token" || id === "cost";
+  const interval = calcXInterval(labels, el);
   const opts = {
     backgroundColor: "transparent",
     tooltip: { trigger: "axis", backgroundColor: themeColor$1("--ds-card-inner", "#FFFFFF"), borderColor: themeColor$1("--ds-border", "#E5E7EB"), textStyle: { fontSize: 11 } },
     grid: { left: 40, right: 20, top: 8, bottom: 24 },
-    xAxis: { type: "category", data: labels, axisLine: { lineStyle: { color: themeColor$1("--ds-border", "#E5E7EB") } }, axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF"), rotate: labels.length > 12 ? 30 : 0, interval: 0 } },
+    xAxis: { type: "category", data: labels, axisLine: { lineStyle: { color: themeColor$1("--ds-border", "#E5E7EB") } }, axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF"), rotate: labels.length > 12 ? 30 : 0, interval, hideOverlap: false } },
     yAxis: { type: "value", axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF") }, splitLine: { lineStyle: { color: themeColor$1("--ds-card", "#F6F7F8") } } },
+    dataZoom: labels.length > 8 ? [{ type: "inside", xAxisIndex: 0, start: Math.max(0, (labels.length - Math.max(8, Math.min(labels.length, Math.floor((el.clientWidth || 320) / 44)))) / labels.length * 100), end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : void 0,
     series: series.map((s) => {
       const isTotal = s.name.includes("总");
       if (isTokenCost && isTotal) return { name: s.name, type: "line", data: s.data, smooth: true, lineStyle: { color: s.color, width: 2 }, itemStyle: { color: s.color }, symbolSize: 2 };
@@ -3302,6 +3311,11 @@ async function renderChart(filteredRaw) {
   });
   const cCardInner = themeColor("--ds-card-inner", "#FFFFFF");
   const cText = themeColor("--ds-text", "#111827");
+  const cw = w || 320;
+  const minPerLabel = cw < 500 ? 42 : cw < 760 ? 56 : 68;
+  const maxLabels = Math.max(8, Math.floor(cw / minPerLabel));
+  const xInterval = labels.length <= maxLabels ? 0 : Math.ceil(labels.length / maxLabels) - 1;
+  const needZoom = labels.length > maxLabels;
   chart.setOption({
     backgroundColor: "transparent",
     tooltip: {
@@ -3324,7 +3338,8 @@ async function renderChart(filteredRaw) {
       }
     },
     grid: { left: 50, right: hasToken && hasCost ? 50 : 20, top: 8, bottom: 28 },
-    xAxis: { type: "category", data: labels, axisLine: { lineStyle: { color: cBorder } }, axisLabel: { color: cText3, fontSize: 10, interval: 0, rotate: labels.length > 20 ? 30 : 0, hideOverlap: true } },
+    dataZoom: needZoom ? [{ type: "inside", xAxisIndex: 0, start: Math.max(0, (labels.length - maxLabels) / labels.length * 100), end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : void 0,
+    xAxis: { type: "category", data: labels, axisLine: { lineStyle: { color: cBorder } }, axisLabel: { color: cText3, fontSize: 10, interval: xInterval, rotate: labels.length > 12 ? 30 : 0, hideOverlap: false } },
     yAxis: yAxis.length ? yAxis : { type: "value", axisLabel: { color: cText3, fontSize: 10 } },
     series: seriesOpt
   }, true);

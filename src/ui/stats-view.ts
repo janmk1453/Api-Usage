@@ -361,6 +361,12 @@ async function renderChart(filteredRaw: any[]) {
   });
   const cCardInner = themeColor('--ds-card-inner', '#FFFFFF');
   const cText = themeColor('--ds-text', '#111827');
+  // X 轴密度随容器宽度动态计算，最少展示 8 个
+  const cw = w || 320;
+  const minPerLabel = cw < 500 ? 42 : cw < 760 ? 56 : 68;
+  const maxLabels = Math.max(8, Math.floor(cw / minPerLabel));
+  const xInterval = labels.length <= maxLabels ? 0 : Math.ceil(labels.length / maxLabels) - 1;
+  const needZoom = labels.length > maxLabels;
   chart.setOption({
     backgroundColor: 'transparent',
     tooltip: {
@@ -383,7 +389,8 @@ async function renderChart(filteredRaw: any[]) {
       }
     },
     grid: { left: 50, right: hasToken&&hasCost?50:20, top: 8, bottom: 28 },
-    xAxis: { type:'category', data: labels, axisLine:{lineStyle:{color:cBorder}}, axisLabel:{color:cText3,fontSize:10,interval:0,rotate: labels.length>20?30:0, hideOverlap:true} },
+    dataZoom: needZoom ? [{ type:'inside', xAxisIndex:0, start: Math.max(0, (labels.length - maxLabels) / labels.length * 100), end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : undefined,
+    xAxis: { type:'category', data: labels, axisLine:{lineStyle:{color:cBorder}}, axisLabel:{color:cText3,fontSize:10,interval: xInterval,rotate: labels.length>12?30:0, hideOverlap: false} },
     yAxis: yAxis.length?yAxis:{ type:'value', axisLabel:{color:cText3,fontSize:10} },
     series: seriesOpt,
   }, true);
