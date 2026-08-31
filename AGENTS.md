@@ -103,6 +103,15 @@ node --check index.js
 - **改历史详情/占比**：`src/ui/panel.ts`（`renderHistory` 内联展开 + 三色条）
 - **改同步/导入**：`src/services/sync.ts` + `src/services/import-export.ts`（单一历史）
 
+## 调试规范（Playwright MCP）
+
+- **配置**：`~/.config/opencode/opencode.jsonc` 中 `mcp.playwright` 使用 `npx -y @playwright/mcp@latest --browser msedge --isolated --caps vision`（`msedge + isolated + vision`），`chrome-devtools` 仅备选默认 `enabled:false`，已预装 `0.0.79 / 1.8.0`，走 `npmmirror` 源
+- **用途限定**：Playwright 仅用于问题定位，禁止用于修复后验证。修复后验证必须走用户标准流程：提交推送 → 酒馆管理扩展程序更新 → 刷新网页后由用户肉眼确认，禁止用 Playwright 自动快照断言通过
+- **隔离特性**：`isolated` 为独立会话，与用户本地 Edge 非同一实例，无法直接看见用户已打开的面板；需在自动化会话中通过 `window.ApiUsageStat.togglePanel()` 复现打开，再经 `snapshot / evaluate` 采集
+- **定位四件套**：`browser_snapshot`（DOM 结构 + `ref`） + `browser_console_messages`（`1 errors 6 warnings` 定界） + `browser_network_requests`（过滤 `translate / api`） + `browser_evaluate`（`SillyTavern.getContext().chat / ApiUsageStat.state.history / documentElement[data-extension]`） + `browser_take_screenshot`（视觉确认）
+- **输入框污染等样式问题**：必须检查 `document.documentElement[data-extension]` 是否污染宿主，`#send_textarea` 计算样式 `backgroundColor` 是否跟随主题，收紧选择器至 `#aus-panel input` 而非 `[data-extension] input`
+- **对话数据为 0 问题**：必须通过 `evaluate` 检查 `chat[].extra.api_usage` 是否为对象（拒绝 `token_count` 数字误判）、`normalizeModel` 是否剥离 `[OR]/[masa]` 前缀、`state.history[0].raw_usage` 类型及 `pricing` 命中
+
 ## 提交与发布
 
 ```bash
