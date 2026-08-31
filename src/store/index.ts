@@ -44,8 +44,26 @@ export const state: State = {
   messageCount: 0,
 };
 
-// 兼容旧调用：统一返回单一聚合，忽略存档概念
-function getCurrentChatIdForStore(): string | null {
+// 兼容旧调用：统一返回单一聚合（始终基于全部历史，不受 historyScope 影响）
+// 概览页除余额外均应基于全部历史，此处不按对话过滤
+export function getSelectedSave(): any {
+  return {
+    history: state.history,
+    total_tokens: state.total_tokens,
+    total_cost: state.total_cost,
+    input_tokens: state.input_tokens,
+    output_tokens: state.output_tokens,
+    cache_hit_tokens: state.cache_hit_tokens,
+    cache_miss_tokens: state.cache_miss_tokens,
+    input_cost: state.input_cost,
+    output_cost: state.output_cost,
+    rounds: state.rounds,
+    startTime: state.startTime,
+  };
+}
+
+// 仅供历史记录列表按对话过滤展示，不影响概览/统计的聚合
+export function getCurrentChatIdForStore(): string | null {
   try {
     const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
     if (ctx?.getCurrentChatId) {
@@ -62,68 +80,12 @@ function getCurrentChatIdForStore(): string | null {
   return null;
 }
 
-export function getSelectedSave(): any {
+export function getHistoryForDisplay(): any[] {
   const scope = (state.settings as any).historyScope || 'all';
-  if (scope !== 'current') {
-    return {
-      history: state.history,
-      total_tokens: state.total_tokens,
-      total_cost: state.total_cost,
-      input_tokens: state.input_tokens,
-      output_tokens: state.output_tokens,
-      cache_hit_tokens: state.cache_hit_tokens,
-      cache_miss_tokens: state.cache_miss_tokens,
-      input_cost: state.input_cost,
-      output_cost: state.output_cost,
-      rounds: state.rounds,
-      startTime: state.startTime,
-    };
-  }
+  if (scope !== 'current') return state.history || [];
   const cur = getCurrentChatIdForStore();
-  if (!cur) {
-    return {
-      history: state.history,
-      total_tokens: state.total_tokens,
-      total_cost: state.total_cost,
-      input_tokens: state.input_tokens,
-      output_tokens: state.output_tokens,
-      cache_hit_tokens: state.cache_hit_tokens,
-      cache_miss_tokens: state.cache_miss_tokens,
-      input_cost: state.input_cost,
-      output_cost: state.output_cost,
-      rounds: state.rounds,
-      startTime: state.startTime,
-    };
-  }
-  const filtered = (state.history || []).filter((h: any) => h.chatId === cur);
-  // 按当前对话重算聚合
-  let total_tokens = 0, total_cost = 0, input_tokens = 0, output_tokens = 0, cache_hit_tokens = 0, cache_miss_tokens = 0, input_cost = 0, output_cost = 0, rounds = 0;
-  for (const h of filtered) {
-    total_tokens += h.total_tokens || 0;
-    total_cost += h.cost || 0;
-    input_tokens += (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0);
-    output_tokens += h.completion_tokens || 0;
-    cache_hit_tokens += h.cache_hit_tokens || 0;
-    cache_miss_tokens += h.cache_miss_tokens || 0;
-    input_cost += h.input_cost || 0;
-    output_cost += h.output_cost || 0;
-    // rounds 仅 deepseek 官方模型
-    if (typeof h.model === 'string' && h.model.toLowerCase().includes('deepseek')) rounds += 1;
-  }
-  const startTime = filtered.length ? Math.min(...filtered.map((h: any) => h.timestamp)) : state.startTime;
-  return {
-    history: filtered,
-    total_tokens,
-    total_cost,
-    input_tokens,
-    output_tokens,
-    cache_hit_tokens,
-    cache_miss_tokens,
-    input_cost,
-    output_cost,
-    rounds,
-    startTime,
-  };
+  if (!cur) return state.history || [];
+  return (state.history || []).filter((h: any) => h.chatId === cur);
 }
 
 export function getMergedStats() { return getSelectedSave(); }

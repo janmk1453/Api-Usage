@@ -75,6 +75,21 @@ const state$1 = {
   customBalance: null,
   messageCount: 0
 };
+function getSelectedSave() {
+  return {
+    history: state$1.history,
+    total_tokens: state$1.total_tokens,
+    total_cost: state$1.total_cost,
+    input_tokens: state$1.input_tokens,
+    output_tokens: state$1.output_tokens,
+    cache_hit_tokens: state$1.cache_hit_tokens,
+    cache_miss_tokens: state$1.cache_miss_tokens,
+    input_cost: state$1.input_cost,
+    output_cost: state$1.output_cost,
+    rounds: state$1.rounds,
+    startTime: state$1.startTime
+  };
+}
 function getCurrentChatIdForStore() {
   try {
     const ctx = globalThis.SillyTavern?.getContext?.();
@@ -92,66 +107,12 @@ function getCurrentChatIdForStore() {
   }
   return null;
 }
-function getSelectedSave() {
+function getHistoryForDisplay() {
   const scope = state$1.settings.historyScope || "all";
-  if (scope !== "current") {
-    return {
-      history: state$1.history,
-      total_tokens: state$1.total_tokens,
-      total_cost: state$1.total_cost,
-      input_tokens: state$1.input_tokens,
-      output_tokens: state$1.output_tokens,
-      cache_hit_tokens: state$1.cache_hit_tokens,
-      cache_miss_tokens: state$1.cache_miss_tokens,
-      input_cost: state$1.input_cost,
-      output_cost: state$1.output_cost,
-      rounds: state$1.rounds,
-      startTime: state$1.startTime
-    };
-  }
+  if (scope !== "current") return state$1.history || [];
   const cur = getCurrentChatIdForStore();
-  if (!cur) {
-    return {
-      history: state$1.history,
-      total_tokens: state$1.total_tokens,
-      total_cost: state$1.total_cost,
-      input_tokens: state$1.input_tokens,
-      output_tokens: state$1.output_tokens,
-      cache_hit_tokens: state$1.cache_hit_tokens,
-      cache_miss_tokens: state$1.cache_miss_tokens,
-      input_cost: state$1.input_cost,
-      output_cost: state$1.output_cost,
-      rounds: state$1.rounds,
-      startTime: state$1.startTime
-    };
-  }
-  const filtered = (state$1.history || []).filter((h) => h.chatId === cur);
-  let total_tokens = 0, total_cost = 0, input_tokens = 0, output_tokens = 0, cache_hit_tokens = 0, cache_miss_tokens = 0, input_cost = 0, output_cost = 0, rounds = 0;
-  for (const h of filtered) {
-    total_tokens += h.total_tokens || 0;
-    total_cost += h.cost || 0;
-    input_tokens += (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0);
-    output_tokens += h.completion_tokens || 0;
-    cache_hit_tokens += h.cache_hit_tokens || 0;
-    cache_miss_tokens += h.cache_miss_tokens || 0;
-    input_cost += h.input_cost || 0;
-    output_cost += h.output_cost || 0;
-    if (typeof h.model === "string" && h.model.toLowerCase().includes("deepseek")) rounds += 1;
-  }
-  const startTime = filtered.length ? Math.min(...filtered.map((h) => h.timestamp)) : state$1.startTime;
-  return {
-    history: filtered,
-    total_tokens,
-    total_cost,
-    input_tokens,
-    output_tokens,
-    cache_hit_tokens,
-    cache_miss_tokens,
-    input_cost,
-    output_cost,
-    rounds,
-    startTime
-  };
+  if (!cur) return state$1.history || [];
+  return (state$1.history || []).filter((h) => h.chatId === cur);
 }
 const MODULE$1 = "api_usage_stat";
 const HOT_KEEP = 50;
@@ -3468,7 +3429,15 @@ function refreshUI() {
 function renderHistory(doc, s) {
   const host = doc.getElementById("aus-history");
   if (!host) return;
-  const hist = s.history || [];
+  let hist = s.history || [];
+  try {
+    const scope = state$1.settings.historyScope || "all";
+    if (scope === "current") {
+      const filtered = getHistoryForDisplay();
+      hist = filtered;
+    }
+  } catch {
+  }
   if (!hist.length) {
     const scope = state$1.settings.historyScope || "all";
     const tip = scope === "current" ? '<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;line-height:1.8;">当前对话暂无记录<br/><span style="font-size:11px;">已按“当前对话”过滤，旧记录（未关联对话）仅在“全部历史”中可见</span><br/><button id="aus-history-scope-switch" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">切换为全部历史</button></div>' : '<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;">暂无历史记录</div>';

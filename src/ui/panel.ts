@@ -1,4 +1,4 @@
-import { state, getSelectedSave } from '../store/index';
+import { state, getSelectedSave, getHistoryForDisplay } from '../store/index';
 import { esc, localDay, localTimeHM } from '../utils/date';
 import { saveHot } from '../store/persistence';
 import { queryBalance } from '../services/balance';
@@ -38,7 +38,16 @@ export function refreshUI() {
 function renderHistory(doc: Document, s: any) {
   const host = doc.getElementById('aus-history');
   if (!host) return;
-  const hist: any[] = s.history || [];
+  // 历史记录按设置过滤：all=全部，current=仅当前对话（其余块仍按全部统计）
+  let hist: any[] = s.history || [];
+  try {
+    const scope = (state.settings as any).historyScope || 'all';
+    if (scope === 'current') {
+      const filtered = getHistoryForDisplay();
+      // getHistoryForDisplay 已按当前 chatId 过滤，此处直接使用
+      hist = filtered;
+    }
+  } catch {}
   if (!hist.length) {
     const scope = (state.settings as any).historyScope || 'all';
     const tip = scope === 'current'
