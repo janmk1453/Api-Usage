@@ -21,7 +21,7 @@
 
 ## 安装
 
-1. `SillyTavern → 扩展程序 → 安装扩展程序 → 输入`https://github.com/janmk1453/Api-Usage`
+1. `SillyTavern → 扩展程序 → 安装扩展程序 → 输入`https://github.com/janmk1453/Api-Usage
 2. 启用后刷新网页，左下角魔法棒出现 `API用量统计` 入口
 
 ## 更新
