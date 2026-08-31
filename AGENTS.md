@@ -30,18 +30,18 @@ Api-Usage/
 ├── i18n/zh-cn.json
 ├── templates/panel.html   # 预留 Handlebars
 ├── src/
-│   ├── index.ts           # 入口：repository.hydrate + 魔法棒注入 + 全屏面板 + 峰值圆点
+│   ├── index.ts           # 入口：repository.hydrate + 魔法棒注入 + 全屏面板 + 峰值圆点（ST 未就绪时轮询重试 installInterception）
 │   ├── constants/pricing.ts  # PRICING/DEFAULT_PEAK_HOURS/MAX_HISTORY/DETAIL_KEEP/STORAGE_KEYS
 │   ├── types/save.ts, settings.ts
 │   ├── data/              # ★ 统一数据框架（所有存/取/算/展的唯一通路）
 │   │   ├── types.ts       # Snapshot/Aggregated/TimeRange/OverviewView/StatsView
-│   │   ├── repository.ts  # 唯一写入口：addEntry/recalcAll/replaceAll/hydrate + persist（单一历史）
+│   │   ├── repository.ts  # 唯一写入口：addEntry(5s指纹去重)/recalcAll/replaceAll(默认合并+清洗)/hydrate + persist（剥离隐私字段）
 │   │   ├── computed.ts    # 唯一算入口：computeOverview/computeStats/getFilteredHistory
 │   │   └── events.ts      # DataEvents.UPDATED/HISTORY_ADDED/SETTINGS_CHANGED
-│   ├── store/index.ts, persistence.ts # 单一历史聚合（已废弃多存档，saves 仅作迁移兼容）
-│   ├── services/pricing.ts, interception.ts(delegates→repository), balance.ts, import-export.ts(单一历史), sync.ts(单一历史), debug.ts, theme.ts(applyTheme/setTheme 深浅切换)
-│   ├── utils/date.ts, crypto.ts, logger.ts
-│   └── ui/panel.ts(全屏+侧边导航+absolute 定位), overview.ts(双明细+四块), stats-view.ts(日历+双维度+图表Y/X配置), chart-config.ts(Y 8×X 5 聚合), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情), settings.ts(完整设置+颜色模式胶囊下拉), peak-dot.ts, customize.ts
+│   ├── store/index.ts, persistence.ts # 单一历史聚合（已废弃多存档，saves 仅作迁移兼容；append/getAllHistory 指纹去重 timestamp|model|total）
+│   ├── services/pricing.ts, interception.ts(fetch透传+缓存+指纹去重，GENERATION_ENDED主路径，install/uninstall幂等), balance.ts, import-export.ts(单一历史+清洗), sync.ts(单一历史+清洗), debug.ts, theme.ts(applyTheme 同步 overlay)
+│   ├── utils/date.ts, crypto.ts(XOR+UTF-8), logger.ts
+│   └── ui/panel.ts(全屏+侧边导航+absolute 定位), overview.ts(双明细+四块+热力图), stats-view.ts(日历+双维度+图表Y/X配置+隐藏跳过), chart-config.ts(Y 8×X 5 聚合), heatmap.ts(GitHub风格近2年Token热力图，块内横向滑动), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情), settings.ts(完整设置+不回显密钥), peak-dot.ts, customize.ts
 ├── README.md
 └── LICENSE
 ```
@@ -67,14 +67,15 @@ node --check index.js
 
 ### 用量概览（overview）
 - **双余额卡**：充值余额（`customBalance|balance`）+ 累计消费（`¥ + CNY` + `tokens`）
-- **双明细**：历史消耗（Token 历史/命中/未命中/输出，右对齐）与支出明细（预计节省/支出输入/输出，分两行，`token` 灰 `10px #9CA3AF`）并列
+- **双明细**：历史消耗（Token 历史/命中/未命中/输出，`gap:10px + 行内 padding:4px` 与右侧对齐）与支出明细（预计节省/支出输入/输出，分两行，`token` 灰 `10px #9CA3AF`）并列
 - **四小块**：每轮费用（`CNY`）/每轮 Token/平均耗时 `s`/输出速率 `t/s`（`computeOverview` 单源）
+- **热力图**：`Token 使用量热力图`（GitHub 风格，近 2 年按日聚合，5 级绿阶 `EBEDF0→216E39/161b22→aceebb`，`#aus-heatmap-card-overview` 块不超出、内部 `overflow-x:auto` 横向滑动，与 `模型汇总` 块一致，悬停显示日期+Token，渲染于 `overview.ts → heatmap.ts`，数据源 `state.history` 全量）
 
 ### 用量统计（stats）
 - **双维度**：时间维度（`全部/今天/昨天/近 7 天/近 30 天/本月/上月/自定义` 双月日历，仅 `自定义` 时显示日历，`‹/›` 月份切换，`全部` 为 `2020-01-01~今日`）仅影响 `消费金额/API 次数/Tokens/模型汇总`；模型维度（同款胶囊，列表为所有已记录模型 + 全部）影响本页所有内容（`三块`+`汇总表`+`图表`）；筛选为 `time ∩ model`，日历选中态仅对当前选项生效
 - **三块**：消费金额 `CNY`/API 请求次数/Tokens
 - **模型汇总表**：`10` 列（模型/调用/命中/未命中/输出/总/总成本/平均成本/平均耗时/平均速率），横向可滚动，随双维度联动
-- **图表**：首图通用 `图表`（`Y` 8 项多选 + `X` 5 维度双胶囊）+ 下方 `6` 图 `2×3` 网格（Token/费用堆叠同柱 `stack:'total'` + 曲线、命中 `100%` 面积、请求数柱、耗时/速率双轴、模型环），均支持 `Y/X` 独立配置与按 `time ∩ model` 联动，`vite.define` 修复 `process` 未定义
+- **图表**：首图通用 `图表`（`Y` 8 项多选 + `X` 5 维度双胶囊）+ 下方 `6` 图 `2×3` 网格（Token/费用堆叠同柱 `stack:'total'` + 曲线、命中 `100%` 面积、请求数柱、耗时/速率双轴、模型环），均支持 `Y/X` 独立配置与按 `time ∩ model` 联动，`vite.define` 修复 `process` 未定义，**隐藏时跳过初始化**（`display:none` 则不渲染，切到统计页再 `setTimeout 60ms` 触发，避免 `clientWidth 0` 误报 `图表容器未就绪`）
 
 ### 历史记录
 - 列表按 `timestamp` 倒序，卡片含模型/时间、`in/out/duration/rate`、费用、旧/新/详情
@@ -99,7 +100,7 @@ node --check index.js
 
 - **改定价/峰谷**：`src/constants/pricing.ts` + `src/services/pricing.ts`（纯函数，`isPeakHour(ts, peakHours)` 不读全局）
 - **改面板/导航**：`src/ui/panel.ts`（全屏+`positionPanel` 定位置换+`applyCollapsed`）+ `style.css`
-- **改概览/统计**：`src/ui/overview.ts` + `src/ui/stats-view.ts`（双维度过滤）+ `src/data/computed.ts`
+- **改概览/统计**：`src/ui/overview.ts` + `src/ui/stats-view.ts`（双维度过滤）+ `src/data/computed.ts` + `src/ui/heatmap.ts`（概览热力图，GitHub 风格，近 2 年，块内滑动）
 - **改历史详情/占比**：`src/ui/panel.ts`（`renderHistory` 内联展开 + 三色条）
 - **改同步/导入**：`src/services/sync.ts` + `src/services/import-export.ts`（单一历史）
 
@@ -111,6 +112,8 @@ node --check index.js
 - **定位四件套**：`browser_snapshot`（DOM 结构 + `ref`） + `browser_console_messages`（`1 errors 6 warnings` 定界） + `browser_network_requests`（过滤 `translate / api`） + `browser_evaluate`（`SillyTavern.getContext().chat / ApiUsageStat.state.history / documentElement[data-extension]`） + `browser_take_screenshot`（视觉确认）
 - **输入框污染等样式问题**：必须检查 `document.documentElement[data-extension]` 是否污染宿主，`#send_textarea` 计算样式 `backgroundColor` 是否跟随主题，收紧选择器至 `#aus-panel input` 而非 `[data-extension] input`
 - **对话数据为 0 问题**：必须通过 `evaluate` 检查 `chat[].extra.api_usage` 是否为对象（拒绝 `token_count` 数字误判）、`normalizeModel` 是否剥离 `[OR]/[masa]` 前缀、`state.history[0].raw_usage` 类型及 `pricing` 命中
+- **0 tokens 中断误判**：`[AUS-TEMP]` 日志显示 `hasFetch:false + token_count` 且无 `chat-completions/generate` 网络请求时，非扩展导致，实为 ST 未发请求（`No secret key saved for openai / AbortReason / status check failed`），需检查 `API 连接 → DeepSeek` 密钥与 `status`，而非回退拦截
+- **热力图/图表未就绪**：统计页图表在 `display:none` 时 `clientWidth 0` 误报，需检测 `offsetParent` 跳过渲染，切到统计页再 `setTimeout 60ms` 触发；热力图块必须 `max-width:100%; overflow:hidden` 卡片 + `overflow-x:auto` 内部滑动，复刻 `模型汇总` 表 `min-width:720px` 在卡片内滑动的模式，禁止让块本身撑开屏幕
 
 ## 提交与发布
 
