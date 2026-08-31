@@ -356,8 +356,9 @@ async function loadHistoryCold() {
 async function appendHistoryCold(entries) {
   if (!entries.length) return;
   const cold = await loadHistoryCold();
-  const seen = new Set(cold.map((h) => h.timestamp));
-  const toAdd = entries.filter((h) => !seen.has(h.timestamp));
+  const keyOf = (h) => `${h.timestamp}|${h.model || ""}|${h.total_tokens || 0}`;
+  const seen = new Set(cold.map((h) => keyOf(h)));
+  const toAdd = entries.filter((h) => !seen.has(keyOf(h)));
   if (!toAdd.length) return;
   const next = [...toAdd, ...cold];
   await dbSet("cold_history", JSON.stringify(next));
@@ -371,11 +372,13 @@ async function getAllHistory() {
   const hot = getExtensionSettings()?.history || [];
   const cold = await loadHistoryCold();
   const merged = [...hot, ...cold].sort((a, b) => b.timestamp - a.timestamp);
+  const keyOf = (h) => `${h.timestamp}|${h.model || ""}|${h.total_tokens || 0}`;
   const seen = /* @__PURE__ */ new Set();
   const dedup = [];
   for (const h of merged) {
-    if (!seen.has(h.timestamp)) {
-      seen.add(h.timestamp);
+    const k = keyOf(h);
+    if (!seen.has(k)) {
+      seen.add(k);
       dedup.push(h);
     }
   }
@@ -432,6 +435,9 @@ function localTimeHM(ts) {
 }
 function esc$1(s) {
   return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function isUnsafeKey$1(k) {
+  return k === "__proto__" || k === "constructor" || k === "prototype";
 }
 function mergePrices(base, custom) {
   if (!custom) return base;
@@ -564,6 +570,17 @@ function pruneDetails() {
 }
 function persist() {
   pruneDetails();
+  let safeLastUsage = state$1.lastUsage;
+  if (safeLastUsage) {
+    try {
+      const c = { ...safeLastUsage };
+      delete c.messages;
+      delete c.fullRequest;
+      delete c.fullResponse;
+      safeLastUsage = c;
+    } catch {
+    }
+  }
   saveHot({
     history: state$1.history,
     total_tokens: state$1.total_tokens,
@@ -580,7 +597,7 @@ function persist() {
     balance: state$1.balance,
     customBalance: state$1.customBalance,
     messageCount: state$1.messageCount,
-    lastUsage: state$1.lastUsage
+    lastUsage: safeLastUsage
   });
   emit(DataEvents.UPDATED);
 }
@@ -676,6 +693,22 @@ const repository = {
       console.log(TRACE + " addEntry 解析", { hit, miss, comp, total });
     } catch {
     }
+    try {
+      const now = Date.now();
+      const fp = `${model}|${total}|${hit}|${miss}|${comp}`;
+      const lastFp = state$1._lastFp;
+      const lastFpTime = state$1._lastFpTime;
+      if (lastFp === fp && lastFpTime && now - lastFpTime < 5e3) {
+        try {
+          console.log(TRACE + " addEntry 去重跳过(5s指纹)", { fp });
+        } catch {
+        }
+        return null;
+      }
+      state$1._lastFp = fp;
+      state$1._lastFpTime = now;
+    } catch {
+    }
     const lu = { timestamp: Date.now(), model, prompt_tokens: hit + miss, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp, total_tokens: total };
     const duration = startTime ? Date.now() - startTime : 0;
     const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || 0;
@@ -761,7 +794,12 @@ const repository = {
   },
   replaceAll(next) {
     if (next.history !== void 0) {
-      const h = next.history;
+      let h = next.history;
+      h = h.map((e) => {
+        if (!e || typeof e !== "object") return e;
+        for (const k of Object.keys(e)) if (isUnsafeKey$1(k)) delete e[k];
+        return e;
+      });
       if (h.length > MAX_HISTORY) {
         const overflow = h.slice(MAX_HISTORY);
         appendHistoryCold(overflow).catch(() => {
@@ -797,11 +835,13 @@ const repository = {
         state$1.rounds += s.rounds || 0;
       }
       all.sort((a, b) => b.timestamp - a.timestamp);
+      const keyOf = (h) => `${h.timestamp}|${h.model || ""}|${h.total_tokens || 0}`;
       const seen = /* @__PURE__ */ new Set();
       const dedup = [];
       for (const h of all) {
-        if (!seen.has(h.timestamp)) {
-          seen.add(h.timestamp);
+        const k = keyOf(h);
+        if (!seen.has(k)) {
+          seen.add(k);
           dedup.push(h);
         }
       }
@@ -812,7 +852,17 @@ const repository = {
       }
       state$1.history = dedup.slice(0, MAX_HISTORY);
     }
-    if (next.settings !== void 0) state$1.settings = next.settings;
+    if (next.settings !== void 0) {
+      const def = defaultSettings();
+      const incoming = next.settings || {};
+      const merged = { ...def, ...incoming };
+      merged.webdav = { ...def.webdav, ...incoming.webdav || {} };
+      if (!Array.isArray(merged.peakHours) || !merged.peakHours.length) merged.peakHours = def.peakHours;
+      if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
+      if (!merged.historyScope) merged.historyScope = def.historyScope;
+      if (!merged.theme) merged.theme = def.theme;
+      state$1.settings = merged;
+    }
     if (next.balance !== void 0) state$1.balance = next.balance;
     if (next.customBalance !== void 0) state$1.customBalance = next.customBalance;
     if (next.messageCount !== void 0) state$1.messageCount = next.messageCount;
@@ -985,17 +1035,12 @@ function installFetchCapture() {
             if (data && data.usage) {
               const model = data?.model || reqBody?.model || fullReq?.model || lastFetchModel || "deepseek-v4-flash";
               const usage = data.usage;
-              lastFetchUsage = usage;
+              lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: data, ttft: ttftVal, thinkTime: thinkTimeVal };
               lastFetchModel = typeof model === "string" ? model : null;
               lastFetchTime = Date.now();
               try {
-                console.log("[API用量统计][TRACE] fetch(原脚本逻辑) 捕获 usage", { url: String(url).slice(0, 80), usage: JSON.stringify(usage).slice(0, 1500), model });
+                console.log("[API用量统计][TRACE] fetch 捕获 usage 已缓存(待 GENERATION_ENDED 消费)", { url: String(url).slice(0, 80), usage: JSON.stringify(usage).slice(0, 1500), model });
               } catch {
-              }
-              try {
-                processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal);
-              } catch (e) {
-                console.error("[API用量统计] fetch 用量记录失败", e?.message || e);
               }
             }
           };
@@ -1018,14 +1063,24 @@ function installFetchCapture() {
   } catch {
   }
 }
+let interceptionInstalled = false;
+let rawFetchRef = null;
+let messageReceivedHandler = null;
 function installInterception() {
   try {
     const ctx = globalThis.SillyTavern?.getContext?.();
     const es = ctx?.eventSource;
     const et = ctx?.event_types;
-    if (!es || !et) return;
+    if (!es || !et) return false;
+    if (interceptionInstalled) return true;
+    try {
+      const p = window.parent || window;
+      if (p?.fetch && !p.fetch.__aus_patched) rawFetchRef = p.fetch.bind(p);
+    } catch {
+    }
     es.on(et.GENERATION_ENDED, onGenerationEnded);
-    es.on(et.MESSAGE_RECEIVED, () => setTimeout(refresh, 400));
+    messageReceivedHandler = () => setTimeout(refresh, 400);
+    es.on(et.MESSAGE_RECEIVED, messageReceivedHandler);
     globalThis.ApiUsageStatInterceptor = (chat, _ctxSize, _abort, _type) => {
       try {
         setLastRequest(chat?.slice(-10) || [], Date.now());
@@ -1036,6 +1091,35 @@ function installInterception() {
       installFetchCapture();
     } catch {
     }
+    interceptionInstalled = true;
+    return true;
+  } catch {
+    return false;
+  }
+}
+function uninstallInterception() {
+  try {
+    const ctx = globalThis.SillyTavern?.getContext?.();
+    const es = ctx?.eventSource;
+    const et = ctx?.event_types;
+    if (es && et && messageReceivedHandler) {
+      try {
+        es.off?.(et.GENERATION_ENDED, onGenerationEnded);
+      } catch {
+      }
+      try {
+        es.off?.(et.MESSAGE_RECEIVED, messageReceivedHandler);
+      } catch {
+      }
+    }
+    try {
+      const p = window.parent || window;
+      if (p && rawFetchRef && p.fetch.__aus_patched) {
+        p.fetch = rawFetchRef;
+      }
+    } catch {
+    }
+    interceptionInstalled = false;
   } catch {
   }
 }
@@ -1119,15 +1203,25 @@ function onGenerationEnded(...args) {
       processUsage(maybeUsage, m, lastMessages, lastStart);
       return;
     }
-    if (lastFetchUsage && isValidUsage(lastFetchUsage) && Date.now() - lastFetchTime < 12e4) {
-      const fetchModel = lastFetchModel || model;
-      console.log(TRACE + " fetch 兜底命中", { model: fetchModel, usage: JSON.stringify(lastFetchUsage).slice(0, 1500) });
-      const u = lastFetchUsage;
-      lastFetchUsage = null;
-      processUsage(u, fetchModel, lastMessages, lastStart);
-      return;
-    } else if (lastFetchUsage) {
-      console.log(TRACE + " fetch 有缓存但无效或超时", { has: !!lastFetchUsage, isValid: lastFetchUsage ? isValidUsage(lastFetchUsage) : false, age: Date.now() - lastFetchTime });
+    {
+      let fetchPack = lastFetchUsage;
+      let fetchUsage = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
+      if (fetchUsage && isValidUsage(fetchUsage) && Date.now() - lastFetchTime < 12e4) {
+        const fetchedModel = fetchPack && fetchPack.model || lastFetchModel || model;
+        const fetchedMsgs = fetchPack && fetchPack.msgs || lastMessages;
+        const fetchedStart = fetchPack && fetchPack.startTime || lastStart;
+        const fetchedReq = fetchPack && fetchPack.fullReq || null;
+        const fetchedRes = fetchPack && fetchPack.fullResponse || null;
+        const fTtft = fetchPack && fetchPack.ttft || 0;
+        const fThink = fetchPack && fetchPack.thinkTime || 0;
+        console.log(TRACE + " fetch 兜底命中", { model: fetchedModel, usage: JSON.stringify(fetchUsage).slice(0, 1500) });
+        lastFetchUsage = null;
+        processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink);
+        return;
+      } else if (lastFetchUsage) {
+        const fu = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
+        console.log(TRACE + " fetch 有缓存但无效或超时", { has: !!lastFetchUsage, isValid: fu ? isValidUsage(fu) : false, age: Date.now() - lastFetchTime });
+      }
     }
     if (extra.token_count != null && !usage) {
       try {
@@ -1158,14 +1252,35 @@ function processUsage(usage, model, messages, startTime, fullRequest = null, ful
 function recalcAllCosts() {
   repository.recalcAll();
 }
+const interception = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  installInterception,
+  processUsage,
+  recalcAllCosts,
+  setLastRequest,
+  uninstallInterception
+}, Symbol.toStringTag, { value: "Module" }));
 const XOR_KEY = "ds-stats-v1-xor-key!@#$%^&*";
 function encryptKey(plaintext) {
   if (!plaintext) return "";
-  let result = "";
-  for (let i = 0; i < plaintext.length; i++) {
-    result += String.fromCharCode(plaintext.charCodeAt(i) ^ XOR_KEY.charCodeAt(i % XOR_KEY.length));
+  try {
+    const utf8 = unescape(encodeURIComponent(plaintext));
+    let result = "";
+    for (let i = 0; i < utf8.length; i++) {
+      result += String.fromCharCode(utf8.charCodeAt(i) ^ XOR_KEY.charCodeAt(i % XOR_KEY.length));
+    }
+    return btoa(result);
+  } catch {
+    let result = "";
+    for (let i = 0; i < plaintext.length; i++) {
+      result += String.fromCharCode(plaintext.charCodeAt(i) ^ XOR_KEY.charCodeAt(i % XOR_KEY.length));
+    }
+    try {
+      return btoa(result);
+    } catch {
+      return "";
+    }
   }
-  return btoa(result);
 }
 function decryptKey(ciphertext) {
   if (!ciphertext) return "";
@@ -1175,7 +1290,11 @@ function decryptKey(ciphertext) {
     for (let i = 0; i < decoded.length; i++) {
       result += String.fromCharCode(decoded.charCodeAt(i) ^ XOR_KEY.charCodeAt(i % XOR_KEY.length));
     }
-    return result;
+    try {
+      return decodeURIComponent(escape(result));
+    } catch {
+      return result;
+    }
   } catch {
     return ciphertext;
   }
@@ -1563,25 +1682,32 @@ function mergeBundles(remote, local) {
     }
     return [];
   };
-  const lh = toHistory(ld), rh = toHistory(rd);
-  const lseen = new Set(lh.map((h) => h.timestamp));
-  const rseen = new Set(rh.map((h) => h.timestamp));
+  const clean = (arr) => arr.map((e) => {
+    if (e && typeof e === "object") {
+      for (const k of Object.keys(e)) if (isUnsafeKey$1(k)) delete e[k];
+    }
+    return e;
+  });
+  const lh = clean(toHistory(ld)), rh = clean(toHistory(rd));
+  const keyOf = (h) => `${h.timestamp}|${h.model || ""}|${h.total_tokens || 0}`;
+  const lseen = new Set(lh.map((h) => keyOf(h)));
+  const rseen = new Set(rh.map((h) => keyOf(h)));
   let pulled = 0, pushed = 0;
   const merged = [...rh.filter((h) => {
-    if (!lseen.has(h.timestamp)) {
+    if (!lseen.has(keyOf(h))) {
       pulled++;
       return true;
     }
     return false;
   }), ...lh.filter((h) => {
-    if (!rseen.has(h.timestamp)) {
+    if (!rseen.has(keyOf(h))) {
       pushed++;
       return true;
     }
     return false;
-  }), ...lh.filter((h) => rseen.has(h.timestamp))];
+  }), ...lh.filter((h) => rseen.has(keyOf(h)))];
   const dedup = /* @__PURE__ */ new Map();
-  for (const h of merged) dedup.set(h.timestamp, h);
+  for (const h of merged) dedup.set(keyOf(h), h);
   let hist = Array.from(dedup.values()).sort((a, b) => b.timestamp - a.timestamp);
   const data = {
     history: hist,
@@ -1672,6 +1798,11 @@ function applyTheme(theme) {
     const doc = window.parent?.document ?? document;
     const panel = doc.getElementById("aus-panel");
     if (panel) panel.setAttribute("data-ds-theme", mode);
+    const overlay = doc.getElementById("aus-overlay");
+    if (overlay) {
+      overlay.setAttribute("data-extension", "api-usage-stat");
+      overlay.setAttribute("data-ds-theme", mode);
+    }
     try {
       document.documentElement.removeAttribute("data-ds-theme");
       document.documentElement.removeAttribute("data-extension");
@@ -1767,7 +1898,7 @@ function renderSettings(doc) {
       <!-- 新价格机制 -->
       <div class="ds-card">
         <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">新价格机制（峰谷计费）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-use-new-pricing" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-use-new-pricing-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
-        <div id="aus-new-pricing-panel" style="display:${s.useNewPricing ? "block" : "none"};margin-top:10px;display:grid;gap:8px;">
+        <div id="aus-new-pricing-panel" style="display:${s.useNewPricing ? "grid" : "none"};margin-top:10px;gap:8px;">
           <div style="display:flex;gap:8px;align-items:center;"><input type="date" id="aus-new-pricing-date" style="flex:1;padding:7px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><button id="aus-btn-pricing-today" style="padding:7px 12px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;white-space:nowrap;">设为今日</button></div>
           <div style="font-size:11px;color:var(--ds-text-2);">生效日期前按旧价，之后按峰谷价（仅 deepseek* 模型，周末全天低谷）。</div>
         </div>
@@ -1782,7 +1913,7 @@ function renderSettings(doc) {
       <!-- 调试 -->
       <div class="ds-card">
         <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">调试模式（模拟数据，不计费）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-debug-mode" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-debug-mode-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
-        <div id="aus-debug-panel" style="display:${s.debug ? "block" : "none"};margin-top:10px;display:grid;gap:8px;">
+        <div id="aus-debug-panel" style="display:${s.debug ? "grid" : "none"};margin-top:10px;gap:8px;">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">命中</div><input type="number" id="aus-debug-hit" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">未命中</div><input type="number" id="aus-debug-miss" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">输出</div><input type="number" id="aus-debug-output" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">模型</div><select id="aus-debug-model" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;"></select></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="date" id="aus-debug-date-start" style="padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><input type="date" id="aus-debug-date-end" style="padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><input type="number" id="aus-debug-batch-count" min="1" placeholder="条数" style="padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div>
@@ -1809,7 +1940,11 @@ function renderSettings(doc) {
   try {
     const ctx = globalThis.SillyTavern?.getContext?.();
     const v = ctx?.extensionSettings?.["api_usage_stat"]?.apiKey;
-    if (v && apiKeyEl) apiKeyEl.value = decryptKey(v);
+    if (v && apiKeyEl) {
+      apiKeyEl.value = "";
+      apiKeyEl.placeholder = "已保存 ●●●●（留空不修改）";
+      apiKeyEl.dataset.hasKey = "1";
+    }
   } catch {
   }
   doc.getElementById("aus-custom-balance").value = state$1.customBalance || "";
@@ -1844,7 +1979,19 @@ function renderSettings(doc) {
   try {
     const pass = localStorage.getItem("ds_ds_webdav_pass") || "";
     const el = doc.getElementById("aus-webdav-pass");
-    if (pass && el) el.value = decryptKey(pass);
+    if (pass && el) {
+      el.value = "";
+      el.placeholder = "已保存 ●●●●（留空不修改）";
+      el.dataset.hasKey = "1";
+    } else {
+      const ctx = globalThis.SillyTavern?.getContext?.();
+      const v2 = ctx?.extensionSettings?.["api_usage_stat"]?.webdavPass;
+      if (v2 && el) {
+        el.value = "";
+        el.placeholder = "已保存 ●●●●（留空不修改）";
+        el.dataset.hasKey = "1";
+      }
+    }
   } catch {
   }
   let themePickerOpen = false;
@@ -1938,10 +2085,24 @@ function renderSettings(doc) {
     };
   }
   doc.getElementById("aus-save-key").onclick = () => {
-    const v = doc.getElementById("aus-api-key").value.trim();
+    const el = doc.getElementById("aus-api-key");
+    const v = el.value.trim();
+    if (!v && el.dataset.hasKey === "1") {
+      const sEl2 = doc.getElementById("aus-key-status");
+      sEl2.textContent = "未修改，已保留原密钥";
+      return;
+    }
     saveApiKey(v);
     const sEl = doc.getElementById("aus-key-status");
     sEl.textContent = v ? "已保存" : "已清空";
+    if (v) {
+      el.value = "";
+      el.placeholder = "已保存 ●●●●（留空不修改）";
+      el.dataset.hasKey = "1";
+    } else {
+      el.placeholder = "输入 DeepSeek API 密钥";
+      el.dataset.hasKey = "";
+    }
   };
   doc.getElementById("aus-save-balance").onclick = () => {
     const v = doc.getElementById("aus-custom-balance").value.trim();
@@ -1977,7 +2138,7 @@ function renderSettings(doc) {
   if (newCb) newCb.onchange = () => {
     state$1.settings.useNewPricing = newCb.checked;
     if (newSlider) newSlider.style.left = newCb.checked ? "23px" : "3px";
-    doc.getElementById("aus-new-pricing-panel").style.display = newCb.checked ? "block" : "none";
+    doc.getElementById("aus-new-pricing-panel").style.display = newCb.checked ? "grid" : "none";
     saveHot({ settings: state$1.settings });
     recalcAllCosts();
     try {
@@ -2005,7 +2166,7 @@ function renderSettings(doc) {
     if (newCb && !newCb.checked) {
       newCb.checked = true;
       if (newSlider) newSlider.style.left = "23px";
-      doc.getElementById("aus-new-pricing-panel").style.display = "block";
+      doc.getElementById("aus-new-pricing-panel").style.display = "grid";
     }
     saveHot({ settings: state$1.settings });
     recalcAllCosts();
@@ -2017,7 +2178,7 @@ function renderSettings(doc) {
   if (dbgCb) dbgCb.onchange = () => {
     state$1.settings.debug = dbgCb.checked;
     if (dbgSlider) dbgSlider.style.left = dbgCb.checked ? "23px" : "3px";
-    doc.getElementById("aus-debug-panel").style.display = dbgCb.checked ? "block" : "none";
+    doc.getElementById("aus-debug-panel").style.display = dbgCb.checked ? "grid" : "none";
     const st = doc.getElementById("aus-debug-status");
     if (st) st.textContent = dbgCb.checked ? "调试模式已开启，下次对话将使用模拟参数，不计费" : "";
     saveHot({ settings: state$1.settings });
@@ -2096,7 +2257,16 @@ function renderSettings(doc) {
     state$1.settings.webdav.proxy = wProxy.value.trim();
     saveHot({ settings: state$1.settings });
   };
-  if (wPass) wPass.onchange = () => saveWebdavPass(wPass.value);
+  if (wPass) wPass.onchange = () => {
+    const vv = wPass.value.trim();
+    if (!vv && wPass.dataset.hasKey === "1") return;
+    saveWebdavPass(wPass.value);
+    if (vv) {
+      wPass.value = "";
+      wPass.placeholder = "已保存 ●●●●（留空不修改）";
+      wPass.dataset.hasKey = "1";
+    }
+  };
   doc.getElementById("aus-webdav-sync").onclick = () => doSyncNow();
   renderPeakHoursEditor(doc);
   renderModelsEditor(doc);
@@ -2227,7 +2397,7 @@ function modelRow(model, p, isBuiltin, usePeak) {
         <div style="font-size:10px;font-weight:600;color:var(--ds-green);">非峰</div>
         ${field("offpeak.hit", hit(p.offpeak.hit))}${field("offpeak.miss", hit(p.offpeak.miss))}${field("offpeak.output", hit(p.offpeak.output))}
       </div>
-      <div style="background:var(--ds-card-inner)BEB;border-radius:8px;padding:8px;display:grid;gap:6px;${usePeak ? "" : "opacity:0.45;pointer-events:none;"}">
+      <div style="background:var(--ds-card-inner);border-radius:8px;padding:8px;display:grid;gap:6px;${usePeak ? "" : "opacity:0.45;pointer-events:none;"}">
         <div style="font-size:10px;font-weight:600;color:#D97706;">高峰</div>
         ${field("peak.hit", hit(p.peak.hit))}${field("peak.miss", hit(p.peak.miss))}${field("peak.output", hit(p.peak.output))}
       </div>
@@ -2440,7 +2610,7 @@ const Y_OPTIONS = [
   { key: "input_hit_token", label: "输入(命中) token", unit: "tokens", kind: "token", color: "#0BA25E" },
   { key: "input_miss_token", label: "输入(未命中) token", unit: "tokens", kind: "token", color: "#F87171" },
   { key: "output_token", label: "输出 token", unit: "tokens", kind: "token", color: "#6366F1" },
-  { key: "total_token", label: "总 Token", unit: "tokens", kind: "token", color: "var(--ds-text)" },
+  { key: "total_token", label: "总 Token", unit: "tokens", kind: "token", color: "#111827" },
   { key: "input_hit_cost", label: "输入(命中)费用", unit: "CNY", kind: "cost", color: "#10B981" },
   { key: "input_miss_cost", label: "输入(未命中)费用", unit: "CNY", kind: "cost", color: "#F59E0B" },
   { key: "output_cost", label: "输出费用", unit: "CNY", kind: "cost", color: "#8B5CF6" },
@@ -2654,112 +2824,127 @@ async function getEcharts() {
   return ec;
 }
 const charts = {};
+let lastFiltered = [];
 function renderExtraCharts(filtered) {
+  lastFiltered = filtered || [];
   for (const id of Object.keys(CHART_DEFS)) {
     renderOne(id, filtered);
   }
 }
 async function renderOne(id, filtered) {
-  const doc = getDoc$3();
-  const el = doc.getElementById(`aus-chart-${id}`);
-  if (!el) return;
-  if (id === "pie") {
-    const mode = state.pie.pieMode;
-    if (!filtered.length) {
-      el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--ds-text-3);">暂无数据</div>';
+  try {
+    const doc = getDoc$3();
+    const el = doc.getElementById(`aus-chart-${id}`);
+    if (!el) return;
+    if (id === "pie") {
+      const mode = state.pie.pieMode;
+      if (!filtered.length) {
+        el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--ds-text-3);">暂无数据</div>';
+        return;
+      }
+      const map2 = {};
+      for (const e of filtered) {
+        const m = e.model || "unknown";
+        const v = mode === "token" ? e.total_tokens || 0 : 1;
+        map2[m] = (map2[m] || 0) + v;
+      }
+      const data = Object.entries(map2).map(([name, value]) => ({ name, value }));
+      const ec = await getEcharts();
+      if (charts[id]) try {
+        charts[id].dispose();
+      } catch {
+      }
+      el.innerHTML = "";
+      el.style.height = "260px";
+      const c = charts[id] = ec.init(el);
+      c.setOption({
+        backgroundColor: "transparent",
+        tooltip: { trigger: "item", backgroundColor: themeColor$1("--ds-card-inner", "#FFFFFF"), borderColor: themeColor$1("--ds-border", "#E5E7EB"), textStyle: { fontSize: 11, color: themeColor$1("--ds-text", "#111827") } },
+        legend: { bottom: 0, textStyle: { fontSize: 10, color: themeColor$1("--ds-text-2", "#6B7280") } },
+        series: [{ type: "pie", radius: ["40%", "70%"], itemStyle: { borderRadius: 6, borderColor: themeColor$1("--ds-card-inner", "#FFFFFF"), borderWidth: 2 }, label: { fontSize: 11 }, data }]
+      });
       return;
     }
-    const map2 = {};
-    for (const e of filtered) {
-      const m = e.model || "unknown";
-      const v = mode === "token" ? e.total_tokens || 0 : 1;
-      map2[m] = (map2[m] || 0) + v;
+    const yKeys = Array.from(state[id].y);
+    const xKey = state[id].x;
+    if (!yKeys.length) {
+      el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ds-text-3);font-size:11px;">请选择 Y 轴</div>';
+      return;
     }
-    const data = Object.entries(map2).map(([name, value]) => ({ name, value }));
-    const ec = await getEcharts();
-    if (charts[id]) try {
-      charts[id].dispose();
-    } catch {
-    }
-    el.innerHTML = "";
-    el.style.height = "260px";
-    const c = charts[id] = ec.init(el);
-    c.setOption({
-      backgroundColor: "transparent",
-      tooltip: { trigger: "item", backgroundColor: themeColor$1("--ds-card-inner", "#FFFFFF"), borderColor: themeColor$1("--ds-border", "#E5E7EB"), textStyle: { fontSize: 11, color: themeColor$1("--ds-text", "#111827") } },
-      legend: { bottom: 0, textStyle: { fontSize: 10, color: themeColor$1("--ds-text-2", "#6B7280") } },
-      series: [{ type: "pie", radius: ["40%", "70%"], itemStyle: { borderRadius: 6, borderColor: themeColor$1("--ds-card-inner", "#FFFFFF"), borderWidth: 2 }, label: { fontSize: 11 }, data }]
-    });
-    return;
-  }
-  const yKeys = Array.from(state[id].y);
-  const xKey = state[id].x;
-  if (!yKeys.length) {
-    el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ds-text-3);font-size:11px;">请选择 Y 轴</div>';
-    return;
-  }
-  if (xKey === "round") {
-    const labels2 = filtered.map((_, i) => `#${i + 1}`);
-    const yMeta = new Map(CHART_DEFS[id].yOpts.map((o) => [o.key, o]));
-    const series2 = yKeys.map((k) => {
-      const meta = yMeta.get(k) || Y_OPTIONS.find((o) => o.key === k) || { label: k, color: "var(--ds-text-2)" };
-      const data = filtered.map((e) => {
-        const v = getYValue(e, k);
-        return Number(v.toFixed(k.includes("cost") || k === "hit_rate" ? 2 : 0));
+    if (xKey === "round") {
+      const labels2 = filtered.map((_, i) => `#${i + 1}`);
+      const yMeta = new Map(CHART_DEFS[id].yOpts.map((o) => [o.key, o]));
+      const series2 = yKeys.map((k) => {
+        const meta = yMeta.get(k) || Y_OPTIONS.find((o) => o.key === k) || { label: k, color: "var(--ds-text-2)" };
+        const data = filtered.map((e) => {
+          const v = getYValue(e, k);
+          return Number(v.toFixed(k.includes("cost") || k === "hit_rate" ? 2 : 0));
+        });
+        return { name: meta.label, data, color: meta.color, kind: meta.kind || "token" };
       });
+      await drawBarLine(el, id, labels2, series2);
+      return;
+    }
+    const buckets = /* @__PURE__ */ new Map();
+    filtered.forEach((e) => {
+      const key = bucketKey(e.timestamp, xKey, 0);
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(e);
+    });
+    const sortedKeys = Array.from(buckets.keys()).sort();
+    const labels = sortedKeys.map((k) => xKey === "day" ? k.slice(5).replace("-", "/") : xKey === "hour" ? k.slice(5) : k);
+    const yOptsMap = new Map(CHART_DEFS[id].yOpts.map((o) => [o.key, o]));
+    const fullMap = new Map([...Y_OPTIONS, ...CHART_DEFS[id].yOpts].map((o) => [o.key, o]));
+    const series = yKeys.map((k) => {
+      const meta = fullMap.get(k) || { label: k, color: "var(--ds-text-2)", kind: "token" };
+      let data;
+      if (k === "hit_rate") {
+        data = sortedKeys.map((key) => {
+          const arr = buckets.get(key);
+          let hit = 0, tot = 0;
+          for (const e of arr) {
+            hit += e.cache_hit_tokens || 0;
+            tot += (e.cache_hit_tokens || 0) + (e.cache_miss_tokens || 0);
+          }
+          return tot ? Number((hit / tot * 100).toFixed(1)) : 0;
+        });
+      } else if (k === "duration") {
+        data = sortedKeys.map((key) => {
+          const arr = buckets.get(key);
+          const avg = arr.reduce((a, c) => a + (c.duration || 0), 0) / arr.length / 1e3;
+          return Number(avg.toFixed(1));
+        });
+      } else if (k === "rate") {
+        data = sortedKeys.map((key) => {
+          const arr = buckets.get(key);
+          const avg = arr.reduce((a, c) => a + (c.tokenRate || 0), 0) / arr.length;
+          return Math.round(avg);
+        });
+      } else if (k === "req_count") {
+        data = sortedKeys.map((key) => buckets.get(key).length);
+      } else {
+        data = sortedKeys.map((key) => {
+          const arr = buckets.get(key);
+          let sum = 0;
+          for (const e of arr) sum += getYValue(e, k);
+          return Number(sum.toFixed(k.includes("cost") ? 2 : 0));
+        });
+      }
       return { name: meta.label, data, color: meta.color, kind: meta.kind || "token" };
     });
-    await drawBarLine(el, id, labels2, series2);
-    return;
-  }
-  const buckets = /* @__PURE__ */ new Map();
-  filtered.forEach((e) => {
-    const key = bucketKey(e.timestamp, xKey, 0);
-    if (!buckets.has(key)) buckets.set(key, []);
-    buckets.get(key).push(e);
-  });
-  const sortedKeys = Array.from(buckets.keys()).sort();
-  const labels = sortedKeys.map((k) => xKey === "day" ? k.slice(5).replace("-", "/") : xKey === "hour" ? k.slice(5) : k);
-  new Map(CHART_DEFS[id].yOpts.map((o) => [o.key, o]));
-  const fullMap = new Map([...Y_OPTIONS, ...CHART_DEFS[id].yOpts].map((o) => [o.key, o]));
-  const series = yKeys.map((k) => {
-    const meta = fullMap.get(k) || { label: k, color: "var(--ds-text-2)", kind: "token" };
-    let data;
-    if (k === "hit_rate") {
-      data = sortedKeys.map((key) => {
-        const arr = buckets.get(key);
-        let hit = 0, tot = 0;
-        for (const e of arr) {
-          hit += e.cache_hit_tokens || 0;
-          tot += (e.cache_hit_tokens || 0) + (e.cache_miss_tokens || 0);
-        }
-        return tot ? Number((hit / tot * 100).toFixed(1)) : 0;
-      });
-    } else if (k === "duration") {
-      data = sortedKeys.map((key) => {
-        const arr = buckets.get(key);
-        const avg = arr.reduce((a, c) => a + (c.duration || 0), 0) / arr.length / 1e3;
-        return Number(avg.toFixed(1));
-      });
-    } else if (k === "rate") {
-      data = sortedKeys.map((key) => {
-        const arr = buckets.get(key);
-        const avg = arr.reduce((a, c) => a + (c.tokenRate || 0), 0) / arr.length;
-        return Math.round(avg);
-      });
-    } else if (k === "req_count") {
-      data = sortedKeys.map((key) => buckets.get(key).length);
-    } else {
-      data = sortedKeys.map((key) => {
-        const arr = buckets.get(key);
-        let sum = 0;
-        for (const e of arr) sum += getYValue(e, k);
-        return Number(sum.toFixed(k.includes("cost") ? 2 : 0));
-      });
+    await drawBarLine(el, id, labels, series);
+  } catch (e) {
+    try {
+      const doc2 = getDoc$3();
+      const el2 = doc2.getElementById(`aus-chart-${id}`);
+      if (el2) el2.innerHTML = '<div style="text-align:center;padding:20px;color:#DC2626;font-size:11px;">图表加载失败: ' + (e?.message || e) + "</div>";
+    } catch {
     }
-    return { name: meta.label, data, color: meta.color, kind: meta.kind || "token" };
-  });
-  await drawBarLine(el, id, labels, series);
+    try {
+      console.error("[Api-Usage] renderOne failed", id, e);
+    } catch {
+    }
+  }
 }
 function calcXInterval(labels, el) {
   const w = el.clientWidth || 320;
@@ -2769,56 +2954,67 @@ function calcXInterval(labels, el) {
   return Math.ceil(labels.length / maxLabels) - 1;
 }
 async function drawBarLine(el, id, labels, series) {
-  const ec = await getEcharts();
-  if (charts[id]) try {
-    charts[id].dispose();
-  } catch {
+  try {
+    const ec = await getEcharts();
+    if (charts[id]) try {
+      charts[id].dispose();
+    } catch {
+    }
+    el.innerHTML = "";
+    el.style.height = "260px";
+    const c = charts[id] = ec.init(el);
+    const isTokenCost = id === "token" || id === "cost";
+    const interval = calcXInterval(labels, el);
+    const opts = {
+      backgroundColor: "transparent",
+      tooltip: { trigger: "axis", backgroundColor: themeColor$1("--ds-card-inner", "#FFFFFF"), borderColor: themeColor$1("--ds-border", "#E5E7EB"), textStyle: { fontSize: 11 } },
+      grid: { left: 40, right: 20, top: 8, bottom: 24 },
+      xAxis: { type: "category", data: labels, axisLine: { lineStyle: { color: themeColor$1("--ds-border", "#E5E7EB") } }, axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF"), rotate: labels.length > 12 ? 30 : 0, interval, hideOverlap: false } },
+      yAxis: { type: "value", axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF") }, splitLine: { lineStyle: { color: themeColor$1("--ds-card", "#F6F7F8") } } },
+      dataZoom: labels.length > 8 ? [{ type: "inside", xAxisIndex: 0, start: Math.max(0, (labels.length - Math.max(8, Math.min(labels.length, Math.floor((el.clientWidth || 320) / 44)))) / labels.length * 100), end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : void 0,
+      series: (() => {
+        const barIndices = series.map((s, i) => ({ s, i })).filter(({ s }) => !(isTokenCost && s.name.includes("总"))).map(({ i }) => i);
+        const topIdx = barIndices.length ? barIndices[barIndices.length - 1] : -1;
+        return series.map((s, idx) => {
+          const isTotal = s.name.includes("总");
+          if (isTokenCost && isTotal) return { name: s.name, type: "line", data: s.data, smooth: true, lineStyle: { color: s.color, width: 2 }, itemStyle: { color: s.color }, symbolSize: 2 };
+          const isTop = idx === topIdx;
+          return { name: s.name, type: "bar", stack: "total", data: s.data, itemStyle: { color: s.color, borderRadius: isTop ? [4, 4, 0, 0] : [0, 0, 0, 0] }, barMaxWidth: 16, barGap: "-100%" };
+        });
+      })()
+    };
+    if (id === "hit") {
+      opts.series = [{ name: "命中率", type: "line", data: series[0].data, areaStyle: { opacity: 0.12, color: series[0].color }, lineStyle: { color: series[0].color }, itemStyle: { color: series[0].color }, smooth: true }];
+      opts.yAxis = { max: 100, axisLabel: { formatter: (v) => v + "%" } };
+    }
+    if (id === "dur") {
+      opts.yAxis = [
+        { type: "value", name: "耗时 s", position: "left", axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF") }, splitLine: { lineStyle: { color: themeColor$1("--ds-card", "#F6F7F8") } } },
+        { type: "value", name: "速率 t/s", position: "right", axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF") }, splitLine: { show: false } }
+      ];
+      opts.series = series.map((s) => ({
+        name: s.name,
+        type: "line",
+        yAxisIndex: s.name.includes("速率") || s.name.toLowerCase().includes("rate") ? 1 : 0,
+        data: s.data,
+        smooth: true,
+        symbolSize: 4,
+        lineStyle: { color: s.color, width: 2 },
+        itemStyle: { color: s.color },
+        areaStyle: s.name.includes("耗时") ? { opacity: 0.08, color: s.color } : void 0
+      }));
+    }
+    c.setOption(opts);
+  } catch (e) {
+    try {
+      el.innerHTML = '<div style="text-align:center;padding:20px;color:#DC2626;font-size:11px;">图表渲染失败</div>';
+    } catch {
+    }
+    try {
+      console.error("[Api-Usage] drawBarLine failed", id, e);
+    } catch {
+    }
   }
-  el.innerHTML = "";
-  el.style.height = "260px";
-  const c = charts[id] = ec.init(el);
-  const isTokenCost = id === "token" || id === "cost";
-  const interval = calcXInterval(labels, el);
-  const opts = {
-    backgroundColor: "transparent",
-    tooltip: { trigger: "axis", backgroundColor: themeColor$1("--ds-card-inner", "#FFFFFF"), borderColor: themeColor$1("--ds-border", "#E5E7EB"), textStyle: { fontSize: 11 } },
-    grid: { left: 40, right: 20, top: 8, bottom: 24 },
-    xAxis: { type: "category", data: labels, axisLine: { lineStyle: { color: themeColor$1("--ds-border", "#E5E7EB") } }, axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF"), rotate: labels.length > 12 ? 30 : 0, interval, hideOverlap: false } },
-    yAxis: { type: "value", axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF") }, splitLine: { lineStyle: { color: themeColor$1("--ds-card", "#F6F7F8") } } },
-    dataZoom: labels.length > 8 ? [{ type: "inside", xAxisIndex: 0, start: Math.max(0, (labels.length - Math.max(8, Math.min(labels.length, Math.floor((el.clientWidth || 320) / 44)))) / labels.length * 100), end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : void 0,
-    series: (() => {
-      const barIndices = series.map((s, i) => ({ s, i })).filter(({ s }) => !(isTokenCost && s.name.includes("总"))).map(({ i }) => i);
-      const topIdx = barIndices.length ? barIndices[barIndices.length - 1] : -1;
-      return series.map((s, idx) => {
-        const isTotal = s.name.includes("总");
-        if (isTokenCost && isTotal) return { name: s.name, type: "line", data: s.data, smooth: true, lineStyle: { color: s.color, width: 2 }, itemStyle: { color: s.color }, symbolSize: 2 };
-        const isTop = idx === topIdx;
-        return { name: s.name, type: "bar", stack: "total", data: s.data, itemStyle: { color: s.color, borderRadius: isTop ? [4, 4, 0, 0] : [0, 0, 0, 0] }, barMaxWidth: 16, barGap: "-100%" };
-      });
-    })()
-  };
-  if (id === "hit") {
-    opts.series = [{ name: "命中率", type: "line", data: series[0].data, areaStyle: { opacity: 0.12, color: series[0].color }, lineStyle: { color: series[0].color }, itemStyle: { color: series[0].color }, smooth: true }];
-    opts.yAxis = { max: 100, axisLabel: { formatter: (v) => v + "%" } };
-  }
-  if (id === "dur") {
-    opts.yAxis = [
-      { type: "value", name: "耗时 s", position: "left", axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF") }, splitLine: { lineStyle: { color: themeColor$1("--ds-card", "#F6F7F8") } } },
-      { type: "value", name: "速率 t/s", position: "right", axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF") }, splitLine: { show: false } }
-    ];
-    opts.series = series.map((s) => ({
-      name: s.name,
-      type: "line",
-      yAxisIndex: s.name.includes("速率") || s.name.toLowerCase().includes("rate") ? 1 : 0,
-      data: s.data,
-      smooth: true,
-      symbolSize: 4,
-      lineStyle: { color: s.color, width: 2 },
-      itemStyle: { color: s.color },
-      areaStyle: s.name.includes("耗时") ? { opacity: 0.08, color: s.color } : void 0
-    }));
-  }
-  c.setOption(opts);
 }
 function initExtraCharts() {
   const doc = getDoc$3();
@@ -2846,9 +3042,7 @@ function initExtraCharts() {
     pieToggle.onclick = () => {
       state.pie.pieMode = state.pie.pieMode === "token" ? "count" : "token";
       pieToggle.textContent = state.pie.pieMode === "token" ? "Token" : "次数";
-      window.ApiUsageStat?.state ? window.ApiUsageStat.state : null;
-      const hist = window.ApiUsageStat?.state?.history || [];
-      renderExtraCharts(hist);
+      renderExtraCharts(lastFiltered);
     };
   }
   doc.addEventListener("click", (e) => {
@@ -2885,8 +3079,7 @@ function renderExtraY(id) {
         else el.checked = true;
       }
       renderExtraY(cid);
-      const hist = window.ApiUsageStat?.state?.history || [];
-      renderExtraCharts(hist);
+      renderExtraCharts(lastFiltered);
     };
   });
 }
@@ -2907,8 +3100,7 @@ function renderExtraX(id) {
       state[cid].x = k;
       drop.style.display = "none";
       renderExtraX(cid);
-      const hist = window.ApiUsageStat?.state?.history || [];
-      renderExtraCharts(hist);
+      renderExtraCharts(lastFiltered);
     };
   });
 }
@@ -3095,7 +3287,7 @@ function renderModelPicker() {
   let html = `<div data-model="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${selectedModel === "__all__" ? "background:var(--ds-card);font-weight:600;" : ""}">全部</div>`;
   for (const m of models) {
     const active = m === selectedModel ? "background:var(--ds-card);font-weight:600;" : "";
-    html += `<div data-model="${m}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${m}</div>`;
+    html += `<div data-model="${esc$1(m)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${esc$1(m)}</div>`;
   }
   if (!models.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">暂无模型</div>';
   dropdown.innerHTML = html;
@@ -3285,9 +3477,16 @@ async function renderChart(filteredRaw) {
   }
   const w = el.clientWidth, h = el.clientHeight;
   if (w === 0 || h === 0) {
+    const tries = renderChart._retryCount || 0;
+    if (tries >= 20) {
+      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--ds-text-3);font-size:11px;">图表容器未就绪，请切换视图重试</div>';
+      return;
+    }
+    renderChart._retryCount = tries + 1;
     setTimeout(() => renderChart(filteredRaw), 80);
     return;
   }
+  renderChart._retryCount = 0;
   let echarts;
   try {
     echarts = await import("./core-CNISqr4u.js").then(async (ec) => {
@@ -3319,20 +3518,23 @@ async function renderChart(filteredRaw) {
   if (hasToken) yAxis.push({ type: "value", name: "tokens", position: "left", axisLine: { show: false }, splitLine: { lineStyle: { color: cCard } }, axisLabel: { color: cText3, fontSize: 10 } });
   if (hasCost) yAxis.push({ type: "value", name: "CNY", position: hasToken ? "right" : "left", axisLine: { show: false }, splitLine: { show: false }, axisLabel: { color: cText3, fontSize: 10, formatter: (v) => "¥" + v } });
   const lastBarIdx = (() => {
-    const indices = series.map((_, i) => i).filter((i) => series[i].kind !== "cost" || true);
-    return indices.length ? indices[indices.length - 1] : -1;
+    const indices = series.map((_, i) => i).filter((i) => series[i].kind !== "cost");
+    const target = indices.length ? indices : series.map((_, i) => i);
+    return target.length ? target[target.length - 1] : -1;
   })();
   const seriesOpt = series.map((s, idx) => {
     const isCost = s.kind === "cost";
     const yIndex = hasToken && hasCost ? isCost ? 1 : 0 : 0;
     const isTop = idx === lastBarIdx;
+    let col = s.color;
+    if (col === "#111827" || typeof col === "string" && col.indexOf("var(") === 0) col = themeColor("--ds-text", "#111827");
     return {
       name: s.name,
       type: "bar",
       yAxisIndex: yIndex,
       data: s.data,
       stack: "total",
-      itemStyle: { color: s.color, borderRadius: isTop ? [4, 4, 0, 0] : [0, 0, 0, 0] },
+      itemStyle: { color: col, borderRadius: isTop ? [4, 4, 0, 0] : [0, 0, 0, 0] },
       barMaxWidth: 18,
       barGap: "-100%",
       emphasis: { focus: "series" }
@@ -3411,15 +3613,40 @@ function renderModelSummary(filtered) {
     const avgCost = e.count ? e.cost / e.count : 0;
     const avgDur = e.count ? (e.dur / e.count / 1e3).toFixed(1) + "s" : "—";
     const avgRate = e.rateCnt ? Math.round(e.rate / e.rateCnt) + " t/s" : "—";
-    return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${m}</td><td style="padding:6px 8px;text-align:right;">${e.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${e.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${e.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${e.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${e.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">¥${e.cost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;">¥${avgCost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${avgDur}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${avgRate}</td></tr>`;
+    return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc$1(m)}</td><td style="padding:6px 8px;text-align:right;">${e.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${e.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${e.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${e.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${e.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">¥${e.cost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;">¥${avgCost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${avgDur}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${avgRate}</td></tr>`;
   }).join("");
   tbody.innerHTML = rows;
 }
-function renderStatsView() {
+let cachedAllHistory = null;
+let allHistoryLoading = false;
+async function getHistoryForStats() {
+  const s = getSelectedSave();
+  const hot = s?.history || [];
+  if (hot.length >= 400 || cachedAllHistory) {
+    if (cachedAllHistory) return cachedAllHistory;
+    if (allHistoryLoading) return hot;
+    allHistoryLoading = true;
+    try {
+      const mod = await Promise.resolve().then(() => persistence);
+      if (mod.getAllHistory) {
+        const all = await mod.getAllHistory();
+        if (all && all.length > hot.length) {
+          cachedAllHistory = all;
+          return all;
+        }
+      }
+    } catch {
+    } finally {
+      allHistoryLoading = false;
+    }
+  }
+  return hot;
+}
+async function renderStatsView() {
   const doc = getDoc$2();
   const s = getSelectedSave();
   if (!s) return;
-  const allHistory = s.history || [];
+  const allHistory = await getHistoryForStats();
   const timeFiltered = filterByRange(allHistory);
   const summaryFiltered = filterByModel(timeFiltered);
   const chartFiltered = filterByModel(timeFiltered);
@@ -3439,6 +3666,34 @@ function renderStatsView() {
   renderModelPicker();
   renderChartSelectors();
   renderExtraCharts(chartFiltered);
+  if (cachedAllHistory && cachedAllHistory.length !== (s.history || []).length) ;
+  else if (!cachedAllHistory && allHistory.length !== (s.history || []).length) {
+    try {
+      const mod = await Promise.resolve().then(() => persistence);
+      const all = await mod.getAllHistory();
+      if (all && all.length > (s.history || []).length) {
+        cachedAllHistory = all;
+        const tf2 = filterByRange(all);
+        const sf2 = filterByModel(tf2);
+        const cf2 = sf2;
+        let c2 = 0, r2 = sf2.length, t2 = 0;
+        for (const e of sf2) {
+          c2 += e.cost || 0;
+          t2 += e.total_tokens || 0;
+        }
+        const ce2 = doc.getElementById("aus-stats-cost");
+        if (ce2) ce2.textContent = "¥" + c2.toFixed(2) + " CNY";
+        const re2 = doc.getElementById("aus-stats-req");
+        if (re2) re2.textContent = String(r2);
+        const te2 = doc.getElementById("aus-stats-tok");
+        if (te2) te2.textContent = t2.toLocaleString("zh-CN");
+        renderModelSummary(sf2);
+        renderChart(cf2);
+        renderExtraCharts(cf2);
+      }
+    } catch {
+    }
+  }
 }
 function initStatsView() {
   bindPicker();
@@ -3585,10 +3840,10 @@ function renderHistory(doc, s) {
           <button class="aus-tab-btn" data-tab="raw" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">原始 Token 用量 (Raw Usage)</button>
           <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">消息内容 (Messages)</button>
         </div>
-        <pre class="aus-tab-content" data-content="req-${h.timestamp}" style="flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(JSON.stringify(h.fullRequest || h.raw_usage || {}, null, 2))}</pre>
-        <pre class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(JSON.stringify(h.fullResponse || {}, null, 2))}</pre>
+        <pre class="aus-tab-content" data-content="req-${h.timestamp}" style="flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : "（原文已清理，仅保留统计）")}</pre>
+        <pre class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(h.fullResponse ? JSON.stringify(h.fullResponse, null, 2) : "（原文已清理）")}</pre>
         <pre class="aus-tab-content" data-content="raw-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
-        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(JSON.stringify(h.messages || [], null, 2))}</pre>
+        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(h.messages && h.messages.length ? JSON.stringify(h.messages, null, 2) : "（原文已清理——超过保留条数 10 条，仅统计可用）")}</pre>
       </div>
     </div>
   `;
@@ -3714,6 +3969,8 @@ function createPanel() {
   const theme = state$1.settings.theme || "light";
   const overlay = doc.createElement("div");
   overlay.id = "aus-overlay";
+  overlay.setAttribute("data-extension", "api-usage-stat");
+  overlay.setAttribute("data-ds-theme", theme);
   overlay.style.cssText = "position:absolute;top:0;left:0;background:var(--ds-overlay);z-index:100000;display:none;opacity:0;transition:opacity 0.2s;";
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) closePanel();
@@ -4126,9 +4383,23 @@ async function onDelete() {
 }
 function onEnable() {
   console.log("[API用量统计] enabled");
+  try {
+    Promise.resolve().then(() => interception).then((m) => m.installInterception());
+  } catch {
+  }
 }
 function onDisable() {
   console.log("[API用量统计] disabled");
+  try {
+    Promise.resolve().then(() => interception).then((m) => m.uninstallInterception?.());
+  } catch {
+  }
+  try {
+    const doc = getDoc();
+    doc.getElementById("aus-overlay")?.remove();
+    doc.getElementById("aus-panel")?.remove();
+  } catch {
+  }
 }
 async function onActivate() {
   ensureStyleScope();
@@ -4192,10 +4463,22 @@ async function init() {
         refreshUI();
       } catch {
       }
+      try {
+        const mod = globalThis.ApiUsageStatInterceptor ? null : null;
+      } catch {
+      }
+      try {
+        Promise.resolve().then(() => interception).then((m) => m.installInterception());
+      } catch {
+      }
     });
     ctx?.eventSource?.on?.(ctx?.event_types?.APP_INITIALIZED, () => {
       try {
         ensureWandEntry();
+      } catch {
+      }
+      try {
+        Promise.resolve().then(() => interception).then((m) => m.installInterception());
       } catch {
       }
     });
@@ -4205,6 +4488,20 @@ async function init() {
       } catch {
       }
     });
+    let retry = 0;
+    const timer = setInterval(() => {
+      retry++;
+      try {
+        const ok = globalThis.SillyTavern?.getContext?.()?.eventSource;
+        if (ok) {
+          Promise.resolve().then(() => interception).then((m) => {
+            if (m.installInterception()) clearInterval(timer);
+          });
+        }
+      } catch {
+      }
+      if (retry > 20) clearInterval(timer);
+    }, 1e3);
   } catch {
   }
   try {

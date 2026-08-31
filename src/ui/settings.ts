@@ -37,7 +37,7 @@ export function renderSettings(doc: Document) {
       <!-- 新价格机制 -->
       <div class="ds-card">
         <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">新价格机制（峰谷计费）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-use-new-pricing" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-use-new-pricing-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
-        <div id="aus-new-pricing-panel" style="display:${s.useNewPricing ? 'block':'none'};margin-top:10px;display:grid;gap:8px;">
+        <div id="aus-new-pricing-panel" style="display:${s.useNewPricing ? 'grid':'none'};margin-top:10px;gap:8px;">
           <div style="display:flex;gap:8px;align-items:center;"><input type="date" id="aus-new-pricing-date" style="flex:1;padding:7px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><button id="aus-btn-pricing-today" style="padding:7px 12px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;white-space:nowrap;">设为今日</button></div>
           <div style="font-size:11px;color:var(--ds-text-2);">生效日期前按旧价，之后按峰谷价（仅 deepseek* 模型，周末全天低谷）。</div>
         </div>
@@ -52,7 +52,7 @@ export function renderSettings(doc: Document) {
       <!-- 调试 -->
       <div class="ds-card">
         <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">调试模式（模拟数据，不计费）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-debug-mode" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-debug-mode-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
-        <div id="aus-debug-panel" style="display:${s.debug ? 'block':'none'};margin-top:10px;display:grid;gap:8px;">
+        <div id="aus-debug-panel" style="display:${s.debug ? 'grid':'none'};margin-top:10px;gap:8px;">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">命中</div><input type="number" id="aus-debug-hit" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">未命中</div><input type="number" id="aus-debug-miss" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">输出</div><input type="number" id="aus-debug-output" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">模型</div><select id="aus-debug-model" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;"></select></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="date" id="aus-debug-date-start" style="padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><input type="date" id="aus-debug-date-end" style="padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><input type="number" id="aus-debug-batch-count" min="1" placeholder="条数" style="padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div>
@@ -76,12 +76,16 @@ export function renderSettings(doc: Document) {
     </div>
   `;
 
-  // 填充 API Key
+  // 填充 API Key：不回填明文，仅显示已保存状态（防 XSS/泄露）
   const apiKeyEl = doc.getElementById('aus-api-key') as HTMLInputElement | null;
   try {
     const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
     const v = ctx?.extensionSettings?.['api_usage_stat']?.apiKey;
-    if (v && apiKeyEl) apiKeyEl.value = decryptKey(v);
+    if (v && apiKeyEl) {
+      apiKeyEl.value = '';
+      apiKeyEl.placeholder = '已保存 ●●●●（留空不修改）';
+      (apiKeyEl as any).dataset.hasKey = '1';
+    }
   } catch {}
   (doc.getElementById('aus-custom-balance') as HTMLInputElement | null)!.value = state.customBalance || '';
   (doc.getElementById('aus-peak-dot') as HTMLInputElement | null)!.checked = state.settings.peakDot !== false;
@@ -116,7 +120,20 @@ export function renderSettings(doc: Document) {
   try {
     const pass = localStorage.getItem('ds_ds_webdav_pass') || '';
     const el = doc.getElementById('aus-webdav-pass') as HTMLInputElement | null;
-    if (pass && el) el.value = decryptKey(pass);
+    if (pass && el) {
+      el.value = '';
+      el.placeholder = '已保存 ●●●●（留空不修改）';
+      (el as any).dataset.hasKey = '1';
+    } else {
+      // 兼容 extensionSettings.webdavPass
+      const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
+      const v2 = ctx?.extensionSettings?.['api_usage_stat']?.webdavPass;
+      if (v2 && el) {
+        el.value = '';
+        el.placeholder = '已保存 ●●●●（留空不修改）';
+        (el as any).dataset.hasKey = '1';
+      }
+    }
   } catch {}
 
   // 颜色模式（胶囊下拉，与用量统计·模型选择一致）
@@ -209,8 +226,24 @@ export function renderSettings(doc: Document) {
 
   // 绑定
   doc.getElementById('aus-save-key')!.onclick = () => {
-    const v = (doc.getElementById('aus-api-key') as HTMLInputElement).value.trim();
-    saveApiKey(v); const sEl = doc.getElementById('aus-key-status')!; sEl.textContent = v ? '已保存' : '已清空';
+    const el = doc.getElementById('aus-api-key') as HTMLInputElement;
+    const v = el.value.trim();
+    if (!v && (el as any).dataset.hasKey === '1') {
+      const sEl = doc.getElementById('aus-key-status')!;
+      sEl.textContent = '未修改，已保留原密钥';
+      return;
+    }
+    saveApiKey(v);
+    const sEl = doc.getElementById('aus-key-status')!;
+    sEl.textContent = v ? '已保存' : '已清空';
+    if (v) {
+      el.value = '';
+      el.placeholder = '已保存 ●●●●（留空不修改）';
+      (el as any).dataset.hasKey = '1';
+    } else {
+      el.placeholder = '输入 DeepSeek API 密钥';
+      (el as any).dataset.hasKey = '';
+    }
   };
   doc.getElementById('aus-save-balance')!.onclick = () => {
     const v = (doc.getElementById('aus-custom-balance') as HTMLInputElement).value.trim();
@@ -235,7 +268,7 @@ export function renderSettings(doc: Document) {
   if (newCb) newCb.onchange = () => {
     state.settings.useNewPricing = newCb.checked;
     if (newSlider) newSlider.style.left = newCb.checked ? '23px' : '3px';
-    (doc.getElementById('aus-new-pricing-panel') as HTMLElement).style.display = newCb.checked ? 'block' : 'none';
+    (doc.getElementById('aus-new-pricing-panel') as HTMLElement).style.display = newCb.checked ? 'grid' : 'none';
     saveHot({ settings: state.settings }); recalcAllCosts(); try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
   };
   if (newDate) newDate.onchange = () => {
@@ -249,13 +282,13 @@ export function renderSettings(doc: Document) {
     const d = new Date(); d.setHours(0,0,0,0);
     state.settings.newPricingDate = d.getTime();
     if (newDate) newDate.value = localDay(d.getTime());
-    if (newCb && !newCb.checked) { newCb.checked = true; if (newSlider) newSlider.style.left = '23px'; (doc.getElementById('aus-new-pricing-panel') as HTMLElement).style.display = 'block'; }
+    if (newCb && !newCb.checked) { newCb.checked = true; if (newSlider) newSlider.style.left = '23px'; (doc.getElementById('aus-new-pricing-panel') as HTMLElement).style.display = 'grid'; }
     saveHot({ settings: state.settings }); recalcAllCosts(); try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
   };
   if (dbgCb) dbgCb.onchange = () => {
     state.settings.debug = dbgCb.checked;
     if (dbgSlider) dbgSlider.style.left = dbgCb.checked ? '23px' : '3px';
-    (doc.getElementById('aus-debug-panel') as HTMLElement).style.display = dbgCb.checked ? 'block' : 'none';
+    (doc.getElementById('aus-debug-panel') as HTMLElement).style.display = dbgCb.checked ? 'grid' : 'none';
     const st = doc.getElementById('aus-debug-status') as HTMLElement | null;
     if (st) st.textContent = dbgCb.checked ? '调试模式已开启，下次对话将使用模拟参数，不计费' : '';
     saveHot({ settings: state.settings });
@@ -280,7 +313,16 @@ export function renderSettings(doc: Document) {
   if (wUser) wUser.onchange = () => { (state.settings.webdav as any).username = wUser.value.trim(); saveHot({ settings: state.settings }); };
   if (wPath) wPath.onchange = () => { (state.settings.webdav as any).path = wPath.value.trim(); saveHot({ settings: state.settings }); };
   if (wProxy) wProxy.onchange = () => { (state.settings.webdav as any).proxy = wProxy.value.trim(); saveHot({ settings: state.settings }); };
-  if (wPass) wPass.onchange = () => saveWebdavPass(wPass.value);
+  if (wPass) wPass.onchange = () => {
+    const vv = wPass.value.trim();
+    if (!vv && (wPass as any).dataset.hasKey === '1') return;
+    saveWebdavPass(wPass.value);
+    if (vv) {
+      wPass.value = '';
+      wPass.placeholder = '已保存 ●●●●（留空不修改）';
+      (wPass as any).dataset.hasKey = '1';
+    }
+  };
   doc.getElementById('aus-webdav-sync')!.onclick = () => doSyncNow();
 
   renderPeakHoursEditor(doc);
@@ -390,7 +432,7 @@ function modelRow(model: string, p: any, isBuiltin: boolean, usePeak: boolean) {
         <div style="font-size:10px;font-weight:600;color:var(--ds-green);">非峰</div>
         ${field('offpeak.hit', hit(p.offpeak.hit))}${field('offpeak.miss', hit(p.offpeak.miss))}${field('offpeak.output', hit(p.offpeak.output))}
       </div>
-      <div style="background:var(--ds-card-inner)BEB;border-radius:8px;padding:8px;display:grid;gap:6px;${usePeak ? '' : 'opacity:0.45;pointer-events:none;'}">
+      <div style="background:var(--ds-card-inner);border-radius:8px;padding:8px;display:grid;gap:6px;${usePeak ? '' : 'opacity:0.45;pointer-events:none;'}">
         <div style="font-size:10px;font-weight:600;color:#D97706;">高峰</div>
         ${field('peak.hit', hit(p.peak.hit))}${field('peak.miss', hit(p.peak.miss))}${field('peak.output', hit(p.peak.output))}
       </div>

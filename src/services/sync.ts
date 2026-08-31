@@ -2,6 +2,7 @@ import { state } from '../store/index';
 import { WEBDAV_SYNC_FILE, WEBDAV_REMOTE_VERSION, MAX_HISTORY } from '../constants/pricing';
 import { decryptKey, encryptKey } from '../utils/crypto';
 import { repository } from '../data/repository';
+import { isUnsafeKey } from '../utils/date';
 
 const WEBDAV_PASS_KEY = 'ds_webdav_pass';
 
@@ -104,14 +105,17 @@ function mergeBundles(remote: any, local: any) {
     }
     return [];
   };
-  const lh = toHistory(ld), rh = toHistory(rd);
-  const lseen = new Set(lh.map((h: any) => h.timestamp));
-  const rseen = new Set(rh.map((h: any) => h.timestamp));
+  // 清洗原型污染
+  const clean = (arr: any[]) => arr.map((e:any)=>{ if(e&&typeof e==='object') for(const k of Object.keys(e)) if(isUnsafeKey(k)) delete e[k]; return e; });
+  const lh = clean(toHistory(ld)), rh = clean(toHistory(rd));
+  const keyOf = (h:any)=> `${h.timestamp}|${h.model||''}|${h.total_tokens||0}`;
+  const lseen = new Set(lh.map((h: any) => keyOf(h)));
+  const rseen = new Set(rh.map((h: any) => keyOf(h)));
   let pulled = 0, pushed = 0;
-  const merged: any[] = [...rh.filter((h: any) => { if (!lseen.has(h.timestamp)) { pulled++; return true; } return false }), ...lh.filter((h: any) => { if (!rseen.has(h.timestamp)) { pushed++; return true; } return false }), ...lh.filter((h: any) => rseen.has(h.timestamp))];
+  const merged: any[] = [...rh.filter((h: any) => { if (!lseen.has(keyOf(h))) { pulled++; return true; } return false }), ...lh.filter((h: any) => { if (!rseen.has(keyOf(h))) { pushed++; return true; } return false }), ...lh.filter((h: any) => rseen.has(keyOf(h)))];
   // 去重并保留本地更完整条目（已通过上式实现），排序；截断由 repository.replaceAll 统一处理溢出进冷
-  const dedup = new Map<number, any>();
-  for (const h of merged) dedup.set(h.timestamp, h);
+  const dedup = new Map<string, any>();
+  for (const h of merged) dedup.set(keyOf(h), h);
   let hist = Array.from(dedup.values()).sort((a, b) => b.timestamp - a.timestamp);
   // 重新聚合（以本地为准，远程仅补历史）
   const data = {

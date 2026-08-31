@@ -208,9 +208,10 @@ export async function loadHistoryCold(): Promise<any[]> {
 export async function appendHistoryCold(entries: any[]) {
   if (!entries.length) return;
   const cold = await loadHistoryCold();
-  // 去重：按 timestamp，已存在则跳过，避免重复写入
-  const seen = new Set(cold.map((h: any) => h.timestamp));
-  const toAdd = entries.filter((h: any) => !seen.has(h.timestamp));
+  // 去重：按 timestamp+model+total 指纹，避免同毫秒双记账误删/重复写入
+  const keyOf = (h: any) => `${h.timestamp}|${h.model||''}|${h.total_tokens||0}`;
+  const seen = new Set(cold.map((h: any) => keyOf(h)));
+  const toAdd = entries.filter((h: any) => !seen.has(keyOf(h)));
   if (!toAdd.length) return;
   const next = [...toAdd, ...cold];
   await dbSet('cold_history', JSON.stringify(next));
@@ -225,8 +226,9 @@ export async function getAllHistory(): Promise<any[]> {
   const hot = getExtensionSettings()?.history || [];
   const cold = await loadHistoryCold();
   const merged = [...hot, ...cold].sort((a: any, b: any) => b.timestamp - a.timestamp);
-  const seen = new Set<number>();
+  const keyOf = (h: any) => `${h.timestamp}|${h.model||''}|${h.total_tokens||0}`;
+  const seen = new Set<string>();
   const dedup: any[] = [];
-  for (const h of merged) { if (!seen.has(h.timestamp)) { seen.add(h.timestamp); dedup.push(h); } }
+  for (const h of merged) { const k = keyOf(h); if (!seen.has(k)) { seen.add(k); dedup.push(h); } }
   return dedup;
 }

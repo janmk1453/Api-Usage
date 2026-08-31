@@ -8,6 +8,8 @@ import { calcCost, isDeepSeekOfficialModel } from '../services/pricing';
 import { MAX_HISTORY, DETAIL_KEEP } from '../constants/pricing';
 import { emit, DataEvents } from './events';
 import type { Snapshot } from './types';
+import { defaultSettings } from '../types/settings';
+import { isUnsafeKey } from '../utils/date';
 
 function getCurrentChatId(): string | null {
   try {
@@ -52,6 +54,18 @@ function pruneDetails() {
 
 function persist() {
   pruneDetails();
+  // 剥离隐私大字段，防止对话全文落盘到 settings.json
+  let safeLastUsage: any = state.lastUsage;
+  if (safeLastUsage) {
+    try {
+      const c: any = { ...safeLastUsage };
+      delete c.messages;
+      delete c.fullRequest;
+      delete c.fullResponse;
+      // raw_usage 保留但去除可能的大对象
+      safeLastUsage = c;
+    } catch {}
+  }
   saveHot({
     history: state.history,
     total_tokens: state.total_tokens,
@@ -68,7 +82,7 @@ function persist() {
     balance: state.balance,
     customBalance: state.customBalance,
     messageCount: state.messageCount,
-    lastUsage: state.lastUsage,
+    lastUsage: safeLastUsage,
   });
   emit(DataEvents.UPDATED);
 }
@@ -142,6 +156,19 @@ export const repository = {
       return null as any;
     }
     try { console.log(TRACE + ' addEntry 解析', { hit, miss, comp, total }); } catch {}
+    // 指纹去重：5秒内同 model+total 防双记账（fetch 与 GENERATION_ENDED 并发）
+    try {
+      const now = Date.now();
+      const fp = `${model}|${total}|${hit}|${miss}|${comp}`;
+      const lastFp = (state as any)._lastFp as string | undefined;
+      const lastFpTime = (state as any)._lastFpTime as number | undefined;
+      if (lastFp === fp && lastFpTime && now - lastFpTime < 5000) {
+        try { console.log(TRACE + ' addEntry 去重跳过(5s指纹)', { fp }); } catch {}
+        return null as any;
+      }
+      (state as any)._lastFp = fp;
+      (state as any)._lastFpTime = now;
+    } catch {}
     const lu: any = { timestamp: Date.now(), model, prompt_tokens: hit + miss, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp, total_tokens: total };
     const duration = startTime ? Date.now() - startTime : 0;
     const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || 0;
@@ -192,7 +219,13 @@ export const repository = {
 
   replaceAll(next: Partial<Snapshot> & any) {
     if (next.history !== undefined) {
-      const h = next.history as any[];
+      let h = next.history as any[];
+      // 清洗原型污染键
+      h = h.map((e: any) => {
+        if (!e || typeof e !== 'object') return e;
+        for (const k of Object.keys(e)) if (isUnsafeKey(k)) delete e[k];
+        return e;
+      });
       if (h.length > MAX_HISTORY) {
         const overflow = h.slice(MAX_HISTORY);
         appendHistoryCold(overflow).catch(() => {});
@@ -228,16 +261,28 @@ export const repository = {
         state.rounds += (s as any).rounds || 0;
       }
       all.sort((a: any, b: any) => b.timestamp - a.timestamp);
-      const seen = new Set<number>();
+      const keyOf = (h: any) => `${h.timestamp}|${h.model||''}|${h.total_tokens||0}`;
+      const seen = new Set<string>();
       const dedup: any[] = [];
-      for (const h of all) { if (!seen.has(h.timestamp)) { seen.add(h.timestamp); dedup.push(h); } }
+      for (const h of all) { const k = keyOf(h); if (!seen.has(k)) { seen.add(k); dedup.push(h); } }
       if (dedup.length > MAX_HISTORY) {
         const overflow = dedup.slice(MAX_HISTORY);
         appendHistoryCold(overflow).catch(() => {});
       }
       state.history = dedup.slice(0, MAX_HISTORY);
     }
-    if (next.settings !== undefined) state.settings = next.settings as any;
+    if (next.settings !== undefined) {
+      const def: any = defaultSettings();
+      const incoming: any = next.settings || {};
+      // 深合并 webdav/peakHours/customModels，避免缺字段导致白屏
+      const merged: any = { ...def, ...incoming };
+      merged.webdav = { ...def.webdav, ...(incoming.webdav || {}) };
+      if (!Array.isArray(merged.peakHours) || !merged.peakHours.length) merged.peakHours = def.peakHours;
+      if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
+      if (!merged.historyScope) merged.historyScope = def.historyScope;
+      if (!merged.theme) merged.theme = def.theme;
+      state.settings = merged as any;
+    }
     if (next.balance !== undefined) state.balance = next.balance;
     if (next.customBalance !== undefined) state.customBalance = next.customBalance as any;
     if (next.messageCount !== undefined) state.messageCount = next.messageCount as any;

@@ -69,14 +69,17 @@ async function getEcharts(){
 }
 
 const charts: Record<string, any> = {};
+let lastFiltered: any[] = [];
 
 export function renderExtraCharts(filtered:any[]){
+  lastFiltered = filtered || [];
   for (const id of Object.keys(CHART_DEFS) as ChartId[]){
     renderOne(id, filtered);
   }
 }
 
 async function renderOne(id:ChartId, filtered:any[]){
+  try {
   const doc=getDoc();
   const el=doc.getElementById(`aus-chart-${id}`) as HTMLElement | null;
   if (!el) return;
@@ -163,6 +166,10 @@ async function renderOne(id:ChartId, filtered:any[]){
     return { name: meta.label, data, color: meta.color, kind: meta.kind || 'token' };
   });
   await drawBarLine(el, id, labels, series);
+  } catch(e:any){
+    try{ const doc2=getDoc(); const el2=doc2.getElementById(`aus-chart-${id}`) as HTMLElement | null; if(el2) el2.innerHTML='<div style="text-align:center;padding:20px;color:#DC2626;font-size:11px;">图表加载失败: '+(e?.message||e)+'</div>'; }catch{}
+    try{ console.error('[Api-Usage] renderOne failed', id, e); }catch{}
+  }
 }
 
 function calcXInterval(labels: string[], el: HTMLElement): number {
@@ -174,6 +181,7 @@ function calcXInterval(labels: string[], el: HTMLElement): number {
 }
 
 async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:Array<{name:string,data:number[],color:string,kind:string}>){
+  try {
   const ec = await getEcharts();
   if (charts[id]) try{ charts[id].dispose(); }catch{}
   el.innerHTML=''; (el as any).style.height='260px';
@@ -220,6 +228,10 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
     }));
   }
   c.setOption(opts);
+  } catch(e:any){
+    try{ el.innerHTML='<div style="text-align:center;padding:20px;color:#DC2626;font-size:11px;">图表渲染失败</div>'; }catch{}
+    try{ console.error('[Api-Usage] drawBarLine failed', id, e); }catch{}
+  }
 }
 
 export function initExtraCharts(){
@@ -244,17 +256,13 @@ export function initExtraCharts(){
       };
     }
   }
-  // pie 模式切换
+  // pie 模式切换：复用已过滤的 lastFiltered，避免丢失时间/模型筛选
   const pieToggle = doc.getElementById('aus-pie-toggle');
   if (pieToggle){
     pieToggle.onclick = ()=>{
       state.pie.pieMode = state.pie.pieMode==='token'?'count':'token';
       (pieToggle as any).textContent = state.pie.pieMode==='token'?'Token':'次数';
-      const s:any = (window as any).ApiUsageStat?.state ? (window as any).ApiUsageStat.state : null;
-      // 触发重绘由外层 refresh 调用，此处直接
-      const hist = (window as any).ApiUsageStat?.state?.history || [];
-      // 轻量：直接重绘
-      renderExtraCharts(hist);
+      renderExtraCharts(lastFiltered);
     };
   }
   doc.addEventListener('click', (e:any)=>{
@@ -288,8 +296,7 @@ function renderExtraY(id:ChartId){
       const k=el.getAttribute('data-y'), cid=el.getAttribute('data-chart') as ChartId;
       if (el.checked) state[cid].y.add(k); else { if (state[cid].y.size>1) state[cid].y.delete(k); else el.checked=true; }
       renderExtraY(cid);
-      const hist = (window as any).ApiUsageStat?.state?.history || [];
-      renderExtraCharts(hist);
+      renderExtraCharts(lastFiltered);
     };
   });
 }
@@ -311,8 +318,7 @@ function renderExtraX(id:ChartId){
       state[cid].x = k;
       drop.style.display='none';
       renderExtraX(cid);
-      const hist = (window as any).ApiUsageStat?.state?.history || [];
-      renderExtraCharts(hist);
+      renderExtraCharts(lastFiltered);
     };
   });
 }

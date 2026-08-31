@@ -1,5 +1,5 @@
 import { getSelectedSave } from '../store/index';
-import { localDay } from '../utils/date';
+import { localDay, esc } from '../utils/date';
 import { Y_OPTIONS, X_OPTIONS, getYSelected, getXSelected, toggleY, setXSelected, aggregateForChart } from './chart-config';
 import { renderExtraCharts } from './extra-charts';
 
@@ -158,7 +158,7 @@ function renderModelPicker() {
   let html = `<div data-model="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${selectedModel==='__all__'?'background:var(--ds-card);font-weight:600;':''}">全部</div>`;
   for (const m of models) {
     const active = m === selectedModel ? 'background:var(--ds-card);font-weight:600;' : '';
-    html += `<div data-model="${m}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${m}</div>`;
+    html += `<div data-model="${esc(m)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${esc(m)}</div>`;
   }
   if (!models.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">暂无模型</div>';
   dropdown.innerHTML = html;
@@ -316,9 +316,16 @@ async function renderChart(filteredRaw: any[]) {
   }
   const w = (el as HTMLElement).clientWidth, h = (el as HTMLElement).clientHeight;
   if (w === 0 || h === 0) {
+    const tries = (renderChart as any)._retryCount || 0;
+    if (tries >= 20) {
+      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--ds-text-3);font-size:11px;">图表容器未就绪，请切换视图重试</div>';
+      return;
+    }
+    (renderChart as any)._retryCount = tries + 1;
     setTimeout(() => renderChart(filteredRaw), 80);
     return;
   }
+  (renderChart as any)._retryCount = 0;
   let echarts: any;
   try {
     echarts = await import('echarts/core').then(async (ec: any) => {
@@ -348,20 +355,24 @@ async function renderChart(filteredRaw: any[]) {
   if (hasCost) yAxis.push({ type:'value', name:'CNY', position: hasToken?'right':'left', axisLine:{show:false}, splitLine:{show:false}, axisLabel:{color:cText3,fontSize:10,formatter:(v:number)=>'¥'+v} });
   // 堆叠柱仅最顶段圆角，其余直角无缝衔接（修复紫/橙/绿段间缝隙）
   const lastBarIdx = (() => {
-    const indices = series.map((_, i) => i).filter(i => series[i].kind !== 'cost' || true); // 所有 bar 均为候选，取最后
-    return indices.length ? indices[indices.length - 1] : -1;
+    const indices = series.map((_, i) => i).filter(i => series[i].kind !== 'cost'); // 仅 token 堆叠取最后，深色同理；cost 单轴不在此堆
+    const target = indices.length ? indices : series.map((_, i)=>i);
+    return target.length ? target[target.length - 1] : -1;
   })();
   const seriesOpt = series.map((s, idx)=>{
     const isCost = s.kind==='cost';
     const yIndex = hasToken && hasCost ? (isCost?1:0) : 0;
     const isTop = idx === lastBarIdx;
+    // 深色下 total_token 颜色同步主题
+    let col = s.color;
+    if (col === '#111827' || (typeof col === 'string' && col.indexOf('var(')===0)) col = themeColor('--ds-text', '#111827');
     return {
       name: s.name,
       type: 'bar',
       yAxisIndex: yIndex,
       data: s.data,
       stack: 'total',
-      itemStyle: { color: s.color, borderRadius: isTop ? [4,4,0,0] as any : [0,0,0,0] as any },
+      itemStyle: { color: col, borderRadius: isTop ? [4,4,0,0] as any : [0,0,0,0] as any },
       barMaxWidth: 18,
       barGap: '-100%' as any,
       emphasis: { focus: 'series' },
@@ -423,16 +434,42 @@ function renderModelSummary(filtered: any[]) {
     const avgCost = e.count ? e.cost / e.count : 0;
     const avgDur = e.count ? (e.dur / e.count / 1000).toFixed(1) + 's' : '—';
     const avgRate = e.rateCnt ? Math.round(e.rate / e.rateCnt) + ' t/s' : '—';
-    return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${m}</td><td style="padding:6px 8px;text-align:right;">${e.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${e.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${e.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${e.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${e.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">¥${e.cost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;">¥${avgCost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${avgDur}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${avgRate}</td></tr>`;
+     return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc(m)}</td><td style="padding:6px 8px;text-align:right;">${e.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${e.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${e.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${e.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${e.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">¥${e.cost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;">¥${avgCost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${avgDur}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${avgRate}</td></tr>`;
   }).join('');
   tbody.innerHTML = rows;
 }
 
-export function renderStatsView() {
+let cachedAllHistory: any[] | null = null;
+let allHistoryLoading = false;
+
+async function getHistoryForStats(): Promise<any[]> {
+  const s: any = getSelectedSave();
+  const hot: any[] = s?.history || [];
+  // 若热已满且可能有冷数据，则异步加载全量
+  if (hot.length >= 400 || cachedAllHistory) {
+    if (cachedAllHistory) return cachedAllHistory;
+    if (allHistoryLoading) return hot;
+    allHistoryLoading = true;
+    try {
+      const mod: any = await import('../store/persistence');
+      if (mod.getAllHistory) {
+        const all = await mod.getAllHistory();
+        if (all && all.length > hot.length) {
+          cachedAllHistory = all;
+          return all;
+        }
+      }
+    } catch {}
+    finally { allHistoryLoading = false; }
+  }
+  return hot;
+}
+
+export async function renderStatsView() {
   const doc = getDoc();
   const s: any = getSelectedSave();
   if (!s) return;
-  const allHistory: any[] = s.history || [];
+  const allHistory: any[] = await getHistoryForStats();
   const timeFiltered = filterByRange(allHistory);
   const summaryFiltered = filterByModel(timeFiltered);
   const chartFiltered = filterByModel(timeFiltered);
@@ -449,6 +486,28 @@ export function renderStatsView() {
   renderModelPicker();
   renderChartSelectors();
   renderExtraCharts(chartFiltered);
+  // 若首次加载了全量且数量更大，二次刷新确保图表包含冷数据（异步后）
+  if (cachedAllHistory && cachedAllHistory.length !== (s.history||[]).length) {
+    // 已使用全量，无需额外
+  } else if (!cachedAllHistory && allHistory.length !== (s.history||[]).length) {
+    // 异步加载完成后若发现冷数据，触发一次重绘
+    try {
+      const mod: any = await import('../store/persistence');
+      const all = await mod.getAllHistory();
+      if (all && all.length > (s.history||[]).length) {
+        cachedAllHistory = all;
+        // 避免无限递归：直接同步重绘一次
+        const tf2 = filterByRange(all);
+        const sf2 = filterByModel(tf2);
+        const cf2 = sf2;
+        let c2=0, r2=sf2.length, t2=0; for(const e of sf2){c2+=e.cost||0; t2+=e.total_tokens||0;}
+        const ce2 = doc.getElementById('aus-stats-cost'); if(ce2) ce2.textContent='¥'+c2.toFixed(2)+' CNY';
+        const re2 = doc.getElementById('aus-stats-req'); if(re2) re2.textContent=String(r2);
+        const te2 = doc.getElementById('aus-stats-tok'); if(te2) te2.textContent=t2.toLocaleString('zh-CN');
+        renderModelSummary(sf2); renderChart(cf2); renderExtraCharts(cf2);
+      }
+    } catch {}
+  }
 }
 
 export function initStatsView() {

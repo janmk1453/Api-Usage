@@ -8,6 +8,11 @@ export function applyTheme(theme?: string) {
     const doc = (window.parent as any)?.document ?? document;
     const panel = doc.getElementById('aus-panel') as HTMLElement | null;
     if (panel) panel.setAttribute('data-ds-theme', mode);
+    const overlay = doc.getElementById('aus-overlay') as HTMLElement | null;
+    if (overlay) {
+      overlay.setAttribute('data-extension', 'api-usage-stat');
+      overlay.setAttribute('data-ds-theme', mode);
+    }
     // 修复：严禁在宿主 documentElement 上设置 data-ds-theme / data-extension，避免全局样式污染（如 #send_textarea 跟随主题变白）
     // 之前 document.documentElement.setAttribute('data-ds-theme', ...) 会使 [data-extension]input 选择器命中全站输入框
     try {

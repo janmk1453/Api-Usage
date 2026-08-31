@@ -69,12 +69,11 @@ function installFetchCapture() {
             if (data && data.usage) {
               const model = (data as any)?.model || reqBody?.model || fullReq?.model || lastFetchModel || 'deepseek-v4-flash';
               const usage = (data as any).usage;
-              // 同时更新 fetch 兜底缓存与直接记录（双保险）
-              lastFetchUsage = usage;
+              // 修复重复记账：fetch 只缓存兜底，不直接落账，统一由 GENERATION_ENDED 记账
+              lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: data, ttft: ttftVal, thinkTime: thinkTimeVal };
               lastFetchModel = typeof model === 'string' ? model : null;
               lastFetchTime = Date.now();
-              try { console.log('[API用量统计][TRACE] fetch(原脚本逻辑) 捕获 usage', { url: String(url).slice(0, 80), usage: JSON.stringify(usage).slice(0, 1500), model }); } catch {}
-              try { processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal); } catch (e) { console.error('[API用量统计] fetch 用量记录失败', (e as any)?.message || e); }
+              try { console.log('[API用量统计][TRACE] fetch 捕获 usage 已缓存(待 GENERATION_ENDED 消费)', { url: String(url).slice(0, 80), usage: JSON.stringify(usage).slice(0, 1500), model }); } catch {}
             }
           };
           // 尝试根据 Content-Type 分发解析
@@ -97,21 +96,54 @@ function installFetchCapture() {
   } catch {}
 }
 
+let interceptionInstalled = false;
+let rawFetchRef: any = null;
+let messageReceivedHandler: any = null;
+
 export function installInterception() {
   try {
     const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
     const es = ctx?.eventSource;
     const et = ctx?.event_types;
-    if (!es || !et) return;
+    if (!es || !et) return false;
+    if (interceptionInstalled) return true;
+    // 记录原始 fetch 引用以便 disable 时还原
+    try {
+      const p: any = (window as any).parent || window;
+      if (p?.fetch && !(p.fetch as any).__aus_patched) rawFetchRef = p.fetch.bind(p);
+    } catch {}
     es.on(et.GENERATION_ENDED, onGenerationEnded);
-    es.on(et.MESSAGE_RECEIVED, () => setTimeout(refresh, 400));
+    messageReceivedHandler = () => setTimeout(refresh, 400);
+    es.on(et.MESSAGE_RECEIVED, messageReceivedHandler);
     // generate_interceptor 记录请求 messages（若 ST 支持）
     (globalThis as any).ApiUsageStatInterceptor = (chat: any[], _ctxSize: number, _abort: any, _type: string) => {
       try { setLastRequest(chat?.slice(-10) || [], Date.now()); } catch {}
     };
     // 安装 fetch 兜底捕获
     try { installFetchCapture(); } catch {}
+    interceptionInstalled = true;
+    return true;
     // manifest 若需，可由用户手动加 generate_interceptor 指向 ApiUsageStatInterceptor
+  } catch { return false; }
+}
+
+export function uninstallInterception() {
+  try {
+    const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
+    const es = ctx?.eventSource;
+    const et = ctx?.event_types;
+    if (es && et && messageReceivedHandler) {
+      try { es.off?.(et.GENERATION_ENDED, onGenerationEnded); } catch {}
+      try { es.off?.(et.MESSAGE_RECEIVED, messageReceivedHandler); } catch {}
+    }
+    // 还原 fetch
+    try {
+      const p: any = (window as any).parent || window;
+      if (p && rawFetchRef && (p.fetch as any).__aus_patched) {
+        p.fetch = rawFetchRef;
+      }
+    } catch {}
+    interceptionInstalled = false;
   } catch {}
 }
 
@@ -207,15 +239,26 @@ function onGenerationEnded(...args: any[]) {
       return;
     }
     // 兜底：尝试 fetch 捕获的 usage（覆盖 ST 未写入 extra 的 custom 渠道）
-    if (lastFetchUsage && isValidUsage(lastFetchUsage) && Date.now() - lastFetchTime < 120000) {
-      const fetchModel = lastFetchModel || model;
-      console.log(TRACE + ' fetch 兜底命中', { model: fetchModel, usage: JSON.stringify(lastFetchUsage).slice(0, 1500) });
-      const u = lastFetchUsage;
-      lastFetchUsage = null; // 消费后清空，避免重复
-      processUsage(u, fetchModel, lastMessages, lastStart);
-      return;
-    } else if (lastFetchUsage) {
-      console.log(TRACE + ' fetch 有缓存但无效或超时', { has: !!lastFetchUsage, isValid: lastFetchUsage ? isValidUsage(lastFetchUsage) : false, age: Date.now() - lastFetchTime });
+    {
+      let fetchPack: any = lastFetchUsage as any;
+      // 兼容旧缓存结构（直接是 usage 对象）与新结构（包裹对象）
+      let fetchUsage = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
+      if (fetchUsage && isValidUsage(fetchUsage) && Date.now() - lastFetchTime < 120000) {
+        const fetchedModel = (fetchPack && fetchPack.model) || lastFetchModel || model;
+        const fetchedMsgs = (fetchPack && fetchPack.msgs) || lastMessages;
+        const fetchedStart = (fetchPack && fetchPack.startTime) || lastStart;
+        const fetchedReq = (fetchPack && fetchPack.fullReq) || null;
+        const fetchedRes = (fetchPack && fetchPack.fullResponse) || null;
+        const fTtft = (fetchPack && fetchPack.ttft) || 0;
+        const fThink = (fetchPack && fetchPack.thinkTime) || 0;
+        console.log(TRACE + ' fetch 兜底命中', { model: fetchedModel, usage: JSON.stringify(fetchUsage).slice(0, 1500) });
+        lastFetchUsage = null; // 消费后清空，避免重复
+        processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink);
+        return;
+      } else if (lastFetchUsage) {
+        const fu = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
+        console.log(TRACE + ' fetch 有缓存但无效或超时', { has: !!lastFetchUsage, isValid: fu ? isValidUsage(fu) : false, age: Date.now() - lastFetchTime });
+      }
     }
     // 最后：若仅有 token_count 数字，说明 ST 本地估算而非 API 真实用量，禁止兜底产生假数据（如 7t 污染）
     // 之前尝试 token_count 兜底导致 [OR]minimax-m3 产生大量 0 in/7 out 假记录，现回退为严格丢弃

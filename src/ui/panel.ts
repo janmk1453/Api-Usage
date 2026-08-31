@@ -144,10 +144,10 @@ function renderHistory(doc: Document, s: any) {
           <button class="aus-tab-btn" data-tab="raw" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">原始 Token 用量 (Raw Usage)</button>
           <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">消息内容 (Messages)</button>
         </div>
-        <pre class="aus-tab-content" data-content="req-${h.timestamp}" style="flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(JSON.stringify(h.fullRequest || h.raw_usage || {}, null, 2))}</pre>
-        <pre class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(JSON.stringify(h.fullResponse || {}, null, 2))}</pre>
+        <pre class="aus-tab-content" data-content="req-${h.timestamp}" style="flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : (h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : '（原文已清理，仅保留统计）'))}</pre>
+        <pre class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.fullResponse ? JSON.stringify(h.fullResponse, null, 2) : '（原文已清理）')}</pre>
         <pre class="aus-tab-content" data-content="raw-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
-        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(JSON.stringify(h.messages || [], null, 2))}</pre>
+        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.messages && (h as any).messages.length ? JSON.stringify(h.messages, null, 2) : '（原文已清理——超过保留条数 10 条，仅统计可用）')}</pre>
       </div>
     </div>
   `;
@@ -244,6 +244,8 @@ export function createPanel() {
   const theme = (state.settings as any).theme || 'light';
   const overlay = doc.createElement('div');
   overlay.id = 'aus-overlay';
+  overlay.setAttribute('data-extension', 'api-usage-stat');
+  overlay.setAttribute('data-ds-theme', theme);
   overlay.style.cssText = 'position:absolute;top:0;left:0;background:var(--ds-overlay);z-index:100000;display:none;opacity:0;transition:opacity 0.2s;';
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closePanel(); });
   const panel = doc.createElement('div');

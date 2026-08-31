@@ -75,8 +75,16 @@ export async function onDelete() {
     doc.getElementById('aus-peak-dot-indicator')?.remove();
   } catch {}
 }
-export function onEnable() { console.log('[API用量统计] enabled'); }
-export function onDisable() { console.log('[API用量统计] disabled'); }
+export function onEnable() { console.log('[API用量统计] enabled'); try { import('./services/interception').then(m=>m.installInterception()); } catch {} }
+export function onDisable() {
+  console.log('[API用量统计] disabled');
+  try { import('./services/interception').then(m=> (m as any).uninstallInterception?.()); } catch {}
+  try {
+    const doc = getDoc();
+    doc.getElementById('aus-overlay')?.remove();
+    doc.getElementById('aus-panel')?.remove();
+  } catch {}
+}
 export async function onActivate() { ensureStyleScope(); try { injectWandEntry(); ensureWandEntry(); } catch {} }
 
 async function init() {
@@ -96,9 +104,19 @@ async function init() {
   else window.setTimeout(mount, 1500);
   try {
     const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
-    ctx?.eventSource?.on?.(ctx?.event_types?.APP_READY, () => { try { createPanel(); } catch {} try { ensureWandEntry(); } catch {} try { refreshUI(); } catch {} });
-    ctx?.eventSource?.on?.(ctx?.event_types?.APP_INITIALIZED, () => { try { ensureWandEntry(); } catch {} });
+    ctx?.eventSource?.on?.(ctx?.event_types?.APP_READY, () => { try { createPanel(); } catch {} try { ensureWandEntry(); } catch {} try { refreshUI(); } catch {} try { const mod = (globalThis as any).ApiUsageStatInterceptor ? null : null; } catch {} try { import('./services/interception').then(m=>m.installInterception()); } catch {} });
+    ctx?.eventSource?.on?.(ctx?.event_types?.APP_INITIALIZED, () => { try { ensureWandEntry(); } catch {} try { import('./services/interception').then(m=>m.installInterception()); } catch {} });
     ctx?.eventSource?.on?.(ctx?.event_types?.CHAT_CHANGED, () => { try { if ((state.settings as any).historyScope === 'current') refreshUI(); } catch {} });
+    // ST 未就绪时轮询重试安装拦截（最多 10 次）
+    let retry = 0;
+    const timer = setInterval(() => {
+      retry++;
+      try {
+        const ok = (globalThis as any).SillyTavern?.getContext?.()?.eventSource;
+        if (ok) { import('./services/interception').then(m=>{ if(m.installInterception()) clearInterval(timer); }); }
+      } catch {}
+      if (retry > 20) clearInterval(timer);
+    }, 1000);
   } catch {}
   try { getDoc().addEventListener('keydown', (e: KeyboardEvent) => { if (e.key === 'Escape') closePanel(); }); } catch {}
   (globalThis as any).ApiUsageStat = { MODULE, refreshUI, updatePeakDot, openPanel, closePanel, togglePanel, state, injectWandEntry: ensureWandEntry };

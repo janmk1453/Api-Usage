@@ -147,6 +147,8 @@
 
 /* 全屏独立面板 */
 #aus-overlay { background: var(--ds-overlay); backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+.aus-diff-full { position: fixed !important; inset: 0 !important; z-index: 100002 !important; overflow: auto !important; background: var(--ds-panel-bg) !important; padding: 20px !important; }
+.aus-diff-full #aus-diff { margin-bottom: 0 !important; }
 #aus-panel {
   background: var(--ds-panel-bg);
   color: var(--ds-text);
@@ -167,8 +169,10 @@
 .aus-nav-item { transition: background 0.15s, color 0.15s; color: var(--ds-text-2); }
 .aus-nav-item:hover { background: var(--ds-hover-bg) !important; }
 .aus-nav-item.active { background: var(--ds-active-bg) !important; color: var(--ds-text) !important; font-weight: 600; }
-#aus-panel #aus-panel-scroll::-webkit-scrollbar { width: 6px; }
-#aus-panel #aus-panel-scroll::-webkit-scrollbar-thumb { background: var(--ds-scrollbar); border-radius: 999px; }
+#aus-panel #aus-main::-webkit-scrollbar { width: 6px; }
+#aus-panel #aus-main::-webkit-scrollbar-thumb { background: var(--ds-scrollbar); border-radius: 999px; }
+#aus-main::-webkit-scrollbar { width: 6px; }
+#aus-main::-webkit-scrollbar-thumb { background: var(--ds-scrollbar); border-radius: 999px; }
 #aus_wand_entry { cursor: pointer; }
 #aus_wand_entry:hover { background: transparent !important; }
 #aus_wand_entry.list-group-item:hover { background: transparent !important; }
