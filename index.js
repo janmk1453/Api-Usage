@@ -874,6 +874,23 @@ function onGenerationEnded(...args) {
       return;
     }
     if (extra.token_count != null && !usage) {
+      const tc = Number(extra.token_count);
+      if (Number.isFinite(tc) && tc > 0) {
+        const ttft = typeof extra.time_to_first_token === "number" ? extra.time_to_first_token : 0;
+        const fallbackUsage = {
+          prompt_tokens: 0,
+          completion_tokens: tc,
+          total_tokens: tc,
+          prompt_tokens_details: { cached_tokens: 0 },
+          _from_token_count: true
+        };
+        try {
+          console.log("[API用量统计] 使用 token_count 兜底：" + tc + " model=" + model);
+        } catch {
+        }
+        processUsage(fallbackUsage, model, lastMessages, lastStart, null, null, ttft, 0);
+        return;
+      }
       try {
         console.warn("[API用量统计] 跳过无效 usage：仅有 token_count=" + extra.token_count + " model=" + model + " 未生成条目避免污染");
       } catch {

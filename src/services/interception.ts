@@ -93,8 +93,24 @@ function onGenerationEnded(...args: any[]) {
       processUsage(maybeUsage, m, lastMessages, lastStart);
       return;
     }
-    // 最后：若仅有 token_count 数字，不产生 0 token 条目，仅记录调试日志
+    // 最后：若仅有 token_count 数字，构造最小可用 usage 兜底记录，避免新对话完全不显示
+    // 适用于 custom / OpenRouter 等渠道：ST 仅写入 token_count，无完整 usage
     if (extra.token_count != null && !usage) {
+      const tc = Number(extra.token_count);
+      if (Number.isFinite(tc) && tc > 0) {
+        const ttft = typeof extra.time_to_first_token === 'number' ? extra.time_to_first_token : 0;
+        // 将 token_count 视为 completion_tokens 兜底，prompt 记 0，总计为 tc，确保历史至少可见
+        const fallbackUsage: any = {
+          prompt_tokens: 0,
+          completion_tokens: tc,
+          total_tokens: tc,
+          prompt_tokens_details: { cached_tokens: 0 },
+          _from_token_count: true,
+        };
+        try { console.log('[API用量统计] 使用 token_count 兜底：' + tc + ' model=' + model); } catch {}
+        processUsage(fallbackUsage, model, lastMessages, lastStart, null, null, ttft, 0);
+        return;
+      }
       try { console.warn('[API用量统计] 跳过无效 usage：仅有 token_count=' + extra.token_count + ' model=' + model + ' 未生成条目避免污染'); } catch {}
     }
   } catch {}
