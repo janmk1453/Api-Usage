@@ -305,7 +305,7 @@ export function createPanel() {
                 </div>
               </div>
               <div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;display:flex;justify-content:space-between;">
-                <span>按日聚合 Token，与 GitHub 贡献图一致（深绿=高用量，展示近 2 年）</span>
+                <span>按日聚合 Token（深绿=高用量，展示近 2 年）</span>
                 <span style="color:var(--ds-text-2);">悬停查看日期</span>
               </div>
             </div>
@@ -372,8 +372,8 @@ export function createPanel() {
           </div>
           <div data-view="about" style="display:none;">
             <div class="ds-card" style="line-height:1.7;font-size:12px;color:var(--ds-text);">
-              <div style="font-size:14px;font-weight:600;">关于</div>
-              <div style="margin-top:8px;color:var(--ds-text-2);">API用量统计 v3.0.0 · SillyTavern 原生扩展<br/>DeepSeek 官方浅色风格 · Vite + ECharts · 内容与脚本 1:1<br/><br/>仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);">janmk1453/Api-Usage</a></div>
+              <div style="font-size:14px;font-weight:600;">关于 API用量统计 · SillyTavern 扩展</div>
+              <div style="margin-top:8px;color:var(--ds-text-2);">迁移至原 DeepSeek使用预测 脚本<br/>致力于实现最全面的用量可视化统计<br/><br/>仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);">janmk1453/Api-Usage</a></div>
             </div>
           </div>
         </div>
