@@ -205,8 +205,11 @@
   #aus-sidebar #aus-sidebar-toggle { display: flex !important; }
   #aus-main { padding: 12px !important; }
   #aus-main > div { max-width: 1100px !important; width: 100% !important; margin: 0 auto !important; box-sizing: border-box !important; }
-  /* 所有卡片不超出 */
-  [data-extension="api-usage-stat"] .ds-card { padding: 12px 14px !important; max-width: 100% !important; overflow: hidden !important; box-sizing: border-box !important; }
+  /* 所有卡片不超出 — 块本身贴合屏幕，块内内容在卡片内横向滑动 */
+  [data-view="stats"],
+  [data-view="overview"],
+  [data-view="history"] { max-width: 100% !important; overflow-x: hidden !important; box-sizing: border-box !important; }
+  [data-extension="api-usage-stat"] .ds-card { padding: 12px 14px !important; max-width: 100% !important; width: 100% !important; box-sizing: border-box !important; overflow-x: auto !important; overflow-y: hidden !important; -webkit-overflow-scrolling: touch !important; }
   /* 网格全部竖排 */
   #aus-overview-four { grid-template-columns: 1fr !important; }
   [data-view="overview"] > div:first-child { grid-template-columns: 1fr !important; }
@@ -242,9 +245,8 @@
   #aus-chart-pie { width: 100% !important; max-width: 100% !important; min-width: 0 !important; }
   /* flex 行在窄屏下可换行或竖排，避免挤压 */
   #aus-history > div > div:first-child { flex-wrap: wrap !important; gap: 8px !important; }
-  /* 卡片本身不超出屏幕，内容过长时在卡片内滑动而非撑开屏幕 */
-  [data-extension="api-usage-stat"] .ds-card { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
-  [data-extension="api-usage-stat"] .ds-card > div { min-width: 0 !important; }
+  /* 卡片内子容器不撑开卡片 */
+  [data-extension="api-usage-stat"] .ds-card > div { min-width: 0 !important; max-width: 100% !important; }
   /* 设置页输入区不超出 */
   #aus-settings input,
   #aus-settings select { max-width: 100% !important; box-sizing: border-box !important; }
