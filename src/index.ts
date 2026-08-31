@@ -13,7 +13,19 @@ import { applyTheme } from './services/theme';
 const MODULE = 'api_usage_stat';
 
 function getDoc(): Document { return (window.parent as any)?.document ?? document; }
-function ensureStyleScope() { document.documentElement.setAttribute('data-extension', 'api-usage-stat'); }
+function ensureStyleScope() {
+  // 修复：禁止在宿主 html 根上设置 data-extension，避免 [data-extension]input 等选择器污染全站（如聊天输入框）
+  // 隔离仅通过 #aus-panel[data-extension="api-usage-stat"] 实现
+  try {
+    document.documentElement.removeAttribute('data-extension');
+    document.documentElement.removeAttribute('data-ds-theme');
+    const doc = getDoc();
+    doc.documentElement.removeAttribute('data-ds-theme');
+    if (doc.documentElement.getAttribute('data-extension') === 'api-usage-stat' && doc.getElementById('aus-panel')) {
+      doc.documentElement.removeAttribute('data-extension');
+    }
+  } catch {}
+}
 
 async function initStore() {
   await repository.hydrate();

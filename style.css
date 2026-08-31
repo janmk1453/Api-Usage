@@ -173,15 +173,23 @@
 #aus_wand_entry:hover { background: transparent !important; }
 #aus_wand_entry.list-group-item:hover { background: transparent !important; }
 
-/* 输入框与按钮的主题化覆盖 */
-[data-extension="api-usage-stat"] input,
-[data-extension="api-usage-stat"] select,
-[data-extension="api-usage-stat"] textarea {
+/* 输入框与按钮的主题化覆盖 — 仅限面板内，严禁污染宿主 #send_textarea */
+#aus-panel input,
+#aus-panel select,
+#aus-panel textarea,
+#aus-overlay input,
+#aus-overlay select,
+#aus-overlay textarea,
+[data-extension="api-usage-stat"]#aus-panel input,
+[data-extension="api-usage-stat"]#aus-panel select,
+[data-extension="api-usage-stat"]#aus-panel textarea {
   background: var(--ds-input-bg) !important;
   color: var(--ds-text) !important;
   border-color: var(--ds-input-border) !important;
 }
-[data-extension="api-usage-stat"] input::placeholder { color: var(--ds-text-3); }
+#aus-panel input::placeholder,
+#aus-overlay input::placeholder,
+[data-extension="api-usage-stat"]#aus-panel input::placeholder { color: var(--ds-text-3); }
 
 /* 移动端自适应 */
 @media (max-width: 760px) {

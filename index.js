@@ -1285,8 +1285,19 @@ function applyTheme(theme) {
     const doc = window.parent?.document ?? document;
     const panel = doc.getElementById("aus-panel");
     if (panel) panel.setAttribute("data-ds-theme", mode);
-    document.documentElement.setAttribute("data-ds-theme", mode);
-    doc.documentElement.setAttribute("data-ds-theme", mode);
+    try {
+      document.documentElement.removeAttribute("data-ds-theme");
+      document.documentElement.removeAttribute("data-extension");
+    } catch {
+    }
+    try {
+      doc.documentElement.removeAttribute("data-ds-theme");
+      if (doc.documentElement.getAttribute("data-extension") === "api-usage-stat") {
+        const hasPanel = !!doc.getElementById("aus-panel");
+        if (hasPanel) doc.documentElement.removeAttribute("data-extension");
+      }
+    } catch {
+    }
   } catch {
   }
 }
@@ -3550,7 +3561,16 @@ function getDoc() {
   return window.parent?.document ?? document;
 }
 function ensureStyleScope() {
-  document.documentElement.setAttribute("data-extension", "api-usage-stat");
+  try {
+    document.documentElement.removeAttribute("data-extension");
+    document.documentElement.removeAttribute("data-ds-theme");
+    const doc = getDoc();
+    doc.documentElement.removeAttribute("data-ds-theme");
+    if (doc.documentElement.getAttribute("data-extension") === "api-usage-stat" && doc.getElementById("aus-panel")) {
+      doc.documentElement.removeAttribute("data-extension");
+    }
+  } catch {
+  }
 }
 async function initStore() {
   await repository.hydrate();
