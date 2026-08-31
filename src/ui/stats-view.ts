@@ -346,16 +346,24 @@ async function renderChart(filteredRaw: any[]) {
   const yAxis: any[] = [];
   if (hasToken) yAxis.push({ type:'value', name:'tokens', position:'left', axisLine:{show:false}, splitLine:{lineStyle:{color:cCard}}, axisLabel:{color:cText3,fontSize:10} });
   if (hasCost) yAxis.push({ type:'value', name:'CNY', position: hasToken?'right':'left', axisLine:{show:false}, splitLine:{show:false}, axisLabel:{color:cText3,fontSize:10,formatter:(v:number)=>'¥'+v} });
-  const seriesOpt = series.map(s=>{
+  // 堆叠柱仅最顶段圆角，其余直角无缝衔接（修复紫/橙/绿段间缝隙）
+  const lastBarIdx = (() => {
+    const indices = series.map((_, i) => i).filter(i => series[i].kind !== 'cost' || true); // 所有 bar 均为候选，取最后
+    return indices.length ? indices[indices.length - 1] : -1;
+  })();
+  const seriesOpt = series.map((s, idx)=>{
     const isCost = s.kind==='cost';
     const yIndex = hasToken && hasCost ? (isCost?1:0) : 0;
+    const isTop = idx === lastBarIdx;
     return {
       name: s.name,
-      type: isCost ? 'bar' : 'bar',
+      type: 'bar',
       yAxisIndex: yIndex,
       data: s.data,
-      itemStyle: { color: s.color, borderRadius: [4,4,0,0] },
+      stack: 'total',
+      itemStyle: { color: s.color, borderRadius: isTop ? [4,4,0,0] as any : [0,0,0,0] as any },
       barMaxWidth: 18,
+      barGap: '-100%' as any,
       emphasis: { focus: 'series' },
     };
   });

@@ -2782,11 +2782,16 @@ async function drawBarLine(el, id, labels, series) {
     xAxis: { type: "category", data: labels, axisLine: { lineStyle: { color: themeColor$1("--ds-border", "#E5E7EB") } }, axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF"), rotate: labels.length > 12 ? 30 : 0, interval, hideOverlap: false } },
     yAxis: { type: "value", axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF") }, splitLine: { lineStyle: { color: themeColor$1("--ds-card", "#F6F7F8") } } },
     dataZoom: labels.length > 8 ? [{ type: "inside", xAxisIndex: 0, start: Math.max(0, (labels.length - Math.max(8, Math.min(labels.length, Math.floor((el.clientWidth || 320) / 44)))) / labels.length * 100), end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : void 0,
-    series: series.map((s) => {
-      const isTotal = s.name.includes("总");
-      if (isTokenCost && isTotal) return { name: s.name, type: "line", data: s.data, smooth: true, lineStyle: { color: s.color, width: 2 }, itemStyle: { color: s.color }, symbolSize: 2 };
-      return { name: s.name, type: "bar", stack: "total", data: s.data, itemStyle: { color: s.color, borderRadius: [4, 4, 0, 0] }, barMaxWidth: 16 };
-    })
+    series: (() => {
+      const barIndices = series.map((s, i) => ({ s, i })).filter(({ s }) => !(isTokenCost && s.name.includes("总"))).map(({ i }) => i);
+      const topIdx = barIndices.length ? barIndices[barIndices.length - 1] : -1;
+      return series.map((s, idx) => {
+        const isTotal = s.name.includes("总");
+        if (isTokenCost && isTotal) return { name: s.name, type: "line", data: s.data, smooth: true, lineStyle: { color: s.color, width: 2 }, itemStyle: { color: s.color }, symbolSize: 2 };
+        const isTop = idx === topIdx;
+        return { name: s.name, type: "bar", stack: "total", data: s.data, itemStyle: { color: s.color, borderRadius: isTop ? [4, 4, 0, 0] : [0, 0, 0, 0] }, barMaxWidth: 16, barGap: "-100%" };
+      });
+    })()
   };
   if (id === "hit") {
     opts.series = [{ name: "命中率", type: "line", data: series[0].data, areaStyle: { opacity: 0.12, color: series[0].color }, lineStyle: { color: series[0].color }, itemStyle: { color: series[0].color }, smooth: true }];
@@ -3309,16 +3314,23 @@ async function renderChart(filteredRaw) {
   const yAxis = [];
   if (hasToken) yAxis.push({ type: "value", name: "tokens", position: "left", axisLine: { show: false }, splitLine: { lineStyle: { color: cCard } }, axisLabel: { color: cText3, fontSize: 10 } });
   if (hasCost) yAxis.push({ type: "value", name: "CNY", position: hasToken ? "right" : "left", axisLine: { show: false }, splitLine: { show: false }, axisLabel: { color: cText3, fontSize: 10, formatter: (v) => "¥" + v } });
-  const seriesOpt = series.map((s) => {
+  const lastBarIdx = (() => {
+    const indices = series.map((_, i) => i).filter((i) => series[i].kind !== "cost" || true);
+    return indices.length ? indices[indices.length - 1] : -1;
+  })();
+  const seriesOpt = series.map((s, idx) => {
     const isCost = s.kind === "cost";
     const yIndex = hasToken && hasCost ? isCost ? 1 : 0 : 0;
+    const isTop = idx === lastBarIdx;
     return {
       name: s.name,
-      type: isCost ? "bar" : "bar",
+      type: "bar",
       yAxisIndex: yIndex,
       data: s.data,
-      itemStyle: { color: s.color, borderRadius: [4, 4, 0, 0] },
+      stack: "total",
+      itemStyle: { color: s.color, borderRadius: isTop ? [4, 4, 0, 0] : [0, 0, 0, 0] },
       barMaxWidth: 18,
+      barGap: "-100%",
       emphasis: { focus: "series" }
     };
   });

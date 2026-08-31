@@ -188,12 +188,17 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
     xAxis:{ type:'category', data: labels, axisLine:{lineStyle:{color:themeColor('--ds-border','#E5E7EB')}}, axisLabel:{fontSize:10,color:themeColor('--ds-text-3','#9CA3AF'),rotate: labels.length>12?30:0, interval: interval, hideOverlap: false} },
     yAxis:{ type:'value', axisLabel:{fontSize:10,color:themeColor('--ds-text-3','#9CA3AF')}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F6F7F8')}} },
     dataZoom: labels.length > 8 ? [{ type:'inside', xAxisIndex:0, start: Math.max(0, (labels.length - Math.max(8, Math.min(labels.length, Math.floor((el.clientWidth||320)/44)))) / labels.length * 100), end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : undefined,
-    series: series.map(s=>{
-      const isTotal = s.name.includes('总');
-      if (isTokenCost && isTotal) return { name:s.name, type:'line', data:s.data, smooth:true, lineStyle:{color:s.color,width:2}, itemStyle:{color:s.color}, symbolSize:2 };
-      // 堆叠在同一柱上
-      return { name:s.name, type:'bar', stack:'total', data:s.data, itemStyle:{color:s.color,borderRadius:[4,4,0,0]}, barMaxWidth:16 };
-    }),
+    series: (() => {
+      // 堆叠柱仅最顶段有圆角，中间段直角以无缝衔接
+      const barIndices = series.map((s, i) => ({ s, i })).filter(({ s }) => !(isTokenCost && s.name.includes('总'))).map(({ i }) => i);
+      const topIdx = barIndices.length ? barIndices[barIndices.length - 1] : -1;
+      return series.map((s, idx)=>{
+        const isTotal = s.name.includes('总');
+        if (isTokenCost && isTotal) return { name:s.name, type:'line', data:s.data, smooth:true, lineStyle:{color:s.color,width:2}, itemStyle:{color:s.color}, symbolSize:2 };
+        const isTop = idx === topIdx;
+        return { name:s.name, type:'bar', stack:'total', data:s.data, itemStyle:{color:s.color,borderRadius: isTop ? [4,4,0,0] as any : [0,0,0,0] as any}, barMaxWidth:16, barGap:'-100%' as any };
+      });
+    })(),
   };
   // 命中/请求等单指标改为线+面积更可读
   if (id==='hit'){ opts.series = [{ name:'命中率', type:'line', data: series[0].data, areaStyle:{opacity:0.12,color:series[0].color}, lineStyle:{color:series[0].color}, itemStyle:{color:series[0].color}, smooth:true }]; opts.yAxis={ max:100, axisLabel:{formatter:(v:number)=>v+'%'} } as any; }
