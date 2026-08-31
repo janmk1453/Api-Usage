@@ -958,59 +958,102 @@ function setLastRequest(messages, start) {
   lastMessages = messages || [];
   lastStart = start || Date.now();
 }
+const TARGET_API = "/api/backends/chat-completions/generate";
 function installFetchCapture() {
   try {
-    const w = window;
-    const parentFetch = w.parent && w.parent.fetch || w.fetch;
-    const target = w.parent || w;
-    if (!target || !target.fetch || target.fetch.__aus_patched) return;
-    const origFetch = target.fetch.bind(target);
-    const patched = async (input, init2) => {
-      const url = typeof input === "string" ? input : input?.url || "";
-      const isChatApi = typeof url === "string" && (url.includes("/api/backends/chat-completions") || url.includes("/api/openai/") || url.includes("/chat/completions"));
-      let resp = null;
-      try {
-        resp = await origFetch(input, init2);
-      } catch (e) {
-        throw e;
-      }
-      if (isChatApi && resp) {
+    const p = window.parent || window;
+    if (!p || !p.fetch || p.fetch.__aus_patched) return;
+    const rawFetch2 = p.fetch.bind(p);
+    const patched = function() {
+      const args = arguments;
+      const url = typeof args[0] === "string" ? args[0] : args[0]?.url || "";
+      if (typeof url === "string" && url.indexOf(TARGET_API) !== -1) {
+        let reqBody = null;
         try {
-          const clone = resp.clone();
-          const ct = clone.headers.get("content-type") || "";
-          if (ct.includes("application/json")) {
-            const data = await clone.json().catch(() => null);
-            const usage = data?.usage || data?.data?.usage || data?.response?.usage || data?.body?.usage;
-            const model = data?.model || data?.data?.model;
-            if (usage && typeof usage === "object") {
+          reqBody = JSON.parse(args[1]?.body || "null");
+        } catch {
+        }
+        const fullReq = reqBody ? JSON.parse(JSON.stringify(reqBody)) : null;
+        let msgs = [];
+        try {
+          if (reqBody?.messages?.length) msgs = reqBody.messages.slice(-10);
+        } catch {
+        }
+        const startTime = Date.now();
+        try {
+          lastMessages = msgs;
+          lastStart = startTime;
+        } catch {
+        }
+        return rawFetch2.apply(p, args).then((res) => {
+          const clone = res.clone();
+          const ttftRef = { value: 0 };
+          const thinkRef = { value: 0 };
+          const parseAndProcess = (text, ttftVal, thinkTimeVal) => {
+            let data = null;
+            try {
+              const trimmed = text.trim();
+              if (trimmed.startsWith("{")) {
+                data = JSON.parse(trimmed);
+              } else {
+                text.split("\n").forEach((line) => {
+                  if (line.startsWith("data: ") && line !== "data: [DONE]") {
+                    try {
+                      const chunk = JSON.parse(line.substring(6));
+                      if (chunk.usage) data = chunk;
+                      if (!data && chunk.choices?.[0]?.usage) data = { usage: chunk.choices[0].usage, model: chunk.model };
+                    } catch {
+                    }
+                  }
+                });
+                if (!data || !data.usage) {
+                  const m = text.match(/"usage"\s*:\s*(\{[^\}]+\})/);
+                  if (m) {
+                    try {
+                      const u = JSON.parse(m[1]);
+                      if (u && typeof u === "object") data = { usage: u, model: data?.model };
+                    } catch {
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn("[API用量统计][TRACE] 用量响应解析失败", e?.message || e);
+              return;
+            }
+            if (data && data.usage) {
+              const model = data?.model || reqBody?.model || fullReq?.model || lastFetchModel || "deepseek-v4-flash";
+              const usage = data.usage;
               lastFetchUsage = usage;
               lastFetchModel = typeof model === "string" ? model : null;
               lastFetchTime = Date.now();
-              console.log("[API用量统计][TRACE] fetch 捕获 usage", { url: String(url).slice(0, 80), usage: JSON.stringify(usage).slice(0, 1500), model: lastFetchModel });
-            }
-          } else if (ct.includes("text/event-stream") || ct.includes("text/plain")) {
-            const text = await clone.text().catch(() => "");
-            const m = text.match(/"usage"\s*:\s*(\{[^}]+\})/);
-            if (m) {
               try {
-                const usage = JSON.parse(m[1]);
-                if (usage && typeof usage === "object") {
-                  lastFetchUsage = usage;
-                  lastFetchTime = Date.now();
-                  console.log("[API用量统计][TRACE] fetch(stream) 捕获 usage", { usage: JSON.stringify(usage).slice(0, 1500) });
-                }
+                console.log("[API用量统计][TRACE] fetch(原脚本逻辑) 捕获 usage", { url: String(url).slice(0, 80), usage: JSON.stringify(usage).slice(0, 1500), model });
               } catch {
               }
+              try {
+                processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal);
+              } catch (e) {
+                console.error("[API用量统计] fetch 用量记录失败", e?.message || e);
+              }
             }
+          };
+          const ct = clone.headers.get("content-type") || "";
+          if (ct.includes("application/json")) {
+            clone.text().then((t) => parseAndProcess(t, 0, 0)).catch(() => {
+            });
+          } else {
+            clone.text().then((t) => parseAndProcess(t, 0, 0)).catch(() => {
+            });
           }
-        } catch {
-        }
+          return res;
+        });
       }
-      return resp;
+      return rawFetch2.apply(p, args);
     };
     patched.__aus_patched = true;
-    target.fetch = patched;
-    console.log("[API用量统计][TRACE] fetch 捕获已安装");
+    p.fetch = patched;
+    console.log("[API用量统计][TRACE] fetch 捕获已安装（原脚本 1:1 逻辑，TARGET_API=" + TARGET_API + "）");
   } catch {
   }
 }

@@ -14,58 +14,86 @@ export function setLastRequest(messages: any[], start: number) {
   lastStart = start || Date.now();
 }
 
+const TARGET_API = '/api/backends/chat-completions/generate';
+
 function installFetchCapture() {
   try {
-    const w: any = window as any;
-    const parentFetch = (w.parent && (w.parent as any).fetch) || w.fetch;
-    const target: any = w.parent || w;
-    if (!target || !target.fetch || (target.fetch as any).__aus_patched) return;
-    const origFetch = target.fetch.bind(target);
-    const patched = async (input: any, init: any) => {
-      const url = typeof input === 'string' ? input : input?.url || '';
-      const isChatApi = typeof url === 'string' && (url.includes('/api/backends/chat-completions') || url.includes('/api/openai/') || url.includes('/chat/completions'));
-      let resp: Response | null = null;
-      try {
-        resp = await origFetch(input, init);
-      } catch (e) {
-        throw e;
-      }
-      if (isChatApi && resp) {
-        try {
-          const clone = resp.clone();
-          const ct = clone.headers.get('content-type') || '';
-          if (ct.includes('application/json')) {
-            const data = await clone.json().catch(() => null);
-            const usage = (data as any)?.usage || (data as any)?.data?.usage || (data as any)?.response?.usage || (data as any)?.body?.usage;
-            const model = (data as any)?.model || (data as any)?.data?.model;
-            if (usage && typeof usage === 'object') {
+    const p: any = (window as any).parent || window;
+    if (!p || !p.fetch || (p.fetch as any).__aus_patched) return;
+    const rawFetch = p.fetch.bind(p);
+    const patched: any = function(this: any) {
+      const args: any = arguments;
+      const url: string = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+      if (typeof url === 'string' && url.indexOf(TARGET_API) !== -1) {
+        let reqBody: any = null;
+        try { reqBody = JSON.parse(args[1]?.body || 'null'); } catch {}
+        const fullReq = reqBody ? JSON.parse(JSON.stringify(reqBody)) : null;
+        let msgs: any[] = [];
+        try { if (reqBody?.messages?.length) msgs = reqBody.messages.slice(-10); } catch {}
+        const startTime = Date.now();
+        // 记录 lastMessages 供 processUsage 使用
+        try { lastMessages = msgs; lastStart = startTime; } catch {}
+        // 直接走原生请求，不做 debug 模拟（扩展 debug 由设置单独控制）
+        return rawFetch.apply(p, args).then((res: Response) => {
+          const clone = res.clone();
+          const ttftRef: any = { value: 0 };
+          const thinkRef: any = { value: 0 };
+          const parseAndProcess = (text: string, ttftVal: number, thinkTimeVal: number) => {
+            let data: any = null;
+            try {
+              const trimmed = text.trim();
+              if (trimmed.startsWith('{')) {
+                data = JSON.parse(trimmed);
+              } else {
+                // 流式 SSE：逐行解析 data: {...} 中的 usage
+                text.split('\n').forEach((line: string) => {
+                  if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+                    try {
+                      const chunk = JSON.parse(line.substring(6));
+                      if (chunk.usage) data = chunk;
+                      // 兼容 usage 在 delta 中
+                      if (!data && chunk.choices?.[0]?.usage) data = { usage: chunk.choices[0].usage, model: chunk.model };
+                    } catch {}
+                  }
+                });
+                // 兜底：正则提取 usage
+                if (!data || !data.usage) {
+                  const m = text.match(/"usage"\s*:\s*(\{[^\}]+\})/);
+                  if (m) { try { const u = JSON.parse(m[1]); if (u && typeof u === 'object') data = { usage: u, model: data?.model }; } catch {} }
+                }
+              }
+            } catch (e) {
+              console.warn('[API用量统计][TRACE] 用量响应解析失败', (e as any)?.message || e);
+              return;
+            }
+            if (data && data.usage) {
+              const model = (data as any)?.model || reqBody?.model || fullReq?.model || lastFetchModel || 'deepseek-v4-flash';
+              const usage = (data as any).usage;
+              // 同时更新 fetch 兜底缓存与直接记录（双保险）
               lastFetchUsage = usage;
               lastFetchModel = typeof model === 'string' ? model : null;
               lastFetchTime = Date.now();
-              console.log('[API用量统计][TRACE] fetch 捕获 usage', { url: String(url).slice(0, 80), usage: JSON.stringify(usage).slice(0, 1500), model: lastFetchModel });
+              try { console.log('[API用量统计][TRACE] fetch(原脚本逻辑) 捕获 usage', { url: String(url).slice(0, 80), usage: JSON.stringify(usage).slice(0, 1500), model }); } catch {}
+              try { processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal); } catch (e) { console.error('[API用量统计] fetch 用量记录失败', (e as any)?.message || e); }
             }
-          } else if (ct.includes('text/event-stream') || ct.includes('text/plain')) {
-            // 流式响应：尝试读取文本中的 usage 标记
-            const text = await clone.text().catch(() => '');
-            const m = text.match(/"usage"\s*:\s*(\{[^}]+\})/);
-            if (m) {
-              try {
-                const usage = JSON.parse(m[1]);
-                if (usage && typeof usage === 'object') {
-                  lastFetchUsage = usage;
-                  lastFetchTime = Date.now();
-                  console.log('[API用量统计][TRACE] fetch(stream) 捕获 usage', { usage: JSON.stringify(usage).slice(0, 1500) });
-                }
-              } catch {}
-            }
+          };
+          // 尝试根据 Content-Type 分发解析
+          const ct = clone.headers.get('content-type') || '';
+          if (ct.includes('application/json')) {
+            clone.text().then(t => parseAndProcess(t, 0, 0)).catch(() => {});
+          } else {
+            // 流式：延迟解析，确保流已完整（原脚本在 res 克隆后异步解析）
+            clone.text().then(t => parseAndProcess(t, 0, 0)).catch(() => {});
           }
-        } catch {}
+          return res;
+        });
       }
-      return resp;
+      // 非目标 API，直接透传
+      return rawFetch.apply(p, args);
     };
-    (patched as any).__aus_patched = true;
-    target.fetch = patched;
-    console.log('[API用量统计][TRACE] fetch 捕获已安装');
+    patched.__aus_patched = true;
+    p.fetch = patched;
+    console.log('[API用量统计][TRACE] fetch 捕获已安装（原脚本 1:1 逻辑，TARGET_API=' + TARGET_API + '）');
   } catch {}
 }
 
