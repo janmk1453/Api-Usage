@@ -37,6 +37,7 @@ export async function queryBalance(apiKey?: string): Promise<any> {
       const bal = { balance: i.total_balance, currency: i.currency, available: d.is_available, timestamp: Date.now() };
       state.balance = bal;
       saveHot({ balance: bal });
+      try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
       toast('success', '余额已更新 ¥' + i.total_balance);
       return bal;
     }

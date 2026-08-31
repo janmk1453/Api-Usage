@@ -1248,6 +1248,10 @@ async function queryBalance(apiKey) {
       const bal = { balance: i.total_balance, currency: i.currency, available: d.is_available, timestamp: Date.now() };
       state$1.balance = bal;
       saveHot({ balance: bal });
+      try {
+        globalThis.ApiUsageStat?.refreshUI?.();
+      } catch {
+      }
       toast("success", "余额已更新 ¥" + i.total_balance);
       return bal;
     }
