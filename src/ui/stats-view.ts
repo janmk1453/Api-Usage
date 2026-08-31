@@ -316,13 +316,20 @@ async function renderChart(filteredRaw: any[]) {
   }
   const w = (el as HTMLElement).clientWidth, h = (el as HTMLElement).clientHeight;
   if (w === 0 || h === 0) {
+    // 统计页隐藏时（首次加载默认显示概览），不报错不重试，等待切换到统计页时由 switchView 触发
+    const statsView = doc.querySelector('[data-view="stats"]') as HTMLElement | null;
+    const isHidden = statsView ? (statsView.style.display === 'none' || (statsView as any).offsetParent === null) : false;
+    if (isHidden) {
+      try { console.log('[AUS] renderChart 容器隐藏，等待切换'); } catch {}
+      return;
+    }
     const tries = (renderChart as any)._retryCount || 0;
-    if (tries >= 20) {
+    if (tries >= 80) {
       el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--ds-text-3);font-size:11px;">图表容器未就绪，请切换视图重试</div>';
       return;
     }
     (renderChart as any)._retryCount = tries + 1;
-    setTimeout(() => renderChart(filteredRaw), 80);
+    setTimeout(() => renderChart(filteredRaw), 120);
     return;
   }
   (renderChart as any)._retryCount = 0;
@@ -482,10 +489,17 @@ export async function renderStatsView() {
   const tokEl = doc.getElementById('aus-stats-tok');
   if (tokEl) tokEl.textContent = totalTok.toLocaleString('zh-CN');
   renderModelSummary(summaryFiltered);
-  renderChart(chartFiltered);
   renderModelPicker();
   renderChartSelectors();
-  renderExtraCharts(chartFiltered);
+  // 首次加载时统计页为 display:none，跳过图表渲染，等待 switchView 切到统计页时再渲染，避免 0 尺寸报错
+  const statsViewEl = doc.querySelector('[data-view="stats"]') as HTMLElement | null;
+  const isStatsHidden = statsViewEl ? (statsViewEl.style.display === 'none' || (statsViewEl as any).offsetParent === null) : false;
+  if (!isStatsHidden) {
+    renderChart(chartFiltered);
+    renderExtraCharts(chartFiltered);
+  } else {
+    try { console.log('[AUS] stats 隐藏，跳过图表初始化'); } catch {}
+  }
   // 若首次加载了全量且数量更大，二次刷新确保图表包含冷数据（异步后）
   if (cachedAllHistory && cachedAllHistory.length !== (s.history||[]).length) {
     // 已使用全量，无需额外
@@ -504,7 +518,10 @@ export async function renderStatsView() {
         const ce2 = doc.getElementById('aus-stats-cost'); if(ce2) ce2.textContent='¥'+c2.toFixed(2)+' CNY';
         const re2 = doc.getElementById('aus-stats-req'); if(re2) re2.textContent=String(r2);
         const te2 = doc.getElementById('aus-stats-tok'); if(te2) te2.textContent=t2.toLocaleString('zh-CN');
-        renderModelSummary(sf2); renderChart(cf2); renderExtraCharts(cf2);
+        renderModelSummary(sf2);
+        const sv2 = doc.querySelector('[data-view="stats"]') as HTMLElement | null;
+        const hidden2 = sv2 ? (sv2.style.display === 'none' || (sv2 as any).offsetParent === null) : false;
+        if (!hidden2) { renderChart(cf2); renderExtraCharts(cf2); }
       }
     } catch {}
   }

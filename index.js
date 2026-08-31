@@ -3736,13 +3736,22 @@ async function renderChart(filteredRaw) {
   }
   const w = el.clientWidth, h = el.clientHeight;
   if (w === 0 || h === 0) {
+    const statsView = doc.querySelector('[data-view="stats"]');
+    const isHidden = statsView ? statsView.style.display === "none" || statsView.offsetParent === null : false;
+    if (isHidden) {
+      try {
+        console.log("[AUS] renderChart 容器隐藏，等待切换");
+      } catch {
+      }
+      return;
+    }
     const tries = renderChart._retryCount || 0;
-    if (tries >= 20) {
+    if (tries >= 80) {
       el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--ds-text-3);font-size:11px;">图表容器未就绪，请切换视图重试</div>';
       return;
     }
     renderChart._retryCount = tries + 1;
-    setTimeout(() => renderChart(filteredRaw), 80);
+    setTimeout(() => renderChart(filteredRaw), 120);
     return;
   }
   renderChart._retryCount = 0;
@@ -3921,10 +3930,19 @@ async function renderStatsView() {
   const tokEl = doc.getElementById("aus-stats-tok");
   if (tokEl) tokEl.textContent = totalTok.toLocaleString("zh-CN");
   renderModelSummary(summaryFiltered);
-  renderChart(chartFiltered);
   renderModelPicker();
   renderChartSelectors();
-  renderExtraCharts(chartFiltered);
+  const statsViewEl = doc.querySelector('[data-view="stats"]');
+  const isStatsHidden = statsViewEl ? statsViewEl.style.display === "none" || statsViewEl.offsetParent === null : false;
+  if (!isStatsHidden) {
+    renderChart(chartFiltered);
+    renderExtraCharts(chartFiltered);
+  } else {
+    try {
+      console.log("[AUS] stats 隐藏，跳过图表初始化");
+    } catch {
+    }
+  }
   if (cachedAllHistory && cachedAllHistory.length !== (s.history || []).length) ;
   else if (!cachedAllHistory && allHistory.length !== (s.history || []).length) {
     try {
@@ -3947,8 +3965,12 @@ async function renderStatsView() {
         const te2 = doc.getElementById("aus-stats-tok");
         if (te2) te2.textContent = t2.toLocaleString("zh-CN");
         renderModelSummary(sf2);
-        renderChart(cf2);
-        renderExtraCharts(cf2);
+        const sv2 = doc.querySelector('[data-view="stats"]');
+        const hidden2 = sv2 ? sv2.style.display === "none" || sv2.offsetParent === null : false;
+        if (!hidden2) {
+          renderChart(cf2);
+          renderExtraCharts(cf2);
+        }
       }
     } catch {
     }
