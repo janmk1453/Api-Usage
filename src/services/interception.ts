@@ -35,10 +35,12 @@ function installFetchCapture() {
         try { lastMessages = msgs; lastStart = startTime; } catch {}
         // 直接走原生请求，不做 debug 模拟（扩展 debug 由设置单独控制）
         return rawFetch.apply(p, args).then((res: Response) => {
-          const clone = res.clone();
-          const ttftRef: any = { value: 0 };
-          const thinkRef: any = { value: 0 };
-          const parseAndProcess = (text: string, ttftVal: number, thinkTimeVal: number) => {
+          // 关键：任何解析异常都不应影响原 res 返回，避免对话中断
+          try {
+            const clone = res.clone();
+            const ttftRef: any = { value: 0 };
+            const thinkRef: any = { value: 0 };
+            const parseAndProcess = (text: string, ttftVal: number, thinkTimeVal: number) => {
             let data: any = null;
             try {
               const trimmed = text.trim();
@@ -69,11 +71,13 @@ function installFetchCapture() {
             if (data && data.usage) {
               const model = (data as any)?.model || reqBody?.model || fullReq?.model || lastFetchModel || 'deepseek-v4-flash';
               const usage = (data as any).usage;
-              // 修复重复记账：fetch 只缓存兜底，不直接落账，统一由 GENERATION_ENDED 记账
+              // 回退修复：fetch 恢复直接落账 + 缓存双保险，依赖 repository 指纹去重防双记账（避免 GENERATION_ENDED 未触发导致丢账）
               lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: data, ttft: ttftVal, thinkTime: thinkTimeVal };
               lastFetchModel = typeof model === 'string' ? model : null;
               lastFetchTime = Date.now();
-              try { console.log('[API用量统计][TRACE] fetch 捕获 usage 已缓存(待 GENERATION_ENDED 消费)', { url: String(url).slice(0, 80), usage: JSON.stringify(usage).slice(0, 1500), model }); } catch {}
+              try { console.log('[API用量统计][TRACE] fetch 捕获 usage', { url: String(url).slice(0, 80), usage: JSON.stringify(usage).slice(0, 1500), model }); } catch {}
+              // 关键：恢复直接落账，但由 repository 5s指纹去重保证不翻倍
+              try { processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal); } catch (e) { console.error('[API用量统计] fetch 用量记录失败', (e as any)?.message || e); }
             }
           };
           // 尝试根据 Content-Type 分发解析
@@ -84,8 +88,11 @@ function installFetchCapture() {
             // 流式：延迟解析，确保流已完整（原脚本在 res 克隆后异步解析）
             clone.text().then(t => parseAndProcess(t, 0, 0)).catch(() => {});
           }
+          } catch (e) {
+            console.warn('[API用量统计] fetch 克隆解析异常，不影响原请求', (e as any)?.message || e);
+          }
           return res;
-        });
+        }).catch((e: any) => { throw e; });
       }
       // 非目标 API，直接透传
       return rawFetch.apply(p, args);

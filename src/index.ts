@@ -107,16 +107,16 @@ async function init() {
     ctx?.eventSource?.on?.(ctx?.event_types?.APP_READY, () => { try { createPanel(); } catch {} try { ensureWandEntry(); } catch {} try { refreshUI(); } catch {} try { const mod = (globalThis as any).ApiUsageStatInterceptor ? null : null; } catch {} try { import('./services/interception').then(m=>m.installInterception()); } catch {} });
     ctx?.eventSource?.on?.(ctx?.event_types?.APP_INITIALIZED, () => { try { ensureWandEntry(); } catch {} try { import('./services/interception').then(m=>m.installInterception()); } catch {} });
     ctx?.eventSource?.on?.(ctx?.event_types?.CHAT_CHANGED, () => { try { if ((state.settings as any).historyScope === 'current') refreshUI(); } catch {} });
-    // ST 未就绪时轮询重试安装拦截（最多 10 次）
+    // ST 未就绪时轮询重试安装拦截（最多 6 次，间隔 1.5s，避免生成期间频繁打扰）
     let retry = 0;
     const timer = setInterval(() => {
       retry++;
       try {
         const ok = (globalThis as any).SillyTavern?.getContext?.()?.eventSource;
-        if (ok) { import('./services/interception').then(m=>{ if(m.installInterception()) clearInterval(timer); }); }
+        if (ok) { try { if (installInterception()) clearInterval(timer); } catch {} }
       } catch {}
-      if (retry > 20) clearInterval(timer);
-    }, 1000);
+      if (retry > 6) clearInterval(timer);
+    }, 1500);
   } catch {}
   try { getDoc().addEventListener('keydown', (e: KeyboardEvent) => { if (e.key === 'Escape') closePanel(); }); } catch {}
   (globalThis as any).ApiUsageStat = { MODULE, refreshUI, updatePeakDot, openPanel, closePanel, togglePanel, state, injectWandEntry: ensureWandEntry };

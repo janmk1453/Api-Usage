@@ -997,62 +997,73 @@ function installFetchCapture() {
         } catch {
         }
         return rawFetch2.apply(p, args).then((res) => {
-          const clone = res.clone();
-          const ttftRef = { value: 0 };
-          const thinkRef = { value: 0 };
-          const parseAndProcess = (text, ttftVal, thinkTimeVal) => {
-            let data = null;
-            try {
-              const trimmed = text.trim();
-              if (trimmed.startsWith("{")) {
-                data = JSON.parse(trimmed);
-              } else {
-                text.split("\n").forEach((line) => {
-                  if (line.startsWith("data: ") && line !== "data: [DONE]") {
-                    try {
-                      const chunk = JSON.parse(line.substring(6));
-                      if (chunk.usage) data = chunk;
-                      if (!data && chunk.choices?.[0]?.usage) data = { usage: chunk.choices[0].usage, model: chunk.model };
-                    } catch {
+          try {
+            const clone = res.clone();
+            const ttftRef = { value: 0 };
+            const thinkRef = { value: 0 };
+            const parseAndProcess = (text, ttftVal, thinkTimeVal) => {
+              let data = null;
+              try {
+                const trimmed = text.trim();
+                if (trimmed.startsWith("{")) {
+                  data = JSON.parse(trimmed);
+                } else {
+                  text.split("\n").forEach((line) => {
+                    if (line.startsWith("data: ") && line !== "data: [DONE]") {
+                      try {
+                        const chunk = JSON.parse(line.substring(6));
+                        if (chunk.usage) data = chunk;
+                        if (!data && chunk.choices?.[0]?.usage) data = { usage: chunk.choices[0].usage, model: chunk.model };
+                      } catch {
+                      }
                     }
-                  }
-                });
-                if (!data || !data.usage) {
-                  const m = text.match(/"usage"\s*:\s*(\{[^\}]+\})/);
-                  if (m) {
-                    try {
-                      const u = JSON.parse(m[1]);
-                      if (u && typeof u === "object") data = { usage: u, model: data?.model };
-                    } catch {
+                  });
+                  if (!data || !data.usage) {
+                    const m = text.match(/"usage"\s*:\s*(\{[^\}]+\})/);
+                    if (m) {
+                      try {
+                        const u = JSON.parse(m[1]);
+                        if (u && typeof u === "object") data = { usage: u, model: data?.model };
+                      } catch {
+                      }
                     }
                   }
                 }
+              } catch (e) {
+                console.warn("[API用量统计][TRACE] 用量响应解析失败", e?.message || e);
+                return;
               }
-            } catch (e) {
-              console.warn("[API用量统计][TRACE] 用量响应解析失败", e?.message || e);
-              return;
-            }
-            if (data && data.usage) {
-              const model = data?.model || reqBody?.model || fullReq?.model || lastFetchModel || "deepseek-v4-flash";
-              const usage = data.usage;
-              lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: data, ttft: ttftVal, thinkTime: thinkTimeVal };
-              lastFetchModel = typeof model === "string" ? model : null;
-              lastFetchTime = Date.now();
-              try {
-                console.log("[API用量统计][TRACE] fetch 捕获 usage 已缓存(待 GENERATION_ENDED 消费)", { url: String(url).slice(0, 80), usage: JSON.stringify(usage).slice(0, 1500), model });
-              } catch {
+              if (data && data.usage) {
+                const model = data?.model || reqBody?.model || fullReq?.model || lastFetchModel || "deepseek-v4-flash";
+                const usage = data.usage;
+                lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: data, ttft: ttftVal, thinkTime: thinkTimeVal };
+                lastFetchModel = typeof model === "string" ? model : null;
+                lastFetchTime = Date.now();
+                try {
+                  console.log("[API用量统计][TRACE] fetch 捕获 usage", { url: String(url).slice(0, 80), usage: JSON.stringify(usage).slice(0, 1500), model });
+                } catch {
+                }
+                try {
+                  processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal);
+                } catch (e) {
+                  console.error("[API用量统计] fetch 用量记录失败", e?.message || e);
+                }
               }
+            };
+            const ct = clone.headers.get("content-type") || "";
+            if (ct.includes("application/json")) {
+              clone.text().then((t) => parseAndProcess(t, 0, 0)).catch(() => {
+              });
+            } else {
+              clone.text().then((t) => parseAndProcess(t, 0, 0)).catch(() => {
+              });
             }
-          };
-          const ct = clone.headers.get("content-type") || "";
-          if (ct.includes("application/json")) {
-            clone.text().then((t) => parseAndProcess(t, 0, 0)).catch(() => {
-            });
-          } else {
-            clone.text().then((t) => parseAndProcess(t, 0, 0)).catch(() => {
-            });
+          } catch (e) {
+            console.warn("[API用量统计] fetch 克隆解析异常，不影响原请求", e?.message || e);
           }
           return res;
+        }).catch((e) => {
+          throw e;
         });
       }
       return rawFetch2.apply(p, args);
@@ -4494,14 +4505,15 @@ async function init() {
       try {
         const ok = globalThis.SillyTavern?.getContext?.()?.eventSource;
         if (ok) {
-          Promise.resolve().then(() => interception).then((m) => {
-            if (m.installInterception()) clearInterval(timer);
-          });
+          try {
+            if (installInterception()) clearInterval(timer);
+          } catch {
+          }
         }
       } catch {
       }
-      if (retry > 20) clearInterval(timer);
-    }, 1e3);
+      if (retry > 6) clearInterval(timer);
+    }, 1500);
   } catch {
   }
   try {
