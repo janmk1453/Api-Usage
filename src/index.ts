@@ -98,6 +98,7 @@ async function init() {
     const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
     ctx?.eventSource?.on?.(ctx?.event_types?.APP_READY, () => { try { createPanel(); } catch {} try { ensureWandEntry(); } catch {} try { refreshUI(); } catch {} });
     ctx?.eventSource?.on?.(ctx?.event_types?.APP_INITIALIZED, () => { try { ensureWandEntry(); } catch {} });
+    ctx?.eventSource?.on?.(ctx?.event_types?.CHAT_CHANGED, () => { try { if ((state.settings as any).historyScope === 'current') refreshUI(); } catch {} });
   } catch {}
   try { getDoc().addEventListener('keydown', (e: KeyboardEvent) => { if (e.key === 'Escape') closePanel(); }); } catch {}
   (globalThis as any).ApiUsageStat = { MODULE, refreshUI, updatePeakDot, openPanel, closePanel, togglePanel, state, injectWandEntry: ensureWandEntry };

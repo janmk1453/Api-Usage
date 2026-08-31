@@ -9,6 +9,37 @@ import { MAX_HISTORY, DETAIL_KEEP } from '../constants/pricing';
 import { emit, DataEvents } from './events';
 import type { Snapshot } from './types';
 
+function getCurrentChatId(): string | null {
+  try {
+    const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
+    if (ctx?.getCurrentChatId) {
+      const v = ctx.getCurrentChatId();
+      if (typeof v === 'string' && v) return v;
+    }
+    // 兼容：直接取 characters[this_chid]?.chat
+    const chid = (globalThis as any).this_chid;
+    const chars = (globalThis as any).characters;
+    if (typeof chid === 'number' && Array.isArray(chars) && chars[chid]) {
+      const c = chars[chid].chat;
+      if (typeof c === 'string' && c) return c;
+    }
+  } catch {}
+  return null;
+}
+
+function getCurrentChatName(): string | null {
+  const id = getCurrentChatId();
+  return id ? String(id) : null;
+}
+
+export function getFilteredHistoryForScope(): any[] {
+  const scope = (state.settings as any).historyScope || 'all';
+  if (scope !== 'current') return state.history || [];
+  const cur = getCurrentChatId();
+  if (!cur) return state.history || [];
+  return (state.history || []).filter((h: any) => h.chatId === cur);
+}
+
 function pruneDetails() {
   if (!state.history || state.history.length <= DETAIL_KEEP) return;
   const hs = [...state.history].sort((a: any, b: any) => b.timestamp - a.timestamp);
@@ -114,6 +145,10 @@ export const repository = {
     const c: any = calcCost({ timestamp: lu.timestamp, model, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp }, state.settings as any);
     lu.cost = c.total; lu.input_cost = c.input; lu.output_cost = c.output; lu.priceType = c.priceType;
     lu.raw_usage = usage; lu.fullRequest = fullRequest; lu.fullResponse = fullResponse;
+    // 记录所属对话，便于按对话过滤
+    const chatId = getCurrentChatId();
+    const chatName = getCurrentChatName();
+    (lu as any).chatId = chatId; (lu as any).chatName = chatName;
     state.lastUsage = lu;
 
     const entry: any = {
@@ -121,6 +156,7 @@ export const repository = {
       completion_tokens: comp, total_tokens: total, input_cost: lu.input_cost, output_cost: lu.output_cost,
       cost: lu.cost, cache_hit_rate: (hit + miss) > 0 ? (hit / (hit + miss) * 100) : 0, priceType: lu.priceType,
       raw_usage: usage, messages, duration, ttft, thinkTime, thinkTokens, tokenRate: lu.tokenRate, fullRequest, fullResponse,
+      chatId, chatName,
     };
     state.history.unshift(entry);
     state.total_tokens += total; state.total_cost += lu.cost; state.input_tokens += hit + miss; state.output_tokens += comp;
@@ -261,6 +297,21 @@ export const repository = {
       if (hot.messageCount) state.messageCount = hot.messageCount;
       if (hot.lastUsage) state.lastUsage = hot.lastUsage;
     }
+    // 迁移：旧设置无 historyScope 时补默认值 all
+    if (!(state.settings as any).historyScope) {
+      (state.settings as any).historyScope = 'all';
+      try { saveHot({ settings: state.settings }); } catch {}
+    }
+    // 迁移：旧历史无 chatId 时尝试回填（无法精确回溯则保留 null，按 all 展示）
+    let needPersistChatId = false;
+    for (const h of state.history || []) {
+      if ((h as any).chatId === undefined) {
+        (h as any).chatId = null;
+        (h as any).chatName = null;
+        needPersistChatId = true;
+      }
+    }
+    if (needPersistChatId) try { saveHot({ history: state.history }); } catch {}
     // 自动清理历史中的全 0 污染条目（由之前 token_count 误判产生）
     try { this.pruneZeroEntries(); } catch {}
     // 对历史成本按归一化模型重算，修复 [masa]/[OR] 前缀导致的 0 费用

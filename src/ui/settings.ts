@@ -21,6 +21,9 @@ export function renderSettings(doc: Document) {
       <!-- 颜色模式（与用量统计·模型选择一致的胶囊下拉） -->
       <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">颜色模式</span><div id="aus-theme-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模式</span><span id="aus-theme-label" style="font-weight:600;color:var(--ds-text);">浅色</span><span style="font-size:10px;">▼</span></div></div><div id="aus-theme-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:140px;padding:8px;"></div><div style="font-size:11px;color:var(--ds-text-2);margin-top:6px;">切换后立即生效，深色模式针对夜间可读性优化</div></div>
 
+      <!-- 历史显示范围 -->
+      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">历史显示范围</span><div id="aus-history-scope-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">范围</span><span id="aus-history-scope-label" style="font-weight:600;color:var(--ds-text);">全部历史</span><span style="font-size:10px;">▼</span></div></div><div id="aus-history-scope-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div><div style="font-size:11px;color:var(--ds-text-2);margin-top:6px;">全部历史展示所有对话的记录，当前对话仅展示与当前聊天文件关联的记录</div></div>
+
       <!-- API 密钥 -->
       <div class="ds-card"><div style="font-size:11px;color:var(--ds-text-2);font-weight:500;margin-bottom:6px;">API 密钥</div><div style="display:flex;gap:8px;"><input id="aus-api-key" type="password" placeholder="输入 DeepSeek API 密钥" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;outline:none;" /><button id="aus-save-key" class="ds-btn-pill" style="padding:8px 14px;">保存</button></div><div id="aus-key-status" style="font-size:11px;color:var(--ds-text-2);margin-top:6px;"></div></div>
 
@@ -160,7 +163,49 @@ export function renderSettings(doc: Document) {
       const d = doc.getElementById('aus-theme-dropdown');
       if (d) d.style.display = 'none';
     }
+    if (scopePickerOpen && !t.closest('#aus-history-scope-dropdown') && !t.closest('#aus-history-scope-btn')) {
+      scopePickerOpen = false;
+      const d2 = doc.getElementById('aus-history-scope-dropdown');
+      if (d2) d2.style.display = 'none';
+    }
   });
+
+  // 历史显示范围（胶囊下拉，与颜色模式同款）
+  let scopePickerOpen = false;
+  function renderScopePicker() {
+    const dropdown = doc.getElementById('aus-history-scope-dropdown');
+    const label = doc.getElementById('aus-history-scope-label');
+    if (!label) return;
+    const cur = (state.settings as any).historyScope || 'all';
+    label.textContent = cur === 'current' ? '当前对话' : '全部历史';
+    if (!dropdown) return;
+    const opts: Array<{v:string,l:string}> = [{v:'all',l:'全部历史'}, {v:'current',l:'当前对话'}];
+    dropdown.innerHTML = opts.map(o => {
+      const active = o.v === cur ? 'background:var(--ds-card);font-weight:600;' : '';
+      return `<div data-scope="${o.v}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${o.l}</div>`;
+    }).join('');
+    dropdown.querySelectorAll('[data-scope]').forEach((el: any) => {
+      el.onclick = () => {
+        const v = el.getAttribute('data-scope') as any;
+        (state.settings as any).historyScope = v;
+        saveHot({ settings: state.settings });
+        scopePickerOpen = false;
+        dropdown.style.display = 'none';
+        renderScopePicker();
+        try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+      };
+    });
+  }
+  renderScopePicker();
+  const scopeBtn = doc.getElementById('aus-history-scope-btn');
+  const scopeDropdown = doc.getElementById('aus-history-scope-dropdown');
+  if (scopeBtn && scopeDropdown) {
+    scopeBtn.onclick = () => {
+      scopePickerOpen = !scopePickerOpen;
+      scopeDropdown.style.display = scopePickerOpen ? 'block' : 'none';
+      if (scopePickerOpen) renderScopePicker();
+    };
+  }
 
   // 绑定
   doc.getElementById('aus-save-key')!.onclick = () => {

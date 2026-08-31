@@ -15,7 +15,8 @@ const defaultSettings = () => ({
   customModels: [],
   peakHours: [{ start: "09:00", end: "12:00" }, { start: "14:00", end: "18:00" }],
   peakDot: true,
-  webdav: { url: "https://dav.jianguoyun.com/dav/", username: "", path: "", proxy: "" }
+  webdav: { url: "https://dav.jianguoyun.com/dav/", username: "", path: "", proxy: "" },
+  historyScope: "all"
 });
 const PRICING = {
   "deepseek-v4-flash": {
@@ -74,19 +75,82 @@ const state$1 = {
   customBalance: null,
   messageCount: 0
 };
+function getCurrentChatIdForStore() {
+  try {
+    const ctx = globalThis.SillyTavern?.getContext?.();
+    if (ctx?.getCurrentChatId) {
+      const v = ctx.getCurrentChatId();
+      if (typeof v === "string" && v) return v;
+    }
+    const chid = globalThis.this_chid;
+    const chars = globalThis.characters;
+    if (typeof chid === "number" && Array.isArray(chars) && chars[chid]) {
+      const c = chars[chid].chat;
+      if (typeof c === "string" && c) return c;
+    }
+  } catch {
+  }
+  return null;
+}
 function getSelectedSave() {
+  const scope = state$1.settings.historyScope || "all";
+  if (scope !== "current") {
+    return {
+      history: state$1.history,
+      total_tokens: state$1.total_tokens,
+      total_cost: state$1.total_cost,
+      input_tokens: state$1.input_tokens,
+      output_tokens: state$1.output_tokens,
+      cache_hit_tokens: state$1.cache_hit_tokens,
+      cache_miss_tokens: state$1.cache_miss_tokens,
+      input_cost: state$1.input_cost,
+      output_cost: state$1.output_cost,
+      rounds: state$1.rounds,
+      startTime: state$1.startTime
+    };
+  }
+  const cur = getCurrentChatIdForStore();
+  if (!cur) {
+    return {
+      history: state$1.history,
+      total_tokens: state$1.total_tokens,
+      total_cost: state$1.total_cost,
+      input_tokens: state$1.input_tokens,
+      output_tokens: state$1.output_tokens,
+      cache_hit_tokens: state$1.cache_hit_tokens,
+      cache_miss_tokens: state$1.cache_miss_tokens,
+      input_cost: state$1.input_cost,
+      output_cost: state$1.output_cost,
+      rounds: state$1.rounds,
+      startTime: state$1.startTime
+    };
+  }
+  const filtered = (state$1.history || []).filter((h) => h.chatId === cur);
+  let total_tokens = 0, total_cost = 0, input_tokens = 0, output_tokens = 0, cache_hit_tokens = 0, cache_miss_tokens = 0, input_cost = 0, output_cost = 0, rounds = 0;
+  for (const h of filtered) {
+    total_tokens += h.total_tokens || 0;
+    total_cost += h.cost || 0;
+    input_tokens += (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0);
+    output_tokens += h.completion_tokens || 0;
+    cache_hit_tokens += h.cache_hit_tokens || 0;
+    cache_miss_tokens += h.cache_miss_tokens || 0;
+    input_cost += h.input_cost || 0;
+    output_cost += h.output_cost || 0;
+    if (typeof h.model === "string" && h.model.toLowerCase().includes("deepseek")) rounds += 1;
+  }
+  const startTime = filtered.length ? Math.min(...filtered.map((h) => h.timestamp)) : state$1.startTime;
   return {
-    history: state$1.history,
-    total_tokens: state$1.total_tokens,
-    total_cost: state$1.total_cost,
-    input_tokens: state$1.input_tokens,
-    output_tokens: state$1.output_tokens,
-    cache_hit_tokens: state$1.cache_hit_tokens,
-    cache_miss_tokens: state$1.cache_miss_tokens,
-    input_cost: state$1.input_cost,
-    output_cost: state$1.output_cost,
-    rounds: state$1.rounds,
-    startTime: state$1.startTime
+    history: filtered,
+    total_tokens,
+    total_cost,
+    input_tokens,
+    output_tokens,
+    cache_hit_tokens,
+    cache_miss_tokens,
+    input_cost,
+    output_cost,
+    rounds,
+    startTime
   };
 }
 const MODULE$1 = "api_usage_stat";
@@ -507,6 +571,27 @@ function emit(event, payload) {
     }
   });
 }
+function getCurrentChatId() {
+  try {
+    const ctx = globalThis.SillyTavern?.getContext?.();
+    if (ctx?.getCurrentChatId) {
+      const v = ctx.getCurrentChatId();
+      if (typeof v === "string" && v) return v;
+    }
+    const chid = globalThis.this_chid;
+    const chars = globalThis.characters;
+    if (typeof chid === "number" && Array.isArray(chars) && chars[chid]) {
+      const c = chars[chid].chat;
+      if (typeof c === "string" && c) return c;
+    }
+  } catch {
+  }
+  return null;
+}
+function getCurrentChatName() {
+  const id = getCurrentChatId();
+  return id ? String(id) : null;
+}
 function pruneDetails() {
   if (!state$1.history || state$1.history.length <= DETAIL_KEEP) return;
   const hs = [...state$1.history].sort((a, b) => b.timestamp - a.timestamp);
@@ -626,6 +711,10 @@ const repository = {
     lu.raw_usage = usage;
     lu.fullRequest = fullRequest;
     lu.fullResponse = fullResponse;
+    const chatId = getCurrentChatId();
+    const chatName = getCurrentChatName();
+    lu.chatId = chatId;
+    lu.chatName = chatName;
     state$1.lastUsage = lu;
     const entry = {
       timestamp: lu.timestamp,
@@ -648,7 +737,9 @@ const repository = {
       thinkTokens,
       tokenRate: lu.tokenRate,
       fullRequest,
-      fullResponse
+      fullResponse,
+      chatId,
+      chatName
     };
     state$1.history.unshift(entry);
     state$1.total_tokens += total;
@@ -801,6 +892,25 @@ const repository = {
       if (hot.customBalance) state$1.customBalance = hot.customBalance;
       if (hot.messageCount) state$1.messageCount = hot.messageCount;
       if (hot.lastUsage) state$1.lastUsage = hot.lastUsage;
+    }
+    if (!state$1.settings.historyScope) {
+      state$1.settings.historyScope = "all";
+      try {
+        saveHot({ settings: state$1.settings });
+      } catch {
+      }
+    }
+    let needPersistChatId = false;
+    for (const h of state$1.history || []) {
+      if (h.chatId === void 0) {
+        h.chatId = null;
+        h.chatName = null;
+        needPersistChatId = true;
+      }
+    }
+    if (needPersistChatId) try {
+      saveHot({ history: state$1.history });
+    } catch {
     }
     try {
       this.pruneZeroEntries();
@@ -1499,6 +1609,9 @@ function renderSettings(doc) {
       <!-- 颜色模式（与用量统计·模型选择一致的胶囊下拉） -->
       <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">颜色模式</span><div id="aus-theme-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模式</span><span id="aus-theme-label" style="font-weight:600;color:var(--ds-text);">浅色</span><span style="font-size:10px;">▼</span></div></div><div id="aus-theme-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:140px;padding:8px;"></div><div style="font-size:11px;color:var(--ds-text-2);margin-top:6px;">切换后立即生效，深色模式针对夜间可读性优化</div></div>
 
+      <!-- 历史显示范围 -->
+      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">历史显示范围</span><div id="aus-history-scope-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">范围</span><span id="aus-history-scope-label" style="font-weight:600;color:var(--ds-text);">全部历史</span><span style="font-size:10px;">▼</span></div></div><div id="aus-history-scope-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div><div style="font-size:11px;color:var(--ds-text-2);margin-top:6px;">全部历史展示所有对话的记录，当前对话仅展示与当前聊天文件关联的记录</div></div>
+
       <!-- API 密钥 -->
       <div class="ds-card"><div style="font-size:11px;color:var(--ds-text-2);font-weight:500;margin-bottom:6px;">API 密钥</div><div style="display:flex;gap:8px;"><input id="aus-api-key" type="password" placeholder="输入 DeepSeek API 密钥" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;outline:none;" /><button id="aus-save-key" class="ds-btn-pill" style="padding:8px 14px;">保存</button></div><div id="aus-key-status" style="font-size:11px;color:var(--ds-text-2);margin-top:6px;"></div></div>
 
@@ -1638,7 +1751,50 @@ function renderSettings(doc) {
       const d = doc.getElementById("aus-theme-dropdown");
       if (d) d.style.display = "none";
     }
+    if (scopePickerOpen && !t.closest("#aus-history-scope-dropdown") && !t.closest("#aus-history-scope-btn")) {
+      scopePickerOpen = false;
+      const d2 = doc.getElementById("aus-history-scope-dropdown");
+      if (d2) d2.style.display = "none";
+    }
   });
+  let scopePickerOpen = false;
+  function renderScopePicker() {
+    const dropdown = doc.getElementById("aus-history-scope-dropdown");
+    const label = doc.getElementById("aus-history-scope-label");
+    if (!label) return;
+    const cur = state$1.settings.historyScope || "all";
+    label.textContent = cur === "current" ? "当前对话" : "全部历史";
+    if (!dropdown) return;
+    const opts = [{ v: "all", l: "全部历史" }, { v: "current", l: "当前对话" }];
+    dropdown.innerHTML = opts.map((o) => {
+      const active = o.v === cur ? "background:var(--ds-card);font-weight:600;" : "";
+      return `<div data-scope="${o.v}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${o.l}</div>`;
+    }).join("");
+    dropdown.querySelectorAll("[data-scope]").forEach((el) => {
+      el.onclick = () => {
+        const v = el.getAttribute("data-scope");
+        state$1.settings.historyScope = v;
+        saveHot({ settings: state$1.settings });
+        scopePickerOpen = false;
+        dropdown.style.display = "none";
+        renderScopePicker();
+        try {
+          globalThis.ApiUsageStat?.refreshUI?.();
+        } catch {
+        }
+      };
+    });
+  }
+  renderScopePicker();
+  const scopeBtn = doc.getElementById("aus-history-scope-btn");
+  const scopeDropdown = doc.getElementById("aus-history-scope-dropdown");
+  if (scopeBtn && scopeDropdown) {
+    scopeBtn.onclick = () => {
+      scopePickerOpen = !scopePickerOpen;
+      scopeDropdown.style.display = scopePickerOpen ? "block" : "none";
+      if (scopePickerOpen) renderScopePicker();
+    };
+  }
   doc.getElementById("aus-save-key").onclick = () => {
     const v = doc.getElementById("aus-api-key").value.trim();
     saveApiKey(v);
@@ -3831,6 +3987,12 @@ async function init() {
     ctx?.eventSource?.on?.(ctx?.event_types?.APP_INITIALIZED, () => {
       try {
         ensureWandEntry();
+      } catch {
+      }
+    });
+    ctx?.eventSource?.on?.(ctx?.event_types?.CHAT_CHANGED, () => {
+      try {
+        if (state$1.settings.historyScope === "current") refreshUI();
       } catch {
       }
     });

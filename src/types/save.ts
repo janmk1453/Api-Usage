@@ -20,6 +20,8 @@ export type HistoryEntry = {
   ttft?: number;
   thinkTime?: number;
   thinkTokens?: number;
+  chatId?: string | null;
+  chatName?: string | null;
 };
 
 export type Save = {

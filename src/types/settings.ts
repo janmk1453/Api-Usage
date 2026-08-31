@@ -15,6 +15,7 @@ export type WebdavSettings = {
 
 export type ThemeMode = 'light' | 'dark';
 
+export type HistoryScope = 'all' | 'current';
 export type Settings = {
   theme: ThemeMode;
   autoBalance: boolean;
@@ -33,6 +34,7 @@ export type Settings = {
   peakHours: PeakHour[];
   peakDot: boolean;
   webdav: WebdavSettings;
+  historyScope: HistoryScope;
 };
 
 export const defaultSettings = (): Settings => ({
@@ -53,6 +55,7 @@ export const defaultSettings = (): Settings => ({
   peakHours: [{ start: '09:00', end: '12:00' }, { start: '14:00', end: '18:00' }],
   peakDot: true,
   webdav: { url: 'https://dav.jianguoyun.com/dav/', username: '', path: '', proxy: '' },
+  historyScope: 'all',
 });
 
 export type Balance = {
