@@ -4416,7 +4416,7 @@ function createPanel() {
           </div>
           <div data-view="about" style="display:none;">
             <div class="ds-card" style="line-height:1.7;font-size:12px;color:var(--ds-text);">
-              <div style="font-size:14px;font-weight:600;">关于 API用量统计 · SillyTavern 扩展</div>
+              <div style="font-size:14px;font-weight:600;">关于<br/><br/>API用量统计 · SillyTavern 扩展</div>
               <div style="margin-top:8px;color:var(--ds-text-2);">迁移至原 DeepSeek使用预测 脚本<br/>致力于实现最全面的用量可视化统计<br/><br/>仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);">janmk1453/Api-Usage</a></div>
             </div>
           </div>
