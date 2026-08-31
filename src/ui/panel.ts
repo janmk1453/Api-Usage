@@ -1,5 +1,6 @@
 import { state, getSelectedSave } from '../store/index';
 import { esc, localDay, localTimeHM } from '../utils/date';
+import { saveHot } from '../store/persistence';
 import { queryBalance } from '../services/balance';
 import { bindImportExport } from '../services/import-export';
 import { renderSettings } from './settings';
@@ -38,7 +39,22 @@ function renderHistory(doc: Document, s: any) {
   const host = doc.getElementById('aus-history');
   if (!host) return;
   const hist: any[] = s.history || [];
-  if (!hist.length) { host.innerHTML = '<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;">暂无历史记录</div>'; return; }
+  if (!hist.length) {
+    const scope = (state.settings as any).historyScope || 'all';
+    const tip = scope === 'current'
+      ? '<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;line-height:1.8;">当前对话暂无记录<br/><span style="font-size:11px;">已按“当前对话”过滤，旧记录（未关联对话）仅在“全部历史”中可见</span><br/><button id="aus-history-scope-switch" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">切换为全部历史</button></div>'
+      : '<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;">暂无历史记录</div>';
+    host.innerHTML = tip;
+    const btn = doc.getElementById('aus-history-scope-switch') as HTMLButtonElement | null;
+    if (btn) btn.onclick = () => {
+      (state.settings as any).historyScope = 'all';
+      try { (saveHot as any)({ settings: state.settings }); } catch {}
+      try { refreshUI(); } catch {}
+      const host2 = doc.getElementById('aus-settings') as HTMLElement | null;
+      if (host2) try { (window as any).ApiUsageStat?.refreshUI?.(); } catch {}
+    };
+    return;
+  }
   host.innerHTML = hist.slice(0, 50).map((h: any) => {
     const total = h.total_tokens || 1;
     const hp = ((h.cache_hit_tokens || 0) / total * 100);
