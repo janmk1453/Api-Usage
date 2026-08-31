@@ -77,12 +77,34 @@ export const repository = {
   addEntry(usage: any, model: string, messages: any[], startTime: number, fullRequest?: any, fullResponse?: any, ttft = 0, thinkTime = 0) {
     messages = messages || [];
     if (!model) try { model = (globalThis as any).SillyTavern?.getContext?.().model || 'deepseek-v4-flash'; } catch { model = 'deepseek-v4-flash'; }
+    // 容错：拒绝数字/空对象导致的 0 token 污染条目
+    if (!usage || typeof usage !== 'object' || Array.isArray(usage)) {
+      try { console.warn('[API用量统计] addEntry 跳过无效 usage：', usage, ' model=', model); } catch {}
+      return null as any;
+    }
+    const hasAnyTokenField =
+      typeof usage.prompt_tokens === 'number' ||
+      typeof usage.completion_tokens === 'number' ||
+      typeof usage.total_tokens === 'number' ||
+      typeof usage.input_tokens === 'number' ||
+      typeof usage.output_tokens === 'number' ||
+      typeof usage.prompt_cache_hit_tokens === 'number' ||
+      (usage.prompt_tokens_details && typeof usage.prompt_tokens_details.cached_tokens === 'number');
+    if (!hasAnyTokenField) {
+      try { console.warn('[API用量统计] addEntry 跳过无 token 字段的 usage：', JSON.stringify(usage).slice(0,300)); } catch {}
+      return null as any;
+    }
     let hit = usage.prompt_cache_hit_tokens || 0;
     if (!hit && usage.prompt_tokens_details?.cached_tokens) hit = usage.prompt_tokens_details.cached_tokens;
     let miss = usage.prompt_cache_miss_tokens;
     if (miss === undefined || miss === null) { miss = (usage.prompt_tokens || usage.input_tokens || 0) - hit; if (miss < 0) miss = 0; }
     const comp = usage.completion_tokens || usage.output_tokens || 0;
     const total = usage.total_tokens || hit + miss + comp;
+    // 若解析后仍全 0，视为无效数据，不写入历史
+    if (hit === 0 && miss === 0 && comp === 0 && total === 0) {
+      try { console.warn('[API用量统计] addEntry 跳过全 0 token 条目 model=' + model); } catch {}
+      return null as any;
+    }
     const lu: any = { timestamp: Date.now(), model, prompt_tokens: hit + miss, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp, total_tokens: total };
     const duration = startTime ? Date.now() - startTime : 0;
     const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || 0;
@@ -182,6 +204,39 @@ export const repository = {
     if (next.balance !== undefined || next.customBalance !== undefined) emit(DataEvents.BALANCE_CHANGED);
   },
 
+  pruneZeroEntries() {
+    const before = (state.history || []).length;
+    const filtered = (state.history || []).filter((h: any) => !(h.total_tokens === 0 && h.prompt_tokens === 0 && h.completion_tokens === 0 && h.cache_hit_tokens === 0 && h.cache_miss_tokens === 0));
+    if (filtered.length !== before) {
+      state.history = filtered as any;
+      // 重算聚合，避免 totals 包含零条目影响
+      let total_tokens = 0, total_cost = 0, input_tokens = 0, output_tokens = 0, cache_hit_tokens = 0, cache_miss_tokens = 0, input_cost = 0, output_cost = 0, rounds = 0;
+      for (const h of filtered) {
+        total_tokens += h.total_tokens || 0;
+        total_cost += h.cost || 0;
+        input_tokens += (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0);
+        output_tokens += h.completion_tokens || 0;
+        cache_hit_tokens += h.cache_hit_tokens || 0;
+        cache_miss_tokens += h.cache_miss_tokens || 0;
+        input_cost += h.input_cost || 0;
+        output_cost += h.output_cost || 0;
+        rounds += 1;
+      }
+      state.total_tokens = total_tokens as any;
+      state.total_cost = total_cost as any;
+      state.input_tokens = input_tokens as any;
+      state.output_tokens = output_tokens as any;
+      state.cache_hit_tokens = cache_hit_tokens as any;
+      state.cache_miss_tokens = cache_miss_tokens as any;
+      state.input_cost = input_cost as any;
+      state.output_cost = output_cost as any;
+      state.rounds = rounds as any;
+      persist();
+      try { console.log('[API用量统计] 已自动清理 ' + (before - filtered.length) + ' 条全 0 污染条目'); } catch {}
+    }
+    return filtered.length;
+  },
+
   async hydrate() {
     const hot: any = await loadHot();
     if (hot) {
@@ -202,6 +257,10 @@ export const repository = {
       if (hot.messageCount) state.messageCount = hot.messageCount;
       if (hot.lastUsage) state.lastUsage = hot.lastUsage;
     }
+    // 自动清理历史中的全 0 污染条目（由之前 token_count 误判产生）
+    try { this.pruneZeroEntries(); } catch {}
+    // 对历史成本按归一化模型重算，修复 [masa]/[OR] 前缀导致的 0 费用
+    try { this.recalcAll(); } catch {}
     emit(DataEvents.UPDATED);
     return this.snapshot();
   },

@@ -406,11 +406,25 @@ function mergePrices(base, custom) {
     output: custom.output !== void 0 && custom.output !== "" ? parseFloat(custom.output) : base.output
   };
 }
+function normalizeModel(model) {
+  if (!model) return "deepseek-v4-flash";
+  let m = String(model).trim();
+  m = m.replace(/^\[[^\]]+\]/, "").trim();
+  const low = m.toLowerCase();
+  if (low.includes("deepseek-v4-flash-vision") || low.includes("deepseek-v4-flash-vision-exp")) return "deepseek-v4-flash-vision-exp";
+  if (low.includes("deepseek-v4-pro")) return "deepseek-v4-pro";
+  if (low.includes("deepseek-v4-flash")) return "deepseek-v4-flash";
+  if (low.includes("deepseek")) {
+    return "deepseek-v4-flash";
+  }
+  return m;
+}
 function getPricing$1(model, settings) {
-  const m = model || "deepseek-v4-flash";
+  const raw = model || "deepseek-v4-flash";
+  const m = normalizeModel(raw);
   const base = PRICING[m] || PRICING["deepseek-v4-flash"];
   for (const cm of settings.customModels || []) {
-    if (cm?.model === m) {
+    if (cm?.model === raw || cm?.model === m) {
       return {
         usePeakPricing: cm.usePeakPricing !== false,
         offpeak: mergePrices(base.offpeak, cm.offpeak),
@@ -421,13 +435,16 @@ function getPricing$1(model, settings) {
   return base;
 }
 function hasPriceForModel(model, settings) {
-  const m = model || "deepseek-v4-flash";
+  const raw = model || "deepseek-v4-flash";
+  const m = normalizeModel(raw);
   if (PRICING[m]) return true;
-  for (const cm of settings.customModels || []) if (cm?.model === m) return true;
+  for (const cm of settings.customModels || []) if (cm?.model === raw || cm?.model === m) return true;
   return false;
 }
 function isDeepSeekOfficialModel(m) {
-  return typeof m === "string" && m.toLowerCase().indexOf("deepseek") === 0;
+  if (typeof m !== "string") return false;
+  const norm = normalizeModel(m);
+  return norm.toLowerCase().indexOf("deepseek") === 0 || String(m).toLowerCase().includes("deepseek");
 }
 function isPeakHour(timestamp, settings) {
   const hours = settings && settings.peakHours || DEFAULT_PEAK_HOURS;
@@ -551,6 +568,21 @@ const repository = {
     } catch {
       model = "deepseek-v4-flash";
     }
+    if (!usage || typeof usage !== "object" || Array.isArray(usage)) {
+      try {
+        console.warn("[API用量统计] addEntry 跳过无效 usage：", usage, " model=", model);
+      } catch {
+      }
+      return null;
+    }
+    const hasAnyTokenField = typeof usage.prompt_tokens === "number" || typeof usage.completion_tokens === "number" || typeof usage.total_tokens === "number" || typeof usage.input_tokens === "number" || typeof usage.output_tokens === "number" || typeof usage.prompt_cache_hit_tokens === "number" || usage.prompt_tokens_details && typeof usage.prompt_tokens_details.cached_tokens === "number";
+    if (!hasAnyTokenField) {
+      try {
+        console.warn("[API用量统计] addEntry 跳过无 token 字段的 usage：", JSON.stringify(usage).slice(0, 300));
+      } catch {
+      }
+      return null;
+    }
     let hit = usage.prompt_cache_hit_tokens || 0;
     if (!hit && usage.prompt_tokens_details?.cached_tokens) hit = usage.prompt_tokens_details.cached_tokens;
     let miss = usage.prompt_cache_miss_tokens;
@@ -560,6 +592,13 @@ const repository = {
     }
     const comp = usage.completion_tokens || usage.output_tokens || 0;
     const total = usage.total_tokens || hit + miss + comp;
+    if (hit === 0 && miss === 0 && comp === 0 && total === 0) {
+      try {
+        console.warn("[API用量统计] addEntry 跳过全 0 token 条目 model=" + model);
+      } catch {
+      }
+      return null;
+    }
     const lu = { timestamp: Date.now(), model, prompt_tokens: hit + miss, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp, total_tokens: total };
     const duration = startTime ? Date.now() - startTime : 0;
     const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || 0;
@@ -695,6 +734,40 @@ const repository = {
     if (next.settings) emit(DataEvents.SETTINGS_CHANGED);
     if (next.balance !== void 0 || next.customBalance !== void 0) emit(DataEvents.BALANCE_CHANGED);
   },
+  pruneZeroEntries() {
+    const before = (state$1.history || []).length;
+    const filtered = (state$1.history || []).filter((h) => !(h.total_tokens === 0 && h.prompt_tokens === 0 && h.completion_tokens === 0 && h.cache_hit_tokens === 0 && h.cache_miss_tokens === 0));
+    if (filtered.length !== before) {
+      state$1.history = filtered;
+      let total_tokens = 0, total_cost = 0, input_tokens = 0, output_tokens = 0, cache_hit_tokens = 0, cache_miss_tokens = 0, input_cost = 0, output_cost = 0, rounds = 0;
+      for (const h of filtered) {
+        total_tokens += h.total_tokens || 0;
+        total_cost += h.cost || 0;
+        input_tokens += (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0);
+        output_tokens += h.completion_tokens || 0;
+        cache_hit_tokens += h.cache_hit_tokens || 0;
+        cache_miss_tokens += h.cache_miss_tokens || 0;
+        input_cost += h.input_cost || 0;
+        output_cost += h.output_cost || 0;
+        rounds += 1;
+      }
+      state$1.total_tokens = total_tokens;
+      state$1.total_cost = total_cost;
+      state$1.input_tokens = input_tokens;
+      state$1.output_tokens = output_tokens;
+      state$1.cache_hit_tokens = cache_hit_tokens;
+      state$1.cache_miss_tokens = cache_miss_tokens;
+      state$1.input_cost = input_cost;
+      state$1.output_cost = output_cost;
+      state$1.rounds = rounds;
+      persist();
+      try {
+        console.log("[API用量统计] 已自动清理 " + (before - filtered.length) + " 条全 0 污染条目");
+      } catch {
+      }
+    }
+    return filtered.length;
+  },
   async hydrate() {
     const hot = await loadHot();
     if (hot) {
@@ -714,6 +787,14 @@ const repository = {
       if (hot.customBalance) state$1.customBalance = hot.customBalance;
       if (hot.messageCount) state$1.messageCount = hot.messageCount;
       if (hot.lastUsage) state$1.lastUsage = hot.lastUsage;
+    }
+    try {
+      this.pruneZeroEntries();
+    } catch {
+    }
+    try {
+      this.recalcAll();
+    } catch {
     }
     emit(DataEvents.UPDATED);
     return this.snapshot();
@@ -742,22 +823,61 @@ function installInterception() {
   } catch {
   }
 }
+function isValidUsage(u) {
+  if (!u || typeof u !== "object" || Array.isArray(u)) return false;
+  return typeof u.prompt_tokens === "number" || typeof u.completion_tokens === "number" || typeof u.total_tokens === "number" || typeof u.input_tokens === "number" || typeof u.output_tokens === "number" || typeof u.prompt_cache_hit_tokens === "number" || typeof u.cached_tokens === "number" || u.prompt_tokens_details && typeof u.prompt_tokens_details.cached_tokens === "number";
+}
+function pickUsageFromExtra(extra) {
+  if (!extra || typeof extra !== "object") return null;
+  const candidates = [
+    extra.api_usage,
+    extra.usage,
+    extra.openai_usage,
+    extra.token_usage,
+    // 兼容部分渠道把 usage 塞在 extra.data.usage
+    extra.data?.usage,
+    extra.response?.usage
+  ];
+  for (const c of candidates) {
+    if (isValidUsage(c)) return c;
+  }
+  if (isValidUsage(extra)) return extra;
+  return null;
+}
 function onGenerationEnded(...args) {
   try {
     const ctx = globalThis.SillyTavern?.getContext?.();
     const chat = ctx?.chat || [];
     const tail = chat[chat.length - 1];
     const extra = tail?.extra || {};
-    const usage = extra.api_usage || extra.token_count || extra.usage;
-    if (usage) {
-      const model = extra.model || tail?.model || ctx?.model || "deepseek-v4-flash";
+    let usage = pickUsageFromExtra(extra);
+    let model = extra.model || tail?.model || ctx?.model || "deepseek-v4-flash";
+    if (usage && isValidUsage(usage)) {
       processUsage(usage, model, lastMessages, lastStart);
       return;
     }
-    const maybeUsage = args[0]?.usage || args[0]?.token_count;
-    if (maybeUsage) {
-      const model = args[0]?.model || "deepseek-v4-flash";
-      processUsage(maybeUsage, model, lastMessages, lastStart);
+    if (tail?.swipe_info && typeof tail.swipe_info === "object") {
+      for (const v of Object.values(tail.swipe_info)) {
+        const cand = v?.extra?.api_usage || v?.extra?.usage;
+        if (isValidUsage(cand)) {
+          usage = cand;
+          model = v?.extra?.model || model;
+          processUsage(usage, model, lastMessages, lastStart);
+          return;
+        }
+      }
+    }
+    const maybeUsage = args[0]?.usage || args[0]?.api_usage;
+    if (isValidUsage(maybeUsage)) {
+      const m = args[0]?.model || model;
+      processUsage(maybeUsage, m, lastMessages, lastStart);
+      return;
+    }
+    if (extra.token_count != null && !usage) {
+      try {
+        console.warn("[API用量统计] 跳过无效 usage：仅有 token_count=" + extra.token_count + " model=" + model + " 未生成条目避免污染");
+      } catch {
+      }
     }
   } catch {
   }
