@@ -93,25 +93,11 @@ function onGenerationEnded(...args: any[]) {
       processUsage(maybeUsage, m, lastMessages, lastStart);
       return;
     }
-    // 最后：若仅有 token_count 数字，构造最小可用 usage 兜底记录，避免新对话完全不显示
-    // 适用于 custom / OpenRouter 等渠道：ST 仅写入 token_count，无完整 usage
+    // 最后：若仅有 token_count 数字，说明 ST 本地估算而非 API 真实用量，禁止兜底产生假数据（如 7t 污染）
+    // 之前尝试 token_count 兜底导致 [OR]minimax-m3 产生大量 0 in/7 out 假记录，现回退为严格丢弃
     if (extra.token_count != null && !usage) {
-      const tc = Number(extra.token_count);
-      if (Number.isFinite(tc) && tc > 0) {
-        const ttft = typeof extra.time_to_first_token === 'number' ? extra.time_to_first_token : 0;
-        // 将 token_count 视为 completion_tokens 兜底，prompt 记 0，总计为 tc，确保历史至少可见
-        const fallbackUsage: any = {
-          prompt_tokens: 0,
-          completion_tokens: tc,
-          total_tokens: tc,
-          prompt_tokens_details: { cached_tokens: 0 },
-          _from_token_count: true,
-        };
-        try { console.log('[API用量统计] 使用 token_count 兜底：' + tc + ' model=' + model); } catch {}
-        processUsage(fallbackUsage, model, lastMessages, lastStart, null, null, ttft, 0);
-        return;
-      }
-      try { console.warn('[API用量统计] 跳过无效 usage：仅有 token_count=' + extra.token_count + ' model=' + model + ' 未生成条目避免污染'); } catch {}
+      try { console.warn('[API用量统计] 跳过无效 usage：仅有本地 token_count=' + extra.token_count + ' model=' + model + ' 未生成条目（非 API 真实用量，需完整 usage）'); } catch {}
+      return;
     }
   } catch {}
 }

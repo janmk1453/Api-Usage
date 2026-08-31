@@ -206,7 +206,11 @@ export const repository = {
 
   pruneZeroEntries() {
     const before = (state.history || []).length;
-    const filtered = (state.history || []).filter((h: any) => !(h.total_tokens === 0 && h.prompt_tokens === 0 && h.completion_tokens === 0 && h.cache_hit_tokens === 0 && h.cache_miss_tokens === 0));
+    const filtered = (state.history || []).filter((h: any) => {
+      const isZero = h.total_tokens === 0 && h.prompt_tokens === 0 && h.completion_tokens === 0 && h.cache_hit_tokens === 0 && h.cache_miss_tokens === 0;
+      const isFakeTokenCount = !!(h.raw_usage && (h.raw_usage as any)._from_token_count);
+      return !(isZero || isFakeTokenCount);
+    });
     if (filtered.length !== before) {
       state.history = filtered as any;
       // 重算聚合，避免 totals 包含零条目影响
