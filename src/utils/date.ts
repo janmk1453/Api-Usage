@@ -34,6 +34,18 @@ export function localDay(ts: number | Date): string {
   return new Date(t + 8 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
+export function localTimeHM(ts: number | Date): string {
+  const t = typeof ts === 'number' ? ts : ts.getTime();
+  const d = new Date(t + 8 * 3600 * 1000);
+  const iso = d.toISOString();
+  // YYYY-MM-DDTHH:mm:ss.sssZ -> 取 MM-DD HH:mm，隐藏年份
+  const mm = iso.slice(5, 7);
+  const dd = iso.slice(8, 10);
+  const hh = iso.slice(11, 13);
+  const mi = iso.slice(14, 16);
+  return `${mm}-${dd} ${hh}:${mi}`;
+}
+
 export function esc(s: unknown): string {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;')

@@ -1,5 +1,5 @@
 import { state, getSelectedSave } from '../store/index';
-import { esc, localDay } from '../utils/date';
+import { esc, localDay, localTimeHM } from '../utils/date';
 import { queryBalance } from '../services/balance';
 import { bindImportExport } from '../services/import-export';
 import { renderSettings } from './settings';
@@ -49,7 +49,7 @@ function renderHistory(doc: Document, s: any) {
     <div style="padding:10px 12px;background:var(--ds-card);border-radius:10px;margin-bottom:8px;font-size:12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <div style="min-width:0;flex:1;">
-          <div style="font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(h.model)} · ${esc(localDay(h.timestamp))}</div>
+          <div style="font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(h.model)} · ${esc(localTimeHM(h.timestamp))}</div>
           <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · ${h.duration || 0}ms · ${h.tokenRate || 0} t/s</div>
         </div>
         <div style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">

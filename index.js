@@ -395,6 +395,16 @@ function localDay$1(ts) {
   const t = typeof ts === "number" ? ts : ts.getTime();
   return new Date(t + 8 * 3600 * 1e3).toISOString().slice(0, 10);
 }
+function localTimeHM(ts) {
+  const t = typeof ts === "number" ? ts : ts.getTime();
+  const d = new Date(t + 8 * 3600 * 1e3);
+  const iso = d.toISOString();
+  const mm = iso.slice(5, 7);
+  const dd = iso.slice(8, 10);
+  const hh = iso.slice(11, 13);
+  const mi = iso.slice(14, 16);
+  return `${mm}-${dd} ${hh}:${mi}`;
+}
 function esc$1(s) {
   return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
@@ -3140,7 +3150,7 @@ function renderHistory(doc, s) {
     <div style="padding:10px 12px;background:var(--ds-card);border-radius:10px;margin-bottom:8px;font-size:12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <div style="min-width:0;flex:1;">
-          <div style="font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc$1(h.model)} · ${esc$1(localDay$1(h.timestamp))}</div>
+          <div style="font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc$1(h.model)} · ${esc$1(localTimeHM(h.timestamp))}</div>
           <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · ${h.duration || 0}ms · ${h.tokenRate || 0} t/s</div>
         </div>
         <div style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
