@@ -951,9 +951,68 @@ const repository = {
 };
 let lastMessages = [];
 let lastStart = 0;
+let lastFetchUsage = null;
+let lastFetchModel = null;
+let lastFetchTime = 0;
 function setLastRequest(messages, start) {
   lastMessages = messages || [];
   lastStart = start || Date.now();
+}
+function installFetchCapture() {
+  try {
+    const w = window;
+    const parentFetch = w.parent && w.parent.fetch || w.fetch;
+    const target = w.parent || w;
+    if (!target || !target.fetch || target.fetch.__aus_patched) return;
+    const origFetch = target.fetch.bind(target);
+    const patched = async (input, init2) => {
+      const url = typeof input === "string" ? input : input?.url || "";
+      const isChatApi = typeof url === "string" && (url.includes("/api/backends/chat-completions") || url.includes("/api/openai/") || url.includes("/chat/completions"));
+      let resp = null;
+      try {
+        resp = await origFetch(input, init2);
+      } catch (e) {
+        throw e;
+      }
+      if (isChatApi && resp) {
+        try {
+          const clone = resp.clone();
+          const ct = clone.headers.get("content-type") || "";
+          if (ct.includes("application/json")) {
+            const data = await clone.json().catch(() => null);
+            const usage = data?.usage || data?.data?.usage || data?.response?.usage || data?.body?.usage;
+            const model = data?.model || data?.data?.model;
+            if (usage && typeof usage === "object") {
+              lastFetchUsage = usage;
+              lastFetchModel = typeof model === "string" ? model : null;
+              lastFetchTime = Date.now();
+              console.log("[API用量统计][TRACE] fetch 捕获 usage", { url: String(url).slice(0, 80), usage: JSON.stringify(usage).slice(0, 1500), model: lastFetchModel });
+            }
+          } else if (ct.includes("text/event-stream") || ct.includes("text/plain")) {
+            const text = await clone.text().catch(() => "");
+            const m = text.match(/"usage"\s*:\s*(\{[^}]+\})/);
+            if (m) {
+              try {
+                const usage = JSON.parse(m[1]);
+                if (usage && typeof usage === "object") {
+                  lastFetchUsage = usage;
+                  lastFetchTime = Date.now();
+                  console.log("[API用量统计][TRACE] fetch(stream) 捕获 usage", { usage: JSON.stringify(usage).slice(0, 1500) });
+                }
+              } catch {
+              }
+            }
+          }
+        } catch {
+        }
+      }
+      return resp;
+    };
+    patched.__aus_patched = true;
+    target.fetch = patched;
+    console.log("[API用量统计][TRACE] fetch 捕获已安装");
+  } catch {
+  }
 }
 function installInterception() {
   try {
@@ -969,6 +1028,10 @@ function installInterception() {
       } catch {
       }
     };
+    try {
+      installFetchCapture();
+    } catch {
+    }
   } catch {
   }
 }
@@ -1052,15 +1115,25 @@ function onGenerationEnded(...args) {
       processUsage(maybeUsage, m, lastMessages, lastStart);
       return;
     }
+    if (lastFetchUsage && isValidUsage(lastFetchUsage) && Date.now() - lastFetchTime < 12e4) {
+      const fetchModel = lastFetchModel || model;
+      console.log(TRACE + " fetch 兜底命中", { model: fetchModel, usage: JSON.stringify(lastFetchUsage).slice(0, 1500) });
+      const u = lastFetchUsage;
+      lastFetchUsage = null;
+      processUsage(u, fetchModel, lastMessages, lastStart);
+      return;
+    } else if (lastFetchUsage) {
+      console.log(TRACE + " fetch 有缓存但无效或超时", { has: !!lastFetchUsage, isValid: lastFetchUsage ? isValidUsage(lastFetchUsage) : false, age: Date.now() - lastFetchTime });
+    }
     if (extra.token_count != null && !usage) {
       try {
-        console.warn("[API用量统计] 跳过无效 usage：仅有本地 token_count=" + extra.token_count + " model=" + model + " 未生成条目（非 API 真实用量，需完整 usage）");
+        console.warn("[API用量统计] 跳过无效 usage：仅有本地 token_count=" + extra.token_count + " model=" + model + " 未生成条目（非 API 真实用量，需完整 usage）。若确为真实请求，请检查网络 fetch 捕获是否命中，或查看 TRACE 中 fetch 日志");
       } catch {
       }
-      console.log(TRACE + " 无有效 usage，仅有 token_count，已跳过不记录", { token_count: extra.token_count, model });
+      console.log(TRACE + " 无有效 usage，仅有 token_count，已跳过不记录", { token_count: extra.token_count, model, hasFetch: !!lastFetchUsage });
       return;
     }
-    console.log(TRACE + " 未找到任何有效 usage，丢弃本次记录", { extraKeys: extra ? Object.keys(extra).slice(0, 20) : [], argsKeys: args[0] ? Object.keys(args[0]).slice(0, 20) : [] });
+    console.log(TRACE + " 未找到任何有效 usage，丢弃本次记录", { extraKeys: extra ? Object.keys(extra).slice(0, 20) : [], argsKeys: args[0] ? Object.keys(args[0]).slice(0, 20) : [], hasFetch: !!lastFetchUsage });
   } catch (e) {
     try {
       console.error(TRACE + " onGenerationEnded 异常", e);

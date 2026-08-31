@@ -2,12 +2,71 @@ import { state } from '../store/index';
 import { repository } from '../data/repository';
 
 // 去 fetch 猴补，主路径 GENERATION_ENDED + MESSAGE_RECEIVED，辅以 generate_interceptor 记 messages
+// 临时增加 fetch 兜底：直接捕获网络层 usage，确保 custom 渠道真实请求应记尽记
 let lastMessages: any[] = [];
 let lastStart = 0;
+let lastFetchUsage: any = null;
+let lastFetchModel: string | null = null;
+let lastFetchTime = 0;
 
 export function setLastRequest(messages: any[], start: number) {
   lastMessages = messages || [];
   lastStart = start || Date.now();
+}
+
+function installFetchCapture() {
+  try {
+    const w: any = window as any;
+    const parentFetch = (w.parent && (w.parent as any).fetch) || w.fetch;
+    const target: any = w.parent || w;
+    if (!target || !target.fetch || (target.fetch as any).__aus_patched) return;
+    const origFetch = target.fetch.bind(target);
+    const patched = async (input: any, init: any) => {
+      const url = typeof input === 'string' ? input : input?.url || '';
+      const isChatApi = typeof url === 'string' && (url.includes('/api/backends/chat-completions') || url.includes('/api/openai/') || url.includes('/chat/completions'));
+      let resp: Response | null = null;
+      try {
+        resp = await origFetch(input, init);
+      } catch (e) {
+        throw e;
+      }
+      if (isChatApi && resp) {
+        try {
+          const clone = resp.clone();
+          const ct = clone.headers.get('content-type') || '';
+          if (ct.includes('application/json')) {
+            const data = await clone.json().catch(() => null);
+            const usage = (data as any)?.usage || (data as any)?.data?.usage || (data as any)?.response?.usage || (data as any)?.body?.usage;
+            const model = (data as any)?.model || (data as any)?.data?.model;
+            if (usage && typeof usage === 'object') {
+              lastFetchUsage = usage;
+              lastFetchModel = typeof model === 'string' ? model : null;
+              lastFetchTime = Date.now();
+              console.log('[API用量统计][TRACE] fetch 捕获 usage', { url: String(url).slice(0, 80), usage: JSON.stringify(usage).slice(0, 1500), model: lastFetchModel });
+            }
+          } else if (ct.includes('text/event-stream') || ct.includes('text/plain')) {
+            // 流式响应：尝试读取文本中的 usage 标记
+            const text = await clone.text().catch(() => '');
+            const m = text.match(/"usage"\s*:\s*(\{[^}]+\})/);
+            if (m) {
+              try {
+                const usage = JSON.parse(m[1]);
+                if (usage && typeof usage === 'object') {
+                  lastFetchUsage = usage;
+                  lastFetchTime = Date.now();
+                  console.log('[API用量统计][TRACE] fetch(stream) 捕获 usage', { usage: JSON.stringify(usage).slice(0, 1500) });
+                }
+              } catch {}
+            }
+          }
+        } catch {}
+      }
+      return resp;
+    };
+    (patched as any).__aus_patched = true;
+    target.fetch = patched;
+    console.log('[API用量统计][TRACE] fetch 捕获已安装');
+  } catch {}
 }
 
 export function installInterception() {
@@ -22,6 +81,8 @@ export function installInterception() {
     (globalThis as any).ApiUsageStatInterceptor = (chat: any[], _ctxSize: number, _abort: any, _type: string) => {
       try { setLastRequest(chat?.slice(-10) || [], Date.now()); } catch {}
     };
+    // 安装 fetch 兜底捕获
+    try { installFetchCapture(); } catch {}
     // manifest 若需，可由用户手动加 generate_interceptor 指向 ApiUsageStatInterceptor
   } catch {}
 }
@@ -117,14 +178,25 @@ function onGenerationEnded(...args: any[]) {
       processUsage(maybeUsage, m, lastMessages, lastStart);
       return;
     }
+    // 兜底：尝试 fetch 捕获的 usage（覆盖 ST 未写入 extra 的 custom 渠道）
+    if (lastFetchUsage && isValidUsage(lastFetchUsage) && Date.now() - lastFetchTime < 120000) {
+      const fetchModel = lastFetchModel || model;
+      console.log(TRACE + ' fetch 兜底命中', { model: fetchModel, usage: JSON.stringify(lastFetchUsage).slice(0, 1500) });
+      const u = lastFetchUsage;
+      lastFetchUsage = null; // 消费后清空，避免重复
+      processUsage(u, fetchModel, lastMessages, lastStart);
+      return;
+    } else if (lastFetchUsage) {
+      console.log(TRACE + ' fetch 有缓存但无效或超时', { has: !!lastFetchUsage, isValid: lastFetchUsage ? isValidUsage(lastFetchUsage) : false, age: Date.now() - lastFetchTime });
+    }
     // 最后：若仅有 token_count 数字，说明 ST 本地估算而非 API 真实用量，禁止兜底产生假数据（如 7t 污染）
     // 之前尝试 token_count 兜底导致 [OR]minimax-m3 产生大量 0 in/7 out 假记录，现回退为严格丢弃
     if (extra.token_count != null && !usage) {
-      try { console.warn('[API用量统计] 跳过无效 usage：仅有本地 token_count=' + extra.token_count + ' model=' + model + ' 未生成条目（非 API 真实用量，需完整 usage）'); } catch {}
-      console.log(TRACE + ' 无有效 usage，仅有 token_count，已跳过不记录', { token_count: extra.token_count, model });
+      try { console.warn('[API用量统计] 跳过无效 usage：仅有本地 token_count=' + extra.token_count + ' model=' + model + ' 未生成条目（非 API 真实用量，需完整 usage）。若确为真实请求，请检查网络 fetch 捕获是否命中，或查看 TRACE 中 fetch 日志'); } catch {}
+      console.log(TRACE + ' 无有效 usage，仅有 token_count，已跳过不记录', { token_count: extra.token_count, model, hasFetch: !!lastFetchUsage });
       return;
     }
-    console.log(TRACE + ' 未找到任何有效 usage，丢弃本次记录', { extraKeys: extra ? Object.keys(extra).slice(0, 20) : [], argsKeys: args[0] ? Object.keys(args[0]).slice(0, 20) : [] });
+    console.log(TRACE + ' 未找到任何有效 usage，丢弃本次记录', { extraKeys: extra ? Object.keys(extra).slice(0, 20) : [], argsKeys: args[0] ? Object.keys(args[0]).slice(0, 20) : [], hasFetch: !!lastFetchUsage });
   } catch (e) {
     try { console.error(TRACE + ' onGenerationEnded 异常', e); } catch {}
   }
