@@ -233,14 +233,26 @@
   [data-extension="api-usage-stat"][data-ds-theme="dark"] .aus-nav-item.active { background: #2A3342 !important; }
   #aus-main { padding: 12px !important; }
   #aus-main > div { max-width: 1100px !important; width: 100% !important; margin: 0 auto !important; box-sizing: border-box !important; }
-  /* 所有卡片不超出 — 块本身贴合屏幕，块内内容在卡片内横向滑动 */
+  /* 视图容器不裁剪下拉：原 overflow-x:hidden 会把胶囊下拉裁进 UI 底下 */
   [data-view="stats"],
   [data-view="overview"],
-  [data-view="history"] { max-width: 100% !important; overflow-x: hidden !important; box-sizing: border-box !important; }
-  [data-extension="api-usage-stat"] .ds-card { padding: 12px 14px !important; max-width: 100% !important; width: 100% !important; box-sizing: border-box !important; overflow-x: auto !important; overflow-y: hidden !important; -webkit-overflow-scrolling: touch !important; }
-  #aus-overview-four .ds-card { overflow: visible !important; overflow-x: visible !important; overflow-y: visible !important; }
-  #aus-overview-four { overflow: visible !important; }
-  #aus-overview-four [id^="aus-four-drop-"] { z-index: 50 !important; }
+  [data-view="history"] { max-width: 100% !important; overflow: visible !important; box-sizing: border-box !important; }
+  [data-extension="api-usage-stat"] .ds-card { padding: 12px 14px !important; max-width: 100% !important; width: 100% !important; box-sizing: border-box !important; -webkit-overflow-scrolling: touch !important; }
+  /* 默认所有卡片 overflow:visible 以不裁剪胶囊下拉；仅需横向滑动的表格/热力图除外 */
+  [data-view="stats"] .ds-card,
+  [data-view="overview"] .ds-card { overflow: visible !important; overflow-x: visible !important; overflow-y: visible !important; }
+  #aus-model-summary { overflow-x: auto !important; overflow-y: hidden !important; }
+  #aus-heatmap-card-overview { overflow: hidden !important; }
+  #aus-heatmap-card-overview > div { overflow: visible !important; }
+  /* 所有胶囊下拉统一提升层级，避免被相邻卡片覆盖 */
+  #aus-range-dropdown,
+  #aus-model-dropdown,
+  #aus-chart-y-dropdown,
+  #aus-chart-x-dropdown,
+  [id^="aus-four-drop-"],
+  [id^="aus-extra-y-drop-"],
+  [id^="aus-extra-x-drop-"],
+  [id^="aus-modeltrends-x-drop-"] { z-index: 50 !important; }
   /* 网格：用量概览 8 块保持 2 列，其余竖排 */
   #aus-overview-four { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
   [data-view="overview"] > div:first-child { grid-template-columns: 1fr !important; }
