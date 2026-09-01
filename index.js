@@ -3405,6 +3405,57 @@ let customEnd = "";
 let pickerOpen = false;
 let selectedModel = "__all__";
 let modelPickerOpen = false;
+let summarySortKey = null;
+let summarySortDir = "desc";
+let lastSummaryFiltered = null;
+function updateSummarySortHeader() {
+  const doc = getDoc$2();
+  const ths = doc.querySelectorAll("#aus-model-summary thead th[data-sort-key]");
+  ths.forEach((th) => {
+    th.style.color = "";
+    th.style.fontWeight = "";
+    const ind = th.querySelector(".aus-sort-ind");
+    if (ind) ind.textContent = "";
+  });
+  if (summarySortKey) {
+    const cur = doc.querySelector(`#aus-model-summary thead th[data-sort-key="${summarySortKey}"]`);
+    if (cur) {
+      cur.style.color = "var(--ds-text)";
+      cur.style.fontWeight = "600";
+      const ind = cur.querySelector(".aus-sort-ind");
+      if (ind) ind.textContent = summarySortDir === "asc" ? " ▲" : " ▼";
+    }
+  }
+}
+function bindSummarySort() {
+  const doc = getDoc$2();
+  const ths = doc.querySelectorAll("#aus-model-summary thead th[data-sort-key]");
+  if (!ths.length) return;
+  if (bindSummarySort._bound) return;
+  bindSummarySort._bound = true;
+  ths.forEach((th) => {
+    th.addEventListener("click", () => {
+      const key = th.getAttribute("data-sort-key");
+      if (!key) return;
+      if (summarySortKey === key) {
+        summarySortDir = summarySortDir === "asc" ? "desc" : "asc";
+      } else {
+        summarySortKey = key;
+        summarySortDir = "desc";
+      }
+      updateSummarySortHeader();
+      if (lastSummaryFiltered) renderModelSummary(lastSummaryFiltered);
+    });
+    th.addEventListener("mouseenter", () => {
+      const k = th.getAttribute("data-sort-key");
+      if (k !== summarySortKey) th.style.color = "var(--ds-text)";
+    });
+    th.addEventListener("mouseleave", () => {
+      const k = th.getAttribute("data-sort-key");
+      if (k !== summarySortKey) th.style.color = "";
+    });
+  });
+}
 function getDoc$2() {
   return window.parent?.document ?? document;
 }
@@ -3889,6 +3940,15 @@ function renderModelSummary(filtered) {
   const doc = getDoc$2();
   const tbody = doc.getElementById("aus-summary-tbody");
   if (!tbody) return;
+  lastSummaryFiltered = filtered;
+  try {
+    bindSummarySort();
+  } catch {
+  }
+  try {
+    updateSummarySortHeader();
+  } catch {
+  }
   if (!filtered.length) {
     tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr>';
     return;
@@ -3912,12 +3972,51 @@ function renderModelSummary(filtered) {
       e.rateCnt++;
     }
   }
-  const rows = Object.keys(map2).sort().map((m) => {
+  let list = Object.keys(map2).map((m) => {
     const e = map2[m];
     const avgCost = e.count ? e.cost / e.count : 0;
-    const avgDur = e.count ? (e.dur / e.count / 1e3).toFixed(1) + "s" : "—";
-    const avgRate = e.rateCnt ? Math.round(e.rate / e.rateCnt) + " t/s" : "—";
-    return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc$1(m)}</td><td style="padding:6px 8px;text-align:right;">${e.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${e.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${e.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${e.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${e.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">¥${e.cost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;">¥${avgCost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${avgDur}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${avgRate}</td></tr>`;
+    const avgDurVal = e.count && e.dur ? e.dur / e.count : -1;
+    const avgDurStr = e.count && e.dur ? (e.dur / e.count / 1e3).toFixed(1) + "s" : "—";
+    const avgRateVal = e.rateCnt ? e.rate / e.rateCnt : -1;
+    const avgRateStr = e.rateCnt ? Math.round(e.rate / e.rateCnt) + " t/s" : "—";
+    return { m, count: e.count, hit: e.hit, miss: e.miss, out: e.out, total: e.total, cost: e.cost, avgCost, avgDurVal, avgRateVal, avgDurStr, avgRateStr };
+  });
+  if (summarySortKey) {
+    const dir = summarySortDir === "asc" ? 1 : -1;
+    const getVal = (r) => {
+      switch (summarySortKey) {
+        case "count":
+          return r.count;
+        case "hit":
+          return r.hit;
+        case "miss":
+          return r.miss;
+        case "out":
+          return r.out;
+        case "total":
+          return r.total;
+        case "cost":
+          return r.cost;
+        case "avgCost":
+          return r.avgCost;
+        case "avgDur":
+          return r.avgDurVal;
+        case "avgRate":
+          return r.avgRateVal;
+        default:
+          return 0;
+      }
+    };
+    list.sort((a, b) => {
+      const av = getVal(a), bv = getVal(b);
+      if (av === bv) return a.m.localeCompare(b.m);
+      return (av - bv) * dir;
+    });
+  } else {
+    list.sort((a, b) => a.m.localeCompare(b.m));
+  }
+  const rows = list.map((r) => {
+    return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc$1(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">¥${r.cost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;">¥${r.avgCost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
   }).join("");
   tbody.innerHTML = rows;
 }
@@ -4015,6 +4114,10 @@ async function renderStatsView() {
 function initStatsView() {
   bindPicker();
   bindChartSelectors();
+  try {
+    bindSummarySort();
+  } catch {
+  }
   updatePickerLabel();
   renderStatsView();
 }
@@ -4381,7 +4484,7 @@ function createPanel() {
             <div id="aus-model-summary" class="ds-card" style="margin-top:12px;overflow:auto;">
               <div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">模型汇总</div>
               <table style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap;">
-                <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">模型</th><th style="padding:6px 8px;">调用次数</th><th style="padding:6px 8px;">输入(命中)</th><th style="padding:6px 8px;">输入(未命中)</th><th style="padding:6px 8px;">输出</th><th style="padding:6px 8px;">总 Tokens</th><th style="padding:6px 8px;">总成本</th><th style="padding:6px 8px;">平均成本</th><th style="padding:6px 8px;">平均耗时</th><th style="padding:6px 8px;">平均速率</th></tr></thead>
+                <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">模型</th><th data-sort-key="count" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">调用次数<span class="aus-sort-ind"></span></th><th data-sort-key="hit" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输入(命中)<span class="aus-sort-ind"></span></th><th data-sort-key="miss" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输入(未命中)<span class="aus-sort-ind"></span></th><th data-sort-key="out" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输出<span class="aus-sort-ind"></span></th><th data-sort-key="total" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总 Tokens<span class="aus-sort-ind"></span></th><th data-sort-key="cost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总成本<span class="aus-sort-ind"></span></th><th data-sort-key="avgCost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均成本<span class="aus-sort-ind"></span></th><th data-sort-key="avgDur" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均耗时<span class="aus-sort-ind"></span></th><th data-sort-key="avgRate" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均速率<span class="aus-sort-ind"></span></th></tr></thead>
                 <tbody id="aus-summary-tbody"><tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
               </table>
             </div>

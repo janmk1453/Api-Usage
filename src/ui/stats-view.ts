@@ -11,6 +11,64 @@ let pickerOpen = false;
 let selectedModel: string = '__all__';
 let modelPickerOpen = false;
 
+// 模型汇总表排序：点击表头（除模型外）正序/倒序切换
+type SummarySortKey = 'count' | 'hit' | 'miss' | 'out' | 'total' | 'cost' | 'avgCost' | 'avgDur' | 'avgRate';
+let summarySortKey: SummarySortKey | null = null;
+let summarySortDir: 'asc' | 'desc' = 'desc';
+let lastSummaryFiltered: any[] | null = null;
+
+function updateSummarySortHeader() {
+  const doc = getDoc();
+  const ths = doc.querySelectorAll('#aus-model-summary thead th[data-sort-key]');
+  ths.forEach((th: any) => {
+    th.style.color = '';
+    th.style.fontWeight = '';
+    const ind = th.querySelector('.aus-sort-ind');
+    if (ind) ind.textContent = '';
+    // 悬停高亮由 CSS :hover 处理，此处仅重置
+  });
+  if (summarySortKey) {
+    const cur = doc.querySelector(`#aus-model-summary thead th[data-sort-key="${summarySortKey}"]`) as HTMLElement | null;
+    if (cur) {
+      cur.style.color = 'var(--ds-text)';
+      cur.style.fontWeight = '600';
+      const ind = cur.querySelector('.aus-sort-ind') as HTMLElement | null;
+      if (ind) ind.textContent = summarySortDir === 'asc' ? ' ▲' : ' ▼';
+    }
+  }
+}
+
+function bindSummarySort() {
+  const doc = getDoc();
+  const ths = doc.querySelectorAll('#aus-model-summary thead th[data-sort-key]');
+  if (!ths.length) return;
+  // 避免重复绑定
+  if ((bindSummarySort as any)._bound) return;
+  (bindSummarySort as any)._bound = true;
+  ths.forEach((th: any) => {
+    th.addEventListener('click', () => {
+      const key = th.getAttribute('data-sort-key') as SummarySortKey;
+      if (!key) return;
+      if (summarySortKey === key) {
+        summarySortDir = summarySortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        summarySortKey = key;
+        summarySortDir = 'desc';
+      }
+      updateSummarySortHeader();
+      if (lastSummaryFiltered) renderModelSummary(lastSummaryFiltered);
+    });
+    th.addEventListener('mouseenter', () => {
+      const k = th.getAttribute('data-sort-key');
+      if (k !== summarySortKey) th.style.color = 'var(--ds-text)';
+    });
+    th.addEventListener('mouseleave', () => {
+      const k = th.getAttribute('data-sort-key');
+      if (k !== summarySortKey) th.style.color = '';
+    });
+  });
+}
+
 function getDoc() { return (window.parent as any)?.document ?? document; }
 function themeColor(name: string, fallback: string) {
   try {
@@ -427,6 +485,10 @@ function renderModelSummary(filtered: any[]) {
   const doc = getDoc();
   const tbody = doc.getElementById('aus-summary-tbody');
   if (!tbody) return;
+  lastSummaryFiltered = filtered;
+  // 确保表头排序交互已绑定（面板创建后才有 DOM）
+  try { bindSummarySort(); } catch {}
+  try { updateSummarySortHeader(); } catch {}
   if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr>'; return; }
   const map: Record<string, { count: number; hit: number; miss: number; out: number; total: number; cost: number; dur: number; rate: number; rateCnt: number }> = {};
   for (const h of filtered) {
@@ -436,12 +498,42 @@ function renderModelSummary(filtered: any[]) {
     if (h.duration) { e.dur += h.duration; }
     if (h.tokenRate) { e.rate += h.tokenRate; e.rateCnt++; }
   }
-  const rows = Object.keys(map).sort().map(m => {
+  type Row = { m: string; count: number; hit: number; miss: number; out: number; total: number; cost: number; avgCost: number; avgDurVal: number; avgRateVal: number; avgDurStr: string; avgRateStr: string };
+  let list: Row[] = Object.keys(map).map(m => {
     const e = map[m];
     const avgCost = e.count ? e.cost / e.count : 0;
-    const avgDur = e.count ? (e.dur / e.count / 1000).toFixed(1) + 's' : '—';
-    const avgRate = e.rateCnt ? Math.round(e.rate / e.rateCnt) + ' t/s' : '—';
-     return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc(m)}</td><td style="padding:6px 8px;text-align:right;">${e.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${e.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${e.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${e.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${e.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">¥${e.cost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;">¥${avgCost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${avgDur}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${avgRate}</td></tr>`;
+    const avgDurVal = e.count && e.dur ? e.dur / e.count : -1;
+    const avgDurStr = e.count && e.dur ? (e.dur / e.count / 1000).toFixed(1) + 's' : '—';
+    const avgRateVal = e.rateCnt ? e.rate / e.rateCnt : -1;
+    const avgRateStr = e.rateCnt ? Math.round(e.rate / e.rateCnt) + ' t/s' : '—';
+    return { m, count: e.count, hit: e.hit, miss: e.miss, out: e.out, total: e.total, cost: e.cost, avgCost, avgDurVal, avgRateVal, avgDurStr, avgRateStr };
+  });
+  if (summarySortKey) {
+    const dir = summarySortDir === 'asc' ? 1 : -1;
+    const getVal = (r: Row): number => {
+      switch (summarySortKey) {
+        case 'count': return r.count;
+        case 'hit': return r.hit;
+        case 'miss': return r.miss;
+        case 'out': return r.out;
+        case 'total': return r.total;
+        case 'cost': return r.cost;
+        case 'avgCost': return r.avgCost;
+        case 'avgDur': return r.avgDurVal;
+        case 'avgRate': return r.avgRateVal;
+        default: return 0;
+      }
+    };
+    list.sort((a, b) => {
+      const av = getVal(a), bv = getVal(b);
+      if (av === bv) return a.m.localeCompare(b.m);
+      return (av - bv) * dir;
+    });
+  } else {
+    list.sort((a, b) => a.m.localeCompare(b.m));
+  }
+  const rows = list.map(r => {
+     return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">¥${r.cost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;">¥${r.avgCost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
   }).join('');
   tbody.innerHTML = rows;
 }
@@ -530,6 +622,7 @@ export async function renderStatsView() {
 export function initStatsView() {
   bindPicker();
   bindChartSelectors();
+  try { bindSummarySort(); } catch {}
   updatePickerLabel();
   renderStatsView();
 }
