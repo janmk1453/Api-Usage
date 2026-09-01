@@ -1,5 +1,5 @@
 const defaultSettings = () => ({
-  theme: "light",
+  theme: "dark",
   autoBalance: false,
   balanceInterval: 10,
   debug: false,
@@ -41,7 +41,7 @@ const DEFAULT_PEAK_HOURS = [
   { start: "09:00", end: "12:00" },
   { start: "14:00", end: "18:00" }
 ];
-const MAX_HISTORY = 500;
+const MAX_HISTORY = 2e3;
 const DETAIL_KEEP = 10;
 const STORAGE_KEYS = {
   KEY: "ds_api_key",
@@ -4683,46 +4683,37 @@ function refreshUI() {
   } catch {
   }
 }
-function renderHistory(doc, s) {
+let historyPage = 1;
+const HISTORY_PAGE_SIZE = 30;
+let historyFullCache = null;
+let historyCacheScope = "";
+let historyLoading = false;
+function renderHistoryInner(doc, fullHist) {
   const host = doc.getElementById("aus-history");
   if (!host) return;
-  let hist = s.history || [];
-  try {
-    const scope = state$2.settings.historyScope || "all";
-    if (scope === "current") {
-      const filtered = getHistoryForDisplay();
-      hist = filtered;
-    }
-  } catch {
-  }
-  if (!hist.length) {
-    const scope = state$2.settings.historyScope || "all";
-    const tip = scope === "current" ? '<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;line-height:1.8;">当前对话暂无记录<br/><span style="font-size:11px;">已按“当前对话”过滤，旧记录（未关联对话）仅在“全部历史”中可见</span><br/><button id="aus-history-scope-switch" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">切换为全部历史</button></div>' : '<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;">暂无历史记录</div>';
-    host.innerHTML = tip;
-    const btn = doc.getElementById("aus-history-scope-switch");
-    if (btn) btn.onclick = () => {
-      state$2.settings.historyScope = "all";
-      try {
-        saveHot({ settings: state$2.settings });
-      } catch {
-      }
-      try {
-        refreshUI();
-      } catch {
-      }
-      const host2 = doc.getElementById("aus-settings");
-      if (host2) try {
-        window.ApiUsageStat?.refreshUI?.();
-      } catch {
-      }
-    };
-    return;
-  }
-  host.innerHTML = hist.slice(0, 50).map((h) => {
-    const total = h.total_tokens || 1;
-    const hp = (h.cache_hit_tokens || 0) / total * 100;
-    const mp = (h.cache_miss_tokens || 0) / total * 100;
-    const op = (h.completion_tokens || 0) / total * 100;
+  const total = fullHist.length;
+  const totalPages = Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE));
+  if (historyPage > totalPages) historyPage = totalPages;
+  if (historyPage < 1) historyPage = 1;
+  const start = (historyPage - 1) * HISTORY_PAGE_SIZE;
+  const pageHist = fullHist.slice(start, start + HISTORY_PAGE_SIZE);
+  const pagerTop = total > HISTORY_PAGE_SIZE ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:11px;color:var(--ds-text-2);">
+      <span>共 ${total} 条 · 第 ${historyPage}/${totalPages} 页</span>
+      <span style="display:flex;gap:6px;">
+        <button id="aus-history-prev" ${historyPage <= 1 ? "disabled" : ""} style="padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:${historyPage <= 1 ? "var(--ds-card)" : "var(--ds-card-inner)"};color:var(--ds-text);font-size:11px;cursor:${historyPage <= 1 ? "not-allowed" : "pointer"};opacity:${historyPage <= 1 ? "0.5" : "1"};">‹ 上一页</button>
+        <button id="aus-history-next" ${historyPage >= totalPages ? "disabled" : ""} style="padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:${historyPage >= totalPages ? "var(--ds-card)" : "var(--ds-card-inner)"};color:var(--ds-text);font-size:11px;cursor:${historyPage >= totalPages ? "not-allowed" : "pointer"};opacity:${historyPage >= totalPages ? "0.5" : "1"};">下一页 ›</button>
+      </span>
+    </div>` : "";
+  const pagerBottom = total > HISTORY_PAGE_SIZE ? `<div style="display:flex;justify-content:center;align-items:center;gap:8px;margin-top:10px;font-size:11px;">
+      <button id="aus-history-prev-b" ${historyPage <= 1 ? "disabled" : ""} style="padding:4px 12px;border:1px solid var(--ds-border);border-radius:999px;background:${historyPage <= 1 ? "var(--ds-card)" : "var(--ds-card-inner)"};color:var(--ds-text);font-size:11px;cursor:${historyPage <= 1 ? "not-allowed" : "pointer"};opacity:${historyPage <= 1 ? "0.5" : "1"};">‹ 上一页</button>
+      <span style="color:var(--ds-text-2);">第 ${historyPage}/${totalPages} 页</span>
+      <button id="aus-history-next-b" ${historyPage >= totalPages ? "disabled" : ""} style="padding:4px 12px;border:1px solid var(--ds-border);border-radius:999px;background:${historyPage >= totalPages ? "var(--ds-card)" : "var(--ds-card-inner)"};color:var(--ds-text);font-size:11px;cursor:${historyPage >= totalPages ? "not-allowed" : "pointer"};opacity:${historyPage >= totalPages ? "0.5" : "1"};">下一页 ›</button>
+    </div>` : "";
+  host.innerHTML = pagerTop + pageHist.map((h) => {
+    const total2 = h.total_tokens || 1;
+    const hp = (h.cache_hit_tokens || 0) / total2 * 100;
+    const mp = (h.cache_miss_tokens || 0) / total2 * 100;
+    const op = (h.completion_tokens || 0) / total2 * 100;
     const hps = hp.toFixed(1), mps = mp.toFixed(1), ops = op.toFixed(1);
     return `
     <div style="padding:10px 12px;background:var(--ds-card);border-radius:10px;margin-bottom:8px;font-size:12px;">
@@ -4749,7 +4740,7 @@ function renderHistory(doc, s) {
       </div>
       <div style="display:flex;justify-content:space-between;font-size:10px;margin-top:4px;">
         <div style="display:flex;gap:8px;"><span style="color:var(--ds-green);font-weight:500;">${hps}% 命中</span><span style="color:var(--ds-red);font-weight:500;">${mps}% 未命中</span><span style="color:var(--ds-purple);font-weight:500;">${ops}% 输出</span></div>
-        <span style="color:var(--ds-text-2);">${total.toLocaleString()}t</span>
+        <span style="color:var(--ds-text-2);">${total2.toLocaleString()}t</span>
       </div>
       <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;margin-top:8px;border-top:1px solid var(--ds-border);padding-top:8px;height:520px;overflow:hidden;display:none;flex-direction:column;gap:8px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
@@ -4805,7 +4796,36 @@ function renderHistory(doc, s) {
       </div>
     </div>
   `;
-  }).join("");
+  }).join("") + pagerBottom;
+  const bindPager = (id) => {
+    const b = doc.getElementById(id);
+    if (!b) return;
+    if (id.includes("prev")) b.onclick = () => {
+      if (historyPage > 1) {
+        historyPage--;
+        renderHistoryInner(doc, fullHist);
+        try {
+          doc.getElementById("aus-history")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        } catch {
+        }
+      }
+    };
+    else b.onclick = () => {
+      const tp = Math.max(1, Math.ceil(fullHist.length / HISTORY_PAGE_SIZE));
+      if (historyPage < tp) {
+        historyPage++;
+        renderHistoryInner(doc, fullHist);
+        try {
+          doc.getElementById("aus-history")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        } catch {
+        }
+      }
+    };
+  };
+  bindPager("aus-history-prev");
+  bindPager("aus-history-next");
+  bindPager("aus-history-prev-b");
+  bindPager("aus-history-next-b");
   host.querySelectorAll(".aus-detail-toggle").forEach((btn) => {
     btn.addEventListener("click", () => {
       const ts = btn.getAttribute("data-ts");
@@ -4848,6 +4868,81 @@ function renderHistory(doc, s) {
       if (target) target.style.display = "block";
     });
   });
+}
+function renderHistory(doc, s) {
+  const host = doc.getElementById("aus-history");
+  if (!host) return;
+  let hist = s.history || [];
+  let scope = "all";
+  try {
+    scope = state$2.settings.historyScope || "all";
+    if (scope === "current") hist = getHistoryForDisplay();
+  } catch {
+  }
+  if (!hist.length) {
+    historyPage = 1;
+    historyFullCache = null;
+    historyCacheScope = "";
+    const tip = scope === "current" ? '<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;line-height:1.8;">当前对话暂无记录<br/><span style="font-size:11px;">已按“当前对话”过滤，旧记录（未关联对话）仅在“全部历史”中可见</span><br/><button id="aus-history-scope-switch" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">切换为全部历史</button></div>' : '<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;">暂无历史记录</div>';
+    host.innerHTML = tip;
+    const btn = doc.getElementById("aus-history-scope-switch");
+    if (btn) btn.onclick = () => {
+      state$2.settings.historyScope = "all";
+      try {
+        saveHot({ settings: state$2.settings });
+      } catch {
+      }
+      historyPage = 1;
+      try {
+        refreshUI();
+      } catch {
+      }
+    };
+    return;
+  }
+  let curChatId = null;
+  try {
+    curChatId = globalThis.SillyTavern?.getContext?.()?.getCurrentChatId?.() || globalThis.SillyTavern?.getContext?.().getCurrentChatId?.call?.(null) || null;
+  } catch {
+  }
+  try {
+    if (!curChatId) curChatId = globalThis.SillyTavern?.getContext?.().getCurrentChatId?.() || null;
+  } catch {
+  }
+  const scopeKey = scope === "current" ? `current:${curChatId || ""}` : "all";
+  if (historyCacheScope !== scopeKey) {
+    historyPage = 1;
+    historyCacheScope = scopeKey;
+    historyFullCache = null;
+  }
+  let fullForRender = hist;
+  if (historyFullCache && historyFullCache.length > hist.length) fullForRender = historyFullCache;
+  renderHistoryInner(doc, fullForRender);
+  if (historyLoading) return;
+  const needFull = hist.length >= HISTORY_PAGE_SIZE || historyFullCache !== null || fullForRender.length >= HISTORY_PAGE_SIZE;
+  if (!needFull && hist.length < HISTORY_PAGE_SIZE) return;
+  historyLoading = true;
+  (async () => {
+    try {
+      const mod = await Promise.resolve().then(() => persistence);
+      if (!mod.getAllHistory) return;
+      const all = await mod.getAllHistory();
+      if (!all || !all.length) return;
+      let full = all;
+      try {
+        if (scope === "current" && curChatId) {
+          full = all.filter((h) => h.chatId === curChatId);
+        }
+      } catch {
+      }
+      if (full.length <= hist.length) return;
+      historyFullCache = full;
+      renderHistoryInner(doc, full);
+    } catch {
+    } finally {
+      historyLoading = false;
+    }
+  })();
 }
 function bindPanel(doc) {
   const q = doc.getElementById("aus-btn-query-balance");

@@ -35,36 +35,34 @@ export function refreshUI() {
   } catch {}
 }
 
-function renderHistory(doc: Document, s: any) {
+let historyPage = 1;
+const HISTORY_PAGE_SIZE = 30;
+let historyFullCache: any[] | null = null;
+let historyCacheScope = '';
+let historyLoading = false;
+
+function renderHistoryInner(doc: Document, fullHist: any[]) {
   const host = doc.getElementById('aus-history');
   if (!host) return;
-  // 历史记录按设置过滤：all=全部，current=仅当前对话（其余块仍按全部统计）
-  let hist: any[] = s.history || [];
-  try {
-    const scope = (state.settings as any).historyScope || 'all';
-    if (scope === 'current') {
-      const filtered = getHistoryForDisplay();
-      // getHistoryForDisplay 已按当前 chatId 过滤，此处直接使用
-      hist = filtered;
-    }
-  } catch {}
-  if (!hist.length) {
-    const scope = (state.settings as any).historyScope || 'all';
-    const tip = scope === 'current'
-      ? '<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;line-height:1.8;">当前对话暂无记录<br/><span style="font-size:11px;">已按“当前对话”过滤，旧记录（未关联对话）仅在“全部历史”中可见</span><br/><button id="aus-history-scope-switch" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">切换为全部历史</button></div>'
-      : '<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;">暂无历史记录</div>';
-    host.innerHTML = tip;
-    const btn = doc.getElementById('aus-history-scope-switch') as HTMLButtonElement | null;
-    if (btn) btn.onclick = () => {
-      (state.settings as any).historyScope = 'all';
-      try { (saveHot as any)({ settings: state.settings }); } catch {}
-      try { refreshUI(); } catch {}
-      const host2 = doc.getElementById('aus-settings') as HTMLElement | null;
-      if (host2) try { (window as any).ApiUsageStat?.refreshUI?.(); } catch {}
-    };
-    return;
-  }
-  host.innerHTML = hist.slice(0, 50).map((h: any) => {
+  const total = fullHist.length;
+  const totalPages = Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE));
+  if (historyPage > totalPages) historyPage = totalPages;
+  if (historyPage < 1) historyPage = 1;
+  const start = (historyPage - 1) * HISTORY_PAGE_SIZE;
+  const pageHist = fullHist.slice(start, start + HISTORY_PAGE_SIZE);
+  const pagerTop = total > HISTORY_PAGE_SIZE ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:11px;color:var(--ds-text-2);">
+      <span>共 ${total} 条 · 第 ${historyPage}/${totalPages} 页</span>
+      <span style="display:flex;gap:6px;">
+        <button id="aus-history-prev" ${historyPage<=1?'disabled':''} style="padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:${historyPage<=1?'var(--ds-card)':'var(--ds-card-inner)'};color:var(--ds-text);font-size:11px;cursor:${historyPage<=1?'not-allowed':'pointer'};opacity:${historyPage<=1?'0.5':'1'};">‹ 上一页</button>
+        <button id="aus-history-next" ${historyPage>=totalPages?'disabled':''} style="padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:${historyPage>=totalPages?'var(--ds-card)':'var(--ds-card-inner)'};color:var(--ds-text);font-size:11px;cursor:${historyPage>=totalPages?'not-allowed':'pointer'};opacity:${historyPage>=totalPages?'0.5':'1'};">下一页 ›</button>
+      </span>
+    </div>` : '';
+  const pagerBottom = total > HISTORY_PAGE_SIZE ? `<div style="display:flex;justify-content:center;align-items:center;gap:8px;margin-top:10px;font-size:11px;">
+      <button id="aus-history-prev-b" ${historyPage<=1?'disabled':''} style="padding:4px 12px;border:1px solid var(--ds-border);border-radius:999px;background:${historyPage<=1?'var(--ds-card)':'var(--ds-card-inner)'};color:var(--ds-text);font-size:11px;cursor:${historyPage<=1?'not-allowed':'pointer'};opacity:${historyPage<=1?'0.5':'1'};">‹ 上一页</button>
+      <span style="color:var(--ds-text-2);">第 ${historyPage}/${totalPages} 页</span>
+      <button id="aus-history-next-b" ${historyPage>=totalPages?'disabled':''} style="padding:4px 12px;border:1px solid var(--ds-border);border-radius:999px;background:${historyPage>=totalPages?'var(--ds-card)':'var(--ds-card-inner)'};color:var(--ds-text);font-size:11px;cursor:${historyPage>=totalPages?'not-allowed':'pointer'};opacity:${historyPage>=totalPages?'0.5':'1'};">下一页 ›</button>
+    </div>` : '';
+  host.innerHTML = pagerTop + pageHist.map((h: any) => {
     const total = h.total_tokens || 1;
     const hp = ((h.cache_hit_tokens || 0) / total * 100);
     const mp = ((h.cache_miss_tokens || 0) / total * 100);
@@ -151,7 +149,15 @@ function renderHistory(doc: Document, s: any) {
       </div>
     </div>
   `;
-  }).join('');
+  }).join('') + pagerBottom;
+  // 分页按钮
+  const bindPager = (id: string) => {
+    const b = doc.getElementById(id) as HTMLButtonElement | null;
+    if (!b) return;
+    if (id.includes('prev')) b.onclick = () => { if (historyPage > 1) { historyPage--; renderHistoryInner(doc, fullHist); try{ doc.getElementById('aus-history')?.scrollIntoView({ behavior:'smooth', block:'start'}); }catch{} } };
+    else b.onclick = () => { const tp = Math.max(1, Math.ceil(fullHist.length / HISTORY_PAGE_SIZE)); if (historyPage < tp) { historyPage++; renderHistoryInner(doc, fullHist); try{ doc.getElementById('aus-history')?.scrollIntoView({ behavior:'smooth', block:'start'}); }catch{} } };
+  };
+  bindPager('aus-history-prev'); bindPager('aus-history-next'); bindPager('aus-history-prev-b'); bindPager('aus-history-next-b');
   host.querySelectorAll('.aus-detail-toggle').forEach((btn) => {
     btn.addEventListener('click', () => {
       const ts = (btn as HTMLElement).getAttribute('data-ts');
@@ -175,6 +181,67 @@ function renderHistory(doc: Document, s: any) {
       if (target) target.style.display = 'block';
     });
   });
+}
+
+function renderHistory(doc: Document, s: any) {
+  const host = doc.getElementById('aus-history');
+  if (!host) return;
+  let hist: any[] = s.history || [];
+  let scope = 'all';
+  try {
+    scope = (state.settings as any).historyScope || 'all';
+    if (scope === 'current') hist = getHistoryForDisplay();
+  } catch {}
+  if (!hist.length) {
+    historyPage = 1;
+    historyFullCache = null;
+    historyCacheScope = '';
+    const tip = scope === 'current'
+      ? '<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;line-height:1.8;">当前对话暂无记录<br/><span style="font-size:11px;">已按“当前对话”过滤，旧记录（未关联对话）仅在“全部历史”中可见</span><br/><button id="aus-history-scope-switch" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">切换为全部历史</button></div>'
+      : '<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;">暂无历史记录</div>';
+    host.innerHTML = tip;
+    const btn = doc.getElementById('aus-history-scope-switch') as HTMLButtonElement | null;
+    if (btn) btn.onclick = () => {
+      (state.settings as any).historyScope = 'all';
+      try { (saveHot as any)({ settings: state.settings }); } catch {}
+      historyPage = 1;
+      try { refreshUI(); } catch {}
+    };
+    return;
+  }
+  // 页码越界/对话切换保护：scope 或 currentChatId 变化重置首页，避免跨对话页码错位
+  let curChatId: string | null = null;
+  try { curChatId = (globalThis as any).SillyTavern?.getContext?.()?.getCurrentChatId?.() || (globalThis as any).SillyTavern?.getContext?.().getCurrentChatId?.call?.(null) || null; } catch {}
+  try { if (!curChatId) curChatId = (globalThis as any).SillyTavern?.getContext?.().getCurrentChatId?.() || null; } catch {}
+  const scopeKey = scope === 'current' ? `current:${curChatId||''}` : 'all';
+  if (historyCacheScope !== scopeKey) { historyPage = 1; historyCacheScope = scopeKey; historyFullCache = null; }
+  // 同步先渲染：若已有全量缓存则直接用缓存分页，否则用热数据分页（30条），避免一次渲染2000条
+  let fullForRender: any[] = hist;
+  if (historyFullCache && historyFullCache.length > hist.length) fullForRender = historyFullCache;
+  renderHistoryInner(doc, fullForRender);
+  // 异步加载全量（热+冷）以支持 2000 条翻页，加载后若更多数据则二次渲染；统计已用聚合 totals，不受此展示分页影响
+  if (historyLoading) return;
+  const needFull = hist.length >= HISTORY_PAGE_SIZE || historyFullCache !== null || fullForRender.length >= HISTORY_PAGE_SIZE;
+  if (!needFull && hist.length < HISTORY_PAGE_SIZE) return;
+  historyLoading = true;
+  (async () => {
+    try {
+      const mod: any = await import('../store/persistence');
+      if (!mod.getAllHistory) return;
+      const all: any[] = await mod.getAllHistory();
+      if (!all || !all.length) return;
+      let full = all;
+      try {
+        if (scope === 'current' && curChatId) {
+          full = all.filter((h:any)=> h.chatId === curChatId);
+        }
+      } catch {}
+      if (full.length <= hist.length) return;
+      historyFullCache = full;
+      // 若当前页仍指向热数据页，需保持页码但更新总数
+      renderHistoryInner(doc, full);
+    } catch {} finally { historyLoading = false; }
+  })();
 }
 
 export function bindPanel(doc: Document) {

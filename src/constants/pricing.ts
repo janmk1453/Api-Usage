@@ -25,7 +25,7 @@ export const DEFAULT_PEAK_HOURS: Array<{ start: string; end: string }> = [
   { start: '14:00', end: '18:00' },
 ];
 
-export const MAX_HISTORY = 500;
+export const MAX_HISTORY = 2000;
 export const DETAIL_KEEP = 10;
 
 export const STORAGE_KEYS = {

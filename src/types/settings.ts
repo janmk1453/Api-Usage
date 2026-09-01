@@ -47,7 +47,7 @@ export type Settings = {
 };
 
 export const defaultSettings = (): Settings => ({
-  theme: 'light',
+  theme: 'dark',
   autoBalance: false,
   balanceInterval: 10,
   debug: false,
