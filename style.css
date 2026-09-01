@@ -234,7 +234,7 @@
   [data-view="overview"] > div:first-child { grid-template-columns: 1fr !important; }
   [data-view="overview"] > div:nth-child(2) { grid-template-columns: 1fr !important; }
   [data-view="stats"] > div:nth-child(2) { grid-template-columns: 1fr !important; }
-  #aus-extra-charts { grid-template-columns: 1fr !important; }
+  #aus-extra-charts, #aus-model-trends { grid-template-columns: 1fr !important; }
   .aus-detail-panel > div:first-child { grid-template-columns: 1fr !important; }
   .aus-detail-panel > div:nth-child(2) { grid-template-columns: 1fr !important; }
   /* 通用兜底：任何并排网格在窄屏下竖排 */
@@ -261,7 +261,9 @@
   #aus-chart-hit,
   #aus-chart-req,
   #aus-chart-dur,
-  #aus-chart-pie { width: 100% !important; max-width: 100% !important; min-width: 0 !important; }
+  #aus-chart-pie,
+  #aus-chart-model-token,
+  #aus-chart-model-req { width: 100% !important; max-width: 100% !important; min-width: 0 !important; }
   /* flex 行在窄屏下可换行或竖排，避免挤压 */
   #aus-history > div > div:first-child { flex-wrap: wrap !important; gap: 8px !important; }
   /* 卡片内子容器不撑开卡片 */

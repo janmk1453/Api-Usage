@@ -2,6 +2,7 @@ import { getSelectedSave } from '../store/index';
 import { localDay, esc } from '../utils/date';
 import { Y_OPTIONS, X_OPTIONS, getYSelected, getXSelected, toggleY, setXSelected, aggregateForChart } from './chart-config';
 import { renderExtraCharts } from './extra-charts';
+import { renderModelTrends, initModelTrends } from './model-trends';
 
 type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom' | 'all';
 let currentRange: RangeKey = '30d';
@@ -589,6 +590,7 @@ export async function renderStatsView() {
   if (!isStatsHidden) {
     renderChart(chartFiltered);
     renderExtraCharts(chartFiltered);
+    renderModelTrends(chartFiltered);
   } else {
     try { console.log('[AUS] stats 隐藏，跳过图表初始化'); } catch {}
   }
@@ -613,7 +615,7 @@ export async function renderStatsView() {
         renderModelSummary(sf2);
         const sv2 = doc.querySelector('[data-view="stats"]') as HTMLElement | null;
         const hidden2 = sv2 ? (sv2.style.display === 'none' || (sv2 as any).offsetParent === null) : false;
-        if (!hidden2) { renderChart(cf2); renderExtraCharts(cf2); }
+        if (!hidden2) { renderChart(cf2); renderExtraCharts(cf2); renderModelTrends(cf2); }
       }
     } catch {}
   }
@@ -623,6 +625,7 @@ export function initStatsView() {
   bindPicker();
   bindChartSelectors();
   try { bindSummarySort(); } catch {}
+  try { initModelTrends(); } catch {}
   updatePickerLabel();
   renderStatsView();
 }

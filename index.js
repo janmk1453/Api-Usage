@@ -57,7 +57,7 @@ const STORAGE_KEYS = {
 const EXPORT_FORMAT_VERSION = 1;
 const WEBDAV_SYNC_FILE = "DeepSeekStatSync.json";
 const WEBDAV_REMOTE_VERSION = 1;
-const state$1 = {
+const state$2 = {
   history: [],
   total_tokens: 0,
   total_cost: 0,
@@ -77,17 +77,17 @@ const state$1 = {
 };
 function getSelectedSave() {
   return {
-    history: state$1.history,
-    total_tokens: state$1.total_tokens,
-    total_cost: state$1.total_cost,
-    input_tokens: state$1.input_tokens,
-    output_tokens: state$1.output_tokens,
-    cache_hit_tokens: state$1.cache_hit_tokens,
-    cache_miss_tokens: state$1.cache_miss_tokens,
-    input_cost: state$1.input_cost,
-    output_cost: state$1.output_cost,
-    rounds: state$1.rounds,
-    startTime: state$1.startTime
+    history: state$2.history,
+    total_tokens: state$2.total_tokens,
+    total_cost: state$2.total_cost,
+    input_tokens: state$2.input_tokens,
+    output_tokens: state$2.output_tokens,
+    cache_hit_tokens: state$2.cache_hit_tokens,
+    cache_miss_tokens: state$2.cache_miss_tokens,
+    input_cost: state$2.input_cost,
+    output_cost: state$2.output_cost,
+    rounds: state$2.rounds,
+    startTime: state$2.startTime
   };
 }
 function getCurrentChatIdForStore() {
@@ -108,11 +108,11 @@ function getCurrentChatIdForStore() {
   return null;
 }
 function getHistoryForDisplay() {
-  const scope = state$1.settings.historyScope || "all";
-  if (scope !== "current") return state$1.history || [];
+  const scope = state$2.settings.historyScope || "all";
+  if (scope !== "current") return state$2.history || [];
   const cur = getCurrentChatIdForStore();
-  if (!cur) return state$1.history || [];
-  return (state$1.history || []).filter((h) => h.chatId === cur);
+  if (!cur) return state$2.history || [];
+  return (state$2.history || []).filter((h) => h.chatId === cur);
 }
 const MODULE$1 = "api_usage_stat";
 const HOT_KEEP = 50;
@@ -560,8 +560,8 @@ function getCurrentChatName() {
   return id ? String(id) : null;
 }
 function pruneDetails() {
-  if (!state$1.history || state$1.history.length <= DETAIL_KEEP) return;
-  const hs = [...state$1.history].sort((a, b) => b.timestamp - a.timestamp);
+  if (!state$2.history || state$2.history.length <= DETAIL_KEEP) return;
+  const hs = [...state$2.history].sort((a, b) => b.timestamp - a.timestamp);
   for (let i = DETAIL_KEEP; i < hs.length; i++) {
     delete hs[i].messages;
     delete hs[i].fullRequest;
@@ -570,7 +570,7 @@ function pruneDetails() {
 }
 function persist() {
   pruneDetails();
-  let safeLastUsage = state$1.lastUsage;
+  let safeLastUsage = state$2.lastUsage;
   if (safeLastUsage) {
     try {
       const c = { ...safeLastUsage };
@@ -582,21 +582,21 @@ function persist() {
     }
   }
   saveHot({
-    history: state$1.history,
-    total_tokens: state$1.total_tokens,
-    total_cost: state$1.total_cost,
-    input_tokens: state$1.input_tokens,
-    output_tokens: state$1.output_tokens,
-    cache_hit_tokens: state$1.cache_hit_tokens,
-    cache_miss_tokens: state$1.cache_miss_tokens,
-    input_cost: state$1.input_cost,
-    output_cost: state$1.output_cost,
-    rounds: state$1.rounds,
-    startTime: state$1.startTime,
-    settings: state$1.settings,
-    balance: state$1.balance,
-    customBalance: state$1.customBalance,
-    messageCount: state$1.messageCount,
+    history: state$2.history,
+    total_tokens: state$2.total_tokens,
+    total_cost: state$2.total_cost,
+    input_tokens: state$2.input_tokens,
+    output_tokens: state$2.output_tokens,
+    cache_hit_tokens: state$2.cache_hit_tokens,
+    cache_miss_tokens: state$2.cache_miss_tokens,
+    input_cost: state$2.input_cost,
+    output_cost: state$2.output_cost,
+    rounds: state$2.rounds,
+    startTime: state$2.startTime,
+    settings: state$2.settings,
+    balance: state$2.balance,
+    customBalance: state$2.customBalance,
+    messageCount: state$2.messageCount,
     lastUsage: safeLastUsage
   });
   emit(DataEvents.UPDATED);
@@ -606,14 +606,14 @@ const repository = {
     return {
       saves: {},
       currentSave: null,
-      settings: state$1.settings,
-      balance: state$1.balance,
-      customBalance: state$1.customBalance,
-      messageCount: state$1.messageCount,
-      lastUsage: state$1.lastUsage,
-      history: state$1.history,
-      total_tokens: state$1.total_tokens,
-      total_cost: state$1.total_cost
+      settings: state$2.settings,
+      balance: state$2.balance,
+      customBalance: state$2.customBalance,
+      messageCount: state$2.messageCount,
+      lastUsage: state$2.lastUsage,
+      history: state$2.history,
+      total_tokens: state$2.total_tokens,
+      total_cost: state$2.total_cost
     };
   },
   getAggregated() {
@@ -700,8 +700,8 @@ const repository = {
     try {
       const now = Date.now();
       const fp = `${model}|${total}|${hit}|${miss}|${comp}`;
-      const lastFp = state$1._lastFp;
-      const lastFpTime = state$1._lastFpTime;
+      const lastFp = state$2._lastFp;
+      const lastFpTime = state$2._lastFpTime;
       if (lastFp === fp && lastFpTime && now - lastFpTime < 5e3) {
         try {
           console.log(TRACE + " addEntry 去重跳过(5s指纹)", { fp });
@@ -709,8 +709,8 @@ const repository = {
         }
         return null;
       }
-      state$1._lastFp = fp;
-      state$1._lastFpTime = now;
+      state$2._lastFp = fp;
+      state$2._lastFpTime = now;
     } catch {
     }
     const lu = { timestamp: Date.now(), model, prompt_tokens: hit + miss, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp, total_tokens: total };
@@ -722,7 +722,7 @@ const repository = {
     lu.thinkTime = thinkTime || 0;
     lu.thinkTokens = thinkTokens;
     lu.messages = messages;
-    const c = calcCost({ timestamp: lu.timestamp, model, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp }, state$1.settings);
+    const c = calcCost({ timestamp: lu.timestamp, model, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp }, state$2.settings);
     lu.cost = c.total;
     lu.input_cost = c.input;
     lu.output_cost = c.output;
@@ -734,7 +734,7 @@ const repository = {
     const chatName = getCurrentChatName();
     lu.chatId = chatId;
     lu.chatName = chatName;
-    state$1.lastUsage = lu;
+    state$2.lastUsage = lu;
     const entry = {
       timestamp: lu.timestamp,
       model,
@@ -764,43 +764,43 @@ const repository = {
       console.log(TRACE + " addEntry 即将写入", { timestamp: entry.timestamp, model: entry.model, total: entry.total_tokens, cost: entry.cost, chatId: entry.chatId });
     } catch {
     }
-    state$1.history.unshift(entry);
-    state$1.total_tokens += total;
-    state$1.total_cost += lu.cost;
-    state$1.input_tokens += hit + miss;
-    state$1.output_tokens += comp;
-    state$1.cache_hit_tokens += hit;
-    state$1.cache_miss_tokens += miss;
-    state$1.input_cost += lu.input_cost;
-    state$1.output_cost += lu.output_cost;
-    if (isDeepSeekOfficialModel(model)) state$1.rounds += 1;
+    state$2.history.unshift(entry);
+    state$2.total_tokens += total;
+    state$2.total_cost += lu.cost;
+    state$2.input_tokens += hit + miss;
+    state$2.output_tokens += comp;
+    state$2.cache_hit_tokens += hit;
+    state$2.cache_miss_tokens += miss;
+    state$2.input_cost += lu.input_cost;
+    state$2.output_cost += lu.output_cost;
+    if (isDeepSeekOfficialModel(model)) state$2.rounds += 1;
     try {
-      if (state$1.customBalance != null && String(state$1.customBalance).trim() !== "") {
-        const cur = parseFloat(String(state$1.customBalance));
-        if (!isNaN(cur)) state$1.customBalance = (cur - lu.cost).toFixed(4);
-      } else if (state$1.balance && state$1.balance.balance != null && String(state$1.balance.balance).trim() !== "") {
-        const cur = parseFloat(String(state$1.balance.balance));
+      if (state$2.customBalance != null && String(state$2.customBalance).trim() !== "") {
+        const cur = parseFloat(String(state$2.customBalance));
+        if (!isNaN(cur)) state$2.customBalance = (cur - lu.cost).toFixed(4);
+      } else if (state$2.balance && state$2.balance.balance != null && String(state$2.balance.balance).trim() !== "") {
+        const cur = parseFloat(String(state$2.balance.balance));
         if (!isNaN(cur)) {
-          state$1.balance.balance = (cur - lu.cost).toFixed(4);
-          state$1.balance.timestamp = Date.now();
+          state$2.balance.balance = (cur - lu.cost).toFixed(4);
+          state$2.balance.timestamp = Date.now();
         }
       }
     } catch {
     }
-    if (state$1.history.length > MAX_HISTORY) {
-      const overflow = state$1.history.slice(MAX_HISTORY);
+    if (state$2.history.length > MAX_HISTORY) {
+      const overflow = state$2.history.slice(MAX_HISTORY);
       appendHistoryCold(overflow).catch(() => {
       });
-      state$1.history = state$1.history.slice(0, MAX_HISTORY);
+      state$2.history = state$2.history.slice(0, MAX_HISTORY);
     }
-    state$1.startTime = state$1.startTime || Date.now();
+    state$2.startTime = state$2.startTime || Date.now();
     persist();
     emit(DataEvents.HISTORY_ADDED, entry);
     return entry;
   },
   recalcAll() {
-    for (const h of state$1.history || []) {
-      const c = calcCost({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state$1.settings);
+    for (const h of state$2.history || []) {
+      const c = calcCost({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state$2.settings);
       h.input_cost = c.input;
       h.output_cost = c.output;
       h.cost = c.total;
@@ -821,35 +821,35 @@ const repository = {
         const overflow = h.slice(MAX_HISTORY);
         appendHistoryCold(overflow).catch(() => {
         });
-        state$1.history = h.slice(0, MAX_HISTORY);
+        state$2.history = h.slice(0, MAX_HISTORY);
       } else {
-        state$1.history = h;
+        state$2.history = h;
       }
     }
-    if (next.total_tokens !== void 0) state$1.total_tokens = next.total_tokens;
-    if (next.total_cost !== void 0) state$1.total_cost = next.total_cost;
-    if (next.input_tokens !== void 0) state$1.input_tokens = next.input_tokens;
-    if (next.output_tokens !== void 0) state$1.output_tokens = next.output_tokens;
-    if (next.cache_hit_tokens !== void 0) state$1.cache_hit_tokens = next.cache_hit_tokens;
-    if (next.cache_miss_tokens !== void 0) state$1.cache_miss_tokens = next.cache_miss_tokens;
-    if (next.input_cost !== void 0) state$1.input_cost = next.input_cost;
-    if (next.output_cost !== void 0) state$1.output_cost = next.output_cost;
-    if (next.rounds !== void 0) state$1.rounds = next.rounds;
-    if (next.startTime !== void 0) state$1.startTime = next.startTime;
+    if (next.total_tokens !== void 0) state$2.total_tokens = next.total_tokens;
+    if (next.total_cost !== void 0) state$2.total_cost = next.total_cost;
+    if (next.input_tokens !== void 0) state$2.input_tokens = next.input_tokens;
+    if (next.output_tokens !== void 0) state$2.output_tokens = next.output_tokens;
+    if (next.cache_hit_tokens !== void 0) state$2.cache_hit_tokens = next.cache_hit_tokens;
+    if (next.cache_miss_tokens !== void 0) state$2.cache_miss_tokens = next.cache_miss_tokens;
+    if (next.input_cost !== void 0) state$2.input_cost = next.input_cost;
+    if (next.output_cost !== void 0) state$2.output_cost = next.output_cost;
+    if (next.rounds !== void 0) state$2.rounds = next.rounds;
+    if (next.startTime !== void 0) state$2.startTime = next.startTime;
     if (next.saves) {
-      let all = [...state$1.history || []];
+      let all = [...state$2.history || []];
       for (const s of Object.values(next.saves)) {
         const h = s.history || [];
         all = all.concat(h);
-        state$1.total_tokens += s.total_tokens || 0;
-        state$1.total_cost += s.total_cost || 0;
-        state$1.input_tokens += s.input_tokens || 0;
-        state$1.output_tokens += s.output_tokens || 0;
-        state$1.cache_hit_tokens += s.cache_hit_tokens || 0;
-        state$1.cache_miss_tokens += s.cache_miss_tokens || 0;
-        state$1.input_cost += s.input_cost || 0;
-        state$1.output_cost += s.output_cost || 0;
-        state$1.rounds += s.rounds || 0;
+        state$2.total_tokens += s.total_tokens || 0;
+        state$2.total_cost += s.total_cost || 0;
+        state$2.input_tokens += s.input_tokens || 0;
+        state$2.output_tokens += s.output_tokens || 0;
+        state$2.cache_hit_tokens += s.cache_hit_tokens || 0;
+        state$2.cache_miss_tokens += s.cache_miss_tokens || 0;
+        state$2.input_cost += s.input_cost || 0;
+        state$2.output_cost += s.output_cost || 0;
+        state$2.rounds += s.rounds || 0;
       }
       all.sort((a, b) => b.timestamp - a.timestamp);
       const keyOf = (h) => `${h.timestamp}|${h.model || ""}|${h.total_tokens || 0}`;
@@ -867,7 +867,7 @@ const repository = {
         appendHistoryCold(overflow).catch(() => {
         });
       }
-      state$1.history = dedup.slice(0, MAX_HISTORY);
+      state$2.history = dedup.slice(0, MAX_HISTORY);
     }
     if (next.settings !== void 0) {
       const def = defaultSettings();
@@ -878,25 +878,25 @@ const repository = {
       if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
       if (!merged.historyScope) merged.historyScope = def.historyScope;
       if (!merged.theme) merged.theme = def.theme;
-      state$1.settings = merged;
+      state$2.settings = merged;
     }
-    if (next.balance !== void 0) state$1.balance = next.balance;
-    if (next.customBalance !== void 0) state$1.customBalance = next.customBalance;
-    if (next.messageCount !== void 0) state$1.messageCount = next.messageCount;
-    if (next.lastUsage !== void 0) state$1.lastUsage = next.lastUsage;
+    if (next.balance !== void 0) state$2.balance = next.balance;
+    if (next.customBalance !== void 0) state$2.customBalance = next.customBalance;
+    if (next.messageCount !== void 0) state$2.messageCount = next.messageCount;
+    if (next.lastUsage !== void 0) state$2.lastUsage = next.lastUsage;
     persist();
     if (next.settings) emit(DataEvents.SETTINGS_CHANGED);
     if (next.balance !== void 0 || next.customBalance !== void 0) emit(DataEvents.BALANCE_CHANGED);
   },
   pruneZeroEntries() {
-    const before = (state$1.history || []).length;
-    const filtered = (state$1.history || []).filter((h) => {
+    const before = (state$2.history || []).length;
+    const filtered = (state$2.history || []).filter((h) => {
       const isZero = h.total_tokens === 0 && h.prompt_tokens === 0 && h.completion_tokens === 0 && h.cache_hit_tokens === 0 && h.cache_miss_tokens === 0;
       const isFakeTokenCount = !!(h.raw_usage && h.raw_usage._from_token_count);
       return !(isZero || isFakeTokenCount);
     });
     if (filtered.length !== before) {
-      state$1.history = filtered;
+      state$2.history = filtered;
       let total_tokens = 0, total_cost = 0, input_tokens = 0, output_tokens = 0, cache_hit_tokens = 0, cache_miss_tokens = 0, input_cost = 0, output_cost = 0, rounds = 0;
       for (const h of filtered) {
         total_tokens += h.total_tokens || 0;
@@ -909,15 +909,15 @@ const repository = {
         output_cost += h.output_cost || 0;
         rounds += 1;
       }
-      state$1.total_tokens = total_tokens;
-      state$1.total_cost = total_cost;
-      state$1.input_tokens = input_tokens;
-      state$1.output_tokens = output_tokens;
-      state$1.cache_hit_tokens = cache_hit_tokens;
-      state$1.cache_miss_tokens = cache_miss_tokens;
-      state$1.input_cost = input_cost;
-      state$1.output_cost = output_cost;
-      state$1.rounds = rounds;
+      state$2.total_tokens = total_tokens;
+      state$2.total_cost = total_cost;
+      state$2.input_tokens = input_tokens;
+      state$2.output_tokens = output_tokens;
+      state$2.cache_hit_tokens = cache_hit_tokens;
+      state$2.cache_miss_tokens = cache_miss_tokens;
+      state$2.input_cost = input_cost;
+      state$2.output_cost = output_cost;
+      state$2.rounds = rounds;
       persist();
       try {
         console.log("[API用量统计] 已自动清理 " + (before - filtered.length) + " 条全 0 污染条目");
@@ -929,32 +929,32 @@ const repository = {
   async hydrate() {
     const hot = await loadHot();
     if (hot) {
-      if (hot.history) state$1.history = hot.history;
-      if (hot.total_tokens !== void 0) state$1.total_tokens = hot.total_tokens;
-      if (hot.total_cost !== void 0) state$1.total_cost = hot.total_cost;
-      if (hot.input_tokens !== void 0) state$1.input_tokens = hot.input_tokens;
-      if (hot.output_tokens !== void 0) state$1.output_tokens = hot.output_tokens;
-      if (hot.cache_hit_tokens !== void 0) state$1.cache_hit_tokens = hot.cache_hit_tokens;
-      if (hot.cache_miss_tokens !== void 0) state$1.cache_miss_tokens = hot.cache_miss_tokens;
-      if (hot.input_cost !== void 0) state$1.input_cost = hot.input_cost;
-      if (hot.output_cost !== void 0) state$1.output_cost = hot.output_cost;
-      if (hot.rounds !== void 0) state$1.rounds = hot.rounds;
-      if (hot.startTime !== void 0) state$1.startTime = hot.startTime;
-      if (hot.settings) state$1.settings = { ...state$1.settings, ...hot.settings };
-      if (hot.balance) state$1.balance = hot.balance;
-      if (hot.customBalance) state$1.customBalance = hot.customBalance;
-      if (hot.messageCount) state$1.messageCount = hot.messageCount;
-      if (hot.lastUsage) state$1.lastUsage = hot.lastUsage;
+      if (hot.history) state$2.history = hot.history;
+      if (hot.total_tokens !== void 0) state$2.total_tokens = hot.total_tokens;
+      if (hot.total_cost !== void 0) state$2.total_cost = hot.total_cost;
+      if (hot.input_tokens !== void 0) state$2.input_tokens = hot.input_tokens;
+      if (hot.output_tokens !== void 0) state$2.output_tokens = hot.output_tokens;
+      if (hot.cache_hit_tokens !== void 0) state$2.cache_hit_tokens = hot.cache_hit_tokens;
+      if (hot.cache_miss_tokens !== void 0) state$2.cache_miss_tokens = hot.cache_miss_tokens;
+      if (hot.input_cost !== void 0) state$2.input_cost = hot.input_cost;
+      if (hot.output_cost !== void 0) state$2.output_cost = hot.output_cost;
+      if (hot.rounds !== void 0) state$2.rounds = hot.rounds;
+      if (hot.startTime !== void 0) state$2.startTime = hot.startTime;
+      if (hot.settings) state$2.settings = { ...state$2.settings, ...hot.settings };
+      if (hot.balance) state$2.balance = hot.balance;
+      if (hot.customBalance) state$2.customBalance = hot.customBalance;
+      if (hot.messageCount) state$2.messageCount = hot.messageCount;
+      if (hot.lastUsage) state$2.lastUsage = hot.lastUsage;
     }
-    if (!state$1.settings.historyScope) {
-      state$1.settings.historyScope = "all";
+    if (!state$2.settings.historyScope) {
+      state$2.settings.historyScope = "all";
       try {
-        saveHot({ settings: state$1.settings });
+        saveHot({ settings: state$2.settings });
       } catch {
       }
     }
     let needPersistChatId = false;
-    for (const h of state$1.history || []) {
+    for (const h of state$2.history || []) {
       if (h.chatId === void 0) {
         h.chatId = null;
         h.chatName = null;
@@ -962,7 +962,7 @@ const repository = {
       }
     }
     if (needPersistChatId) try {
-      saveHot({ history: state$1.history });
+      saveHot({ history: state$2.history });
     } catch {
     }
     try {
@@ -1496,7 +1496,7 @@ async function queryBalance(apiKey) {
     if (d.is_available && d.balance_infos?.length) {
       const i = d.balance_infos[0];
       const bal = { balance: i.total_balance, currency: i.currency, available: d.is_available, timestamp: Date.now() };
-      state$1.balance = bal;
+      state$2.balance = bal;
       saveHot({ balance: bal });
       try {
         globalThis.ApiUsageStat?.refreshUI?.();
@@ -1535,23 +1535,23 @@ function exportHistory() {
     exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
     appVersion: "3.0.0",
     data: {
-      history: stripHistory$1(state$1.history),
-      total_tokens: state$1.total_tokens,
-      total_cost: state$1.total_cost,
-      input_tokens: state$1.input_tokens,
-      output_tokens: state$1.output_tokens,
-      cache_hit_tokens: state$1.cache_hit_tokens,
-      cache_miss_tokens: state$1.cache_miss_tokens,
-      input_cost: state$1.input_cost,
-      output_cost: state$1.output_cost,
-      rounds: state$1.rounds,
-      startTime: state$1.startTime,
-      balance: state$1.balance,
-      customBalance: state$1.customBalance,
-      settings: JSON.parse(JSON.stringify(state$1.settings)),
-      messageCount: state$1.messageCount,
+      history: stripHistory$1(state$2.history),
+      total_tokens: state$2.total_tokens,
+      total_cost: state$2.total_cost,
+      input_tokens: state$2.input_tokens,
+      output_tokens: state$2.output_tokens,
+      cache_hit_tokens: state$2.cache_hit_tokens,
+      cache_miss_tokens: state$2.cache_miss_tokens,
+      input_cost: state$2.input_cost,
+      output_cost: state$2.output_cost,
+      rounds: state$2.rounds,
+      startTime: state$2.startTime,
+      balance: state$2.balance,
+      customBalance: state$2.customBalance,
+      settings: JSON.parse(JSON.stringify(state$2.settings)),
+      messageCount: state$2.messageCount,
       // 兼容旧多存档导入：额外提供 saves 包装
-      saves: { default: { name: "default", history: stripHistory$1(state$1.history), total_tokens: state$1.total_tokens, total_cost: state$1.total_cost, input_tokens: state$1.input_tokens, output_tokens: state$1.output_tokens, cache_hit_tokens: state$1.cache_hit_tokens, cache_miss_tokens: state$1.cache_miss_tokens, input_cost: state$1.input_cost, output_cost: state$1.output_cost, rounds: state$1.rounds, startTime: state$1.startTime } },
+      saves: { default: { name: "default", history: stripHistory$1(state$2.history), total_tokens: state$2.total_tokens, total_cost: state$2.total_cost, input_tokens: state$2.input_tokens, output_tokens: state$2.output_tokens, cache_hit_tokens: state$2.cache_hit_tokens, cache_miss_tokens: state$2.cache_miss_tokens, input_cost: state$2.input_cost, output_cost: state$2.output_cost, rounds: state$2.rounds, startTime: state$2.startTime } },
       currentSave: "default"
     }
   };
@@ -1622,7 +1622,7 @@ function applyImportedData(d, mode) {
       messageCount: d.messageCount
     });
   } else {
-    const seen = new Set((state$1.history || []).map((h) => h.timestamp));
+    const seen = new Set((state$2.history || []).map((h) => h.timestamp));
     const toAdd = [];
     for (const h of d.history || []) {
       if (!seen.has(h.timestamp)) {
@@ -1630,7 +1630,7 @@ function applyImportedData(d, mode) {
         toAdd.push(h);
       }
     }
-    const merged = [...toAdd, ...state$1.history].sort((a, b) => b.timestamp - a.timestamp);
+    const merged = [...toAdd, ...state$2.history].sort((a, b) => b.timestamp - a.timestamp);
     repository.replaceAll({ history: merged });
   }
   try {
@@ -1697,7 +1697,7 @@ function rawFetch() {
   }
 }
 function authHeader() {
-  const cfg = state$1.settings.webdav || {};
+  const cfg = state$2.settings.webdav || {};
   let pass = "";
   try {
     pass = decryptKey(localStorage.getItem("ds_" + WEBDAV_PASS_KEY) || "");
@@ -1711,7 +1711,7 @@ function authHeader() {
   return "Basic " + b64((cfg.username || "") + ":" + pass);
 }
 function realUrl() {
-  const cfg = state$1.settings.webdav || {};
+  const cfg = state$2.settings.webdav || {};
   const base = (cfg.url || "").trim().replace(/\/+$/, "");
   const path = (cfg.path || "").trim().replace(/^\/+|\/+$/g, "");
   let u = base + "/";
@@ -1720,13 +1720,13 @@ function realUrl() {
   return u;
 }
 function reqUrl(u) {
-  const proxy = (state$1.settings.webdav?.proxy || "").trim();
+  const proxy = (state$2.settings.webdav?.proxy || "").trim();
   if (!proxy) return u;
   if (proxy.indexOf("?") !== -1) return proxy + encodeURIComponent(u);
   return proxy.replace(/\/+$/, "") + "/" + encodeURIComponent(u);
 }
 function dirs() {
-  const cfg = state$1.settings.webdav || {};
+  const cfg = state$2.settings.webdav || {};
   const base = (cfg.url || "").trim().replace(/\/+$/, "");
   const path = (cfg.path || "").trim().replace(/^\/+|\/+$/g, "");
   const out = [];
@@ -1783,21 +1783,21 @@ function buildLocalBundle() {
     version: WEBDAV_REMOTE_VERSION,
     syncedAt: Date.now(),
     data: {
-      history: stripHistory(state$1.history),
-      total_tokens: state$1.total_tokens,
-      total_cost: state$1.total_cost,
-      input_tokens: state$1.input_tokens,
-      output_tokens: state$1.output_tokens,
-      cache_hit_tokens: state$1.cache_hit_tokens,
-      cache_miss_tokens: state$1.cache_miss_tokens,
-      input_cost: state$1.input_cost,
-      output_cost: state$1.output_cost,
-      rounds: state$1.rounds,
-      startTime: state$1.startTime,
-      balance: state$1.balance,
-      customBalance: state$1.customBalance,
-      settings: JSON.parse(JSON.stringify(state$1.settings)),
-      messageCount: state$1.messageCount
+      history: stripHistory(state$2.history),
+      total_tokens: state$2.total_tokens,
+      total_cost: state$2.total_cost,
+      input_tokens: state$2.input_tokens,
+      output_tokens: state$2.output_tokens,
+      cache_hit_tokens: state$2.cache_hit_tokens,
+      cache_miss_tokens: state$2.cache_miss_tokens,
+      input_cost: state$2.input_cost,
+      output_cost: state$2.output_cost,
+      rounds: state$2.rounds,
+      startTime: state$2.startTime,
+      balance: state$2.balance,
+      customBalance: state$2.customBalance,
+      settings: JSON.parse(JSON.stringify(state$2.settings)),
+      messageCount: state$2.messageCount
     },
     _ts: {}
   };
@@ -1862,7 +1862,7 @@ function mergeBundles(remote, local) {
 let syncing = false;
 async function doSyncNow() {
   if (syncing) return alert("同步进行中");
-  const cfg = state$1.settings.webdav || {};
+  const cfg = state$2.settings.webdav || {};
   if (!cfg.url || !cfg.username) return alert("请先在设置中填写 WebDAV 地址与用户名");
   if (!/^https:\/\//i.test(cfg.url)) return alert("WebDAV 地址必须为 https");
   syncing = true;
@@ -1923,7 +1923,7 @@ function saveWebdavPass(pass) {
   }
 }
 function applyTheme(theme) {
-  const t = theme || state$1.settings.theme || "light";
+  const t = theme || state$2.settings.theme || "light";
   const mode = t === "dark" ? "dark" : "light";
   try {
     const doc = window.parent?.document ?? document;
@@ -1951,17 +1951,17 @@ function applyTheme(theme) {
   }
 }
 function generateDebugBatch() {
-  const startStr = state$1.settings.debugDateStart;
-  const endStr = state$1.settings.debugDateEnd;
+  const startStr = state$2.settings.debugDateStart;
+  const endStr = state$2.settings.debugDateEnd;
   if (!startStr || !endStr) return alert("请设置起始与结束日期");
   const startDate = /* @__PURE__ */ new Date(startStr + "T00:00:00Z");
   const endDate = /* @__PURE__ */ new Date(endStr + "T00:00:00Z");
   if (isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || endDate < startDate) return alert("日期范围无效");
-  const count = state$1.settings.debugBatchCount || 30;
-  const model = state$1.settings.debugModel || "deepseek-v4-flash";
-  const hit = state$1.settings.debugHit || 1e4;
-  const miss = state$1.settings.debugMiss || 5e3;
-  const output = state$1.settings.debugOutput || 2e3;
+  const count = state$2.settings.debugBatchCount || 30;
+  const model = state$2.settings.debugModel || "deepseek-v4-flash";
+  const hit = state$2.settings.debugHit || 1e4;
+  const miss = state$2.settings.debugMiss || 5e3;
+  const output = state$2.settings.debugOutput || 2e3;
   const totalDays = Math.round((endDate.getTime() - startDate.getTime()) / 864e5) + 1;
   const perDay = Math.ceil(count / totalDays);
   let generated = 0;
@@ -1976,21 +1976,21 @@ function generateDebugBatch() {
       ts.setUTCHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60), Math.floor(Math.random() * 60), 0);
       const dur = Math.floor(Math.random() * 5e3) + 500;
       const ttft = Math.floor(Math.random() * 1e3) + 100;
-      const c = calcCost({ timestamp: ts.getTime(), model, prompt_cache_hit_tokens: h, prompt_cache_miss_tokens: m, completion_tokens: o }, state$1.settings);
-      state$1.total_tokens += total;
-      state$1.total_cost += c.total;
-      state$1.input_tokens += h + m;
-      state$1.output_tokens += o;
-      state$1.cache_hit_tokens += h;
-      state$1.cache_miss_tokens += m;
-      state$1.input_cost += c.input;
-      state$1.output_cost += c.output;
-      if (isDeepSeekOfficialModel(model)) state$1.rounds += 1;
-      state$1.history.unshift({ timestamp: ts.getTime(), model, prompt_tokens: h + m, cache_hit_tokens: h, cache_miss_tokens: m, completion_tokens: o, total_tokens: total, input_cost: c.input, output_cost: c.output, cost: c.total, cache_hit_rate: h + m > 0 ? h / (h + m) * 100 : 0, priceType: c.priceType, raw_usage: { prompt_cache_hit_tokens: h, prompt_cache_miss_tokens: m, completion_tokens: o, total_tokens: total }, messages: [], duration: dur, ttft, thinkTime: 300, thinkTokens: Math.floor(o * 0.2), tokenRate: Math.round(o / (dur - ttft) * 1e3), fullRequest: null, fullResponse: null });
+      const c = calcCost({ timestamp: ts.getTime(), model, prompt_cache_hit_tokens: h, prompt_cache_miss_tokens: m, completion_tokens: o }, state$2.settings);
+      state$2.total_tokens += total;
+      state$2.total_cost += c.total;
+      state$2.input_tokens += h + m;
+      state$2.output_tokens += o;
+      state$2.cache_hit_tokens += h;
+      state$2.cache_miss_tokens += m;
+      state$2.input_cost += c.input;
+      state$2.output_cost += c.output;
+      if (isDeepSeekOfficialModel(model)) state$2.rounds += 1;
+      state$2.history.unshift({ timestamp: ts.getTime(), model, prompt_tokens: h + m, cache_hit_tokens: h, cache_miss_tokens: m, completion_tokens: o, total_tokens: total, input_cost: c.input, output_cost: c.output, cost: c.total, cache_hit_rate: h + m > 0 ? h / (h + m) * 100 : 0, priceType: c.priceType, raw_usage: { prompt_cache_hit_tokens: h, prompt_cache_miss_tokens: m, completion_tokens: o, total_tokens: total }, messages: [], duration: dur, ttft, thinkTime: 300, thinkTokens: Math.floor(o * 0.2), tokenRate: Math.round(o / (dur - ttft) * 1e3), fullRequest: null, fullResponse: null });
       generated++;
     }
   }
-  state$1.history.sort((a, b) => b.timestamp - a.timestamp);
+  state$2.history.sort((a, b) => b.timestamp - a.timestamp);
   repository.recalcAll();
   try {
     globalThis.ApiUsageStat?.refreshUI?.();
@@ -2007,7 +2007,7 @@ function localDay(ts) {
 function renderSettings(doc) {
   const host = doc.getElementById("aus-settings");
   if (!host) return;
-  const s = state$1.settings;
+  const s = state$2.settings;
   host.innerHTML = `
     <div style="display:grid;gap:12px;">
       <!-- 颜色模式（与用量统计·模型选择一致的胶囊下拉） -->
@@ -2078,10 +2078,10 @@ function renderSettings(doc) {
     }
   } catch {
   }
-  doc.getElementById("aus-custom-balance").value = state$1.customBalance || "";
-  doc.getElementById("aus-peak-dot").checked = state$1.settings.peakDot !== false;
+  doc.getElementById("aus-custom-balance").value = state$2.customBalance || "";
+  doc.getElementById("aus-peak-dot").checked = state$2.settings.peakDot !== false;
   const peakSlider = doc.getElementById("aus-peak-dot-slider");
-  if (peakSlider) peakSlider.style.left = state$1.settings.peakDot !== false ? "23px" : "3px";
+  if (peakSlider) peakSlider.style.left = state$2.settings.peakDot !== false ? "23px" : "3px";
   const autoCb = doc.getElementById("aus-auto-balance");
   const autoSlider = doc.getElementById("aus-auto-balance-slider");
   if (autoCb) autoCb.checked = !!s.autoBalance;
@@ -2130,7 +2130,7 @@ function renderSettings(doc) {
     const dropdown = doc.getElementById("aus-theme-dropdown");
     const label = doc.getElementById("aus-theme-label");
     if (!label) return;
-    const cur = state$1.settings.theme || "light";
+    const cur = state$2.settings.theme || "light";
     label.textContent = cur === "dark" ? "深色" : "浅色";
     if (!dropdown) return;
     const opts = [{ v: "light", l: "浅色" }, { v: "dark", l: "深色" }];
@@ -2141,8 +2141,8 @@ function renderSettings(doc) {
     dropdown.querySelectorAll("[data-theme]").forEach((el) => {
       el.onclick = () => {
         const v = el.getAttribute("data-theme");
-        state$1.settings.theme = v;
-        saveHot({ settings: state$1.settings });
+        state$2.settings.theme = v;
+        saveHot({ settings: state$2.settings });
         applyTheme(v);
         themePickerOpen = false;
         dropdown.style.display = "none";
@@ -2182,7 +2182,7 @@ function renderSettings(doc) {
     const dropdown = doc.getElementById("aus-history-scope-dropdown");
     const label = doc.getElementById("aus-history-scope-label");
     if (!label) return;
-    const cur = state$1.settings.historyScope || "all";
+    const cur = state$2.settings.historyScope || "all";
     label.textContent = cur === "current" ? "当前对话" : "全部历史";
     if (!dropdown) return;
     const opts = [{ v: "all", l: "全部历史" }, { v: "current", l: "当前对话" }];
@@ -2193,8 +2193,8 @@ function renderSettings(doc) {
     dropdown.querySelectorAll("[data-scope]").forEach((el) => {
       el.onclick = () => {
         const v = el.getAttribute("data-scope");
-        state$1.settings.historyScope = v;
-        saveHot({ settings: state$1.settings });
+        state$2.settings.historyScope = v;
+        saveHot({ settings: state$2.settings });
         scopePickerOpen = false;
         dropdown.style.display = "none";
         renderScopePicker();
@@ -2238,8 +2238,8 @@ function renderSettings(doc) {
   doc.getElementById("aus-save-balance").onclick = () => {
     const v = doc.getElementById("aus-custom-balance").value.trim();
     if (v && isNaN(parseFloat(v))) return alert("请输入有效金额");
-    state$1.customBalance = v || null;
-    saveHot({ customBalance: state$1.customBalance });
+    state$2.customBalance = v || null;
+    saveHot({ customBalance: state$2.customBalance });
     try {
       globalThis.ApiUsageStat?.refreshUI?.();
     } catch {
@@ -2247,7 +2247,7 @@ function renderSettings(doc) {
     doc.getElementById("aus-balance-status").textContent = v ? "已保存" : "已清除";
   };
   doc.getElementById("aus-clear-balance").onclick = () => {
-    state$1.customBalance = null;
+    state$2.customBalance = null;
     saveHot({ customBalance: null });
     doc.getElementById("aus-custom-balance").value = "";
     doc.getElementById("aus-balance-status").textContent = "已清除";
@@ -2257,20 +2257,20 @@ function renderSettings(doc) {
     }
   };
   if (autoCb) autoCb.onchange = () => {
-    state$1.settings.autoBalance = autoCb.checked;
+    state$2.settings.autoBalance = autoCb.checked;
     if (autoSlider) autoSlider.style.left = autoCb.checked ? "23px" : "3px";
     doc.getElementById("aus-auto-balance-interval").style.display = autoCb.checked ? "block" : "none";
-    saveHot({ settings: state$1.settings });
+    saveHot({ settings: state$2.settings });
   };
   doc.getElementById("aus-balance-interval").onchange = (e) => {
-    state$1.settings.balanceInterval = parseInt(e.target.value) || 10;
-    saveHot({ settings: state$1.settings });
+    state$2.settings.balanceInterval = parseInt(e.target.value) || 10;
+    saveHot({ settings: state$2.settings });
   };
   if (newCb) newCb.onchange = () => {
-    state$1.settings.useNewPricing = newCb.checked;
+    state$2.settings.useNewPricing = newCb.checked;
     if (newSlider) newSlider.style.left = newCb.checked ? "23px" : "3px";
     doc.getElementById("aus-new-pricing-panel").style.display = newCb.checked ? "grid" : "none";
-    saveHot({ settings: state$1.settings });
+    saveHot({ settings: state$2.settings });
     recalcAllCosts();
     try {
       globalThis.ApiUsageStat?.refreshUI?.();
@@ -2280,9 +2280,9 @@ function renderSettings(doc) {
   if (newDate) newDate.onchange = () => {
     if (newDate.value) {
       const p = newDate.value.split("-");
-      state$1.settings.newPricingDate = (/* @__PURE__ */ new Date(p[0] + "-" + p[1] + "-" + p[2] + "T00:00:00+08:00")).getTime();
-    } else state$1.settings.newPricingDate = 0;
-    saveHot({ settings: state$1.settings });
+      state$2.settings.newPricingDate = (/* @__PURE__ */ new Date(p[0] + "-" + p[1] + "-" + p[2] + "T00:00:00+08:00")).getTime();
+    } else state$2.settings.newPricingDate = 0;
+    saveHot({ settings: state$2.settings });
     recalcAllCosts();
     try {
       globalThis.ApiUsageStat?.refreshUI?.();
@@ -2292,14 +2292,14 @@ function renderSettings(doc) {
   doc.getElementById("aus-btn-pricing-today").onclick = () => {
     const d = /* @__PURE__ */ new Date();
     d.setHours(0, 0, 0, 0);
-    state$1.settings.newPricingDate = d.getTime();
+    state$2.settings.newPricingDate = d.getTime();
     if (newDate) newDate.value = localDay(d.getTime());
     if (newCb && !newCb.checked) {
       newCb.checked = true;
       if (newSlider) newSlider.style.left = "23px";
       doc.getElementById("aus-new-pricing-panel").style.display = "grid";
     }
-    saveHot({ settings: state$1.settings });
+    saveHot({ settings: state$2.settings });
     recalcAllCosts();
     try {
       globalThis.ApiUsageStat?.refreshUI?.();
@@ -2307,48 +2307,48 @@ function renderSettings(doc) {
     }
   };
   if (dbgCb) dbgCb.onchange = () => {
-    state$1.settings.debug = dbgCb.checked;
+    state$2.settings.debug = dbgCb.checked;
     if (dbgSlider) dbgSlider.style.left = dbgCb.checked ? "23px" : "3px";
     doc.getElementById("aus-debug-panel").style.display = dbgCb.checked ? "grid" : "none";
     const st = doc.getElementById("aus-debug-status");
     if (st) st.textContent = dbgCb.checked ? "调试模式已开启，下次对话将使用模拟参数，不计费" : "";
-    saveHot({ settings: state$1.settings });
+    saveHot({ settings: state$2.settings });
   };
   doc.getElementById("aus-debug-hit").onchange = (e) => {
-    state$1.settings.debugHit = parseInt(e.target.value) || 0;
-    saveHot({ settings: state$1.settings });
+    state$2.settings.debugHit = parseInt(e.target.value) || 0;
+    saveHot({ settings: state$2.settings });
   };
   doc.getElementById("aus-debug-miss").onchange = (e) => {
-    state$1.settings.debugMiss = parseInt(e.target.value) || 0;
-    saveHot({ settings: state$1.settings });
+    state$2.settings.debugMiss = parseInt(e.target.value) || 0;
+    saveHot({ settings: state$2.settings });
   };
   doc.getElementById("aus-debug-output").onchange = (e) => {
-    state$1.settings.debugOutput = parseInt(e.target.value) || 0;
-    saveHot({ settings: state$1.settings });
+    state$2.settings.debugOutput = parseInt(e.target.value) || 0;
+    saveHot({ settings: state$2.settings });
   };
   const dbgModel = doc.getElementById("aus-debug-model");
   if (dbgModel) dbgModel.onchange = (e) => {
-    state$1.settings.debugModel = e.target.value;
-    saveHot({ settings: state$1.settings });
+    state$2.settings.debugModel = e.target.value;
+    saveHot({ settings: state$2.settings });
   };
   doc.getElementById("aus-debug-date-start").onchange = (e) => {
-    state$1.settings.debugDateStart = e.target.value;
-    saveHot({ settings: state$1.settings });
+    state$2.settings.debugDateStart = e.target.value;
+    saveHot({ settings: state$2.settings });
   };
   doc.getElementById("aus-debug-date-end").onchange = (e) => {
-    state$1.settings.debugDateEnd = e.target.value;
-    saveHot({ settings: state$1.settings });
+    state$2.settings.debugDateEnd = e.target.value;
+    saveHot({ settings: state$2.settings });
   };
   doc.getElementById("aus-debug-batch-count").onchange = (e) => {
-    state$1.settings.debugBatchCount = parseInt(e.target.value) || 1;
-    saveHot({ settings: state$1.settings });
+    state$2.settings.debugBatchCount = parseInt(e.target.value) || 1;
+    saveHot({ settings: state$2.settings });
   };
   doc.getElementById("aus-btn-debug-batch").onclick = () => generateDebugBatch();
   doc.getElementById("aus-peak-dot").onchange = (e) => {
-    state$1.settings.peakDot = e.target.checked;
+    state$2.settings.peakDot = e.target.checked;
     const sl = doc.getElementById("aus-peak-dot-slider");
     if (sl) sl.style.left = e.target.checked ? "23px" : "3px";
-    saveHot({ settings: state$1.settings });
+    saveHot({ settings: state$2.settings });
     try {
       globalThis.ApiUsageStat?.updatePeakDot?.();
     } catch {
@@ -2373,20 +2373,20 @@ function renderSettings(doc) {
   const wProxy = doc.getElementById("aus-webdav-proxy");
   const wPass = doc.getElementById("aus-webdav-pass");
   if (wUrl) wUrl.onchange = () => {
-    state$1.settings.webdav.url = wUrl.value.trim();
-    saveHot({ settings: state$1.settings });
+    state$2.settings.webdav.url = wUrl.value.trim();
+    saveHot({ settings: state$2.settings });
   };
   if (wUser) wUser.onchange = () => {
-    state$1.settings.webdav.username = wUser.value.trim();
-    saveHot({ settings: state$1.settings });
+    state$2.settings.webdav.username = wUser.value.trim();
+    saveHot({ settings: state$2.settings });
   };
   if (wPath) wPath.onchange = () => {
-    state$1.settings.webdav.path = wPath.value.trim();
-    saveHot({ settings: state$1.settings });
+    state$2.settings.webdav.path = wPath.value.trim();
+    saveHot({ settings: state$2.settings });
   };
   if (wProxy) wProxy.onchange = () => {
-    state$1.settings.webdav.proxy = wProxy.value.trim();
-    saveHot({ settings: state$1.settings });
+    state$2.settings.webdav.proxy = wProxy.value.trim();
+    saveHot({ settings: state$2.settings });
   };
   if (wPass) wPass.onchange = () => {
     const vv = wPass.value.trim();
@@ -2406,7 +2406,7 @@ function renderSettings(doc) {
 function renderPeakHoursEditor(doc) {
   const list = doc.getElementById("aus-peak-hours-list");
   if (!list) return;
-  const hours = state$1.settings.peakHours || [];
+  const hours = state$2.settings.peakHours || [];
   list.innerHTML = hours.map((h, i) => `
     <div style="display:flex;align-items:center;gap:6px;">
       <input type="time" value="${esc(h.start || "")}" data-idx="${i}" data-field="start" style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" />
@@ -2419,8 +2419,8 @@ function renderPeakHoursEditor(doc) {
     el.onchange = () => {
       const idx = parseInt(el.getAttribute("data-idx"));
       const field2 = el.getAttribute("data-field");
-      state$1.settings.peakHours[idx][field2] = el.value;
-      saveHot({ settings: state$1.settings });
+      state$2.settings.peakHours[idx][field2] = el.value;
+      saveHot({ settings: state$2.settings });
       recalcAllCosts();
       try {
         globalThis.ApiUsageStat?.refreshUI?.();
@@ -2431,9 +2431,9 @@ function renderPeakHoursEditor(doc) {
   list.querySelectorAll("button[data-del]").forEach((el) => {
     el.onclick = () => {
       const idx = parseInt(el.getAttribute("data-del"));
-      state$1.settings.peakHours.splice(idx, 1);
-      if (!state$1.settings.peakHours.length) state$1.settings.peakHours = JSON.parse(JSON.stringify(DEFAULT_PEAK_HOURS));
-      saveHot({ settings: state$1.settings });
+      state$2.settings.peakHours.splice(idx, 1);
+      if (!state$2.settings.peakHours.length) state$2.settings.peakHours = JSON.parse(JSON.stringify(DEFAULT_PEAK_HOURS));
+      saveHot({ settings: state$2.settings });
       renderPeakHoursEditor(doc);
       recalcAllCosts();
       try {
@@ -2444,8 +2444,8 @@ function renderPeakHoursEditor(doc) {
   });
   const addBtn = doc.getElementById("aus-btn-add-peak-hour");
   if (addBtn) addBtn.onclick = () => {
-    state$1.settings.peakHours.push({ start: "09:00", end: "12:00" });
-    saveHot({ settings: state$1.settings });
+    state$2.settings.peakHours.push({ start: "09:00", end: "12:00" });
+    saveHot({ settings: state$2.settings });
     renderPeakHoursEditor(doc);
   };
 }
@@ -2453,7 +2453,7 @@ function renderModelsEditor(doc) {
   const list = doc.getElementById("aus-custom-models-list");
   if (!list) return;
   const builtin = Object.keys(PRICING);
-  const cms = state$1.settings.customModels || [];
+  const cms = state$2.settings.customModels || [];
   const rows = [];
   for (const m of builtin) {
     const p = getPricing(m);
@@ -2473,7 +2473,7 @@ function renderModelsEditor(doc) {
       const model = row.getAttribute("data-model") || "";
       const usePeak = el.checked;
       upsertCustom(model, { usePeakPricing: usePeak });
-      saveHot({ settings: state$1.settings });
+      saveHot({ settings: state$2.settings });
       renderModelsEditor(doc);
       recalcAllCosts();
       try {
@@ -2495,8 +2495,8 @@ function renderModelsEditor(doc) {
     el.onclick = () => {
       const row = el.closest("[data-model]");
       const model = row.getAttribute("data-model") || "";
-      state$1.settings.customModels = state$1.settings.customModels.filter((c) => c.model !== model);
-      saveHot({ settings: state$1.settings });
+      state$2.settings.customModels = state$2.settings.customModels.filter((c) => c.model !== model);
+      saveHot({ settings: state$2.settings });
       renderModelsEditor(doc);
       fillDebugModelSelect(doc);
       recalcAllCosts();
@@ -2508,9 +2508,9 @@ function renderModelsEditor(doc) {
   });
   const addBtn = doc.getElementById("aus-btn-add-model");
   if (addBtn) addBtn.onclick = () => {
-    const name = "custom-model-" + (state$1.settings.customModels.length + 1);
-    state$1.settings.customModels.push({ model: name, usePeakPricing: true, offpeak: {}, peak: {} });
-    saveHot({ settings: state$1.settings });
+    const name = "custom-model-" + (state$2.settings.customModels.length + 1);
+    state$2.settings.customModels.push({ model: name, usePeakPricing: true, offpeak: {}, peak: {} });
+    saveHot({ settings: state$2.settings });
     renderModelsEditor(doc);
     fillDebugModelSelect(doc);
   };
@@ -2553,7 +2553,7 @@ function readRow(row) {
   return out;
 }
 function upsertCustom(model, patch) {
-  const cms = state$1.settings.customModels;
+  const cms = state$2.settings.customModels;
   let found = cms.find((c) => c.model === model);
   if (found) Object.assign(found, patch);
   else cms.push({ model, usePeakPricing: patch.usePeakPricing, offpeak: {}, peak: {} });
@@ -2565,7 +2565,7 @@ function saveCustomRow(model, prices, isBuiltin) {
     if (prices.offpeak[f] !== "" && prices.offpeak[f] !== base?.offpeak?.[f]) same = false;
     if (prices.peak[f] !== "" && prices.peak[f] !== base?.peak?.[f]) same = false;
   }
-  const cms = state$1.settings.customModels;
+  const cms = state$2.settings.customModels;
   const idx = cms.findIndex((c) => c.model === model);
   if (isBuiltin && prices.usePeakPricing && same) {
     if (idx !== -1) cms.splice(idx, 1);
@@ -2574,7 +2574,7 @@ function saveCustomRow(model, prices, isBuiltin) {
     if (idx !== -1) cms[idx] = entry;
     else cms.push(entry);
   }
-  saveHot({ settings: state$1.settings });
+  saveHot({ settings: state$2.settings });
   recalcAllCosts();
   try {
     globalThis.ApiUsageStat?.refreshUI?.();
@@ -2584,7 +2584,7 @@ function saveCustomRow(model, prices, isBuiltin) {
 function getPricing(model) {
   const m = model || "deepseek-v4-flash";
   const base = PRICING[m] || PRICING["deepseek-v4-flash"];
-  for (const cm of state$1.settings.customModels || []) {
+  for (const cm of state$2.settings.customModels || []) {
     if (cm?.model === m) {
       const merge = (b, c) => ({ hit: c?.hit !== "" && c?.hit !== void 0 ? parseFloat(c.hit) : b.hit, miss: c?.miss !== "" && c?.miss !== void 0 ? parseFloat(c.miss) : b.miss, output: c?.output !== "" && c?.output !== void 0 ? parseFloat(c.output) : b.output });
       return { usePeakPricing: cm.usePeakPricing !== false, offpeak: merge(base.offpeak, cm.offpeak), peak: merge(base.peak, cm.peak) };
@@ -2595,16 +2595,16 @@ function getPricing(model) {
 function fillDebugModelSelect(doc) {
   const sel = doc.getElementById("aus-debug-model");
   if (!sel) return;
-  const models = Object.keys(PRICING).concat((state$1.settings.customModels || []).map((c) => c.model).filter(Boolean));
+  const models = Object.keys(PRICING).concat((state$2.settings.customModels || []).map((c) => c.model).filter(Boolean));
   const uniq = Array.from(new Set(models));
   sel.innerHTML = uniq.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
-  const cur = state$1.settings.debugModel;
-  if (uniq.indexOf(cur) === -1) state$1.settings.debugModel = uniq[0] || "deepseek-v4-flash";
-  sel.value = state$1.settings.debugModel;
+  const cur = state$2.settings.debugModel;
+  if (uniq.indexOf(cur) === -1) state$2.settings.debugModel = uniq[0] || "deepseek-v4-flash";
+  sel.value = state$2.settings.debugModel;
 }
 let selOld = null;
 let selNew = null;
-function getDoc$5() {
+function getDoc$6() {
   return window.parent?.document ?? document;
 }
 function diffMessages(oldMsgs, newMsgs) {
@@ -2620,7 +2620,7 @@ function diffMessages(oldMsgs, newMsgs) {
   return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${aCtx}</div><div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${bCtx}</div></div><div style="font-size:11px;color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
 }
 function bindHistoryCompare() {
-  const doc = getDoc$5();
+  const doc = getDoc$6();
   doc.addEventListener("click", (e) => {
     const t = e.target;
     if (!t) return;
@@ -2637,7 +2637,7 @@ function bindHistoryCompare() {
   });
 }
 function renderDiff() {
-  const doc = getDoc$5();
+  const doc = getDoc$6();
   const host = doc.getElementById("aus-diff");
   if (!host) return;
   if (selOld == null || selNew == null) {
@@ -2662,7 +2662,7 @@ function computeOverview() {
   const hitRate = hit + miss > 0 ? hit / (hit + miss) * 100 : 0;
   let savings = 0;
   try {
-    for (const h of s.history || []) savings += calcSavings({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state$1.settings);
+    for (const h of s.history || []) savings += calcSavings({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state$2.settings);
   } catch {
   }
   const rounds = s.rounds || 0;
@@ -2670,7 +2670,7 @@ function computeOverview() {
   const avgTokens = rounds ? totalTokens / rounds : 0;
   const avgDuration = s.history?.length ? s.history.reduce((a, h) => a + (h.duration || 0), 0) / s.history.length / 1e3 : 0;
   const avgRate = s.history?.length ? s.history.reduce((a, h) => a + (h.tokenRate || 0), 0) / s.history.length : 0;
-  const bal = state$1.customBalance || state$1.balance?.balance;
+  const bal = state$2.customBalance || state$2.balance?.balance;
   let remainingRounds = null;
   try {
     const balNum = bal != null && bal !== "" ? parseFloat(String(bal)) : NaN;
@@ -2704,12 +2704,12 @@ function computeOverview() {
     remainingRounds
   };
 }
-function getDoc$4() {
+function getDoc$5() {
   return window.parent?.document ?? document;
 }
 function themeIsDark() {
   try {
-    const doc = getDoc$4();
+    const doc = getDoc$5();
     const p = doc.getElementById("aus-panel");
     return p?.getAttribute("data-ds-theme") === "dark";
   } catch {
@@ -2717,7 +2717,7 @@ function themeIsDark() {
   }
 }
 function renderHeatmap(filtered) {
-  const doc = getDoc$4();
+  const doc = getDoc$5();
   const container = doc.getElementById("aus-heatmap-container-overview") || doc.getElementById("aus-heatmap-container");
   const legendEl = doc.getElementById("aus-heatmap-legend-overview") || doc.getElementById("aus-heatmap-legend");
   const labelsEl = doc.getElementById("aus-heatmap-labels-overview") || doc.getElementById("aus-heatmap-labels");
@@ -2855,7 +2855,7 @@ function renderOverview() {
   if (remEl) {
     if (v.remainingRounds != null) remEl.textContent = "预计还可进行 " + v.remainingRounds.toLocaleString("zh-CN") + " 轮对话（仅 DeepSeek 官方）";
     else {
-      const hasBal = !!(state$1.customBalance || state$1.balance?.balance);
+      const hasBal = !!(state$2.customBalance || state$2.balance?.balance);
       remEl.textContent = hasBal ? "暂无 DeepSeek 对话数据，无法预测" : "查询余额后可预测剩余轮次";
     }
   }
@@ -2896,7 +2896,7 @@ function renderOverview() {
     `;
   }
   try {
-    const hist = state$1.history || [];
+    const hist = state$2.history || [];
     renderHeatmap(hist);
   } catch {
   }
@@ -3032,7 +3032,7 @@ const CHART_DEFS = {
   dur: { title: "耗时与速率 趋势", yOpts: [{ key: "duration", label: "耗时", unit: "s", kind: "token", color: "#2563EB" }, { key: "rate", label: "速率", unit: "t/s", kind: "cost", color: "#10B981" }], hasX: true },
   pie: { title: "模型用量占比", yOpts: [], hasX: false }
 };
-const state = {
+const state$1 = {
   token: { y: /* @__PURE__ */ new Set(["input_hit_token", "input_miss_token", "output_token"]), x: "day", pieMode: "token" },
   cost: { y: /* @__PURE__ */ new Set(["total_cost"]), x: "day", pieMode: "token" },
   hit: { y: /* @__PURE__ */ new Set(["hit_rate"]), x: "day", pieMode: "token" },
@@ -3040,12 +3040,12 @@ const state = {
   dur: { y: /* @__PURE__ */ new Set(["duration", "rate"]), x: "day", pieMode: "token" },
   pie: { y: /* @__PURE__ */ new Set([]), x: "day", pieMode: "token" }
 };
-function getDoc$3() {
+function getDoc$4() {
   return window.parent?.document ?? document;
 }
-function themeColor$1(name, fallback) {
+function themeColor$2(name, fallback) {
   try {
-    const doc = getDoc$3();
+    const doc = getDoc$4();
     const el = doc.getElementById("aus-panel") || doc.documentElement;
     const v = getComputedStyle(el).getPropertyValue(name).trim();
     return v || fallback;
@@ -3053,7 +3053,7 @@ function themeColor$1(name, fallback) {
     return fallback;
   }
 }
-function bucketKey(ts, x, idx) {
+function bucketKey$1(ts, x, idx) {
   if (x === "round") return `#${idx + 1}`;
   if (x === "hour") {
     const d = new Date(ts + 8 * 3600 * 1e3);
@@ -3110,7 +3110,7 @@ function getYValue(e, key) {
   }
   return 0;
 }
-async function getEcharts() {
+async function getEcharts$1() {
   const ec = await import("./core-CNISqr4u.js");
   const { BarChart, LineChart, PieChart } = await import("./charts-vsOc2fZ2.js");
   const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-CKoHC6Fi.js");
@@ -3118,21 +3118,21 @@ async function getEcharts() {
   ec.use([BarChart, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
   return ec;
 }
-const charts = {};
-let lastFiltered = [];
+const charts$1 = {};
+let lastFiltered$1 = [];
 function renderExtraCharts(filtered) {
-  lastFiltered = filtered || [];
+  lastFiltered$1 = filtered || [];
   for (const id of Object.keys(CHART_DEFS)) {
-    renderOne(id, filtered);
+    renderOne$1(id, filtered);
   }
 }
-async function renderOne(id, filtered) {
+async function renderOne$1(id, filtered) {
   try {
-    const doc = getDoc$3();
+    const doc = getDoc$4();
     const el = doc.getElementById(`aus-chart-${id}`);
     if (!el) return;
     if (id === "pie") {
-      const mode = state.pie.pieMode;
+      const mode = state$1.pie.pieMode;
       if (!filtered.length) {
         el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--ds-text-3);">暂无数据</div>';
         return;
@@ -3144,24 +3144,24 @@ async function renderOne(id, filtered) {
         map2[m] = (map2[m] || 0) + v;
       }
       const data = Object.entries(map2).map(([name, value]) => ({ name, value }));
-      const ec = await getEcharts();
-      if (charts[id]) try {
-        charts[id].dispose();
+      const ec = await getEcharts$1();
+      if (charts$1[id]) try {
+        charts$1[id].dispose();
       } catch {
       }
       el.innerHTML = "";
       el.style.height = "260px";
-      const c = charts[id] = ec.init(el);
+      const c = charts$1[id] = ec.init(el);
       c.setOption({
         backgroundColor: "transparent",
-        tooltip: { trigger: "item", backgroundColor: themeColor$1("--ds-card-inner", "#FFFFFF"), borderColor: themeColor$1("--ds-border", "#E5E7EB"), textStyle: { fontSize: 11, color: themeColor$1("--ds-text", "#111827") } },
-        legend: { bottom: 0, textStyle: { fontSize: 10, color: themeColor$1("--ds-text-2", "#6B7280") } },
-        series: [{ type: "pie", radius: ["40%", "70%"], itemStyle: { borderRadius: 6, borderColor: themeColor$1("--ds-card-inner", "#FFFFFF"), borderWidth: 2 }, label: { fontSize: 11 }, data }]
+        tooltip: { trigger: "item", backgroundColor: themeColor$2("--ds-card-inner", "#FFFFFF"), borderColor: themeColor$2("--ds-border", "#E5E7EB"), textStyle: { fontSize: 11, color: themeColor$2("--ds-text", "#111827") } },
+        legend: { bottom: 0, textStyle: { fontSize: 10, color: themeColor$2("--ds-text-2", "#6B7280") } },
+        series: [{ type: "pie", radius: ["40%", "70%"], itemStyle: { borderRadius: 6, borderColor: themeColor$2("--ds-card-inner", "#FFFFFF"), borderWidth: 2 }, label: { fontSize: 11 }, data }]
       });
       return;
     }
-    const yKeys = Array.from(state[id].y);
-    const xKey = state[id].x;
+    const yKeys = Array.from(state$1[id].y);
+    const xKey = state$1[id].x;
     if (!yKeys.length) {
       el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--ds-text-3);font-size:11px;">请选择 Y 轴</div>';
       return;
@@ -3182,7 +3182,7 @@ async function renderOne(id, filtered) {
     }
     const buckets = /* @__PURE__ */ new Map();
     filtered.forEach((e) => {
-      const key = bucketKey(e.timestamp, xKey, 0);
+      const key = bucketKey$1(e.timestamp, xKey, 0);
       if (!buckets.has(key)) buckets.set(key, []);
       buckets.get(key).push(e);
     });
@@ -3230,7 +3230,7 @@ async function renderOne(id, filtered) {
     await drawBarLine(el, id, labels, series);
   } catch (e) {
     try {
-      const doc2 = getDoc$3();
+      const doc2 = getDoc$4();
       const el2 = doc2.getElementById(`aus-chart-${id}`);
       if (el2) el2.innerHTML = '<div style="text-align:center;padding:20px;color:#DC2626;font-size:11px;">图表加载失败: ' + (e?.message || e) + "</div>";
     } catch {
@@ -3250,22 +3250,22 @@ function calcXInterval(labels, el) {
 }
 async function drawBarLine(el, id, labels, series) {
   try {
-    const ec = await getEcharts();
-    if (charts[id]) try {
-      charts[id].dispose();
+    const ec = await getEcharts$1();
+    if (charts$1[id]) try {
+      charts$1[id].dispose();
     } catch {
     }
     el.innerHTML = "";
     el.style.height = "260px";
-    const c = charts[id] = ec.init(el);
+    const c = charts$1[id] = ec.init(el);
     const isTokenCost = id === "token" || id === "cost";
     const interval = calcXInterval(labels, el);
     const opts = {
       backgroundColor: "transparent",
-      tooltip: { trigger: "axis", backgroundColor: themeColor$1("--ds-card-inner", "#FFFFFF"), borderColor: themeColor$1("--ds-border", "#E5E7EB"), textStyle: { fontSize: 11 } },
+      tooltip: { trigger: "axis", backgroundColor: themeColor$2("--ds-card-inner", "#FFFFFF"), borderColor: themeColor$2("--ds-border", "#E5E7EB"), textStyle: { fontSize: 11 } },
       grid: { left: 40, right: 20, top: 8, bottom: 24 },
-      xAxis: { type: "category", data: labels, axisLine: { lineStyle: { color: themeColor$1("--ds-border", "#E5E7EB") } }, axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF"), rotate: labels.length > 12 ? 30 : 0, interval, hideOverlap: false } },
-      yAxis: { type: "value", axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF") }, splitLine: { lineStyle: { color: themeColor$1("--ds-card", "#F6F7F8") } } },
+      xAxis: { type: "category", data: labels, axisLine: { lineStyle: { color: themeColor$2("--ds-border", "#E5E7EB") } }, axisLabel: { fontSize: 10, color: themeColor$2("--ds-text-3", "#9CA3AF"), rotate: labels.length > 12 ? 30 : 0, interval, hideOverlap: false } },
+      yAxis: { type: "value", axisLabel: { fontSize: 10, color: themeColor$2("--ds-text-3", "#9CA3AF") }, splitLine: { lineStyle: { color: themeColor$2("--ds-card", "#F6F7F8") } } },
       dataZoom: labels.length > 8 ? [{ type: "inside", xAxisIndex: 0, start: Math.max(0, (labels.length - Math.max(8, Math.min(labels.length, Math.floor((el.clientWidth || 320) / 44)))) / labels.length * 100), end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : void 0,
       series: (() => {
         const barIndices = series.map((s, i) => ({ s, i })).filter(({ s }) => !(isTokenCost && s.name.includes("总"))).map(({ i }) => i);
@@ -3284,8 +3284,8 @@ async function drawBarLine(el, id, labels, series) {
     }
     if (id === "dur") {
       opts.yAxis = [
-        { type: "value", name: "耗时 s", position: "left", axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF") }, splitLine: { lineStyle: { color: themeColor$1("--ds-card", "#F6F7F8") } } },
-        { type: "value", name: "速率 t/s", position: "right", axisLabel: { fontSize: 10, color: themeColor$1("--ds-text-3", "#9CA3AF") }, splitLine: { show: false } }
+        { type: "value", name: "耗时 s", position: "left", axisLabel: { fontSize: 10, color: themeColor$2("--ds-text-3", "#9CA3AF") }, splitLine: { lineStyle: { color: themeColor$2("--ds-card", "#F6F7F8") } } },
+        { type: "value", name: "速率 t/s", position: "right", axisLabel: { fontSize: 10, color: themeColor$2("--ds-text-3", "#9CA3AF") }, splitLine: { show: false } }
       ];
       opts.series = series.map((s) => ({
         name: s.name,
@@ -3312,7 +3312,7 @@ async function drawBarLine(el, id, labels, series) {
   }
 }
 function initExtraCharts() {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   for (const id of Object.keys(CHART_DEFS)) {
     if (!CHART_DEFS[id].hasX) continue;
     const yBtn = doc.getElementById(`aus-extra-y-${id}`);
@@ -3335,9 +3335,9 @@ function initExtraCharts() {
   const pieToggle = doc.getElementById("aus-pie-toggle");
   if (pieToggle) {
     pieToggle.onclick = () => {
-      state.pie.pieMode = state.pie.pieMode === "token" ? "count" : "token";
-      pieToggle.textContent = state.pie.pieMode === "token" ? "Token" : "次数";
-      renderExtraCharts(lastFiltered);
+      state$1.pie.pieMode = state$1.pie.pieMode === "token" ? "count" : "token";
+      pieToggle.textContent = state$1.pie.pieMode === "token" ? "Token" : "次数";
+      renderExtraCharts(lastFiltered$1);
     };
   }
   doc.addEventListener("click", (e) => {
@@ -3354,12 +3354,12 @@ function initExtraCharts() {
   });
 }
 function renderExtraY(id) {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   const drop = doc.getElementById(`aus-extra-y-drop-${id}`);
   const label = doc.getElementById(`aus-extra-y-label-${id}`);
   if (!drop) return;
   const opts = CHART_DEFS[id].yOpts;
-  const sel = state[id].y;
+  const sel = state$1[id].y;
   if (label) label.textContent = sel.size ? `${sel.size} 项` : "选择";
   drop.innerHTML = opts.map((o) => {
     const checked = sel.has(o.key);
@@ -3368,22 +3368,22 @@ function renderExtraY(id) {
   drop.querySelectorAll("input[data-y]").forEach((el) => {
     el.onchange = () => {
       const k = el.getAttribute("data-y"), cid = el.getAttribute("data-chart");
-      if (el.checked) state[cid].y.add(k);
+      if (el.checked) state$1[cid].y.add(k);
       else {
-        if (state[cid].y.size > 1) state[cid].y.delete(k);
+        if (state$1[cid].y.size > 1) state$1[cid].y.delete(k);
         else el.checked = true;
       }
       renderExtraY(cid);
-      renderExtraCharts(lastFiltered);
+      renderExtraCharts(lastFiltered$1);
     };
   });
 }
 function renderExtraX(id) {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   const drop = doc.getElementById(`aus-extra-x-drop-${id}`);
   const label = doc.getElementById(`aus-extra-x-label-${id}`);
   if (!drop) return;
-  const cur = state[id].x;
+  const cur = state$1[id].x;
   if (label) label.textContent = X_OPTIONS.find((o) => o.key === cur)?.label || cur;
   drop.innerHTML = X_OPTIONS.map((o) => {
     const active = o.key === cur;
@@ -3392,10 +3392,280 @@ function renderExtraX(id) {
   drop.querySelectorAll("[data-x]").forEach((el) => {
     el.onclick = () => {
       const k = el.getAttribute("data-x"), cid = el.getAttribute("data-chart");
-      state[cid].x = k;
+      state$1[cid].x = k;
       drop.style.display = "none";
       renderExtraX(cid);
-      renderExtraCharts(lastFiltered);
+      renderExtraCharts(lastFiltered$1);
+    };
+  });
+}
+const MODEL_COLORS = [
+  "#0BA25E",
+  "#6366F1",
+  "#FF6A00",
+  "#10B981",
+  "#F59E0B",
+  "#8B5CF6",
+  "#EF4444",
+  "#06B6D4",
+  "#84CC16",
+  "#E11D48",
+  "#0EA5E9",
+  "#F97316",
+  "#14B8A6",
+  "#A855F7",
+  "#EAB308",
+  "#22C55E"
+];
+const state = {
+  token: { x: "day" },
+  req: { x: "day" }
+};
+function getDoc$3() {
+  return window.parent?.document ?? document;
+}
+function themeColor$1(name, fallback) {
+  try {
+    const doc = getDoc$3();
+    const el = doc.getElementById("aus-panel") || doc.documentElement;
+    const v = getComputedStyle(el).getPropertyValue(name).trim();
+    return v || fallback;
+  } catch {
+    return fallback;
+  }
+}
+function bucketKey(ts, x, idx) {
+  if (x === "round") return `#${idx + 1}`;
+  if (x === "hour") {
+    const d = new Date(ts + 8 * 3600 * 1e3);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")} ${String(d.getUTCHours()).padStart(2, "0")}:00`;
+  }
+  if (x === "day") return localDay$1(ts);
+  if (x === "week") {
+    const d = new Date(ts);
+    const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum = tmp.getUTCDay() || 7;
+    tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil(((tmp - yearStart) / 864e5 + 1) / 7);
+    return `${tmp.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+  }
+  if (x === "month") {
+    const d = new Date(ts + 8 * 3600 * 1e3);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  }
+  return localDay$1(ts);
+}
+async function getEcharts() {
+  const ec = await import("./core-CNISqr4u.js");
+  const { LineChart } = await import("./charts-vsOc2fZ2.js");
+  const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-CKoHC6Fi.js");
+  const { CanvasRenderer } = await import("./renderers-ua0LGD8C.js");
+  ec.use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
+  return ec;
+}
+const charts = {};
+let lastFiltered = [];
+function renderModelTrends(filtered) {
+  lastFiltered = filtered || [];
+  renderOne("token", filtered);
+  renderOne("req", filtered);
+}
+async function renderOne(id, filtered) {
+  try {
+    const doc = getDoc$3();
+    const el = doc.getElementById(`aus-chart-model-${id}`);
+    if (!el) return;
+    const xKey = state[id].x;
+    if (!filtered.length) {
+      if (charts[id]) try {
+        charts[id].dispose();
+      } catch {
+      }
+      charts[id] = null;
+      el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--ds-text-3);font-size:11px;">暂无数据</div>';
+      return;
+    }
+    const modelSet = /* @__PURE__ */ new Set();
+    for (const e of filtered) modelSet.add(e.model || "unknown");
+    const models = Array.from(modelSet).sort();
+    const colorMap = /* @__PURE__ */ new Map();
+    models.forEach((m, i) => colorMap.set(m, MODEL_COLORS[i % MODEL_COLORS.length]));
+    let labels = [];
+    let seriesData = [];
+    if (xKey === "round") {
+      labels = filtered.map((_, i) => `#${i + 1}`);
+      seriesData = models.map((m) => {
+        const col = colorMap.get(m);
+        const data = filtered.map((e) => {
+          if ((e.model || "unknown") !== m) return 0;
+          return id === "token" ? e.total_tokens || 0 : 1;
+        });
+        return { name: m, data, color: col };
+      });
+    } else {
+      const buckets = /* @__PURE__ */ new Map();
+      filtered.forEach((_, idx) => {
+        const e = filtered[idx];
+        const key = bucketKey(e.timestamp, xKey, idx);
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(e);
+      });
+      const sortedKeys = Array.from(buckets.keys()).sort();
+      labels = sortedKeys.map((k) => xKey === "day" ? k.slice(5).replace("-", "/") : xKey === "hour" ? k.slice(5) : k);
+      seriesData = models.map((m) => {
+        const col = colorMap.get(m);
+        const data = sortedKeys.map((key) => {
+          const arr = buckets.get(key);
+          let sum = 0;
+          for (const e of arr) if ((e.model || "unknown") === m) sum += id === "token" ? e.total_tokens || 0 : 1;
+          return sum;
+        });
+        return { name: m, data, color: col };
+      });
+    }
+    const w = el.clientWidth;
+    const h = el.clientHeight;
+    if (w === 0 || h === 0) {
+      const statsView = doc.querySelector('[data-view="stats"]');
+      const isHidden = statsView ? statsView.style.display === "none" || statsView.offsetParent === null : false;
+      if (isHidden) return;
+      const tries = renderOne._retryCount || 0;
+      if (tries >= 20) {
+        el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--ds-text-3);font-size:11px;">图表容器未就绪</div>';
+        return;
+      }
+      renderOne._retryCount = tries + 1;
+      setTimeout(() => renderOne(id, filtered), 120);
+      return;
+    }
+    renderOne._retryCount = 0;
+    const ec = await getEcharts();
+    if (charts[id]) try {
+      charts[id].dispose();
+    } catch {
+    }
+    el.innerHTML = "";
+    el.style.height = "220px";
+    const c = charts[id] = ec.init(el);
+    const cBorder = themeColor$1("--ds-border", "#E5E7EB");
+    const cCard = themeColor$1("--ds-card", "#F6F7F8");
+    const cText3 = themeColor$1("--ds-text-3", "#9CA3AF");
+    const cCardInner = themeColor$1("--ds-card-inner", "#FFFFFF");
+    const cText = themeColor$1("--ds-text", "#111827");
+    const cw = w || 320;
+    const minPerLabel = cw < 500 ? 42 : cw < 760 ? 56 : 68;
+    const maxLabels = Math.max(8, Math.floor(cw / minPerLabel));
+    const xInterval = labels.length <= maxLabels ? 0 : Math.ceil(labels.length / maxLabels) - 1;
+    const needZoom = labels.length > maxLabels;
+    const legendTop = models.length > 4 ? 2 : 0;
+    c.setOption({
+      backgroundColor: "transparent",
+      tooltip: {
+        trigger: "axis",
+        backgroundColor: cCardInner,
+        borderColor: cBorder,
+        borderWidth: 1,
+        textStyle: { color: cText, fontSize: 11 },
+        formatter: (params) => {
+          if (!params?.length) return "";
+          const idx = params[0].dataIndex;
+          const label = labels[idx];
+          let sum = 0;
+          for (const p of params) sum += Number(p.value || 0);
+          let html = `<div style="font-weight:600;margin-bottom:6px;">${label}<span style="margin-left:8px;color:var(--ds-text-2);font-weight:400;">合计 ${id === "token" ? sum.toLocaleString() + " tokens" : sum + " 次"}</span></div>`;
+          for (const p of params) {
+            if (Number(p.value) === 0) continue;
+            html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${id === "token" ? Number(p.value).toLocaleString() + " tokens" : p.value + " 次"}</span></div>`;
+          }
+          if (!params.some((p) => Number(p.value) > 0)) html += `<div style="color:var(--ds-text-3);font-size:10px;">本${xKey === "day" ? "日" : xKey === "hour" ? "时段" : xKey === "week" ? "周" : xKey === "month" ? "月" : "轮次"}无数据</div>`;
+          return `<div style="padding:4px 2px;min-width:180px;max-width:280px;">${html}</div>`;
+        }
+      },
+      legend: {
+        top: legendTop,
+        type: "scroll",
+        textStyle: { fontSize: 10, color: cText3 },
+        pageIconColor: cText3,
+        pageTextStyle: { color: cText3 },
+        itemWidth: 10,
+        itemHeight: 6
+      },
+      grid: { left: 42, right: 16, top: 22 + (models.length > 4 ? 8 : 0), bottom: 24 },
+      dataZoom: needZoom ? [{ type: "inside", xAxisIndex: 0, start: Math.max(0, (labels.length - maxLabels) / labels.length * 100), end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : void 0,
+      xAxis: { type: "category", data: labels, boundaryGap: false, axisLine: { lineStyle: { color: cBorder } }, axisLabel: { color: cText3, fontSize: 10, interval: xInterval, rotate: labels.length > 12 ? 30 : 0, hideOverlap: false } },
+      yAxis: { type: "value", axisLabel: { color: cText3, fontSize: 10, formatter: (v) => id === "token" ? v >= 1e3 ? (v / 1e3).toFixed(0) + "k" : String(v) : String(v) }, splitLine: { lineStyle: { color: cCard } } },
+      series: seriesData.map((s) => ({
+        name: s.name,
+        type: "line",
+        stack: "total",
+        smooth: true,
+        symbol: "none",
+        lineStyle: { width: 1.5, color: s.color },
+        itemStyle: { color: s.color },
+        areaStyle: { color: s.color, opacity: 0.18 },
+        emphasis: { focus: "series" },
+        data: s.data
+      }))
+    }, true);
+    setTimeout(() => {
+      try {
+        c.resize();
+      } catch {
+      }
+    }, 60);
+  } catch (e) {
+    try {
+      const doc2 = getDoc$3();
+      const el2 = doc2.getElementById(`aus-chart-model-${id}`);
+      if (el2) el2.innerHTML = '<div style="text-align:center;padding:20px;color:#DC2626;font-size:11px;">图表加载失败</div>';
+    } catch {
+    }
+    try {
+      console.error("[Api-Usage] renderModelTrends failed", id, e);
+    } catch {
+    }
+  }
+}
+function initModelTrends() {
+  const doc = getDoc$3();
+  for (const id of ["token", "req"]) {
+    const btn = doc.getElementById(`aus-modeltrends-x-${id}`);
+    const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
+    if (btn && drop) {
+      btn.onclick = () => {
+        drop.style.display = drop.style.display === "block" ? "none" : "block";
+        if (drop.style.display === "block") renderXDrop(id);
+      };
+    }
+  }
+  doc.addEventListener("click", (e) => {
+    const t = e.target;
+    for (const id of ["token", "req"]) {
+      const btn = doc.getElementById(`aus-modeltrends-x-${id}`);
+      const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
+      if (btn && drop && !t.closest(`#aus-modeltrends-x-${id}`) && !t.closest(`#aus-modeltrends-x-drop-${id}`)) drop.style.display = "none";
+    }
+  });
+}
+function renderXDrop(id) {
+  const doc = getDoc$3();
+  const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
+  const label = doc.getElementById(`aus-modeltrends-x-label-${id}`);
+  if (!drop) return;
+  const cur = state[id].x;
+  if (label) label.textContent = X_OPTIONS.find((o) => o.key === cur)?.label || cur;
+  drop.innerHTML = X_OPTIONS.map((o) => {
+    const active = o.key === cur;
+    return `<div data-x="${o.key}" data-trend="${id}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active ? "background:var(--ds-card);font-weight:600;" : ""}">${o.label}</div>`;
+  }).join("");
+  drop.querySelectorAll("[data-x]").forEach((el) => {
+    el.onclick = () => {
+      const k = el.getAttribute("data-x"), tid = el.getAttribute("data-trend");
+      state[tid].x = k;
+      drop.style.display = "none";
+      renderXDrop(tid);
+      renderModelTrends(lastFiltered);
     };
   });
 }
@@ -4072,6 +4342,7 @@ async function renderStatsView() {
   if (!isStatsHidden) {
     renderChart(chartFiltered);
     renderExtraCharts(chartFiltered);
+    renderModelTrends(chartFiltered);
   } else {
     try {
       console.log("[AUS] stats 隐藏，跳过图表初始化");
@@ -4105,6 +4376,7 @@ async function renderStatsView() {
         if (!hidden2) {
           renderChart(cf2);
           renderExtraCharts(cf2);
+          renderModelTrends(cf2);
         }
       }
     } catch {
@@ -4116,6 +4388,10 @@ function initStatsView() {
   bindChartSelectors();
   try {
     bindSummarySort();
+  } catch {
+  }
+  try {
+    initModelTrends();
   } catch {
   }
   updatePickerLabel();
@@ -4132,7 +4408,7 @@ function refreshUI() {
     const doc = getDoc$1();
     const s = getSelectedSave();
     if (!s) return;
-    const bal = state$1.customBalance || state$1.balance?.balance;
+    const bal = state$2.customBalance || state$2.balance?.balance;
     const balEl = doc.getElementById("aus-balance");
     if (balEl) balEl.textContent = bal ? "¥" + bal + " CNY" : "¥0.00 CNY";
     const totalCostEl = doc.getElementById("aus-total-cost");
@@ -4150,7 +4426,7 @@ function renderHistory(doc, s) {
   if (!host) return;
   let hist = s.history || [];
   try {
-    const scope = state$1.settings.historyScope || "all";
+    const scope = state$2.settings.historyScope || "all";
     if (scope === "current") {
       const filtered = getHistoryForDisplay();
       hist = filtered;
@@ -4158,14 +4434,14 @@ function renderHistory(doc, s) {
   } catch {
   }
   if (!hist.length) {
-    const scope = state$1.settings.historyScope || "all";
+    const scope = state$2.settings.historyScope || "all";
     const tip = scope === "current" ? '<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;line-height:1.8;">当前对话暂无记录<br/><span style="font-size:11px;">已按“当前对话”过滤，旧记录（未关联对话）仅在“全部历史”中可见</span><br/><button id="aus-history-scope-switch" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">切换为全部历史</button></div>' : '<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;">暂无历史记录</div>';
     host.innerHTML = tip;
     const btn = doc.getElementById("aus-history-scope-switch");
     if (btn) btn.onclick = () => {
-      state$1.settings.historyScope = "all";
+      state$2.settings.historyScope = "all";
       try {
-        saveHot({ settings: state$1.settings });
+        saveHot({ settings: state$2.settings });
       } catch {
       }
       try {
@@ -4386,7 +4662,7 @@ function createPanel() {
     return;
   }
   panelCreated = true;
-  const theme = state$1.settings.theme || "light";
+  const theme = state$2.settings.theme || "light";
   const overlay = doc.createElement("div");
   overlay.id = "aus-overlay";
   overlay.setAttribute("data-extension", "api-usage-stat");
@@ -4487,6 +4763,10 @@ function createPanel() {
                 <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">模型</th><th data-sort-key="count" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">调用次数<span class="aus-sort-ind"></span></th><th data-sort-key="hit" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输入(命中)<span class="aus-sort-ind"></span></th><th data-sort-key="miss" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输入(未命中)<span class="aus-sort-ind"></span></th><th data-sort-key="out" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输出<span class="aus-sort-ind"></span></th><th data-sort-key="total" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总 Tokens<span class="aus-sort-ind"></span></th><th data-sort-key="cost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总成本<span class="aus-sort-ind"></span></th><th data-sort-key="avgCost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均成本<span class="aus-sort-ind"></span></th><th data-sort-key="avgDur" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均耗时<span class="aus-sort-ind"></span></th><th data-sort-key="avgRate" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均速率<span class="aus-sort-ind"></span></th></tr></thead>
                 <tbody id="aus-summary-tbody"><tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
               </table>
+            </div>
+            <div id="aus-model-trends" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px;">
+              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:var(--ds-text);">模型 Token 趋势</span><div style="display:flex;gap:6px;"><div id="aus-modeltrends-x-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;"><span id="aus-modeltrends-x-label-token">每日</span> ▼</div></div></div><div id="aus-modeltrends-x-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-model-token" style="height:220px;"></div></div>
+              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:var(--ds-text);">模型调用次数趋势</span><div style="display:flex;gap:6px;"><div id="aus-modeltrends-x-req" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;"><span id="aus-modeltrends-x-label-req">每日</span> ▼</div></div></div><div id="aus-modeltrends-x-drop-req" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-model-req" style="height:220px;"></div></div>
             </div>
             <div class="ds-card" style="margin-top:12px;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">图表</span><div style="display:flex;gap:8px;position:relative;"><div id="aus-chart-y-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;"><span style="color:var(--ds-text-2);">Y</span><span id="aus-chart-y-label" style="font-weight:600;color:var(--ds-text);">总费用</span><span style="font-size:10px;">▼</span></div><div id="aus-chart-x-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;"><span style="color:var(--ds-text-2);">X</span><span id="aus-chart-x-label" style="font-weight:600;color:var(--ds-text);">每日</span><span style="font-size:10px;">▼</span></div><div id="aus-chart-y-dropdown" style="display:none;position:absolute;top:34px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;"></div><div id="aus-chart-x-dropdown" style="display:none;position:absolute;top:34px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:140px;"></div></div></div><div id="aus-stats-chart" style="height:300px;"></div></div>
             <div id="aus-extra-charts" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px;">
@@ -4667,7 +4947,7 @@ function isPeak(ts) {
   if (isWeekend(ts)) return false;
   const d = new Date(ts);
   const mins = (d.getUTCHours() * 60 + d.getUTCMinutes() + 8 * 60) % 1440;
-  for (const h of state$1.settings.peakHours || []) {
+  for (const h of state$2.settings.peakHours || []) {
     const sp = parseInt(h.start.split(":")[0]) * 60 + parseInt(h.start.split(":")[1] || "0");
     const ep = parseInt(h.end.split(":")[0]) * 60 + parseInt(h.end.split(":")[1] || "0");
     if (sp < ep) {
@@ -4682,7 +4962,7 @@ function getPeakStatus(now = Date.now()) {
   const d = new Date(now);
   const mins = (d.getUTCHours() * 60 + d.getUTCMinutes() + 8 * 60) % 1440;
   let nearest = 1440;
-  for (const h of state$1.settings.peakHours || []) {
+  for (const h of state$2.settings.peakHours || []) {
     const sp = parseInt(h.start.split(":")[0]) * 60 + parseInt(h.start.split(":")[1] || "0");
     let diff = sp - mins;
     if (diff < 0) diff += 1440;
@@ -4695,7 +4975,7 @@ function updatePeakDot() {
   const doc = window.parent?.document ?? document;
   const dot = doc.getElementById("aus-peak-dot-indicator");
   if (!dot) return;
-  if (state$1.settings.peakDot === false) {
+  if (state$2.settings.peakDot === false) {
     dot.style.display = "none";
     return;
   }
@@ -4848,7 +5128,7 @@ async function onActivate() {
 async function init() {
   ensureStyleScope();
   try {
-    applyTheme(state$1.settings.theme);
+    applyTheme(state$2.settings.theme);
   } catch {
   }
   try {
@@ -4862,7 +5142,7 @@ async function init() {
   }
   const mount = () => {
     try {
-      applyTheme(state$1.settings.theme);
+      applyTheme(state$2.settings.theme);
     } catch {
     }
     try {
@@ -4920,7 +5200,7 @@ async function init() {
     });
     ctx?.eventSource?.on?.(ctx?.event_types?.CHAT_CHANGED, () => {
       try {
-        if (state$1.settings.historyScope === "current") refreshUI();
+        if (state$2.settings.historyScope === "current") refreshUI();
       } catch {
       }
     });
@@ -4947,7 +5227,7 @@ async function init() {
     });
   } catch {
   }
-  globalThis.ApiUsageStat = { MODULE, refreshUI, updatePeakDot, openPanel, closePanel, togglePanel, state: state$1, injectWandEntry: ensureWandEntry };
+  globalThis.ApiUsageStat = { MODULE, refreshUI, updatePeakDot, openPanel, closePanel, togglePanel, state: state$2, injectWandEntry: ensureWandEntry };
 }
 init();
 export {
