@@ -228,6 +228,9 @@
   #aus-sidebar #aus-brand { display:flex !important; }
   #aus-sidebar .aus-nav-label { display:inline !important; }
   #aus-sidebar .aus-nav-item { justify-content:flex-start !important; padding:8px 10px !important; gap:10px !important; font-size:12px !important; border-radius:8px !important; }
+  /* 窄屏选中态加深，避免 #F9FAFB 侧栏与 #F6F7F8 选中态均为近白导致“都是白底” */
+  .aus-nav-item.active { background: #E5E7EB !important; }
+  [data-extension="api-usage-stat"][data-ds-theme="dark"] .aus-nav-item.active { background: #2A3342 !important; }
   #aus-main { padding: 12px !important; }
   #aus-main > div { max-width: 1100px !important; width: 100% !important; margin: 0 auto !important; box-sizing: border-box !important; }
   /* 所有卡片不超出 — 块本身贴合屏幕，块内内容在卡片内横向滑动 */
@@ -235,6 +238,9 @@
   [data-view="overview"],
   [data-view="history"] { max-width: 100% !important; overflow-x: hidden !important; box-sizing: border-box !important; }
   [data-extension="api-usage-stat"] .ds-card { padding: 12px 14px !important; max-width: 100% !important; width: 100% !important; box-sizing: border-box !important; overflow-x: auto !important; overflow-y: hidden !important; -webkit-overflow-scrolling: touch !important; }
+  #aus-overview-four .ds-card { overflow: visible !important; overflow-x: visible !important; overflow-y: visible !important; }
+  #aus-overview-four { overflow: visible !important; }
+  #aus-overview-four [id^="aus-four-drop-"] { z-index: 50 !important; }
   /* 网格：用量概览 8 块保持 2 列，其余竖排 */
   #aus-overview-four { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
   [data-view="overview"] > div:first-child { grid-template-columns: 1fr !important; }
@@ -255,10 +261,10 @@
   /* 表格及数据块横向滑动而非超出 — 类似模型汇总的 overflow 容器 */
   #aus-model-summary { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
   #aus-model-summary table { min-width: 720px !important; }
-  /* 用量概览的数据块（历史消耗/支出明细/四小块）块内滑动 */
+  /* 用量概览的数据块（历史消耗/支出明细）块内滑动；四小块保持 overflow:visible 以显示下拉 */
   #aus-overview-history,
-  #aus-overview-spend,
-  #aus-overview-four .ds-card { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
+  #aus-overview-spend { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
+  #aus-overview-four .ds-card { overflow: visible !important; }
   #aus-overview-history > div,
   #aus-overview-spend > div { min-width: 0 !important; }
   /* 图表容器自适应 */
