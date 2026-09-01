@@ -488,6 +488,20 @@ export function createPanel() {
     if (isMobile()) {
       if (mobileOpen) sb.classList.add('is-open');
       else sb.classList.remove('is-open');
+      // 窄屏下强制还原为完整导航（避免宽屏折叠残留的 inline 隐藏）
+      const brand = doc.getElementById('aus-brand') as HTMLElement | null;
+      if (brand) brand.style.removeProperty('display');
+      doc.querySelectorAll('.aus-nav-label').forEach((el: any) => { (el as HTMLElement).style.removeProperty('display'); });
+      doc.querySelectorAll('#aus-sidebar .aus-nav-item').forEach((el: any) => {
+        const c = el as HTMLElement;
+        c.style.removeProperty('justify-content');
+        c.style.removeProperty('padding');
+      });
+      if (sb) {
+        sb.style.removeProperty('width');
+        sb.style.removeProperty('min-width');
+        sb.style.removeProperty('max-width');
+      }
     } else {
       sb.classList.remove('is-open');
     }

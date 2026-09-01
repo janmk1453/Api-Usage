@@ -5207,6 +5207,21 @@ function createPanel() {
     if (isMobile()) {
       if (mobileOpen) sb.classList.add("is-open");
       else sb.classList.remove("is-open");
+      const brand = doc.getElementById("aus-brand");
+      if (brand) brand.style.removeProperty("display");
+      doc.querySelectorAll(".aus-nav-label").forEach((el) => {
+        el.style.removeProperty("display");
+      });
+      doc.querySelectorAll("#aus-sidebar .aus-nav-item").forEach((el) => {
+        const c = el;
+        c.style.removeProperty("justify-content");
+        c.style.removeProperty("padding");
+      });
+      if (sb) {
+        sb.style.removeProperty("width");
+        sb.style.removeProperty("min-width");
+        sb.style.removeProperty("max-width");
+      }
     } else {
       sb.classList.remove("is-open");
     }

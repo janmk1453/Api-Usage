@@ -223,6 +223,7 @@
   #aus-sidebar { display:none !important; width:220px !important; min-width:220px !important; max-width:220px !important; }
   #aus-sidebar.is-open { display:flex !important; }
   #aus-sidebar-overlay { display:none !important; }
+  #aus-sidebar-toggle { display:none !important; }
   #aus-main { padding: 12px !important; }
   #aus-main > div { max-width: 1100px !important; width: 100% !important; margin: 0 auto !important; box-sizing: border-box !important; }
   /* 所有卡片不超出 — 块本身贴合屏幕，块内内容在卡片内横向滑动 */
