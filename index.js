@@ -5032,9 +5032,14 @@ function createPanel() {
   panel.id = "aus-panel";
   panel.setAttribute("data-extension", "api-usage-stat");
   panel.setAttribute("data-ds-theme", theme);
-  panel.style.cssText = "position:absolute;top:0;left:0;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:'Microsoft YaHei','微软雅黑',system-ui,-apple-system,sans-serif;display:none;flex-direction:row;overflow:hidden;transform:none;filter:none;will-change:auto;";
+  panel.style.cssText = "position:absolute;top:0;left:0;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:'Microsoft YaHei','微软雅黑',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;";
   panel.innerHTML = `
-    <div id="aus-sidebar" style="width:220px;flex-shrink:0;background:var(--ds-sidebar-bg);border-right:1px solid var(--ds-border);display:flex;flex-direction:column;transition:width 0.2s ease;overflow:hidden;">
+    <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;border-bottom:1px solid var(--ds-border);background:var(--ds-card-inner);">
+      <button id="aus-hamburger-btn" title="菜单" style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);font-size:18px;line-height:1;padding:0;">☰</button>
+      <span style="margin-left:12px;font-size:13px;font-weight:700;color:var(--ds-text);">API用量统计</span>
+    </div>
+    <div id="aus-panel-body" style="flex:1;display:flex;flex-direction:row;overflow:hidden;min-height:0;">
+    <div id="aus-sidebar" style="width:220px;flex-shrink:0;background:var(--ds-sidebar-bg);border-right:1px solid var(--ds-border);display:flex;flex-direction:column;overflow:hidden;">
       <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;">
         <div style="display:flex;flex-direction:column;min-width:0;" id="aus-brand">
           <span style="font-size:13px;font-weight:700;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
@@ -5163,11 +5168,11 @@ function createPanel() {
         </div>
       </div>
     </div>
+    </div>
   `;
   const sbOverlay = doc.createElement("div");
   sbOverlay.id = "aus-sidebar-overlay";
-  sbOverlay.style.cssText = "display:none;position:absolute;left:60px;top:0;right:0;bottom:0;background:rgba(0,0,0,0.08);z-index:4;";
-  sbOverlay.addEventListener("click", () => applyCollapsed(true));
+  sbOverlay.style.cssText = "display:none !important;";
   panel.appendChild(sbOverlay);
   doc.body.appendChild(overlay);
   doc.body.appendChild(panel);
@@ -5188,50 +5193,37 @@ function createPanel() {
       if (v) switchView(v);
     });
   });
+  let mobileOpen = false;
+  const isMobile = () => {
+    try {
+      return (window.parent?.innerWidth ?? window.innerWidth) <= 760;
+    } catch {
+      return window.innerWidth <= 760;
+    }
+  };
+  const syncMobileSidebar = () => {
+    const sb = doc.getElementById("aus-sidebar");
+    if (!sb) return;
+    if (isMobile()) {
+      if (mobileOpen) sb.classList.add("is-open");
+      else sb.classList.remove("is-open");
+    } else {
+      sb.classList.remove("is-open");
+    }
+  };
   const applyCollapsed = (v) => {
     collapsed = v;
     const sb = doc.getElementById("aus-sidebar");
     const brand = doc.getElementById("aus-brand");
     const btn = doc.getElementById("aus-sidebar-toggle");
-    const overlay2 = doc.getElementById("aus-sidebar-overlay");
     if (!sb) return;
-    const isMobile = window.parent?.innerWidth <= 760 || window.innerWidth <= 760;
-    if (isMobile) {
-      if (collapsed) {
-        sb.style.setProperty("width", "60px", "important");
-        sb.style.setProperty("min-width", "60px", "important");
-        sb.style.setProperty("max-width", "60px", "important");
-        sb.style.position = "";
-        sb.style.left = "";
-        sb.style.top = "";
-        sb.style.bottom = "";
-        sb.style.zIndex = "";
-        sb.style.boxShadow = "";
-        if (overlay2) overlay2.style.display = "none";
-      } else {
-        sb.style.setProperty("width", "220px", "important");
-        sb.style.setProperty("min-width", "220px", "important");
-        sb.style.setProperty("max-width", "220px", "important");
-        sb.style.position = "absolute";
-        sb.style.left = "0";
-        sb.style.top = "0";
-        sb.style.bottom = "0";
-        sb.style.zIndex = "5";
-        sb.style.boxShadow = "4px 0 16px rgba(0,0,0,0.12)";
-        if (overlay2) overlay2.style.display = "block";
-      }
-    } else {
-      sb.style.setProperty("width", collapsed ? "60px" : "220px", "important");
-      sb.style.setProperty("min-width", collapsed ? "60px" : "220px", "important");
-      sb.style.setProperty("max-width", collapsed ? "60px" : "220px", "important");
-      sb.style.position = "";
-      sb.style.left = "";
-      sb.style.top = "";
-      sb.style.bottom = "";
-      sb.style.zIndex = "";
-      sb.style.boxShadow = "";
-      if (overlay2) overlay2.style.display = "none";
+    if (isMobile()) {
+      syncMobileSidebar();
+      return;
     }
+    sb.style.setProperty("width", collapsed ? "60px" : "220px", "important");
+    sb.style.setProperty("min-width", collapsed ? "60px" : "220px", "important");
+    sb.style.setProperty("max-width", collapsed ? "60px" : "220px", "important");
     if (brand) brand.style.setProperty("display", collapsed ? "none" : "flex", "important");
     if (btn) btn.textContent = collapsed ? "›" : "‹";
     doc.querySelectorAll(".aus-nav-label").forEach((el) => {
@@ -5240,16 +5232,42 @@ function createPanel() {
     doc.querySelectorAll(".aus-nav-item").forEach((el) => {
       el.style.justifyContent = collapsed ? "center" : "flex-start";
     });
+    doc.querySelectorAll("#aus-sidebar .aus-nav-item").forEach((el) => {
+      el.style.padding = collapsed ? "10px 0" : "8px 10px";
+    });
   };
   doc.getElementById("aus-sidebar-toggle")?.addEventListener("click", () => applyCollapsed(!collapsed));
-  try {
-    const isMobile = window.parent?.innerWidth <= 760 || window.innerWidth <= 760;
-    if (isMobile) applyCollapsed(true);
-    window.parent?.addEventListener("resize", () => {
-      const nowMobile = window.parent?.innerWidth <= 760;
-      if (nowMobile && !collapsed) {
+  doc.getElementById("aus-hamburger-btn")?.addEventListener("click", () => {
+    mobileOpen = !mobileOpen;
+    syncMobileSidebar();
+  });
+  doc.querySelectorAll(".aus-nav-item").forEach((el) => {
+    el.addEventListener("click", () => {
+      if (isMobile() && mobileOpen) {
+        mobileOpen = false;
+        syncMobileSidebar();
       }
     });
+  });
+  try {
+    if (isMobile()) {
+      mobileOpen = false;
+      syncMobileSidebar();
+    }
+    const onResize = () => {
+      if (isMobile()) syncMobileSidebar();
+      else {
+        mobileOpen = false;
+        syncMobileSidebar();
+        applyCollapsed(collapsed);
+      }
+      try {
+        positionPanel();
+      } catch {
+      }
+    };
+    window.parent?.addEventListener("resize", onResize);
+    window.addEventListener("resize", onResize);
   } catch {
   }
   bindPanel(doc);
@@ -5271,6 +5289,22 @@ function openPanel() {
   }
   ov.style.display = "block";
   pn.style.display = "flex";
+  try {
+    const sb = doc.getElementById("aus-sidebar");
+    const isMobile = (() => {
+      try {
+        return (window.parent?.innerWidth ?? window.innerWidth) <= 760;
+      } catch {
+        return window.innerWidth <= 760;
+      }
+    })();
+    if (sb) {
+      if (isMobile) {
+        if (sb.classList.contains("is-open") && !doc._aus_mobileOpen) sb.classList.remove("is-open");
+      } else sb.classList.remove("is-open");
+    }
+  } catch {
+  }
   positionPanel();
   requestAnimationFrame(() => {
     ov.style.opacity = "1";
