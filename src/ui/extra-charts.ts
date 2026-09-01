@@ -262,7 +262,7 @@ export function initExtraCharts(){
     pieToggle.onclick = ()=>{
       state.pie.pieMode = state.pie.pieMode==='token'?'count':'token';
       (pieToggle as any).textContent = state.pie.pieMode==='token'?'Token':'次数';
-      renderExtraCharts(lastFiltered);
+      renderOne('pie', lastFiltered);
     };
   }
   doc.addEventListener('click', (e:any)=>{
@@ -296,7 +296,7 @@ function renderExtraY(id:ChartId){
       const k=el.getAttribute('data-y'), cid=el.getAttribute('data-chart') as ChartId;
       if (el.checked) state[cid].y.add(k); else { if (state[cid].y.size>1) state[cid].y.delete(k); else el.checked=true; }
       renderExtraY(cid);
-      renderExtraCharts(lastFiltered);
+      renderOne(cid, lastFiltered);
     };
   });
 }
@@ -318,7 +318,7 @@ function renderExtraX(id:ChartId){
       state[cid].x = k;
       drop.style.display='none';
       renderExtraX(cid);
-      renderExtraCharts(lastFiltered);
+      renderOne(cid, lastFiltered);
     };
   });
 }

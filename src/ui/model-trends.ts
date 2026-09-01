@@ -234,7 +234,7 @@ function renderXDrop(id:TrendId){
       state[tid].x = k;
       drop.style.display='none';
       renderXDrop(tid);
-      renderModelTrends(lastFiltered);
+      renderOne(tid, lastFiltered);
     };
   });
 }

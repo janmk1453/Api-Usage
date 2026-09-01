@@ -3600,7 +3600,7 @@ function initExtraCharts() {
     pieToggle.onclick = () => {
       state$1.pie.pieMode = state$1.pie.pieMode === "token" ? "count" : "token";
       pieToggle.textContent = state$1.pie.pieMode === "token" ? "Token" : "次数";
-      renderExtraCharts(lastFiltered$1);
+      renderOne$1("pie", lastFiltered$1);
     };
   }
   doc.addEventListener("click", (e) => {
@@ -3637,7 +3637,7 @@ function renderExtraY(id) {
         else el.checked = true;
       }
       renderExtraY(cid);
-      renderExtraCharts(lastFiltered$1);
+      renderOne$1(cid, lastFiltered$1);
     };
   });
 }
@@ -3658,7 +3658,7 @@ function renderExtraX(id) {
       state$1[cid].x = k;
       drop.style.display = "none";
       renderExtraX(cid);
-      renderExtraCharts(lastFiltered$1);
+      renderOne$1(cid, lastFiltered$1);
     };
   });
 }
@@ -3927,7 +3927,7 @@ function renderXDrop(id) {
       state[tid].x = k;
       drop.style.display = "none";
       renderXDrop(tid);
-      renderModelTrends(lastFiltered);
+      renderOne(tid, lastFiltered);
     };
   });
 }
