@@ -224,6 +224,10 @@
   #aus-sidebar.is-open { display:flex !important; }
   #aus-sidebar-overlay { display:none !important; }
   #aus-sidebar-toggle { display:none !important; }
+  /* 窄屏呼出时强制还原完整导航样式，避免宽屏折叠残留导致间距/动画异常 */
+  #aus-sidebar #aus-brand { display:flex !important; }
+  #aus-sidebar .aus-nav-label { display:inline !important; }
+  #aus-sidebar .aus-nav-item { justify-content:flex-start !important; padding:8px 10px !important; gap:10px !important; font-size:12px !important; border-radius:8px !important; }
   #aus-main { padding: 12px !important; }
   #aus-main > div { max-width: 1100px !important; width: 100% !important; margin: 0 auto !important; box-sizing: border-box !important; }
   /* 所有卡片不超出 — 块本身贴合屏幕，块内内容在卡片内横向滑动 */
