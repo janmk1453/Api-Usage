@@ -16,6 +16,13 @@ export type WebdavSettings = {
 export type ThemeMode = 'light' | 'dark';
 
 export type HistoryScope = 'all' | 'current';
+// 概览四块可自定义指标
+export type OverviewFourKey =
+  | 'avg_cost' | 'avg_tokens' | 'avg_duration' | 'avg_rate'
+  | 'avg_input_cost' | 'avg_input_tokens' | 'avg_output_cost' | 'avg_output_tokens'
+  | 'avg_think_time' | 'avg_think_tokens'
+  | 'avg_hit_rate' | 'latest_hit_rate'
+  | 'max_output' | 'max_input' | 'max_total';
 export type Settings = {
   theme: ThemeMode;
   autoBalance: boolean;
@@ -35,6 +42,7 @@ export type Settings = {
   peakDot: boolean;
   webdav: WebdavSettings;
   historyScope: HistoryScope;
+  overviewFour: OverviewFourKey[];
 };
 
 export const defaultSettings = (): Settings => ({
@@ -56,6 +64,7 @@ export const defaultSettings = (): Settings => ({
   peakDot: true,
   webdav: { url: 'https://dav.jianguoyun.com/dav/', username: '', path: '', proxy: '' },
   historyScope: 'all',
+  overviewFour: ['avg_cost', 'avg_tokens', 'avg_duration', 'avg_rate'],
 });
 
 export type Balance = {

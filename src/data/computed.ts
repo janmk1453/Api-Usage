@@ -19,7 +19,7 @@ export function getFilteredHistory(range?: TimeRange): any[] {
 
 export function computeOverview(): OverviewView {
   const s: any = getSelectedSave();
-  if (!s) return { balanceText: '¥0.00 CNY', totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0, remainingRounds: null } as any;
+  if (!s) return { balanceText: '¥0.00 CNY', totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0, remainingRounds: null, avgInputCost: 0, avgInputTokens: 0, avgOutputCost: 0, avgOutputTokens: 0, avgThinkTime: 0, avgThinkTokens: 0, avgHitRate: 0, latestHitRate: null, maxOutput: 0, maxInput: 0, maxTotal: 0 } as any;
   const totalCost = s.total_cost || 0;
   const totalTokens = s.total_tokens || 0;
   const hit = s.cache_hit_tokens || 0, miss = s.cache_miss_tokens || 0, output = s.output_tokens || 0;
@@ -27,10 +27,45 @@ export function computeOverview(): OverviewView {
   let savings = 0;
   try { for (const h of s.history || []) savings += calcSavings({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state.settings as any); } catch {}
   const rounds = s.rounds || 0;
+  const hist: any[] = s.history || [];
   const avgCost = rounds ? totalCost / rounds : 0;
   const avgTokens = rounds ? totalTokens / rounds : 0;
-  const avgDuration = s.history?.length ? (s.history.reduce((a: number, h: any) => a + (h.duration || 0), 0) / s.history.length) / 1000 : 0;
-  const avgRate = s.history?.length ? (s.history.reduce((a: number, h: any) => a + (h.tokenRate || 0), 0) / s.history.length) : 0;
+  const avgDuration = hist.length ? (hist.reduce((a: number, h: any) => a + (h.duration || 0), 0) / hist.length) / 1000 : 0;
+  const avgRate = hist.length ? (hist.reduce((a: number, h: any) => a + (h.tokenRate || 0), 0) / hist.length) : 0;
+  // 新增：输入/输出均摊
+  const inputTokens = s.input_tokens || 0;
+  const avgInputCost = rounds ? (s.input_cost || 0) / rounds : 0;
+  const avgInputTokens = rounds ? inputTokens / rounds : 0;
+  const avgOutputCost = rounds ? (s.output_cost || 0) / rounds : 0;
+  const avgOutputTokens = rounds ? output / rounds : 0;
+  // 思维链（剔除 0）
+  const thinkTimes = hist.map((h: any) => h.thinkTime || 0).filter((v: number) => v > 0);
+  const thinkTokensArr = hist.map((h: any) => h.thinkTokens || 0).filter((v: number) => v > 0);
+  const avgThinkTime = thinkTimes.length ? (thinkTimes.reduce((a: number, b: number) => a + b, 0) / thinkTimes.length) / 1000 : 0;
+  const avgThinkTokens = thinkTokensArr.length ? thinkTokensArr.reduce((a: number, b: number) => a + b, 0) / thinkTokensArr.length : 0;
+  // 平均命中率（剔除 0）
+  const hitRates = hist.map((h: any) => {
+    const ch = h.cache_hit_tokens || 0, cm = h.cache_miss_tokens || 0, tot = ch + cm;
+    return tot > 0 ? (ch / tot * 100) : 0;
+  }).filter((v: number) => v > 0);
+  const avgHitRate = hitRates.length ? hitRates.reduce((a: number, b: number) => a + b, 0) / hitRates.length : 0;
+  // 最新一轮命中率（0 也显示，无数据则 null）
+  let latestHitRate: number | null = null;
+  if (hist.length) {
+    const latest = [...hist].sort((a, b) => b.timestamp - a.timestamp)[0];
+    const ch = latest.cache_hit_tokens || 0, cm = latest.cache_miss_tokens || 0, tot = ch + cm;
+    latestHitRate = tot > 0 ? (ch / tot * 100) : 0;
+  }
+  // 历史单轮最大
+  let maxOutput = 0, maxInput = 0, maxTotal = 0;
+  for (const h of hist) {
+    const out = h.completion_tokens || 0;
+    const inp = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) || h.prompt_tokens || 0;
+    const tot = h.total_tokens || 0;
+    if (out > maxOutput) maxOutput = out;
+    if (inp > maxInput) maxInput = inp;
+    if (tot > maxTotal) maxTotal = tot;
+  }
   const bal = state.customBalance || state.balance?.balance;
   // 余额预测：仅基于 DeepSeek 官方模型历史（deepseek*），EWMA alpha=0.3，与原脚本一致
   let remainingRounds: number | null = null;
@@ -51,7 +86,8 @@ export function computeOverview(): OverviewView {
     totalCost, totalTokens, hit, miss, output, hitRate, savings,
     inputCost: s.input_cost || 0, outputCost: s.output_cost || 0,
     avgCost, avgTokens, avgDuration, avgRate, rounds, remainingRounds,
-  };
+    avgInputCost, avgInputTokens, avgOutputCost, avgOutputTokens, avgThinkTime, avgThinkTokens, avgHitRate, latestHitRate, maxOutput, maxInput, maxTotal,
+  } as any;
 }
 
 export function computeStats(range: TimeRange): StatsView {

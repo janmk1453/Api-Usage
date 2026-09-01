@@ -16,7 +16,8 @@ const defaultSettings = () => ({
   peakHours: [{ start: "09:00", end: "12:00" }, { start: "14:00", end: "18:00" }],
   peakDot: true,
   webdav: { url: "https://dav.jianguoyun.com/dav/", username: "", path: "", proxy: "" },
-  historyScope: "all"
+  historyScope: "all",
+  overviewFour: ["avg_cost", "avg_tokens", "avg_duration", "avg_rate"]
 });
 const PRICING = {
   "deepseek-v4-flash": {
@@ -878,6 +879,12 @@ const repository = {
       if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
       if (!merged.historyScope) merged.historyScope = def.historyScope;
       if (!merged.theme) merged.theme = def.theme;
+      if (!Array.isArray(merged.overviewFour) || merged.overviewFour.length !== 4) merged.overviewFour = def.overviewFour;
+      try {
+        const valid = /* @__PURE__ */ new Set(["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_cost", "avg_input_tokens", "avg_output_cost", "avg_output_tokens", "avg_think_time", "avg_think_tokens", "avg_hit_rate", "latest_hit_rate", "max_output", "max_input", "max_total"]);
+        if (Array.isArray(merged.overviewFour)) merged.overviewFour = merged.overviewFour.map((k) => valid.has(k) ? k : "avg_cost");
+      } catch {
+      }
       state$2.settings = merged;
     }
     if (next.balance !== void 0) state$2.balance = next.balance;
@@ -948,6 +955,13 @@ const repository = {
     }
     if (!state$2.settings.historyScope) {
       state$2.settings.historyScope = "all";
+      try {
+        saveHot({ settings: state$2.settings });
+      } catch {
+      }
+    }
+    if (!Array.isArray(state$2.settings.overviewFour) || state$2.settings.overviewFour.length !== 4) {
+      state$2.settings.overviewFour = ["avg_cost", "avg_tokens", "avg_duration", "avg_rate"];
       try {
         saveHot({ settings: state$2.settings });
       } catch {
@@ -2655,7 +2669,7 @@ function renderDiff() {
 }
 function computeOverview() {
   const s = getSelectedSave();
-  if (!s) return { balanceText: "¥0.00 CNY", totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0, remainingRounds: null };
+  if (!s) return { balanceText: "¥0.00 CNY", totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0, remainingRounds: null, avgInputCost: 0, avgInputTokens: 0, avgOutputCost: 0, avgOutputTokens: 0, avgThinkTime: 0, avgThinkTokens: 0, avgHitRate: 0, latestHitRate: null, maxOutput: 0, maxInput: 0, maxTotal: 0 };
   const totalCost = s.total_cost || 0;
   const totalTokens = s.total_tokens || 0;
   const hit = s.cache_hit_tokens || 0, miss = s.cache_miss_tokens || 0, output = s.output_tokens || 0;
@@ -2666,10 +2680,40 @@ function computeOverview() {
   } catch {
   }
   const rounds = s.rounds || 0;
+  const hist = s.history || [];
   const avgCost = rounds ? totalCost / rounds : 0;
   const avgTokens = rounds ? totalTokens / rounds : 0;
-  const avgDuration = s.history?.length ? s.history.reduce((a, h) => a + (h.duration || 0), 0) / s.history.length / 1e3 : 0;
-  const avgRate = s.history?.length ? s.history.reduce((a, h) => a + (h.tokenRate || 0), 0) / s.history.length : 0;
+  const avgDuration = hist.length ? hist.reduce((a, h) => a + (h.duration || 0), 0) / hist.length / 1e3 : 0;
+  const avgRate = hist.length ? hist.reduce((a, h) => a + (h.tokenRate || 0), 0) / hist.length : 0;
+  const inputTokens = s.input_tokens || 0;
+  const avgInputCost = rounds ? (s.input_cost || 0) / rounds : 0;
+  const avgInputTokens = rounds ? inputTokens / rounds : 0;
+  const avgOutputCost = rounds ? (s.output_cost || 0) / rounds : 0;
+  const avgOutputTokens = rounds ? output / rounds : 0;
+  const thinkTimes = hist.map((h) => h.thinkTime || 0).filter((v) => v > 0);
+  const thinkTokensArr = hist.map((h) => h.thinkTokens || 0).filter((v) => v > 0);
+  const avgThinkTime = thinkTimes.length ? thinkTimes.reduce((a, b) => a + b, 0) / thinkTimes.length / 1e3 : 0;
+  const avgThinkTokens = thinkTokensArr.length ? thinkTokensArr.reduce((a, b) => a + b, 0) / thinkTokensArr.length : 0;
+  const hitRates = hist.map((h) => {
+    const ch = h.cache_hit_tokens || 0, cm = h.cache_miss_tokens || 0, tot = ch + cm;
+    return tot > 0 ? ch / tot * 100 : 0;
+  }).filter((v) => v > 0);
+  const avgHitRate = hitRates.length ? hitRates.reduce((a, b) => a + b, 0) / hitRates.length : 0;
+  let latestHitRate = null;
+  if (hist.length) {
+    const latest = [...hist].sort((a, b) => b.timestamp - a.timestamp)[0];
+    const ch = latest.cache_hit_tokens || 0, cm = latest.cache_miss_tokens || 0, tot = ch + cm;
+    latestHitRate = tot > 0 ? ch / tot * 100 : 0;
+  }
+  let maxOutput = 0, maxInput = 0, maxTotal = 0;
+  for (const h of hist) {
+    const out = h.completion_tokens || 0;
+    const inp = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) || h.prompt_tokens || 0;
+    const tot = h.total_tokens || 0;
+    if (out > maxOutput) maxOutput = out;
+    if (inp > maxInput) maxInput = inp;
+    if (tot > maxTotal) maxTotal = tot;
+  }
   const bal = state$2.customBalance || state$2.balance?.balance;
   let remainingRounds = null;
   try {
@@ -2701,7 +2745,18 @@ function computeOverview() {
     avgDuration,
     avgRate,
     rounds,
-    remainingRounds
+    remainingRounds,
+    avgInputCost,
+    avgInputTokens,
+    avgOutputCost,
+    avgOutputTokens,
+    avgThinkTime,
+    avgThinkTokens,
+    avgHitRate,
+    latestHitRate,
+    maxOutput,
+    maxInput,
+    maxTotal
   };
 }
 function getDoc$5() {
@@ -2846,6 +2901,126 @@ function fmt(n) {
 function CNY(n) {
   return "¥" + n.toFixed(4) + " CNY";
 }
+const FOUR_OPTIONS = [
+  { key: "avg_cost", label: "每轮费用" },
+  { key: "avg_tokens", label: "每轮 Token" },
+  { key: "avg_duration", label: "平均耗时" },
+  { key: "avg_rate", label: "输出速率" },
+  { key: "avg_input_cost", label: "每轮平均输入费用" },
+  { key: "avg_input_tokens", label: "每轮平均输入 Token" },
+  { key: "avg_output_cost", label: "每轮平均输出费用" },
+  { key: "avg_output_tokens", label: "每轮平均输出 Token" },
+  { key: "avg_think_time", label: "思维链平均耗时" },
+  { key: "avg_think_tokens", label: "思维链平均 Token" },
+  { key: "avg_hit_rate", label: "平均缓存命中率" },
+  { key: "latest_hit_rate", label: "最新命中率" },
+  { key: "max_output", label: "单轮最大输出" },
+  { key: "max_input", label: "单轮最大输入" },
+  { key: "max_total", label: "单轮最大总 Token" }
+];
+const FOUR_LABEL_MAP = new Map(FOUR_OPTIONS.map((o) => [o.key, o.label]));
+function ensureFour() {
+  let cur = state$2.settings.overviewFour;
+  const valid = new Set(FOUR_OPTIONS.map((o) => o.key));
+  if (!Array.isArray(cur) || cur.length !== 4 || cur.some((k) => !valid.has(k))) {
+    cur = ["avg_cost", "avg_tokens", "avg_duration", "avg_rate"];
+    state$2.settings.overviewFour = cur;
+    try {
+      saveHot({ settings: state$2.settings });
+    } catch {
+    }
+  }
+  return cur;
+}
+function getFourDisplay(key, v) {
+  const title = FOUR_LABEL_MAP.get(key) || key;
+  const rounds = v.rounds || 0;
+  !rounds && key !== "latest_hit_rate" && key !== "avg_hit_rate" && key !== "max_output" && key !== "max_input" && key !== "max_total" || !v.history && false;
+  switch (key) {
+    case "avg_cost":
+      return { title, html: `¥${(v.avgCost || 0).toFixed(4)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span>` };
+    case "avg_tokens":
+      return { title, html: `${Math.round(v.avgTokens || 0).toLocaleString("zh-CN")}` };
+    case "avg_duration":
+      return { title, html: `${(v.avgDuration || 0).toFixed(1)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">s</span>` };
+    case "avg_rate":
+      return { title: "输出速率", html: `${Math.round(v.avgRate || 0)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">t/s</span>` };
+    case "avg_input_cost":
+      return { title, html: `¥${(v.avgInputCost || 0).toFixed(4)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span>` };
+    case "avg_input_tokens":
+      return { title, html: `${Math.round(v.avgInputTokens || 0).toLocaleString("zh-CN")}` };
+    case "avg_output_cost":
+      return { title, html: `¥${(v.avgOutputCost || 0).toFixed(4)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span>` };
+    case "avg_output_tokens":
+      return { title, html: `${Math.round(v.avgOutputTokens || 0).toLocaleString("zh-CN")}` };
+    case "avg_think_time": {
+      const has = (v.avgThinkTime || 0) > 0;
+      return { title, html: has ? `${v.avgThinkTime.toFixed(1)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">s</span>` : `<span style="color:var(--ds-text-3);">—</span>` };
+    }
+    case "avg_think_tokens": {
+      const has = (v.avgThinkTokens || 0) > 0;
+      return { title, html: has ? `${Math.round(v.avgThinkTokens).toLocaleString("zh-CN")}` : `<span style="color:var(--ds-text-3);">—</span>` };
+    }
+    case "avg_hit_rate": {
+      const has = (v.avgHitRate || 0) > 0;
+      return { title, html: has ? `${v.avgHitRate.toFixed(1)}<span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">%</span>` : `<span style="color:var(--ds-text-3);">—</span>` };
+    }
+    case "latest_hit_rate": {
+      const val = v.latestHitRate;
+      if (val == null) return { title, html: `<span style="color:var(--ds-text-3);">—</span>` };
+      return { title, html: `${val.toFixed(1)}<span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">%</span>` };
+    }
+    case "max_output":
+      return { title, html: `${(v.maxOutput || 0).toLocaleString("zh-CN")}` };
+    case "max_input":
+      return { title, html: `${(v.maxInput || 0).toLocaleString("zh-CN")}` };
+    case "max_total":
+      return { title, html: `${(v.maxTotal || 0).toLocaleString("zh-CN")}` };
+    default:
+      return { title, html: "—" };
+  }
+}
+let fourBound = false;
+function bindFour() {
+  if (fourBound) return;
+  fourBound = true;
+  const doc = window.parent?.document ?? document;
+  doc.addEventListener("click", (e) => {
+    const t = e.target;
+    for (let i = 0; i < 4; i++) {
+      const drop = doc.getElementById(`aus-four-drop-${i}`);
+      const btn = doc.getElementById(`aus-four-btn-${i}`);
+      if (drop && btn && !t.closest(`#aus-four-drop-${i}`) && !t.closest(`#aus-four-btn-${i}`)) drop.style.display = "none";
+    }
+  });
+}
+function openFourDrop(idx, v) {
+  const doc = window.parent?.document ?? document;
+  const drop = doc.getElementById(`aus-four-drop-${idx}`);
+  if (!drop) return;
+  const curKeys = ensureFour();
+  const cur = curKeys[idx];
+  drop.innerHTML = FOUR_OPTIONS.map((o) => {
+    const active = o.key === cur;
+    return `<div data-four="${idx}" data-key="${o.key}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:11px;${active ? "background:var(--ds-card);font-weight:600;color:var(--ds-text);" : ""}">${o.label}</div>`;
+  }).join("");
+  drop.querySelectorAll("[data-four]").forEach((el) => {
+    el.onclick = () => {
+      const key = el.getAttribute("data-key");
+      const at = Number(el.getAttribute("data-four"));
+      const arr = ensureFour().slice();
+      arr[at] = key;
+      state$2.settings.overviewFour = arr;
+      try {
+        saveHot({ settings: state$2.settings });
+      } catch {
+      }
+      drop.style.display = "none";
+      renderOverview();
+    };
+  });
+  drop.style.display = drop.style.display === "block" ? "none" : "block";
+}
 function renderOverview() {
   const doc = window.parent?.document ?? document;
   const v = computeOverview();
@@ -2888,12 +3063,25 @@ function renderOverview() {
   }
   const fourHost = doc.getElementById("aus-overview-four");
   if (fourHost) {
-    fourHost.innerHTML = `
-      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:var(--ds-text-2);">每轮费用</div><div style="font-size:18px;font-weight:600;color:var(--ds-text);margin-top:4px;">¥${v.avgCost.toFixed(4)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span></div></div>
-      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:var(--ds-text-2);">每轮 Token</div><div style="font-size:18px;font-weight:600;color:var(--ds-text);margin-top:4px;">${Math.round(v.avgTokens).toLocaleString("zh-CN")}</div></div>
-      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:var(--ds-text-2);">平均耗时</div><div style="font-size:18px;font-weight:600;color:var(--ds-text);margin-top:4px;">${v.avgDuration.toFixed(1)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">s</span></div></div>
-      <div class="ds-card" style="padding:14px;"><div style="font-size:11px;color:var(--ds-text-2);">输出速率</div><div style="font-size:18px;font-weight:600;color:var(--ds-green);margin-top:4px;">${Math.round(v.avgRate)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">t/s</span></div></div>
-    `;
+    const keys = ensureFour();
+    bindFour();
+    fourHost.innerHTML = keys.map((k, i) => {
+      const d = getFourDisplay(k, v);
+      const isRate = k === "avg_rate";
+      const valColor = isRate ? "var(--ds-green)" : "var(--ds-text)";
+      return `<div class="ds-card" style="padding:14px;position:relative;overflow:visible;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+          <div style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.title}</div>
+          <button id="aus-four-btn-${i}" title="切换指标" style="flex-shrink:0;padding:4px 7px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:10px;cursor:pointer;line-height:1;">▼</button>
+          <div id="aus-four-drop-${i}" style="display:none;position:absolute;top:38px;right:8px;z-index:6;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:180px;max-height:260px;overflow:auto;"></div>
+        </div>
+        <div style="font-size:18px;font-weight:600;color:${valColor};margin-top:6px;word-break:break-all;">${d.html}</div>
+      </div>`;
+    }).join("");
+    keys.forEach((_, i) => {
+      const btn = doc.getElementById(`aus-four-btn-${i}`);
+      if (btn) btn.onclick = () => openFourDrop(i);
+    });
   }
   try {
     const hist = state$2.history || [];

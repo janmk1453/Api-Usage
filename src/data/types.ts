@@ -55,6 +55,10 @@ export type OverviewView = {
   avgCost: number; avgTokens: number; avgDuration: number; avgRate: number;
   rounds: number;
   remainingRounds: number | null;
+  avgInputCost: number; avgInputTokens: number; avgOutputCost: number; avgOutputTokens: number;
+  avgThinkTime: number; avgThinkTokens: number;
+  avgHitRate: number; latestHitRate: number | null;
+  maxOutput: number; maxInput: number; maxTotal: number;
 };
 
 export type StatsView = {
