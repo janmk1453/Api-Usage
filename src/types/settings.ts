@@ -43,6 +43,7 @@ export type Settings = {
   webdav: WebdavSettings;
   historyScope: HistoryScope;
   overviewFour: OverviewFourKey[];
+  modelsPricingCollapsed?: boolean;
 };
 
 export const defaultSettings = (): Settings => ({
@@ -65,6 +66,7 @@ export const defaultSettings = (): Settings => ({
   webdav: { url: 'https://dav.jianguoyun.com/dav/', username: '', path: '', proxy: '' },
   historyScope: 'all',
   overviewFour: ['avg_cost', 'avg_tokens', 'avg_duration', 'avg_rate', 'avg_input_tokens', 'avg_output_tokens', 'avg_hit_rate', 'max_total'],
+  modelsPricingCollapsed: true,
 });
 
 export type Balance = {

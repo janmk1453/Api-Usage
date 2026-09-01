@@ -17,7 +17,8 @@ const defaultSettings = () => ({
   peakDot: true,
   webdav: { url: "https://dav.jianguoyun.com/dav/", username: "", path: "", proxy: "" },
   historyScope: "all",
-  overviewFour: ["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_tokens", "avg_output_tokens", "avg_hit_rate", "max_total"]
+  overviewFour: ["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_tokens", "avg_output_tokens", "avg_hit_rate", "max_total"],
+  modelsPricingCollapsed: true
 });
 const PRICING = {
   "deepseek-v4-flash": {
@@ -879,6 +880,7 @@ const repository = {
       if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
       if (!merged.historyScope) merged.historyScope = def.historyScope;
       if (!merged.theme) merged.theme = def.theme;
+      if (typeof merged.modelsPricingCollapsed !== "boolean") merged.modelsPricingCollapsed = true;
       if (!Array.isArray(merged.overviewFour) || merged.overviewFour.length !== 8 && merged.overviewFour.length !== 4) merged.overviewFour = def.overviewFour;
       if (Array.isArray(merged.overviewFour) && merged.overviewFour.length === 4) {
         merged.overviewFour = [...merged.overviewFour, ...def.overviewFour.slice(4)];
@@ -972,6 +974,13 @@ const repository = {
       }
     } else if (state$2.settings.overviewFour.length === 4) {
       state$2.settings.overviewFour = [...state$2.settings.overviewFour, "avg_input_tokens", "avg_output_tokens", "avg_hit_rate", "max_total"];
+      try {
+        saveHot({ settings: state$2.settings });
+      } catch {
+      }
+    }
+    if (typeof state$2.settings.modelsPricingCollapsed !== "boolean") {
+      state$2.settings.modelsPricingCollapsed = true;
       try {
         saveHot({ settings: state$2.settings });
       } catch {
@@ -2062,8 +2071,8 @@ function renderSettings(doc) {
       <!-- 高峰时段 -->
       <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">高峰时段</span><button id="aus-btn-add-peak-hour" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 添加</button></div><div id="aus-peak-hours-list" style="display:grid;gap:6px;margin-top:8px;"></div><div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;">支持跨天（如 22:00-02:00），周末自动低谷。</div></div>
 
-      <!-- 模型与价格 -->
-      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型与价格（¥/百万 tokens）</span><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 自定义模型</button></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
+      <!-- 模型与价格（可折叠，默认收起） -->
+      <div class="ds-card"><div id="aus-models-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型与价格（¥/百万 tokens）</span><div style="display:flex;align-items:center;gap:8px;"><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 自定义模型</button><span id="aus-models-toggle" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;user-select:none;line-height:1;">▼ 展开</span></div></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
 
       <!-- 调试 -->
       <div class="ds-card">
@@ -2426,6 +2435,44 @@ function renderSettings(doc) {
   renderPeakHoursEditor(doc);
   renderModelsEditor(doc);
   fillDebugModelSelect(doc);
+  try {
+    const listEl = doc.getElementById("aus-custom-models-list");
+    const toggleEl = doc.getElementById("aus-models-toggle");
+    const headerEl = doc.getElementById("aus-models-header");
+    const addBtn = doc.getElementById("aus-btn-add-model");
+    const collapsed2 = s.modelsPricingCollapsed !== false;
+    if (listEl) listEl.style.display = collapsed2 ? "none" : "grid";
+    if (toggleEl) toggleEl.textContent = collapsed2 ? "▼ 展开" : "▲ 收起";
+    const applyCollapsed = (next) => {
+      state$2.settings.modelsPricingCollapsed = next;
+      try {
+        saveHot({ settings: state$2.settings });
+      } catch {
+      }
+      if (listEl) listEl.style.display = next ? "none" : "grid";
+      if (toggleEl) toggleEl.textContent = next ? "▼ 展开" : "▲ 收起";
+    };
+    if (toggleEl) toggleEl.onclick = (e) => {
+      e.stopPropagation();
+      applyCollapsed(listEl?.style.display !== "none" ? true : false);
+    };
+    if (headerEl) headerEl.onclick = (e) => {
+      const target = e.target;
+      if (target.closest("#aus-btn-add-model") || target.closest("#aus-models-toggle")) return;
+      applyCollapsed(listEl?.style.display !== "none" ? true : false);
+    };
+    if (addBtn) addBtn.addEventListener("click", () => {
+      const wasCollapsed = listEl?.style.display === "none";
+      if (wasCollapsed) applyCollapsed(false);
+      setTimeout(() => {
+        const l = doc.getElementById("aus-custom-models-list");
+        const t = doc.getElementById("aus-models-toggle");
+        if (l) l.style.display = "grid";
+        if (t) t.textContent = "▲ 收起";
+      }, 30);
+    });
+  } catch {
+  }
 }
 function renderPeakHoursEditor(doc) {
   const list = doc.getElementById("aus-peak-hours-list");

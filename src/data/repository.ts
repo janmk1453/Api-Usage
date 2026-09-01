@@ -295,6 +295,7 @@ export const repository = {
       if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
       if (!merged.historyScope) merged.historyScope = def.historyScope;
       if (!merged.theme) merged.theme = def.theme;
+      if (typeof merged.modelsPricingCollapsed !== 'boolean') merged.modelsPricingCollapsed = true;
       if (!Array.isArray(merged.overviewFour) || (merged.overviewFour.length !== 8 && merged.overviewFour.length !== 4)) merged.overviewFour = def.overviewFour;
       if (Array.isArray(merged.overviewFour) && merged.overviewFour.length === 4) {
         merged.overviewFour = [...merged.overviewFour, ...def.overviewFour.slice(4)];
@@ -384,6 +385,10 @@ export const repository = {
       try { saveHot({ settings: state.settings }); } catch {}
     } else if ((state.settings as any).overviewFour.length === 4) {
       (state.settings as any).overviewFour = [...(state.settings as any).overviewFour, 'avg_input_tokens','avg_output_tokens','avg_hit_rate','max_total'];
+      try { saveHot({ settings: state.settings }); } catch {}
+    }
+    if (typeof (state.settings as any).modelsPricingCollapsed !== 'boolean') {
+      (state.settings as any).modelsPricingCollapsed = true;
       try { saveHot({ settings: state.settings }); } catch {}
     }
     // 迁移：旧历史无 chatId 时尝试回填（无法精确回溯则保留 null，按 all 展示）
