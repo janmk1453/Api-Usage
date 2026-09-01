@@ -14,11 +14,11 @@ const CHART_DEFS: Record<ChartId, {title:string, yOpts: typeof Y_OPTIONS, hasX:b
 };
 
 const state: Record<ChartId, {y:Set<string>,x:XKey,pieMode:'token'|'count'}> = {
-  token: { y: new Set(['input_hit_token','input_miss_token','output_token']), x:'day', pieMode:'token' },
-  cost: { y: new Set(['total_cost']), x:'day', pieMode:'token' },
-  hit: { y: new Set(['hit_rate']), x:'day', pieMode:'token' },
+  token: { y: new Set(['input_hit_token','input_miss_token','output_token']), x:'round', pieMode:'token' },
+  cost: { y: new Set(['total_cost']), x:'round', pieMode:'token' },
+  hit: { y: new Set(['hit_rate']), x:'round', pieMode:'token' },
   req: { y: new Set(['req_count']), x:'day', pieMode:'token' },
-  dur: { y: new Set(['duration','rate']), x:'day', pieMode:'token' },
+  dur: { y: new Set(['duration','rate']), x:'round', pieMode:'token' },
   pie: { y: new Set([]), x:'day', pieMode:'token' },
 };
 
