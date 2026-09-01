@@ -3598,7 +3598,6 @@ async function renderOne(id, filtered) {
       series: seriesData.map((s) => ({
         name: s.name,
         type: "line",
-        stack: "total",
         smooth: true,
         symbol: "none",
         lineStyle: { width: 1.5, color: s.color },
