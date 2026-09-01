@@ -295,11 +295,15 @@ export const repository = {
       if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
       if (!merged.historyScope) merged.historyScope = def.historyScope;
       if (!merged.theme) merged.theme = def.theme;
-      if (!Array.isArray(merged.overviewFour) || merged.overviewFour.length !== 4) merged.overviewFour = def.overviewFour;
+      if (!Array.isArray(merged.overviewFour) || (merged.overviewFour.length !== 8 && merged.overviewFour.length !== 4)) merged.overviewFour = def.overviewFour;
+      if (Array.isArray(merged.overviewFour) && merged.overviewFour.length === 4) {
+        merged.overviewFour = [...merged.overviewFour, ...def.overviewFour.slice(4)];
+      }
       // 清洗 overviewFour 非法 key
       try {
         const valid = new Set(['avg_cost','avg_tokens','avg_duration','avg_rate','avg_input_cost','avg_input_tokens','avg_output_cost','avg_output_tokens','avg_think_time','avg_think_tokens','avg_hit_rate','latest_hit_rate','max_output','max_input','max_total']);
         if (Array.isArray(merged.overviewFour)) merged.overviewFour = merged.overviewFour.map((k:any)=> valid.has(k)?k:'avg_cost');
+        if (merged.overviewFour.length !== 8) merged.overviewFour = def.overviewFour;
       } catch {}
       state.settings = merged as any;
     }
@@ -374,9 +378,12 @@ export const repository = {
       (state.settings as any).historyScope = 'all';
       try { saveHot({ settings: state.settings }); } catch {}
     }
-    // 迁移：旧设置无 overviewFour 时补默认四块
-    if (!Array.isArray((state.settings as any).overviewFour) || (state.settings as any).overviewFour.length !== 4) {
-      (state.settings as any).overviewFour = ['avg_cost','avg_tokens','avg_duration','avg_rate'];
+    // 迁移：旧设置无 overviewFour 时补默认八块（兼容旧4块）
+    if (!Array.isArray((state.settings as any).overviewFour) || ((state.settings as any).overviewFour.length !== 8 && (state.settings as any).overviewFour.length !== 4)) {
+      (state.settings as any).overviewFour = ['avg_cost','avg_tokens','avg_duration','avg_rate','avg_input_tokens','avg_output_tokens','avg_hit_rate','max_total'];
+      try { saveHot({ settings: state.settings }); } catch {}
+    } else if ((state.settings as any).overviewFour.length === 4) {
+      (state.settings as any).overviewFour = [...(state.settings as any).overviewFour, 'avg_input_tokens','avg_output_tokens','avg_hit_rate','max_total'];
       try { saveHot({ settings: state.settings }); } catch {}
     }
     // 迁移：旧历史无 chatId 时尝试回填（无法精确回溯则保留 null，按 all 展示）

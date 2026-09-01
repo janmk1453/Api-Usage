@@ -30,8 +30,21 @@ const FOUR_LABEL_MAP = new Map<string,string>(FOUR_OPTIONS.map(o=>[o.key,o.label
 function ensureFour(): OverviewFourKey[] {
   let cur: any = (state.settings as any).overviewFour;
   const valid = new Set(FOUR_OPTIONS.map(o=>o.key));
-  if (!Array.isArray(cur) || cur.length !== 4 || cur.some((k:any)=>!valid.has(k))) {
-    cur = ['avg_cost','avg_tokens','avg_duration','avg_rate'] as OverviewFourKey[];
+  const defaults: OverviewFourKey[] = ['avg_cost','avg_tokens','avg_duration','avg_rate','avg_input_tokens','avg_output_tokens','avg_hit_rate','max_total'];
+  if (!Array.isArray(cur) || cur.some((k:any)=>!valid.has(k))) {
+    cur = defaults.slice();
+    (state.settings as any).overviewFour = cur;
+    try { saveHot({ settings: state.settings }); } catch {}
+    return cur as OverviewFourKey[];
+  }
+  if (cur.length === 4) {
+    // 旧4块迁移至8块：保留原4，补齐后4默认
+    cur = [...cur, ...defaults.slice(4)] as OverviewFourKey[];
+    (state.settings as any).overviewFour = cur;
+    try { saveHot({ settings: state.settings }); } catch {}
+  }
+  if (cur.length !== 8) {
+    cur = defaults.slice();
     (state.settings as any).overviewFour = cur;
     try { saveHot({ settings: state.settings }); } catch {}
   }
@@ -83,7 +96,7 @@ function bindFour() {
   const doc = (window.parent as any)?.document ?? document;
   doc.addEventListener('click', (e: any) => {
     const t = e.target as HTMLElement;
-    for (let i=0;i<4;i++) {
+    for (let i=0;i<8;i++) {
       const drop = doc.getElementById(`aus-four-drop-${i}`);
       const btn = doc.getElementById(`aus-four-btn-${i}`);
       if (drop && btn && !t.closest(`#aus-four-drop-${i}`) && !t.closest(`#aus-four-btn-${i}`)) drop.style.display='none';

@@ -17,7 +17,7 @@ const defaultSettings = () => ({
   peakDot: true,
   webdav: { url: "https://dav.jianguoyun.com/dav/", username: "", path: "", proxy: "" },
   historyScope: "all",
-  overviewFour: ["avg_cost", "avg_tokens", "avg_duration", "avg_rate"]
+  overviewFour: ["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_tokens", "avg_output_tokens", "avg_hit_rate", "max_total"]
 });
 const PRICING = {
   "deepseek-v4-flash": {
@@ -879,10 +879,14 @@ const repository = {
       if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
       if (!merged.historyScope) merged.historyScope = def.historyScope;
       if (!merged.theme) merged.theme = def.theme;
-      if (!Array.isArray(merged.overviewFour) || merged.overviewFour.length !== 4) merged.overviewFour = def.overviewFour;
+      if (!Array.isArray(merged.overviewFour) || merged.overviewFour.length !== 8 && merged.overviewFour.length !== 4) merged.overviewFour = def.overviewFour;
+      if (Array.isArray(merged.overviewFour) && merged.overviewFour.length === 4) {
+        merged.overviewFour = [...merged.overviewFour, ...def.overviewFour.slice(4)];
+      }
       try {
         const valid = /* @__PURE__ */ new Set(["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_cost", "avg_input_tokens", "avg_output_cost", "avg_output_tokens", "avg_think_time", "avg_think_tokens", "avg_hit_rate", "latest_hit_rate", "max_output", "max_input", "max_total"]);
         if (Array.isArray(merged.overviewFour)) merged.overviewFour = merged.overviewFour.map((k) => valid.has(k) ? k : "avg_cost");
+        if (merged.overviewFour.length !== 8) merged.overviewFour = def.overviewFour;
       } catch {
       }
       state$2.settings = merged;
@@ -960,8 +964,14 @@ const repository = {
       } catch {
       }
     }
-    if (!Array.isArray(state$2.settings.overviewFour) || state$2.settings.overviewFour.length !== 4) {
-      state$2.settings.overviewFour = ["avg_cost", "avg_tokens", "avg_duration", "avg_rate"];
+    if (!Array.isArray(state$2.settings.overviewFour) || state$2.settings.overviewFour.length !== 8 && state$2.settings.overviewFour.length !== 4) {
+      state$2.settings.overviewFour = ["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_tokens", "avg_output_tokens", "avg_hit_rate", "max_total"];
+      try {
+        saveHot({ settings: state$2.settings });
+      } catch {
+      }
+    } else if (state$2.settings.overviewFour.length === 4) {
+      state$2.settings.overviewFour = [...state$2.settings.overviewFour, "avg_input_tokens", "avg_output_tokens", "avg_hit_rate", "max_total"];
       try {
         saveHot({ settings: state$2.settings });
       } catch {
@@ -2922,8 +2932,26 @@ const FOUR_LABEL_MAP = new Map(FOUR_OPTIONS.map((o) => [o.key, o.label]));
 function ensureFour() {
   let cur = state$2.settings.overviewFour;
   const valid = new Set(FOUR_OPTIONS.map((o) => o.key));
-  if (!Array.isArray(cur) || cur.length !== 4 || cur.some((k) => !valid.has(k))) {
-    cur = ["avg_cost", "avg_tokens", "avg_duration", "avg_rate"];
+  const defaults = ["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_tokens", "avg_output_tokens", "avg_hit_rate", "max_total"];
+  if (!Array.isArray(cur) || cur.some((k) => !valid.has(k))) {
+    cur = defaults.slice();
+    state$2.settings.overviewFour = cur;
+    try {
+      saveHot({ settings: state$2.settings });
+    } catch {
+    }
+    return cur;
+  }
+  if (cur.length === 4) {
+    cur = [...cur, ...defaults.slice(4)];
+    state$2.settings.overviewFour = cur;
+    try {
+      saveHot({ settings: state$2.settings });
+    } catch {
+    }
+  }
+  if (cur.length !== 8) {
+    cur = defaults.slice();
     state$2.settings.overviewFour = cur;
     try {
       saveHot({ settings: state$2.settings });
@@ -2987,7 +3015,7 @@ function bindFour() {
   const doc = window.parent?.document ?? document;
   doc.addEventListener("click", (e) => {
     const t = e.target;
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 8; i++) {
       const drop = doc.getElementById(`aus-four-drop-${i}`);
       const btn = doc.getElementById(`aus-four-btn-${i}`);
       if (drop && btn && !t.closest(`#aus-four-drop-${i}`) && !t.closest(`#aus-four-btn-${i}`)) drop.style.display = "none";
