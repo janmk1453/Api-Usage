@@ -41,7 +41,7 @@ Api-Usage/
 │   ├── store/index.ts, persistence.ts # 单一历史聚合（已废弃多存档，saves 仅作迁移兼容；append/getAllHistory 指纹去重 timestamp|model|total）
 │   ├── services/pricing.ts, interception.ts(fetch透传+缓存+指纹去重，GENERATION_ENDED主路径，install/uninstall幂等), balance.ts, import-export.ts(单一历史+清洗), sync.ts(单一历史+清洗), debug.ts, theme.ts(applyTheme 同步 overlay)
 │   ├── utils/date.ts, crypto.ts(XOR+UTF-8), logger.ts
-│   └── ui/panel.ts(全屏+侧边导航+absolute 定位), overview.ts(双明细+四块+热力图), stats-view.ts(日历+双维度+图表Y/X配置+隐藏跳过), chart-config.ts(Y 8×X 5 聚合), heatmap.ts(GitHub风格近2年Token热力图，块内横向滑动), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情), settings.ts(完整设置+不回显密钥), peak-dot.ts, customize.ts
+│   └── ui/panel.ts(全屏+absolute定位+DeepSeek式侧边栏display切换+汉堡), overview.ts(双明细+8块2列+热力图), stats-view.ts(日历+双维度+图表Y/X配置+隐藏跳过), chart-config.ts(Y 8×X 5 聚合), heatmap.ts(GitHub风格近2年Token热力图，块内横向滑动), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情), settings.ts(完整设置+不回显密钥), peak-dot.ts, customize.ts
 ├── README.md
 └── LICENSE
 ```
@@ -57,8 +57,8 @@ node --check index.js
 ```
 
 - **入口**：酒馆左下角魔法棒 `#extensionsMenu → #aus_wand_entry`（`list-group-item`），点击 `togglePanel()` 打开全屏 `#aus-overlay + #aus-panel`（`absolute` 视口计算，监听 `scroll/resize`，非 `fixed` 以规避 `transform` 祖先在窄屏漂移）
-- **面板**：全屏 `absolute` 定位置换 + 侧边导航（`220px ↔ 60px`，`≤760px` 自动收起 `60px` 图标栏，展开 `220px` 覆盖式 + 遮罩），`6` 视图（用量概览/统计/历史/设置/使用说明/关于）经 `data-view` + `opacity 0.15s` 切换，`sidebar-toggle` 同步宽度与标签显隐
-- **样式**：`[data-extension="api-usage-stat"][data-ds-theme="light"]` 隔离，卡片 `1px solid #E5E7EB` 实线，无 `box-shadow`，字重 `600`，`Microsoft YaHei` 保证锐利；`#aus-sidebar` 过渡 `width 0.2s`，移动端横向可滚动，`style.css` 定义 `light/dark` 两套同名变量，深色经 `themeColor()` 注入 ECharts
+- **面板**：全屏 `absolute` 定位置换 + 侧边导航（复刻 DeepSeek 官网 `display` 切换：`≥761px` 常显 `220px ↔ 60px` 折叠，`≤760px` 默认 `display:none` 隐藏 + `#aus-mobile-header` 内 `24px` 汉堡瞬时呼出 `is-open`，无遮罩无动画无过渡），外层 `#aus-panel flex:column` + 内层 `#aus-panel-body flex:row`，`6` 视图（用量概览/统计/历史/设置/使用说明/关于）经 `data-view` + `opacity 0.15s` 切换，`sidebar-toggle` 仅宽屏折叠，窄屏由汉堡控制 + 导航点击自动收起
+- **样式**：`[data-extension="api-usage-stat"][data-ds-theme="light"]` 隔离，卡片 `1px solid #E5E7EB` 实线，无 `box-shadow`，字重 `600`，`Microsoft YaHei` 保证锐利；`#aus-sidebar` 无过渡（瞬时 `display` 切换），`style.css` 定义 `light/dark` 两套同名变量，深色经 `themeColor()` 注入 ECharts
 - **拦截**：`GENERATION_ENDED → chat[].extra.api_usage` 主路径，`ApiUsageStatInterceptor` 辅路径，`repository.addEntry/recalcAll` 1:1 脚本
 - **数据框架**：所有存/取/算/展必须走 `src/data/` — `repository` 唯一写、`computed` 唯一算（`computeOverview` 供概览 8 块，`computeStats` 供统计）、`events` 订阅刷新；禁止在 UI 直接读写 `state.history` 聚合或手算
 - **持久化**：`saveHot` 节流 `300ms`，`loadHot/migrateIfNeeded` 仅由 `repository.hydrate` 调用，已自动将旧多存档合并为单一历史（`hot 50` + `cold_history`）
@@ -68,7 +68,7 @@ node --check index.js
 ### 用量概览（overview）
 - **双余额卡**：充值余额（`customBalance|balance`）+ 累计消费（`¥ + CNY` + `tokens`）
 - **双明细**：历史消耗（Token 历史/命中/未命中/输出，`gap:10px + 行内 padding:4px` 与右侧对齐）与支出明细（预计节省/支出输入/输出，分两行，`token` 灰 `10px #9CA3AF`）并列
-- **四小块**：每轮费用（`CNY`）/每轮 Token/平均耗时 `s`/输出速率 `t/s`（`computeOverview` 单源）
+- **四小块→八小块**：默认 8 块 `repeat(4,1fr)`，`≤760px` 与 `≤480px` 保持 `repeat(2,1fr)` 两列（`gap 10px→8px`，卡片 `10px 12px`），支持 `overviewFour` 自定义 `14` 指标（`computeOverview` 单源，通用兜底排除 `#aus-overview-four`）
 - **热力图**：`Token 使用量热力图`（GitHub 风格，近 2 年按日聚合，5 级绿阶 `EBEDF0→216E39/161b22→aceebb`，`#aus-heatmap-card-overview` 块不超出、内部 `overflow-x:auto` 横向滑动，与 `模型汇总` 块一致，悬停显示日期+Token，渲染于 `overview.ts → heatmap.ts`，数据源 `state.history` 全量）
 
 ### 用量统计（stats）
@@ -94,12 +94,12 @@ node --check index.js
 - 选择器统一：所有选择类 UI 必须使用用量统计·模型选择同款胶囊下拉（`#xxx-btn` 胶囊 `999px` + `#xxx-dropdown` 绝对定位 `12px` 圆角 `box-shadow`），禁止原生 `select`，选中态 `background:var(--ds-card)` 加粗
 - 魔法棒悬停：`background: transparent !important`
 - 文字：`Microsoft YaHei`，无 `antialiased/optimizeLegibility` 干预
-- 移动端：`≤760px` 侧边栏自动收起 `60px`，展开 `220px` 覆盖式（`absolute` + 遮罩），网格 `4→2→1` 列自适应
+- 移动端：`≤760px` 侧边栏 `display:none` 默认隐藏、`#aus-mobile-header` 汉堡（`24px` `☰`，`display:flex`）瞬时呼出 `is-open`，无遮罩无动画；`#aus-panel flex:column + #aus-panel-body flex:row`，概览 8 块保持 `repeat(2,1fr)` 两列，其余网格 `4→1` 列
 
 ## 常见任务
 
 - **改定价/峰谷**：`src/constants/pricing.ts` + `src/services/pricing.ts`（纯函数，`isPeakHour(ts, peakHours)` 不读全局）
-- **改面板/导航**：`src/ui/panel.ts`（全屏+`positionPanel` 定位置换+`applyCollapsed`）+ `style.css`
+- **改面板/导航**：`src/ui/panel.ts`（全屏+`positionPanel` 定位置换+`applyCollapsed`）+ `style.css`（`#aus-mobile-header` 汉堡 + `display` 切换，无过渡）
 - **改概览/统计**：`src/ui/overview.ts` + `src/ui/stats-view.ts`（双维度过滤）+ `src/data/computed.ts` + `src/ui/heatmap.ts`（概览热力图，GitHub 风格，近 2 年，块内滑动）
 - **改历史详情/占比**：`src/ui/panel.ts`（`renderHistory` 内联展开 + 三色条）
 - **改同步/导入**：`src/services/sync.ts` + `src/services/import-export.ts`（单一历史）
