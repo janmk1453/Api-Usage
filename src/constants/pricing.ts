@@ -26,7 +26,7 @@ export const DEFAULT_PEAK_HOURS: Array<{ start: string; end: string }> = [
 ];
 
 export const MAX_HISTORY = 2000;
-export const DETAIL_KEEP = 10;
+export const DETAIL_KEEP = 3;
 
 export const STORAGE_KEYS = {
   KEY: 'ds_api_key',

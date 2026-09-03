@@ -3,6 +3,7 @@ import { localDay, esc } from '../utils/date';
 import { Y_OPTIONS, X_OPTIONS, getYSelected, getXSelected, toggleY, setXSelected, aggregateForChart } from './chart-config';
 import { renderExtraCharts } from './extra-charts';
 import { renderModelTrends, initModelTrends } from './model-trends';
+import { DataEvents, on as onDataEvent } from '../data/events';
 
 type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom' | 'all';
 let currentRange: RangeKey = '30d';
@@ -82,15 +83,15 @@ function themeColor(name: string, fallback: string) {
 
 function getRangeDates(): { start: string; end: string } {
   const today = localDay(Date.now());
-  const d = new Date(today + 'T00:00:00Z');
-  const fmt = (x: Date) => x.toISOString().slice(0,10);
+  const d = new Date(today + 'T00:00:00');
+  const fmt = (x: Date) => localDay(x.getTime());
   switch (currentRange) {
     case 'today': return { start: today, end: today };
-    case 'yesterday': { const y = new Date(d); y.setUTCDate(y.getUTCDate()-1); const s=fmt(y); return { start:s,end:s }; }
-    case '7d': { const s=new Date(d); s.setUTCDate(s.getUTCDate()-6); return { start:fmt(s), end:today }; }
-    case '30d': { const s=new Date(d); s.setUTCDate(s.getUTCDate()-29); return { start:fmt(s), end:today }; }
-    case 'month': { const s=new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(),1)); return { start:fmt(s), end:today }; }
-    case 'lastMonth': { const s=new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth()-1,1)); const e=new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(),0)); return { start:fmt(s), end:fmt(e) }; }
+    case 'yesterday': { const y = new Date(d); y.setDate(y.getDate()-1); const s=fmt(y); return { start:s,end:s }; }
+    case '7d': { const s=new Date(d); s.setDate(s.getDate()-6); return { start:fmt(s), end:today }; }
+    case '30d': { const s=new Date(d); s.setDate(s.getDate()-29); return { start:fmt(s), end:today }; }
+    case 'month': { const s=new Date(d.getFullYear(), d.getMonth(),1); return { start:fmt(s), end:today }; }
+    case 'lastMonth': { const s=new Date(d.getFullYear(), d.getMonth()-1,1); const e=new Date(d.getFullYear(), d.getMonth(),0); return { start:fmt(s), end:fmt(e) }; }
     case 'custom': return { start: customStart || today, end: customEnd || today };
     case 'all': return { start: '2020-01-01', end: today };
   }
@@ -138,26 +139,26 @@ function renderCalendar() {
   updateRangeHighlight();
   if (currentRange !== 'custom') return;
   const todayStr = localDay(Date.now());
-  const base = new Date(todayStr + 'T00:00:00Z');
-  base.setUTCMonth(base.getUTCMonth() + calendarOffset);
+  const base = new Date(todayStr + 'T00:00:00');
+  base.setMonth(base.getMonth() + calendarOffset);
   const months: Date[] = [];
-  months.push(new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth()-1, 1)));
-  months.push(new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), 1)));
+  months.push(new Date(base.getFullYear(), base.getMonth()-1, 1));
+  months.push(new Date(base.getFullYear(), base.getMonth(), 1));
   let html = '<div style="display:flex;gap:12px;align-items:flex-start;">';
   html += `<button id="aus-cal-prev" style="margin-top:32px;padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);cursor:pointer;">‹</button>`;
   html += '<div style="display:flex;gap:16px;">';
   for (const m of months) {
-    const y = m.getUTCFullYear(), mo = m.getUTCMonth();
-    const first = new Date(Date.UTC(y, mo, 1));
-    const daysInMonth = new Date(Date.UTC(y, mo+1, 0)).getUTCDate();
-    const startDow = first.getUTCDay();
+    const y = m.getFullYear(), mo = m.getMonth();
+    const first = new Date(y, mo, 1);
+    const daysInMonth = new Date(y, mo+1, 0).getDate();
+    const startDow = first.getDay();
     html += `<div style="min-width:220px;"><div style="text-align:center;font-weight:600;font-size:13px;margin-bottom:8px;">${y}年${mo+1}月</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:11px;">`;
     const week = ['日','一','二','三','四','五','六'];
     for (const w of week) html += `<div style="text-align:center;color:var(--ds-text-3);padding:4px;">${w}</div>`;
     for (let i=0;i<startDow;i++) html += `<div></div>`;
     for (let d=1; d<=daysInMonth; d++) {
-      const date = new Date(Date.UTC(y, mo, d));
-      const key = date.toISOString().slice(0,10);
+      const date = new Date(y, mo, d);
+      const key = localDay(date.getTime());
       const { start, end } = getRangeDates();
       const inRange = key >= start && key <= end;
       const isToday = key === todayStr;
@@ -379,7 +380,7 @@ async function renderChart(filteredRaw: any[]) {
     const statsView = doc.querySelector('[data-view="stats"]') as HTMLElement | null;
     const isHidden = statsView ? (statsView.style.display === 'none' || (statsView as any).offsetParent === null) : false;
     if (isHidden) {
-      try { console.log('[AUS] renderChart 容器隐藏，等待切换'); } catch {}
+      try { const { log } = await import('../utils/logger'); log.debug('renderChart 容器隐藏，等待切换'); } catch {}
       return;
     }
     const tries = (renderChart as any)._retryCount || 0;
@@ -542,12 +543,20 @@ function renderModelSummary(filtered: any[]) {
 let cachedAllHistory: any[] | null = null;
 let allHistoryLoading = false;
 
+export function invalidateStatsCache() { cachedAllHistory = null; }
+try { onDataEvent(DataEvents.HISTORY_ADDED, () => { cachedAllHistory = null; }); } catch {}
+
 async function getHistoryForStats(): Promise<any[]> {
   const s: any = getSelectedSave();
   const hot: any[] = s?.history || [];
-  // 若热已满且可能有冷数据，则异步加载全量
   if (hot.length >= 400 || cachedAllHistory) {
-    if (cachedAllHistory) return cachedAllHistory;
+    if (cachedAllHistory) {
+      const keyOf = (h: any) => `${h.timestamp}|${h.model||''}|${h.total_tokens||0}`;
+      const seen = new Set(cachedAllHistory.map(keyOf));
+      const fresh = hot.filter((h: any) => !seen.has(keyOf(h)));
+      if (fresh.length) cachedAllHistory = [...fresh, ...cachedAllHistory].sort((a: any,b: any)=> b.timestamp - a.timestamp);
+      return cachedAllHistory;
+    }
     if (allHistoryLoading) return hot;
     allHistoryLoading = true;
     try {
@@ -592,32 +601,7 @@ export async function renderStatsView() {
     renderExtraCharts(chartFiltered);
     renderModelTrends(chartFiltered);
   } else {
-    try { console.log('[AUS] stats 隐藏，跳过图表初始化'); } catch {}
-  }
-  // 若首次加载了全量且数量更大，二次刷新确保图表包含冷数据（异步后）
-  if (cachedAllHistory && cachedAllHistory.length !== (s.history||[]).length) {
-    // 已使用全量，无需额外
-  } else if (!cachedAllHistory && allHistory.length !== (s.history||[]).length) {
-    // 异步加载完成后若发现冷数据，触发一次重绘
-    try {
-      const mod: any = await import('../store/persistence');
-      const all = await mod.getAllHistory();
-      if (all && all.length > (s.history||[]).length) {
-        cachedAllHistory = all;
-        // 避免无限递归：直接同步重绘一次
-        const tf2 = filterByRange(all);
-        const sf2 = filterByModel(tf2);
-        const cf2 = sf2;
-        let c2=0, r2=sf2.length, t2=0; for(const e of sf2){c2+=e.cost||0; t2+=e.total_tokens||0;}
-        const ce2 = doc.getElementById('aus-stats-cost'); if(ce2) ce2.textContent='¥'+c2.toFixed(2)+' CNY';
-        const re2 = doc.getElementById('aus-stats-req'); if(re2) re2.textContent=String(r2);
-        const te2 = doc.getElementById('aus-stats-tok'); if(te2) te2.textContent=t2.toLocaleString('zh-CN');
-        renderModelSummary(sf2);
-        const sv2 = doc.querySelector('[data-view="stats"]') as HTMLElement | null;
-        const hidden2 = sv2 ? (sv2.style.display === 'none' || (sv2 as any).offsetParent === null) : false;
-        if (!hidden2) { renderChart(cf2); renderExtraCharts(cf2); renderModelTrends(cf2); }
-      }
-    } catch {}
+    try { const { log } = await import('../utils/logger'); log.debug('stats 隐藏，跳过图表初始化'); } catch {}
   }
 }
 

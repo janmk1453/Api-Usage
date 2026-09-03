@@ -54,7 +54,12 @@ async function webdavGet(): Promise<any> {
 }
 async function webdavMkcol(dir: string) {
   const url = reqUrl(dir);
-  try { const r: any = await rawFetch()(url, { method: 'MKCOL', headers: { Authorization: authHeader() } }); return r.status === 201 || r.status === 405 || r.status === 409 || r.status === 204; } catch { return false; }
+  try {
+    const r: any = await rawFetch()(url, { method: 'MKCOL', headers: { Authorization: authHeader() } });
+    if (r.status === 201 || r.status === 405 || r.status === 204) return true;
+    if (r.status === 409) return false; // 父目录不存在，提示用户检查路径
+    return false;
+  } catch { return false; }
 }
 async function webdavPut(text: string) {
   for (const d of dirs()) await webdavMkcol(d);
@@ -144,6 +149,10 @@ export async function doSyncNow() {
   const cfg: any = state.settings.webdav || {};
   if (!cfg.url || !cfg.username) return alert('请先在设置中填写 WebDAV 地址与用户名');
   if (!/^https:\/\//i.test(cfg.url)) return alert('WebDAV 地址必须为 https');
+  const proxy = (cfg.proxy || '').trim();
+  if (proxy && !/^https:\/\//i.test(proxy)) {
+    if (!confirm('CORS 代理非 https，WebDAV 用户名密码将以可被截获的方式经该代理传输。\n仍要继续？')) return;
+  }
   syncing = true;
   const btn = (window.parent as any)?.document?.getElementById('aus-webdav-sync') as HTMLButtonElement | null;
   if (btn) { btn.disabled = true; btn.textContent = '同步中…'; }

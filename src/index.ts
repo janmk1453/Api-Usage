@@ -9,6 +9,7 @@ import { installInterception } from './services/interception';
 import { createPanel, openPanel, closePanel, togglePanel, refreshUI } from './ui/panel';
 import { createPeakDot, updatePeakDot } from './ui/peak-dot';
 import { applyTheme } from './services/theme';
+import { log } from './utils/logger';
 
 const MODULE = 'api_usage_stat';
 
@@ -50,7 +51,7 @@ function injectWandEntry() {
   try { menu.appendChild(container); } catch { return false; }
   const btn = doc.getElementById('aus_wand_entry');
   if (btn) btn.addEventListener('click', () => togglePanel());
-  console.log('[API用量统计] 魔法棒入口已注入');
+  log.debug('魔法棒入口已注入');
   return true;
 }
 
@@ -63,10 +64,10 @@ function ensureWandEntry() {
   }, 500);
 }
 
-export async function onInstall() { console.log('[API用量统计] installed'); try { const { loadHot } = await import('./store/persistence'); await loadHot(); } catch {} }
-export async function onUpdate() { console.log('[API用量统计] updated'); }
+export async function onInstall() { log.debug('installed'); try { const { loadHot } = await import('./store/persistence'); await loadHot(); } catch {} }
+export async function onUpdate() { log.debug('updated'); }
 export async function onDelete() {
-  console.log('[API用量统计] deleted');
+  log.debug('deleted');
   try {
     const doc = getDoc();
     doc.getElementById('aus-overlay')?.remove();
@@ -74,16 +75,33 @@ export async function onDelete() {
     doc.getElementById('aus_wand_container')?.remove();
     doc.getElementById('aus-peak-dot-indicator')?.remove();
   } catch {}
+  try { const m = await import('./ui/panel'); (m as any).resetPanelState?.(); } catch {}
+  try { const m = await import('./ui/peak-dot'); (m as any).stopPeakDot?.(); } catch {}
+  try { const m2 = await import('./services/balance'); (m2 as any).stopBalanceTimer?.(); } catch {}
+  // 清理卸载残留
+  try { localStorage.removeItem('ds_ds_webdav_pass'); } catch {}
+  try { localStorage.removeItem('ds_ds_peak_dot_pos'); } catch {}
+  try { localStorage.removeItem('ds_debug_log'); } catch {}
+  try {
+    const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
+    if (ctx?.extensionSettings) { delete ctx.extensionSettings['api_usage_stat']; ctx.saveSettingsDebounced?.(); }
+  } catch {}
+  try { delete (globalThis as any).ApiUsageStat; delete (globalThis as any).ApiUsageStatInterceptor; } catch {}
 }
-export function onEnable() { console.log('[API用量统计] enabled'); try { import('./services/interception').then(m=>m.installInterception()); } catch {} }
-export function onDisable() {
-  console.log('[API用量统计] disabled');
+export function onEnable() { log.debug('enabled'); try { import('./services/interception').then(m=>m.installInterception()); } catch {} try { import('./services/balance').then(m=> (m as any).restartBalanceTimer?.()); } catch {} }
+export async function onDisable() {
+  log.debug('disabled');
   try { import('./services/interception').then(m=> (m as any).uninstallInterception?.()); } catch {}
   try {
     const doc = getDoc();
     doc.getElementById('aus-overlay')?.remove();
     doc.getElementById('aus-panel')?.remove();
+    doc.getElementById('aus_wand_container')?.remove();
+    doc.getElementById('aus-peak-dot-indicator')?.remove();
   } catch {}
+  try { const m = await import('./ui/panel'); (m as any).resetPanelState?.(); } catch {}
+  try { const m = await import('./ui/peak-dot'); (m as any).stopPeakDot?.(); } catch {}
+  try { const m2 = await import('./services/balance'); (m2 as any).stopBalanceTimer?.(); } catch {}
 }
 export async function onActivate() { ensureStyleScope(); try { injectWandEntry(); ensureWandEntry(); } catch {} }
 
@@ -92,6 +110,7 @@ async function init() {
   try { applyTheme((state.settings as any).theme); } catch {}
   // 隔离数据初始化错误，不影响入口注入
   try { await initStore(); } catch (e) { console.error('[API用量统计] initStore 失败', e); }
+  try { const m = await import('./services/balance'); (m as any).restartBalanceTimer?.(); } catch {}
   try { installInterception(); } catch {}
   const mount = () => {
     try { applyTheme((state.settings as any).theme); } catch {}

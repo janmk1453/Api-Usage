@@ -1,4 +1,4 @@
-// 迁移自 DeepSeek使用预测.js:16-23
+// 迁移自 DeepSeek使用预测.js:16-23 - 已改为本地时区（原 UTC+8 硬编码）
 export function isWeekendDay(timestamp: number | Date | unknown): boolean {
   const t =
     typeof timestamp === 'number'
@@ -6,14 +6,14 @@ export function isWeekendDay(timestamp: number | Date | unknown): boolean {
       : timestamp && (timestamp as Date).getTime
         ? (timestamp as Date).getTime()
         : 0;
-  const day = new Date(t + 8 * 3600 * 1000).getUTCDay();
+  const day = new Date(t).getDay();
   return day === 6 || day === 0;
 }
 
 export function isPeakHour(timestamp: number, peakHours: Array<{ start: string; end: string }>): boolean {
   if (isWeekendDay(timestamp)) return false;
   const d = new Date(timestamp);
-  const totalMinutes = (d.getUTCHours() * 60 + d.getUTCMinutes() + 8 * 60) % 1440;
+  const totalMinutes = d.getHours() * 60 + d.getMinutes();
   for (const h of peakHours) {
     if (!h || !h.start || !h.end) continue;
     const p = h.start.split(':');
@@ -31,19 +31,16 @@ export function isPeakHour(timestamp: number, peakHours: Array<{ start: string; 
 
 export function localDay(ts: number | Date): string {
   const t = typeof ts === 'number' ? ts : ts.getTime();
-  return new Date(t + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  const d = new Date(t);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 }
 
 export function localTimeHM(ts: number | Date): string {
   const t = typeof ts === 'number' ? ts : ts.getTime();
-  const d = new Date(t + 8 * 3600 * 1000);
-  const iso = d.toISOString();
-  // YYYY-MM-DDTHH:mm:ss.sssZ -> 取 MM-DD HH:mm，隐藏年份
-  const mm = iso.slice(5, 7);
-  const dd = iso.slice(8, 10);
-  const hh = iso.slice(11, 13);
-  const mi = iso.slice(14, 16);
-  return `${mm}-${dd} ${hh}:${mi}`;
+  const d = new Date(t);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export function esc(s: unknown): string {

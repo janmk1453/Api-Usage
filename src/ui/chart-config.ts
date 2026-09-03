@@ -36,13 +36,12 @@ export function toggleY(key: YKey) {
 }
 
 function toHourKey(ts: number): string {
-  const d = new Date(ts + 8*3600*1000);
-  const y = d.getUTCFullYear(), m = String(d.getUTCMonth()+1).padStart(2,'0'), day = String(d.getUTCDate()).padStart(2,'0'), h = String(d.getUTCHours()).padStart(2,'0');
+  const d = new Date(ts);
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0'), h = String(d.getHours()).padStart(2,'0');
   return `${y}-${m}-${day} ${h}:00`;
 }
 function toWeekKey(ts: number): string {
   const d = new Date(ts);
-  // ISO week
   const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const dayNum = tmp.getUTCDay() || 7;
   tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
@@ -51,8 +50,8 @@ function toWeekKey(ts: number): string {
   return `${tmp.getUTCFullYear()}-W${String(weekNo).padStart(2,'0')}`;
 }
 function toMonthKey(ts: number): string {
-  const d = new Date(ts + 8*3600*1000);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 }
 
 function getBucketKey(e: any, x: XKey, idx: number): string {

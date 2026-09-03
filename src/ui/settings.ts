@@ -10,7 +10,7 @@ import { generateDebugBatch } from '../services/debug';
 
 function esc(s: string) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-function localDay(ts: number) { return new Date(ts + 8*3600*1000).toISOString().slice(0,10); }
+function localDay(ts: number) { const d = new Date(ts); const pad=(n:number)=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
 
 export function renderSettings(doc: Document) {
   const host = doc.getElementById('aus-settings');
@@ -260,10 +260,12 @@ export function renderSettings(doc: Document) {
     if (autoSlider) autoSlider.style.left = autoCb.checked ? '23px' : '3px';
     (doc.getElementById('aus-auto-balance-interval') as HTMLElement).style.display = autoCb.checked ? 'block' : 'none';
     saveHot({ settings: state.settings });
+    try { import('../services/balance').then(m=> (m as any).restartBalanceTimer?.()); } catch {}
   };
   (doc.getElementById('aus-balance-interval') as HTMLInputElement).onchange = (e: any) => {
     state.settings.balanceInterval = parseInt(e.target.value) || 10;
     saveHot({ settings: state.settings });
+    try { import('../services/balance').then(m=> (m as any).restartBalanceTimer?.()); } catch {}
   };
   if (newCb) newCb.onchange = () => {
     state.settings.useNewPricing = newCb.checked;
@@ -273,8 +275,7 @@ export function renderSettings(doc: Document) {
   };
   if (newDate) newDate.onchange = () => {
     if (newDate.value) {
-      const p = newDate.value.split('-');
-      state.settings.newPricingDate = new Date(p[0] + '-' + p[1] + '-' + p[2] + 'T00:00:00+08:00').getTime();
+      state.settings.newPricingDate = new Date(newDate.value + 'T00:00:00').getTime();
     } else state.settings.newPricingDate = 0;
     saveHot({ settings: state.settings }); recalcAllCosts(); try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
   };
@@ -482,9 +483,11 @@ function readRow(row: HTMLElement) {
   const out: any = { usePeakPricing: peak, offpeak: {}, peak: {} };
   row.querySelectorAll('input[data-price]').forEach((el: any) => {
     const k = el.getAttribute('data-price'); const v = el.value.trim();
-    const num = v === '' ? '' : parseFloat(v);
+    if (v === '') return;
+    const num = parseFloat(v);
+    if (isNaN(num as any)) return;
     const [zone, field] = k.split('.');
-    out[zone][field] = v === '' || isNaN(num as any) ? '' : num;
+    out[zone][field] = num;
   });
   return out;
 }
@@ -498,8 +501,8 @@ function saveCustomRow(model: string, prices: any, isBuiltin: boolean) {
   const base: any = (PRICING as any)[model];
   let same = true;
   for (const f of ['hit','miss','output']) {
-    if (prices.offpeak[f] !== '' && prices.offpeak[f] !== base?.offpeak?.[f]) same = false;
-    if (prices.peak[f] !== '' && prices.peak[f] !== base?.peak?.[f]) same = false;
+    if (prices.offpeak[f] !== undefined && prices.offpeak[f] !== base?.offpeak?.[f]) same = false;
+    if (prices.peak[f] !== undefined && prices.peak[f] !== base?.peak?.[f]) same = false;
   }
   const cms: any[] = (state.settings as any).customModels;
   const idx = cms.findIndex((c: any) => c.model === model);
@@ -529,6 +532,9 @@ function fillDebugModelSelect(doc: Document) {
   const uniq = Array.from(new Set(models));
   sel.innerHTML = uniq.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
   const cur = (state.settings as any).debugModel;
-  if (uniq.indexOf(cur) === -1) (state.settings as any).debugModel = uniq[0] || 'deepseek-v4-flash';
+  if (uniq.indexOf(cur) === -1) {
+    (state.settings as any).debugModel = uniq[0] || 'deepseek-v4-flash';
+    try { saveHot({ settings: state.settings }); } catch {}
+  }
   sel.value = (state.settings as any).debugModel;
 }

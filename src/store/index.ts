@@ -91,12 +91,20 @@ export function getHistoryForDisplay(): any[] {
 export function getMergedStats() { return getSelectedSave(); }
 
 export function pruneHistoryDetails() {
-  if (!state.history || state.history.length <= DETAIL_KEEP) return;
+  if (!state.history || !state.history.length) return;
   const hs = [...state.history].sort((a, b) => b.timestamp - a.timestamp);
-  for (let i = DETAIL_KEEP; i < hs.length; i++) {
-    delete (hs[i] as any).messages;
-    delete (hs[i] as any).fullRequest;
-    delete (hs[i] as any).fullResponse;
+  for (let i = 0; i < hs.length; i++) {
+    const e: any = hs[i];
+    if (i >= DETAIL_KEEP) {
+      delete e.messages;
+      delete e.fullRequest;
+      delete e.fullResponse;
+    } else if (e.fullRequest && typeof e.fullRequest === 'object' && Array.isArray(e.fullRequest.messages)) {
+      const keep: any = {};
+      for (const k of ['model','stream','temperature','max_tokens','top_p','stream_options']) if (e.fullRequest[k] !== undefined) keep[k]=e.fullRequest[k];
+      keep.messages_length = e.fullRequest.messages.length;
+      e.fullRequest = keep;
+    }
   }
 }
 

@@ -36,22 +36,20 @@ export function renderHeatmap(filtered: any[]) {
   const keys = Object.keys(dayMap).sort();
   const isDark = themeIsDark();
 
-  // 时间范围：近 2 年（占满右侧空位，与原脚本 2 年一致）+ 覆盖更早数据
+  // 时间范围：近 2 年（本地时区）
   const now = new Date();
   const endStr = localDay(now.getTime());
-  const endDate = new Date(endStr + 'T00:00:00Z');
+  const endDate = new Date(endStr + 'T00:00:00');
   let startDate = new Date(endDate);
-  startDate.setUTCFullYear(startDate.getUTCFullYear() - 2);
-  // 若最早数据更早，则扩展
+  startDate.setFullYear(startDate.getFullYear() - 2);
   if (keys.length > 0) {
-    const earliest = new Date(keys[0] + 'T00:00:00Z');
+    const earliest = new Date(keys[0] + 'T00:00:00');
     if (earliest < startDate) startDate = earliest;
   }
-  // 对齐到周一
-  const sd = startDate.getUTCDay();
-  startDate.setUTCDate(startDate.getUTCDate() + (sd === 0 ? -6 : 1 - sd));
-  const ed = endDate.getUTCDay();
-  endDate.setUTCDate(endDate.getUTCDate() + (ed === 0 ? 0 : 7 - ed));
+  const sd = startDate.getDay();
+  startDate.setDate(startDate.getDate() + (sd === 0 ? -6 : 1 - sd));
+  const ed = endDate.getDay();
+  endDate.setDate(endDate.getDate() + (ed === 0 ? 0 : 7 - ed));
   const totalDays = Math.round((endDate.getTime() - startDate.getTime()) / 86400000);
   const totalWeeks = Math.ceil(totalDays / 7);
 
@@ -97,20 +95,19 @@ export function renderHeatmap(filtered: any[]) {
     labelsEl.innerHTML = lhtml;
   }
 
-  // 网格
   let html = '<table style="border-collapse:collapse;font-size:10px;color:var(--ds-text-3)"><tr><td style="height:16px;padding:0;line-height:16px"></td>';
   let lastM = -1;
   for (let w = 0; w < totalWeeks; w++) {
-    const ws = new Date(startDate); ws.setUTCDate(startDate.getUTCDate() + w * 7);
-    const mk = ws.getUTCFullYear() * 12 + ws.getUTCMonth();
+    const ws = new Date(startDate); ws.setDate(startDate.getDate() + w * 7);
+    const mk = ws.getFullYear() * 12 + ws.getMonth();
     if (mk !== lastM) {
       let span = 1;
       for (let w2 = w + 1; w2 < totalWeeks; w2++) {
-        const ws2 = new Date(startDate); ws2.setUTCDate(startDate.getUTCDate() + w2 * 7);
-        if (ws2.getUTCFullYear() * 12 + ws2.getUTCMonth() === mk) span++; else break;
+        const ws2 = new Date(startDate); ws2.setDate(startDate.getDate() + w2 * 7);
+        if (ws2.getFullYear() * 12 + ws2.getMonth() === mk) span++; else break;
       }
-      let label = mn[ws.getUTCMonth()];
-      if (ws.getUTCMonth() === 0) label = ws.getUTCFullYear() + '年';
+      let label = mn[ws.getMonth()];
+      if (ws.getMonth() === 0) label = ws.getFullYear() + '年';
       html += '<td colspan="' + span + '" style="padding:0 0 0 2px;line-height:16px;height:16px;font-size:10px;color:var(--ds-text-3);white-space:nowrap">' + label + '</td>';
       lastM = mk;
     }
@@ -119,11 +116,11 @@ export function renderHeatmap(filtered: any[]) {
   for (let d = 0; d < 7; d++) {
     html += '<tr>';
     for (let w = 0; w < totalWeeks; w++) {
-      const cd = new Date(startDate); cd.setUTCDate(startDate.getUTCDate() + w * 7 + d);
-      const key = cd.toISOString().slice(0, 10);
+      const cd = new Date(startDate); cd.setDate(startDate.getDate() + w * 7 + d);
+      const key = localDay(cd.getTime());
       const t = dayMap[key] || 0;
       const lv = getLevel(t);
-      const tip = cd.getUTCFullYear() + '年' + (cd.getUTCMonth() + 1) + '月' + cd.getUTCDate() + '日' + (t > 0 ? ' · ' + t.toLocaleString() + ' Token' : ' · 无记录');
+      const tip = cd.getFullYear() + '年' + (cd.getMonth() + 1) + '月' + cd.getDate() + '日' + (t > 0 ? ' · ' + t.toLocaleString() + ' Token' : ' · 无记录');
       html += '<td style="padding:1px;line-height:0;font-size:0"><div style="width:' + cs + 'px;height:' + cs + 'px;border-radius:2px;background:' + clr[lv] + ';border:1px solid ' + borderClr + ';cursor:pointer;box-sizing:border-box;" title="' + tip + '"></div></td>';
     }
     html += '</tr>';

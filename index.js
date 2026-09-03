@@ -42,7 +42,7 @@ const DEFAULT_PEAK_HOURS = [
   { start: "14:00", end: "18:00" }
 ];
 const MAX_HISTORY = 2e3;
-const DETAIL_KEEP = 10;
+const DETAIL_KEEP = 3;
 const STORAGE_KEYS = {
   KEY: "ds_api_key",
   BALANCE: "ds_balance_data",
@@ -400,13 +400,13 @@ const persistence = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineP
 }, Symbol.toStringTag, { value: "Module" }));
 function isWeekendDay(timestamp) {
   const t = typeof timestamp === "number" ? timestamp : timestamp && timestamp.getTime ? timestamp.getTime() : 0;
-  const day = new Date(t + 8 * 3600 * 1e3).getUTCDay();
+  const day = new Date(t).getDay();
   return day === 6 || day === 0;
 }
 function isPeakHour$1(timestamp, peakHours) {
   if (isWeekendDay(timestamp)) return false;
   const d = new Date(timestamp);
-  const totalMinutes = (d.getUTCHours() * 60 + d.getUTCMinutes() + 8 * 60) % 1440;
+  const totalMinutes = d.getHours() * 60 + d.getMinutes();
   for (const h of peakHours) {
     if (!h || !h.start || !h.end) continue;
     const p = h.start.split(":");
@@ -423,17 +423,15 @@ function isPeakHour$1(timestamp, peakHours) {
 }
 function localDay$1(ts) {
   const t = typeof ts === "number" ? ts : ts.getTime();
-  return new Date(t + 8 * 3600 * 1e3).toISOString().slice(0, 10);
+  const d = new Date(t);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 function localTimeHM(ts) {
   const t = typeof ts === "number" ? ts : ts.getTime();
-  const d = new Date(t + 8 * 3600 * 1e3);
-  const iso = d.toISOString();
-  const mm = iso.slice(5, 7);
-  const dd = iso.slice(8, 10);
-  const hh = iso.slice(11, 13);
-  const mi = iso.slice(14, 16);
-  return `${mm}-${dd} ${hh}:${mi}`;
+  const d = new Date(t);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 function esc$1(s) {
   return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -449,17 +447,17 @@ function mergePrices(base, custom) {
     output: custom.output !== void 0 && custom.output !== "" ? parseFloat(custom.output) : base.output
   };
 }
+const MODEL_ALIASES = {
+  "deepseek-v4-flash-vision": "deepseek-v4-flash-vision-exp"
+};
 function normalizeModel(model) {
   if (!model) return "deepseek-v4-flash";
-  let m = String(model).trim();
-  m = m.replace(/^\[[^\]]+\]/, "").trim();
+  let m = String(model).trim().replace(/^\[[^\]]+\]/, "").trim();
   const low = m.toLowerCase();
-  if (low.includes("deepseek-v4-flash-vision") || low.includes("deepseek-v4-flash-vision-exp")) return "deepseek-v4-flash-vision-exp";
-  if (low.includes("deepseek-v4-pro")) return "deepseek-v4-pro";
-  if (low.includes("deepseek-v4-flash")) return "deepseek-v4-flash";
-  if (low.includes("deepseek")) {
-    return "deepseek-v4-flash";
-  }
+  if (MODEL_ALIASES[low]) return MODEL_ALIASES[low];
+  if (low === "deepseek-v4-flash") return "deepseek-v4-flash";
+  if (low === "deepseek-v4-pro") return "deepseek-v4-pro";
+  if (low === "deepseek-v4-flash-vision-exp") return "deepseek-v4-flash-vision-exp";
   return m;
 }
 function getPricing$1(model, settings) {
@@ -532,6 +530,14 @@ const DataEvents = {
   SETTINGS_CHANGED: "data:settings:changed",
   BALANCE_CHANGED: "data:balance:changed"
 };
+function on(event, fn) {
+  if (!map.has(event)) map.set(event, /* @__PURE__ */ new Set());
+  map.get(event).add(fn);
+  return () => off(event, fn);
+}
+function off(event, fn) {
+  map.get(event)?.delete(fn);
+}
 function emit(event, payload) {
   map.get(event)?.forEach((fn) => {
     try {
@@ -540,6 +546,42 @@ function emit(event, payload) {
     }
   });
 }
+const PREFIX = "[DS]";
+const warned = /* @__PURE__ */ new Set();
+let debugOn = false;
+try {
+  debugOn = localStorage.getItem("ds_debug_log") === "1";
+} catch {
+}
+const log = {
+  debug(...args) {
+    if (debugOn) console.log(PREFIX, ...args);
+  },
+  warn(msg, ...rest) {
+    if (warned.has(msg)) return;
+    warned.add(msg);
+    console.warn(PREFIX, msg, ...rest);
+  },
+  error(...args) {
+    console.error(PREFIX, ...args);
+  }
+};
+function toast(type, msg) {
+  try {
+    const t = window.parent?.toastr ?? window.toastr;
+    if (t?.[type]) {
+      t[type](msg);
+      return;
+    }
+  } catch {
+    log.debug("toastr 不可用: " + msg);
+  }
+}
+const logger = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  log,
+  toast
+}, Symbol.toStringTag, { value: "Module" }));
 function getCurrentChatId() {
   try {
     const ctx = globalThis.SillyTavern?.getContext?.();
@@ -561,13 +603,30 @@ function getCurrentChatName() {
   const id = getCurrentChatId();
   return id ? String(id) : null;
 }
+function sanitizeFullRequest(fr) {
+  if (!fr || typeof fr !== "object") return fr;
+  const keep = {};
+  for (const k of ["model", "stream", "temperature", "max_tokens", "top_p", "stream_options"]) {
+    if (fr[k] !== void 0) keep[k] = fr[k];
+  }
+  if (Array.isArray(fr.messages)) keep.messages_length = fr.messages.length;
+  else if (typeof fr.messages === "number") keep.messages_length = fr.messages;
+  return keep;
+}
 function pruneDetails() {
-  if (!state$2.history || state$2.history.length <= DETAIL_KEEP) return;
+  if (!state$2.history || !state$2.history.length) return;
   const hs = [...state$2.history].sort((a, b) => b.timestamp - a.timestamp);
-  for (let i = DETAIL_KEEP; i < hs.length; i++) {
-    delete hs[i].messages;
-    delete hs[i].fullRequest;
-    delete hs[i].fullResponse;
+  for (let i = 0; i < hs.length; i++) {
+    const e = hs[i];
+    if (i >= DETAIL_KEEP) {
+      delete e.messages;
+      delete e.fullRequest;
+      delete e.fullResponse;
+    } else {
+      if (e.fullRequest && typeof e.fullRequest === "object" && Array.isArray(e.fullRequest.messages)) {
+        e.fullRequest = sanitizeFullRequest(e.fullRequest);
+      }
+    }
   }
 }
 function persist() {
@@ -624,7 +683,11 @@ const repository = {
   getHistoryByRange(range) {
     const s = getSelectedSave();
     if (!s?.history) return [];
-    const toDay = (ts) => new Date(ts + 8 * 3600 * 1e3).toISOString().slice(0, 10);
+    const toDay = (ts) => {
+      const d = new Date(ts);
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    };
     return s.history.filter((h) => {
       const k = toDay(h.timestamp);
       return k >= range.start && k <= range.end;
@@ -643,32 +706,14 @@ const repository = {
     } catch {
       model = "deepseek-v4-flash";
     }
-    const TRACE = "[API用量统计][TRACE]";
-    try {
-      console.log(TRACE + " addEntry 收到", { model, usageStr: JSON.stringify(usage).slice(0, 1500), hasMessages: !!messages?.length, startTime, ttft });
-    } catch {
-    }
+    log.debug("addEntry 收到", { model, hasMessages: !!messages?.length });
     if (!usage || typeof usage !== "object" || Array.isArray(usage)) {
-      try {
-        console.warn("[API用量统计] addEntry 跳过无效 usage：", usage, " model=", model);
-      } catch {
-      }
-      try {
-        console.log(TRACE + " addEntry 跳过：usage 非对象");
-      } catch {
-      }
+      log.debug("addEntry 跳过：usage 非对象 model=" + model);
       return null;
     }
     const hasAnyTokenField = typeof usage.prompt_tokens === "number" || typeof usage.completion_tokens === "number" || typeof usage.total_tokens === "number" || typeof usage.input_tokens === "number" || typeof usage.output_tokens === "number" || typeof usage.prompt_cache_hit_tokens === "number" || usage.prompt_tokens_details && typeof usage.prompt_tokens_details.cached_tokens === "number";
     if (!hasAnyTokenField) {
-      try {
-        console.warn("[API用量统计] addEntry 跳过无 token 字段的 usage：", JSON.stringify(usage).slice(0, 300));
-      } catch {
-      }
-      try {
-        console.log(TRACE + " addEntry 跳过：无 token 字段");
-      } catch {
-      }
+      log.debug("addEntry 跳过：无 token 字段 model=" + model);
       return null;
     }
     let hit = usage.prompt_cache_hit_tokens || 0;
@@ -681,34 +726,17 @@ const repository = {
     const comp = usage.completion_tokens || usage.output_tokens || 0;
     const total = usage.total_tokens || hit + miss + comp;
     if (hit === 0 && miss === 0 && comp === 0 && total === 0) {
-      try {
-        console.warn("[API用量统计] addEntry 跳过全 0 token 条目 model=" + model);
-      } catch {
-      }
-      try {
-        console.log(TRACE + " addEntry 跳过：全 0 token");
-      } catch {
-      }
+      log.debug("addEntry 跳过：全 0 token model=" + model);
       return null;
     }
-    try {
-      console.log(TRACE + " addEntry 解析", { hit, miss, comp, total });
-    } catch {
-    }
-    try {
-      console.log("[AUS-TEMP] addEntry 入口", { model, total, hit, miss, comp, hasUsage: !!usage });
-    } catch {
-    }
+    log.debug("addEntry 解析", { model, hit, miss, comp, total });
     try {
       const now = Date.now();
       const fp = `${model}|${total}|${hit}|${miss}|${comp}`;
       const lastFp = state$2._lastFp;
       const lastFpTime = state$2._lastFpTime;
       if (lastFp === fp && lastFpTime && now - lastFpTime < 5e3) {
-        try {
-          console.log(TRACE + " addEntry 去重跳过(5s指纹)", { fp });
-        } catch {
-        }
+        log.debug("addEntry 去重跳过(5s指纹)", { fp });
         return null;
       }
       state$2._lastFp = fp;
@@ -762,10 +790,7 @@ const repository = {
       chatId,
       chatName
     };
-    try {
-      console.log(TRACE + " addEntry 即将写入", { timestamp: entry.timestamp, model: entry.model, total: entry.total_tokens, cost: entry.cost, chatId: entry.chatId });
-    } catch {
-    }
+    log.debug("addEntry 即将写入", { model: entry.model, total: entry.total_tokens });
     state$2.history.unshift(entry);
     state$2.total_tokens += total;
     state$2.total_cost += lu.cost;
@@ -932,10 +957,7 @@ const repository = {
       state$2.output_cost = output_cost;
       state$2.rounds = rounds;
       persist();
-      try {
-        console.log("[API用量统计] 已自动清理 " + (before - filtered.length) + " 条全 0 污染条目");
-      } catch {
-      }
+      log.debug("已自动清理 " + (before - filtered.length) + " 条全 0 污染条目");
     }
     return filtered.length;
   },
@@ -1024,24 +1046,12 @@ function installFetchCapture() {
   try {
     const p = window.parent || window;
     if (!p || !p.fetch || p.fetch.__aus_patched) {
-      try {
-        console.log("[AUS-TEMP] installFetchCapture 跳过 已 patched 或无 fetch", { hasFetch: !!p?.fetch, patched: !!p?.fetch?.__aus_patched });
-      } catch {
-      }
       return;
     }
     const rawFetch2 = p.fetch.bind(p);
-    try {
-      console.log("[AUS-TEMP] installFetchCapture 开始安装", { target: TARGET_API });
-    } catch {
-    }
     const patched = function() {
       const args = arguments;
       const url = typeof args[0] === "string" ? args[0] : args[0]?.url || "";
-      try {
-        console.log("[AUS-TEMP] fetch 拦截入口", { url: String(url).slice(0, 200), hasBody: !!args[1]?.body });
-      } catch {
-      }
       if (typeof url === "string" && url.indexOf(TARGET_API) !== -1) {
         let reqBody = null;
         try {
@@ -1060,23 +1070,9 @@ function installFetchCapture() {
           lastStart = startTime;
         } catch {
         }
-        try {
-          console.log("[AUS-TEMP] 命中 TARGET_API 即将透传", { url: String(url).slice(0, 120) });
-        } catch {
-        }
         return rawFetch2.apply(p, args).then((res) => {
           try {
-            console.log("[AUS-TEMP] fetch 响应返回", { url: String(url).slice(0, 120), status: res?.status, ok: res?.ok, ct: res.headers.get("content-type") });
-          } catch {
-          }
-          try {
             const clone = res.clone();
-            try {
-              console.log("[AUS-TEMP] clone 成功，准备解析 text");
-            } catch {
-            }
-            const ttftRef = { value: 0 };
-            const thinkRef = { value: 0 };
             const parseAndProcess = (text, ttftVal, thinkTimeVal) => {
               let data = null;
               try {
@@ -1106,7 +1102,7 @@ function installFetchCapture() {
                   }
                 }
               } catch (e) {
-                console.warn("[API用量统计][TRACE] 用量响应解析失败", e?.message || e);
+                log.debug("用量响应解析失败", e?.message || e);
                 return;
               }
               if (data && data.usage) {
@@ -1115,79 +1111,31 @@ function installFetchCapture() {
                 lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: data, ttft: ttftVal, thinkTime: thinkTimeVal };
                 lastFetchModel = typeof model === "string" ? model : null;
                 lastFetchTime = Date.now();
-                try {
-                  console.log("[AUS-TEMP] fetch 解析成功 usage", { model, usage });
-                } catch {
-                }
-                try {
-                  console.log("[API用量统计][TRACE] fetch 捕获 usage", { url: String(url).slice(0, 80), usage: JSON.stringify(usage).slice(0, 1500), model });
-                } catch {
-                }
-                try {
-                  console.log("[AUS-TEMP] 即将 processUsage fetch");
-                } catch {
-                }
+                log.debug("fetch 捕获 usage", { model, hasUsage: !!usage });
                 try {
                   processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal);
-                  try {
-                    console.log("[AUS-TEMP] processUsage fetch 完成");
-                  } catch {
-                  }
                 } catch (e) {
-                  console.error("[API用量统计] fetch 用量记录失败", e?.message || e);
-                }
-              } else {
-                try {
-                  console.log("[AUS-TEMP] fetch 解析后无 usage", { textLen: text.length, hasData: !!data, dataKeys: data ? Object.keys(data).slice(0, 10) : [] });
-                } catch {
+                  log.error("fetch 用量记录失败 " + (e?.message || e));
                 }
               }
             };
             const ct = clone.headers.get("content-type") || "";
-            try {
-              console.log("[AUS-TEMP] 准备 clone.text 解析", { ct });
-            } catch {
-            }
             if (ct.includes("application/json")) {
               clone.text().then((t) => {
-                try {
-                  console.log("[AUS-TEMP] clone.text json 完成", { len: t.length });
-                } catch {
-                }
                 parseAndProcess(t, 0, 0);
-              }).catch((e) => {
-                try {
-                  console.log("[AUS-TEMP] clone.text json 失败", e?.message);
-                } catch {
-                }
+              }).catch(() => {
               });
             } else {
               clone.text().then((t) => {
-                try {
-                  console.log("[AUS-TEMP] clone.text stream 完成", { len: t.length });
-                } catch {
-                }
                 parseAndProcess(t, 0, 0);
-              }).catch((e) => {
-                try {
-                  console.log("[AUS-TEMP] clone.text stream 失败", e?.message);
-                } catch {
-                }
+              }).catch(() => {
               });
             }
           } catch (e) {
-            console.warn("[API用量统计] fetch 克隆解析异常，不影响原请求", e?.message || e);
-            try {
-              console.log("[AUS-TEMP] fetch 克隆异常", e?.message);
-            } catch {
-            }
+            log.debug("fetch 克隆解析异常，不影响原请求", e?.message || e);
           }
           return res;
         }).catch((e) => {
-          try {
-            console.log("[AUS-TEMP] rawFetch 失败", e?.message);
-          } catch {
-          }
           throw e;
         });
       }
@@ -1195,7 +1143,7 @@ function installFetchCapture() {
     };
     patched.__aus_patched = true;
     p.fetch = patched;
-    console.log("[API用量统计][TRACE] fetch 捕获已安装（原脚本 1:1 逻辑，TARGET_API=" + TARGET_API + "）");
+    log.debug("fetch 捕获已安装 TARGET_API=" + TARGET_API);
   } catch {
   }
 }
@@ -1207,22 +1155,10 @@ function installInterception() {
     const ctx = globalThis.SillyTavern?.getContext?.();
     const es = ctx?.eventSource;
     const et = ctx?.event_types;
-    try {
-      console.log("[AUS-TEMP] installInterception 调用", { hasCtx: !!ctx, hasEs: !!es, hasEt: !!et, installed: interceptionInstalled });
-    } catch {
-    }
     if (!es || !et) {
-      try {
-        console.log("[AUS-TEMP] installInterception 失败 无 es/et");
-      } catch {
-      }
       return false;
     }
     if (interceptionInstalled) {
-      try {
-        console.log("[AUS-TEMP] installInterception 已安装跳过");
-      } catch {
-      }
       return true;
     }
     try {
@@ -1235,15 +1171,7 @@ function installInterception() {
     es.on(et.MESSAGE_RECEIVED, messageReceivedHandler);
     globalThis.ApiUsageStatInterceptor = (chat, _ctxSize, _abort, _type) => {
       try {
-        console.log("[AUS-TEMP] ApiUsageStatInterceptor 触发", { len: chat?.length, type: _type });
-      } catch {
-      }
-      try {
         setLastRequest(chat?.slice(-10) || [], Date.now());
-      } catch {
-      }
-      try {
-        console.log("[AUS-TEMP] setLastRequest 完成");
       } catch {
       }
     };
@@ -1294,7 +1222,6 @@ function pickUsageFromExtra(extra) {
     extra.usage,
     extra.openai_usage,
     extra.token_usage,
-    // 兼容部分渠道把 usage 塞在 extra.data.usage
     extra.data?.usage,
     extra.response?.usage
   ];
@@ -1305,11 +1232,6 @@ function pickUsageFromExtra(extra) {
   return null;
 }
 function onGenerationEnded(...args) {
-  const TRACE = "[API用量统计][TRACE]";
-  try {
-    console.log("[AUS-TEMP] onGenerationEnded 入口", { argsLen: args.length, arg0Keys: args[0] ? Object.keys(args[0]).slice(0, 10) : [] });
-  } catch {
-  }
   try {
     const ctx = globalThis.SillyTavern?.getContext?.();
     const chat = ctx?.chat || [];
@@ -1317,53 +1239,34 @@ function onGenerationEnded(...args) {
     const extra = tail?.extra || {};
     const tailModel = tail?.model || null;
     const extraModel = extra.model || tailModel || ctx?.model || "deepseek-v4-flash";
-    try {
-      console.log(TRACE + " onGenerationEnded 触发", {
-        chatLen: chat.length,
-        tailIdx: chat.length - 1,
-        tailExtraKeys: extra ? Object.keys(extra).slice(0, 20) : [],
-        tailExtraStr: JSON.stringify(extra).slice(0, 2e3),
-        args0: args[0] ? JSON.stringify(args[0]).slice(0, 2e3) : "no args0",
-        model: extraModel,
-        hasApiUsage: !!extra.api_usage,
-        hasUsage: !!extra.usage,
-        hasTokenCount: extra.token_count
-      });
-    } catch {
-    }
+    log.debug("onGenerationEnded 触发", { chatLen: chat.length, hasApiUsage: !!extra.api_usage });
     let usage = pickUsageFromExtra(extra);
     let model = extraModel;
-    try {
-      console.log(TRACE + " pickUsageFromExtra 结果", { hasUsage: !!usage, usageStr: usage ? JSON.stringify(usage).slice(0, 1500) : "null", isValid: usage ? isValidUsage(usage) : false });
-    } catch {
-    }
+    log.debug("pickUsageFromExtra 结果", { hasUsage: !!usage, isValid: usage ? isValidUsage(usage) : false });
     if (usage && isValidUsage(usage)) {
-      console.log(TRACE + " 命中主路径 extra usage，准备 processUsage");
+      log.debug("命中主路径 extra usage");
       processUsage(usage, model, lastMessages, lastStart);
       return;
     }
     if (tail?.swipe_info && typeof tail.swipe_info === "object") {
-      console.log(TRACE + " 尝试 swipe_info 兼容路径", { swipeKeys: Object.keys(tail.swipe_info).slice(0, 5) });
+      log.debug("尝试 swipe_info 路径");
       for (const v of Object.values(tail.swipe_info)) {
         const cand = v?.extra?.api_usage || v?.extra?.usage;
         if (isValidUsage(cand)) {
           usage = cand;
           model = v?.extra?.model || model;
-          console.log(TRACE + " swipe_info 命中", { model, cand: JSON.stringify(cand).slice(0, 1e3) });
+          log.debug("swipe_info 命中", { model });
           processUsage(usage, model, lastMessages, lastStart);
           return;
         }
       }
-      console.log(TRACE + " swipe_info 未命中有效 usage");
+      log.debug("swipe_info 未命中有效 usage");
     }
     const maybeUsage = args[0]?.usage || args[0]?.api_usage;
-    try {
-      console.log(TRACE + " 尝试 args 兜底", { hasMaybeUsage: !!maybeUsage, maybeUsageStr: maybeUsage ? JSON.stringify(maybeUsage).slice(0, 1500) : "null", isValid: maybeUsage ? isValidUsage(maybeUsage) : false });
-    } catch {
-    }
+    log.debug("尝试 args 兜底", { hasMaybeUsage: !!maybeUsage, isValid: maybeUsage ? isValidUsage(maybeUsage) : false });
     if (isValidUsage(maybeUsage)) {
       const m = args[0]?.model || model;
-      console.log(TRACE + " args 命中", { model: m });
+      log.debug("args 命中", { model: m });
       processUsage(maybeUsage, m, lastMessages, lastStart);
       return;
     }
@@ -1378,29 +1281,22 @@ function onGenerationEnded(...args) {
         const fetchedRes = fetchPack && fetchPack.fullResponse || null;
         const fTtft = fetchPack && fetchPack.ttft || 0;
         const fThink = fetchPack && fetchPack.thinkTime || 0;
-        console.log(TRACE + " fetch 兜底命中", { model: fetchedModel, usage: JSON.stringify(fetchUsage).slice(0, 1500) });
+        log.debug("fetch 兜底命中", { model: fetchedModel });
         lastFetchUsage = null;
         processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink);
         return;
       } else if (lastFetchUsage) {
         const fu = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
-        console.log(TRACE + " fetch 有缓存但无效或超时", { has: !!lastFetchUsage, isValid: fu ? isValidUsage(fu) : false, age: Date.now() - lastFetchTime });
+        log.debug("fetch 有缓存但无效或超时", { has: !!lastFetchUsage, isValid: fu ? isValidUsage(fu) : false, age: Date.now() - lastFetchTime });
       }
     }
     if (extra.token_count != null && !usage) {
-      try {
-        console.warn("[API用量统计] 跳过无效 usage：仅有本地 token_count=" + extra.token_count + " model=" + model + " 未生成条目（非 API 真实用量，需完整 usage）。若确为真实请求，请检查网络 fetch 捕获是否命中，或查看 TRACE 中 fetch 日志");
-      } catch {
-      }
-      console.log(TRACE + " 无有效 usage，仅有 token_count，已跳过不记录", { token_count: extra.token_count, model, hasFetch: !!lastFetchUsage });
+      log.debug("跳过无效 usage：仅有本地 token_count=" + extra.token_count + " model=" + model);
       return;
     }
-    console.log(TRACE + " 未找到任何有效 usage，丢弃本次记录", { extraKeys: extra ? Object.keys(extra).slice(0, 20) : [], argsKeys: args[0] ? Object.keys(args[0]).slice(0, 20) : [], hasFetch: !!lastFetchUsage });
+    log.debug("未找到任何有效 usage，丢弃本次记录");
   } catch (e) {
-    try {
-      console.error(TRACE + " onGenerationEnded 异常", e);
-    } catch {
-    }
+    log.error("onGenerationEnded 异常 " + e?.message || e);
   }
 }
 function refresh() {
@@ -1463,37 +1359,6 @@ function decryptKey(ciphertext) {
     return ciphertext;
   }
 }
-const PREFIX = "[DS]";
-const warned = /* @__PURE__ */ new Set();
-let debugOn = false;
-try {
-  debugOn = localStorage.getItem("ds_debug_log") === "1";
-} catch {
-}
-const log = {
-  debug(...args) {
-    if (debugOn) console.log(PREFIX, ...args);
-  },
-  warn(msg, ...rest) {
-    if (warned.has(msg)) return;
-    warned.add(msg);
-    console.warn(PREFIX, msg, ...rest);
-  },
-  error(...args) {
-    console.error(PREFIX, ...args);
-  }
-};
-function toast(type, msg) {
-  try {
-    const t = window.parent?.toastr ?? window.toastr;
-    if (t?.[type]) {
-      t[type](msg);
-      return;
-    }
-  } catch {
-    log.debug("toastr 不可用: " + msg);
-  }
-}
 function getApiKey() {
   try {
     const ctx = globalThis.SillyTavern?.getContext?.();
@@ -1514,17 +1379,29 @@ function saveApiKey(key) {
   } catch {
   }
 }
-async function queryBalance(apiKey) {
-  const key = getApiKey();
-  if (!key) {
-    toast("error", "请先设置 API 密钥");
-    return null;
-  }
+let balanceInFlight = false;
+async function queryBalance() {
+  if (balanceInFlight) return null;
+  balanceInFlight = true;
   try {
+    const key = getApiKey();
+    if (!key) {
+      toast("error", "请先设置 API 密钥");
+      return null;
+    }
+    const ctrl = new AbortController();
+    const to = setTimeout(() => {
+      try {
+        ctrl.abort();
+      } catch {
+      }
+    }, 15e3);
     const r = await fetch("https://api.deepseek.com/user/balance", {
       method: "GET",
-      headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" }
+      headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
+      signal: ctrl.signal
     });
+    clearTimeout(to);
     const d = await r.json();
     if (d.is_available && d.balance_infos?.length) {
       const i = d.balance_infos[0];
@@ -1541,11 +1418,48 @@ async function queryBalance(apiKey) {
     toast("error", d.error?.message || "查询失败");
     return null;
   } catch (e) {
+    const msg = e?.name === "AbortError" ? "查询超时(15s)" : e?.message || e;
     log.error("余额查询失败", e);
-    toast("error", "网络错误: " + (e?.message || e));
+    toast("error", "网络错误: " + msg);
     return null;
+  } finally {
+    balanceInFlight = false;
   }
 }
+let balanceTimer = null;
+function restartBalanceTimer() {
+  if (balanceTimer) {
+    try {
+      clearInterval(balanceTimer);
+    } catch {
+    }
+    balanceTimer = null;
+  }
+  const s = state$2.settings;
+  if (!s.autoBalance) return;
+  const min = Math.min(Math.max(parseInt(s.balanceInterval) || 10, 1), 1440);
+  balanceTimer = setInterval(() => {
+    queryBalance().catch(() => {
+    });
+  }, min * 60 * 1e3);
+}
+function stopBalanceTimer() {
+  if (balanceTimer) {
+    try {
+      clearInterval(balanceTimer);
+    } catch {
+    }
+    balanceTimer = null;
+  }
+}
+const balance = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  getApiKey,
+  queryBalance,
+  restartBalanceTimer,
+  saveApiKey,
+  stopBalanceTimer
+}, Symbol.toStringTag, { value: "Module" }));
 function isUnsafeKey(k) {
   return k === "__proto__" || k === "constructor" || k === "prototype";
 }
@@ -1702,8 +1616,9 @@ function triggerImport() {
         if (!raw || raw.format !== "deepseek-stat-export") return alert("导入失败：文件格式不正确");
         const res = normalizeImportData(raw);
         if (res.error) return alert("导入失败：" + res.error);
-        const mode = confirm("确定导入？\n确定=覆盖导入（替换全部）\n取消=合并导入（按时间戳去重）\n（合并更安全）") ? "overwrite" : "merge";
-        if (mode === "overwrite" && !confirm("覆盖将替换全部数据，确定？")) return;
+        const merge = confirm("导入方式：\n确定 = 合并导入（推荐，按时间戳去重）\n取消 = 覆盖导入（替换全部数据）");
+        const mode = merge ? "merge" : "overwrite";
+        if (mode === "overwrite" && !confirm("覆盖将删除现有全部统计并无法恢复，确定要覆盖？")) return;
         applyImportedData(res.data, mode);
         alert(mode === "overwrite" ? "已覆盖导入" : "已合并导入");
       };
@@ -1790,7 +1705,9 @@ async function webdavMkcol(dir) {
   const url = reqUrl(dir);
   try {
     const r = await rawFetch()(url, { method: "MKCOL", headers: { Authorization: authHeader() } });
-    return r.status === 201 || r.status === 405 || r.status === 409 || r.status === 204;
+    if (r.status === 201 || r.status === 405 || r.status === 204) return true;
+    if (r.status === 409) return false;
+    return false;
   } catch {
     return false;
   }
@@ -1898,6 +1815,10 @@ async function doSyncNow() {
   const cfg = state$2.settings.webdav || {};
   if (!cfg.url || !cfg.username) return alert("请先在设置中填写 WebDAV 地址与用户名");
   if (!/^https:\/\//i.test(cfg.url)) return alert("WebDAV 地址必须为 https");
+  const proxy = (cfg.proxy || "").trim();
+  if (proxy && !/^https:\/\//i.test(proxy)) {
+    if (!confirm("CORS 代理非 https，WebDAV 用户名密码将以可被截获的方式经该代理传输。\n仍要继续？")) return;
+  }
   syncing = true;
   const btn = window.parent?.document?.getElementById("aus-webdav-sync");
   if (btn) {
@@ -1960,8 +1881,8 @@ function applyTheme(theme) {
   const mode = t === "dark" ? "dark" : "light";
   try {
     const doc = window.parent?.document ?? document;
-    const panel = doc.getElementById("aus-panel");
-    if (panel) panel.setAttribute("data-ds-theme", mode);
+    const panel2 = doc.getElementById("aus-panel");
+    if (panel2) panel2.setAttribute("data-ds-theme", mode);
     const overlay = doc.getElementById("aus-overlay");
     if (overlay) {
       overlay.setAttribute("data-extension", "api-usage-stat");
@@ -1987,8 +1908,8 @@ function generateDebugBatch() {
   const startStr = state$2.settings.debugDateStart;
   const endStr = state$2.settings.debugDateEnd;
   if (!startStr || !endStr) return alert("请设置起始与结束日期");
-  const startDate = /* @__PURE__ */ new Date(startStr + "T00:00:00Z");
-  const endDate = /* @__PURE__ */ new Date(endStr + "T00:00:00Z");
+  const startDate = /* @__PURE__ */ new Date(startStr + "T00:00:00");
+  const endDate = /* @__PURE__ */ new Date(endStr + "T00:00:00");
   if (isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || endDate < startDate) return alert("日期范围无效");
   const count = state$2.settings.debugBatchCount || 30;
   const model = state$2.settings.debugModel || "deepseek-v4-flash";
@@ -2000,13 +1921,13 @@ function generateDebugBatch() {
   let generated = 0;
   for (let d = 0; d < totalDays && generated < count; d++) {
     const curDate = new Date(startDate);
-    curDate.setUTCDate(startDate.getUTCDate() + d);
+    curDate.setDate(startDate.getDate() + d);
     for (let i = 0; i < perDay && generated < count; i++) {
       const rv = (base) => Math.round(base * (0.3 + Math.random() * 1.4));
       const h = rv(hit), m = rv(miss), o = rv(output);
       const total = h + m + o;
       const ts = new Date(curDate);
-      ts.setUTCHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60), Math.floor(Math.random() * 60), 0);
+      ts.setHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60), Math.floor(Math.random() * 60), 0);
       const dur = Math.floor(Math.random() * 5e3) + 500;
       const ttft = Math.floor(Math.random() * 1e3) + 100;
       const c = calcCost({ timestamp: ts.getTime(), model, prompt_cache_hit_tokens: h, prompt_cache_miss_tokens: m, completion_tokens: o }, state$2.settings);
@@ -2019,7 +1940,7 @@ function generateDebugBatch() {
       state$2.input_cost += c.input;
       state$2.output_cost += c.output;
       if (isDeepSeekOfficialModel(model)) state$2.rounds += 1;
-      state$2.history.unshift({ timestamp: ts.getTime(), model, prompt_tokens: h + m, cache_hit_tokens: h, cache_miss_tokens: m, completion_tokens: o, total_tokens: total, input_cost: c.input, output_cost: c.output, cost: c.total, cache_hit_rate: h + m > 0 ? h / (h + m) * 100 : 0, priceType: c.priceType, raw_usage: { prompt_cache_hit_tokens: h, prompt_cache_miss_tokens: m, completion_tokens: o, total_tokens: total }, messages: [], duration: dur, ttft, thinkTime: 300, thinkTokens: Math.floor(o * 0.2), tokenRate: Math.round(o / (dur - ttft) * 1e3), fullRequest: null, fullResponse: null });
+      state$2.history.unshift({ timestamp: ts.getTime(), model, prompt_tokens: h + m, cache_hit_tokens: h, cache_miss_tokens: m, completion_tokens: o, total_tokens: total, input_cost: c.input, output_cost: c.output, cost: c.total, cache_hit_rate: h + m > 0 ? h / (h + m) * 100 : 0, priceType: c.priceType, raw_usage: { prompt_cache_hit_tokens: h, prompt_cache_miss_tokens: m, completion_tokens: o, total_tokens: total }, messages: [], duration: dur, ttft, thinkTime: 300, thinkTokens: Math.floor(o * 0.2), tokenRate: Math.round(o / (dur - ttft) * 1e3), fullRequest: null, fullResponse: null, _debug: true });
       generated++;
     }
   }
@@ -2035,7 +1956,9 @@ function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 function localDay(ts) {
-  return new Date(ts + 8 * 3600 * 1e3).toISOString().slice(0, 10);
+  const d = new Date(ts);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 function renderSettings(doc) {
   const host = doc.getElementById("aus-settings");
@@ -2294,10 +2217,18 @@ function renderSettings(doc) {
     if (autoSlider) autoSlider.style.left = autoCb.checked ? "23px" : "3px";
     doc.getElementById("aus-auto-balance-interval").style.display = autoCb.checked ? "block" : "none";
     saveHot({ settings: state$2.settings });
+    try {
+      Promise.resolve().then(() => balance).then((m) => m.restartBalanceTimer?.());
+    } catch {
+    }
   };
   doc.getElementById("aus-balance-interval").onchange = (e) => {
     state$2.settings.balanceInterval = parseInt(e.target.value) || 10;
     saveHot({ settings: state$2.settings });
+    try {
+      Promise.resolve().then(() => balance).then((m) => m.restartBalanceTimer?.());
+    } catch {
+    }
   };
   if (newCb) newCb.onchange = () => {
     state$2.settings.useNewPricing = newCb.checked;
@@ -2312,8 +2243,7 @@ function renderSettings(doc) {
   };
   if (newDate) newDate.onchange = () => {
     if (newDate.value) {
-      const p = newDate.value.split("-");
-      state$2.settings.newPricingDate = (/* @__PURE__ */ new Date(p[0] + "-" + p[1] + "-" + p[2] + "T00:00:00+08:00")).getTime();
+      state$2.settings.newPricingDate = (/* @__PURE__ */ new Date(newDate.value + "T00:00:00")).getTime();
     } else state$2.settings.newPricingDate = 0;
     saveHot({ settings: state$2.settings });
     recalcAllCosts();
@@ -2617,9 +2547,11 @@ function readRow(row) {
   row.querySelectorAll("input[data-price]").forEach((el) => {
     const k = el.getAttribute("data-price");
     const v = el.value.trim();
-    const num = v === "" ? "" : parseFloat(v);
+    if (v === "") return;
+    const num = parseFloat(v);
+    if (isNaN(num)) return;
     const [zone, field2] = k.split(".");
-    out[zone][field2] = v === "" || isNaN(num) ? "" : num;
+    out[zone][field2] = num;
   });
   return out;
 }
@@ -2633,8 +2565,8 @@ function saveCustomRow(model, prices, isBuiltin) {
   const base = PRICING[model];
   let same = true;
   for (const f of ["hit", "miss", "output"]) {
-    if (prices.offpeak[f] !== "" && prices.offpeak[f] !== base?.offpeak?.[f]) same = false;
-    if (prices.peak[f] !== "" && prices.peak[f] !== base?.peak?.[f]) same = false;
+    if (prices.offpeak[f] !== void 0 && prices.offpeak[f] !== base?.offpeak?.[f]) same = false;
+    if (prices.peak[f] !== void 0 && prices.peak[f] !== base?.peak?.[f]) same = false;
   }
   const cms = state$2.settings.customModels;
   const idx = cms.findIndex((c) => c.model === model);
@@ -2670,7 +2602,13 @@ function fillDebugModelSelect(doc) {
   const uniq = Array.from(new Set(models));
   sel.innerHTML = uniq.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
   const cur = state$2.settings.debugModel;
-  if (uniq.indexOf(cur) === -1) state$2.settings.debugModel = uniq[0] || "deepseek-v4-flash";
+  if (uniq.indexOf(cur) === -1) {
+    state$2.settings.debugModel = uniq[0] || "deepseek-v4-flash";
+    try {
+      saveHot({ settings: state$2.settings });
+    } catch {
+    }
+  }
   sel.value = state$2.settings.debugModel;
 }
 let selOld = null;
@@ -2850,17 +2788,17 @@ function renderHeatmap(filtered) {
   const isDark = themeIsDark();
   const now = /* @__PURE__ */ new Date();
   const endStr = localDay$1(now.getTime());
-  const endDate = /* @__PURE__ */ new Date(endStr + "T00:00:00Z");
+  const endDate = /* @__PURE__ */ new Date(endStr + "T00:00:00");
   let startDate = new Date(endDate);
-  startDate.setUTCFullYear(startDate.getUTCFullYear() - 2);
+  startDate.setFullYear(startDate.getFullYear() - 2);
   if (keys.length > 0) {
-    const earliest = /* @__PURE__ */ new Date(keys[0] + "T00:00:00Z");
+    const earliest = /* @__PURE__ */ new Date(keys[0] + "T00:00:00");
     if (earliest < startDate) startDate = earliest;
   }
-  const sd = startDate.getUTCDay();
-  startDate.setUTCDate(startDate.getUTCDate() + (sd === 0 ? -6 : 1 - sd));
-  const ed = endDate.getUTCDay();
-  endDate.setUTCDate(endDate.getUTCDate() + (ed === 0 ? 0 : 7 - ed));
+  const sd = startDate.getDay();
+  startDate.setDate(startDate.getDate() + (sd === 0 ? -6 : 1 - sd));
+  const ed = endDate.getDay();
+  endDate.setDate(endDate.getDate() + (ed === 0 ? 0 : 7 - ed));
   const totalDays = Math.round((endDate.getTime() - startDate.getTime()) / 864e5);
   const totalWeeks = Math.ceil(totalDays / 7);
   const vals = [];
@@ -2908,18 +2846,18 @@ function renderHeatmap(filtered) {
   let lastM = -1;
   for (let w = 0; w < totalWeeks; w++) {
     const ws = new Date(startDate);
-    ws.setUTCDate(startDate.getUTCDate() + w * 7);
-    const mk = ws.getUTCFullYear() * 12 + ws.getUTCMonth();
+    ws.setDate(startDate.getDate() + w * 7);
+    const mk = ws.getFullYear() * 12 + ws.getMonth();
     if (mk !== lastM) {
       let span = 1;
       for (let w2 = w + 1; w2 < totalWeeks; w2++) {
         const ws2 = new Date(startDate);
-        ws2.setUTCDate(startDate.getUTCDate() + w2 * 7);
-        if (ws2.getUTCFullYear() * 12 + ws2.getUTCMonth() === mk) span++;
+        ws2.setDate(startDate.getDate() + w2 * 7);
+        if (ws2.getFullYear() * 12 + ws2.getMonth() === mk) span++;
         else break;
       }
-      let label = mn[ws.getUTCMonth()];
-      if (ws.getUTCMonth() === 0) label = ws.getUTCFullYear() + "年";
+      let label = mn[ws.getMonth()];
+      if (ws.getMonth() === 0) label = ws.getFullYear() + "年";
       html += '<td colspan="' + span + '" style="padding:0 0 0 2px;line-height:16px;height:16px;font-size:10px;color:var(--ds-text-3);white-space:nowrap">' + label + "</td>";
       lastM = mk;
     }
@@ -2929,11 +2867,11 @@ function renderHeatmap(filtered) {
     html += "<tr>";
     for (let w = 0; w < totalWeeks; w++) {
       const cd = new Date(startDate);
-      cd.setUTCDate(startDate.getUTCDate() + w * 7 + d);
-      const key = cd.toISOString().slice(0, 10);
+      cd.setDate(startDate.getDate() + w * 7 + d);
+      const key = localDay$1(cd.getTime());
       const t = dayMap[key] || 0;
       const lv = getLevel(t);
-      const tip = cd.getUTCFullYear() + "年" + (cd.getUTCMonth() + 1) + "月" + cd.getUTCDate() + "日" + (t > 0 ? " · " + t.toLocaleString() + " Token" : " · 无记录");
+      const tip = cd.getFullYear() + "年" + (cd.getMonth() + 1) + "月" + cd.getDate() + "日" + (t > 0 ? " · " + t.toLocaleString() + " Token" : " · 无记录");
       html += '<td style="padding:1px;line-height:0;font-size:0"><div style="width:' + cs + "px;height:" + cs + "px;border-radius:2px;background:" + clr[lv] + ";border:1px solid " + borderClr + ';cursor:pointer;box-sizing:border-box;" title="' + tip + '"></div></td>';
     }
     html += "</tr>";
@@ -3198,8 +3136,8 @@ function toggleY(key) {
   } else ySelected.add(key);
 }
 function toHourKey(ts) {
-  const d = new Date(ts + 8 * 3600 * 1e3);
-  const y = d.getUTCFullYear(), m = String(d.getUTCMonth() + 1).padStart(2, "0"), day = String(d.getUTCDate()).padStart(2, "0"), h = String(d.getUTCHours()).padStart(2, "0");
+  const d = new Date(ts);
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0"), h = String(d.getHours()).padStart(2, "0");
   return `${y}-${m}-${day} ${h}:00`;
 }
 function toWeekKey(ts) {
@@ -3212,8 +3150,8 @@ function toWeekKey(ts) {
   return `${tmp.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
 }
 function toMonthKey(ts) {
-  const d = new Date(ts + 8 * 3600 * 1e3);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 function getBucketKey(e, x, idx) {
   if (x === "round") return `#${idx + 1}`;
@@ -3319,8 +3257,8 @@ function themeColor$2(name, fallback) {
 function bucketKey$1(ts, x, idx) {
   if (x === "round") return `#${idx + 1}`;
   if (x === "hour") {
-    const d = new Date(ts + 8 * 3600 * 1e3);
-    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")} ${String(d.getUTCHours()).padStart(2, "0")}:00`;
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:00`;
   }
   if (x === "day") return localDay$1(ts);
   if (x === "week") {
@@ -3333,8 +3271,8 @@ function bucketKey$1(ts, x, idx) {
     return `${tmp.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
   }
   if (x === "month") {
-    const d = new Date(ts + 8 * 3600 * 1e3);
-    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   }
   return localDay$1(ts);
 }
@@ -3700,8 +3638,8 @@ function themeColor$1(name, fallback) {
 function bucketKey(ts, x, idx) {
   if (x === "round") return `#${idx + 1}`;
   if (x === "hour") {
-    const d = new Date(ts + 8 * 3600 * 1e3);
-    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")} ${String(d.getUTCHours()).padStart(2, "0")}:00`;
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:00`;
   }
   if (x === "day") return localDay$1(ts);
   if (x === "week") {
@@ -3714,8 +3652,8 @@ function bucketKey(ts, x, idx) {
     return `${tmp.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
   }
   if (x === "month") {
-    const d = new Date(ts + 8 * 3600 * 1e3);
-    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   }
   return localDay$1(ts);
 }
@@ -4003,34 +3941,34 @@ function themeColor(name, fallback) {
 }
 function getRangeDates() {
   const today = localDay$1(Date.now());
-  const d = /* @__PURE__ */ new Date(today + "T00:00:00Z");
-  const fmt2 = (x) => x.toISOString().slice(0, 10);
+  const d = /* @__PURE__ */ new Date(today + "T00:00:00");
+  const fmt2 = (x) => localDay$1(x.getTime());
   switch (currentRange) {
     case "today":
       return { start: today, end: today };
     case "yesterday": {
       const y = new Date(d);
-      y.setUTCDate(y.getUTCDate() - 1);
+      y.setDate(y.getDate() - 1);
       const s = fmt2(y);
       return { start: s, end: s };
     }
     case "7d": {
       const s = new Date(d);
-      s.setUTCDate(s.getUTCDate() - 6);
+      s.setDate(s.getDate() - 6);
       return { start: fmt2(s), end: today };
     }
     case "30d": {
       const s = new Date(d);
-      s.setUTCDate(s.getUTCDate() - 29);
+      s.setDate(s.getDate() - 29);
       return { start: fmt2(s), end: today };
     }
     case "month": {
-      const s = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+      const s = new Date(d.getFullYear(), d.getMonth(), 1);
       return { start: fmt2(s), end: today };
     }
     case "lastMonth": {
-      const s = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1));
-      const e = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 0));
+      const s = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+      const e = new Date(d.getFullYear(), d.getMonth(), 0);
       return { start: fmt2(s), end: fmt2(e) };
     }
     case "custom":
@@ -4080,26 +4018,26 @@ function renderCalendar() {
   updateRangeHighlight();
   if (currentRange !== "custom") return;
   const todayStr = localDay$1(Date.now());
-  const base = /* @__PURE__ */ new Date(todayStr + "T00:00:00Z");
-  base.setUTCMonth(base.getUTCMonth() + calendarOffset);
+  const base = /* @__PURE__ */ new Date(todayStr + "T00:00:00");
+  base.setMonth(base.getMonth() + calendarOffset);
   const months = [];
-  months.push(new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() - 1, 1)));
-  months.push(new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), 1)));
+  months.push(new Date(base.getFullYear(), base.getMonth() - 1, 1));
+  months.push(new Date(base.getFullYear(), base.getMonth(), 1));
   let html = '<div style="display:flex;gap:12px;align-items:flex-start;">';
   html += `<button id="aus-cal-prev" style="margin-top:32px;padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);cursor:pointer;">‹</button>`;
   html += '<div style="display:flex;gap:16px;">';
   for (const m of months) {
-    const y = m.getUTCFullYear(), mo = m.getUTCMonth();
-    const first = new Date(Date.UTC(y, mo, 1));
-    const daysInMonth = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate();
-    const startDow = first.getUTCDay();
+    const y = m.getFullYear(), mo = m.getMonth();
+    const first = new Date(y, mo, 1);
+    const daysInMonth = new Date(y, mo + 1, 0).getDate();
+    const startDow = first.getDay();
     html += `<div style="min-width:220px;"><div style="text-align:center;font-weight:600;font-size:13px;margin-bottom:8px;">${y}年${mo + 1}月</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:11px;">`;
     const week = ["日", "一", "二", "三", "四", "五", "六"];
     for (const w of week) html += `<div style="text-align:center;color:var(--ds-text-3);padding:4px;">${w}</div>`;
     for (let i = 0; i < startDow; i++) html += `<div></div>`;
     for (let d = 1; d <= daysInMonth; d++) {
-      const date = new Date(Date.UTC(y, mo, d));
-      const key = date.toISOString().slice(0, 10);
+      const date = new Date(y, mo, d);
+      const key = localDay$1(date.getTime());
       const { start, end } = getRangeDates();
       const inRange = key >= start && key <= end;
       const isToday = key === todayStr;
@@ -4359,7 +4297,8 @@ async function renderChart(filteredRaw) {
     const isHidden = statsView ? statsView.style.display === "none" || statsView.offsetParent === null : false;
     if (isHidden) {
       try {
-        console.log("[AUS] renderChart 容器隐藏，等待切换");
+        const { log: log2 } = await Promise.resolve().then(() => logger);
+        log2.debug("renderChart 容器隐藏，等待切换");
       } catch {
       }
       return;
@@ -4554,11 +4493,23 @@ function renderModelSummary(filtered) {
 }
 let cachedAllHistory = null;
 let allHistoryLoading = false;
+try {
+  on(DataEvents.HISTORY_ADDED, () => {
+    cachedAllHistory = null;
+  });
+} catch {
+}
 async function getHistoryForStats() {
   const s = getSelectedSave();
   const hot = s?.history || [];
   if (hot.length >= 400 || cachedAllHistory) {
-    if (cachedAllHistory) return cachedAllHistory;
+    if (cachedAllHistory) {
+      const keyOf = (h) => `${h.timestamp}|${h.model || ""}|${h.total_tokens || 0}`;
+      const seen = new Set(cachedAllHistory.map(keyOf));
+      const fresh = hot.filter((h) => !seen.has(keyOf(h)));
+      if (fresh.length) cachedAllHistory = [...fresh, ...cachedAllHistory].sort((a, b) => b.timestamp - a.timestamp);
+      return cachedAllHistory;
+    }
     if (allHistoryLoading) return hot;
     allHistoryLoading = true;
     try {
@@ -4607,40 +4558,8 @@ async function renderStatsView() {
     renderModelTrends(chartFiltered);
   } else {
     try {
-      console.log("[AUS] stats 隐藏，跳过图表初始化");
-    } catch {
-    }
-  }
-  if (cachedAllHistory && cachedAllHistory.length !== (s.history || []).length) ;
-  else if (!cachedAllHistory && allHistory.length !== (s.history || []).length) {
-    try {
-      const mod = await Promise.resolve().then(() => persistence);
-      const all = await mod.getAllHistory();
-      if (all && all.length > (s.history || []).length) {
-        cachedAllHistory = all;
-        const tf2 = filterByRange(all);
-        const sf2 = filterByModel(tf2);
-        const cf2 = sf2;
-        let c2 = 0, r2 = sf2.length, t2 = 0;
-        for (const e of sf2) {
-          c2 += e.cost || 0;
-          t2 += e.total_tokens || 0;
-        }
-        const ce2 = doc.getElementById("aus-stats-cost");
-        if (ce2) ce2.textContent = "¥" + c2.toFixed(2) + " CNY";
-        const re2 = doc.getElementById("aus-stats-req");
-        if (re2) re2.textContent = String(r2);
-        const te2 = doc.getElementById("aus-stats-tok");
-        if (te2) te2.textContent = t2.toLocaleString("zh-CN");
-        renderModelSummary(sf2);
-        const sv2 = doc.querySelector('[data-view="stats"]');
-        const hidden2 = sv2 ? sv2.style.display === "none" || sv2.offsetParent === null : false;
-        if (!hidden2) {
-          renderChart(cf2);
-          renderExtraCharts(cf2);
-          renderModelTrends(cf2);
-        }
-      }
+      const { log: log2 } = await Promise.resolve().then(() => logger);
+      log2.debug("stats 隐藏，跳过图表初始化");
     } catch {
     }
   }
@@ -4667,6 +4586,8 @@ let panelOpen = false;
 let collapsed = false;
 function refreshUI() {
   try {
+    if (!panelOpen && !panelCreated) return;
+    if (!panelOpen) return;
     const doc = getDoc$1();
     const s = getSelectedSave();
     if (!s) return;
@@ -4688,6 +4609,12 @@ const HISTORY_PAGE_SIZE = 30;
 let historyFullCache = null;
 let historyCacheScope = "";
 let historyLoading = false;
+try {
+  on(DataEvents.HISTORY_ADDED, () => {
+    historyFullCache = null;
+  });
+} catch {
+}
 function renderHistoryInner(doc, fullHist) {
   const host = doc.getElementById("aus-history");
   if (!host) return;
@@ -4742,7 +4669,7 @@ function renderHistoryInner(doc, fullHist) {
         <div style="display:flex;gap:8px;"><span style="color:var(--ds-green);font-weight:500;">${hps}% 命中</span><span style="color:var(--ds-red);font-weight:500;">${mps}% 未命中</span><span style="color:var(--ds-purple);font-weight:500;">${ops}% 输出</span></div>
         <span style="color:var(--ds-text-2);">${total2.toLocaleString()}t</span>
       </div>
-      <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;margin-top:8px;border-top:1px solid var(--ds-border);padding-top:8px;height:520px;overflow:hidden;display:none;flex-direction:column;gap:8px;">
+      <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;margin-top:8px;border-top:1px solid var(--ds-border);padding-top:8px;height:min(520px,60vh);overflow:hidden;flex-direction:column;gap:8px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">基础信息</div>
@@ -4829,17 +4756,17 @@ function renderHistoryInner(doc, fullHist) {
   host.querySelectorAll(".aus-detail-toggle").forEach((btn) => {
     btn.addEventListener("click", () => {
       const ts = btn.getAttribute("data-ts");
-      const panel = host.querySelector(`[data-detail="${ts}"]`);
-      if (!panel) return;
-      const isOpen = panel.style.display !== "none" && panel.style.display !== "";
+      const panel2 = host.querySelector(`[data-detail="${ts}"]`);
+      if (!panel2) return;
+      const isOpen = panel2.style.display !== "none" && panel2.style.display !== "";
       if (isOpen) {
-        panel.style.display = "none";
+        panel2.style.display = "none";
         btn.textContent = "详情";
         btn.style.background = "var(--ds-black)";
         btn.style.color = "var(--ds-black-text)";
       } else {
-        panel.style.display = "flex";
-        panel.style.flexDirection = "column";
+        panel2.style.display = "flex";
+        panel2.style.flexDirection = "column";
         btn.textContent = "收起";
         btn.style.background = "var(--ds-card-inner)";
         btn.style.color = "var(--ds-text)";
@@ -4991,25 +4918,18 @@ function switchView(view) {
   }
 }
 function positionPanel() {
-  const doc = getDoc$1();
-  const overlay = doc.getElementById("aus-overlay");
-  const panel = doc.getElementById("aus-panel");
-  if (!overlay || !panel || overlay.style.display === "none") return;
-  const vw = doc.documentElement.clientWidth || window.parent?.innerWidth || 0;
-  const vh = doc.documentElement.clientHeight || window.parent?.innerHeight || 0;
-  panel.style.left = "0px";
-  panel.style.top = "0px";
-  const rect = panel.getBoundingClientRect();
-  const docOffX = -rect.left;
-  const docOffY = -rect.top;
-  overlay.style.left = docOffX + "px";
-  overlay.style.top = docOffY + "px";
-  overlay.style.width = vw + "px";
-  overlay.style.height = vh + "px";
-  panel.style.left = docOffX + "px";
-  panel.style.top = docOffY + "px";
-  panel.style.width = vw + "px";
-  panel.style.height = vh + "px";
+  try {
+    const doc = getDoc$1();
+    const charts2 = [];
+    for (const id of ["aus-stats-chart", "aus-chart-token", "aus-chart-cost", "aus-chart-hit", "aus-chart-req", "aus-chart-dur", "aus-chart-pie", "aus-chart-model-token", "aus-chart-model-req"]) {
+      const el = doc.getElementById(id);
+      if (el && el.__echarts_instance) try {
+        el.__echarts_instance.resize();
+      } catch {
+      }
+    }
+  } catch {
+  }
 }
 function createPanel() {
   if (panelCreated) return;
@@ -5024,16 +4944,16 @@ function createPanel() {
   overlay.id = "aus-overlay";
   overlay.setAttribute("data-extension", "api-usage-stat");
   overlay.setAttribute("data-ds-theme", theme);
-  overlay.style.cssText = "position:absolute;top:0;left:0;background:var(--ds-overlay);z-index:100000;display:none;opacity:0;transition:opacity 0.2s;";
+  overlay.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;background:var(--ds-overlay);z-index:100000;display:none;opacity:0;transition:opacity 0.2s;";
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) closePanel();
   });
-  const panel = doc.createElement("div");
-  panel.id = "aus-panel";
-  panel.setAttribute("data-extension", "api-usage-stat");
-  panel.setAttribute("data-ds-theme", theme);
-  panel.style.cssText = "position:absolute;top:0;left:0;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:'Microsoft YaHei','微软雅黑',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;";
-  panel.innerHTML = `
+  const panel2 = doc.createElement("div");
+  panel2.id = "aus-panel";
+  panel2.setAttribute("data-extension", "api-usage-stat");
+  panel2.setAttribute("data-ds-theme", theme);
+  panel2.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:'Microsoft YaHei','微软雅黑',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;";
+  panel2.innerHTML = `
     <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;border-bottom:1px solid var(--ds-border);background:var(--ds-card-inner);">
       <button id="aus-hamburger-btn" title="菜单" style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);font-size:18px;line-height:1;padding:0;">☰</button>
       <span style="margin-left:12px;font-size:13px;font-weight:700;color:var(--ds-text);">API用量统计</span>
@@ -5173,9 +5093,9 @@ function createPanel() {
   const sbOverlay = doc.createElement("div");
   sbOverlay.id = "aus-sidebar-overlay";
   sbOverlay.style.cssText = "display:none !important;";
-  panel.appendChild(sbOverlay);
+  panel2.appendChild(sbOverlay);
   doc.body.appendChild(overlay);
-  doc.body.appendChild(panel);
+  doc.body.appendChild(panel2);
   try {
     applyTheme(theme);
   } catch {
@@ -5294,13 +5214,19 @@ function createPanel() {
   switchView("overview");
   refreshUI();
 }
+function resetPanelState() {
+  panelCreated = false;
+  panelOpen = false;
+}
 function openPanel() {
   const doc = getDoc$1();
-  const ov = doc.getElementById("aus-overlay");
-  const pn = doc.getElementById("aus-panel");
+  let ov = doc.getElementById("aus-overlay");
+  let pn = doc.getElementById("aus-panel");
   if (!ov || !pn) {
     createPanel();
-    return openPanel();
+    ov = doc.getElementById("aus-overlay");
+    pn = doc.getElementById("aus-panel");
+    if (!ov || !pn) return;
   }
   ov.style.display = "block";
   pn.style.display = "flex";
@@ -5345,14 +5271,28 @@ function togglePanel() {
   if (panelOpen) closePanel();
   else openPanel();
 }
+function injectPanel() {
+  createPanel();
+}
+const panel = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  bindPanel,
+  closePanel,
+  createPanel,
+  injectPanel,
+  openPanel,
+  refreshUI,
+  resetPanelState,
+  togglePanel
+}, Symbol.toStringTag, { value: "Module" }));
 function isWeekend(ts) {
-  const d = new Date(ts + 8 * 3600 * 1e3).getUTCDay();
-  return d === 0 || d === 6;
+  const d = new Date(ts);
+  return d.getDay() === 0 || d.getDay() === 6;
 }
 function isPeak(ts) {
   if (isWeekend(ts)) return false;
   const d = new Date(ts);
-  const mins = (d.getUTCHours() * 60 + d.getUTCMinutes() + 8 * 60) % 1440;
+  const mins = d.getHours() * 60 + d.getMinutes();
   for (const h of state$2.settings.peakHours || []) {
     const sp = parseInt(h.start.split(":")[0]) * 60 + parseInt(h.start.split(":")[1] || "0");
     const ep = parseInt(h.end.split(":")[0]) * 60 + parseInt(h.end.split(":")[1] || "0");
@@ -5366,7 +5306,7 @@ function getPeakStatus(now = Date.now()) {
   if (isWeekend(now)) return { color: "#22c55e", label: "周末全天低谷" };
   if (isPeak(now)) return { color: "#ef4444", label: "高峰时段" };
   const d = new Date(now);
-  const mins = (d.getUTCHours() * 60 + d.getUTCMinutes() + 8 * 60) % 1440;
+  const mins = d.getHours() * 60 + d.getMinutes();
   let nearest = 1440;
   for (const h of state$2.settings.peakHours || []) {
     const sp = parseInt(h.start.split(":")[0]) * 60 + parseInt(h.start.split(":")[1] || "0");
@@ -5391,6 +5331,28 @@ function updatePeakDot() {
   dot.style.boxShadow = `0 0 8px ${st.color}`;
   dot.title = `API用量统计 · ${st.label}`;
 }
+let peakTimer = null;
+function clampPos(left, top) {
+  const w = window.parent?.innerWidth ?? window.innerWidth;
+  const h = window.parent?.innerHeight ?? window.innerHeight;
+  const cl = Math.min(Math.max(left, 0), w - 40);
+  const ct = Math.min(Math.max(top, 0), h - 40);
+  return { left: cl, top: ct };
+}
+function stopPeakDot() {
+  if (peakTimer) {
+    try {
+      clearInterval(peakTimer);
+    } catch {
+    }
+    peakTimer = null;
+  }
+  try {
+    const doc = window.parent?.document ?? document;
+    doc.getElementById("aus-peak-dot-indicator")?.remove();
+  } catch {
+  }
+}
 function createPeakDot() {
   const doc = window.parent?.document ?? document;
   if (doc.getElementById("aus-peak-dot-indicator")) return;
@@ -5403,38 +5365,60 @@ function createPeakDot() {
     if (v) saved = JSON.parse(v);
   } catch {
   }
-  if (saved) {
-    dot.style.left = saved.left + "px";
-    dot.style.top = saved.top + "px";
+  if (saved && typeof saved.left === "number" && typeof saved.top === "number") {
+    const c = clampPos(saved.left, saved.top);
+    dot.style.left = c.left + "px";
+    dot.style.top = c.top + "px";
   } else {
     dot.style.right = "16px";
     dot.style.top = "60px";
   }
   doc.body.appendChild(dot);
   updatePeakDot();
-  setInterval(updatePeakDot, 3e4);
-  dot.addEventListener("mousedown", (e) => {
+  peakTimer = setInterval(updatePeakDot, 3e4);
+  dot.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    try {
+      dot.setPointerCapture(e.pointerId);
+    } catch {
+    }
     dot.style.cursor = "grabbing";
     const rect = dot.getBoundingClientRect();
     const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
     const onMove = (ev) => {
+      dot.style.right = "auto";
       dot.style.left = ev.clientX - sx + "px";
       dot.style.top = ev.clientY - sy + "px";
-      dot.style.right = "auto";
     };
-    const onUp = () => {
+    const onUp = (ev) => {
       dot.style.cursor = "grab";
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+      dot.removeEventListener("pointermove", onMove);
+      dot.removeEventListener("pointerup", onUp);
       try {
-        localStorage.setItem("ds_ds_peak_dot_pos", JSON.stringify({ left: parseInt(dot.style.left) || 0, top: parseInt(dot.style.top) || 0 }));
+        dot.releasePointerCapture(ev.pointerId);
+      } catch {
+      }
+      const left = parseInt(dot.style.left) || 0;
+      const top = parseInt(dot.style.top) || 0;
+      const c = clampPos(left, top);
+      dot.style.left = c.left + "px";
+      dot.style.top = c.top + "px";
+      try {
+        localStorage.setItem("ds_ds_peak_dot_pos", JSON.stringify({ left: c.left, top: c.top }));
       } catch {
       }
     };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    dot.addEventListener("pointermove", onMove);
+    dot.addEventListener("pointerup", onUp);
   });
 }
+const peakDot = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  createPeakDot,
+  getPeakStatus,
+  stopPeakDot,
+  updatePeakDot
+}, Symbol.toStringTag, { value: "Module" }));
 const MODULE = "api_usage_stat";
 function getDoc() {
   return window.parent?.document ?? document;
@@ -5470,7 +5454,7 @@ function injectWandEntry() {
   }
   const btn = doc.getElementById("aus_wand_entry");
   if (btn) btn.addEventListener("click", () => togglePanel());
-  console.log("[API用量统计] 魔法棒入口已注入");
+  log.debug("魔法棒入口已注入");
   return true;
 }
 function ensureWandEntry() {
@@ -5482,7 +5466,7 @@ function ensureWandEntry() {
   }, 500);
 }
 async function onInstall() {
-  console.log("[API用量统计] installed");
+  log.debug("installed");
   try {
     const { loadHot: loadHot2 } = await Promise.resolve().then(() => persistence);
     await loadHot2();
@@ -5490,10 +5474,10 @@ async function onInstall() {
   }
 }
 async function onUpdate() {
-  console.log("[API用量统计] updated");
+  log.debug("updated");
 }
 async function onDelete() {
-  console.log("[API用量统计] deleted");
+  log.debug("deleted");
   try {
     const doc = getDoc();
     doc.getElementById("aus-overlay")?.remove();
@@ -5502,16 +5486,60 @@ async function onDelete() {
     doc.getElementById("aus-peak-dot-indicator")?.remove();
   } catch {
   }
+  try {
+    const m = await Promise.resolve().then(() => panel);
+    m.resetPanelState?.();
+  } catch {
+  }
+  try {
+    const m = await Promise.resolve().then(() => peakDot);
+    m.stopPeakDot?.();
+  } catch {
+  }
+  try {
+    const m2 = await Promise.resolve().then(() => balance);
+    m2.stopBalanceTimer?.();
+  } catch {
+  }
+  try {
+    localStorage.removeItem("ds_ds_webdav_pass");
+  } catch {
+  }
+  try {
+    localStorage.removeItem("ds_ds_peak_dot_pos");
+  } catch {
+  }
+  try {
+    localStorage.removeItem("ds_debug_log");
+  } catch {
+  }
+  try {
+    const ctx = globalThis.SillyTavern?.getContext?.();
+    if (ctx?.extensionSettings) {
+      delete ctx.extensionSettings["api_usage_stat"];
+      ctx.saveSettingsDebounced?.();
+    }
+  } catch {
+  }
+  try {
+    delete globalThis.ApiUsageStat;
+    delete globalThis.ApiUsageStatInterceptor;
+  } catch {
+  }
 }
 function onEnable() {
-  console.log("[API用量统计] enabled");
+  log.debug("enabled");
   try {
     Promise.resolve().then(() => interception).then((m) => m.installInterception());
   } catch {
   }
+  try {
+    Promise.resolve().then(() => balance).then((m) => m.restartBalanceTimer?.());
+  } catch {
+  }
 }
-function onDisable() {
-  console.log("[API用量统计] disabled");
+async function onDisable() {
+  log.debug("disabled");
   try {
     Promise.resolve().then(() => interception).then((m) => m.uninstallInterception?.());
   } catch {
@@ -5520,6 +5548,23 @@ function onDisable() {
     const doc = getDoc();
     doc.getElementById("aus-overlay")?.remove();
     doc.getElementById("aus-panel")?.remove();
+    doc.getElementById("aus_wand_container")?.remove();
+    doc.getElementById("aus-peak-dot-indicator")?.remove();
+  } catch {
+  }
+  try {
+    const m = await Promise.resolve().then(() => panel);
+    m.resetPanelState?.();
+  } catch {
+  }
+  try {
+    const m = await Promise.resolve().then(() => peakDot);
+    m.stopPeakDot?.();
+  } catch {
+  }
+  try {
+    const m2 = await Promise.resolve().then(() => balance);
+    m2.stopBalanceTimer?.();
   } catch {
   }
 }
@@ -5541,6 +5586,11 @@ async function init() {
     await initStore();
   } catch (e) {
     console.error("[API用量统计] initStore 失败", e);
+  }
+  try {
+    const m = await Promise.resolve().then(() => balance);
+    m.restartBalanceTimer?.();
+  } catch {
   }
   try {
     installInterception();

@@ -27,10 +27,10 @@ function themeColor(name: string, fallback: string) {
 
 function bucketKey(ts:number, x:XKey, idx:number):string {
   if (x==='round') return `#${idx+1}`;
-  if (x==='hour') { const d=new Date(ts+8*3600*1000); return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')} ${String(d.getUTCHours()).padStart(2,'0')}:00`; }
+  if (x==='hour') { const d=new Date(ts); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:00`; }
   if (x==='day') return localDay(ts);
   if (x==='week') { const d=new Date(ts); const tmp=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())); const dayNum=tmp.getUTCDay()||7; tmp.setUTCDate(tmp.getUTCDate()+4-dayNum); const yearStart=new Date(Date.UTC(tmp.getUTCFullYear(),0,1)); const weekNo=Math.ceil((((tmp as any)-(yearStart as any))/86400000+1)/7); return `${tmp.getUTCFullYear()}-W${String(weekNo).padStart(2,'0')}`; }
-  if (x==='month') { const d=new Date(ts+8*3600*1000); return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`; }
+  if (x==='month') { const d=new Date(ts); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
   return localDay(ts);
 }
 

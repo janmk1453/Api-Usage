@@ -1,8 +1,7 @@
 import { state } from '../store/index';
 import { repository } from '../data/repository';
+import { log } from '../utils/logger';
 
-// 去 fetch 猴补，主路径 GENERATION_ENDED + MESSAGE_RECEIVED，辅以 generate_interceptor 记 messages
-// 临时增加 fetch 兜底：直接捕获网络层 usage，确保 custom 渠道真实请求应记尽记
 let lastMessages: any[] = [];
 let lastStart = 0;
 let lastFetchUsage: any = null;
@@ -20,15 +19,12 @@ function installFetchCapture() {
   try {
     const p: any = (window as any).parent || window;
     if (!p || !p.fetch || (p.fetch as any).__aus_patched) {
-      try { console.log('[AUS-TEMP] installFetchCapture 跳过 已 patched 或无 fetch', { hasFetch: !!p?.fetch, patched: !!(p?.fetch as any)?.__aus_patched }); } catch {}
       return;
     }
     const rawFetch = p.fetch.bind(p);
-    try { console.log('[AUS-TEMP] installFetchCapture 开始安装', { target: TARGET_API }); } catch {}
     const patched: any = function(this: any) {
       const args: any = arguments;
       const url: string = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
-      try { console.log('[AUS-TEMP] fetch 拦截入口', { url: String(url).slice(0, 200), hasBody: !!args[1]?.body }); } catch {}
       if (typeof url === 'string' && url.indexOf(TARGET_API) !== -1) {
         let reqBody: any = null;
         try { reqBody = JSON.parse(args[1]?.body || 'null'); } catch {}
@@ -36,18 +32,10 @@ function installFetchCapture() {
         let msgs: any[] = [];
         try { if (reqBody?.messages?.length) msgs = reqBody.messages.slice(-10); } catch {}
         const startTime = Date.now();
-        // 记录 lastMessages 供 processUsage 使用
         try { lastMessages = msgs; lastStart = startTime; } catch {}
-        // 直接走原生请求，不做 debug 模拟（扩展 debug 由设置单独控制）
-        try { console.log('[AUS-TEMP] 命中 TARGET_API 即将透传', { url: String(url).slice(0, 120) }); } catch {}
         return rawFetch.apply(p, args).then((res: Response) => {
-          try { console.log('[AUS-TEMP] fetch 响应返回', { url: String(url).slice(0, 120), status: (res as any)?.status, ok: (res as any)?.ok, ct: res.headers.get('content-type') }); } catch {}
-          // 关键：任何解析异常都不应影响原 res 返回，避免对话中断
           try {
             const clone = res.clone();
-            try { console.log('[AUS-TEMP] clone 成功，准备解析 text'); } catch {}
-            const ttftRef: any = { value: 0 };
-            const thinkRef: any = { value: 0 };
             const parseAndProcess = (text: string, ttftVal: number, thinkTimeVal: number) => {
             let data: any = null;
             try {
@@ -55,65 +43,51 @@ function installFetchCapture() {
               if (trimmed.startsWith('{')) {
                 data = JSON.parse(trimmed);
               } else {
-                // 流式 SSE：逐行解析 data: {...} 中的 usage
                 text.split('\n').forEach((line: string) => {
                   if (line.startsWith('data: ') && line !== 'data: [DONE]') {
                     try {
                       const chunk = JSON.parse(line.substring(6));
                       if (chunk.usage) data = chunk;
-                      // 兼容 usage 在 delta 中
                       if (!data && chunk.choices?.[0]?.usage) data = { usage: chunk.choices[0].usage, model: chunk.model };
                     } catch {}
                   }
                 });
-                // 兜底：正则提取 usage
                 if (!data || !data.usage) {
                   const m = text.match(/"usage"\s*:\s*(\{[^\}]+\})/);
                   if (m) { try { const u = JSON.parse(m[1]); if (u && typeof u === 'object') data = { usage: u, model: data?.model }; } catch {} }
                 }
               }
             } catch (e) {
-              console.warn('[API用量统计][TRACE] 用量响应解析失败', (e as any)?.message || e);
+              log.debug('用量响应解析失败', (e as any)?.message || e);
               return;
             }
             if (data && data.usage) {
               const model = (data as any)?.model || reqBody?.model || fullReq?.model || lastFetchModel || 'deepseek-v4-flash';
               const usage = (data as any).usage;
-              // 回退修复：fetch 恢复直接落账 + 缓存双保险，依赖 repository 指纹去重防双记账（避免 GENERATION_ENDED 未触发导致丢账）
               lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: data, ttft: ttftVal, thinkTime: thinkTimeVal };
               lastFetchModel = typeof model === 'string' ? model : null;
               lastFetchTime = Date.now();
-              try { console.log('[AUS-TEMP] fetch 解析成功 usage', { model, usage }); } catch {}
-              try { console.log('[API用量统计][TRACE] fetch 捕获 usage', { url: String(url).slice(0, 80), usage: JSON.stringify(usage).slice(0, 1500), model }); } catch {}
-              // 关键：恢复直接落账，但由 repository 5s指纹去重保证不翻倍
-              try { console.log('[AUS-TEMP] 即将 processUsage fetch'); } catch {}
-              try { processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal); try { console.log('[AUS-TEMP] processUsage fetch 完成'); } catch {} } catch (e) { console.error('[API用量统计] fetch 用量记录失败', (e as any)?.message || e); }
-            } else {
-              try { console.log('[AUS-TEMP] fetch 解析后无 usage', { textLen: text.length, hasData: !!data, dataKeys: data ? Object.keys(data).slice(0, 10) : [] }); } catch {}
+              log.debug('fetch 捕获 usage', { model, hasUsage: !!usage });
+              try { processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal); } catch (e) { log.error('fetch 用量记录失败 ' + ((e as any)?.message || e)); }
             }
           };
-          // 尝试根据 Content-Type 分发解析
           const ct = clone.headers.get('content-type') || '';
-          try { console.log('[AUS-TEMP] 准备 clone.text 解析', { ct }); } catch {}
           if (ct.includes('application/json')) {
-            clone.text().then(t => { try { console.log('[AUS-TEMP] clone.text json 完成', { len: t.length }); } catch {} parseAndProcess(t, 0, 0); }).catch((e: any) => { try { console.log('[AUS-TEMP] clone.text json 失败', e?.message); } catch {} });
+            clone.text().then(t => { parseAndProcess(t, 0, 0); }).catch(()=>{});
           } else {
-            // 流式：延迟解析，确保流已完整（原脚本在 res 克隆后异步解析）
-            clone.text().then(t => { try { console.log('[AUS-TEMP] clone.text stream 完成', { len: t.length }); } catch {} parseAndProcess(t, 0, 0); }).catch((e: any) => { try { console.log('[AUS-TEMP] clone.text stream 失败', e?.message); } catch {} });
+            clone.text().then(t => { parseAndProcess(t, 0, 0); }).catch(()=>{});
           }
           } catch (e) {
-            console.warn('[API用量统计] fetch 克隆解析异常，不影响原请求', (e as any)?.message || e);
-            try { console.log('[AUS-TEMP] fetch 克隆异常', (e as any)?.message); } catch {}
+            log.debug('fetch 克隆解析异常，不影响原请求', (e as any)?.message || e);
           }
           return res;
-        }).catch((e: any) => { try { console.log('[AUS-TEMP] rawFetch 失败', e?.message); } catch {} throw e; });
+        }).catch((e: any) => { throw e; });
       }
-      // 非目标 API，直接透传
       return rawFetch.apply(p, args);
     };
     patched.__aus_patched = true;
     p.fetch = patched;
-    console.log('[API用量统计][TRACE] fetch 捕获已安装（原脚本 1:1 逻辑，TARGET_API=' + TARGET_API + '）');
+    log.debug('fetch 捕获已安装 TARGET_API=' + TARGET_API);
   } catch {}
 }
 
@@ -126,16 +100,12 @@ export function installInterception() {
     const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
     const es = ctx?.eventSource;
     const et = ctx?.event_types;
-    try { console.log('[AUS-TEMP] installInterception 调用', { hasCtx: !!ctx, hasEs: !!es, hasEt: !!et, installed: interceptionInstalled }); } catch {}
     if (!es || !et) {
-      try { console.log('[AUS-TEMP] installInterception 失败 无 es/et'); } catch {}
       return false;
     }
     if (interceptionInstalled) {
-      try { console.log('[AUS-TEMP] installInterception 已安装跳过'); } catch {}
       return true;
     }
-    // 记录原始 fetch 引用以便 disable 时还原
     try {
       const p: any = (window as any).parent || window;
       if (p?.fetch && !(p.fetch as any).__aus_patched) rawFetchRef = p.fetch.bind(p);
@@ -143,17 +113,12 @@ export function installInterception() {
     es.on(et.GENERATION_ENDED, onGenerationEnded);
     messageReceivedHandler = () => setTimeout(refresh, 400);
     es.on(et.MESSAGE_RECEIVED, messageReceivedHandler);
-    // generate_interceptor 记录请求 messages（若 ST 支持）
     (globalThis as any).ApiUsageStatInterceptor = (chat: any[], _ctxSize: number, _abort: any, _type: string) => {
-      try { console.log('[AUS-TEMP] ApiUsageStatInterceptor 触发', { len: chat?.length, type: _type }); } catch {}
       try { setLastRequest(chat?.slice(-10) || [], Date.now()); } catch {}
-      try { console.log('[AUS-TEMP] setLastRequest 完成'); } catch {}
     };
-    // 安装 fetch 兜底捕获
     try { installFetchCapture(); } catch {}
     interceptionInstalled = true;
     return true;
-    // manifest 若需，可由用户手动加 generate_interceptor 指向 ApiUsageStatInterceptor
   } catch { return false; }
 }
 
@@ -166,7 +131,6 @@ export function uninstallInterception() {
       try { es.off?.(et.GENERATION_ENDED, onGenerationEnded); } catch {}
       try { es.off?.(et.MESSAGE_RECEIVED, messageReceivedHandler); } catch {}
     }
-    // 还原 fetch
     try {
       const p: any = (window as any).parent || window;
       if (p && rawFetchRef && (p.fetch as any).__aus_patched) {
@@ -179,7 +143,6 @@ export function uninstallInterception() {
 
 function isValidUsage(u: any): boolean {
   if (!u || typeof u !== 'object' || Array.isArray(u)) return false;
-  // 至少包含一个 token 字段才视为有效 usage
   return (
     typeof u.prompt_tokens === 'number' ||
     typeof u.completion_tokens === 'number' ||
@@ -199,80 +162,57 @@ function pickUsageFromExtra(extra: any): any {
     extra.usage,
     extra.openai_usage,
     extra.token_usage,
-    // 兼容部分渠道把 usage 塞在 extra.data.usage
     extra.data?.usage,
     extra.response?.usage,
   ];
   for (const c of candidates) {
     if (isValidUsage(c)) return c;
   }
-  // 额外兼容：extra 本身就是 usage（某些渠道直接把 prompt_tokens 放在 extra）
   if (isValidUsage(extra)) return extra;
   return null;
 }
 
 function onGenerationEnded(...args: any[]) {
-  const TRACE = '[API用量统计][TRACE]';
-  try { console.log('[AUS-TEMP] onGenerationEnded 入口', { argsLen: args.length, arg0Keys: args[0] ? Object.keys(args[0]).slice(0, 10) : [] }); } catch {}
   try {
-    // ST 的 chat 尾条常带 extra.api_usage
     const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
     const chat: any[] = ctx?.chat || [];
     const tail = chat[chat.length - 1];
     const extra = tail?.extra || {};
     const tailModel = (tail as any)?.model || null;
     const extraModel = extra.model || tailModel || ctx?.model || 'deepseek-v4-flash';
-    // 临时详细日志：打印 tail 的关键字段，帮助定位为何无记录
-    try {
-      console.log(TRACE + ' onGenerationEnded 触发', {
-        chatLen: chat.length,
-        tailIdx: chat.length - 1,
-        tailExtraKeys: extra ? Object.keys(extra).slice(0, 20) : [],
-        tailExtraStr: JSON.stringify(extra).slice(0, 2000),
-        args0: args[0] ? JSON.stringify(args[0]).slice(0, 2000) : 'no args0',
-        model: extraModel,
-        hasApiUsage: !!extra.api_usage,
-        hasUsage: !!extra.usage,
-        hasTokenCount: extra.token_count,
-      });
-    } catch {}
-    // 优先从 extra 严格校验的 usage 中取，避免把 token_count 数字误判为 usage
+    log.debug('onGenerationEnded 触发', { chatLen: chat.length, hasApiUsage: !!extra.api_usage });
     let usage = pickUsageFromExtra(extra);
     let model = extraModel;
-    try { console.log(TRACE + ' pickUsageFromExtra 结果', { hasUsage: !!usage, usageStr: usage ? JSON.stringify(usage).slice(0, 1500) : 'null', isValid: usage ? isValidUsage(usage) : false }); } catch {}
+    log.debug('pickUsageFromExtra 结果', { hasUsage: !!usage, isValid: usage ? isValidUsage(usage) : false });
     if (usage && isValidUsage(usage)) {
-      console.log(TRACE + ' 命中主路径 extra usage，准备 processUsage');
+      log.debug('命中主路径 extra usage');
       processUsage(usage, model, lastMessages, lastStart);
       return;
     }
-    // 兼容：部分渠道的 usage 藏在 message 的 swipe_info 或其他字段
     if (tail?.swipe_info && typeof tail.swipe_info === 'object') {
-      console.log(TRACE + ' 尝试 swipe_info 兼容路径', { swipeKeys: Object.keys(tail.swipe_info as any).slice(0, 5) });
+      log.debug('尝试 swipe_info 路径');
       for (const v of Object.values(tail.swipe_info as any)) {
         const cand = (v as any)?.extra?.api_usage || (v as any)?.extra?.usage;
         if (isValidUsage(cand)) {
           usage = cand;
           model = (v as any)?.extra?.model || model;
-          console.log(TRACE + ' swipe_info 命中', { model, cand: JSON.stringify(cand).slice(0, 1000) });
+          log.debug('swipe_info 命中', { model });
           processUsage(usage, model, lastMessages, lastStart);
           return;
         }
       }
-      console.log(TRACE + ' swipe_info 未命中有效 usage');
+      log.debug('swipe_info 未命中有效 usage');
     }
-    // 兜底：若未带 usage，尝试从 args 解析（需同样校验）
     const maybeUsage = args[0]?.usage || args[0]?.api_usage;
-    try { console.log(TRACE + ' 尝试 args 兜底', { hasMaybeUsage: !!maybeUsage, maybeUsageStr: maybeUsage ? JSON.stringify(maybeUsage).slice(0, 1500) : 'null', isValid: maybeUsage ? isValidUsage(maybeUsage) : false }); } catch {}
+    log.debug('尝试 args 兜底', { hasMaybeUsage: !!maybeUsage, isValid: maybeUsage ? isValidUsage(maybeUsage) : false });
     if (isValidUsage(maybeUsage)) {
       const m = args[0]?.model || model;
-      console.log(TRACE + ' args 命中', { model: m });
+      log.debug('args 命中', { model: m });
       processUsage(maybeUsage, m, lastMessages, lastStart);
       return;
     }
-    // 兜底：尝试 fetch 捕获的 usage（覆盖 ST 未写入 extra 的 custom 渠道）
     {
       let fetchPack: any = lastFetchUsage as any;
-      // 兼容旧缓存结构（直接是 usage 对象）与新结构（包裹对象）
       let fetchUsage = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
       if (fetchUsage && isValidUsage(fetchUsage) && Date.now() - lastFetchTime < 120000) {
         const fetchedModel = (fetchPack && fetchPack.model) || lastFetchModel || model;
@@ -282,30 +222,26 @@ function onGenerationEnded(...args: any[]) {
         const fetchedRes = (fetchPack && fetchPack.fullResponse) || null;
         const fTtft = (fetchPack && fetchPack.ttft) || 0;
         const fThink = (fetchPack && fetchPack.thinkTime) || 0;
-        console.log(TRACE + ' fetch 兜底命中', { model: fetchedModel, usage: JSON.stringify(fetchUsage).slice(0, 1500) });
-        lastFetchUsage = null; // 消费后清空，避免重复
+        log.debug('fetch 兜底命中', { model: fetchedModel });
+        lastFetchUsage = null;
         processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink);
         return;
       } else if (lastFetchUsage) {
         const fu = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
-        console.log(TRACE + ' fetch 有缓存但无效或超时', { has: !!lastFetchUsage, isValid: fu ? isValidUsage(fu) : false, age: Date.now() - lastFetchTime });
+        log.debug('fetch 有缓存但无效或超时', { has: !!lastFetchUsage, isValid: fu ? isValidUsage(fu) : false, age: Date.now() - lastFetchTime });
       }
     }
-    // 最后：若仅有 token_count 数字，说明 ST 本地估算而非 API 真实用量，禁止兜底产生假数据（如 7t 污染）
-    // 之前尝试 token_count 兜底导致 [OR]minimax-m3 产生大量 0 in/7 out 假记录，现回退为严格丢弃
     if (extra.token_count != null && !usage) {
-      try { console.warn('[API用量统计] 跳过无效 usage：仅有本地 token_count=' + extra.token_count + ' model=' + model + ' 未生成条目（非 API 真实用量，需完整 usage）。若确为真实请求，请检查网络 fetch 捕获是否命中，或查看 TRACE 中 fetch 日志'); } catch {}
-      console.log(TRACE + ' 无有效 usage，仅有 token_count，已跳过不记录', { token_count: extra.token_count, model, hasFetch: !!lastFetchUsage });
+      log.debug('跳过无效 usage：仅有本地 token_count=' + extra.token_count + ' model=' + model);
       return;
     }
-    console.log(TRACE + ' 未找到任何有效 usage，丢弃本次记录', { extraKeys: extra ? Object.keys(extra).slice(0, 20) : [], argsKeys: args[0] ? Object.keys(args[0]).slice(0, 20) : [], hasFetch: !!lastFetchUsage });
+    log.debug('未找到任何有效 usage，丢弃本次记录');
   } catch (e) {
-    try { console.error(TRACE + ' onGenerationEnded 异常', e); } catch {}
+    log.error('onGenerationEnded 异常 ' + (e as any)?.message || e);
   }
 }
 
 function refresh() {
-  // 触发面板刷新事件（由 ui 层监听）
   try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
 }
 

@@ -137,8 +137,9 @@ function triggerImport() {
         if (!raw || raw.format !== 'deepseek-stat-export') return alert('导入失败：文件格式不正确');
         const res: any = normalizeImportData(raw);
         if (res.error) return alert('导入失败：' + res.error);
-        const mode = confirm('确定导入？\n确定=覆盖导入（替换全部）\n取消=合并导入（按时间戳去重）\n（合并更安全）') ? 'overwrite' : 'merge';
-        if (mode === 'overwrite' && !confirm('覆盖将替换全部数据，确定？')) return;
+        const merge = confirm('导入方式：\n确定 = 合并导入（推荐，按时间戳去重）\n取消 = 覆盖导入（替换全部数据）');
+        const mode = merge ? 'merge' : 'overwrite';
+        if (mode === 'overwrite' && !confirm('覆盖将删除现有全部统计并无法恢复，确定要覆盖？')) return;
         applyImportedData(res.data, mode as any);
         alert(mode === 'overwrite' ? '已覆盖导入' : '已合并导入');
       };

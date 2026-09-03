@@ -22,21 +22,19 @@ function mergePrices(base: { hit: number; miss: number; output: number }, custom
   };
 }
 
+const MODEL_ALIASES: Record<string,string> = {
+  'deepseek-v4-flash-vision': 'deepseek-v4-flash-vision-exp',
+};
+
 function normalizeModel(model: string): string {
   if (!model) return 'deepseek-v4-flash';
-  let m = String(model).trim();
-  // 去除渠道前缀如 [OR] / [masa] / [xxx]
-  m = m.replace(/^\[[^\]]+\]/, '').trim();
-  // 统一小写便于匹配
+  let m = String(model).trim().replace(/^\[[^\]]+\]/, '').trim();
   const low = m.toLowerCase();
-  // 模糊匹配内置定价：包含关键子串即视为该模型
-  if (low.includes('deepseek-v4-flash-vision') || low.includes('deepseek-v4-flash-vision-exp')) return 'deepseek-v4-flash-vision-exp';
-  if (low.includes('deepseek-v4-pro')) return 'deepseek-v4-pro';
-  if (low.includes('deepseek-v4-flash')) return 'deepseek-v4-flash';
-  if (low.includes('deepseek')) {
-    // 其他 deepseek 变体回落为 flash
-    return 'deepseek-v4-flash';
-  }
+  if ((MODEL_ALIASES as any)[low]) return (MODEL_ALIASES as any)[low];
+  if (low === 'deepseek-v4-flash') return 'deepseek-v4-flash';
+  if (low === 'deepseek-v4-pro') return 'deepseek-v4-pro';
+  if (low === 'deepseek-v4-flash-vision-exp') return 'deepseek-v4-flash-vision-exp';
+  // 精确匹配后不再回落 deepseek -> flash，保持原名以便无价提示
   return m;
 }
 

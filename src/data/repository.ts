@@ -10,6 +10,7 @@ import { emit, DataEvents } from './events';
 import type { Snapshot } from './types';
 import { defaultSettings } from '../types/settings';
 import { isUnsafeKey } from '../utils/date';
+import { log } from '../utils/logger';
 
 function getCurrentChatId(): string | null {
   try {
@@ -42,13 +43,32 @@ export function getFilteredHistoryForScope(): any[] {
   return (state.history || []).filter((h: any) => h.chatId === cur);
 }
 
+function sanitizeFullRequest(fr: any): any {
+  if (!fr || typeof fr !== 'object') return fr;
+  const keep: any = {};
+  for (const k of ['model','stream','temperature','max_tokens','top_p','stream_options']) {
+    if (fr[k] !== undefined) keep[k] = fr[k];
+  }
+  if (Array.isArray(fr.messages)) keep.messages_length = fr.messages.length;
+  else if (typeof fr.messages === 'number') keep.messages_length = fr.messages;
+  return keep;
+}
+
 function pruneDetails() {
-  if (!state.history || state.history.length <= DETAIL_KEEP) return;
+  if (!state.history || !state.history.length) return;
   const hs = [...state.history].sort((a: any, b: any) => b.timestamp - a.timestamp);
-  for (let i = DETAIL_KEEP; i < hs.length; i++) {
-    delete (hs[i] as any).messages;
-    delete (hs[i] as any).fullRequest;
-    delete (hs[i] as any).fullResponse;
+  for (let i = 0; i < hs.length; i++) {
+    const e: any = hs[i];
+    if (i >= DETAIL_KEEP) {
+      delete e.messages;
+      delete e.fullRequest;
+      delete e.fullResponse;
+    } else {
+      // 保留条也裁剪 fullRequest 防止大 messages 落盘
+      if (e.fullRequest && typeof e.fullRequest === 'object' && Array.isArray(e.fullRequest.messages)) {
+        e.fullRequest = sanitizeFullRequest(e.fullRequest);
+      }
+    }
   }
 }
 
@@ -108,7 +128,7 @@ export const repository = {
   getHistoryByRange(range: { start: string; end: string }) {
     const s: any = getSelectedSave();
     if (!s?.history) return [];
-    const toDay = (ts: number) => new Date(ts + 8*3600*1000).toISOString().slice(0,10);
+    const toDay = (ts: number) => { const d = new Date(ts); const pad=(n:number)=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
     return s.history.filter((h: any) => {
       const k = toDay(h.timestamp);
       return k >= range.start && k <= range.end;
@@ -122,12 +142,10 @@ export const repository = {
   addEntry(usage: any, model: string, messages: any[], startTime: number, fullRequest?: any, fullResponse?: any, ttft = 0, thinkTime = 0) {
     messages = messages || [];
     if (!model) try { model = (globalThis as any).SillyTavern?.getContext?.().model || 'deepseek-v4-flash'; } catch { model = 'deepseek-v4-flash'; }
-    const TRACE = '[API用量统计][TRACE]';
-    try { console.log(TRACE + ' addEntry 收到', { model, usageStr: JSON.stringify(usage).slice(0, 1500), hasMessages: !!messages?.length, startTime, ttft }); } catch {}
+    log.debug('addEntry 收到', { model, hasMessages: !!messages?.length });
     // 容错：拒绝数字/空对象导致的 0 token 污染条目
     if (!usage || typeof usage !== 'object' || Array.isArray(usage)) {
-      try { console.warn('[API用量统计] addEntry 跳过无效 usage：', usage, ' model=', model); } catch {}
-      try { console.log(TRACE + ' addEntry 跳过：usage 非对象'); } catch {}
+      log.debug('addEntry 跳过：usage 非对象 model=' + model);
       return null as any;
     }
     const hasAnyTokenField =
@@ -139,8 +157,7 @@ export const repository = {
       typeof usage.prompt_cache_hit_tokens === 'number' ||
       (usage.prompt_tokens_details && typeof usage.prompt_tokens_details.cached_tokens === 'number');
     if (!hasAnyTokenField) {
-      try { console.warn('[API用量统计] addEntry 跳过无 token 字段的 usage：', JSON.stringify(usage).slice(0,300)); } catch {}
-      try { console.log(TRACE + ' addEntry 跳过：无 token 字段'); } catch {}
+      log.debug('addEntry 跳过：无 token 字段 model=' + model);
       return null as any;
     }
     let hit = usage.prompt_cache_hit_tokens || 0;
@@ -151,12 +168,10 @@ export const repository = {
     const total = usage.total_tokens || hit + miss + comp;
     // 若解析后仍全 0，视为无效数据，不写入历史
     if (hit === 0 && miss === 0 && comp === 0 && total === 0) {
-      try { console.warn('[API用量统计] addEntry 跳过全 0 token 条目 model=' + model); } catch {}
-      try { console.log(TRACE + ' addEntry 跳过：全 0 token'); } catch {}
+      log.debug('addEntry 跳过：全 0 token model=' + model);
       return null as any;
     }
-    try { console.log(TRACE + ' addEntry 解析', { hit, miss, comp, total }); } catch {}
-    try { console.log('[AUS-TEMP] addEntry 入口', { model, total, hit, miss, comp, hasUsage: !!usage }); } catch {}
+    log.debug('addEntry 解析', { model, hit, miss, comp, total });
     // 指纹去重：5秒内同 model+total 防双记账（fetch 与 GENERATION_ENDED 并发）
     try {
       const now = Date.now();
@@ -164,7 +179,7 @@ export const repository = {
       const lastFp = (state as any)._lastFp as string | undefined;
       const lastFpTime = (state as any)._lastFpTime as number | undefined;
       if (lastFp === fp && lastFpTime && now - lastFpTime < 5000) {
-        try { console.log(TRACE + ' addEntry 去重跳过(5s指纹)', { fp }); } catch {}
+        log.debug('addEntry 去重跳过(5s指纹)', { fp });
         return null as any;
       }
       (state as any)._lastFp = fp;
@@ -192,7 +207,7 @@ export const repository = {
       raw_usage: usage, messages, duration, ttft, thinkTime, thinkTokens, tokenRate: lu.tokenRate, fullRequest, fullResponse,
       chatId, chatName,
     };
-    try { console.log(TRACE + ' addEntry 即将写入', { timestamp: entry.timestamp, model: entry.model, total: entry.total_tokens, cost: entry.cost, chatId: entry.chatId }); } catch {}
+    log.debug('addEntry 即将写入', { model: entry.model, total: entry.total_tokens });
     state.history.unshift(entry);
     state.total_tokens += total; state.total_cost += lu.cost; state.input_tokens += hit + miss; state.output_tokens += comp;
     state.cache_hit_tokens += hit; state.cache_miss_tokens += miss; state.input_cost += lu.input_cost; state.output_cost += lu.output_cost;
@@ -349,7 +364,7 @@ export const repository = {
       state.output_cost = output_cost as any;
       state.rounds = rounds as any;
       persist();
-      try { console.log('[API用量统计] 已自动清理 ' + (before - filtered.length) + ' 条全 0 污染条目'); } catch {}
+      log.debug('已自动清理 ' + (before - filtered.length) + ' 条全 0 污染条目');
     }
     return filtered.length;
   },

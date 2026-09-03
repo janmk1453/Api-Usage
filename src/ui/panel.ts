@@ -9,6 +9,7 @@ import { renderOverview } from './overview';
 import { initStatsView, renderStatsView } from './stats-view';
 import { initExtraCharts, renderExtraCharts } from './extra-charts';
 import { applyTheme } from '../services/theme';
+import { DataEvents, on as onDataEvent } from '../data/events';
 
 function getDoc(): Document { return (window.parent as any)?.document ?? document; }
 
@@ -19,6 +20,9 @@ let collapsed = false;
 
 export function refreshUI() {
   try {
+    if (!panelOpen && !panelCreated) return;
+    // 面板关闭时仅在 openPanel 时强制刷新，此处跳过 heavy 渲染
+    if (!panelOpen) return;
     const doc = getDoc();
     const s: any = getSelectedSave();
     if (!s) return;
@@ -40,6 +44,7 @@ const HISTORY_PAGE_SIZE = 30;
 let historyFullCache: any[] | null = null;
 let historyCacheScope = '';
 let historyLoading = false;
+try { onDataEvent(DataEvents.HISTORY_ADDED, () => { historyFullCache = null; }); } catch {}
 
 function renderHistoryInner(doc: Document, fullHist: any[]) {
   const host = doc.getElementById('aus-history');
@@ -95,7 +100,7 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
         <div style="display:flex;gap:8px;"><span style="color:var(--ds-green);font-weight:500;">${hps}% 命中</span><span style="color:var(--ds-red);font-weight:500;">${mps}% 未命中</span><span style="color:var(--ds-purple);font-weight:500;">${ops}% 输出</span></div>
         <span style="color:var(--ds-text-2);">${total.toLocaleString()}t</span>
       </div>
-      <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;margin-top:8px;border-top:1px solid var(--ds-border);padding-top:8px;height:520px;overflow:hidden;display:none;flex-direction:column;gap:8px;">
+      <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;margin-top:8px;border-top:1px solid var(--ds-border);padding-top:8px;height:min(520px,60vh);overflow:hidden;flex-direction:column;gap:8px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">基础信息</div>
@@ -282,25 +287,16 @@ function switchView(view: typeof currentView) {
 }
 
 function positionPanel() {
-  const doc = getDoc();
-  const overlay = doc.getElementById('aus-overlay') as HTMLElement | null;
-  const panel = doc.getElementById('aus-panel') as HTMLElement | null;
-  if (!overlay || !panel || overlay.style.display === 'none') return;
-  const vw = doc.documentElement.clientWidth || (window.parent as any)?.innerWidth || 0;
-  const vh = doc.documentElement.clientHeight || (window.parent as any)?.innerHeight || 0;
-  panel.style.left = '0px';
-  panel.style.top = '0px';
-  const rect = panel.getBoundingClientRect();
-  const docOffX = -rect.left;
-  const docOffY = -rect.top;
-  overlay.style.left = docOffX + 'px';
-  overlay.style.top = docOffY + 'px';
-  overlay.style.width = vw + 'px';
-  overlay.style.height = vh + 'px';
-  panel.style.left = docOffX + 'px';
-  panel.style.top = docOffY + 'px';
-  panel.style.width = vw + 'px';
-  panel.style.height = vh + 'px';
+  // 已改为 fixed，无需手动跟随滚动；保留空实现以兼容旧调用
+  try {
+    const doc = getDoc();
+    const charts: any[] = [];
+    // 触发图表自适应（解决 resize 不重算）
+    for (const id of ['aus-stats-chart','aus-chart-token','aus-chart-cost','aus-chart-hit','aus-chart-req','aus-chart-dur','aus-chart-pie','aus-chart-model-token','aus-chart-model-req']) {
+      const el = doc.getElementById(id) as any;
+      if (el && (el as any).__echarts_instance) try { (el as any).__echarts_instance.resize(); } catch {}
+    }
+  } catch {}
 }
 
 export function createPanel() {
@@ -313,13 +309,13 @@ export function createPanel() {
   overlay.id = 'aus-overlay';
   overlay.setAttribute('data-extension', 'api-usage-stat');
   overlay.setAttribute('data-ds-theme', theme);
-  overlay.style.cssText = 'position:absolute;top:0;left:0;background:var(--ds-overlay);z-index:100000;display:none;opacity:0;transition:opacity 0.2s;';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:var(--ds-overlay);z-index:100000;display:none;opacity:0;transition:opacity 0.2s;';
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closePanel(); });
   const panel = doc.createElement('div');
   panel.id = 'aus-panel';
   panel.setAttribute('data-extension', 'api-usage-stat');
   panel.setAttribute('data-ds-theme', theme);
-  panel.style.cssText = 'position:absolute;top:0;left:0;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:\'Microsoft YaHei\',\'微软雅黑\',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;';
+  panel.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:\'Microsoft YaHei\',\'微软雅黑\',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;';
   panel.innerHTML = `
     <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;border-bottom:1px solid var(--ds-border);background:var(--ds-card-inner);">
       <button id="aus-hamburger-btn" title="菜单" style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);font-size:18px;line-height:1;padding:0;">☰</button>
@@ -560,11 +556,21 @@ export function createPanel() {
   refreshUI();
 }
 
+export function resetPanelState() {
+  panelCreated = false;
+  panelOpen = false;
+}
+
 export function openPanel() {
   const doc = getDoc();
-  const ov = doc.getElementById('aus-overlay') as HTMLElement | null;
-  const pn = doc.getElementById('aus-panel') as HTMLElement | null;
-  if (!ov || !pn) { createPanel(); return openPanel(); }
+  let ov = doc.getElementById('aus-overlay') as HTMLElement | null;
+  let pn = doc.getElementById('aus-panel') as HTMLElement | null;
+  if (!ov || !pn) {
+    createPanel();
+    ov = doc.getElementById('aus-overlay') as HTMLElement | null;
+    pn = doc.getElementById('aus-panel') as HTMLElement | null;
+    if (!ov || !pn) return;
+  }
   ov.style.display = 'block';
   pn.style.display = 'flex';
   try {
