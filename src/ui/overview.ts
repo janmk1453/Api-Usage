@@ -8,7 +8,7 @@ function fmt(n: number) { return n.toLocaleString('zh-CN'); }
 function CNY(n: number) { return '¥' + n.toFixed(4) + ' CNY'; }
 
 type FourOpt = { key: OverviewFourKey; label: string };
-const FOUR_OPTIONS: FourOpt[] = [
+export const FOUR_OPTIONS: FourOpt[] = [
   { key: 'avg_cost', label: '每轮费用' },
   { key: 'avg_tokens', label: '每轮 Token' },
   { key: 'avg_duration', label: '平均耗时' },
@@ -24,6 +24,8 @@ const FOUR_OPTIONS: FourOpt[] = [
   { key: 'max_output', label: '单轮最大输出' },
   { key: 'max_input', label: '单轮最大输入' },
   { key: 'max_total', label: '单轮最大总 Token' },
+  { key: 'avg_think_ratio', label: '思维链占比' },
+  { key: 'truncation_rate', label: '截断率' },
 ];
 const FOUR_LABEL_MAP = new Map<string,string>(FOUR_OPTIONS.map(o=>[o.key,o.label]));
 
@@ -51,11 +53,8 @@ function ensureFour(): OverviewFourKey[] {
   return cur as OverviewFourKey[];
 }
 
-function getFourDisplay(key: OverviewFourKey, v: any): { title:string; html:string } {
+export function getFourDisplay(key: OverviewFourKey, v: any): { title:string; html:string } {
   const title = FOUR_LABEL_MAP.get(key) || key;
-  const rounds = v.rounds || 0;
-  const empty = (!rounds && key!=='latest_hit_rate' && key!=='avg_hit_rate' && key!=='max_output' && key!=='max_input' && key!=='max_total') || !v.history && false;
-  // helpers
   switch (key) {
     case 'avg_cost': return { title, html: `¥${(v.avgCost||0).toFixed(4)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span>` };
     case 'avg_tokens': return { title, html: `${Math.round(v.avgTokens||0).toLocaleString('zh-CN')}` };
@@ -85,6 +84,16 @@ function getFourDisplay(key: OverviewFourKey, v: any): { title:string; html:stri
     case 'max_output': return { title, html: `${(v.maxOutput||0).toLocaleString('zh-CN')}` };
     case 'max_input': return { title, html: `${(v.maxInput||0).toLocaleString('zh-CN')}` };
     case 'max_total': return { title, html: `${(v.maxTotal||0).toLocaleString('zh-CN')}` };
+    case 'avg_think_ratio': {
+      const has = (v.avgThinkRatio||0) > 0 || (v.rounds||0) > 0;
+      const val = v.avgThinkRatio||0;
+      return { title, html: has && val>0 ? `${val.toFixed(1)}<span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">%</span>` : `<span style="color:var(--ds-text-3);">—</span>` };
+    }
+    case 'truncation_rate': {
+      const has = (v.rounds||0) > 0;
+      const val = v.truncationRate||0;
+      return { title, html: has ? `${val.toFixed(1)}<span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">%</span>` : `<span style="color:var(--ds-text-3);">—</span>` };
+    }
     default: return { title, html: '—' };
   }
 }

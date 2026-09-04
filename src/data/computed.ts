@@ -19,7 +19,7 @@ export function getFilteredHistory(range?: TimeRange): any[] {
 
 export function computeOverview(): OverviewView {
   const s: any = getSelectedSave();
-  if (!s) return { balanceText: '¥0.00 CNY', totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0, remainingRounds: null, avgInputCost: 0, avgInputTokens: 0, avgOutputCost: 0, avgOutputTokens: 0, avgThinkTime: 0, avgThinkTokens: 0, avgHitRate: 0, latestHitRate: null, maxOutput: 0, maxInput: 0, maxTotal: 0 } as any;
+  if (!s) return { balanceText: '¥0.00 CNY', totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0, remainingRounds: null, avgInputCost: 0, avgInputTokens: 0, avgOutputCost: 0, avgOutputTokens: 0, avgThinkTime: 0, avgThinkTokens: 0, avgHitRate: 0, latestHitRate: null, maxOutput: 0, maxInput: 0, maxTotal: 0, avgThinkRatio: 0, truncationRate: 0 } as any;
   const totalCost = s.total_cost || 0;
   const totalTokens = s.total_tokens || 0;
   const hit = s.cache_hit_tokens || 0, miss = s.cache_miss_tokens || 0, output = s.output_tokens || 0;
@@ -66,6 +66,13 @@ export function computeOverview(): OverviewView {
     if (inp > maxInput) maxInput = inp;
     if (tot > maxTotal) maxTotal = tot;
   }
+  // 思维链占比 = 全部 thinkTokens / 全部 completion_tokens
+  let sumThink = 0, sumOut = 0;
+  for (const h of hist) { sumThink += h.thinkTokens || 0; sumOut += h.completion_tokens || 0; }
+  const avgThinkRatio = sumOut > 0 ? (sumThink / sumOut * 100) : 0;
+  // 截断率 = finishReason === 'length' 的占比
+  const truncCnt = hist.filter((h: any) => (h.finishReason === 'length' || h.isTruncated)).length;
+  const truncationRate = hist.length ? truncCnt / hist.length * 100 : 0;
   const bal = state.customBalance || state.balance?.balance;
   // 余额预测：仅基于 DeepSeek 官方模型历史（deepseek*），EWMA alpha=0.3，与原脚本一致
   let remainingRounds: number | null = null;
@@ -87,6 +94,7 @@ export function computeOverview(): OverviewView {
     inputCost: s.input_cost || 0, outputCost: s.output_cost || 0,
     avgCost, avgTokens, avgDuration, avgRate, rounds, remainingRounds,
     avgInputCost, avgInputTokens, avgOutputCost, avgOutputTokens, avgThinkTime, avgThinkTokens, avgHitRate, latestHitRate, maxOutput, maxInput, maxTotal,
+    avgThinkRatio, truncationRate,
   } as any;
 }
 
@@ -109,4 +117,39 @@ export function computeStats(range: TimeRange): StatsView {
   const days = Object.keys(byDayMap).sort();
   const byDay = days.map(day => ({ day: day.slice(5).replace('-','/'), cost: Number(byDayMap[day].cost.toFixed(4)), tokens: byDayMap[day].tokens, byModel: byDayMap[day].byModel }));
   return { range, totalCost, totalRequests: filtered.length, totalTokens, byDay, byModel };
+}
+
+export function computeStatsFour(filtered: any[]): { avgCost:number; avgTokens:number; avgDuration:number; avgRate:number; avgInputCost:number; avgInputTokens:number; avgOutputCost:number; avgOutputTokens:number; avgThinkTime:number; avgThinkTokens:number; avgHitRate:number; latestHitRate:number|null; maxOutput:number; maxInput:number; maxTotal:number; avgThinkRatio:number; truncationRate:number; rounds:number } {
+  if (!filtered || !filtered.length) {
+    return { avgCost:0, avgTokens:0, avgDuration:0, avgRate:0, avgInputCost:0, avgInputTokens:0, avgOutputCost:0, avgOutputTokens:0, avgThinkTime:0, avgThinkTokens:0, avgHitRate:0, latestHitRate:null, maxOutput:0, maxInput:0, maxTotal:0, avgThinkRatio:0, truncationRate:0, rounds:0 };
+  }
+  const rounds = filtered.length;
+  let totalCost = 0, totalTokens = 0, totalDur = 0, totalRate = 0, totalInputCost = 0, totalInputTokens = 0, totalOutputCost = 0, totalOutputTokens = 0;
+  let thinkTimeSum = 0, thinkTokensSum = 0, thinkTimeCnt = 0, thinkTokensCnt = 0;
+  let hitRateSum = 0, hitRateCnt = 0;
+  let maxOutput = 0, maxInput = 0, maxTotal = 0;
+  let sumThink = 0, sumOut = 0, truncCnt = 0;
+  for (const h of filtered) {
+    totalCost += h.cost || 0; totalTokens += h.total_tokens || 0; totalDur += h.duration || 0; totalRate += h.tokenRate || 0;
+    totalInputCost += h.input_cost || 0; totalInputTokens += (h.cache_hit_tokens||0)+(h.cache_miss_tokens||0); totalOutputCost += h.output_cost||0; totalOutputTokens += h.completion_tokens||0;
+    if ((h.thinkTime||0) > 0) { thinkTimeSum += h.thinkTime; thinkTimeCnt++; }
+    if ((h.thinkTokens||0) > 0) { thinkTokensSum += h.thinkTokens; thinkTokensCnt++; }
+    const ch = h.cache_hit_tokens||0, cm = h.cache_miss_tokens||0, tot = ch+cm;
+    if (tot>0) { hitRateSum += ch/tot*100; hitRateCnt++; }
+    const out = h.completion_tokens||0, inp = (h.cache_hit_tokens||0)+(h.cache_miss_tokens||0), totTok = h.total_tokens||0;
+    if (out>maxOutput) maxOutput=out; if (inp>maxInput) maxInput=inp; if (totTok>maxTotal) maxTotal=totTok;
+    sumThink += h.thinkTokens||0; sumOut += h.completion_tokens||0;
+    if (h.finishReason==='length' || h.isTruncated) truncCnt++;
+  }
+  return {
+    avgCost: totalCost/rounds, avgTokens: totalTokens/rounds, avgDuration: totalDur/rounds/1000, avgRate: totalRate/rounds,
+    avgInputCost: totalInputCost/rounds, avgInputTokens: totalInputTokens/rounds, avgOutputCost: totalOutputCost/rounds, avgOutputTokens: totalOutputTokens/rounds,
+    avgThinkTime: thinkTimeCnt? thinkTimeSum/thinkTimeCnt/1000 : 0, avgThinkTokens: thinkTokensCnt? thinkTokensSum/thinkTokensCnt : 0,
+    avgHitRate: hitRateCnt? hitRateSum/hitRateCnt : 0,
+    latestHitRate: (()=>{ const latest=[...filtered].sort((a,b)=>b.timestamp-a.timestamp)[0]; const ch=latest.cache_hit_tokens||0, cm=latest.cache_miss_tokens||0, tot=ch+cm; return tot>0? ch/tot*100 : 0; })(),
+    maxOutput, maxInput, maxTotal,
+    avgThinkRatio: sumOut>0? sumThink/sumOut*100 : 0,
+    truncationRate: truncCnt/rounds*100,
+    rounds,
+  };
 }

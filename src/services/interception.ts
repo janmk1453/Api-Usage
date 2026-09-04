@@ -38,10 +38,12 @@ function installFetchCapture() {
             const clone = res.clone();
             const parseAndProcess = (text: string, ttftVal: number, thinkTimeVal: number) => {
             let data: any = null;
+            let finishReason: string | null = null;
             try {
               const trimmed = text.trim();
               if (trimmed.startsWith('{')) {
                 data = JSON.parse(trimmed);
+                try { finishReason = (data as any)?.choices?.[0]?.finish_reason ?? null; } catch {}
               } else {
                 text.split('\n').forEach((line: string) => {
                   if (line.startsWith('data: ') && line !== 'data: [DONE]') {
@@ -49,6 +51,8 @@ function installFetchCapture() {
                       const chunk = JSON.parse(line.substring(6));
                       if (chunk.usage) data = chunk;
                       if (!data && chunk.choices?.[0]?.usage) data = { usage: chunk.choices[0].usage, model: chunk.model };
+                      const fr = chunk?.choices?.[0]?.finish_reason;
+                      if (fr != null) finishReason = fr;
                     } catch {}
                   }
                 });
@@ -64,11 +68,13 @@ function installFetchCapture() {
             if (data && data.usage) {
               const model = (data as any)?.model || reqBody?.model || fullReq?.model || lastFetchModel || 'deepseek-v4-flash';
               const usage = (data as any).usage;
-              lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: data, ttft: ttftVal, thinkTime: thinkTimeVal };
+              // 将 finish_reason 挂到 usage 以便 repository 统一处理
+              try { if (finishReason) (usage as any).__finish_reason = finishReason; } catch {}
+              lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: data, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason };
               lastFetchModel = typeof model === 'string' ? model : null;
               lastFetchTime = Date.now();
-              log.debug('fetch 捕获 usage', { model, hasUsage: !!usage });
-              try { processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal); } catch (e) { log.error('fetch 用量记录失败 ' + ((e as any)?.message || e)); }
+              log.debug('fetch 捕获 usage', { model, hasUsage: !!usage, finishReason });
+              try { processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal, finishReason); } catch (e) { log.error('fetch 用量记录失败 ' + ((e as any)?.message || e)); }
             }
           };
           // 流式测量 TTFT 与思维链耗时：后台消费 clone 的 body 流，不阻塞原始响应透传
@@ -224,7 +230,24 @@ function onGenerationEnded(...args: any[]) {
     log.debug('pickUsageFromExtra 结果', { hasUsage: !!usage, isValid: usage ? isValidUsage(usage) : false });
     if (usage && isValidUsage(usage)) {
       log.debug('命中主路径 extra usage');
-      processUsage(usage, model, lastMessages, lastStart);
+      // 主路径也尝试携带最近 fetch 的 TTFT/思维链/截断信息（fetch 已在后台流式测量）
+      let ttft = 0, think = 0, fr: string | null = (usage as any)?.__finish_reason ?? (usage as any)?.finish_reason ?? null;
+      try {
+        const fp: any = lastFetchUsage;
+        if (fp && Date.now() - lastFetchTime < 5000) {
+          if (!ttft) ttft = fp.ttft || 0;
+          if (!think) think = fp.thinkTime || 0;
+          if (!fr) fr = fp.finishReason ?? null;
+          // 尝试从 tail SSE 最后一个 chunk 补 finish_reason（若 usage 未带）
+          if (!fr) {
+            try {
+              const extraFr = (extra as any)?.finish_reason ?? (tail as any)?.finish_reason ?? null;
+              if (extraFr) fr = extraFr;
+            } catch {}
+          }
+        }
+      } catch {}
+      processUsage(usage, model, lastMessages, lastStart, null, null, ttft, think, fr);
       return;
     }
     if (tail?.swipe_info && typeof tail.swipe_info === 'object') {
@@ -235,7 +258,9 @@ function onGenerationEnded(...args: any[]) {
           usage = cand;
           model = (v as any)?.extra?.model || model;
           log.debug('swipe_info 命中', { model });
-          processUsage(usage, model, lastMessages, lastStart);
+          let ttft = 0, think = 0, fr: string | null = (cand as any)?.__finish_reason ?? null;
+          try { const fp:any=lastFetchUsage; if (fp && Date.now()-lastFetchTime<5000){ ttft=fp.ttft||0; think=fp.thinkTime||0; if(!fr) fr=fp.finishReason??null; } } catch {}
+          processUsage(usage, model, lastMessages, lastStart, null, null, ttft, think, fr);
           return;
         }
       }
@@ -246,7 +271,9 @@ function onGenerationEnded(...args: any[]) {
     if (isValidUsage(maybeUsage)) {
       const m = args[0]?.model || model;
       log.debug('args 命中', { model: m });
-      processUsage(maybeUsage, m, lastMessages, lastStart);
+      let ttft = 0, think = 0, fr: string | null = (maybeUsage as any)?.__finish_reason ?? null;
+      try { const fp:any=lastFetchUsage; if (fp && Date.now()-lastFetchTime<5000){ ttft=fp.ttft||0; think=fp.thinkTime||0; if(!fr) fr=fp.finishReason??null; } } catch {}
+      processUsage(maybeUsage, m, lastMessages, lastStart, null, null, ttft, think, fr);
       return;
     }
     {
@@ -260,9 +287,10 @@ function onGenerationEnded(...args: any[]) {
         const fetchedRes = (fetchPack && fetchPack.fullResponse) || null;
         const fTtft = (fetchPack && fetchPack.ttft) || 0;
         const fThink = (fetchPack && fetchPack.thinkTime) || 0;
+        const fFr = (fetchPack && fetchPack.finishReason) || (fetchUsage as any)?.__finish_reason || null;
         log.debug('fetch 兜底命中', { model: fetchedModel });
         lastFetchUsage = null;
-        processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink);
+        processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink, fFr);
         return;
       } else if (lastFetchUsage) {
         const fu = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
@@ -283,8 +311,8 @@ function refresh() {
   try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
 }
 
-export function processUsage(usage: any, model: string, messages: any[], startTime: number, fullRequest: any = null, fullResponse: any = null, ttft = 0, thinkTime = 0) {
-  repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime);
+export function processUsage(usage: any, model: string, messages: any[], startTime: number, fullRequest: any = null, fullResponse: any = null, ttft = 0, thinkTime = 0, finishReason: string | null = null) {
+  repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason);
   refresh();
 }
 

@@ -31,7 +31,9 @@ export function generateDebugBatch() {
       state.total_tokens += total; state.total_cost += c.total; state.input_tokens += h+m; state.output_tokens += o;
       state.cache_hit_tokens += h; state.cache_miss_tokens += m; state.input_cost += c.input; state.output_cost += c.output;
       if (isDeepSeekOfficialModel(model)) state.rounds += 1;
-      state.history.unshift({ timestamp: ts.getTime(), model, prompt_tokens: h+m, cache_hit_tokens: h, cache_miss_tokens: m, completion_tokens: o, total_tokens: total, input_cost: c.input, output_cost: c.output, cost: c.total, cache_hit_rate: (h+m)>0?h/(h+m)*100:0, priceType: c.priceType, raw_usage: {prompt_cache_hit_tokens:h,prompt_cache_miss_tokens:m,completion_tokens:o,total_tokens:total}, messages: [], duration: dur, ttft, thinkTime: 300, thinkTokens: Math.floor(o*0.2), tokenRate: Math.round(o/(dur-ttft)*1000), fullRequest: null, fullResponse: null, _debug: true } as any);
+      const isTrunc = Math.random() < 0.08;
+      const fr = isTrunc ? 'length' : 'stop';
+      state.history.unshift({ timestamp: ts.getTime(), model, prompt_tokens: h+m, cache_hit_tokens: h, cache_miss_tokens: m, completion_tokens: o, total_tokens: total, input_cost: c.input, output_cost: c.output, cost: c.total, cache_hit_rate: (h+m)>0?h/(h+m)*100:0, priceType: c.priceType, raw_usage: {prompt_cache_hit_tokens:h,prompt_cache_miss_tokens:m,completion_tokens:o,total_tokens:total, __finish_reason: fr}, messages: [], duration: dur, ttft, thinkTime: 300, thinkTokens: Math.floor(o*0.2), tokenRate: Math.round(o/(dur-ttft)*1000), fullRequest: null, fullResponse: null, finishReason: fr, isTruncated: isTrunc, _debug: true } as any);
       generated++;
     }
   }

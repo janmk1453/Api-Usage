@@ -18,6 +18,7 @@ const defaultSettings = () => ({
   webdav: { url: "https://dav.jianguoyun.com/dav/", username: "", path: "", proxy: "" },
   historyScope: "all",
   overviewFour: ["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_tokens", "avg_output_tokens", "avg_hit_rate", "max_total"],
+  statsFour: ["avg_cost", "avg_tokens", "avg_think_ratio", "truncation_rate"],
   modelsPricingCollapsed: true
 });
 const PRICING = {
@@ -783,7 +784,7 @@ const repository = {
   async getAllHistory() {
     return getAllHistory();
   },
-  addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft = 0, thinkTime = 0) {
+  addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft = 0, thinkTime = 0, finishReason = null) {
     messages = messages || [];
     if (!model) try {
       model = globalThis.SillyTavern?.getContext?.().model || "deepseek-v4-flash";
@@ -835,6 +836,9 @@ const repository = {
     lu.ttft = ttft || 0;
     lu.thinkTime = thinkTime || 0;
     lu.thinkTokens = thinkTokens;
+    const fr = finishReason ?? usage?.__finish_reason ?? usage?.finish_reason ?? null;
+    lu.finishReason = fr;
+    lu.isTruncated = fr === "length";
     lu.messages = (messages || []).map(clampMessage);
     const c = calcCost({ timestamp: lu.timestamp, model, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp }, state$2.settings);
     lu.cost = c.total;
@@ -849,6 +853,7 @@ const repository = {
     lu.chatId = chatId;
     lu.chatName = chatName;
     state$2.lastUsage = lu;
+    const fr2 = finishReason ?? usage?.__finish_reason ?? null;
     const entry = {
       timestamp: lu.timestamp,
       model,
@@ -871,6 +876,8 @@ const repository = {
       tokenRate: lu.tokenRate,
       fullRequest,
       fullResponse: null,
+      finishReason: fr2,
+      isTruncated: fr2 === "length",
       chatId,
       chatName
     };
@@ -1008,9 +1015,27 @@ const repository = {
         merged.overviewFour = [...merged.overviewFour, ...def.overviewFour.slice(4)];
       }
       try {
-        const valid = /* @__PURE__ */ new Set(["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_cost", "avg_input_tokens", "avg_output_cost", "avg_output_tokens", "avg_think_time", "avg_think_tokens", "avg_hit_rate", "latest_hit_rate", "max_output", "max_input", "max_total"]);
+        const valid = /* @__PURE__ */ new Set(["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_cost", "avg_input_tokens", "avg_output_cost", "avg_output_tokens", "avg_think_time", "avg_think_tokens", "avg_hit_rate", "latest_hit_rate", "max_output", "max_input", "max_total", "avg_think_ratio", "truncation_rate"]);
         if (Array.isArray(merged.overviewFour)) merged.overviewFour = merged.overviewFour.map((k) => valid.has(k) ? k : "avg_cost");
         if (merged.overviewFour.length !== 8) merged.overviewFour = def.overviewFour;
+        if (!Array.isArray(merged.statsFour) || merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
+        const validStats = /* @__PURE__ */ new Set(["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_cost", "avg_input_tokens", "avg_output_cost", "avg_output_tokens", "avg_think_time", "avg_think_tokens", "avg_think_ratio", "truncation_rate", "avg_hit_rate", "latest_hit_rate", "max_output", "max_input", "max_total"]);
+        if (Array.isArray(merged.statsFour)) merged.statsFour = merged.statsFour.map((k) => validStats.has(k) ? k : "avg_cost");
+        if (merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
+      } catch {
+      }
+      try {
+        let need = false;
+        for (const h of state$2.history) {
+          if (h.finishReason === void 0) {
+            h.finishReason = h.raw_usage?.__finish_reason ?? null;
+            need = true;
+          }
+          if (h.isTruncated === void 0) {
+            h.isTruncated = h.finishReason === "length";
+          }
+        }
+        if (need) saveHot({ history: state$2.history });
       } catch {
       }
       state$2.settings = merged;
@@ -1106,6 +1131,43 @@ const repository = {
       } catch {
       }
     }
+    if (!Array.isArray(state$2.settings.statsFour) || state$2.settings.statsFour.length !== 4) {
+      state$2.settings.statsFour = ["avg_cost", "avg_tokens", "avg_think_ratio", "truncation_rate"];
+      try {
+        saveHot({ settings: state$2.settings });
+      } catch {
+      }
+    } else {
+      try {
+        const validStats = /* @__PURE__ */ new Set(["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_cost", "avg_input_tokens", "avg_output_cost", "avg_output_tokens", "avg_think_time", "avg_think_tokens", "avg_think_ratio", "truncation_rate", "avg_hit_rate", "latest_hit_rate", "max_output", "max_input", "max_total"]);
+        let cur = state$2.settings.statsFour;
+        if (cur.some((k) => !validStats.has(k))) {
+          state$2.settings.statsFour = ["avg_cost", "avg_tokens", "avg_think_ratio", "truncation_rate"];
+          try {
+            saveHot({ settings: state$2.settings });
+          } catch {
+          }
+        }
+      } catch {
+      }
+    }
+    try {
+      let need = false;
+      for (const h of state$2.history) {
+        if (h.finishReason === void 0) {
+          h.finishReason = h.raw_usage?.__finish_reason ?? null;
+          need = true;
+        }
+        if (h.isTruncated === void 0) {
+          h.isTruncated = h.finishReason === "length";
+        }
+      }
+      if (need) try {
+        saveHot({ history: state$2.history });
+      } catch {
+      }
+    } catch {
+    }
     let needPersistChatId = false;
     for (const h of state$2.history || []) {
       if (h.chatId === void 0) {
@@ -1178,10 +1240,15 @@ function installFetchCapture() {
             const clone = res.clone();
             const parseAndProcess = (text, ttftVal, thinkTimeVal) => {
               let data = null;
+              let finishReason = null;
               try {
                 const trimmed = text.trim();
                 if (trimmed.startsWith("{")) {
                   data = JSON.parse(trimmed);
+                  try {
+                    finishReason = data?.choices?.[0]?.finish_reason ?? null;
+                  } catch {
+                  }
                 } else {
                   text.split("\n").forEach((line) => {
                     if (line.startsWith("data: ") && line !== "data: [DONE]") {
@@ -1189,6 +1256,8 @@ function installFetchCapture() {
                         const chunk = JSON.parse(line.substring(6));
                         if (chunk.usage) data = chunk;
                         if (!data && chunk.choices?.[0]?.usage) data = { usage: chunk.choices[0].usage, model: chunk.model };
+                        const fr = chunk?.choices?.[0]?.finish_reason;
+                        if (fr != null) finishReason = fr;
                       } catch {
                       }
                     }
@@ -1211,12 +1280,16 @@ function installFetchCapture() {
               if (data && data.usage) {
                 const model = data?.model || reqBody?.model || fullReq?.model || lastFetchModel || "deepseek-v4-flash";
                 const usage = data.usage;
-                lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: data, ttft: ttftVal, thinkTime: thinkTimeVal };
+                try {
+                  if (finishReason) usage.__finish_reason = finishReason;
+                } catch {
+                }
+                lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: data, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason };
                 lastFetchModel = typeof model === "string" ? model : null;
                 lastFetchTime = Date.now();
-                log.debug("fetch 捕获 usage", { model, hasUsage: !!usage });
+                log.debug("fetch 捕获 usage", { model, hasUsage: !!usage, finishReason });
                 try {
-                  processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal);
+                  processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal, finishReason);
                 } catch (e) {
                   log.error("fetch 用量记录失败 " + (e?.message || e));
                 }
@@ -1404,7 +1477,24 @@ function onGenerationEnded(...args) {
     log.debug("pickUsageFromExtra 结果", { hasUsage: !!usage, isValid: usage ? isValidUsage(usage) : false });
     if (usage && isValidUsage(usage)) {
       log.debug("命中主路径 extra usage");
-      processUsage(usage, model, lastMessages, lastStart);
+      let ttft = 0, think = 0, fr = usage?.__finish_reason ?? usage?.finish_reason ?? null;
+      try {
+        const fp = lastFetchUsage;
+        if (fp && Date.now() - lastFetchTime < 5e3) {
+          if (!ttft) ttft = fp.ttft || 0;
+          if (!think) think = fp.thinkTime || 0;
+          if (!fr) fr = fp.finishReason ?? null;
+          if (!fr) {
+            try {
+              const extraFr = extra?.finish_reason ?? tail?.finish_reason ?? null;
+              if (extraFr) fr = extraFr;
+            } catch {
+            }
+          }
+        }
+      } catch {
+      }
+      processUsage(usage, model, lastMessages, lastStart, null, null, ttft, think, fr);
       return;
     }
     if (tail?.swipe_info && typeof tail.swipe_info === "object") {
@@ -1415,7 +1505,17 @@ function onGenerationEnded(...args) {
           usage = cand;
           model = v?.extra?.model || model;
           log.debug("swipe_info 命中", { model });
-          processUsage(usage, model, lastMessages, lastStart);
+          let ttft = 0, think = 0, fr = cand?.__finish_reason ?? null;
+          try {
+            const fp = lastFetchUsage;
+            if (fp && Date.now() - lastFetchTime < 5e3) {
+              ttft = fp.ttft || 0;
+              think = fp.thinkTime || 0;
+              if (!fr) fr = fp.finishReason ?? null;
+            }
+          } catch {
+          }
+          processUsage(usage, model, lastMessages, lastStart, null, null, ttft, think, fr);
           return;
         }
       }
@@ -1426,7 +1526,17 @@ function onGenerationEnded(...args) {
     if (isValidUsage(maybeUsage)) {
       const m = args[0]?.model || model;
       log.debug("args 命中", { model: m });
-      processUsage(maybeUsage, m, lastMessages, lastStart);
+      let ttft = 0, think = 0, fr = maybeUsage?.__finish_reason ?? null;
+      try {
+        const fp = lastFetchUsage;
+        if (fp && Date.now() - lastFetchTime < 5e3) {
+          ttft = fp.ttft || 0;
+          think = fp.thinkTime || 0;
+          if (!fr) fr = fp.finishReason ?? null;
+        }
+      } catch {
+      }
+      processUsage(maybeUsage, m, lastMessages, lastStart, null, null, ttft, think, fr);
       return;
     }
     {
@@ -1440,9 +1550,10 @@ function onGenerationEnded(...args) {
         const fetchedRes = fetchPack && fetchPack.fullResponse || null;
         const fTtft = fetchPack && fetchPack.ttft || 0;
         const fThink = fetchPack && fetchPack.thinkTime || 0;
+        const fFr = fetchPack && fetchPack.finishReason || fetchUsage?.__finish_reason || null;
         log.debug("fetch 兜底命中", { model: fetchedModel });
         lastFetchUsage = null;
-        processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink);
+        processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink, fFr);
         return;
       } else if (lastFetchUsage) {
         const fu = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
@@ -1464,8 +1575,8 @@ function refresh() {
   } catch {
   }
 }
-function processUsage(usage, model, messages, startTime, fullRequest = null, fullResponse = null, ttft = 0, thinkTime = 0) {
-  repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime);
+function processUsage(usage, model, messages, startTime, fullRequest = null, fullResponse = null, ttft = 0, thinkTime = 0, finishReason = null) {
+  repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason);
   refresh();
 }
 function recalcAllCosts() {
@@ -2101,7 +2212,9 @@ function generateDebugBatch() {
       state$2.input_cost += c.input;
       state$2.output_cost += c.output;
       if (isDeepSeekOfficialModel(model)) state$2.rounds += 1;
-      state$2.history.unshift({ timestamp: ts.getTime(), model, prompt_tokens: h + m, cache_hit_tokens: h, cache_miss_tokens: m, completion_tokens: o, total_tokens: total, input_cost: c.input, output_cost: c.output, cost: c.total, cache_hit_rate: h + m > 0 ? h / (h + m) * 100 : 0, priceType: c.priceType, raw_usage: { prompt_cache_hit_tokens: h, prompt_cache_miss_tokens: m, completion_tokens: o, total_tokens: total }, messages: [], duration: dur, ttft, thinkTime: 300, thinkTokens: Math.floor(o * 0.2), tokenRate: Math.round(o / (dur - ttft) * 1e3), fullRequest: null, fullResponse: null, _debug: true });
+      const isTrunc = Math.random() < 0.08;
+      const fr = isTrunc ? "length" : "stop";
+      state$2.history.unshift({ timestamp: ts.getTime(), model, prompt_tokens: h + m, cache_hit_tokens: h, cache_miss_tokens: m, completion_tokens: o, total_tokens: total, input_cost: c.input, output_cost: c.output, cost: c.total, cache_hit_rate: h + m > 0 ? h / (h + m) * 100 : 0, priceType: c.priceType, raw_usage: { prompt_cache_hit_tokens: h, prompt_cache_miss_tokens: m, completion_tokens: o, total_tokens: total, __finish_reason: fr }, messages: [], duration: dur, ttft, thinkTime: 300, thinkTokens: Math.floor(o * 0.2), tokenRate: Math.round(o / (dur - ttft) * 1e3), fullRequest: null, fullResponse: null, finishReason: fr, isTruncated: isTrunc, _debug: true });
       generated++;
     }
   }
@@ -2841,7 +2954,7 @@ function renderDiff() {
 }
 function computeOverview() {
   const s = getSelectedSave();
-  if (!s) return { balanceText: "¥0.00 CNY", totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0, remainingRounds: null, avgInputCost: 0, avgInputTokens: 0, avgOutputCost: 0, avgOutputTokens: 0, avgThinkTime: 0, avgThinkTokens: 0, avgHitRate: 0, latestHitRate: null, maxOutput: 0, maxInput: 0, maxTotal: 0 };
+  if (!s) return { balanceText: "¥0.00 CNY", totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0, remainingRounds: null, avgInputCost: 0, avgInputTokens: 0, avgOutputCost: 0, avgOutputTokens: 0, avgThinkTime: 0, avgThinkTokens: 0, avgHitRate: 0, latestHitRate: null, maxOutput: 0, maxInput: 0, maxTotal: 0, avgThinkRatio: 0, truncationRate: 0 };
   const totalCost = s.total_cost || 0;
   const totalTokens = s.total_tokens || 0;
   const hit = s.cache_hit_tokens || 0, miss = s.cache_miss_tokens || 0, output = s.output_tokens || 0;
@@ -2886,6 +2999,14 @@ function computeOverview() {
     if (inp > maxInput) maxInput = inp;
     if (tot > maxTotal) maxTotal = tot;
   }
+  let sumThink = 0, sumOut = 0;
+  for (const h of hist) {
+    sumThink += h.thinkTokens || 0;
+    sumOut += h.completion_tokens || 0;
+  }
+  const avgThinkRatio = sumOut > 0 ? sumThink / sumOut * 100 : 0;
+  const truncCnt = hist.filter((h) => h.finishReason === "length" || h.isTruncated).length;
+  const truncationRate = hist.length ? truncCnt / hist.length * 100 : 0;
   const bal = state$2.customBalance || state$2.balance?.balance;
   let remainingRounds = null;
   try {
@@ -2928,7 +3049,74 @@ function computeOverview() {
     latestHitRate,
     maxOutput,
     maxInput,
-    maxTotal
+    maxTotal,
+    avgThinkRatio,
+    truncationRate
+  };
+}
+function computeStatsFour(filtered) {
+  if (!filtered || !filtered.length) {
+    return { avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, avgInputCost: 0, avgInputTokens: 0, avgOutputCost: 0, avgOutputTokens: 0, avgThinkTime: 0, avgThinkTokens: 0, avgHitRate: 0, latestHitRate: null, maxOutput: 0, maxInput: 0, maxTotal: 0, avgThinkRatio: 0, truncationRate: 0, rounds: 0 };
+  }
+  const rounds = filtered.length;
+  let totalCost = 0, totalTokens = 0, totalDur = 0, totalRate = 0, totalInputCost = 0, totalInputTokens = 0, totalOutputCost = 0, totalOutputTokens = 0;
+  let thinkTimeSum = 0, thinkTokensSum = 0, thinkTimeCnt = 0, thinkTokensCnt = 0;
+  let hitRateSum = 0, hitRateCnt = 0;
+  let maxOutput = 0, maxInput = 0, maxTotal = 0;
+  let sumThink = 0, sumOut = 0, truncCnt = 0;
+  for (const h of filtered) {
+    totalCost += h.cost || 0;
+    totalTokens += h.total_tokens || 0;
+    totalDur += h.duration || 0;
+    totalRate += h.tokenRate || 0;
+    totalInputCost += h.input_cost || 0;
+    totalInputTokens += (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0);
+    totalOutputCost += h.output_cost || 0;
+    totalOutputTokens += h.completion_tokens || 0;
+    if ((h.thinkTime || 0) > 0) {
+      thinkTimeSum += h.thinkTime;
+      thinkTimeCnt++;
+    }
+    if ((h.thinkTokens || 0) > 0) {
+      thinkTokensSum += h.thinkTokens;
+      thinkTokensCnt++;
+    }
+    const ch = h.cache_hit_tokens || 0, cm = h.cache_miss_tokens || 0, tot = ch + cm;
+    if (tot > 0) {
+      hitRateSum += ch / tot * 100;
+      hitRateCnt++;
+    }
+    const out = h.completion_tokens || 0, inp = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0), totTok = h.total_tokens || 0;
+    if (out > maxOutput) maxOutput = out;
+    if (inp > maxInput) maxInput = inp;
+    if (totTok > maxTotal) maxTotal = totTok;
+    sumThink += h.thinkTokens || 0;
+    sumOut += h.completion_tokens || 0;
+    if (h.finishReason === "length" || h.isTruncated) truncCnt++;
+  }
+  return {
+    avgCost: totalCost / rounds,
+    avgTokens: totalTokens / rounds,
+    avgDuration: totalDur / rounds / 1e3,
+    avgRate: totalRate / rounds,
+    avgInputCost: totalInputCost / rounds,
+    avgInputTokens: totalInputTokens / rounds,
+    avgOutputCost: totalOutputCost / rounds,
+    avgOutputTokens: totalOutputTokens / rounds,
+    avgThinkTime: thinkTimeCnt ? thinkTimeSum / thinkTimeCnt / 1e3 : 0,
+    avgThinkTokens: thinkTokensCnt ? thinkTokensSum / thinkTokensCnt : 0,
+    avgHitRate: hitRateCnt ? hitRateSum / hitRateCnt : 0,
+    latestHitRate: (() => {
+      const latest = [...filtered].sort((a, b) => b.timestamp - a.timestamp)[0];
+      const ch = latest.cache_hit_tokens || 0, cm = latest.cache_miss_tokens || 0, tot = ch + cm;
+      return tot > 0 ? ch / tot * 100 : 0;
+    })(),
+    maxOutput,
+    maxInput,
+    maxTotal,
+    avgThinkRatio: sumOut > 0 ? sumThink / sumOut * 100 : 0,
+    truncationRate: truncCnt / rounds * 100,
+    rounds
   };
 }
 function getDoc$5() {
@@ -3088,7 +3276,9 @@ const FOUR_OPTIONS = [
   { key: "latest_hit_rate", label: "最新命中率" },
   { key: "max_output", label: "单轮最大输出" },
   { key: "max_input", label: "单轮最大输入" },
-  { key: "max_total", label: "单轮最大总 Token" }
+  { key: "max_total", label: "单轮最大总 Token" },
+  { key: "avg_think_ratio", label: "思维链占比" },
+  { key: "truncation_rate", label: "截断率" }
 ];
 const FOUR_LABEL_MAP = new Map(FOUR_OPTIONS.map((o) => [o.key, o.label]));
 function ensureFour() {
@@ -3124,8 +3314,6 @@ function ensureFour() {
 }
 function getFourDisplay(key, v) {
   const title = FOUR_LABEL_MAP.get(key) || key;
-  const rounds = v.rounds || 0;
-  !rounds && key !== "latest_hit_rate" && key !== "avg_hit_rate" && key !== "max_output" && key !== "max_input" && key !== "max_total" || !v.history && false;
   switch (key) {
     case "avg_cost":
       return { title, html: `¥${(v.avgCost || 0).toFixed(4)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span>` };
@@ -3166,6 +3354,16 @@ function getFourDisplay(key, v) {
       return { title, html: `${(v.maxInput || 0).toLocaleString("zh-CN")}` };
     case "max_total":
       return { title, html: `${(v.maxTotal || 0).toLocaleString("zh-CN")}` };
+    case "avg_think_ratio": {
+      const has = (v.avgThinkRatio || 0) > 0 || (v.rounds || 0) > 0;
+      const val = v.avgThinkRatio || 0;
+      return { title, html: has && val > 0 ? `${val.toFixed(1)}<span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">%</span>` : `<span style="color:var(--ds-text-3);">—</span>` };
+    }
+    case "truncation_rate": {
+      const has = (v.rounds || 0) > 0;
+      const val = v.truncationRate || 0;
+      return { title, html: has ? `${val.toFixed(1)}<span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">%</span>` : `<span style="color:var(--ds-text-3);">—</span>` };
+    }
     default:
       return { title, html: "—" };
   }
@@ -4721,6 +4919,7 @@ async function renderStatsView() {
   if (reqEl) reqEl.textContent = String(totalReq);
   const tokEl = doc.getElementById("aus-stats-tok");
   if (tokEl) tokEl.textContent = totalTok.toLocaleString("zh-CN");
+  renderStatsFour(summaryFiltered);
   renderModelSummary(summaryFiltered);
   renderModelPicker();
   renderChartSelectors();
@@ -4737,6 +4936,97 @@ async function renderStatsView() {
     } catch {
     }
   }
+}
+function ensureStatsFour() {
+  const def = ["avg_cost", "avg_tokens", "avg_think_ratio", "truncation_rate"];
+  let cur = state$2.statsFour;
+  const valid = new Set(FOUR_OPTIONS.map((o) => o.key));
+  if (!Array.isArray(cur) || cur.length !== 4 || cur.some((k) => !valid.has(k))) {
+    cur = def.slice();
+    state$2.statsFour = cur;
+    try {
+      saveHot({ settings: state$2 });
+    } catch {
+    }
+    return cur;
+  }
+  return cur;
+}
+let statsFourBound = false;
+function bindStatsFour() {
+  if (statsFourBound) return;
+  statsFourBound = true;
+  const doc = getDoc$2();
+  doc.addEventListener("click", (e) => {
+    const t = e.target;
+    for (let i = 0; i < 4; i++) {
+      const drop = doc.getElementById(`aus-stats-four-drop-${i}`);
+      const btn = doc.getElementById(`aus-stats-four-btn-${i}`);
+      if (drop && btn && !t.closest(`#aus-stats-four-drop-${i}`) && !t.closest(`#aus-stats-four-btn-${i}`)) drop.style.display = "none";
+    }
+  });
+}
+function openStatsFourDrop(idx, v) {
+  const doc = getDoc$2();
+  const drop = doc.getElementById(`aus-stats-four-drop-${idx}`);
+  if (!drop) return;
+  const curKeys = ensureStatsFour();
+  const cur = curKeys[idx];
+  drop.innerHTML = FOUR_OPTIONS.map((o) => {
+    const active = o.key === cur;
+    return `<div data-sfour="${idx}" data-key="${o.key}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:11px;${active ? "background:var(--ds-card);font-weight:600;color:var(--ds-text);" : ""}">${o.label}</div>`;
+  }).join("");
+  drop.querySelectorAll("[data-sfour]").forEach((el) => {
+    el.onclick = () => {
+      const key = el.getAttribute("data-key");
+      const at = Number(el.getAttribute("data-sfour"));
+      const arr = ensureStatsFour().slice();
+      arr[at] = key;
+      state$2.statsFour = arr;
+      try {
+        saveHot({ settings: state$2 });
+      } catch {
+      }
+      drop.style.display = "none";
+      const curFiltered = (() => {
+        try {
+          const s = getSelectedSave();
+          const all = s?.history || [];
+          const tf = filterByRange(all);
+          return filterByModel(tf);
+        } catch {
+          return [];
+        }
+      })();
+      renderStatsFour(curFiltered);
+    };
+  });
+  drop.style.display = drop.style.display === "block" ? "none" : "block";
+}
+function renderStatsFour(filtered) {
+  const doc = getDoc$2();
+  const host = doc.getElementById("aus-stats-four");
+  if (!host) return;
+  const v = computeStatsFour(filtered || []);
+  const keys = ensureStatsFour();
+  bindStatsFour();
+  host.innerHTML = keys.map((k, i) => {
+    const d = getFourDisplay(k, v);
+    const isRate = k === "avg_rate";
+    const valColor = isRate ? "var(--ds-green)" : "var(--ds-text)";
+    return `<div class="ds-card" style="padding:14px;position:relative;overflow:visible;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+        <div style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.title}</div>
+        <button id="aus-stats-four-btn-${i}" title="切换指标" style="flex-shrink:0;padding:4px 7px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:10px;cursor:pointer;line-height:1;">▼</button>
+        <div id="aus-stats-four-drop-${i}" style="display:none;position:absolute;top:38px;right:8px;z-index:6;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:180px;max-height:260px;overflow:auto;"></div>
+      </div>
+      <div style="font-size:18px;font-weight:600;color:${valColor};margin-top:6px;word-break:break-all;">${d.html}</div>
+    </div>`;
+  }).join("");
+  keys.forEach((_, i) => {
+    const btn = doc.getElementById(`aus-stats-four-btn-${i}`);
+    if (btn) btn.onclick = () => openStatsFourDrop(i);
+  });
 }
 function initStatsView() {
   bindPicker();
@@ -4848,19 +5138,23 @@ function renderHistoryInner(doc, fullHist) {
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">基础信息</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;font-size:11px;">
               <div><div style="color:var(--ds-text-2);font-size:10px;">模型</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${esc$1(h.model || "—")}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">时段</div><div style="font-weight:600;margin-top:2px;color:var(--ds-text);">${h.priceType === "new-peak" ? "🔴 高峰" : h.priceType === "new-offpeak" ? "🟢 非高峰" : "⚪ 旧价格"}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">时段</div><div style="font-weight:600;margin-top:2px;color:var(--ds-text);">${h.priceType === "new-peak" ? "高峰" : h.priceType === "new-offpeak" ? "非高峰" : "旧价格"}</div></div>
               <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">时间</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${new Date(h.timestamp).toLocaleString("zh-CN")}</div></div>
             </div>
           </div>
-          <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
+            <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">性能</div>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;font-size:11px;">
               <div><div style="color:var(--ds-text-2);font-size:10px;">耗时</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${((h.duration || 0) / 1e3).toFixed(1)}s</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">首字延迟</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${((h.ttft || 0) / 1e3).toFixed(1)}s</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">首字延迟</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${(h.ttft || 0) > 0 ? ((h.ttft || 0) / 1e3).toFixed(1) + "s" : "—"}</div></div>
               <div><div style="color:var(--ds-text-2);font-size:10px;">速率</div><div style="font-weight:600;color:var(--ds-green);margin-top:2px;">${h.tokenRate || 0} t/s</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">思维链耗时</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${((h.thinkTime || 0) / 1e3).toFixed(1)}s</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">思维链 Token</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${h.thinkTokens || 0}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">总时长</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${((h.duration || 0) / 1e3).toFixed(1)}s</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">思维链耗时</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${(h.thinkTime || 0) > 0 ? ((h.thinkTime || 0) / 1e3).toFixed(1) + "s" : "—"}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">思维链占比</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${(() => {
+      const comp = h.completion_tokens || 0, th = h.thinkTokens || 0;
+      if (!comp || !th) return "—";
+      return (th / comp * 100).toFixed(1) + "%";
+    })()}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">是否截断</div><div style="font-weight:600;margin-top:2px;color:${h.finishReason === "length" || h.isTruncated ? "var(--ds-red)" : "var(--ds-text)"};">${h.finishReason === "length" || h.isTruncated ? "是 (" + esc$1(h.finishReason || "length") + ")" : "否"}</div></div>
             </div>
           </div>
         </div>
@@ -4872,6 +5166,12 @@ function renderHistoryInner(doc, fullHist) {
               <div><div style="color:var(--ds-text-2);font-size:10px;">缓存未命中</div><div style="font-weight:600;color:var(--ds-red);margin-top:2px;">${(h.cache_miss_tokens || 0).toLocaleString()}</div></div>
               <div><div style="color:var(--ds-text-2);font-size:10px;">输出 Token</div><div style="font-weight:600;color:var(--ds-purple);margin-top:2px;">${(h.completion_tokens || 0).toLocaleString()}</div></div>
               <div><div style="color:var(--ds-text-2);font-size:10px;">总 Token</div><div style="font-weight:700;color:var(--ds-text);margin-top:2px;">${(h.total_tokens || 0).toLocaleString()}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">思维链 Token</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${h.thinkTokens || 0}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">思维链占比</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${(() => {
+      const c = h.completion_tokens || 0, t = h.thinkTokens || 0;
+      if (!c || !t) return "—";
+      return (t / c * 100).toFixed(1) + "%";
+    })()}</div></div>
             </div>
           </div>
           <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
@@ -5212,6 +5512,7 @@ function createPanel() {
               <div class="ds-card"><div style="font-size:11px;color:var(--ds-text-2);">API 请求次数</div><div id="aus-stats-req" style="font-size:22px;font-weight:700;color:var(--ds-text);margin-top:6px;">0</div></div>
               <div class="ds-card"><div style="font-size:11px;color:var(--ds-text-2);">Tokens</div><div id="aus-stats-tok" style="font-size:22px;font-weight:700;color:var(--ds-text);margin-top:6px;">0</div></div>
             </div>
+            <div id="aus-stats-four" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px;"></div>
             <div id="aus-model-summary" class="ds-card" style="margin-top:12px;overflow:auto;">
               <div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">模型汇总</div>
               <table style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap;">

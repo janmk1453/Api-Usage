@@ -1,9 +1,11 @@
-import { getSelectedSave } from '../store/index';
+import { getSelectedSave, state } from '../store/index';
 import { localDay, esc } from '../utils/date';
 import { Y_OPTIONS, X_OPTIONS, getYSelected, getXSelected, toggleY, setXSelected, aggregateForChart } from './chart-config';
 import { renderExtraCharts } from './extra-charts';
 import { renderModelTrends, initModelTrends } from './model-trends';
 import { DataEvents, on as onDataEvent } from '../data/events';
+import { computeStatsFour } from '../data/computed';
+import { FOUR_OPTIONS, getFourDisplay } from './overview';
 
 type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom' | 'all';
 let currentRange: RangeKey = '30d';
@@ -590,6 +592,7 @@ export async function renderStatsView() {
   if (reqEl) reqEl.textContent = String(totalReq);
   const tokEl = doc.getElementById('aus-stats-tok');
   if (tokEl) tokEl.textContent = totalTok.toLocaleString('zh-CN');
+  renderStatsFour(summaryFiltered);
   renderModelSummary(summaryFiltered);
   renderModelPicker();
   renderChartSelectors();
@@ -603,6 +606,85 @@ export async function renderStatsView() {
   } else {
     try { const { log } = await import('../utils/logger'); log.debug('stats 隐藏，跳过图表初始化'); } catch {}
   }
+}
+
+// 统计页 4 小块（响应时间+模型双维度筛选）
+import { saveHot } from '../store/persistence';
+function ensureStatsFour(): string[] {
+  const def = ['avg_cost','avg_tokens','avg_think_ratio','truncation_rate'];
+  let cur: any = (state as any).statsFour;
+  const valid = new Set(FOUR_OPTIONS.map(o=>o.key));
+  if (!Array.isArray(cur) || cur.length !== 4 || cur.some((k:any)=> !valid.has(k))) {
+    cur = def.slice();
+    (state as any).statsFour = cur;
+    try { saveHot({ settings: state as any }); } catch {}
+    return cur as string[];
+  }
+  return cur as string[];
+}
+let statsFourBound = false;
+function bindStatsFour() {
+  if (statsFourBound) return;
+  statsFourBound = true;
+  const doc = getDoc();
+  doc.addEventListener('click', (e:any)=>{
+    const t = e.target as HTMLElement;
+    for (let i=0;i<4;i++) {
+      const drop = doc.getElementById(`aus-stats-four-drop-${i}`);
+      const btn = doc.getElementById(`aus-stats-four-btn-${i}`);
+      if (drop && btn && !t.closest(`#aus-stats-four-drop-${i}`) && !t.closest(`#aus-stats-four-btn-${i}`)) drop.style.display='none';
+    }
+  });
+}
+function openStatsFourDrop(idx:number, v:any) {
+  const doc = getDoc();
+  const drop = doc.getElementById(`aus-stats-four-drop-${idx}`) as HTMLElement | null;
+  if (!drop) return;
+  const curKeys = ensureStatsFour();
+  const cur = curKeys[idx];
+  drop.innerHTML = FOUR_OPTIONS.map(o=>{
+    const active = o.key===cur;
+    return `<div data-sfour="${idx}" data-key="${o.key}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:11px;${active?'background:var(--ds-card);font-weight:600;color:var(--ds-text);':''}">${o.label}</div>`;
+  }).join('');
+  drop.querySelectorAll('[data-sfour]').forEach((el:any)=>{
+    el.onclick = () => {
+      const key = el.getAttribute('data-key');
+      const at = Number(el.getAttribute('data-sfour'));
+      const arr = ensureStatsFour().slice();
+      arr[at] = key as any;
+      (state as any).statsFour = arr;
+      try { saveHot({ settings: state as any }); } catch {}
+      drop.style.display='none';
+      const curFiltered = (()=>{ try { const s:any=getSelectedSave(); const all = (s?.history||[]); const tf = filterByRange(all); return filterByModel(tf); } catch { return []; } })();
+      renderStatsFour(curFiltered);
+    };
+  });
+  drop.style.display = drop.style.display==='block' ? 'none' : 'block';
+}
+export function renderStatsFour(filtered:any[]) {
+  const doc = getDoc();
+  const host = doc.getElementById('aus-stats-four');
+  if (!host) return;
+  const v = computeStatsFour(filtered || []);
+  const keys = ensureStatsFour();
+  bindStatsFour();
+  host.innerHTML = keys.map((k,i)=>{
+    const d = getFourDisplay(k as any, v as any);
+    const isRate = k==='avg_rate';
+    const valColor = isRate ? 'var(--ds-green)' : 'var(--ds-text)';
+    return `<div class="ds-card" style="padding:14px;position:relative;overflow:visible;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+        <div style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.title}</div>
+        <button id="aus-stats-four-btn-${i}" title="切换指标" style="flex-shrink:0;padding:4px 7px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:10px;cursor:pointer;line-height:1;">▼</button>
+        <div id="aus-stats-four-drop-${i}" style="display:none;position:absolute;top:38px;right:8px;z-index:6;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:180px;max-height:260px;overflow:auto;"></div>
+      </div>
+      <div style="font-size:18px;font-weight:600;color:${valColor};margin-top:6px;word-break:break-all;">${d.html}</div>
+    </div>`;
+  }).join('');
+  keys.forEach((_,i)=>{
+    const btn = doc.getElementById(`aus-stats-four-btn-${i}`);
+    if (btn) btn.onclick = () => openStatsFourDrop(i, v);
+  });
 }
 
 export function initStatsView() {

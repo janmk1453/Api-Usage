@@ -59,6 +59,7 @@ export type OverviewView = {
   avgThinkTime: number; avgThinkTokens: number;
   avgHitRate: number; latestHitRate: number | null;
   maxOutput: number; maxInput: number; maxTotal: number;
+  avgThinkRatio: number; truncationRate: number;
 };
 
 export type StatsView = {

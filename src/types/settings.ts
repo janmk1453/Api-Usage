@@ -22,7 +22,13 @@ export type OverviewFourKey =
   | 'avg_input_cost' | 'avg_input_tokens' | 'avg_output_cost' | 'avg_output_tokens'
   | 'avg_think_time' | 'avg_think_tokens'
   | 'avg_hit_rate' | 'latest_hit_rate'
-  | 'max_output' | 'max_input' | 'max_total';
+  | 'max_output' | 'max_input' | 'max_total'
+  | 'avg_think_ratio' | 'truncation_rate';
+// 统计页模型汇总上方 4 小块（与概览 8 块同体系，独立配置）
+export type StatsFourKey = 'avg_cost' | 'avg_tokens' | 'avg_duration' | 'avg_rate'
+  | 'avg_input_cost' | 'avg_input_tokens' | 'avg_output_cost' | 'avg_output_tokens'
+  | 'avg_think_time' | 'avg_think_tokens' | 'avg_think_ratio' | 'truncation_rate'
+  | 'avg_hit_rate' | 'latest_hit_rate' | 'max_output' | 'max_input' | 'max_total';
 export type Settings = {
   theme: ThemeMode;
   autoBalance: boolean;
@@ -43,6 +49,7 @@ export type Settings = {
   webdav: WebdavSettings;
   historyScope: HistoryScope;
   overviewFour: OverviewFourKey[];
+  statsFour: StatsFourKey[];
   modelsPricingCollapsed?: boolean;
 };
 
@@ -66,6 +73,7 @@ export const defaultSettings = (): Settings => ({
   webdav: { url: 'https://dav.jianguoyun.com/dav/', username: '', path: '', proxy: '' },
   historyScope: 'all',
   overviewFour: ['avg_cost', 'avg_tokens', 'avg_duration', 'avg_rate', 'avg_input_tokens', 'avg_output_tokens', 'avg_hit_rate', 'max_total'],
+  statsFour: ['avg_cost', 'avg_tokens', 'avg_think_ratio', 'truncation_rate'],
   modelsPricingCollapsed: true,
 });
 
