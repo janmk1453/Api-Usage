@@ -12,6 +12,8 @@ import { renderForecastView, initForecastView } from './forecast-view';
 import { applyTheme } from '../services/theme';
 import { DataEvents, on as onDataEvent } from '../data/events';
 
+declare const __APP_VERSION__: string;
+
 function getDoc(): Document { return (window.parent as any)?.document ?? document; }
 
 let panelCreated = false;
@@ -330,7 +332,7 @@ export function createPanel() {
       <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;">
         <div style="display:flex;flex-direction:column;min-width:0;" id="aus-brand">
           <span style="font-size:13px;font-weight:700;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
-          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v3.0.0</span>
+          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v${typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.0.0'}</span>
         </div>
         <button id="aus-sidebar-toggle" style="width:28px;height:28px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;">‹</button>
       </div>
@@ -468,7 +470,7 @@ export function createPanel() {
                 <div id="aus-update-banner" style="display:none;padding:8px 10px;border-radius:8px;background:var(--ds-yellow-bg);border:1px solid var(--ds-yellow-border);font-size:11px;color:var(--ds-text);"></div>
                 <div style="display:flex;gap:8px;align-items:center;">
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:11px;">检查更新</button>
-                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v3.0.0 · 每 6 小时自动检查</span>
+                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v${typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.0.0'} · 每 6 小时自动检查</span>
                 </div>
               </div>
             </div>

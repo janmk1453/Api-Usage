@@ -1,9 +1,15 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
+import { readFileSync } from 'fs';
+
+const manifest = (() => {
+  try { return JSON.parse(readFileSync('./manifest.json', 'utf-8')); } catch { return { version: '0.0.0' }; }
+})();
 
 export default defineConfig({
   define: {
     'process.env.NODE_ENV': '"production"',
+    '__APP_VERSION__': JSON.stringify(manifest.version || '0.0.0'),
   },
   build: {
     lib: {

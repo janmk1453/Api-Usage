@@ -1,6 +1,7 @@
 import { toast, log } from '../utils/logger';
 
-const CURRENT_VERSION = '3.0.0';
+declare const __APP_VERSION__: string;
+const CURRENT_VERSION: string = (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.0.0') as string;
 const REMOTE_MANIFEST = 'https://raw.githubusercontent.com/janmk1453/Api-Usage/main/manifest.json';
 const REPO_URL = 'https://github.com/janmk1453/Api-Usage';
 const INTERVAL_MS = 6 * 60 * 60 * 1000;

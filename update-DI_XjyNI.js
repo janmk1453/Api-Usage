@@ -1,5 +1,5 @@
-import { t as toast, l as log } from "./index-CW1q-lf1.js";
-const CURRENT_VERSION = "3.0.0";
+import { t as toast, l as log } from "./index-Do6IVtOe.js";
+const CURRENT_VERSION = "3.0.1";
 const REMOTE_MANIFEST = "https://raw.githubusercontent.com/janmk1453/Api-Usage/main/manifest.json";
 const REPO_URL = "https://github.com/janmk1453/Api-Usage";
 const INTERVAL_MS = 6 * 60 * 60 * 1e3;
