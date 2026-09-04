@@ -181,7 +181,8 @@
   will-change: auto !important;
 }
 #aus-sidebar { background: var(--ds-sidebar-bg) !important; border-right: 1px solid var(--ds-border) !important; }
-#aus-panel-body { display:flex; flex-direction:row; flex:1; min-height:0; overflow:hidden; container-type: inline-size; container-name: ausbody; position: relative; }
+#aus-panel { position: fixed; } /* 使 absolute 侧栏以面板为 containing block，覆盖含 mobile-header 的全高度 */
+#aus-panel-body { display:flex; flex-direction:row; flex:1; min-height:0; overflow:hidden; container-type: inline-size; container-name: ausbody; /* 去 relative：让移动端抽屉覆盖 header，避免顶部缺口 */ }
 /* 覆盖式抽屉遮罩（移动端/窄容器） */
 #aus-sidebar-overlay { display: none; }
 #aus-sidebar-overlay.is-open {
@@ -220,10 +221,9 @@
   gap: clamp(8px, 1.5cqi, 12px);
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
-/* 表格移动化：首列粘性 */
-#aus-model-summary td:first-child, #aus-model-summary th:first-child {
-  position: sticky; left: 0; background: var(--ds-card-inner); z-index: 1;
-}
+/* 表格：全宽横向滚动，不做首列粘性（避免与 ds-card 灰底形成白/灰切割，图1底色问题） */
+#aus-model-summary { background: transparent; }
+#aus-model-summary table { background: transparent; }
 /* 安全区（全面屏底部） */
 #aus-main { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
 /* 触控目标 */
@@ -281,7 +281,7 @@
 @media (max-width: 760px) {
   #aus-panel { flex-direction: column !important; }
   #aus-mobile-header { display:flex !important; }
-  #aus-panel-body { flex-direction: row !important; position: relative !important; }
+  #aus-panel-body { flex-direction: row !important; /* 不设 relative，让抽屉以 #aus-panel 为锚点覆盖 header */ }
   /* 覆盖式抽屉：侧栏绝对定位不挤压主区 + 遮罩点外关闭 */
   #aus-sidebar { display:none !important; width:240px !important; min-width:240px !important; max-width:240px !important; }
   #aus-sidebar.is-open { display:flex !important; position:absolute !important; left:0; top:0; bottom:0; z-index:30 !important; box-shadow:8px 0 24px rgba(0,0,0,0.18) !important; }
@@ -304,9 +304,19 @@
   [data-view="stats"] > div,
   [data-view="overview"] > div { min-width: 0 !important; max-width: 100% !important; }
   [data-extension="api-usage-stat"] .ds-card { padding: 12px 14px !important; max-width: 100% !important; width: 100% !important; box-sizing: border-box !important; -webkit-overflow-scrolling: touch !important; }
-  /* 默认所有卡片 overflow:visible 以不裁剪胶囊下拉；仅需横向滑动的表格/热力图除外 */
-  [data-view="stats"] .ds-card,
-  [data-view="overview"] .ds-card { overflow: visible !important; overflow-x: visible !important; overflow-y: visible !important; }
+  /* 卡片 overflow 策略：图表/表格灰色底块不超出视口（图3），同时保留下拉可用
+     - 概览页卡片 hidden 避免撑开
+     - 统计页图表卡片 visible 保留下拉，但通过 min-width:0 + 内部图表 hidden 双重约束避免卡片盒本身被内容撑开超出 */
+  [data-view="overview"] .ds-card { overflow: hidden !important; }
+  [data-view="stats"] .ds-card { overflow: visible !important; }
+  /* 统计页图表类卡片内部图表容器必须 hidden + 约束宽度，防止灰色底块随 100% 宽度把卡片撑出视口 */
+  [data-view="stats"] #aus-extra-charts .ds-card,
+  [data-view="stats"] #aus-model-trends .ds-card { overflow: hidden !important; }
+  /* extra/model-trends 网格项必须 min-width:0 否则 grid 默认 minmax:auto 会被图表最小宽度撑开超出视口 */
+  #aus-extra-charts, #aus-model-trends { min-width: 0 !important; max-width: 100% !important; width: 100% !important; }
+  #aus-extra-charts > .ds-card, #aus-model-trends > .ds-card { min-width: 0 !important; max-width: 100% !important; overflow: hidden !important; }
+  /* 图表容器自身再加一层 hidden 约束，确保 ECharts canvas 不把父卡片撑开 */
+  #aus-extra-charts [id^="aus-chart-"], #aus-model-trends [id^="aus-chart-"] { overflow: hidden !important; max-width: 100% !important; box-sizing: border-box !important; }
   #aus-model-summary { overflow-x: auto !important; overflow-y: hidden !important; }
   #aus-heatmap-card-overview { overflow: hidden !important; }
   #aus-heatmap-card-overview > div { overflow: visible !important; }
