@@ -286,7 +286,8 @@
 
 /* 移动端自适应 — 760 为分界，复刻 DeepSeek 官网：侧边栏 display 切换 + 汉堡按钮 */
 @media (max-width: 760px) {
-  #aus-panel { flex-direction: column !important; }
+  #aus-panel { flex-direction: column !important; width:100% !important; max-width:100% !important; left:0 !important; right:0 !important; box-sizing:border-box !important; }
+  #aus-overlay { width:100% !important; max-width:100% !important; }
   #aus-mobile-header { display:flex !important; }
   #aus-panel-body { flex-direction: row !important; /* 不设 relative，让抽屉以 #aus-panel 为锚点覆盖 header */ }
   /* 覆盖式抽屉：侧栏绝对定位不挤压主区 + 遮罩点外关闭 */
@@ -307,9 +308,17 @@
   /* 视图容器不裁剪下拉：原 overflow-x:hidden 会把胶囊下拉裁进 UI 底下；需配合 min-width:0 防止 720px 表撑开整个视图导致块超出屏幕 */
   [data-view="stats"],
   [data-view="overview"],
-  [data-view="history"] { max-width: 100% !important; overflow: visible !important; box-sizing: border-box !important; min-width: 0 !important; }
+  [data-view="history"],
+  [data-view="forecast"],
+  [data-view="settings"],
+  [data-view="help"],
+  [data-view="about"] { max-width: 100% !important; overflow: visible !important; box-sizing: border-box !important; min-width: 0 !important; }
   [data-view="stats"] > div,
-  [data-view="overview"] > div { min-width: 0 !important; max-width: 100% !important; }
+  [data-view="overview"] > div,
+  [data-view="forecast"] > div,
+  [data-view="settings"] > div,
+  [data-view="help"] > div,
+  [data-view="about"] > div { min-width: 0 !important; max-width: 100% !important; }
   [data-extension="api-usage-stat"] .ds-card { padding: 12px 14px !important; max-width: 100% !important; width: 100% !important; box-sizing: border-box !important; -webkit-overflow-scrolling: touch !important; }
   /* 卡片 overflow 策略：图表/表格灰色底块不超出视口（图3），同时保留下拉可用
      - 概览页卡片 hidden 避免撑开
@@ -381,9 +390,26 @@
   /* 历史详情：竖屏展开后内部可滚动，避免内容被截断（图1） */
   .aus-detail-panel { max-height: min(70vh, 520px) !important; overflow-y: auto !important; overflow-x: hidden !important; -webkit-overflow-scrolling: touch !important; overscroll-behavior: contain !important; }
   .aus-detail-panel pre.aus-tab-content { flex: 0 0 auto !important; min-height: 120px !important; max-height: 260px !important; }
+  /* 设置与趋势预测页：卡片及内部文本不超出视口（实机溢出修复）—— 保持 overflow:visible 以不裁剪胶囊下拉 */
+  [data-view="settings"] .ds-card,
+  [data-view="forecast"] .ds-card,
+  [data-view="help"] .ds-card,
+  [data-view="about"] .ds-card { max-width:100% !important; width:100% !important; box-sizing:border-box !important; min-width:0 !important; overflow:visible !important; }
+  [data-view="settings"] .ds-card > div,
+  [data-view="forecast"] .ds-card > div,
+  [data-view="help"] .ds-card > div,
+  [data-view="about"] .ds-card > div { min-width:0 !important; max-width:100% !important; }
+  [data-view="settings"] .ds-card div,
+  [data-view="forecast"] .ds-card div { word-break: break-word !important; overflow-wrap: anywhere !important; white-space: normal !important; min-width:0 !important; max-width:100% !important; }
+  [data-view="settings"] [style*="display:flex"],
+  [data-view="forecast"] [style*="display:flex"] { flex-wrap: wrap !important; min-width:0 !important; max-width:100% !important; }
+  [data-view="forecast"] #aus-forecast-chart,
+  [data-view="forecast"] [id^="aus-forecast-"] { width:100% !important; max-width:100% !important; min-width:0 !important; box-sizing:border-box !important; }
   /* 设置页输入区不超出 */
   #aus-settings input,
-  #aus-settings select { max-width: 100% !important; box-sizing: border-box !important; }
+  #aus-settings select,
+  #aus-settings textarea,
+  #aus-forecast-sensitivity input { max-width: 100% !important; box-sizing: border-box !important; min-width:0 !important; }
   /* 减少标题字号防溢出（流体 clamp 已处理，此处仅保底换行） */
   [data-extension="api-usage-stat"] .ds-card-val { word-break: break-all !important; }
 }
