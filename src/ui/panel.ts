@@ -458,9 +458,19 @@ export function createPanel() {
             </div>
           </div>
           <div data-view="about" style="display:none;">
-            <div class="ds-card" style="line-height:1.7;font-size:12px;color:var(--ds-text);">
-              <div style="font-size:14px;font-weight:600;">关于<br/><br/>API用量统计 · SillyTavern 扩展</div>
-              <div style="margin-top:8px;color:var(--ds-text-2);">迁移至原 DeepSeek使用预测 脚本<br/>致力于实现最全面的用量可视化统计<br/><br/>仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);">janmk1453/Api-Usage</a></div>
+            <div style="display:grid;gap:12px;">
+              <div class="ds-card" style="line-height:1.7;font-size:12px;color:var(--ds-text);">
+                <div style="font-size:14px;font-weight:600;">关于<br/><br/>API用量统计 · SillyTavern 扩展</div>
+                <div style="margin-top:8px;color:var(--ds-text-2);">迁移至原 DeepSeek使用预测 脚本<br/>致力于实现最全面的用量可视化统计<br/><br/>仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);">janmk1453/Api-Usage</a></div>
+              </div>
+              <div class="ds-card" style="display:grid;gap:8px;">
+                <div style="font-size:12px;font-weight:600;color:var(--ds-text);">检查更新</div>
+                <div id="aus-update-banner" style="display:none;padding:8px 10px;border-radius:8px;background:var(--ds-yellow-bg);border:1px solid var(--ds-yellow-border);font-size:11px;color:var(--ds-text);"></div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:11px;">检查更新</button>
+                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v3.0.0 · 每 6 小时自动检查</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -589,6 +599,20 @@ export function createPanel() {
   initStatsView();
   initExtraCharts();
   try { initForecastView(); } catch {}
+  // 关于页检查更新按钮
+  try {
+    const updBtn = doc.getElementById('aus-check-update') as HTMLButtonElement | null;
+    if (updBtn) {
+      updBtn.onclick = () => {
+        updBtn.textContent = '检查中…';
+        updBtn.setAttribute('disabled', '');
+        import('../services/update').then(m => m.checkUpdate(true).finally(() => {
+          updBtn.textContent = '检查更新';
+          updBtn.removeAttribute('disabled');
+        }));
+      };
+    }
+  } catch {}
   switchView('overview');
   refreshUI();
 }
@@ -624,6 +648,7 @@ export function openPanel() {
   requestAnimationFrame(() => { ov.style.opacity = '1'; positionPanel(); });
   panelOpen = true;
   refreshUI();
+  try { import('../services/update').then(m => m.maybeAutoCheck()); } catch {}
 }
 export function closePanel() {
   const doc = getDoc();

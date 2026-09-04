@@ -141,6 +141,8 @@ async function init() {
   } catch {}
   try { getDoc().addEventListener('keydown', (e: KeyboardEvent) => { if (e.key === 'Escape') closePanel(); }); } catch {}
   try { window.addEventListener('pagehide', () => { try { import('./store/persistence').then(m => (m as any).flushSaveHot?.()); } catch {} }); } catch {}
+  // 扩展加载后延迟自动检查更新（6 小时节流）
+  setTimeout(() => { try { import('./services/update').then(m => m.maybeAutoCheck()); } catch {} }, 3000);
   (globalThis as any).ApiUsageStat = { MODULE, refreshUI, updatePeakDot, openPanel, closePanel, togglePanel, state, injectWandEntry: ensureWandEntry };
 }
 
