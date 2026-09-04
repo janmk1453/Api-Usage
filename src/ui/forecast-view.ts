@@ -53,7 +53,6 @@ export function renderForecastView(){
     </div>`;
   };
   renderCard(doc.getElementById('aus-forecast-card'));
-  renderCard(doc.getElementById('aus-forecast-card-overview'));
   // 能耗标识
   const badgeHost = doc.getElementById('aus-energy-badge');
   if (badgeHost) {

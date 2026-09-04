@@ -5303,7 +5303,6 @@ function renderForecastView() {
     </div>`;
   };
   renderCard(doc.getElementById("aus-forecast-card"));
-  renderCard(doc.getElementById("aus-forecast-card-overview"));
   const badgeHost = doc.getElementById("aus-energy-badge");
   if (badgeHost) {
     const chatId2 = currentChatId();
@@ -5903,7 +5902,7 @@ function createPanel() {
                 <span>按日聚合 Token（深绿=高用量，展示近 2 年）</span>
                 <span style="color:var(--ds-text-2);">悬停查看日期</span>
               </div>
-              <div id="aus-forecast-card-overview" class="ds-card" style="margin-top:12px;"></div>
+            </div>
             </div>
            <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
