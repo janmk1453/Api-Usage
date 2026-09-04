@@ -8,6 +8,7 @@ import { bindHistoryCompare, renderUsageDetail } from './compare';
 import { renderOverview } from './overview';
 import { initStatsView, renderStatsView } from './stats-view';
 import { initExtraCharts, renderExtraCharts } from './extra-charts';
+import { renderForecastView, initForecastView } from './forecast-view';
 import { applyTheme } from '../services/theme';
 import { DataEvents, on as onDataEvent } from '../data/events';
 
@@ -15,7 +16,7 @@ function getDoc(): Document { return (window.parent as any)?.document ?? documen
 
 let panelCreated = false;
 let panelOpen = false;
-let currentView: 'overview' | 'stats' | 'history' | 'settings' | 'help' | 'about' = 'overview';
+let currentView: 'overview' | 'stats' | 'history' | 'forecast' | 'settings' | 'help' | 'about' = 'overview';
 let collapsed = false;
 
 export function refreshUI() {
@@ -34,6 +35,7 @@ export function refreshUI() {
     renderHistory(doc, s);
     renderOverview();
     renderStatsView();
+    try { renderForecastView(); } catch {}
   } catch {}
 }
 
@@ -266,7 +268,7 @@ function switchView(view: typeof currentView) {
     if (v === view) el.classList.add('active');
     else el.classList.remove('active');
   });
-  const titles: any = { overview: '用量概览', stats: '用量统计', history: '历史记录', settings: '设置', help: '使用说明', about: '关于' };
+  const titles: any = { overview: '用量概览', stats: '用量统计', history: '历史记录', forecast: '趋势预测', settings: '设置', help: '使用说明', about: '关于' };
   const titleEl = doc.getElementById('aus-page-title');
   if (titleEl) titleEl.textContent = titles[view] || '';
   refreshUI();
@@ -282,6 +284,9 @@ function switchView(view: typeof currentView) {
         }
       } catch {}
     }, 60);
+  }
+  if (view === 'forecast') {
+    setTimeout(() => { try { renderForecastView(); } catch {} }, 60);
   }
 }
 
@@ -334,6 +339,7 @@ export function createPanel() {
           <div class="aus-nav-item active" data-nav="overview" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">◈</span><span class="aus-nav-label">用量概览</span></div>
           <div class="aus-nav-item" data-nav="stats" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">▦</span><span class="aus-nav-label">用量统计</span></div>
           <div class="aus-nav-item" data-nav="history" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">≡</span><span class="aus-nav-label">历史记录</span></div>
+          <div class="aus-nav-item" data-nav="forecast" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">⬈</span><span class="aus-nav-label">趋势预测</span></div>
         </div>
         <div style="flex:1;"></div>
         <div class="aus-nav-group" style="display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--ds-border);padding-top:8px;">
@@ -375,8 +381,8 @@ export function createPanel() {
                 <span>按日聚合 Token（深绿=高用量，展示近 2 年）</span>
                 <span style="color:var(--ds-text-2);">悬停查看日期</span>
               </div>
+              <div id="aus-forecast-card-overview" class="ds-card" style="margin-top:12px;"></div>
             </div>
-           </div>
            <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span><span style="font-size:10px;">▼</span></div>
@@ -421,6 +427,15 @@ export function createPanel() {
             <div id="aus-model-trends" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px;">
               <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:var(--ds-text);">模型 Token 趋势</span><div style="display:flex;gap:6px;"><div id="aus-modeltrends-x-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;"><span id="aus-modeltrends-x-label-token">每日</span> ▼</div></div></div><div id="aus-modeltrends-x-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-model-token" style="height:220px;"></div></div>
               <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:var(--ds-text);">模型调用次数趋势</span><div style="display:flex;gap:6px;"><div id="aus-modeltrends-x-req" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;"><span id="aus-modeltrends-x-label-req">每日</span> ▼</div></div></div><div id="aus-modeltrends-x-drop-req" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-model-req" style="height:220px;"></div></div>
+            </div>
+          </div>
+          <div data-view="forecast" style="display:none;">
+            <div style="display:grid;gap:12px;">
+              <div id="aus-forecast-card" class="ds-card"></div>
+              <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">能耗标识（RP 能耗效率）</div><div id="aus-energy-badge"></div></div>
+              <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">预测趋势（输入 token 按轮次 + 拟合/置信带/上限）</div><div id="aus-forecast-chart" style="height:260px;"></div></div>
+              <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">敏感度 · 假设命中率</div><div id="aus-forecast-sensitivity"></div></div>
+              <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">对比 · 最耗对话 Top</div><div id="aus-forecast-compare"></div></div>
             </div>
           </div>
           <div data-view="history" style="display:none;">
@@ -573,6 +588,7 @@ export function createPanel() {
   bindHistoryCompare();
   initStatsView();
   initExtraCharts();
+  try { initForecastView(); } catch {}
   switchView('overview');
   refreshUI();
 }

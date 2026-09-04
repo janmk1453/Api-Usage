@@ -150,10 +150,10 @@ function calculateRemainingRounds(stats) {
   const history = (s.history || []).filter((h) => typeof h.model === "string" && h.model.toLowerCase().indexOf("deepseek") === 0);
   if (!history.length) return null;
   const alpha = 0.3;
-  let ewma = history[history.length - 1].cost || 0;
-  for (let i = history.length - 2; i >= 0; i--) ewma = alpha * (history[i].cost || 0) + (1 - alpha) * ewma;
-  if (ewma <= 0) return null;
-  return Math.floor(bal / ewma);
+  let ewma2 = history[history.length - 1].cost || 0;
+  for (let i = history.length - 2; i >= 0; i--) ewma2 = alpha * (history[i].cost || 0) + (1 - alpha) * ewma2;
+  if (ewma2 <= 0) return null;
+  return Math.floor(bal / ewma2);
 }
 const index = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
@@ -2903,7 +2903,7 @@ function fillDebugModelSelect(doc) {
 }
 let selOld = null;
 let selNew = null;
-function getDoc$6() {
+function getDoc$7() {
   return window.parent?.document ?? document;
 }
 function diffMessages(oldMsgs, newMsgs) {
@@ -2919,7 +2919,7 @@ function diffMessages(oldMsgs, newMsgs) {
   return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${aCtx}</div><div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${bCtx}</div></div><div style="font-size:11px;color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
 }
 function bindHistoryCompare() {
-  const doc = getDoc$6();
+  const doc = getDoc$7();
   doc.addEventListener("click", (e) => {
     const t = e.target;
     if (!t) return;
@@ -2936,7 +2936,7 @@ function bindHistoryCompare() {
   });
 }
 function renderDiff() {
-  const doc = getDoc$6();
+  const doc = getDoc$7();
   const host = doc.getElementById("aus-diff");
   if (!host) return;
   if (selOld == null || selNew == null) {
@@ -3008,16 +3008,16 @@ function computeOverview() {
   const truncCnt = hist.filter((h) => h.finishReason === "length" || h.isTruncated).length;
   const truncationRate = hist.length ? truncCnt / hist.length * 100 : 0;
   const bal = state$2.customBalance || state$2.balance?.balance;
-  let remainingRounds = null;
+  let remainingRounds2 = null;
   try {
     const balNum = bal != null && bal !== "" ? parseFloat(String(bal)) : NaN;
     if (!isNaN(balNum) && s.history?.length) {
       const dsHist = (s.history || []).filter((h) => typeof h.model === "string" && h.model.toLowerCase().indexOf("deepseek") === 0);
       if (dsHist.length) {
         const alpha = 0.3;
-        let ewma = dsHist[dsHist.length - 1].cost || 0;
-        for (let i = dsHist.length - 2; i >= 0; i--) ewma = alpha * (dsHist[i].cost || 0) + (1 - alpha) * ewma;
-        if (ewma > 0) remainingRounds = Math.floor(balNum / ewma);
+        let ewma2 = dsHist[dsHist.length - 1].cost || 0;
+        for (let i = dsHist.length - 2; i >= 0; i--) ewma2 = alpha * (dsHist[i].cost || 0) + (1 - alpha) * ewma2;
+        if (ewma2 > 0) remainingRounds2 = Math.floor(balNum / ewma2);
       }
     }
   } catch {
@@ -3038,7 +3038,7 @@ function computeOverview() {
     avgDuration,
     avgRate,
     rounds,
-    remainingRounds,
+    remainingRounds: remainingRounds2,
     avgInputCost,
     avgInputTokens,
     avgOutputCost,
@@ -3119,12 +3119,12 @@ function computeStatsFour(filtered) {
     rounds
   };
 }
-function getDoc$5() {
+function getDoc$6() {
   return window.parent?.document ?? document;
 }
 function themeIsDark() {
   try {
-    const doc = getDoc$5();
+    const doc = getDoc$6();
     const p = doc.getElementById("aus-panel");
     return p?.getAttribute("data-ds-theme") === "dark";
   } catch {
@@ -3132,7 +3132,7 @@ function themeIsDark() {
   }
 }
 function renderHeatmap(filtered) {
-  const doc = getDoc$5();
+  const doc = getDoc$6();
   const container = doc.getElementById("aus-heatmap-container-overview") || doc.getElementById("aus-heatmap-container");
   const legendEl = doc.getElementById("aus-heatmap-legend-overview") || doc.getElementById("aus-heatmap-legend");
   const labelsEl = doc.getElementById("aus-heatmap-labels-overview") || doc.getElementById("aus-heatmap-labels");
@@ -3616,12 +3616,12 @@ const state$1 = {
   dur: { y: /* @__PURE__ */ new Set(["duration", "rate"]), x: "round", pieMode: "token" },
   pie: { y: /* @__PURE__ */ new Set([]), x: "day", pieMode: "token" }
 };
-function getDoc$4() {
+function getDoc$5() {
   return window.parent?.document ?? document;
 }
 function themeColor$2(name, fallback) {
   try {
-    const doc = getDoc$4();
+    const doc = getDoc$5();
     const el = doc.getElementById("aus-panel") || doc.documentElement;
     const v = getComputedStyle(el).getPropertyValue(name).trim();
     return v || fallback;
@@ -3704,7 +3704,7 @@ function renderExtraCharts(filtered) {
 }
 async function renderOne$1(id, filtered) {
   try {
-    const doc = getDoc$4();
+    const doc = getDoc$5();
     const el = doc.getElementById(`aus-chart-${id}`);
     if (!el) return;
     if (id === "pie") {
@@ -3805,7 +3805,7 @@ async function renderOne$1(id, filtered) {
     await drawBarLine(el, id, labels, series);
   } catch (e) {
     try {
-      const doc2 = getDoc$4();
+      const doc2 = getDoc$5();
       const el2 = doc2.getElementById(`aus-chart-${id}`);
       if (el2) el2.innerHTML = '<div style="text-align:center;padding:20px;color:#DC2626;font-size:11px;">图表加载失败: ' + (e?.message || e) + "</div>";
     } catch {
@@ -3886,7 +3886,7 @@ async function drawBarLine(el, id, labels, series) {
   }
 }
 function initExtraCharts() {
-  const doc = getDoc$4();
+  const doc = getDoc$5();
   for (const id of Object.keys(CHART_DEFS)) {
     if (!CHART_DEFS[id].hasX) continue;
     const yBtn = doc.getElementById(`aus-extra-y-${id}`);
@@ -3928,7 +3928,7 @@ function initExtraCharts() {
   });
 }
 function renderExtraY(id) {
-  const doc = getDoc$4();
+  const doc = getDoc$5();
   const drop = doc.getElementById(`aus-extra-y-drop-${id}`);
   const label = doc.getElementById(`aus-extra-y-label-${id}`);
   if (!drop) return;
@@ -3953,7 +3953,7 @@ function renderExtraY(id) {
   });
 }
 function renderExtraX(id) {
-  const doc = getDoc$4();
+  const doc = getDoc$5();
   const drop = doc.getElementById(`aus-extra-x-drop-${id}`);
   const label = doc.getElementById(`aus-extra-x-label-${id}`);
   if (!drop) return;
@@ -3995,12 +3995,12 @@ const state = {
   token: { x: "day" },
   req: { x: "day" }
 };
-function getDoc$3() {
+function getDoc$4() {
   return window.parent?.document ?? document;
 }
 function themeColor$1(name, fallback) {
   try {
-    const doc = getDoc$3();
+    const doc = getDoc$4();
     const el = doc.getElementById("aus-panel") || doc.documentElement;
     const v = getComputedStyle(el).getPropertyValue(name).trim();
     return v || fallback;
@@ -4047,7 +4047,7 @@ function renderModelTrends(filtered) {
 }
 async function renderOne(id, filtered) {
   try {
-    const doc = getDoc$3();
+    const doc = getDoc$4();
     const el = doc.getElementById(`aus-chart-model-${id}`);
     if (!el) return;
     const xKey = state[id].x;
@@ -4188,7 +4188,7 @@ async function renderOne(id, filtered) {
     }, 60);
   } catch (e) {
     try {
-      const doc2 = getDoc$3();
+      const doc2 = getDoc$4();
       const el2 = doc2.getElementById(`aus-chart-model-${id}`);
       if (el2) el2.innerHTML = '<div style="text-align:center;padding:20px;color:#DC2626;font-size:11px;">图表加载失败</div>';
     } catch {
@@ -4200,7 +4200,7 @@ async function renderOne(id, filtered) {
   }
 }
 function initModelTrends() {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   for (const id of ["token", "req"]) {
     const btn = doc.getElementById(`aus-modeltrends-x-${id}`);
     const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
@@ -4221,7 +4221,7 @@ function initModelTrends() {
   });
 }
 function renderXDrop(id) {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
   const label = doc.getElementById(`aus-modeltrends-x-label-${id}`);
   if (!drop) return;
@@ -4251,7 +4251,7 @@ let summarySortKey = null;
 let summarySortDir = "desc";
 let lastSummaryFiltered = null;
 function updateSummarySortHeader() {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   const ths = doc.querySelectorAll("#aus-model-summary thead th[data-sort-key]");
   ths.forEach((th) => {
     th.style.color = "";
@@ -4270,7 +4270,7 @@ function updateSummarySortHeader() {
   }
 }
 function bindSummarySort() {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   const ths = doc.querySelectorAll("#aus-model-summary thead th[data-sort-key]");
   if (!ths.length) return;
   if (bindSummarySort._bound) return;
@@ -4298,12 +4298,12 @@ function bindSummarySort() {
     });
   });
 }
-function getDoc$2() {
+function getDoc$3() {
   return window.parent?.document ?? document;
 }
 function themeColor(name, fallback) {
   try {
-    const doc = getDoc$2();
+    const doc = getDoc$3();
     const el = doc.getElementById("aus-panel") || doc.documentElement;
     const v = getComputedStyle(el).getPropertyValue(name).trim();
     return v || fallback;
@@ -4368,7 +4368,7 @@ function filterByModel(entries) {
   return entries.filter((e) => e.model === selectedModel);
 }
 function updateRangeHighlight() {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   doc.querySelectorAll("[data-range]").forEach((el) => {
     const r = el.getAttribute("data-range");
     if (r === currentRange) {
@@ -4383,7 +4383,7 @@ function updateRangeHighlight() {
   if (calWrap) calWrap.style.display = currentRange === "custom" ? "block" : "none";
 }
 function renderCalendar() {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   const cal = doc.getElementById("aus-date-calendar");
   if (!cal) return;
   updateRangeHighlight();
@@ -4418,7 +4418,7 @@ function renderCalendar() {
   if (applyBtn) applyBtn.onclick = apply;
 }
 function updatePickerLabel() {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   const label = doc.getElementById("aus-range-label");
   if (!label) return;
   const map2 = { all: "全部", today: "今天", yesterday: "昨天", "7d": "近 7 天", "30d": "近 30 天", month: "本月", lastMonth: "上月", custom: "自定义" };
@@ -4428,7 +4428,7 @@ function updatePickerLabel() {
   updateRangeHighlight();
 }
 function renderModelPicker() {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   const dropdown = doc.getElementById("aus-model-dropdown");
   const label = doc.getElementById("aus-model-label");
   if (!dropdown || !label) return;
@@ -4452,7 +4452,7 @@ function renderModelPicker() {
   });
 }
 function bindPicker() {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   const btn = doc.getElementById("aus-range-btn");
   const dropdown = doc.getElementById("aus-range-dropdown");
   if (btn && dropdown) {
@@ -4512,7 +4512,7 @@ function bindPicker() {
 let chartYOpen = false;
 let chartXOpen = false;
 function renderChartSelectors() {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   const yBtn = doc.getElementById("aus-chart-y-btn");
   const xBtn = doc.getElementById("aus-chart-x-btn");
   const yDrop = doc.getElementById("aus-chart-y-dropdown");
@@ -4559,7 +4559,7 @@ function renderChartSelectors() {
   });
 }
 function bindChartSelectors() {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   const yBtn = doc.getElementById("aus-chart-y-btn");
   const yDrop = doc.getElementById("aus-chart-y-dropdown");
   const xBtn = doc.getElementById("aus-chart-x-btn");
@@ -4608,7 +4608,7 @@ function bindChartSelectors() {
 }
 let chart = null;
 async function renderChart(filteredRaw) {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   const el = doc.getElementById("aus-stats-chart");
   if (!el) return;
   const yKeys = getYSelected();
@@ -4742,7 +4742,7 @@ async function renderChart(filteredRaw) {
   }, 60);
 }
 function renderModelSummary(filtered) {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   const tbody = doc.getElementById("aus-summary-tbody");
   if (!tbody) return;
   lastSummaryFiltered = filtered;
@@ -4863,7 +4863,7 @@ async function getHistoryForStats() {
   return hot;
 }
 async function renderStatsView() {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   const s = getSelectedSave();
   if (!s) return;
   const allHistory = await getHistoryForStats();
@@ -4918,7 +4918,7 @@ let statsFourBound = false;
 function bindStatsFour() {
   if (statsFourBound) return;
   statsFourBound = true;
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   doc.addEventListener("click", (e) => {
     const t = e.target;
     for (let i = 0; i < 4; i++) {
@@ -4929,7 +4929,7 @@ function bindStatsFour() {
   });
 }
 function openStatsFourDrop(idx, v) {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   const drop = doc.getElementById(`aus-stats-four-drop-${idx}`);
   if (!drop) return;
   const curKeys = ensureStatsFour();
@@ -4966,7 +4966,7 @@ function openStatsFourDrop(idx, v) {
   drop.style.display = drop.style.display === "block" ? "none" : "block";
 }
 function renderStatsFour(filtered) {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   const host = doc.getElementById("aus-stats-four");
   if (!host) return;
   const v = computeStatsFour(filtered || []);
@@ -5004,6 +5004,453 @@ function initStatsView() {
   updatePickerLabel();
   renderStatsView();
 }
+function ewma(arr, alpha = 0.3) {
+  if (!arr.length) return 0;
+  let v = arr[arr.length - 1];
+  for (let i = arr.length - 2; i >= 0; i--) v = alpha * arr[i] + (1 - alpha) * v;
+  return v;
+}
+function segmentByDrop(sorted) {
+  if (sorted.length < 2) return { seg: sorted, segStart: 0 };
+  let cut = 0;
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1].prompt_tokens ?? (sorted[i - 1].cache_hit_tokens || 0) + (sorted[i - 1].cache_miss_tokens || 0);
+    const cur = sorted[i].prompt_tokens ?? (sorted[i].cache_hit_tokens || 0) + (sorted[i].cache_miss_tokens || 0);
+    if (prev > 0 && cur / prev <= 0.7) cut = i;
+  }
+  return { seg: sorted.slice(cut), segStart: cut };
+}
+function linearFit(y) {
+  const n = y.length;
+  if (n < 3) {
+    const deltas = [];
+    for (let i = 1; i < n; i++) deltas.push(y[i] - y[i - 1]);
+    const delta2 = deltas.length ? deltas.reduce((a, b) => a + b, 0) / deltas.length : 0;
+    const C02 = n ? y[0] : 0;
+    return { C0: C02, delta: delta2, sigma: 0, r2: 0 };
+  }
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (let i = 0; i < n; i++) {
+    sx += i;
+    sy += y[i];
+    sxx += i * i;
+    sxy += i * y[i];
+  }
+  const denom = n * sxx - sx * sx;
+  const delta = denom ? (n * sxy - sx * sy) / denom : 0;
+  const C0 = (sy - delta * sx) / n;
+  let rss = 0, tss = 0;
+  const mean = sy / n;
+  for (let i = 0; i < n; i++) {
+    const pred = C0 + delta * i;
+    rss += (y[i] - pred) ** 2;
+    tss += (y[i] - mean) ** 2;
+  }
+  const sigma = Math.sqrt(rss / n);
+  const r2 = tss ? 1 - rss / tss : 0;
+  return { C0, delta, sigma, r2 };
+}
+function logFit(y) {
+  const n = y.length;
+  if (n < 6) return { C0: y[0] || 0, delta: 0, sigma: 0, r2: -1, a: 0, b: y[0] || 0 };
+  const xs = y.map((_, i) => Math.log(i + 1));
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (let i = 0; i < n; i++) {
+    sx += xs[i];
+    sy += y[i];
+    sxx += xs[i] * xs[i];
+    sxy += xs[i] * y[i];
+  }
+  const denom = n * sxx - sx * sx;
+  const a = denom ? (n * sxy - sx * sy) / denom : 0;
+  const b = (sy - a * sx) / n;
+  let rss = 0, tss = 0;
+  const mean = sy / n;
+  for (let i = 0; i < n; i++) {
+    const pred = a * xs[i] + b;
+    rss += (y[i] - pred) ** 2;
+    tss += (y[i] - mean) ** 2;
+  }
+  const sigma = Math.sqrt(rss / n);
+  const r2 = tss ? 1 - rss / tss : 0;
+  return { C0: b, delta: a, sigma, r2, a, b };
+}
+function fitSegments(history, chatId) {
+  const filtered = chatId ? history.filter((h) => (h.chatId ?? null) === chatId) : history.slice();
+  if (filtered.length < 1) return null;
+  const sorted = [...filtered].sort((a, b) => a.timestamp - b.timestamp);
+  const promptOf = (h) => h.prompt_tokens ?? (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0);
+  const { seg, segStart } = segmentByDrop(sorted);
+  const y = seg.map(promptOf);
+  if (y.length < 6) {
+    const C0 = y[0] || 0;
+    const delta = y.length >= 2 ? (y[y.length - 1] - y[0]) / (y.length - 1) : 0;
+    const mean = y.reduce((a, b) => a + b, 0) / y.length;
+    const sigma = Math.sqrt(y.reduce((a, b) => a + (b - mean) ** 2, 0) / y.length);
+    const r2 = 0;
+    return finalize(seg, sorted, C0, delta, sigma, r2, "recent-mean", segStart);
+  }
+  const lf = linearFit(y);
+  const gf = logFit(y);
+  if (gf.r2 > lf.r2 && gf.r2 > 0.5) {
+    const approxDelta = y.length >= 2 ? y[y.length - 1] - y[y.length - 2] : 0;
+    return finalize(seg, sorted, gf.b, approxDelta, gf.sigma, gf.r2, "log", segStart, { C0: gf.b, sigma: gf.sigma, r2: gf.r2 });
+  }
+  return finalize(seg, sorted, lf.C0, lf.delta, lf.sigma, lf.r2, "linear", segStart);
+}
+function finalize(seg, sorted, C0, delta, sigma, r2, model, segStart, extra) {
+  const hitRates = seg.map((h) => {
+    const ch = h.cache_hit_tokens || 0, cm = h.cache_miss_tokens || 0, tot = ch + cm;
+    return tot ? ch / tot : 0;
+  });
+  const outTokens = seg.map((h) => h.completion_tokens || 0);
+  const hitEwma = ewma(hitRates.slice(-5));
+  const outEwma = ewma(outTokens.slice(-5));
+  let avgIntervalMs = 0;
+  if (sorted.length >= 2) {
+    const diffs = [];
+    for (let i = 1; i < sorted.length; i++) diffs.push(sorted[i].timestamp - sorted[i - 1].timestamp);
+    avgIntervalMs = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+  }
+  return { chatId: seg[0]?.chatId ?? null, C0: Math.max(0, C0), delta: Math.max(0, delta), sigma: Math.max(0, sigma), r2, segStart, segLen: seg.length, model, hitEwma, outEwma, avgIntervalMs };
+}
+function costAt(n, fit, pricing) {
+  const prompt = Math.max(0, fit.C0 + fit.delta * n);
+  const hitTok = prompt * fit.hitEwma;
+  const missTok = prompt * (1 - fit.hitEwma);
+  return (hitTok * pricing.hit + missTok * pricing.miss + fit.outEwma * pricing.output) / 1e6;
+}
+function remainingRounds(budget, fit, pricing) {
+  if (budget <= 0 || !fit) return { R: 0, R_low: 0, R_high: 0 };
+  const pIn = fit.hitEwma * pricing.hit + (1 - fit.hitEwma) * pricing.miss;
+  const a = fit.delta * pIn / 1e6 / 2;
+  const b = fit.C0 * pIn / 1e6 + fit.outEwma * pricing.output / 1e6 + fit.delta * pIn / 1e6 / 2;
+  const solve = (dlt) => {
+    const aa = dlt * pIn / 1e6 / 2;
+    const bb = fit.C0 * pIn / 1e6 + fit.outEwma * pricing.output / 1e6 + dlt * pIn / 1e6 / 2;
+    if (Math.abs(aa) < 1e-12) return bb ? Math.floor(budget / bb) : 0;
+    const disc = bb * bb + 4 * aa * budget;
+    const r = (-bb + Math.sqrt(disc)) / (2 * aa);
+    return Math.max(0, Math.floor(r));
+  };
+  if (Math.abs(a) < 1e-12) {
+    const r = b ? Math.floor(budget / b) : 0;
+    return { R: Math.max(0, r), R_low: Math.max(0, r), R_high: Math.max(0, r) };
+  }
+  const R = solve(fit.delta);
+  const R_low = solve(Math.max(0, fit.delta - fit.sigma));
+  const R_high = solve(fit.delta + fit.sigma);
+  return { R, R_low: Math.min(R, R_low), R_high: Math.max(R, R_high) };
+}
+function ctxLimitRounds(fit, limit) {
+  if (!fit || !limit || fit.delta <= 0) return null;
+  const r = (limit - fit.C0) / fit.delta;
+  return r > 0 ? Math.floor(r) : 0;
+}
+function nextPromptWithBand(fit) {
+  const n = fit.segLen;
+  const p = fit.C0 + fit.delta * n;
+  return { prompt: Math.max(0, p), low: Math.max(0, p - fit.sigma), high: p + fit.sigma };
+}
+function ctxLimitForModel(model) {
+  const m = (model || "").toLowerCase();
+  if (m.includes("128k") || m.includes("128")) return 128e3;
+  if (m.includes("64k") || m.includes("64")) return 64e3;
+  if (m.includes("32k")) return 32e3;
+  try {
+    const w = globalThis.state;
+  } catch {
+  }
+  return 64e3;
+}
+function percentileAbs(value, thresholds, reverse) {
+  const n = thresholds.length;
+  for (let i = 0; i < n; i++) {
+    if (value <= thresholds[i]) {
+      const score = 100 - i / n * 100;
+      return score;
+    }
+  }
+  return 0;
+}
+const ABS_THRESHOLDS = {
+  delta: [800, 1500, 3e3, 5e3, 8e3, 12e3],
+  // tok/轮
+  out: [600, 900, 1300, 1800, 2400, 3200],
+  // 越大越好
+  truncRate: [0.01, 0.03, 0.06, 0.1, 0.15, 0.25],
+  // 越小越好
+  thinkRatio: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+  // 越小越好
+};
+const WEIGHTS = { delta: 0.25, out: 0.2, efficiency: 0.2, hitRate: 0.15, truncRate: 0.1, thinkRatio: 0.1 };
+function computeMetricsForChat(history, chatId) {
+  const filtered = chatId ? history.filter((h) => (h.chatId ?? null) === chatId) : history.slice();
+  if (!filtered.length) return { delta: 0, out: 0, efficiency: 0, hitRate: 0.5, truncRate: 0, thinkRatio: 0 };
+  const fit = fitSegments(history, chatId);
+  const delta = fit?.delta ?? 0;
+  const out = fit?.outEwma ?? filtered.reduce((a, b) => a + (b.completion_tokens || 0), 0) / filtered.length;
+  const totalTok = filtered.reduce((a, b) => a + (b.total_tokens || 0), 0);
+  const sumOut = filtered.reduce((a, b) => a + (b.completion_tokens || 0), 0);
+  const efficiency = totalTok ? sumOut / totalTok : 0;
+  const hitRates = filtered.map((h) => {
+    const ch = h.cache_hit_tokens || 0, cm = h.cache_miss_tokens || 0, tot = ch + cm;
+    return tot ? ch / tot : 0.5;
+  });
+  const hitRate = hitRates.length ? hitRates.slice(-5).reduce((a, b) => a + b, 0) / Math.min(5, hitRates.length) : 0.5;
+  const truncRate = filtered.filter((h) => h.finishReason === "length" || h.isTruncated).length / filtered.length;
+  const thinkRatio = (() => {
+    const sOut = filtered.reduce((a, b) => a + (b.completion_tokens || 0), 0);
+    const sThink = filtered.reduce((a, b) => a + (b.thinkTokens || 0), 0);
+    return sOut ? sThink / sOut : 0;
+  })();
+  return { delta, out, efficiency, hitRate, truncRate, thinkRatio };
+}
+function scoreFromMetrics(m) {
+  const sDelta = percentileAbs(m.delta, ABS_THRESHOLDS.delta);
+  const sOut = percentileAbs(m.out, ABS_THRESHOLDS.out);
+  100 - percentileAbs(m.efficiency, [0.1, 0.15, 0.2, 0.25, 0.3, 0.4].reverse());
+  100 - percentileAbs(m.hitRate, [0.2, 0.35, 0.5, 0.65, 0.8, 0.9]);
+  const sTrunc = percentileAbs(m.truncRate, ABS_THRESHOLDS.truncRate);
+  const sThink = percentileAbs(m.thinkRatio, ABS_THRESHOLDS.thinkRatio);
+  100 - percentileAbs(m.hitRate, [0.2, 0.35, 0.5, 0.65, 0.8, 0.9]);
+  function scoreLargerBetter(v, thr) {
+    for (let i = thr.length - 1; i >= 0; i--) if (v >= thr[i]) return (i + 1) / thr.length * 100;
+    return 0;
+  }
+  const effScore = scoreLargerBetter(m.efficiency, [0.1, 0.15, 0.2, 0.25, 0.3, 0.4]);
+  const hitScore2 = scoreLargerBetter(m.hitRate, [0.2, 0.35, 0.5, 0.65, 0.8, 0.9]);
+  return WEIGHTS.delta * sDelta + WEIGHTS.out * sOut + WEIGHTS.efficiency * effScore + WEIGHTS.hitRate * hitScore2 + WEIGHTS.truncRate * sTrunc + WEIGHTS.thinkRatio * sThink;
+}
+function gradeFromScore(score) {
+  if (score >= 85) return "A";
+  if (score >= 75) return "B";
+  if (score >= 65) return "C";
+  if (score >= 55) return "D";
+  if (score >= 45) return "E";
+  if (score >= 35) return "F";
+  return "G";
+}
+function energyScore(history, chatId) {
+  const metrics = computeMetricsForChat(history, chatId);
+  const score = scoreFromMetrics(metrics);
+  const grade = gradeFromScore(score);
+  return { metrics, score, grade };
+}
+function topPowerChats(history, limit = 10) {
+  const ids = Array.from(new Set(history.map((h) => h.chatId ?? null)));
+  const list = ids.map((id) => {
+    const r = energyScore(history, id);
+    return { chatId: id, grade: r.grade, score: r.score, delta: r.metrics.delta };
+  });
+  list.sort((a, b) => b.delta - a.delta);
+  return list.slice(0, limit);
+}
+function getDoc$2() {
+  return window.parent?.document ?? document;
+}
+function currentChatId() {
+  try {
+    const ctx = globalThis.SillyTavern?.getContext?.();
+    return ctx?.getCurrentChatId?.() || null;
+  } catch {
+    return null;
+  }
+}
+function balanceNum() {
+  const b = state$2.customBalance || state$2.balance?.balance;
+  if (b == null || b === "") return null;
+  const n = parseFloat(String(b));
+  return isNaN(n) ? null : n;
+}
+function renderForecastView() {
+  const doc = getDoc$2();
+  const hist = state$2.history || [];
+  const chatId = currentChatId();
+  const selHist = chatId ? hist.filter((h) => (h.chatId ?? null) === chatId) : hist.slice();
+  const renderCard = (host) => {
+    if (!host) return;
+    if (selHist.length < 3) {
+      host.innerHTML = `<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;">继续对话以启用预测（需 ≥3 轮当前对话样本）</div>`;
+      return;
+    }
+    const fit = fitSegments(hist, chatId);
+    if (!fit) {
+      host.innerHTML = `<div style="padding:12px;color:var(--ds-text-2);font-size:12px;">暂无数据</div>`;
+      return;
+    }
+    const bal = balanceNum();
+    const model = selHist[selHist.length - 1]?.model || "deepseek-v4-flash";
+    const pricing = getPricing$1(model, state$2.settings);
+    const p = pricing.offpeak;
+    const R = bal != null ? remainingRounds(bal, fit, p) : { R: 0, R_low: 0, R_high: 0 };
+    const ctxLim = ctxLimitForModel(model);
+    const rCtx = ctxLimitRounds(fit, ctxLim);
+    const rShow = rCtx != null ? Math.min(R.R, rCtx) : R.R;
+    const next = nextPromptWithBand(fit);
+    const hitPct = (fit.hitEwma * 100).toFixed(1);
+    const deltaTok = Math.round(fit.delta);
+    const cNext = costAt(fit.segLen, fit, p);
+    host.innerHTML = `<div style="line-height:1.6;">
+      <div style="font-size:13px;font-weight:700;color:var(--ds-text);">预计还可 <span style="color:var(--ds-green);">~${rShow} 轮</span>（余额口径）· ±${Math.abs(R.R_high - R.R_low) / 2 | 0}</div>
+      <div style="font-size:11px;color:var(--ds-text-2);margin-top:4px;">每轮新增 ≈ ${deltaTok.toLocaleString()} tok · 命中率(近5) ${hitPct}% · 下一轮成本 ≈ ¥${cNext.toFixed(4)} · 下一轮 prompt ≈ ${Math.round(next.prompt).toLocaleString()} tok</div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <div style="flex:1;background:var(--ds-card);border-radius:6px;height:8px;position:relative;overflow:hidden;"><div style="position:absolute;left:0;top:0;bottom:0;width:${Math.min(100, R.R / Math.max(10, R.R + (rCtx || 0)) * 100)}%;background:var(--ds-green);"></div></div>
+        <div style="flex:1;background:var(--ds-card);border-radius:6px;height:8px;position:relative;overflow:hidden;"><div style="position:absolute;left:0;top:0;bottom:0;width:${rCtx != null ? Math.min(100, rCtx / Math.max(10, rCtx) * 100) : 0}%;background:${rCtx != null && rCtx < rShow ? "var(--ds-red)" : "var(--ds-purple-bg)"};"></div></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ds-text-3);margin-top:4px;"><span>R(余额) ${R.R}</span><span>R(ctx ${ctxLim / 1e3 | 0}k) ${rCtx ?? "—"}</span></div>
+      ${rCtx != null && rCtx < rShow ? `<div style="font-size:11px;color:var(--ds-red);margin-top:6px;">⚠ ${rCtx} 轮后 prompt 达上限 ${ctxLim.toLocaleString()} tok，建议压缩上下文</div>` : ""}
+    </div>`;
+  };
+  renderCard(doc.getElementById("aus-forecast-card"));
+  renderCard(doc.getElementById("aus-forecast-card-overview"));
+  const badgeHost = doc.getElementById("aus-energy-badge");
+  if (badgeHost) {
+    const chatId2 = currentChatId();
+    const r = energyScore(hist, chatId2);
+    const grade = r.grade;
+    const colors = { A: "#16a34a", B: "#22c55e", C: "#84cc16", D: "#eab308", E: "#f97316", F: "#ef4444", G: "#dc2626" };
+    const grades = ["A", "B", "C", "D", "E", "F", "G"];
+    const idx = grades.indexOf(grade);
+    badgeHost.innerHTML = `<div style="display:flex;gap:12px;align-items:center;">
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        ${grades.map((g, i) => `<div style="display:flex;align-items:center;gap:6px;"><span style="width:28px;height:22px;border-radius:4px;background:${colors[g]};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;">${g}</span>${i === idx ? `<span style="color:${colors[g]};font-weight:700;">◀ 当前</span>` : ""}</div>`).join("")}
+      </div>
+      <div style="flex:1;display:grid;gap:6px;font-size:11px;">
+        <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">增速 Δ</span><span style="font-weight:600;">${Math.round(r.metrics.delta).toLocaleString()} tok/轮</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输出</span><span style="font-weight:600;">${Math.round(r.metrics.out).toLocaleString()} tok/轮</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">效率</span><span style="font-weight:600;">${(r.metrics.efficiency * 100).toFixed(1)}%</span></div>
+        <div style="font-size:10px;color:var(--ds-text-3);margin-top:4px;">综合评分 ${r.score.toFixed(0)} · ${grade} 级 · 样本 ${chatId2 ? hist.filter((h) => (h.chatId ?? null) === chatId2).length : hist.length} 轮</div>
+      </div>
+    </div>`;
+  }
+  renderForecastChart(hist, chatId);
+  renderSensitivity(hist, chatId);
+  renderCompare(hist);
+}
+let forecastChart = null;
+async function renderForecastChart(history, chatId) {
+  const doc = getDoc$2();
+  const el = doc.getElementById("aus-forecast-chart");
+  if (!el) return;
+  if (!history.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--ds-text-3);">暂无数据</div>';
+    return;
+  }
+  const fit = fitSegments(history, chatId);
+  if (!fit || fit.segLen < 1) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--ds-text-3);">样本不足</div>';
+    return;
+  }
+  const sorted = [...history].filter((h) => (h.chatId ?? null) === chatId).sort((a, b) => a.timestamp - b.timestamp);
+  const y = sorted.map((h) => h.prompt_tokens ?? (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0));
+  const fitLine = y.map((_, i) => fit.C0 + fit.delta * (fit.segStart + i >= sorted.length - fit.segLen ? fit.segStart + i - (sorted.length - fit.segLen) : 0));
+  const futureN = 10;
+  const pred = [], low = [], high = [];
+  for (let k = 1; k <= futureN; k++) {
+    const n = fit.segLen + k - 1;
+    const p = fit.C0 + fit.delta * n;
+    pred.push(p);
+    low.push(Math.max(0, p - fit.sigma));
+    high.push(p + fit.sigma);
+  }
+  const labels = sorted.map((_, i) => `#${i + 1}`).concat(Array.from({ length: futureN }, (_, i) => `+${i + 1}`));
+  const histData = y.concat(Array(futureN).fill(null));
+  const predData = Array(y.length).fill(null).concat(pred);
+  const lowData = Array(y.length).fill(null).concat(low);
+  const highData = Array(y.length).fill(null).concat(high);
+  const ctxLim = ctxLimitForModel(sorted[sorted.length - 1]?.model || "deepseek-v4-flash");
+  const ec = await import("./core-CNISqr4u.js");
+  const { LineChart } = await import("./charts-vsOc2fZ2.js");
+  const { GridComponent, TooltipComponent } = await import("./components-CKoHC6Fi.js");
+  const { CanvasRenderer } = await import("./renderers-ua0LGD8C.js");
+  ec.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
+  if (forecastChart) try {
+    forecastChart.dispose();
+  } catch {
+  }
+  el.innerHTML = "";
+  el.style.height = "260px";
+  forecastChart = ec.init(el);
+  const cText3 = getComputedStyle(doc.getElementById("aus-panel") || doc.documentElement).getPropertyValue("--ds-text-3") || "#9CA3AF";
+  const cBorder = getComputedStyle(doc.getElementById("aus-panel") || doc.documentElement).getPropertyValue("--ds-border") || "#E5E7EB";
+  forecastChart.setOption({
+    backgroundColor: "transparent",
+    tooltip: { trigger: "axis" },
+    grid: { left: 48, right: 16, top: 16, bottom: 24 },
+    xAxis: { type: "category", data: labels, axisLine: { lineStyle: { color: cBorder } }, axisLabel: { color: cText3, fontSize: 10, interval: Math.ceil(labels.length / 12) - 1 } },
+    yAxis: { type: "value", axisLabel: { color: cText3, fontSize: 10 }, splitLine: { lineStyle: { color: cBorder } } },
+    series: [
+      { name: "历史 prompt", type: "line", data: histData, smooth: true, symbol: "circle", symbolSize: 3, lineStyle: { width: 1.5 }, itemStyle: { color: "#6366F1" } },
+      { name: "拟合", type: "line", data: fitLine.concat(Array(futureN).fill(null)), lineStyle: { type: "dashed", width: 1.5, color: "#9CA3AF" }, symbol: "none" },
+      { name: "预测", type: "line", data: predData, lineStyle: { width: 1.8, color: "#0BA25E" }, symbol: "none" },
+      { name: "置信下", type: "line", data: lowData, lineStyle: { width: 0 }, symbol: "none", areaStyle: { color: "rgba(16,185,129,0.12)" } },
+      { name: "置信上", type: "line", data: highData, lineStyle: { width: 0 }, symbol: "none" },
+      { type: "line", data: Array(labels.length).fill(ctxLim), lineStyle: { type: "dashed", color: "#ef4444" }, symbol: "none", markLine: { data: [{ yAxis: ctxLim }] } }
+    ]
+  }, true);
+}
+function renderSensitivity(history, chatId) {
+  const host = getDoc$2().getElementById("aus-forecast-sensitivity");
+  if (!host) return;
+  const hitInit = (() => {
+    const fit = fitSegments(history, chatId);
+    return fit ? Math.round(fit.hitEwma * 100) : 50;
+  })();
+  host.innerHTML = `<div style="display:flex;align-items:center;gap:8px;"><span style="font-size:11px;color:var(--ds-text-2);">假设命中率</span><input id="aus-sens-hit" type="range" min="0" max="100" value="${hitInit}" style="flex:1;"><span id="aus-sens-hit-val" style="font-weight:600;min-width:36px;text-align:right;">${hitInit}%</span></div><div id="aus-sens-result" style="font-size:11px;color:var(--ds-text-2);margin-top:6px;"></div>`;
+  const slider = host.querySelector("#aus-sens-hit");
+  const valEl = host.querySelector("#aus-sens-hit-val");
+  const resEl = host.querySelector("#aus-sens-result");
+  const update = () => {
+    const h = Number(slider.value) / 100;
+    if (valEl) valEl.textContent = slider.value + "%";
+    const fit = fitSegments(history, chatId);
+    if (!fit) {
+      if (resEl) resEl.textContent = "样本不足";
+      return;
+    }
+    const bal = balanceNum();
+    if (bal == null) {
+      if (resEl) resEl.textContent = "未设置余额，无法估算剩余轮数";
+      return;
+    }
+    const tmp = { ...fit, hitEwma: h };
+    const model = history.filter((hh) => (hh.chatId ?? null) === chatId).slice(-1)[0]?.model || "deepseek-v4-flash";
+    const pricing = getPricing$1(model, state$2.settings);
+    const R = remainingRounds(bal, tmp, pricing.offpeak);
+    if (resEl) resEl.textContent = `命中 ${slider.value}% 时预计剩余 ${R.R} 轮（±${Math.abs(R.R_high - R.R_low) / 2 | 0}），降 10% 约少 ${Math.abs(R.R - remainingRounds(bal, { ...fit, hitEwma: Math.max(0, h - 0.1) }, pricing.offpeak).R)} 轮`;
+  };
+  if (slider) slider.oninput = update;
+  update();
+}
+function renderCompare(history) {
+  const host = getDoc$2().getElementById("aus-forecast-compare");
+  if (!host) return;
+  const list = topPowerChats(history, 8);
+  if (!list.length) {
+    host.innerHTML = `<div style="padding:12px;color:var(--ds-text-3);font-size:11px;">暂无对话</div>`;
+    return;
+  }
+  host.innerHTML = list.map((r) => {
+    const name = r.chatId || "全部/未分组";
+    const pct = Math.max(6, Math.min(100, r.delta / 8e3 * 100));
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--ds-border);font-size:11px;">
+      <span style="min-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</span>
+      <span style="width:18px;height:18px;border-radius:999px;background:${gradeColor(r.grade)};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;">${r.grade}</span>
+      <span style="flex:1;height:6px;background:var(--ds-card);border-radius:999px;position:relative;overflow:hidden;"><span style="position:absolute;left:0;top:0;bottom:0;width:${pct}%;background:var(--ds-purple-bg);"></span></span>
+      <span style="min-width:60px;text-align:right;">${Math.round(r.delta).toLocaleString()} tok/轮</span>
+    </div>`;
+  }).join("");
+  function gradeColor(g) {
+    const m = { A: "#16a34a", B: "#22c55e", C: "#84cc16", D: "#eab308", E: "#f97316", F: "#ef4444", G: "#dc2626" };
+    return m[g] || "#9CA3AF";
+  }
+}
+function initForecastView() {
+  const doc = getDoc$2();
+  doc.addEventListener("click", (e) => {
+  });
+}
 function getDoc$1() {
   return window.parent?.document ?? document;
 }
@@ -5026,6 +5473,10 @@ function refreshUI() {
     renderHistory(doc, s);
     renderOverview();
     renderStatsView();
+    try {
+      renderForecastView();
+    } catch {
+    }
   } catch {
   }
 }
@@ -5323,7 +5774,7 @@ function switchView(view) {
     if (v === view) el.classList.add("active");
     else el.classList.remove("active");
   });
-  const titles = { overview: "用量概览", stats: "用量统计", history: "历史记录", settings: "设置", help: "使用说明", about: "关于" };
+  const titles = { overview: "用量概览", stats: "用量统计", history: "历史记录", forecast: "趋势预测", settings: "设置", help: "使用说明", about: "关于" };
   const titleEl = doc.getElementById("aus-page-title");
   if (titleEl) titleEl.textContent = titles[view] || "";
   refreshUI();
@@ -5342,6 +5793,14 @@ function switchView(view) {
         } else {
           renderStatsView();
         }
+      } catch {
+      }
+    }, 60);
+  }
+  if (view === "forecast") {
+    setTimeout(() => {
+      try {
+        renderForecastView();
       } catch {
       }
     }, 60);
@@ -5402,6 +5861,7 @@ function createPanel() {
           <div class="aus-nav-item active" data-nav="overview" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">◈</span><span class="aus-nav-label">用量概览</span></div>
           <div class="aus-nav-item" data-nav="stats" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">▦</span><span class="aus-nav-label">用量统计</span></div>
           <div class="aus-nav-item" data-nav="history" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">≡</span><span class="aus-nav-label">历史记录</span></div>
+          <div class="aus-nav-item" data-nav="forecast" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">⬈</span><span class="aus-nav-label">趋势预测</span></div>
         </div>
         <div style="flex:1;"></div>
         <div class="aus-nav-group" style="display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--ds-border);padding-top:8px;">
@@ -5443,8 +5903,8 @@ function createPanel() {
                 <span>按日聚合 Token（深绿=高用量，展示近 2 年）</span>
                 <span style="color:var(--ds-text-2);">悬停查看日期</span>
               </div>
+              <div id="aus-forecast-card-overview" class="ds-card" style="margin-top:12px;"></div>
             </div>
-           </div>
            <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span><span style="font-size:10px;">▼</span></div>
@@ -5489,6 +5949,15 @@ function createPanel() {
             <div id="aus-model-trends" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px;">
               <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:var(--ds-text);">模型 Token 趋势</span><div style="display:flex;gap:6px;"><div id="aus-modeltrends-x-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;"><span id="aus-modeltrends-x-label-token">每日</span> ▼</div></div></div><div id="aus-modeltrends-x-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-model-token" style="height:220px;"></div></div>
               <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:11px;font-weight:600;color:var(--ds-text);">模型调用次数趋势</span><div style="display:flex;gap:6px;"><div id="aus-modeltrends-x-req" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;"><span id="aus-modeltrends-x-label-req">每日</span> ▼</div></div></div><div id="aus-modeltrends-x-drop-req" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-model-req" style="height:220px;"></div></div>
+            </div>
+          </div>
+          <div data-view="forecast" style="display:none;">
+            <div style="display:grid;gap:12px;">
+              <div id="aus-forecast-card" class="ds-card"></div>
+              <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">能耗标识（RP 能耗效率）</div><div id="aus-energy-badge"></div></div>
+              <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">预测趋势（输入 token 按轮次 + 拟合/置信带/上限）</div><div id="aus-forecast-chart" style="height:260px;"></div></div>
+              <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">敏感度 · 假设命中率</div><div id="aus-forecast-sensitivity"></div></div>
+              <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">对比 · 最耗对话 Top</div><div id="aus-forecast-compare"></div></div>
             </div>
           </div>
           <div data-view="history" style="display:none;">
@@ -5664,6 +6133,10 @@ function createPanel() {
   bindHistoryCompare();
   initStatsView();
   initExtraCharts();
+  try {
+    initForecastView();
+  } catch {
+  }
   switchView("overview");
   refreshUI();
 }
