@@ -54,15 +54,24 @@ function sanitizeFullRequest(fr: any): any {
   return keep;
 }
 
+function clampMessage(m: any): any {
+  if (!m || typeof m !== 'object') return m;
+  const c = typeof m.content === 'string'
+    ? (m.content.length > 600 ? m.content.slice(0, 600) + '…[截断]' : m.content)
+    : m.content;
+  return { ...m, content: c };
+}
+
 function pruneDetails() {
   if (!state.history || !state.history.length) return;
   const hs = [...state.history].sort((a: any, b: any) => b.timestamp - a.timestamp);
   for (let i = 0; i < hs.length; i++) {
     const e: any = hs[i];
+    // fullResponse 对统计/展示无必要，一律清除（响应统计已在 raw_usage）
+    delete e.fullResponse;
     if (i >= DETAIL_KEEP) {
       delete e.messages;
       delete e.fullRequest;
-      delete e.fullResponse;
     } else {
       // 保留条也裁剪 fullRequest 防止大 messages 落盘
       if (e.fullRequest && typeof e.fullRequest === 'object' && Array.isArray(e.fullRequest.messages)) {
@@ -190,10 +199,10 @@ export const repository = {
     const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || 0;
     lu.duration = duration;
     lu.tokenRate = duration - (ttft || 0) > 50 && comp > 0 ? Math.round((comp / (duration - (ttft || 0))) * 1000) : 0;
-    lu.ttft = ttft || 0; lu.thinkTime = thinkTime || 0; lu.thinkTokens = thinkTokens; lu.messages = messages;
+    lu.ttft = ttft || 0; lu.thinkTime = thinkTime || 0; lu.thinkTokens = thinkTokens; lu.messages = (messages || []).map(clampMessage);
     const c: any = calcCost({ timestamp: lu.timestamp, model, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp }, state.settings as any);
     lu.cost = c.total; lu.input_cost = c.input; lu.output_cost = c.output; lu.priceType = c.priceType;
-    lu.raw_usage = usage; lu.fullRequest = fullRequest; lu.fullResponse = fullResponse;
+    lu.raw_usage = usage; lu.fullRequest = fullRequest; lu.fullResponse = null;
     // 记录所属对话，便于按对话过滤
     const chatId = getCurrentChatId();
     const chatName = getCurrentChatName();
@@ -204,7 +213,7 @@ export const repository = {
       timestamp: lu.timestamp, model, prompt_tokens: hit + miss, cache_hit_tokens: hit, cache_miss_tokens: miss,
       completion_tokens: comp, total_tokens: total, input_cost: lu.input_cost, output_cost: lu.output_cost,
       cost: lu.cost, cache_hit_rate: (hit + miss) > 0 ? (hit / (hit + miss) * 100) : 0, priceType: lu.priceType,
-      raw_usage: usage, messages, duration, ttft, thinkTime, thinkTokens, tokenRate: lu.tokenRate, fullRequest, fullResponse,
+      raw_usage: usage, messages: (messages || []).map(clampMessage), duration, ttft, thinkTime, thinkTokens, tokenRate: lu.tokenRate, fullRequest, fullResponse: null,
       chatId, chatName,
     };
     log.debug('addEntry 即将写入', { model: entry.model, total: entry.total_tokens });
@@ -273,21 +282,12 @@ export const repository = {
     if (next.output_cost !== undefined) state.output_cost = next.output_cost as any;
     if (next.rounds !== undefined) state.rounds = next.rounds as any;
     if (next.startTime !== undefined) state.startTime = next.startTime as any;
-    // 兼容旧 saves 导入：合并至单一历史
+    // 兼容旧 saves 导入：合并至单一历史（聚合仅在外部未提供时自算，避免重复累加）
     if (next.saves) {
       let all: any[] = [...(state.history || [])];
       for (const s of Object.values(next.saves as any)) {
         const h = (s as any).history || [];
         all = all.concat(h);
-        state.total_tokens += (s as any).total_tokens || 0;
-        state.total_cost += (s as any).total_cost || 0;
-        state.input_tokens += (s as any).input_tokens || 0;
-        state.output_tokens += (s as any).output_tokens || 0;
-        state.cache_hit_tokens += (s as any).cache_hit_tokens || 0;
-        state.cache_miss_tokens += (s as any).cache_miss_tokens || 0;
-        state.input_cost += (s as any).input_cost || 0;
-        state.output_cost += (s as any).output_cost || 0;
-        state.rounds += (s as any).rounds || 0;
       }
       all.sort((a: any, b: any) => b.timestamp - a.timestamp);
       const keyOf = (h: any) => `${h.timestamp}|${h.model||''}|${h.total_tokens||0}`;
@@ -299,6 +299,18 @@ export const repository = {
         appendHistoryCold(overflow).catch(() => {});
       }
       state.history = dedup.slice(0, MAX_HISTORY);
+      if (next.total_tokens === undefined) {
+        let tt = 0, tc = 0, it = 0, ot = 0, ch = 0, cm = 0, ic = 0, oc = 0;
+        for (const h of state.history) {
+          tt += h.total_tokens || 0; tc += h.cost || 0;
+          it += (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0); ot += h.completion_tokens || 0;
+          ch += h.cache_hit_tokens || 0; cm += h.cache_miss_tokens || 0;
+          ic += h.input_cost || 0; oc += h.output_cost || 0;
+        }
+        state.total_tokens = tt as any; state.total_cost = tc as any; state.input_tokens = it as any;
+        state.output_tokens = ot as any; state.cache_hit_tokens = ch as any; state.cache_miss_tokens = cm as any;
+        state.input_cost = ic as any; state.output_cost = oc as any; state.rounds = state.history.length as any;
+      }
     }
     if (next.settings !== undefined) {
       const def: any = defaultSettings();
@@ -337,7 +349,8 @@ export const repository = {
     const filtered = (state.history || []).filter((h: any) => {
       const isZero = h.total_tokens === 0 && h.prompt_tokens === 0 && h.completion_tokens === 0 && h.cache_hit_tokens === 0 && h.cache_miss_tokens === 0;
       const isFakeTokenCount = !!(h.raw_usage && (h.raw_usage as any)._from_token_count);
-      return !(isZero || isFakeTokenCount);
+      const isDebug = (h as any)._debug === true;
+      return !(isZero || isFakeTokenCount || isDebug);
     });
     if (filtered.length !== before) {
       state.history = filtered as any;

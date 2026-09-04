@@ -73,11 +73,23 @@ export function saveExtensionSettings(data: any) {
 }
 
 let saveTimer: any = null;
+let pendingNext: any = null;
 export function saveHot(patch: Record<string, any>) {
   const cur = getExtensionSettings() || {};
   const next = { ...cur, ...patch, _updated: Date.now() };
+  pendingNext = next;
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => saveExtensionSettings(next), 300);
+  saveTimer = setTimeout(() => { saveTimer = null; pendingNext = null; saveExtensionSettings(next); }, 300);
+}
+
+export function flushSaveHot() {
+  if (!saveTimer && !pendingNext) return;
+  if (saveTimer) { try { clearTimeout(saveTimer); } catch {} saveTimer = null; }
+  if (pendingNext) {
+    const next = pendingNext;
+    pendingNext = null;
+    saveExtensionSettings(next);
+  }
 }
 
 export async function migrateIfNeeded(): Promise<void> {

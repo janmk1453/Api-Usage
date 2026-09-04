@@ -20,8 +20,6 @@ let collapsed = false;
 
 export function refreshUI() {
   try {
-    if (!panelOpen && !panelCreated) return;
-    // 面板关闭时仅在 openPanel 时强制刷新，此处跳过 heavy 渲染
     if (!panelOpen) return;
     const doc = getDoc();
     const s: any = getSelectedSave();
@@ -453,17 +451,16 @@ export function createPanel() {
     </div>
     </div>
   `;
-  // 兼容旧遮罩：保留节点但永久隐藏，DeepSeek 方案无遮罩
+  // 兼容旧遮罩：覆盖式抽屉遮罩，点击关闭
   const sbOverlay = doc.createElement('div');
   sbOverlay.id = 'aus-sidebar-overlay';
-  sbOverlay.style.cssText = 'display:none !important;';
+  sbOverlay.style.cssText = 'display:none;';
   panel.appendChild(sbOverlay);
   doc.body.appendChild(overlay);
   doc.body.appendChild(panel);
   try { applyTheme(theme); } catch {}
   try {
     const p = (window.parent as any) || window;
-    p.addEventListener('scroll', positionPanel, { capture: true, passive: true } as any);
     p.addEventListener('resize', positionPanel, { passive: true } as any);
   } catch {}
   doc.getElementById('aus-panel-close')?.addEventListener('click', closePanel);
@@ -473,17 +470,29 @@ export function createPanel() {
       if (v) switchView(v as any);
     });
   });
-  // DeepSeek 方案：窄屏 display:none/block 瞬时切换，宽屏 60/220 折叠；无遮罩无动画
+  // DeepSeek 方案：窄屏覆盖式抽屉 + 遮罩点外关闭，宽屏 60/220 折叠；无动画瞬时切换
   let mobileOpen = false;
   const isMobile = () => {
-    try { return ((window.parent as any)?.innerWidth ?? window.innerWidth) <= 760; } catch { return window.innerWidth <= 760; }
+    try {
+      const body = doc.getElementById('aus-panel-body') as HTMLElement | null;
+      if (body && body.clientWidth > 0) return body.clientWidth <= 760;
+      return ((window.parent as any)?.innerWidth ?? window.innerWidth) <= 760;
+    } catch { return window.innerWidth <= 760; }
   };
   const syncMobileSidebar = () => {
     const sb = doc.getElementById('aus-sidebar') as HTMLElement | null;
     if (!sb) return;
+    const ov = doc.getElementById('aus-sidebar-overlay') as HTMLElement | null;
     if (isMobile()) {
       if (mobileOpen) sb.classList.add('is-open');
       else sb.classList.remove('is-open');
+      if (ov) {
+        ov.classList.toggle('is-open', mobileOpen);
+        ov.style.display = '';
+        if (mobileOpen) {
+          ov.onclick = () => { mobileOpen = false; syncMobileSidebar(); };
+        } else ov.onclick = null;
+      }
       // 窄屏下强制还原为完整导航（避免宽屏折叠残留的 inline 隐藏）
       const brand = doc.getElementById('aus-brand') as HTMLElement | null;
       if (brand) brand.style.removeProperty('display');
@@ -500,6 +509,11 @@ export function createPanel() {
       }
     } else {
       sb.classList.remove('is-open');
+      if (ov) {
+        ov.classList.remove('is-open');
+        ov.style.display = 'none';
+        ov.onclick = null;
+      }
     }
   };
   const applyCollapsed = (v: boolean) => {
@@ -538,10 +552,15 @@ export function createPanel() {
   });
   try {
     if (isMobile()) { mobileOpen = false; syncMobileSidebar(); }
+    let rzT: any = null;
     const onResize = () => {
-      if (isMobile()) syncMobileSidebar();
-      else { mobileOpen = false; syncMobileSidebar(); applyCollapsed(collapsed); }
-      try { positionPanel(); } catch {}
+      if (rzT) return;
+      rzT = setTimeout(() => {
+        rzT = null;
+        if (isMobile()) syncMobileSidebar();
+        else { mobileOpen = false; syncMobileSidebar(); applyCollapsed(collapsed); }
+        try { positionPanel(); } catch {}
+      }, 150);
     };
     (window.parent as any)?.addEventListener('resize', onResize);
     window.addEventListener('resize', onResize);
@@ -575,7 +594,7 @@ export function openPanel() {
   pn.style.display = 'flex';
   try {
     const sb = doc.getElementById('aus-sidebar') as HTMLElement | null;
-    const isMobile = (()=>{ try{ return ((window.parent as any)?.innerWidth ?? window.innerWidth) <= 760; } catch{ return window.innerWidth <=760; }})();
+    const isMobile = (()=>{ try{ const b = doc.getElementById('aus-panel-body') as HTMLElement | null; if (b && b.clientWidth > 0) return b.clientWidth <= 760; return ((window.parent as any)?.innerWidth ?? window.innerWidth) <= 760; } catch{ return window.innerWidth <=760; }})();
     if (sb) {
       if (isMobile) {
         // 窄屏默认隐藏，等待汉堡呼出
@@ -597,4 +616,3 @@ export function closePanel() {
   panelOpen = false;
 }
 export function togglePanel() { if (panelOpen) closePanel(); else openPanel(); }
-export function injectPanel() { createPanel(); }

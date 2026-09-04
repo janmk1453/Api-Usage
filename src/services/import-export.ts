@@ -5,7 +5,7 @@ import { repository } from '../data/repository';
 function isUnsafeKey(k: string) { return k === '__proto__' || k === 'constructor' || k === 'prototype'; }
 
 function stripHistory(history: any[]) {
-  return history.map((h: any) => {
+  return history.filter((h: any) => h && (h as any)._debug !== true).map((h: any) => {
     const c = { ...h };
     delete c.messages; delete c.fullRequest; delete c.fullResponse;
     return c;
@@ -16,6 +16,8 @@ export function exportHistory() {
   const doc = (window.parent as any)?.document ?? document;
   const d = new Date();
   const pad = (n: number) => (n < 10 ? '0' + n : '' + n);
+  const safeSettings: any = JSON.parse(JSON.stringify(state.settings || {}));
+  if (safeSettings.webdav) safeSettings.webdav = { url: '', username: '', path: '', proxy: '' };
   const payload = {
     format: 'deepseek-stat-export' as const,
     version: EXPORT_FORMAT_VERSION,
@@ -35,7 +37,7 @@ export function exportHistory() {
       startTime: state.startTime,
       balance: state.balance,
       customBalance: state.customBalance,
-      settings: JSON.parse(JSON.stringify(state.settings)),
+      settings: safeSettings,
       messageCount: state.messageCount,
       // 兼容旧多存档导入：额外提供 saves 包装
       saves: { default: { name: 'default', history: stripHistory(state.history), total_tokens: state.total_tokens, total_cost: state.total_cost, input_tokens: state.input_tokens, output_tokens: state.output_tokens, cache_hit_tokens: state.cache_hit_tokens, cache_miss_tokens: state.cache_miss_tokens, input_cost: state.input_cost, output_cost: state.output_cost, rounds: state.rounds, startTime: state.startTime } },
@@ -70,9 +72,9 @@ export function normalizeImportData(raw: any): { data?: any; error?: string; ski
   let skipped = 0;
   for (const h of history) {
     if (!h || typeof h !== 'object' || h.timestamp === undefined || isNaN(h.timestamp)) { skipped++; continue; }
-    if (isUnsafeKey(String(h.model))) continue;
     const nh: any = { timestamp: h.timestamp, model: h.model || 'unknown', prompt_tokens: h.prompt_tokens || 0, cache_hit_tokens: h.cache_hit_tokens || 0, cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0, total_tokens: h.total_tokens || 0, priceType: h.priceType || 'old' };
-    for (const f of Object.keys(h)) { if (isUnsafeKey(f)) continue; if (nh[f] === undefined) nh[f] = h[f]; }
+    const SKIP_IMPORT = new Set(['messages', 'fullRequest', 'fullResponse', 'raw_usage']);
+    for (const f of Object.keys(h)) { if (isUnsafeKey(f) || SKIP_IMPORT.has(f)) continue; if (nh[f] === undefined) nh[f] = h[f]; }
     cleaned.push(nh);
   }
   cleaned.sort((a, b) => b.timestamp - a.timestamp);

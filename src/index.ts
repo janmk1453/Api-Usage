@@ -68,6 +68,7 @@ export async function onInstall() { log.debug('installed'); try { const { loadHo
 export async function onUpdate() { log.debug('updated'); }
 export async function onDelete() {
   log.debug('deleted');
+  try { const { flushSaveHot } = await import('./store/persistence'); flushSaveHot(); } catch {}
   try {
     const doc = getDoc();
     doc.getElementById('aus-overlay')?.remove();
@@ -91,6 +92,7 @@ export async function onDelete() {
 export function onEnable() { log.debug('enabled'); try { import('./services/interception').then(m=>m.installInterception()); } catch {} try { import('./services/balance').then(m=> (m as any).restartBalanceTimer?.()); } catch {} }
 export async function onDisable() {
   log.debug('disabled');
+  try { const { flushSaveHot } = await import('./store/persistence'); flushSaveHot(); } catch {}
   try { import('./services/interception').then(m=> (m as any).uninstallInterception?.()); } catch {}
   try {
     const doc = getDoc();
@@ -123,7 +125,7 @@ async function init() {
   else window.setTimeout(mount, 1500);
   try {
     const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
-    ctx?.eventSource?.on?.(ctx?.event_types?.APP_READY, () => { try { createPanel(); } catch {} try { ensureWandEntry(); } catch {} try { refreshUI(); } catch {} try { const mod = (globalThis as any).ApiUsageStatInterceptor ? null : null; } catch {} try { import('./services/interception').then(m=>m.installInterception()); } catch {} });
+    ctx?.eventSource?.on?.(ctx?.event_types?.APP_READY, () => { try { createPanel(); } catch {} try { ensureWandEntry(); } catch {} try { refreshUI(); } catch {} try { import('./services/interception').then(m=>m.installInterception()); } catch {} });
     ctx?.eventSource?.on?.(ctx?.event_types?.APP_INITIALIZED, () => { try { ensureWandEntry(); } catch {} try { import('./services/interception').then(m=>m.installInterception()); } catch {} });
     ctx?.eventSource?.on?.(ctx?.event_types?.CHAT_CHANGED, () => { try { if ((state.settings as any).historyScope === 'current') refreshUI(); } catch {} });
     // ST 未就绪时轮询重试安装拦截（最多 6 次，间隔 1.5s，避免生成期间频繁打扰）
@@ -138,6 +140,7 @@ async function init() {
     }, 1500);
   } catch {}
   try { getDoc().addEventListener('keydown', (e: KeyboardEvent) => { if (e.key === 'Escape') closePanel(); }); } catch {}
+  try { window.addEventListener('pagehide', () => { try { import('./store/persistence').then(m => (m as any).flushSaveHot?.()); } catch {} }); } catch {}
   (globalThis as any).ApiUsageStat = { MODULE, refreshUI, updatePeakDot, openPanel, closePanel, togglePanel, state, injectWandEntry: ensureWandEntry };
 }
 

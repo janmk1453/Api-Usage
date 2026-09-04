@@ -69,7 +69,7 @@ async function webdavPut(text: string) {
 }
 
 function stripHistory(history: any[]) {
-  return history.map((h: any) => { const c = { ...h }; delete c.messages; delete c.fullRequest; delete c.fullResponse; return c; });
+  return history.filter((h: any) => h && (h as any)._debug !== true).map((h: any) => { const c = { ...h }; delete c.messages; delete c.fullRequest; delete c.fullResponse; return c; });
 }
 
 function buildLocalBundle(): any {

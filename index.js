@@ -116,6 +116,56 @@ function getHistoryForDisplay() {
   if (!cur) return state$2.history || [];
   return (state$2.history || []).filter((h) => h.chatId === cur);
 }
+function getMergedStats() {
+  return getSelectedSave();
+}
+function pruneHistoryDetails() {
+  if (!state$2.history || !state$2.history.length) return;
+  const hs = [...state$2.history].sort((a, b) => b.timestamp - a.timestamp);
+  for (let i = 0; i < hs.length; i++) {
+    const e = hs[i];
+    if (i >= DETAIL_KEEP) {
+      delete e.messages;
+      delete e.fullRequest;
+      delete e.fullResponse;
+    } else if (e.fullRequest && typeof e.fullRequest === "object" && Array.isArray(e.fullRequest.messages)) {
+      const keep = {};
+      for (const k of ["model", "stream", "temperature", "max_tokens", "top_p", "stream_options"]) if (e.fullRequest[k] !== void 0) keep[k] = e.fullRequest[k];
+      keep.messages_length = e.fullRequest.messages.length;
+      e.fullRequest = keep;
+    }
+  }
+}
+function createNewSave() {
+  return "default";
+}
+function deleteSave(_key) {
+}
+function calculateRemainingRounds(stats) {
+  const bal = state$2.customBalance !== null && state$2.customBalance !== "" ? parseFloat(state$2.customBalance) : state$2.balance?.balance ? parseFloat(state$2.balance.balance) : null;
+  if (bal === null || isNaN(bal)) return null;
+  const s = stats || getSelectedSave();
+  if (!s) return null;
+  const history = (s.history || []).filter((h) => typeof h.model === "string" && h.model.toLowerCase().indexOf("deepseek") === 0);
+  if (!history.length) return null;
+  const alpha = 0.3;
+  let ewma = history[history.length - 1].cost || 0;
+  for (let i = history.length - 2; i >= 0; i--) ewma = alpha * (history[i].cost || 0) + (1 - alpha) * ewma;
+  if (ewma <= 0) return null;
+  return Math.floor(bal / ewma);
+}
+const index = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  calculateRemainingRounds,
+  createNewSave,
+  deleteSave,
+  getCurrentChatIdForStore,
+  getHistoryForDisplay,
+  getMergedStats,
+  getSelectedSave,
+  pruneHistoryDetails,
+  state: state$2
+}, Symbol.toStringTag, { value: "Module" }));
 const MODULE$1 = "api_usage_stat";
 const HOT_KEEP = 50;
 const DB_NAME = "api_usage_stat_db";
@@ -200,11 +250,32 @@ function saveExtensionSettings(data) {
   }
 }
 let saveTimer = null;
+let pendingNext = null;
 function saveHot(patch) {
   const cur = getExtensionSettings() || {};
   const next = { ...cur, ...patch, _updated: Date.now() };
+  pendingNext = next;
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => saveExtensionSettings(next), 300);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    pendingNext = null;
+    saveExtensionSettings(next);
+  }, 300);
+}
+function flushSaveHot() {
+  if (!saveTimer && !pendingNext) return;
+  if (saveTimer) {
+    try {
+      clearTimeout(saveTimer);
+    } catch {
+    }
+    saveTimer = null;
+  }
+  if (pendingNext) {
+    const next = pendingNext;
+    pendingNext = null;
+    saveExtensionSettings(next);
+  }
 }
 async function migrateIfNeeded() {
   const cur = getExtensionSettings();
@@ -390,6 +461,7 @@ const persistence = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineP
   __proto__: null,
   HOT_KEEP,
   appendHistoryCold,
+  flushSaveHot,
   getAllHistory,
   getExtensionSettings,
   loadHistoryCold,
@@ -603,6 +675,13 @@ function getCurrentChatName() {
   const id = getCurrentChatId();
   return id ? String(id) : null;
 }
+function getFilteredHistoryForScope() {
+  const scope = state$2.settings.historyScope || "all";
+  if (scope !== "current") return state$2.history || [];
+  const cur = getCurrentChatId();
+  if (!cur) return state$2.history || [];
+  return (state$2.history || []).filter((h) => h.chatId === cur);
+}
 function sanitizeFullRequest(fr) {
   if (!fr || typeof fr !== "object") return fr;
   const keep = {};
@@ -613,15 +692,20 @@ function sanitizeFullRequest(fr) {
   else if (typeof fr.messages === "number") keep.messages_length = fr.messages;
   return keep;
 }
+function clampMessage(m) {
+  if (!m || typeof m !== "object") return m;
+  const c = typeof m.content === "string" ? m.content.length > 600 ? m.content.slice(0, 600) + "…[截断]" : m.content : m.content;
+  return { ...m, content: c };
+}
 function pruneDetails() {
   if (!state$2.history || !state$2.history.length) return;
   const hs = [...state$2.history].sort((a, b) => b.timestamp - a.timestamp);
   for (let i = 0; i < hs.length; i++) {
     const e = hs[i];
+    delete e.fullResponse;
     if (i >= DETAIL_KEEP) {
       delete e.messages;
       delete e.fullRequest;
-      delete e.fullResponse;
     } else {
       if (e.fullRequest && typeof e.fullRequest === "object" && Array.isArray(e.fullRequest.messages)) {
         e.fullRequest = sanitizeFullRequest(e.fullRequest);
@@ -751,7 +835,7 @@ const repository = {
     lu.ttft = ttft || 0;
     lu.thinkTime = thinkTime || 0;
     lu.thinkTokens = thinkTokens;
-    lu.messages = messages;
+    lu.messages = (messages || []).map(clampMessage);
     const c = calcCost({ timestamp: lu.timestamp, model, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp }, state$2.settings);
     lu.cost = c.total;
     lu.input_cost = c.input;
@@ -759,7 +843,7 @@ const repository = {
     lu.priceType = c.priceType;
     lu.raw_usage = usage;
     lu.fullRequest = fullRequest;
-    lu.fullResponse = fullResponse;
+    lu.fullResponse = null;
     const chatId = getCurrentChatId();
     const chatName = getCurrentChatName();
     lu.chatId = chatId;
@@ -779,14 +863,14 @@ const repository = {
       cache_hit_rate: hit + miss > 0 ? hit / (hit + miss) * 100 : 0,
       priceType: lu.priceType,
       raw_usage: usage,
-      messages,
+      messages: (messages || []).map(clampMessage),
       duration,
       ttft,
       thinkTime,
       thinkTokens,
       tokenRate: lu.tokenRate,
       fullRequest,
-      fullResponse,
+      fullResponse: null,
       chatId,
       chatName
     };
@@ -868,15 +952,6 @@ const repository = {
       for (const s of Object.values(next.saves)) {
         const h = s.history || [];
         all = all.concat(h);
-        state$2.total_tokens += s.total_tokens || 0;
-        state$2.total_cost += s.total_cost || 0;
-        state$2.input_tokens += s.input_tokens || 0;
-        state$2.output_tokens += s.output_tokens || 0;
-        state$2.cache_hit_tokens += s.cache_hit_tokens || 0;
-        state$2.cache_miss_tokens += s.cache_miss_tokens || 0;
-        state$2.input_cost += s.input_cost || 0;
-        state$2.output_cost += s.output_cost || 0;
-        state$2.rounds += s.rounds || 0;
       }
       all.sort((a, b) => b.timestamp - a.timestamp);
       const keyOf = (h) => `${h.timestamp}|${h.model || ""}|${h.total_tokens || 0}`;
@@ -895,6 +970,28 @@ const repository = {
         });
       }
       state$2.history = dedup.slice(0, MAX_HISTORY);
+      if (next.total_tokens === void 0) {
+        let tt = 0, tc = 0, it = 0, ot = 0, ch = 0, cm = 0, ic = 0, oc = 0;
+        for (const h of state$2.history) {
+          tt += h.total_tokens || 0;
+          tc += h.cost || 0;
+          it += (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0);
+          ot += h.completion_tokens || 0;
+          ch += h.cache_hit_tokens || 0;
+          cm += h.cache_miss_tokens || 0;
+          ic += h.input_cost || 0;
+          oc += h.output_cost || 0;
+        }
+        state$2.total_tokens = tt;
+        state$2.total_cost = tc;
+        state$2.input_tokens = it;
+        state$2.output_tokens = ot;
+        state$2.cache_hit_tokens = ch;
+        state$2.cache_miss_tokens = cm;
+        state$2.input_cost = ic;
+        state$2.output_cost = oc;
+        state$2.rounds = state$2.history.length;
+      }
     }
     if (next.settings !== void 0) {
       const def = defaultSettings();
@@ -931,7 +1028,8 @@ const repository = {
     const filtered = (state$2.history || []).filter((h) => {
       const isZero = h.total_tokens === 0 && h.prompt_tokens === 0 && h.completion_tokens === 0 && h.cache_hit_tokens === 0 && h.cache_miss_tokens === 0;
       const isFakeTokenCount = !!(h.raw_usage && h.raw_usage._from_token_count);
-      return !(isZero || isFakeTokenCount);
+      const isDebug = h._debug === true;
+      return !(isZero || isFakeTokenCount || isDebug);
     });
     if (filtered.length !== before) {
       state$2.history = filtered;
@@ -1032,6 +1130,11 @@ const repository = {
     return this.snapshot();
   }
 };
+const repository$1 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  getFilteredHistoryForScope,
+  repository
+}, Symbol.toStringTag, { value: "Module" }));
 let lastMessages = [];
 let lastStart = 0;
 let lastFetchUsage = null;
@@ -1119,17 +1222,73 @@ function installFetchCapture() {
                 }
               }
             };
-            const ct = clone.headers.get("content-type") || "";
-            if (ct.includes("application/json")) {
-              clone.text().then((t) => {
-                parseAndProcess(t, 0, 0);
-              }).catch(() => {
-              });
-            } else {
-              clone.text().then((t) => {
-                parseAndProcess(t, 0, 0);
-              }).catch(() => {
-              });
+            try {
+              const t0 = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+              const nowMs = () => typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+              let ttft = 0;
+              let thinkStart = 0, thinkEnd = 0;
+              let fullText = "";
+              const finish = () => {
+                try {
+                  parseAndProcess(fullText, ttft, thinkEnd && thinkStart ? thinkEnd - thinkStart : 0);
+                } catch {
+                }
+              };
+              const scanThink = (chunk) => {
+                for (const line of chunk.split("\n")) {
+                  if (!line.startsWith("data: ") || line === "data: [DONE]") continue;
+                  if (!thinkStart && line.indexOf('"reasoning_content"') !== -1) thinkStart = nowMs() - t0;
+                  if (thinkStart && !thinkEnd && line.indexOf('"content"') !== -1) thinkEnd = nowMs() - t0;
+                }
+              };
+              const readStream = async (body) => {
+                const reader = body.getReader();
+                const dec = new TextDecoder();
+                let first = true, buf = "";
+                for (; ; ) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+                  if (first && value && value.byteLength) {
+                    ttft = nowMs() - t0;
+                    first = false;
+                  }
+                  const piece = dec.decode(value, { stream: true });
+                  fullText += piece;
+                  buf += piece;
+                  const nl = buf.lastIndexOf("\n");
+                  if (nl !== -1) {
+                    const lines = buf.slice(0, nl);
+                    buf = buf.slice(nl + 1);
+                    scanThink(lines);
+                  }
+                }
+                if (buf) scanThink(buf);
+                finish();
+              };
+              const streamBody = clone.body;
+              if (streamBody && typeof streamBody.getReader === "function") {
+                readStream(streamBody).catch(() => {
+                  try {
+                    finish();
+                  } catch {
+                  }
+                });
+              } else {
+                clone.text().then((t) => {
+                  ttft = nowMs() - t0;
+                  parseAndProcess(t, ttft, 0);
+                }).catch(() => {
+                });
+              }
+            } catch (innerErr) {
+              log.debug("fetch 流式读取异常，不影响原请求", innerErr?.message || innerErr);
+              try {
+                clone.text().then((t) => {
+                  parseAndProcess(t, 0, 0);
+                }).catch(() => {
+                });
+              } catch {
+              }
             }
           } catch (e) {
             log.debug("fetch 克隆解析异常，不影响原请求", e?.message || e);
@@ -1464,7 +1623,7 @@ function isUnsafeKey(k) {
   return k === "__proto__" || k === "constructor" || k === "prototype";
 }
 function stripHistory$1(history) {
-  return history.map((h) => {
+  return history.filter((h) => h && h._debug !== true).map((h) => {
     const c = { ...h };
     delete c.messages;
     delete c.fullRequest;
@@ -1476,6 +1635,8 @@ function exportHistory() {
   const doc = window.parent?.document ?? document;
   const d = /* @__PURE__ */ new Date();
   const pad = (n) => n < 10 ? "0" + n : "" + n;
+  const safeSettings = JSON.parse(JSON.stringify(state$2.settings || {}));
+  if (safeSettings.webdav) safeSettings.webdav = { url: "", username: "", path: "", proxy: "" };
   const payload = {
     format: "deepseek-stat-export",
     version: EXPORT_FORMAT_VERSION,
@@ -1495,7 +1656,7 @@ function exportHistory() {
       startTime: state$2.startTime,
       balance: state$2.balance,
       customBalance: state$2.customBalance,
-      settings: JSON.parse(JSON.stringify(state$2.settings)),
+      settings: safeSettings,
       messageCount: state$2.messageCount,
       // 兼容旧多存档导入：额外提供 saves 包装
       saves: { default: { name: "default", history: stripHistory$1(state$2.history), total_tokens: state$2.total_tokens, total_cost: state$2.total_cost, input_tokens: state$2.input_tokens, output_tokens: state$2.output_tokens, cache_hit_tokens: state$2.cache_hit_tokens, cache_miss_tokens: state$2.cache_miss_tokens, input_cost: state$2.input_cost, output_cost: state$2.output_cost, rounds: state$2.rounds, startTime: state$2.startTime } },
@@ -1538,10 +1699,10 @@ function normalizeImportData(raw) {
       skipped++;
       continue;
     }
-    if (isUnsafeKey(String(h.model))) continue;
     const nh = { timestamp: h.timestamp, model: h.model || "unknown", prompt_tokens: h.prompt_tokens || 0, cache_hit_tokens: h.cache_hit_tokens || 0, cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0, total_tokens: h.total_tokens || 0, priceType: h.priceType || "old" };
+    const SKIP_IMPORT = /* @__PURE__ */ new Set(["messages", "fullRequest", "fullResponse", "raw_usage"]);
     for (const f of Object.keys(h)) {
-      if (isUnsafeKey(f)) continue;
+      if (isUnsafeKey(f) || SKIP_IMPORT.has(f)) continue;
       if (nh[f] === void 0) nh[f] = h[f];
     }
     cleaned.push(nh);
@@ -1719,7 +1880,7 @@ async function webdavPut(text) {
   if (!r.ok) throw new Error("上传失败 HTTP " + r.status);
 }
 function stripHistory(history) {
-  return history.map((h) => {
+  return history.filter((h) => h && h._debug !== true).map((h) => {
     const c = { ...h };
     delete c.messages;
     delete c.fullRequest;
@@ -1953,7 +2114,19 @@ function generateDebugBatch() {
   alert("已生成 " + generated + " 条模拟数据");
 }
 function esc(s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+let docClickBound = false;
+function bindSettingsOutsideClick(doc) {
+  if (docClickBound) return;
+  docClickBound = true;
+  doc.addEventListener("click", (e) => {
+    const t = e.target;
+    const td = doc.getElementById("aus-theme-dropdown");
+    if (td && td.style.display === "block" && !t.closest("#aus-theme-dropdown") && !t.closest("#aus-theme-btn")) td.style.display = "none";
+    const sd = doc.getElementById("aus-history-scope-dropdown");
+    if (sd && sd.style.display === "block" && !t.closest("#aus-history-scope-dropdown") && !t.closest("#aus-history-scope-btn")) sd.style.display = "none";
+  });
 }
 function localDay(ts) {
   const d = new Date(ts);
@@ -2004,7 +2177,8 @@ function renderSettings(doc) {
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">命中</div><input type="number" id="aus-debug-hit" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">未命中</div><input type="number" id="aus-debug-miss" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">输出</div><input type="number" id="aus-debug-output" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">模型</div><select id="aus-debug-model" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;"></select></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="date" id="aus-debug-date-start" style="padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><input type="date" id="aus-debug-date-end" style="padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><input type="number" id="aus-debug-batch-count" min="1" placeholder="条数" style="padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div>
-          <button id="aus-btn-debug-batch" class="ds-btn-pill" style="width:100%;">生成模拟数据</button><div id="aus-debug-status" style="font-size:11px;color:var(--ds-text-2);"></div>
+          <button id="aus-btn-debug-batch" class="ds-btn-pill" style="width:100%;">生成模拟数据</button>
+          <button id="aus-btn-debug-clear" style="width:100%;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">清除调试数据</button><div id="aus-debug-status" style="font-size:11px;color:var(--ds-text-2);"></div>
         </div>
       </div>
 
@@ -2081,7 +2255,6 @@ function renderSettings(doc) {
     }
   } catch {
   }
-  let themePickerOpen = false;
   function renderThemePicker() {
     const dropdown = doc.getElementById("aus-theme-dropdown");
     const label = doc.getElementById("aus-theme-label");
@@ -2100,7 +2273,6 @@ function renderSettings(doc) {
         state$2.settings.theme = v;
         saveHot({ settings: state$2.settings });
         applyTheme(v);
-        themePickerOpen = false;
         dropdown.style.display = "none";
         renderThemePicker();
         try {
@@ -2115,25 +2287,12 @@ function renderSettings(doc) {
   const themeDropdown = doc.getElementById("aus-theme-dropdown");
   if (themeBtn && themeDropdown) {
     themeBtn.onclick = () => {
-      themePickerOpen = !themePickerOpen;
-      themeDropdown.style.display = themePickerOpen ? "block" : "none";
-      if (themePickerOpen) renderThemePicker();
+      const open = themeDropdown.style.display === "block";
+      themeDropdown.style.display = open ? "none" : "block";
+      if (!open) renderThemePicker();
     };
   }
-  doc.addEventListener("click", (e) => {
-    const t = e.target;
-    if (themePickerOpen && !t.closest("#aus-theme-dropdown") && !t.closest("#aus-theme-btn")) {
-      themePickerOpen = false;
-      const d = doc.getElementById("aus-theme-dropdown");
-      if (d) d.style.display = "none";
-    }
-    if (scopePickerOpen && !t.closest("#aus-history-scope-dropdown") && !t.closest("#aus-history-scope-btn")) {
-      scopePickerOpen = false;
-      const d2 = doc.getElementById("aus-history-scope-dropdown");
-      if (d2) d2.style.display = "none";
-    }
-  });
-  let scopePickerOpen = false;
+  bindSettingsOutsideClick(doc);
   function renderScopePicker() {
     const dropdown = doc.getElementById("aus-history-scope-dropdown");
     const label = doc.getElementById("aus-history-scope-label");
@@ -2151,7 +2310,6 @@ function renderSettings(doc) {
         const v = el.getAttribute("data-scope");
         state$2.settings.historyScope = v;
         saveHot({ settings: state$2.settings });
-        scopePickerOpen = false;
         dropdown.style.display = "none";
         renderScopePicker();
         try {
@@ -2166,9 +2324,9 @@ function renderSettings(doc) {
   const scopeDropdown = doc.getElementById("aus-history-scope-dropdown");
   if (scopeBtn && scopeDropdown) {
     scopeBtn.onclick = () => {
-      scopePickerOpen = !scopePickerOpen;
-      scopeDropdown.style.display = scopePickerOpen ? "block" : "none";
-      if (scopePickerOpen) renderScopePicker();
+      const open = scopeDropdown.style.display === "block";
+      scopeDropdown.style.display = open ? "none" : "block";
+      if (!open) renderScopePicker();
     };
   }
   doc.getElementById("aus-save-key").onclick = () => {
@@ -2307,6 +2465,25 @@ function renderSettings(doc) {
     saveHot({ settings: state$2.settings });
   };
   doc.getElementById("aus-btn-debug-batch").onclick = () => generateDebugBatch();
+  try {
+    const clearBtn = doc.getElementById("aus-btn-debug-clear");
+    if (clearBtn) clearBtn.onclick = async () => {
+      try {
+        const { repository: repository2 } = await Promise.resolve().then(() => repository$1);
+        const { state: st } = await Promise.resolve().then(() => index);
+        repository2.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
+        repository2.recalcAll();
+        try {
+          globalThis.ApiUsageStat?.refreshUI?.();
+        } catch {
+        }
+        const el = doc.getElementById("aus-debug-status");
+        if (el) el.textContent = "已清除调试数据";
+      } catch {
+      }
+    };
+  } catch {
+  }
   doc.getElementById("aus-peak-dot").onchange = (e) => {
     state$2.settings.peakDot = e.target.checked;
     const sl = doc.getElementById("aus-peak-dot-slider");
@@ -3346,19 +3523,18 @@ async function renderOne$1(id, filtered) {
       }
       const data = Object.entries(map2).map(([name, value]) => ({ name, value }));
       const ec = await getEcharts$1();
-      if (charts$1[id]) try {
-        charts$1[id].dispose();
-      } catch {
+      let c = charts$1[id];
+      if (!c || c.isDisposed?.()) {
+        el.innerHTML = "";
+        el.style.height = "260px";
+        c = charts$1[id] = ec.init(el);
       }
-      el.innerHTML = "";
-      el.style.height = "260px";
-      const c = charts$1[id] = ec.init(el);
       c.setOption({
         backgroundColor: "transparent",
         tooltip: { trigger: "item", backgroundColor: themeColor$2("--ds-card-inner", "#FFFFFF"), borderColor: themeColor$2("--ds-border", "#E5E7EB"), textStyle: { fontSize: 11, color: themeColor$2("--ds-text", "#111827") } },
         legend: { bottom: 0, textStyle: { fontSize: 10, color: themeColor$2("--ds-text-2", "#6B7280") } },
         series: [{ type: "pie", radius: ["40%", "70%"], itemStyle: { borderRadius: 6, borderColor: themeColor$2("--ds-card-inner", "#FFFFFF"), borderWidth: 2 }, label: { fontSize: 11 }, data }]
-      });
+      }, true);
       return;
     }
     const yKeys = Array.from(state$1[id].y);
@@ -3452,13 +3628,12 @@ function calcXInterval(labels, el) {
 async function drawBarLine(el, id, labels, series) {
   try {
     const ec = await getEcharts$1();
-    if (charts$1[id]) try {
-      charts$1[id].dispose();
-    } catch {
+    let c = charts$1[id];
+    if (!c || c.isDisposed?.()) {
+      el.innerHTML = "";
+      el.style.height = "260px";
+      c = charts$1[id] = ec.init(el);
     }
-    el.innerHTML = "";
-    el.style.height = "260px";
-    const c = charts$1[id] = ec.init(el);
     const isTokenCost = id === "token" || id === "cost";
     const interval = calcXInterval(labels, el);
     const opts = {
@@ -3500,7 +3675,7 @@ async function drawBarLine(el, id, labels, series) {
         areaStyle: s.name.includes("耗时") ? { opacity: 0.08, color: s.color } : void 0
       }));
     }
-    c.setOption(opts);
+    c.setOption(opts, true);
   } catch (e) {
     try {
       el.innerHTML = '<div style="text-align:center;padding:20px;color:#DC2626;font-size:11px;">图表渲染失败</div>';
@@ -3742,13 +3917,12 @@ async function renderOne(id, filtered) {
     }
     renderOne._retryCount = 0;
     const ec = await getEcharts();
-    if (charts[id]) try {
-      charts[id].dispose();
-    } catch {
+    let c = charts[id];
+    if (!c || c.isDisposed?.()) {
+      el.innerHTML = "";
+      el.style.height = "220px";
+      c = charts[id] = ec.init(el);
     }
-    el.innerHTML = "";
-    el.style.height = "220px";
-    const c = charts[id] = ec.init(el);
     const cBorder = themeColor$1("--ds-border", "#E5E7EB");
     const cCard = themeColor$1("--ds-card", "#F6F7F8");
     const cText3 = themeColor$1("--ds-text-3", "#9CA3AF");
@@ -4586,7 +4760,6 @@ let panelOpen = false;
 let collapsed = false;
 function refreshUI() {
   try {
-    if (!panelOpen && !panelCreated) return;
     if (!panelOpen) return;
     const doc = getDoc$1();
     const s = getSelectedSave();
@@ -5092,7 +5265,7 @@ function createPanel() {
   `;
   const sbOverlay = doc.createElement("div");
   sbOverlay.id = "aus-sidebar-overlay";
-  sbOverlay.style.cssText = "display:none !important;";
+  sbOverlay.style.cssText = "display:none;";
   panel2.appendChild(sbOverlay);
   doc.body.appendChild(overlay);
   doc.body.appendChild(panel2);
@@ -5102,7 +5275,6 @@ function createPanel() {
   }
   try {
     const p = window.parent || window;
-    p.addEventListener("scroll", positionPanel, { capture: true, passive: true });
     p.addEventListener("resize", positionPanel, { passive: true });
   } catch {
   }
@@ -5116,6 +5288,8 @@ function createPanel() {
   let mobileOpen = false;
   const isMobile = () => {
     try {
+      const body = doc.getElementById("aus-panel-body");
+      if (body && body.clientWidth > 0) return body.clientWidth <= 760;
       return (window.parent?.innerWidth ?? window.innerWidth) <= 760;
     } catch {
       return window.innerWidth <= 760;
@@ -5124,9 +5298,20 @@ function createPanel() {
   const syncMobileSidebar = () => {
     const sb = doc.getElementById("aus-sidebar");
     if (!sb) return;
+    const ov = doc.getElementById("aus-sidebar-overlay");
     if (isMobile()) {
       if (mobileOpen) sb.classList.add("is-open");
       else sb.classList.remove("is-open");
+      if (ov) {
+        ov.classList.toggle("is-open", mobileOpen);
+        ov.style.display = "";
+        if (mobileOpen) {
+          ov.onclick = () => {
+            mobileOpen = false;
+            syncMobileSidebar();
+          };
+        } else ov.onclick = null;
+      }
       const brand = doc.getElementById("aus-brand");
       if (brand) brand.style.removeProperty("display");
       doc.querySelectorAll(".aus-nav-label").forEach((el) => {
@@ -5144,6 +5329,11 @@ function createPanel() {
       }
     } else {
       sb.classList.remove("is-open");
+      if (ov) {
+        ov.classList.remove("is-open");
+        ov.style.display = "none";
+        ov.onclick = null;
+      }
     }
   };
   const applyCollapsed = (v) => {
@@ -5189,17 +5379,22 @@ function createPanel() {
       mobileOpen = false;
       syncMobileSidebar();
     }
+    let rzT = null;
     const onResize = () => {
-      if (isMobile()) syncMobileSidebar();
-      else {
-        mobileOpen = false;
-        syncMobileSidebar();
-        applyCollapsed(collapsed);
-      }
-      try {
-        positionPanel();
-      } catch {
-      }
+      if (rzT) return;
+      rzT = setTimeout(() => {
+        rzT = null;
+        if (isMobile()) syncMobileSidebar();
+        else {
+          mobileOpen = false;
+          syncMobileSidebar();
+          applyCollapsed(collapsed);
+        }
+        try {
+          positionPanel();
+        } catch {
+        }
+      }, 150);
     };
     window.parent?.addEventListener("resize", onResize);
     window.addEventListener("resize", onResize);
@@ -5234,6 +5429,8 @@ function openPanel() {
     const sb = doc.getElementById("aus-sidebar");
     const isMobile = (() => {
       try {
+        const b = doc.getElementById("aus-panel-body");
+        if (b && b.clientWidth > 0) return b.clientWidth <= 760;
         return (window.parent?.innerWidth ?? window.innerWidth) <= 760;
       } catch {
         return window.innerWidth <= 760;
@@ -5271,15 +5468,11 @@ function togglePanel() {
   if (panelOpen) closePanel();
   else openPanel();
 }
-function injectPanel() {
-  createPanel();
-}
 const panel = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   bindPanel,
   closePanel,
   createPanel,
-  injectPanel,
   openPanel,
   refreshUI,
   resetPanelState,
@@ -5479,6 +5672,11 @@ async function onUpdate() {
 async function onDelete() {
   log.debug("deleted");
   try {
+    const { flushSaveHot: flushSaveHot2 } = await Promise.resolve().then(() => persistence);
+    flushSaveHot2();
+  } catch {
+  }
+  try {
     const doc = getDoc();
     doc.getElementById("aus-overlay")?.remove();
     doc.getElementById("aus-panel")?.remove();
@@ -5540,6 +5738,11 @@ function onEnable() {
 }
 async function onDisable() {
   log.debug("disabled");
+  try {
+    const { flushSaveHot: flushSaveHot2 } = await Promise.resolve().then(() => persistence);
+    flushSaveHot2();
+  } catch {
+  }
   try {
     Promise.resolve().then(() => interception).then((m) => m.uninstallInterception?.());
   } catch {
@@ -5636,10 +5839,6 @@ async function init() {
       } catch {
       }
       try {
-        const mod = globalThis.ApiUsageStatInterceptor ? null : null;
-      } catch {
-      }
-      try {
         Promise.resolve().then(() => interception).then((m) => m.installInterception());
       } catch {
       }
@@ -5680,6 +5879,15 @@ async function init() {
   try {
     getDoc().addEventListener("keydown", (e) => {
       if (e.key === "Escape") closePanel();
+    });
+  } catch {
+  }
+  try {
+    window.addEventListener("pagehide", () => {
+      try {
+        Promise.resolve().then(() => persistence).then((m) => m.flushSaveHot?.());
+      } catch {
+      }
     });
   } catch {
   }

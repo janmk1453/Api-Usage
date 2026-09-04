@@ -71,11 +71,49 @@ function installFetchCapture() {
               try { processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal); } catch (e) { log.error('fetch 用量记录失败 ' + ((e as any)?.message || e)); }
             }
           };
-          const ct = clone.headers.get('content-type') || '';
-          if (ct.includes('application/json')) {
-            clone.text().then(t => { parseAndProcess(t, 0, 0); }).catch(()=>{});
-          } else {
-            clone.text().then(t => { parseAndProcess(t, 0, 0); }).catch(()=>{});
+          // 流式测量 TTFT 与思维链耗时：后台消费 clone 的 body 流，不阻塞原始响应透传
+          try {
+            const t0 = (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
+            const nowMs = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
+            let ttft = 0;
+            let thinkStart = 0, thinkEnd = 0;
+            let fullText = '';
+            const finish = () => { try { parseAndProcess(fullText, ttft, thinkEnd && thinkStart ? thinkEnd - thinkStart : 0); } catch {} };
+            const scanThink = (chunk: string) => {
+              for (const line of chunk.split('\n')) {
+                if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+                if (!thinkStart && line.indexOf('"reasoning_content"') !== -1) thinkStart = nowMs() - t0;
+                if (thinkStart && !thinkEnd && line.indexOf('"content"') !== -1) thinkEnd = nowMs() - t0;
+              }
+            };
+            const readStream = async (body: ReadableStream<Uint8Array>) => {
+              const reader = body.getReader();
+              const dec = new TextDecoder();
+              let first = true, buf = '';
+              for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                if (first && value && value.byteLength) { ttft = nowMs() - t0; first = false; }
+                const piece = dec.decode(value, { stream: true });
+                fullText += piece; buf += piece;
+                const nl = buf.lastIndexOf('\n');
+                if (nl !== -1) {
+                  const lines = buf.slice(0, nl); buf = buf.slice(nl + 1);
+                  scanThink(lines);
+                }
+              }
+              if (buf) scanThink(buf);
+              finish();
+            };
+            const streamBody = (clone.body as ReadableStream<Uint8Array> | null);
+            if (streamBody && typeof (streamBody as any).getReader === 'function') {
+              readStream(streamBody).catch(() => { try { finish(); } catch {} });
+            } else {
+              clone.text().then((t) => { ttft = nowMs() - t0; parseAndProcess(t, ttft, 0); }).catch(()=>{});
+            }
+          } catch (innerErr) {
+            log.debug('fetch 流式读取异常，不影响原请求', (innerErr as any)?.message || innerErr);
+            try { clone.text().then((t) => { parseAndProcess(t, 0, 0); }).catch(()=>{}); } catch {}
           }
           } catch (e) {
             log.debug('fetch 克隆解析异常，不影响原请求', (e as any)?.message || e);

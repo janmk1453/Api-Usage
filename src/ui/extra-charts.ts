@@ -91,15 +91,17 @@ async function renderOne(id:ChartId, filtered:any[]){
     for (const e of filtered){ const m=e.model||'unknown'; const v = mode==='token' ? (e.total_tokens||0) : 1; map[m]=(map[m]||0)+v; }
     const data = Object.entries(map).map(([name,value])=>({name, value}));
     const ec = await getEcharts();
-    if (charts[id]) try{ charts[id].dispose(); }catch{}
-    el.innerHTML=''; (el as any).style.height='260px';
-    const c = charts[id]=ec.init(el);
+    let c = charts[id];
+    if (!c || (c as any).isDisposed?.()) {
+      el.innerHTML=''; (el as any).style.height='260px';
+      c = charts[id]=ec.init(el);
+    }
     c.setOption({
       backgroundColor:'transparent',
       tooltip:{ trigger:'item', backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize:11, color:themeColor('--ds-text','#111827')} },
       legend:{ bottom:0, textStyle:{fontSize:10,color:themeColor('--ds-text-2','#6B7280')} },
       series:[{ type:'pie', radius:['40%','70%'], itemStyle:{borderRadius:6,borderColor:themeColor('--ds-card-inner','#FFFFFF'),borderWidth:2}, label:{fontSize:11}, data }],
-    });
+    }, true);
     return;
   }
   const yKeys = Array.from(state[id].y);
@@ -183,9 +185,11 @@ function calcXInterval(labels: string[], el: HTMLElement): number {
 async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:Array<{name:string,data:number[],color:string,kind:string}>){
   try {
   const ec = await getEcharts();
-  if (charts[id]) try{ charts[id].dispose(); }catch{}
-  el.innerHTML=''; (el as any).style.height='260px';
-  const c = charts[id]=ec.init(el);
+  let c = charts[id];
+  if (!c || (c as any).isDisposed?.()) {
+    el.innerHTML=''; (el as any).style.height='260px';
+    c = charts[id]=ec.init(el);
+  }
   // 前两张：重叠柱 + 曲线（Token/费用）
   const isTokenCost = id==='token' || id==='cost';
   const interval = calcXInterval(labels, el);
@@ -227,7 +231,7 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
       areaStyle: s.name.includes('耗时') ? { opacity:0.08, color:s.color } : undefined,
     }));
   }
-  c.setOption(opts);
+  c.setOption(opts, true);
   } catch(e:any){
     try{ el.innerHTML='<div style="text-align:center;padding:20px;color:#DC2626;font-size:11px;">图表渲染失败</div>'; }catch{}
     try{ console.error('[Api-Usage] drawBarLine failed', id, e); }catch{}

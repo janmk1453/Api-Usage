@@ -125,9 +125,11 @@ async function renderOne(id:TrendId, filtered:any[]){
   (renderOne as any)._retryCount=0;
 
   const ec = await getEcharts();
-  if (charts[id]) try{ charts[id].dispose(); }catch{}
-  el.innerHTML=''; (el as any).style.height='220px';
-  const c = charts[id]=ec.init(el);
+  let c = charts[id];
+  if (!c || (c as any).isDisposed?.()) {
+    el.innerHTML=''; (el as any).style.height='220px';
+    c = charts[id]=ec.init(el);
+  }
 
   const cBorder = themeColor('--ds-border','#E5E7EB');
   const cCard = themeColor('--ds-card','#F6F7F8');

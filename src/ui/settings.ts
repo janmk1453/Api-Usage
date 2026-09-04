@@ -8,7 +8,20 @@ import { PRICING, DEFAULT_PEAK_HOURS } from '../constants/pricing';
 import { recalcAllCosts } from '../services/interception';
 import { generateDebugBatch } from '../services/debug';
 
-function esc(s: string) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function esc(s: string) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+let docClickBound = false;
+function bindSettingsOutsideClick(doc: Document) {
+  if (docClickBound) return;
+  docClickBound = true;
+  doc.addEventListener('click', (e: any) => {
+    const t = e.target as HTMLElement;
+    const td = doc.getElementById('aus-theme-dropdown');
+    if (td && td.style.display === 'block' && !t.closest('#aus-theme-dropdown') && !t.closest('#aus-theme-btn')) td.style.display = 'none';
+    const sd = doc.getElementById('aus-history-scope-dropdown');
+    if (sd && sd.style.display === 'block' && !t.closest('#aus-history-scope-dropdown') && !t.closest('#aus-history-scope-btn')) sd.style.display = 'none';
+  });
+}
 
 function localDay(ts: number) { const d = new Date(ts); const pad=(n:number)=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
 
@@ -56,7 +69,8 @@ export function renderSettings(doc: Document) {
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">命中</div><input type="number" id="aus-debug-hit" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">未命中</div><input type="number" id="aus-debug-miss" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">输出</div><input type="number" id="aus-debug-output" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div><div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">模型</div><select id="aus-debug-model" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;"></select></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="date" id="aus-debug-date-start" style="padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><input type="date" id="aus-debug-date-end" style="padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><input type="number" id="aus-debug-batch-count" min="1" placeholder="条数" style="padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div>
-          <button id="aus-btn-debug-batch" class="ds-btn-pill" style="width:100%;">生成模拟数据</button><div id="aus-debug-status" style="font-size:11px;color:var(--ds-text-2);"></div>
+          <button id="aus-btn-debug-batch" class="ds-btn-pill" style="width:100%;">生成模拟数据</button>
+          <button id="aus-btn-debug-clear" style="width:100%;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">清除调试数据</button><div id="aus-debug-status" style="font-size:11px;color:var(--ds-text-2);"></div>
         </div>
       </div>
 
@@ -137,7 +151,6 @@ export function renderSettings(doc: Document) {
   } catch {}
 
   // 颜色模式（胶囊下拉，与用量统计·模型选择一致）
-  let themePickerOpen = false;
   function renderThemePicker() {
     const dropdown = doc.getElementById('aus-theme-dropdown');
     const label = doc.getElementById('aus-theme-label');
@@ -156,7 +169,6 @@ export function renderSettings(doc: Document) {
         (state.settings as any).theme = v;
         saveHot({ settings: state.settings });
         applyTheme(v);
-        themePickerOpen = false;
         dropdown.style.display = 'none';
         renderThemePicker();
         try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
@@ -168,27 +180,13 @@ export function renderSettings(doc: Document) {
   const themeDropdown = doc.getElementById('aus-theme-dropdown');
   if (themeBtn && themeDropdown) {
     themeBtn.onclick = () => {
-      themePickerOpen = !themePickerOpen;
-      themeDropdown.style.display = themePickerOpen ? 'block' : 'none';
-      if (themePickerOpen) renderThemePicker();
+      const open = themeDropdown.style.display === 'block';
+      themeDropdown.style.display = open ? 'none' : 'block';
+      if (!open) renderThemePicker();
     };
   }
-  doc.addEventListener('click', (e: any) => {
-    const t = e.target as HTMLElement;
-    if (themePickerOpen && !t.closest('#aus-theme-dropdown') && !t.closest('#aus-theme-btn')) {
-      themePickerOpen = false;
-      const d = doc.getElementById('aus-theme-dropdown');
-      if (d) d.style.display = 'none';
-    }
-    if (scopePickerOpen && !t.closest('#aus-history-scope-dropdown') && !t.closest('#aus-history-scope-btn')) {
-      scopePickerOpen = false;
-      const d2 = doc.getElementById('aus-history-scope-dropdown');
-      if (d2) d2.style.display = 'none';
-    }
-  });
-
+  bindSettingsOutsideClick(doc);
   // 历史显示范围（胶囊下拉，与颜色模式同款）
-  let scopePickerOpen = false;
   function renderScopePicker() {
     const dropdown = doc.getElementById('aus-history-scope-dropdown');
     const label = doc.getElementById('aus-history-scope-label');
@@ -206,7 +204,6 @@ export function renderSettings(doc: Document) {
         const v = el.getAttribute('data-scope') as any;
         (state.settings as any).historyScope = v;
         saveHot({ settings: state.settings });
-        scopePickerOpen = false;
         dropdown.style.display = 'none';
         renderScopePicker();
         try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
@@ -218,9 +215,9 @@ export function renderSettings(doc: Document) {
   const scopeDropdown = doc.getElementById('aus-history-scope-dropdown');
   if (scopeBtn && scopeDropdown) {
     scopeBtn.onclick = () => {
-      scopePickerOpen = !scopePickerOpen;
-      scopeDropdown.style.display = scopePickerOpen ? 'block' : 'none';
-      if (scopePickerOpen) renderScopePicker();
+      const open = scopeDropdown.style.display === 'block';
+      scopeDropdown.style.display = open ? 'none' : 'block';
+      if (!open) renderScopePicker();
     };
   }
 
@@ -303,6 +300,20 @@ export function renderSettings(doc: Document) {
   (doc.getElementById('aus-debug-date-end') as HTMLInputElement).onchange = (e: any) => { state.settings.debugDateEnd = e.target.value; saveHot({ settings: state.settings }); };
   (doc.getElementById('aus-debug-batch-count') as HTMLInputElement).onchange = (e: any) => { state.settings.debugBatchCount = parseInt(e.target.value) || 1; saveHot({ settings: state.settings }); };
   doc.getElementById('aus-btn-debug-batch')!.onclick = () => generateDebugBatch();
+  try {
+    const clearBtn = doc.getElementById('aus-btn-debug-clear') as HTMLButtonElement | null;
+    if (clearBtn) clearBtn.onclick = async () => {
+      try {
+        const { repository } = await import('../data/repository');
+        const { state: st } = await import('../store/index');
+        repository.replaceAll({ history: (st.history || []).filter((h: any) => (h as any)._debug !== true) } as any);
+        repository.recalcAll();
+        try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+        const el = doc.getElementById('aus-debug-status');
+        if (el) el.textContent = '已清除调试数据';
+      } catch {}
+    };
+  } catch {}
   doc.getElementById('aus-peak-dot')!.onchange = (e: any) => { state.settings.peakDot = e.target.checked; const sl = doc.getElementById('aus-peak-dot-slider') as HTMLElement | null; if (sl) sl.style.left = e.target.checked ? '23px' : '3px'; saveHot({ settings: state.settings }); try { (globalThis as any).ApiUsageStat?.updatePeakDot?.(); } catch {} };
   doc.getElementById('aus-reset-dot')!.onclick = () => { try { localStorage.removeItem('ds_ds_peak_dot_pos'); const dot = (window.parent as any)?.document?.getElementById('aus-peak-dot-indicator') as HTMLElement | null; if (dot) { dot.style.left = ''; dot.style.top = '60px'; dot.style.right = '16px'; } } catch {} alert('已重置'); };
   const wUrl = doc.getElementById('aus-webdav-url') as HTMLInputElement | null;
