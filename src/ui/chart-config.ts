@@ -23,12 +23,12 @@ export const X_OPTIONS: Array<{key:XKey,label:string}> = [
   { key:'month', label:'每月' },
 ];
 
-let ySelected: Set<YKey> = new Set<YKey>(['total_cost']);
+let ySelected: Set<YKey> = new Set<YKey>(['total_token']);
 let xSelected: XKey = 'day';
 
 export function getYSelected(): YKey[] { return Array.from(ySelected); }
 export function getXSelected(): XKey { return xSelected; }
-export function setYSelected(keys: YKey[]) { ySelected = new Set(keys.length?keys:['total_cost']); }
+export function setYSelected(keys: YKey[]) { ySelected = new Set(keys.length?keys:['total_token']); }
 export function setXSelected(k: XKey) { xSelected = k; }
 export function toggleY(key: YKey) {
   if (ySelected.has(key)) { if (ySelected.size>1) ySelected.delete(key); }
@@ -87,7 +87,7 @@ function getYValue(e: any, y: YKey): number {
 
 export function aggregateForChart(entries: any[], yKeys: YKey[], xKey: XKey): { labels: string[]; series: Array<{name:string,data:number[],kind:'token'|'cost',color:string}> } {
   const yMeta = new Map<string, typeof Y_OPTIONS[number]>(Y_OPTIONS.map(o=>[o.key,o] as any));
-  if (!yKeys.length) yKeys = ['total_cost'] as any;
+  if (!yKeys.length) yKeys = ['total_token'] as any;
   if (xKey==='round') {
     const labels = entries.map((_, i)=>`#${i+1}`);
     const series = yKeys.map(k=>{

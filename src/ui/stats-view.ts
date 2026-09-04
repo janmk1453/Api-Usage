@@ -141,62 +141,27 @@ function renderCalendar() {
   updateRangeHighlight();
   if (currentRange !== 'custom') return;
   const todayStr = localDay(Date.now());
-  const base = new Date(todayStr + 'T00:00:00');
-  base.setMonth(base.getMonth() + calendarOffset);
-  const months: Date[] = [];
-  months.push(new Date(base.getFullYear(), base.getMonth()-1, 1));
-  months.push(new Date(base.getFullYear(), base.getMonth(), 1));
-  let html = '<div style="display:flex;gap:12px;align-items:flex-start;">';
-  html += `<button id="aus-cal-prev" style="margin-top:32px;padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);cursor:pointer;">‹</button>`;
-  html += '<div style="display:flex;gap:16px;">';
-  for (const m of months) {
-    const y = m.getFullYear(), mo = m.getMonth();
-    const first = new Date(y, mo, 1);
-    const daysInMonth = new Date(y, mo+1, 0).getDate();
-    const startDow = first.getDay();
-    html += `<div style="min-width:220px;"><div style="text-align:center;font-weight:600;font-size:13px;margin-bottom:8px;">${y}年${mo+1}月</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:11px;">`;
-    const week = ['日','一','二','三','四','五','六'];
-    for (const w of week) html += `<div style="text-align:center;color:var(--ds-text-3);padding:4px;">${w}</div>`;
-    for (let i=0;i<startDow;i++) html += `<div></div>`;
-    for (let d=1; d<=daysInMonth; d++) {
-      const date = new Date(y, mo, d);
-      const key = localDay(date.getTime());
-      const { start, end } = getRangeDates();
-      const inRange = key >= start && key <= end;
-      const isToday = key === todayStr;
-      const bg = inRange ? 'var(--ds-text)' : 'var(--ds-card-inner)';
-      const color = inRange ? 'var(--ds-card-inner)' : 'var(--ds-text)';
-      const ring = isToday && !inRange ? 'border:1px solid var(--ds-text);' : '';
-      html += `<div data-date="${key}" style="text-align:center;padding:6px;border-radius:999px;background:${bg};color:${color};cursor:pointer;${ring}">${d}</div>`;
-    }
-    html += `</div></div>`;
-  }
-  html += '</div>';
-  html += `<button id="aus-cal-next" style="margin-top:32px;padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);cursor:pointer;">›</button>`;
-  html += '</div>';
-  cal.innerHTML = html;
-  const prev = doc.getElementById('aus-cal-prev');
-  const next = doc.getElementById('aus-cal-next');
-  if (prev) prev.onclick = () => { calendarOffset--; renderCalendar(); };
-  if (next) next.onclick = () => { calendarOffset++; renderCalendar(); };
-  cal.querySelectorAll('[data-date]').forEach((el: any) => {
-    el.addEventListener('click', () => {
-      if (currentRange !== 'custom') {
-        currentRange = 'custom';
-        customStart = el.getAttribute('data-date');
-        customEnd = el.getAttribute('data-date');
-      } else {
-        const clicked = el.getAttribute('data-date');
-        if (!customStart) customStart = clicked;
-        else if (clicked < customStart) { customEnd = customStart; customStart = clicked; }
-        else customEnd = clicked;
-      }
-      updatePickerLabel();
-      updateRangeHighlight();
-      renderStatsView();
-      renderCalendar();
-    });
-  });
+  if (!customStart) customStart = todayStr;
+  if (!customEnd) customEnd = todayStr;
+  cal.innerHTML = `<div style="padding:12px;min-width:260px;display:grid;gap:10px;">
+    <div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">开始日期</div><input type="date" id="aus-custom-start" value="${customStart}" max="${todayStr}" style="width:100%;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;box-sizing:border-box;"></div>
+    <div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">结束日期</div><input type="date" id="aus-custom-end" value="${customEnd}" max="${todayStr}" style="width:100%;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;box-sizing:border-box;"></div>
+    <button id="aus-custom-apply" style="padding:8px 12px;border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);border:none;font-size:12px;cursor:pointer;">应用</button>
+  </div>`;
+  const startEl = doc.getElementById('aus-custom-start') as HTMLInputElement | null;
+  const endEl = doc.getElementById('aus-custom-end') as HTMLInputElement | null;
+  const applyBtn = doc.getElementById('aus-custom-apply');
+  const apply = () => {
+    if (startEl) customStart = startEl.value || todayStr;
+    if (endEl) customEnd = endEl.value || todayStr;
+    if (customStart > customEnd) { const t = customStart; customStart = customEnd; customEnd = t; if (startEl) startEl.value = customStart; if (endEl) endEl.value = customEnd; }
+    updatePickerLabel();
+    updateRangeHighlight();
+    renderStatsView();
+  };
+  if (startEl) startEl.onchange = apply;
+  if (endEl) endEl.onchange = apply;
+  if (applyBtn) applyBtn.onclick = apply;
 }
 
 function updatePickerLabel() {
