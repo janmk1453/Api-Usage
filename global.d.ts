@@ -11,6 +11,7 @@ declare global {
   const eventSource: any;
   const event_types: any;
   var TavernHelper: any;
+  const __APP_VERSION__: string;
 }
 
 declare module '/script.js' {

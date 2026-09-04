@@ -2,6 +2,8 @@ import { state } from '../store/index';
 import { EXPORT_FORMAT_VERSION } from '../constants/pricing';
 import { repository } from '../data/repository';
 
+declare const __APP_VERSION__: string;
+
 function isUnsafeKey(k: string) { return k === '__proto__' || k === 'constructor' || k === 'prototype'; }
 
 function stripHistory(history: any[]) {
@@ -18,11 +20,12 @@ export function exportHistory() {
   const pad = (n: number) => (n < 10 ? '0' + n : '' + n);
   const safeSettings: any = JSON.parse(JSON.stringify(state.settings || {}));
   if (safeSettings.webdav) safeSettings.webdav = { url: '', username: '', path: '', proxy: '' };
+  const _appVer: string = (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.0.0') as string;
   const payload = {
     format: 'deepseek-stat-export' as const,
     version: EXPORT_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
-    appVersion: '3.0.0',
+    appVersion: _appVer,
     data: {
       history: stripHistory(state.history),
       total_tokens: state.total_tokens,
