@@ -24,12 +24,12 @@ export function saveApiKey(key: string) {
 }
 
 let balanceInFlight = false;
-export async function queryBalance(): Promise<any> {
+export async function queryBalance(silent = false): Promise<any> {
   if (balanceInFlight) return null;
   balanceInFlight = true;
   try {
     const key = getApiKey();
-    if (!key) { toast('error', '请先设置 API 密钥'); return null; }
+    if (!key) { if (!silent) toast('error', '请先设置 API 密钥'); return null; }
     const ctrl = new AbortController();
     const to = setTimeout(() => { try { ctrl.abort(); } catch {} }, 15000);
     const r = await fetch('https://api.deepseek.com/user/balance', {
@@ -45,15 +45,15 @@ export async function queryBalance(): Promise<any> {
       state.balance = bal;
       saveHot({ balance: bal });
       try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
-      toast('success', '余额已更新 ¥' + i.total_balance);
+      if (!silent) toast('success', '余额已更新 ¥' + i.total_balance);
       return bal;
     }
-    toast('error', d.error?.message || '查询失败');
+    if (!silent) toast('error', d.error?.message || '查询失败');
     return null;
   } catch (e: any) {
     const msg = e?.name === 'AbortError' ? '查询超时(15s)' : (e?.message || e);
     log.error('余额查询失败', e);
-    toast('error', '网络错误: ' + msg);
+    if (!silent) toast('error', '网络错误: ' + msg);
     return null;
   } finally { balanceInFlight = false; }
 }
@@ -64,7 +64,7 @@ export function restartBalanceTimer() {
   const s: any = state.settings;
   if (!s.autoBalance) return;
   const min = Math.min(Math.max(parseInt(s.balanceInterval) || 10, 1), 1440);
-  balanceTimer = setInterval(() => { queryBalance().catch(()=>{}); }, min * 60 * 1000);
+  balanceTimer = setInterval(() => { queryBalance(true).catch(()=>{}); }, min * 60 * 1000);
 }
 export function stopBalanceTimer() {
   if (balanceTimer) { try { clearInterval(balanceTimer); } catch {} balanceTimer = null; }

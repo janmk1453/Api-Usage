@@ -369,6 +369,9 @@
   #aus-history > div > div:first-child { flex-wrap: wrap !important; gap: 8px !important; }
   /* 卡片内子容器不撑开卡片 */
   [data-extension="api-usage-stat"] .ds-card > div { min-width: 0 !important; max-width: 100% !important; }
+  /* 历史详情：竖屏展开后内部可滚动，避免内容被截断（图1） */
+  .aus-detail-panel { max-height: min(70vh, 520px) !important; overflow-y: auto !important; overflow-x: hidden !important; -webkit-overflow-scrolling: touch !important; overscroll-behavior: contain !important; }
+  .aus-detail-panel pre.aus-tab-content { flex: 0 0 auto !important; min-height: 120px !important; max-height: 260px !important; }
   /* 设置页输入区不超出 */
   #aus-settings input,
   #aus-settings select { max-width: 100% !important; box-sizing: border-box !important; }

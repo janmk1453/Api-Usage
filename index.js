@@ -1539,13 +1539,13 @@ function saveApiKey(key) {
   }
 }
 let balanceInFlight = false;
-async function queryBalance() {
+async function queryBalance(silent = false) {
   if (balanceInFlight) return null;
   balanceInFlight = true;
   try {
     const key = getApiKey();
     if (!key) {
-      toast("error", "请先设置 API 密钥");
+      if (!silent) toast("error", "请先设置 API 密钥");
       return null;
     }
     const ctrl = new AbortController();
@@ -1571,15 +1571,15 @@ async function queryBalance() {
         globalThis.ApiUsageStat?.refreshUI?.();
       } catch {
       }
-      toast("success", "余额已更新 ¥" + i.total_balance);
+      if (!silent) toast("success", "余额已更新 ¥" + i.total_balance);
       return bal;
     }
-    toast("error", d.error?.message || "查询失败");
+    if (!silent) toast("error", d.error?.message || "查询失败");
     return null;
   } catch (e) {
     const msg = e?.name === "AbortError" ? "查询超时(15s)" : e?.message || e;
     log.error("余额查询失败", e);
-    toast("error", "网络错误: " + msg);
+    if (!silent) toast("error", "网络错误: " + msg);
     return null;
   } finally {
     balanceInFlight = false;
@@ -1598,7 +1598,7 @@ function restartBalanceTimer() {
   if (!s.autoBalance) return;
   const min = Math.min(Math.max(parseInt(s.balanceInterval) || 10, 1), 1440);
   balanceTimer = setInterval(() => {
-    queryBalance().catch(() => {
+    queryBalance(true).catch(() => {
     });
   }, min * 60 * 1e3);
 }
@@ -4842,7 +4842,7 @@ function renderHistoryInner(doc, fullHist) {
         <div style="display:flex;gap:8px;"><span style="color:var(--ds-green);font-weight:500;">${hps}% 命中</span><span style="color:var(--ds-red);font-weight:500;">${mps}% 未命中</span><span style="color:var(--ds-purple);font-weight:500;">${ops}% 输出</span></div>
         <span style="color:var(--ds-text-2);">${total2.toLocaleString()}t</span>
       </div>
-      <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;margin-top:8px;border-top:1px solid var(--ds-border);padding-top:8px;height:min(520px,60vh);overflow:hidden;flex-direction:column;gap:8px;">
+      <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;margin-top:8px;border-top:1px solid var(--ds-border);padding-top:8px;max-height:min(520px,60vh);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;flex-direction:column;gap:8px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">基础信息</div>
