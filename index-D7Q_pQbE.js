@@ -5440,24 +5440,121 @@ function balanceNum() {
   const n = parseFloat(String(b));
   return isNaN(n) ? null : n;
 }
+let selectedForecastKey = "__current__";
+let forecastChatPickerOpen = false;
+function getRecordedChatsForForecast(list) {
+  const map2 = /* @__PURE__ */ new Map();
+  for (const h of list || []) {
+    const cid = h.chatId ?? null;
+    const cname = h.chatName ?? null;
+    const key = cid ?? "__null__";
+    if (!map2.has(key)) map2.set(key, { chatId: cid, chatName: cname });
+    else if (cname && !map2.get(key).chatName) map2.get(key).chatName = cname;
+  }
+  return Array.from(map2.values()).map((v) => {
+    let display = v.chatName || "";
+    if (!display) {
+      if (v.chatId) display = v.chatId.length > 18 ? v.chatId.slice(0, 8) + "…" + v.chatId.slice(-4) : v.chatId;
+      else display = "未分组/旧数据";
+    }
+    return { chatId: v.chatId, chatName: v.chatName, displayName: display };
+  }).sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""));
+}
+function getEffectiveHist(fullHist) {
+  if (selectedForecastKey === "__all__") return fullHist.slice();
+  if (selectedForecastKey === "__current__") {
+    const cur = currentChatId();
+    if (!cur) return fullHist.slice();
+    return fullHist.filter((h) => (h.chatId ?? null) === cur);
+  }
+  if (selectedForecastKey === "__null__") return fullHist.filter((h) => !h.chatId);
+  return fullHist.filter((h) => (h.chatId ?? null) === selectedForecastKey);
+}
+function getForecastLabel(fullHist) {
+  if (selectedForecastKey === "__current__") return "当前对话";
+  if (selectedForecastKey === "__all__") return "全部";
+  if (selectedForecastKey === "__null__") return "未分组/旧数据";
+  const found = getRecordedChatsForForecast(fullHist).find((c) => (c.chatId ?? "__null__") === selectedForecastKey);
+  return found?.displayName || selectedForecastKey;
+}
+function renderForecastChatPicker(fullHist) {
+  const doc = getDoc$2();
+  const btn = doc.getElementById("aus-forecast-chat-btn");
+  const dropdown = doc.getElementById("aus-forecast-chat-dropdown");
+  const label = doc.getElementById("aus-forecast-chat-label");
+  if (!btn || !dropdown || !label) return;
+  label.textContent = getForecastLabel(fullHist);
+  const chats = getRecordedChatsForForecast(fullHist);
+  let html = "";
+  const curActive = selectedForecastKey === "__current__" ? "background:var(--ds-card);font-weight:600;" : "";
+  html += `<div data-fchat="__current__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${curActive}">当前对话</div>`;
+  const allActive = selectedForecastKey === "__all__" ? "background:var(--ds-card);font-weight:600;" : "";
+  html += `<div data-fchat="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${allActive}">全部</div>`;
+  for (const c of chats) {
+    const key = c.chatId ?? "__null__";
+    const active = key === selectedForecastKey ? "background:var(--ds-card);font-weight:600;" : "";
+    html += `<div data-fchat="${esc$1(key)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}" title="${esc$1(c.chatId || "")}">${esc$1(c.displayName)}</div>`;
+  }
+  if (!chats.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">暂无对话</div>';
+  dropdown.innerHTML = html;
+  dropdown.querySelectorAll("[data-fchat]").forEach((el) => {
+    el.onclick = () => {
+      selectedForecastKey = el.getAttribute("data-fchat") || "__current__";
+      forecastChatPickerOpen = false;
+      dropdown.style.display = "none";
+      renderForecastView();
+    };
+  });
+}
+function bindForecastChatPicker() {
+  const doc = getDoc$2();
+  const btn = doc.getElementById("aus-forecast-chat-btn");
+  const dropdown = doc.getElementById("aus-forecast-chat-dropdown");
+  if (!btn || !dropdown) return;
+  if (bindForecastChatPicker._bound) return;
+  bindForecastChatPicker._bound = true;
+  btn.onclick = () => {
+    forecastChatPickerOpen = !forecastChatPickerOpen;
+    dropdown.style.display = forecastChatPickerOpen ? "block" : "none";
+    if (forecastChatPickerOpen) {
+      const hist = state$2.history || [];
+      renderForecastChatPicker(hist);
+    }
+  };
+  doc.addEventListener("click", (e) => {
+    const t = e.target;
+    if (forecastChatPickerOpen && !t.closest("#aus-forecast-chat-dropdown") && !t.closest("#aus-forecast-chat-btn")) {
+      forecastChatPickerOpen = false;
+      const d = doc.getElementById("aus-forecast-chat-dropdown");
+      if (d) d.style.display = "none";
+    }
+  });
+}
 function renderForecastView() {
   const doc = getDoc$2();
   const hist = state$2.history || [];
-  const chatId = currentChatId();
-  const selHist = chatId ? hist.filter((h) => (h.chatId ?? null) === chatId) : hist.slice();
+  try {
+    renderForecastChatPicker(hist);
+  } catch {
+  }
+  try {
+    bindForecastChatPicker();
+  } catch {
+  }
+  const effectiveHist = getEffectiveHist(hist);
   const renderCard = (host) => {
     if (!host) return;
-    if (selHist.length < 3) {
+    if (effectiveHist.length < 3) {
       host.innerHTML = `<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;">继续对话以启用预测（需 ≥3 轮当前对话样本）</div>`;
       return;
     }
-    const fit = fitSegments(hist, chatId);
+    const fit = fitSegments(effectiveHist, null);
     if (!fit) {
       host.innerHTML = `<div style="padding:12px;color:var(--ds-text-2);font-size:12px;">暂无数据</div>`;
       return;
     }
     const bal = balanceNum();
-    const model = selHist[selHist.length - 1]?.model || "deepseek-v4-flash";
+    const model = effectiveHist[effectiveHist.length - 1]?.model || "deepseek-v4-flash";
     const pricing = getPricing$1(model, state$2.settings);
     const p = pricing.offpeak;
     const R = bal != null ? remainingRounds(bal, fit, p) : { R: 0, R_low: 0, R_high: 0 };
@@ -5482,8 +5579,7 @@ function renderForecastView() {
   renderCard(doc.getElementById("aus-forecast-card"));
   const badgeHost = doc.getElementById("aus-energy-badge");
   if (badgeHost) {
-    const chatId2 = currentChatId();
-    const r = energyScore(hist, chatId2);
+    const r = energyScore(effectiveHist, null);
     const grade = r.grade;
     const colors = { A: "#16a34a", B: "#22c55e", C: "#84cc16", D: "#eab308", E: "#f97316", F: "#ef4444", G: "#dc2626" };
     const grades = ["A", "B", "C", "D", "E", "F", "G"];
@@ -5492,16 +5588,16 @@ function renderForecastView() {
       <div style="display:flex;flex-direction:column;gap:2px;">
         ${grades.map((g, i) => `<div style="display:flex;align-items:center;gap:6px;"><span style="width:28px;height:22px;border-radius:4px;background:${colors[g]};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;">${g}</span>${i === idx ? `<span style="color:${colors[g]};font-weight:700;">◀ 当前</span>` : ""}</div>`).join("")}
       </div>
-      <div style="flex:1;display:grid;gap:6px;font-size:11px;">
+        <div style="flex:1;display:grid;gap:6px;font-size:11px;">
         <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">增速 Δ</span><span style="font-weight:600;">${Math.round(r.metrics.delta).toLocaleString()} tok/轮</span></div>
         <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输出</span><span style="font-weight:600;">${Math.round(r.metrics.out).toLocaleString()} tok/轮</span></div>
         <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">效率</span><span style="font-weight:600;">${(r.metrics.efficiency * 100).toFixed(1)}%</span></div>
-        <div style="font-size:10px;color:var(--ds-text-3);margin-top:4px;">综合评分 ${r.score.toFixed(0)} · ${grade} 级 · 样本 ${chatId2 ? hist.filter((h) => (h.chatId ?? null) === chatId2).length : hist.length} 轮</div>
+        <div style="font-size:10px;color:var(--ds-text-3);margin-top:4px;">综合评分 ${r.score.toFixed(0)} · ${grade} 级 · 样本 ${effectiveHist.length} 轮 · ${esc$1(getForecastLabel(hist))}</div>
       </div>
     </div>`;
   }
-  renderForecastChart(hist, chatId);
-  renderSensitivity(hist, chatId);
+  renderForecastChart(effectiveHist, null);
+  renderSensitivity(effectiveHist, null);
   renderCompare(hist);
 }
 let forecastChart = null;
@@ -5518,7 +5614,7 @@ async function renderForecastChart(history, chatId) {
     el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--ds-text-3);">样本不足</div>';
     return;
   }
-  const sorted = [...history].filter((h) => (h.chatId ?? null) === chatId).sort((a, b) => a.timestamp - b.timestamp);
+  const sorted = [...history].sort((a, b) => a.timestamp - b.timestamp);
   const y = sorted.map((h) => h.prompt_tokens ?? (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0));
   const fitLine = y.map((_, i) => fit.C0 + fit.delta * (fit.segStart + i >= sorted.length - fit.segLen ? fit.segStart + i - (sorted.length - fit.segLen) : 0));
   const futureN = 10;
@@ -5591,7 +5687,7 @@ function renderSensitivity(history, chatId) {
       return;
     }
     const tmp = { ...fit, hitEwma: h };
-    const model = history.filter((hh) => (hh.chatId ?? null) === chatId).slice(-1)[0]?.model || "deepseek-v4-flash";
+    const model = history.slice(-1)[0]?.model || "deepseek-v4-flash";
     const pricing = getPricing$1(model, state$2.settings);
     const R = remainingRounds(bal, tmp, pricing.offpeak);
     if (resEl) resEl.textContent = `命中 ${slider.value}% 时预计剩余 ${R.R} 轮（±${Math.abs(R.R_high - R.R_low) / 2 | 0}），降 10% 约少 ${Math.abs(R.R - remainingRounds(bal, { ...fit, hitEwma: Math.max(0, h - 0.1) }, pricing.offpeak).R)} 轮`;
@@ -6139,6 +6235,11 @@ function createPanel() {
           </div>
           <div data-view="forecast" style="display:none;">
             <div style="display:grid;gap:12px;">
+              <div style="display:flex;align-items:center;gap:8px;position:relative;flex-wrap:wrap;">
+                <div id="aus-forecast-chat-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">对话</span><span id="aus-forecast-chat-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">当前对话</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-forecast-chat-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:220px;max-height:260px;overflow:auto;padding:8px;"></div>
+                <span style="font-size:10px;color:var(--ds-text-3);">切换对话以查看对应预测，能耗/趋势均随之更新</span>
+              </div>
               <div id="aus-forecast-card" class="ds-card"></div>
               <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">能耗标识（RP 能耗效率）</div><div id="aus-energy-badge"></div></div>
               <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">预测趋势（输入 token 按轮次 + 拟合/置信带/上限）</div><div id="aus-forecast-chart" style="height:260px;"></div></div>
@@ -6339,7 +6440,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-TXXyjQmr.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-BHEgAkXY.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -6392,7 +6493,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-TXXyjQmr.js").then((m) => m.maybeAutoCheck());
+    import("./update-BHEgAkXY.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }
@@ -6838,7 +6939,7 @@ async function init() {
   }
   setTimeout(() => {
     try {
-      import("./update-TXXyjQmr.js").then((m) => m.maybeAutoCheck());
+      import("./update-BHEgAkXY.js").then((m) => m.maybeAutoCheck());
     } catch {
     }
   }, 3e3);
