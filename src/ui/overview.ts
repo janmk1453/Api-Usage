@@ -4,9 +4,20 @@ import { state } from '../store/index';
 import { saveHot } from '../store/persistence';
 import { esc } from '../utils/date';
 import type { OverviewFourKey } from '../types/settings';
+import { formatMoney, getDisplayCurrency } from '../services/currency';
 
 function fmt(n: number) { return n.toLocaleString('zh-CN'); }
-function CNY(n: number) { return '¥' + n.toFixed(4) + ' CNY'; }
+function CNY(n: number) {
+  try {  return formatMoney(n, 4); } catch { return '¥' + n.toFixed(4) + ' CNY'; }
+}
+function moneyHtml(cny: number, digits = 4): string {
+  try {
+    
+    const cur: any = getDisplayCurrency();
+    const v = cur.code === 'USD' ? cny / cur.rate : cny;
+    return `${cur.symbol}${v.toFixed(digits)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">${cur.code}</span>`;
+  } catch { return `¥${(cny||0).toFixed(digits)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span>`; }
+}
 
 type FourOpt = { key: OverviewFourKey; label: string };
 export const FOUR_OPTIONS: FourOpt[] = [
@@ -57,13 +68,13 @@ function ensureFour(): OverviewFourKey[] {
 export function getFourDisplay(key: OverviewFourKey, v: any): { title:string; html:string } {
   const title = FOUR_LABEL_MAP.get(key) || key;
   switch (key) {
-    case 'avg_cost': return { title, html: `¥${(v.avgCost||0).toFixed(4)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span>` };
+    case 'avg_cost': return { title, html: moneyHtml(v.avgCost||0, 4) };
     case 'avg_tokens': return { title, html: `${Math.round(v.avgTokens||0).toLocaleString('zh-CN')}` };
     case 'avg_duration': return { title, html: `${(v.avgDuration||0).toFixed(1)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">s</span>` };
     case 'avg_rate': return { title: '输出速率', html: `${Math.round(v.avgRate||0)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">t/s</span>` };
-    case 'avg_input_cost': return { title, html: `¥${(v.avgInputCost||0).toFixed(4)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span>` };
+    case 'avg_input_cost': return { title, html: moneyHtml(v.avgInputCost||0, 4) };
     case 'avg_input_tokens': return { title, html: `${Math.round(v.avgInputTokens||0).toLocaleString('zh-CN')}` };
-    case 'avg_output_cost': return { title, html: `¥${(v.avgOutputCost||0).toFixed(4)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span>` };
+    case 'avg_output_cost': return { title, html: moneyHtml(v.avgOutputCost||0, 4) };
     case 'avg_output_tokens': return { title, html: `${Math.round(v.avgOutputTokens||0).toLocaleString('zh-CN')}` };
     case 'avg_think_time': {
       const has = (v.avgThinkTime||0) > 0;
@@ -154,7 +165,9 @@ export function renderOverview() {
     }
   }
   const costEl = doc.getElementById('aus-total-cost');
-  if (costEl) costEl.textContent = '¥' + v.totalCost.toFixed(4) + ' CNY';
+  if (costEl) {
+    try {  costEl.textContent = formatMoney(v.totalCost, 4); } catch { costEl.textContent = '¥' + v.totalCost.toFixed(4) + ' CNY'; }
+  }
   const tokEl = doc.getElementById('aus-total-tokens');
   if (tokEl) tokEl.textContent = fmt(v.totalTokens) + ' tokens';
 
@@ -229,6 +242,8 @@ function renderChatSummaryOverview() {
     tbody.innerHTML = rows.map(r => {
       const avgRate = r.avgHitRate > 0 ? r.avgHitRate.toFixed(1) + '%' : '—';
       const colorRate = r.avgHitRate >= 50 ? 'var(--ds-green)' : r.avgHitRate > 0 ? 'var(--ds-text)' : 'var(--ds-text-3)';
+      let costTxt = `¥${r.cost.toFixed(4)}`;
+      try {  costTxt = formatMoney(r.cost, 4); } catch {}
       return `<tr style="border-bottom:1px solid var(--ds-card);">
         <td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;" title="${esc(r.chatId || 'null')}">${esc(r.displayName)}</td>
         <td style="padding:6px 8px;text-align:right;">${r.count}</td>
@@ -236,7 +251,7 @@ function renderChatSummaryOverview() {
         <td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString('zh-CN')}</td>
         <td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString('zh-CN')}</td>
         <td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString('zh-CN')}</td>
-        <td style="padding:6px 8px;text-align:right;color:var(--ds-text);">¥${r.cost.toFixed(4)}</td>
+        <td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${costTxt}</td>
         <td style="padding:6px 8px;text-align:right;">${Math.round(r.avgTokens).toLocaleString('zh-CN')}</td>
         <td style="padding:6px 8px;text-align:right;color:${colorRate};">${avgRate}</td>
       </tr>`;

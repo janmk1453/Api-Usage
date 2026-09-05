@@ -1,5 +1,6 @@
 import { localDay } from '../utils/date';
 import { Y_OPTIONS, X_OPTIONS, getYSelected as getMainY, getXSelected as getMainX } from './chart-config';
+import { formatMoney, getDisplayCurrency } from '../services/currency';
 
 type ChartId = 'token'|'cost'|'hit'|'req'|'dur'|'pie';
 type XKey = 'round'|'hour'|'day'|'week'|'month';
@@ -184,6 +185,11 @@ function calcXInterval(labels: string[], el: HTMLElement): number {
 
 async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:Array<{name:string,data:number[],color:string,kind:string}>){
   try {
+  const curCur = (()=>{ try{  return getDisplayCurrency(); } catch{ return {code:'CNY',symbol:'¥',rate:1} as any; } })();
+  // 费用类数据在 USD 模式下需换算为显示币种
+  if (curCur.code==='USD') {
+    for (const s of series) if (s.kind==='cost' || s.name.includes('费用') || s.name.toLowerCase().includes('cost')) s.data = s.data.map((v:any)=> Number((Number(v)/curCur.rate).toFixed(4)));
+  }
   const ec = await getEcharts();
   let c = charts[id];
   if (!c || (c as any).isDisposed?.()) {
@@ -212,6 +218,10 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
       });
     })(),
   };
+  if (id==='cost') {
+    opts.yAxis = { type:'value', axisLabel:{fontSize:10,color:themeColor('--ds-text-3','#9CA3AF'), formatter:(v:number)=> curCur.symbol + Number(v).toFixed(2)}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F6F7F8')}} } as any;
+    opts.tooltip = { trigger:'axis', backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize:11}, formatter: (params:any)=>{ let html=`<div style="font-weight:600;margin-bottom:6px;">${params[0]?.axisValueLabel||''}</div>`; for(const p of params){ html+=`<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${curCur.symbol}${Number(p.value).toFixed(4)} ${curCur.code}</span></div>`; } return `<div style="padding:4px 2px;min-width:160px;">${html}</div>`; } } as any;
+  }
   // 命中/请求等单指标改为线+面积更可读
   if (id==='hit'){ opts.series = [{ name:'命中率', type:'line', data: series[0].data, areaStyle:{opacity:0.12,color:series[0].color}, lineStyle:{color:series[0].color}, itemStyle:{color:series[0].color}, smooth:true }]; opts.yAxis={ max:100, axisLabel:{formatter:(v:number)=>v+'%'} } as any; }
   if (id==='dur'){

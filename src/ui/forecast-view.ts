@@ -3,6 +3,7 @@ import { fitSegments, remainingRounds as calcR, ctxLimitRounds, costAt, nextProm
 import { energyScore, topPowerChats } from '../stats/energyScore';
 import { getPricing } from '../services/pricing';
 import { esc } from '../utils/date';
+import { formatMoney, getDisplayCurrency } from '../services/currency';
 
 function getDoc(){ return (window.parent as any)?.document ?? document; }
 function currentChatId(): string | null {
@@ -142,7 +143,7 @@ export function renderForecastView(){
     const cNext = costAt(fit.segLen, fit, p);
     host.innerHTML = `<div style="line-height:1.6;">
       <div style="font-size:13px;font-weight:700;color:var(--ds-text);">预计还可 <span style="color:var(--ds-green);">~${rShow} 轮</span>（余额口径）· ±${Math.abs(R.R_high-R.R_low)/2|0}</div>
-      <div style="font-size:11px;color:var(--ds-text-2);margin-top:4px;">每轮新增 ≈ ${deltaTok.toLocaleString()} tok · 命中率(近5) ${hitPct}% · 下一轮成本 ≈ ¥${cNext.toFixed(4)} · 下一轮 prompt ≈ ${Math.round(next.prompt).toLocaleString()} tok</div>
+      <div style="font-size:11px;color:var(--ds-text-2);margin-top:4px;">每轮新增 ≈ ${deltaTok.toLocaleString()} tok · 命中率(近5) ${hitPct}% · 下一轮成本 ≈ ${(()=>{ try{  return formatMoney(cNext,4);} catch{ return '¥'+cNext.toFixed(4)+' CNY';}})()} · 下一轮 prompt ≈ ${Math.round(next.prompt).toLocaleString()} tok</div>
       <div style="display:flex;gap:8px;margin-top:10px;">
         <div style="flex:1;background:var(--ds-card);border-radius:6px;height:8px;position:relative;overflow:hidden;"><div style="position:absolute;left:0;top:0;bottom:0;width:${Math.min(100,(R.R/ Math.max(10,R.R+(rCtx||0)))*100)}%;background:var(--ds-green);"></div></div>
         <div style="flex:1;background:var(--ds-card);border-radius:6px;height:8px;position:relative;overflow:hidden;"><div style="position:absolute;left:0;top:0;bottom:0;width:${rCtx!=null?Math.min(100,(rCtx/ Math.max(10,rCtx))*100):0}%;background:${(rCtx!=null&&rCtx<rShow)?'var(--ds-red)':'var(--ds-purple-bg)'};"></div></div>

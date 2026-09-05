@@ -469,9 +469,14 @@ async function renderChart(filteredRaw: any[]) {
   const cBorder = themeColor('--ds-border', '#E5E7EB');
   const cCard = themeColor('--ds-card', '#F6F7F8');
   const cText3 = themeColor('--ds-text-3', '#9CA3AF');
+  const curCur = (()=>{ try{  return getDisplayCurrency(); } catch{ return {code:'CNY',symbol:'¥',rate:1} as any; } })();
+  if (hasCost) {
+    // 费用单位动态换算：CNY→USD 时图表数据需除以汇率
+    for (const s of series) if (s.kind==='cost') s.data = s.data.map((v:any)=> curCur.code==='USD' ? Number((Number(v)/curCur.rate).toFixed(4)) : v);
+  }
   const yAxis: any[] = [];
   if (hasToken) yAxis.push({ type:'value', name:'tokens', position:'left', axisLine:{show:false}, splitLine:{lineStyle:{color:cCard}}, axisLabel:{color:cText3,fontSize:10} });
-  if (hasCost) yAxis.push({ type:'value', name:'CNY', position: hasToken?'right':'left', axisLine:{show:false}, splitLine:{show:false}, axisLabel:{color:cText3,fontSize:10,formatter:(v:number)=>'¥'+v} });
+  if (hasCost) yAxis.push({ type:'value', name:curCur.code, position: hasToken?'right':'left', axisLine:{show:false}, splitLine:{show:false}, axisLabel:{color:cText3,fontSize:10,formatter:(v:number)=> curCur.symbol + (curCur.code==='USD' ? (Number(v)).toFixed(4) : Number(v).toFixed(4))} });
   // 堆叠柱仅最顶段圆角，其余直角无缝衔接（修复紫/橙/绿段间缝隙）
   const lastBarIdx = (() => {
     const indices = series.map((_, i) => i).filter(i => series[i].kind !== 'cost'); // 仅 token 堆叠取最后，深色同理；cost 单轴不在此堆
@@ -521,7 +526,9 @@ async function renderChart(filteredRaw: any[]) {
         for (const p of params) {
           const v = p.value;
           const unit = Y_OPTIONS.find((o:any)=>o.label===p.seriesName)?.unit || '';
-          html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${unit==='CNY'?'¥'+Number(v).toFixed(4):Number(v).toLocaleString()+' '+unit}</span></div>`;
+          const isCost = unit==='CNY';
+          const disp = isCost ? (curCur.symbol + Number(v).toFixed(4) + ' ' + curCur.code) : (Number(v).toLocaleString()+' '+unit);
+          html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${disp}</span></div>`;
         }
         return `<div style="padding:4px 2px;min-width:180px;">${html}</div>`;
       }
@@ -586,8 +593,9 @@ function renderModelSummary(filtered: any[]) {
   } else {
     list.sort((a, b) => a.m.localeCompare(b.m));
   }
+  const fmtC = (v:number)=>{ try{  return formatMoney(v||0,4);} catch{ return '¥'+(v||0).toFixed(4)+' CNY'; } };
   const rows = list.map(r => {
-     return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">¥${r.cost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;">¥${r.avgCost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
+     return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${fmtC(r.cost)}</td><td style="padding:6px 8px;text-align:right;">${fmtC(r.avgCost)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
   }).join('');
   tbody.innerHTML = rows;
 }
@@ -638,7 +646,7 @@ export async function renderStatsView() {
   let totalCost = 0, totalReq = summaryFiltered.length, totalTok = 0;
   for (const e of summaryFiltered) { totalCost += e.cost || 0; totalTok += e.total_tokens || 0; }
   const costEl = doc.getElementById('aus-stats-cost');
-  if (costEl) costEl.textContent = '¥' + totalCost.toFixed(2) + ' CNY';
+  if (costEl) { try {  costEl.textContent = formatMoney(totalCost, 2); } catch { costEl.textContent = '¥' + totalCost.toFixed(2) + ' CNY'; } }
   const reqEl = doc.getElementById('aus-stats-req');
   if (reqEl) reqEl.textContent = String(totalReq);
   const tokEl = doc.getElementById('aus-stats-tok');
@@ -662,6 +670,7 @@ export async function renderStatsView() {
 
 // 统计页 4 小块（响应时间+模型双维度筛选）
 import { saveHot } from '../store/persistence';
+import { formatMoney, getDisplayCurrency } from '../services/currency';
 function ensureStatsFour(): string[] {
   const def = ['avg_cost','avg_tokens','avg_think_ratio','truncation_rate'];
   let cur: any = (state as any).statsFour;

@@ -7,6 +7,9 @@ import { applyTheme } from '../services/theme';
 import { PRICING, DEFAULT_PEAK_HOURS } from '../constants/pricing';
 import { recalcAllCosts } from '../services/interception';
 import { generateDebugBatch } from '../services/debug';
+import { getDisplayCurrency } from '../services/currency';
+import { syncPricingFromModelsDev, previewSync, fetchModelsDevCatalog } from '../services/pricing-sync';
+import { fetchLiveRate } from '../services/currency';
 
 function esc(s: string) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
@@ -20,6 +23,10 @@ function bindSettingsOutsideClick(doc: Document) {
     if (td && td.style.display === 'block' && !t.closest('#aus-theme-dropdown') && !t.closest('#aus-theme-btn')) td.style.display = 'none';
     const sd = doc.getElementById('aus-history-scope-dropdown');
     if (sd && sd.style.display === 'block' && !t.closest('#aus-history-scope-dropdown') && !t.closest('#aus-history-scope-btn')) sd.style.display = 'none';
+    const md = doc.getElementById('aus-pricing-sync-mode-dropdown');
+    if (md && md.style.display === 'block' && !t.closest('#aus-pricing-sync-mode-dropdown') && !t.closest('#aus-pricing-sync-mode-btn')) md.style.display = 'none';
+    const idd = doc.getElementById('aus-pricing-sync-interval-dropdown');
+    if (idd && idd.style.display === 'block' && !t.closest('#aus-pricing-sync-interval-dropdown') && !t.closest('#aus-pricing-sync-interval-btn')) idd.style.display = 'none';
   });
 }
 
@@ -60,7 +67,25 @@ export function renderSettings(doc: Document) {
       <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">高峰时段</span><button id="aus-btn-add-peak-hour" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 添加</button></div><div id="aus-peak-hours-list" style="display:grid;gap:6px;margin-top:8px;"></div><div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;">支持跨天（如 22:00-02:00），周末自动低谷。</div></div>
 
       <!-- 模型与价格（可折叠，默认收起） -->
-      <div class="ds-card"><div id="aus-models-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型与价格（¥/百万 tokens）</span><div style="display:flex;align-items:center;gap:8px;"><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 自定义模型</button><span id="aus-models-toggle" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;user-select:none;line-height:1;">▼ 展开</span></div></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
+      <div class="ds-card"><div id="aus-models-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型与价格（<span id="aus-model-price-unit">${getDisplayCurrency().code}/百万 tokens</span>）</span><div style="display:flex;align-items:center;gap:8px;"><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 自定义模型</button><span id="aus-models-toggle" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;user-select:none;line-height:1;">▼ 展开</span></div></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
+
+      <!-- 模型价格自动同步（models.dev） -->
+      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型价格自动同步（models.dev）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-pricing-sync-enabled" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-pricing-sync-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div id="aus-pricing-sync-panel" style="display:${s.pricingSync?.enabled ? 'grid':'none'};margin-top:10px;gap:10px;">
+          <div style="font-size:11px;color:var(--ds-text-2);line-height:1.6;">开启后所有价格、余额、图表将以 <b style="color:var(--ds-text);">美元 $/USD</b> 展示（按汇率动态换算），自动从 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 拉取全量模型价格，人民币时仍以 ¥/CNY 展示，数据源为 USD/百万 tokens，已按峰谷规则本地合成 DeepSeek 峰价（2×谷）。功能默认关闭。</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;position:relative;"><span style="font-size:12px;color:var(--ds-text);">同步模式</span><div id="aus-pricing-sync-mode-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:12px;cursor:pointer;"><span id="aus-pricing-sync-mode-label" style="font-weight:600;color:var(--ds-text);">仅新增</span><span style="font-size:10px;">▼</span></div><div id="aus-pricing-sync-mode-dropdown" style="display:none;position:absolute;top:40px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">汇率 USD→CNY</div><input id="aus-exchange-rate" type="number" step="0.0001" min="0" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div>
+            <div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">自动同步间隔</div><div id="aus-pricing-sync-interval-btn" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;cursor:pointer;"><span id="aus-pricing-sync-interval-label" style="font-weight:600;">仅手动</span><span style="font-size:10px;">▼</span></div><div id="aus-pricing-sync-interval-dropdown" style="display:none;position:absolute;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:140px;padding:8px;"></div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;"><label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" id="aus-use-live-rate" style="accent-color:var(--ds-text);" /> 每24小时自动联网获取最新汇率</label><button id="aus-fetch-rate" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">立即获取</button></div>
+          <div id="aus-rate-status" style="font-size:10px;color:var(--ds-text-3);"></div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" id="aus-recalc-on-sync" style="accent-color:var(--ds-text);" /> 同步后重算历史费用（否则仅新请求生效）</label>
+          <div style="display:flex;gap:8px;"><button id="aus-btn-sync-pricing" class="ds-btn-pill" style="flex:1;">立即同步</button><button id="aus-btn-preview-pricing" style="flex:1;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">预览</button></div>
+          <div id="aus-pricing-sync-status" style="font-size:11px;color:var(--ds-text-2);"></div>
+          <div id="aus-pricing-sync-preview" style="display:none;max-height:160px;overflow:auto;border:1px solid var(--ds-border);border-radius:8px;padding:8px;background:var(--ds-sidebar-bg);font-size:11px;"></div>
+        </div>
+      </div>
 
       <!-- 调试 -->
       <div class="ds-card">
@@ -337,6 +362,120 @@ export function renderSettings(doc: Document) {
   };
   doc.getElementById('aus-webdav-sync')!.onclick = () => doSyncNow();
 
+  // 模型价格自动同步（models.dev）
+  try {
+    const ps: any = (state.settings as any).pricingSync || {};
+    const enabledEl = doc.getElementById('aus-pricing-sync-enabled') as HTMLInputElement | null;
+    const slider = doc.getElementById('aus-pricing-sync-slider') as HTMLElement | null;
+    const panel = doc.getElementById('aus-pricing-sync-panel') as HTMLElement | null;
+    if (enabledEl) enabledEl.checked = !!ps.enabled;
+    if (slider) slider.style.left = ps.enabled ? '23px' : '3px';
+    if (panel) panel.style.display = ps.enabled ? 'grid' : 'none';
+    const modeBtn = doc.getElementById('aus-pricing-sync-mode-btn') as HTMLElement | null;
+    const modeLabel = doc.getElementById('aus-pricing-sync-mode-label') as HTMLElement | null;
+    const modeDrop = doc.getElementById('aus-pricing-sync-mode-dropdown') as HTMLElement | null;
+    const modeMap: any = { 'add-missing': '仅新增', 'overwrite-unlocked': '覆盖未锁定', 'overwrite-all': '全部覆盖' };
+    if (modeLabel) modeLabel.textContent = modeMap[ps.mode] || '仅新增';
+    if (modeDrop) {
+      modeDrop.innerHTML = Object.entries(modeMap).map(([k, l]: any) => `<div data-mode="${k}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${ps.mode===k?'background:var(--ds-card);font-weight:600;':''}">${l}</div>`).join('');
+      modeDrop.querySelectorAll('[data-mode]').forEach((el: any) => {
+        el.onclick = () => {
+          (state.settings as any).pricingSync.mode = el.getAttribute('data-mode');
+          saveHot({ settings: state.settings });
+          modeDrop.style.display = 'none';
+          if (modeLabel) modeLabel.textContent = modeMap[(state.settings as any).pricingSync.mode] || el.getAttribute('data-mode');
+          modeDrop.innerHTML = Object.entries(modeMap).map(([k, l]: any) => `<div data-mode="${k}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${(state.settings as any).pricingSync.mode===k?'background:var(--ds-card);font-weight:600;':''}">${l}</div>`).join('');
+        };
+      });
+    }
+    if (modeBtn && modeDrop) modeBtn.onclick = () => { modeDrop.style.display = modeDrop.style.display==='block'?'none':'block'; };
+    const rateEl = doc.getElementById('aus-exchange-rate') as HTMLInputElement | null;
+    if (rateEl) rateEl.value = String(ps.exchangeRate ?? 7.2);
+    const liveEl = doc.getElementById('aus-use-live-rate') as HTMLInputElement | null;
+    if (liveEl) liveEl.checked = !!ps.useLiveRate;
+    const recalcEl = doc.getElementById('aus-recalc-on-sync') as HTMLInputElement | null;
+    if (recalcEl) recalcEl.checked = !!ps.recalcOnSync;
+    const intervalBtn = doc.getElementById('aus-pricing-sync-interval-btn') as HTMLElement | null;
+    const intervalLabel = doc.getElementById('aus-pricing-sync-interval-label') as HTMLElement | null;
+    const intervalDrop = doc.getElementById('aus-pricing-sync-interval-dropdown') as HTMLElement | null;
+    const intervalMap: any = { '0': '仅手动', '24': '每天', '168': '每周' };
+    if (intervalLabel) intervalLabel.textContent = intervalMap[String(ps.autoIntervalHours ?? 0)] || '仅手动';
+    if (intervalDrop) {
+      intervalDrop.innerHTML = Object.entries(intervalMap).map(([k,l]: any)=> `<div data-interval="${k}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${String(ps.autoIntervalHours)===k?'background:var(--ds-card);font-weight:600;':''}">${l}</div>`).join('');
+      intervalDrop.querySelectorAll('[data-interval]').forEach((el:any)=>{
+        el.onclick=()=>{
+          (state.settings as any).pricingSync.autoIntervalHours = parseInt(el.getAttribute('data-interval'))||0;
+          saveHot({settings:state.settings});
+          intervalDrop.style.display='none';
+          if(intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute('data-interval')]||el.getAttribute('data-interval');
+          try{ import('../services/pricing-sync').then(m=> (m as any).restartPricingSyncTimer?.()); import('../services/currency').then(m=> (m as any).restartRateTimer?.()); }catch{}
+        };
+      });
+    }
+    if (intervalBtn && intervalDrop) intervalBtn.onclick = () => { intervalDrop.style.display = intervalDrop.style.display==='block'?'none':'block'; };
+    const rateStatus = doc.getElementById('aus-rate-status') as HTMLElement | null;
+    if (rateStatus) {
+      const last = ps.lastRateFetch ? new Date(ps.lastRateFetch).toLocaleString('zh-CN') : '—';
+      rateStatus.textContent = `1 USD ≈ ${Number(ps.exchangeRate||7.2).toFixed(4)} CNY（更新于 ${last}）`;
+    }
+    const syncStatus = doc.getElementById('aus-pricing-sync-status') as HTMLElement | null;
+    if (syncStatus) {
+      const lastSync = ps.lastSync ? new Date(ps.lastSync).toLocaleString('zh-CN') : '未同步';
+      syncStatus.textContent = `上次同步：${lastSync} · 模式：${modeMap[ps.mode]||ps.mode}`;
+    }
+    if (enabledEl) enabledEl.onchange = () => {
+      (state.settings as any).pricingSync.enabled = enabledEl.checked;
+      if (slider) slider.style.left = enabledEl.checked ? '23px' : '3px';
+      if (panel) panel.style.display = enabledEl.checked ? 'grid' : 'none';
+      saveHot({ settings: state.settings });
+      try { import('../services/currency').then(m=> (m as any).restartRateTimer?.()); import('../services/pricing-sync').then(m=> (m as any).restartPricingSyncTimer?.()); } catch {}
+      try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+      const unitEl = doc.getElementById('aus-model-price-unit') as HTMLElement | null;
+      if (unitEl) { try{  unitEl.textContent = getDisplayCurrency().code + '/百万 tokens'; }catch{} }
+    };
+    if (rateEl) rateEl.onchange = () => {
+      const v = parseFloat(rateEl.value);
+      if (!isFinite(v) || v <= 0) return;
+      (state.settings as any).pricingSync.exchangeRate = Math.round(v*10000)/10000;
+      saveHot({ settings: state.settings });
+      if (rateStatus) rateStatus.textContent = `1 USD ≈ ${v.toFixed(4)} CNY（更新于 ${new Date().toLocaleString('zh-CN')}）`;
+      try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+    };
+    if (liveEl) liveEl.onchange = () => {
+      (state.settings as any).pricingSync.useLiveRate = liveEl.checked;
+      saveHot({ settings: state.settings });
+      try { import('../services/currency').then(m=> (m as any).restartRateTimer?.()); } catch {}
+    };
+    if (recalcEl) recalcEl.onchange = () => {
+      (state.settings as any).pricingSync.recalcOnSync = recalcEl.checked;
+      saveHot({ settings: state.settings });
+    };
+    const fetchBtn = doc.getElementById('aus-fetch-rate') as HTMLElement | null;
+    if (fetchBtn) fetchBtn.onclick = async () => {
+      fetchBtn.textContent = '获取中…';
+      (fetchBtn as any).disabled = true;
+      try { const r = await fetchLiveRate(true); if (r && rateEl) { rateEl.value = String(r); if(rateStatus) rateStatus.textContent = `1 USD ≈ ${Number(r).toFixed(4)} CNY（更新于 ${new Date().toLocaleString('zh-CN')}）`; try{ (globalThis as any).ApiUsageStat?.refreshUI?.(); }catch{} } } finally { fetchBtn.textContent='立即获取'; (fetchBtn as any).disabled=false; }
+    };
+    const syncBtn = doc.getElementById('aus-btn-sync-pricing') as HTMLElement | null;
+    if (syncBtn) syncBtn.onclick = async () => {
+      syncBtn.textContent = '同步中…';
+      (syncBtn as any).disabled = true;
+      try { await syncPricingFromModelsDev({ silent:false }); if(syncStatus){ const ps2:any=(state.settings as any).pricingSync; syncStatus.textContent=`上次同步：${new Date(ps2.lastSync).toLocaleString('zh-CN')} · 模式：${modeMap[ps2.mode]||ps2.mode}`; } try{ (globalThis as any).ApiUsageStat?.refreshUI?.(); renderModelsEditor(doc); }catch{} } finally { syncBtn.textContent='立即同步'; (syncBtn as any).disabled=false; }
+    };
+    const previewBtn = doc.getElementById('aus-btn-preview-pricing') as HTMLElement | null;
+    const previewHost = doc.getElementById('aus-pricing-sync-preview') as HTMLElement | null;
+    if (previewBtn && previewHost) previewBtn.onclick = async () => {
+      previewBtn.textContent='预览中…'; (previewBtn as any).disabled=true;
+      try {
+        const catalog = await fetchModelsDevCatalog();
+        const p = previewSync(catalog);
+        previewHost.style.display='block';
+        previewHost.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">共 ${p.total} 模型 · 新增 ${p.added} 更新 ${p.updated} 跳过 ${p.skipped}</div>` + p.samples.map((s:any)=>`<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--ds-border);padding:4px 0;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;">${esc(s.model)}</span><span>${s.hit.toFixed(4)}/${s.miss.toFixed(4)}/${s.output.toFixed(4)}</span></div>`).join('') + `<div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;">单位 ${getDisplayCurrency().code}/百万 · 峰价为谷价 2×（DeepSeek）</div>`;
+      } catch(e:any){ previewHost.style.display='block'; previewHost.textContent='预览失败：'+(e?.message||e); }
+      finally { previewBtn.textContent='预览'; (previewBtn as any).disabled=false; }
+    };
+  } catch {}
+
   renderPeakHoursEditor(doc);
   renderModelsEditor(doc);
   fillDebugModelSelect(doc);
@@ -465,7 +604,15 @@ function renderModelsEditor(doc: Document) {
 }
 
 function modelRow(model: string, p: any, isBuiltin: boolean, usePeak: boolean) {
-  const hit = (v: any) => v !== undefined && v !== '' ? v : '';
+  const cur = (()=>{ try{ return getDisplayCurrency(); } catch{ return {code:'CNY',symbol:'¥',rate:1} as any; } })();
+  const toDisplay = (v:any)=> {
+    if (v===''||v==null) return '';
+    const num=parseFloat(String(v));
+    if(!isFinite(num)) return String(v);
+    const d = cur.code==='USD' ? num / cur.rate : num;
+    return String(Math.round(d*10000)/10000);
+  };
+  const hit = (v: any) => v !== undefined && v !== '' ? toDisplay(v) : '';
   return `<div data-model="${esc(model)}" data-builtin="${isBuiltin ? '1':'0'}" style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;background:var(--ds-card-inner);display:grid;gap:8px;">
     <div style="display:flex;align-items:center;gap:8px;">
       <input value="${esc(model)}" ${isBuiltin ? 'readonly' : ''} style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:${isBuiltin ? 'var(--ds-sidebar-bg)':'var(--ds-card-inner)'};font-size:12px;" />
@@ -482,7 +629,7 @@ function modelRow(model: string, p: any, isBuiltin: boolean, usePeak: boolean) {
         ${field('peak.hit', hit(p.peak.hit))}${field('peak.miss', hit(p.peak.miss))}${field('peak.output', hit(p.peak.output))}
       </div>
     </div>
-    <div style="font-size:10px;color:var(--ds-text-3);">单位：¥/百万 tokens · 内置模型不可删除，价格可覆盖</div>
+    <div style="font-size:10px;color:var(--ds-text-3);">单位：${cur.code}/百万 tokens（${cur.symbol}）· 内置模型不可删除，价格可覆盖</div>
   </div>`;
 }
 function field(key: string, val: any) {
@@ -492,13 +639,15 @@ function field(key: string, val: any) {
 function readRow(row: HTMLElement) {
   const peak = (row.querySelector('.aus-cm-peak') as HTMLInputElement)?.checked ?? true;
   const out: any = { usePeakPricing: peak, offpeak: {}, peak: {} };
+  const cur = (()=>{ try{ return getDisplayCurrency(); } catch{ return {code:'CNY',rate:1} as any; } })();
   row.querySelectorAll('input[data-price]').forEach((el: any) => {
     const k = el.getAttribute('data-price'); const v = el.value.trim();
     if (v === '') return;
     const num = parseFloat(v);
     if (isNaN(num as any)) return;
+    const cny = cur.code==='USD' ? Math.round(num * cur.rate * 10000)/10000 : num;
     const [zone, field] = k.split('.');
-    out[zone][field] = num;
+    out[zone][field] = cny;
   });
   return out;
 }

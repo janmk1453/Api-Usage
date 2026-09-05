@@ -324,6 +324,8 @@ export const repository = {
       // 深合并 webdav/peakHours/customModels，避免缺字段导致白屏
       const merged: any = { ...def, ...incoming };
       merged.webdav = { ...def.webdav, ...(incoming.webdav || {}) };
+      merged.pricingSync = { ...def.pricingSync, ...(incoming.pricingSync || {}) };
+      if (!isFinite(parseFloat(String(merged.pricingSync.exchangeRate))) || parseFloat(String(merged.pricingSync.exchangeRate)) <= 0) merged.pricingSync.exchangeRate = 7.2;
       if (!Array.isArray(merged.peakHours) || !merged.peakHours.length) merged.peakHours = def.peakHours;
       if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
       if (!merged.historyScope) merged.historyScope = def.historyScope;
@@ -449,6 +451,20 @@ export const repository = {
           (state.settings as any).statsFour = ['avg_cost','avg_tokens','avg_think_ratio','truncation_rate'];
           try { saveHot({ settings: state.settings }); } catch {}
         }
+      } catch {}
+    }
+    // 迁移：pricingSync（默认关闭，汇率 7.2，自动同步仅手动）
+    if (!(state.settings as any).pricingSync) {
+      (state.settings as any).pricingSync = { enabled: false, mode: 'add-missing', exchangeRate: 7.2, useLiveRate: true, autoIntervalHours: 0, lastSync: null, lastRateFetch: null, recalcOnSync: false };
+      try { saveHot({ settings: state.settings }); } catch {}
+    } else {
+      try {
+        const def:any = { enabled:false, mode:'add-missing', exchangeRate:7.2, useLiveRate:true, autoIntervalHours:0, lastSync:null, lastRateFetch:null, recalcOnSync:false };
+        const ps:any=(state.settings as any).pricingSync;
+        for(const k of Object.keys(def)) if(ps[k]===undefined) ps[k]=def[k];
+        const r=parseFloat(String(ps.exchangeRate));
+        if(!isFinite(r)||r<=0) ps.exchangeRate=7.2;
+        try{ saveHot({settings:state.settings}); }catch{}
       } catch {}
     }
     // 迁移：旧历史补 finishReason/isTruncated

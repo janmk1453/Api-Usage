@@ -6,6 +6,7 @@ import { state, getSelectedSave } from '../store/index';
 import { calcSavings } from '../services/pricing';
 import { localDay } from '../utils/date';
 import type { OverviewView, StatsView, TimeRange } from './types';
+import { formatMoney, getDisplayCurrency } from '../services/currency';
 
 export function getFilteredHistory(range?: TimeRange): any[] {
   const s: any = getSelectedSave();
@@ -88,8 +89,16 @@ export function computeOverview(): OverviewView {
       }
     }
   } catch {}
+  const balanceText = (() => {
+    try {
+      
+      const v = bal != null && bal !== '' ? parseFloat(String(bal)) : NaN;
+      if (!isNaN(v)) return formatMoney(v, 2);
+      return formatMoney(0, 2);
+    } catch { return bal ? '¥' + bal + ' CNY' : '¥0.00 CNY'; }
+  })();
   return {
-    balanceText: bal ? '¥' + bal + ' CNY' : '¥0.00 CNY',
+    balanceText,
     totalCost, totalTokens, hit, miss, output, hitRate, savings,
     inputCost: s.input_cost || 0, outputCost: s.output_cost || 0,
     avgCost, avgTokens, avgDuration, avgRate, rounds, remainingRounds,

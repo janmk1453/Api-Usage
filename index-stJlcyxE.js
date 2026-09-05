@@ -19,7 +19,17 @@ const defaultSettings = () => ({
   historyScope: "all",
   overviewFour: ["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_tokens", "avg_output_tokens", "avg_hit_rate", "max_total"],
   statsFour: ["avg_cost", "avg_tokens", "avg_think_ratio", "truncation_rate"],
-  modelsPricingCollapsed: true
+  modelsPricingCollapsed: true,
+  pricingSync: {
+    enabled: false,
+    mode: "add-missing",
+    exchangeRate: 7.2,
+    useLiveRate: true,
+    autoIntervalHours: 0,
+    lastSync: null,
+    lastRateFetch: null,
+    recalcOnSync: false
+  }
 });
 const PRICING = {
   "deepseek-v4-flash": {
@@ -60,6 +70,10 @@ const STORAGE_KEYS = {
 const EXPORT_FORMAT_VERSION = 1;
 const WEBDAV_SYNC_FILE = "DeepSeekStatSync.json";
 const WEBDAV_REMOTE_VERSION = 1;
+const PRICING_SYNC_SOURCE = "https://models.dev/api.json";
+const PRICING_SYNC_FALLBACK = "https://raw.githubusercontent.com/anomalyco/opencode/main/models.json";
+const DEFAULT_EXCHANGE_RATE = 7.2;
+const EXCHANGE_RATE_FETCH_INTERVAL = 24 * 60 * 60 * 1e3;
 const state$2 = {
   history: [],
   total_tokens: 0,
@@ -512,6 +526,126 @@ function esc$1(s) {
 function isUnsafeKey$1(k) {
   return k === "__proto__" || k === "constructor" || k === "prototype";
 }
+function getEffectiveRate() {
+  const ps = state$2.settings?.pricingSync;
+  if (!ps?.enabled) return 1;
+  const r = parseFloat(String(ps.exchangeRate));
+  if (!isFinite(r) || r <= 0) return DEFAULT_EXCHANGE_RATE;
+  return r;
+}
+function getDisplayCurrency() {
+  const ps = state$2.settings?.pricingSync;
+  if (ps?.enabled) {
+    return { code: "USD", symbol: "$", rate: getEffectiveRate() };
+  }
+  return { code: "CNY", symbol: "¥", rate: 1 };
+}
+function cnyToDisplay(cny) {
+  const cur = getDisplayCurrency();
+  if (cur.code === "USD") return cny / cur.rate;
+  return cny;
+}
+function displayToCny(display) {
+  const cur = getDisplayCurrency();
+  if (cur.code === "USD") return display * cur.rate;
+  return display;
+}
+function formatMoney(cny, digits = 4) {
+  const cur = getDisplayCurrency();
+  const v = cnyToDisplay(cny);
+  return `${cur.symbol}${v.toFixed(digits)} ${cur.code}`;
+}
+function formatMoneyWithCode(cny, digits = 4, codeOverride) {
+  const cur = codeOverride ? { code: codeOverride, symbol: codeOverride === "USD" ? "$" : "¥", rate: getEffectiveRate() } : getDisplayCurrency();
+  const v = codeOverride === "USD" ? cny / cur.rate : codeOverride === "CNY" ? cny : cnyToDisplay(cny);
+  const sym = codeOverride ? codeOverride === "USD" ? "$" : "¥" : cur.symbol;
+  const code = codeOverride || cur.code;
+  return `${sym}${v.toFixed(digits)} ${code}`;
+}
+function formatRate() {
+  const ps = state$2.settings?.pricingSync;
+  const r = getEffectiveRate();
+  const last = ps?.lastRateFetch ? new Date(ps.lastRateFetch).toLocaleString("zh-CN") : "—";
+  return `1 USD ≈ ${r.toFixed(4)} CNY（更新于 ${last}）`;
+}
+let rateInFlight = false;
+async function fetchLiveRate(force = false) {
+  const ps = state$2.settings?.pricingSync;
+  if (!ps) return null;
+  if (!force && ps.lastRateFetch && Date.now() - ps.lastRateFetch < EXCHANGE_RATE_FETCH_INTERVAL) {
+    return ps.exchangeRate;
+  }
+  if (rateInFlight) return null;
+  rateInFlight = true;
+  const urls = [
+    "https://open.er-api.com/v6/latest/USD",
+    "https://api.exchangerate-api.com/v4/latest/USD"
+  ];
+  for (const u of urls) {
+    try {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 6e3);
+      const r = await fetch(u, { signal: ctrl.signal });
+      clearTimeout(to);
+      if (!r.ok) continue;
+      const j = await r.json();
+      const rate = j?.rates?.CNY ?? j?.rates?.["CNY"] ?? j?.conversion_rates?.CNY;
+      const v = parseFloat(String(rate));
+      if (isFinite(v) && v > 0) {
+        ps.exchangeRate = Math.round(v * 1e4) / 1e4;
+        ps.lastRateFetch = Date.now();
+        saveHot({ settings: state$2.settings });
+        rateInFlight = false;
+        return ps.exchangeRate;
+      }
+    } catch {
+    }
+  }
+  rateInFlight = false;
+  return null;
+}
+let rateTimer = null;
+function restartRateTimer() {
+  if (rateTimer) {
+    try {
+      clearInterval(rateTimer);
+    } catch {
+    }
+    rateTimer = null;
+  }
+  const ps = state$2.settings?.pricingSync;
+  if (!ps?.enabled || !ps?.useLiveRate) return;
+  rateTimer = setInterval(() => {
+    fetchLiveRate(false).catch(() => {
+    });
+  }, EXCHANGE_RATE_FETCH_INTERVAL);
+  if (!ps.lastRateFetch || Date.now() - ps.lastRateFetch >= EXCHANGE_RATE_FETCH_INTERVAL) {
+    fetchLiveRate(false).catch(() => {
+    });
+  }
+}
+function stopRateTimer() {
+  if (rateTimer) {
+    try {
+      clearInterval(rateTimer);
+    } catch {
+    }
+    rateTimer = null;
+  }
+}
+const currency = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  cnyToDisplay,
+  displayToCny,
+  fetchLiveRate,
+  formatMoney,
+  formatMoneyWithCode,
+  formatRate,
+  getDisplayCurrency,
+  getEffectiveRate,
+  restartRateTimer,
+  stopRateTimer
+}, Symbol.toStringTag, { value: "Module" }));
 function mergePrices(base, custom) {
   if (!custom) return base;
   return {
@@ -1005,6 +1139,8 @@ const repository = {
       const incoming = next.settings || {};
       const merged = { ...def, ...incoming };
       merged.webdav = { ...def.webdav, ...incoming.webdav || {} };
+      merged.pricingSync = { ...def.pricingSync, ...incoming.pricingSync || {} };
+      if (!isFinite(parseFloat(String(merged.pricingSync.exchangeRate))) || parseFloat(String(merged.pricingSync.exchangeRate)) <= 0) merged.pricingSync.exchangeRate = 7.2;
       if (!Array.isArray(merged.peakHours) || !merged.peakHours.length) merged.peakHours = def.peakHours;
       if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
       if (!merged.historyScope) merged.historyScope = def.historyScope;
@@ -1147,6 +1283,26 @@ const repository = {
             saveHot({ settings: state$2.settings });
           } catch {
           }
+        }
+      } catch {
+      }
+    }
+    if (!state$2.settings.pricingSync) {
+      state$2.settings.pricingSync = { enabled: false, mode: "add-missing", exchangeRate: 7.2, useLiveRate: true, autoIntervalHours: 0, lastSync: null, lastRateFetch: null, recalcOnSync: false };
+      try {
+        saveHot({ settings: state$2.settings });
+      } catch {
+      }
+    } else {
+      try {
+        const def = { enabled: false, mode: "add-missing", exchangeRate: 7.2, useLiveRate: true, autoIntervalHours: 0, lastSync: null, lastRateFetch: null, recalcOnSync: false };
+        const ps = state$2.settings.pricingSync;
+        for (const k of Object.keys(def)) if (ps[k] === void 0) ps[k] = def[k];
+        const r = parseFloat(String(ps.exchangeRate));
+        if (!isFinite(r) || r <= 0) ps.exchangeRate = 7.2;
+        try {
+          saveHot({ settings: state$2.settings });
+        } catch {
         }
       } catch {
       }
@@ -1682,7 +1838,13 @@ async function queryBalance(silent = false) {
         globalThis.ApiUsageStat?.refreshUI?.();
       } catch {
       }
-      if (!silent) toast("success", "余额已更新 ¥" + i.total_balance);
+      if (!silent) {
+        try {
+          toast("success", "余额已更新 " + formatMoney(parseFloat(String(i.total_balance)) || 0, 2));
+        } catch {
+          toast("success", "余额已更新 ¥" + i.total_balance);
+        }
+      }
       return bal;
     }
     if (!silent) toast("error", d.error?.message || "查询失败");
@@ -1748,7 +1910,7 @@ function exportHistory() {
   const pad = (n) => n < 10 ? "0" + n : "" + n;
   const safeSettings = JSON.parse(JSON.stringify(state$2.settings || {}));
   if (safeSettings.webdav) safeSettings.webdav = { url: "", username: "", path: "", proxy: "" };
-  const _appVer = "3.0.2";
+  const _appVer = "3.0.3";
   const payload = {
     format: "deepseek-stat-export",
     version: EXPORT_FORMAT_VERSION,
@@ -2227,6 +2389,194 @@ function generateDebugBatch() {
   }
   alert("已生成 " + generated + " 条模拟数据");
 }
+function toCNY(usd, rate) {
+  return Math.round(usd * rate * 1e4) / 1e4;
+}
+function normalizeCost(c) {
+  if (!c || typeof c !== "object") return null;
+  const hitRaw = c.cache_read ?? c.cacheRead ?? c.cached_tokens;
+  const missRaw = c.input;
+  const outRaw = c.output ?? c.reasoning;
+  const hit = hitRaw != null ? parseFloat(String(hitRaw)) : NaN;
+  const miss = missRaw != null ? parseFloat(String(missRaw)) : NaN;
+  const out = outRaw != null ? parseFloat(String(outRaw)) : NaN;
+  if (!isFinite(miss) || !isFinite(out)) return null;
+  const h = isFinite(hit) ? hit : miss;
+  return { hit: h, miss, output: out };
+}
+async function fetchJson(url, timeoutMs = 8e3) {
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, cache: "no-store" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return await r.json();
+  } finally {
+    clearTimeout(to);
+  }
+}
+async function fetchModelsDevCatalog() {
+  const urls = [PRICING_SYNC_SOURCE, PRICING_SYNC_FALLBACK, "https://models.dev/catalog.json"];
+  let lastErr = null;
+  for (const u of urls) {
+    try {
+      return await fetchJson(u);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("fetch failed");
+}
+function buildCustomModelsFromCatalog(catalog, rate) {
+  const out = [];
+  if (!catalog || typeof catalog !== "object") return out;
+  for (const providerId of Object.keys(catalog)) {
+    const provider = catalog[providerId];
+    const models = provider?.models;
+    if (!models || typeof models !== "object") continue;
+    for (const modelId of Object.keys(models)) {
+      const m = models[modelId];
+      const cost = m?.cost;
+      const norm = normalizeCost(cost);
+      if (!norm) continue;
+      const cnHit = toCNY(norm.hit, rate);
+      const cnMiss = toCNY(norm.miss, rate);
+      const cnOut = toCNY(norm.output, rate);
+      const usePeak = isDeepSeekOfficialModel(modelId);
+      const entry = {
+        model: modelId,
+        usePeakPricing: usePeak,
+        offpeak: { hit: cnHit, miss: cnMiss, output: cnOut },
+        peak: usePeak ? { hit: toCNY(norm.hit * 2, 1) ? cnHit * 2 : cnHit * 2, miss: cnMiss * 2, output: cnOut * 2 } : { hit: cnHit, miss: cnMiss, output: cnOut }
+      };
+      if (usePeak) {
+        entry.peak.hit = Math.round(cnHit * 2 * 1e4) / 1e4;
+        entry.peak.miss = Math.round(cnMiss * 2 * 1e4) / 1e4;
+        entry.peak.output = Math.round(cnOut * 2 * 1e4) / 1e4;
+      }
+      out.push(entry);
+    }
+  }
+  return out;
+}
+function previewSync(catalog) {
+  const rate = getEffectiveRate() || DEFAULT_EXCHANGE_RATE;
+  const incoming = buildCustomModelsFromCatalog(catalog, rate);
+  const existing = new Map((state$2.settings.customModels || []).map((c) => [c.model, c]));
+  const mode = state$2.settings.pricingSync?.mode || "add-missing";
+  let added = 0, updated = 0, skipped = 0;
+  const samples = [];
+  for (const inc of incoming) {
+    const ex = existing.get(inc.model);
+    if (!ex) {
+      added++;
+      if (samples.length < 6) samples.push(inc);
+    } else {
+      const same = ex.offpeak?.hit === inc.offpeak.hit && ex.offpeak?.miss === inc.offpeak.miss && ex.offpeak?.output === inc.offpeak.output;
+      if (mode === "add-missing") skipped++;
+      else if (mode === "overwrite-all") {
+        if (!same) updated++;
+        else skipped++;
+      } else {
+        if (!same) updated++;
+        else skipped++;
+      }
+    }
+  }
+  return { added, updated, skipped, total: incoming.length, samples };
+}
+async function syncPricingFromModelsDev(opts) {
+  const silent = !!opts?.silent;
+  const ps = state$2.settings.pricingSync;
+  if (!ps) return null;
+  try {
+    const catalog = await fetchModelsDevCatalog();
+    const rate = getEffectiveRate() || DEFAULT_EXCHANGE_RATE;
+    const incoming = buildCustomModelsFromCatalog(catalog, rate);
+    if (!incoming.length) {
+      if (!silent) toast("warning", "models.dev 未返回可用价格");
+      return null;
+    }
+    const mode = ps.mode || "add-missing";
+    const map2 = new Map((state$2.settings.customModels || []).map((c) => [c.model, c]));
+    let added = 0, updated = 0, skipped = 0;
+    for (const inc of incoming) {
+      const ex = map2.get(inc.model);
+      if (!ex) {
+        map2.set(inc.model, inc);
+        added++;
+      } else {
+        if (mode === "add-missing") {
+          skipped++;
+          continue;
+        }
+        const same = ex.offpeak?.hit === inc.offpeak.hit && ex.offpeak?.miss === inc.offpeak.miss && ex.offpeak?.output === inc.offpeak.output && ex.peak?.hit === inc.peak.hit;
+        if (same) {
+          skipped++;
+          continue;
+        }
+        map2.set(inc.model, inc);
+        updated++;
+      }
+    }
+    state$2.settings.customModels = Array.from(map2.values());
+    ps.lastSync = Date.now();
+    saveHot({ settings: state$2.settings });
+    try {
+      const { repository: repository2 } = await Promise.resolve().then(() => repository$1);
+      if (ps.recalcOnSync) repository2.recalcAll();
+    } catch {
+    }
+    try {
+      globalThis.ApiUsageStat?.refreshUI?.();
+    } catch {
+    }
+    const total = incoming.length;
+    const preview = { added, updated, skipped, total, samples: incoming.slice(0, 6).map((c) => ({ model: c.model, hit: c.offpeak.hit, miss: c.offpeak.miss, output: c.offpeak.output })) };
+    if (!silent) toast("success", `价格已同步：新增 ${added} 更新 ${updated} 跳过 ${skipped}（共 ${total} 模型）`);
+    log.debug("pricing sync done", preview);
+    return preview;
+  } catch (e) {
+    log.error("pricing sync failed", e);
+    if (!silent) toast("error", "同步失败：" + (e?.message || e));
+    return null;
+  }
+}
+let pricingTimer = null;
+function restartPricingSyncTimer() {
+  if (pricingTimer) {
+    try {
+      clearInterval(pricingTimer);
+    } catch {
+    }
+    pricingTimer = null;
+  }
+  const ps = state$2.settings.pricingSync;
+  if (!ps?.enabled) return;
+  const hours = parseInt(String(ps.autoIntervalHours)) || 0;
+  if (!hours || hours <= 0) return;
+  pricingTimer = setInterval(() => {
+    syncPricingFromModelsDev({ silent: true }).catch(() => {
+    });
+  }, hours * 60 * 60 * 1e3);
+}
+function stopPricingSyncTimer() {
+  if (pricingTimer) {
+    try {
+      clearInterval(pricingTimer);
+    } catch {
+    }
+    pricingTimer = null;
+  }
+}
+const pricingSync = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  fetchModelsDevCatalog,
+  previewSync,
+  restartPricingSyncTimer,
+  stopPricingSyncTimer,
+  syncPricingFromModelsDev
+}, Symbol.toStringTag, { value: "Module" }));
 function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
@@ -2240,6 +2590,10 @@ function bindSettingsOutsideClick(doc) {
     if (td && td.style.display === "block" && !t.closest("#aus-theme-dropdown") && !t.closest("#aus-theme-btn")) td.style.display = "none";
     const sd = doc.getElementById("aus-history-scope-dropdown");
     if (sd && sd.style.display === "block" && !t.closest("#aus-history-scope-dropdown") && !t.closest("#aus-history-scope-btn")) sd.style.display = "none";
+    const md = doc.getElementById("aus-pricing-sync-mode-dropdown");
+    if (md && md.style.display === "block" && !t.closest("#aus-pricing-sync-mode-dropdown") && !t.closest("#aus-pricing-sync-mode-btn")) md.style.display = "none";
+    const idd = doc.getElementById("aus-pricing-sync-interval-dropdown");
+    if (idd && idd.style.display === "block" && !t.closest("#aus-pricing-sync-interval-dropdown") && !t.closest("#aus-pricing-sync-interval-btn")) idd.style.display = "none";
   });
 }
 function localDay(ts) {
@@ -2282,7 +2636,25 @@ function renderSettings(doc) {
       <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">高峰时段</span><button id="aus-btn-add-peak-hour" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 添加</button></div><div id="aus-peak-hours-list" style="display:grid;gap:6px;margin-top:8px;"></div><div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;">支持跨天（如 22:00-02:00），周末自动低谷。</div></div>
 
       <!-- 模型与价格（可折叠，默认收起） -->
-      <div class="ds-card"><div id="aus-models-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型与价格（¥/百万 tokens）</span><div style="display:flex;align-items:center;gap:8px;"><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 自定义模型</button><span id="aus-models-toggle" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;user-select:none;line-height:1;">▼ 展开</span></div></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
+      <div class="ds-card"><div id="aus-models-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型与价格（<span id="aus-model-price-unit">${getDisplayCurrency().code}/百万 tokens</span>）</span><div style="display:flex;align-items:center;gap:8px;"><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 自定义模型</button><span id="aus-models-toggle" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;user-select:none;line-height:1;">▼ 展开</span></div></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
+
+      <!-- 模型价格自动同步（models.dev） -->
+      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型价格自动同步（models.dev）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-pricing-sync-enabled" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-pricing-sync-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div id="aus-pricing-sync-panel" style="display:${s.pricingSync?.enabled ? "grid" : "none"};margin-top:10px;gap:10px;">
+          <div style="font-size:11px;color:var(--ds-text-2);line-height:1.6;">开启后所有价格、余额、图表将以 <b style="color:var(--ds-text);">美元 $/USD</b> 展示（按汇率动态换算），自动从 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 拉取全量模型价格，人民币时仍以 ¥/CNY 展示，数据源为 USD/百万 tokens，已按峰谷规则本地合成 DeepSeek 峰价（2×谷）。功能默认关闭。</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;position:relative;"><span style="font-size:12px;color:var(--ds-text);">同步模式</span><div id="aus-pricing-sync-mode-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:12px;cursor:pointer;"><span id="aus-pricing-sync-mode-label" style="font-weight:600;color:var(--ds-text);">仅新增</span><span style="font-size:10px;">▼</span></div><div id="aus-pricing-sync-mode-dropdown" style="display:none;position:absolute;top:40px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">汇率 USD→CNY</div><input id="aus-exchange-rate" type="number" step="0.0001" min="0" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div>
+            <div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">自动同步间隔</div><div id="aus-pricing-sync-interval-btn" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;cursor:pointer;"><span id="aus-pricing-sync-interval-label" style="font-weight:600;">仅手动</span><span style="font-size:10px;">▼</span></div><div id="aus-pricing-sync-interval-dropdown" style="display:none;position:absolute;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:140px;padding:8px;"></div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;"><label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" id="aus-use-live-rate" style="accent-color:var(--ds-text);" /> 每24小时自动联网获取最新汇率</label><button id="aus-fetch-rate" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">立即获取</button></div>
+          <div id="aus-rate-status" style="font-size:10px;color:var(--ds-text-3);"></div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" id="aus-recalc-on-sync" style="accent-color:var(--ds-text);" /> 同步后重算历史费用（否则仅新请求生效）</label>
+          <div style="display:flex;gap:8px;"><button id="aus-btn-sync-pricing" class="ds-btn-pill" style="flex:1;">立即同步</button><button id="aus-btn-preview-pricing" style="flex:1;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">预览</button></div>
+          <div id="aus-pricing-sync-status" style="font-size:11px;color:var(--ds-text-2);"></div>
+          <div id="aus-pricing-sync-preview" style="display:none;max-height:160px;overflow:auto;border:1px solid var(--ds-border);border-radius:8px;padding:8px;background:var(--ds-sidebar-bg);font-size:11px;"></div>
+        </div>
+      </div>
 
       <!-- 调试 -->
       <div class="ds-card">
@@ -2653,6 +3025,178 @@ function renderSettings(doc) {
     }
   };
   doc.getElementById("aus-webdav-sync").onclick = () => doSyncNow();
+  try {
+    const ps = state$2.settings.pricingSync || {};
+    const enabledEl = doc.getElementById("aus-pricing-sync-enabled");
+    const slider = doc.getElementById("aus-pricing-sync-slider");
+    const panel2 = doc.getElementById("aus-pricing-sync-panel");
+    if (enabledEl) enabledEl.checked = !!ps.enabled;
+    if (slider) slider.style.left = ps.enabled ? "23px" : "3px";
+    if (panel2) panel2.style.display = ps.enabled ? "grid" : "none";
+    const modeBtn = doc.getElementById("aus-pricing-sync-mode-btn");
+    const modeLabel = doc.getElementById("aus-pricing-sync-mode-label");
+    const modeDrop = doc.getElementById("aus-pricing-sync-mode-dropdown");
+    const modeMap = { "add-missing": "仅新增", "overwrite-unlocked": "覆盖未锁定", "overwrite-all": "全部覆盖" };
+    if (modeLabel) modeLabel.textContent = modeMap[ps.mode] || "仅新增";
+    if (modeDrop) {
+      modeDrop.innerHTML = Object.entries(modeMap).map(([k, l]) => `<div data-mode="${k}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${ps.mode === k ? "background:var(--ds-card);font-weight:600;" : ""}">${l}</div>`).join("");
+      modeDrop.querySelectorAll("[data-mode]").forEach((el) => {
+        el.onclick = () => {
+          state$2.settings.pricingSync.mode = el.getAttribute("data-mode");
+          saveHot({ settings: state$2.settings });
+          modeDrop.style.display = "none";
+          if (modeLabel) modeLabel.textContent = modeMap[state$2.settings.pricingSync.mode] || el.getAttribute("data-mode");
+          modeDrop.innerHTML = Object.entries(modeMap).map(([k, l]) => `<div data-mode="${k}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${state$2.settings.pricingSync.mode === k ? "background:var(--ds-card);font-weight:600;" : ""}">${l}</div>`).join("");
+        };
+      });
+    }
+    if (modeBtn && modeDrop) modeBtn.onclick = () => {
+      modeDrop.style.display = modeDrop.style.display === "block" ? "none" : "block";
+    };
+    const rateEl = doc.getElementById("aus-exchange-rate");
+    if (rateEl) rateEl.value = String(ps.exchangeRate ?? 7.2);
+    const liveEl = doc.getElementById("aus-use-live-rate");
+    if (liveEl) liveEl.checked = !!ps.useLiveRate;
+    const recalcEl = doc.getElementById("aus-recalc-on-sync");
+    if (recalcEl) recalcEl.checked = !!ps.recalcOnSync;
+    const intervalBtn = doc.getElementById("aus-pricing-sync-interval-btn");
+    const intervalLabel = doc.getElementById("aus-pricing-sync-interval-label");
+    const intervalDrop = doc.getElementById("aus-pricing-sync-interval-dropdown");
+    const intervalMap = { "0": "仅手动", "24": "每天", "168": "每周" };
+    if (intervalLabel) intervalLabel.textContent = intervalMap[String(ps.autoIntervalHours ?? 0)] || "仅手动";
+    if (intervalDrop) {
+      intervalDrop.innerHTML = Object.entries(intervalMap).map(([k, l]) => `<div data-interval="${k}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${String(ps.autoIntervalHours) === k ? "background:var(--ds-card);font-weight:600;" : ""}">${l}</div>`).join("");
+      intervalDrop.querySelectorAll("[data-interval]").forEach((el) => {
+        el.onclick = () => {
+          state$2.settings.pricingSync.autoIntervalHours = parseInt(el.getAttribute("data-interval")) || 0;
+          saveHot({ settings: state$2.settings });
+          intervalDrop.style.display = "none";
+          if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
+          try {
+            Promise.resolve().then(() => pricingSync).then((m) => m.restartPricingSyncTimer?.());
+            Promise.resolve().then(() => currency).then((m) => m.restartRateTimer?.());
+          } catch {
+          }
+        };
+      });
+    }
+    if (intervalBtn && intervalDrop) intervalBtn.onclick = () => {
+      intervalDrop.style.display = intervalDrop.style.display === "block" ? "none" : "block";
+    };
+    const rateStatus = doc.getElementById("aus-rate-status");
+    if (rateStatus) {
+      const last = ps.lastRateFetch ? new Date(ps.lastRateFetch).toLocaleString("zh-CN") : "—";
+      rateStatus.textContent = `1 USD ≈ ${Number(ps.exchangeRate || 7.2).toFixed(4)} CNY（更新于 ${last}）`;
+    }
+    const syncStatus = doc.getElementById("aus-pricing-sync-status");
+    if (syncStatus) {
+      const lastSync = ps.lastSync ? new Date(ps.lastSync).toLocaleString("zh-CN") : "未同步";
+      syncStatus.textContent = `上次同步：${lastSync} · 模式：${modeMap[ps.mode] || ps.mode}`;
+    }
+    if (enabledEl) enabledEl.onchange = () => {
+      state$2.settings.pricingSync.enabled = enabledEl.checked;
+      if (slider) slider.style.left = enabledEl.checked ? "23px" : "3px";
+      if (panel2) panel2.style.display = enabledEl.checked ? "grid" : "none";
+      saveHot({ settings: state$2.settings });
+      try {
+        Promise.resolve().then(() => currency).then((m) => m.restartRateTimer?.());
+        Promise.resolve().then(() => pricingSync).then((m) => m.restartPricingSyncTimer?.());
+      } catch {
+      }
+      try {
+        globalThis.ApiUsageStat?.refreshUI?.();
+      } catch {
+      }
+      const unitEl = doc.getElementById("aus-model-price-unit");
+      if (unitEl) {
+        try {
+          unitEl.textContent = getDisplayCurrency().code + "/百万 tokens";
+        } catch {
+        }
+      }
+    };
+    if (rateEl) rateEl.onchange = () => {
+      const v = parseFloat(rateEl.value);
+      if (!isFinite(v) || v <= 0) return;
+      state$2.settings.pricingSync.exchangeRate = Math.round(v * 1e4) / 1e4;
+      saveHot({ settings: state$2.settings });
+      if (rateStatus) rateStatus.textContent = `1 USD ≈ ${v.toFixed(4)} CNY（更新于 ${(/* @__PURE__ */ new Date()).toLocaleString("zh-CN")}）`;
+      try {
+        globalThis.ApiUsageStat?.refreshUI?.();
+      } catch {
+      }
+    };
+    if (liveEl) liveEl.onchange = () => {
+      state$2.settings.pricingSync.useLiveRate = liveEl.checked;
+      saveHot({ settings: state$2.settings });
+      try {
+        Promise.resolve().then(() => currency).then((m) => m.restartRateTimer?.());
+      } catch {
+      }
+    };
+    if (recalcEl) recalcEl.onchange = () => {
+      state$2.settings.pricingSync.recalcOnSync = recalcEl.checked;
+      saveHot({ settings: state$2.settings });
+    };
+    const fetchBtn = doc.getElementById("aus-fetch-rate");
+    if (fetchBtn) fetchBtn.onclick = async () => {
+      fetchBtn.textContent = "获取中…";
+      fetchBtn.disabled = true;
+      try {
+        const r = await fetchLiveRate(true);
+        if (r && rateEl) {
+          rateEl.value = String(r);
+          if (rateStatus) rateStatus.textContent = `1 USD ≈ ${Number(r).toFixed(4)} CNY（更新于 ${(/* @__PURE__ */ new Date()).toLocaleString("zh-CN")}）`;
+          try {
+            globalThis.ApiUsageStat?.refreshUI?.();
+          } catch {
+          }
+        }
+      } finally {
+        fetchBtn.textContent = "立即获取";
+        fetchBtn.disabled = false;
+      }
+    };
+    const syncBtn = doc.getElementById("aus-btn-sync-pricing");
+    if (syncBtn) syncBtn.onclick = async () => {
+      syncBtn.textContent = "同步中…";
+      syncBtn.disabled = true;
+      try {
+        await syncPricingFromModelsDev({ silent: false });
+        if (syncStatus) {
+          const ps2 = state$2.settings.pricingSync;
+          syncStatus.textContent = `上次同步：${new Date(ps2.lastSync).toLocaleString("zh-CN")} · 模式：${modeMap[ps2.mode] || ps2.mode}`;
+        }
+        try {
+          globalThis.ApiUsageStat?.refreshUI?.();
+          renderModelsEditor(doc);
+        } catch {
+        }
+      } finally {
+        syncBtn.textContent = "立即同步";
+        syncBtn.disabled = false;
+      }
+    };
+    const previewBtn = doc.getElementById("aus-btn-preview-pricing");
+    const previewHost = doc.getElementById("aus-pricing-sync-preview");
+    if (previewBtn && previewHost) previewBtn.onclick = async () => {
+      previewBtn.textContent = "预览中…";
+      previewBtn.disabled = true;
+      try {
+        const catalog = await fetchModelsDevCatalog();
+        const p = previewSync(catalog);
+        previewHost.style.display = "block";
+        previewHost.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">共 ${p.total} 模型 · 新增 ${p.added} 更新 ${p.updated} 跳过 ${p.skipped}</div>` + p.samples.map((s2) => `<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--ds-border);padding:4px 0;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;">${esc(s2.model)}</span><span>${s2.hit.toFixed(4)}/${s2.miss.toFixed(4)}/${s2.output.toFixed(4)}</span></div>`).join("") + `<div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;">单位 ${getDisplayCurrency().code}/百万 · 峰价为谷价 2×（DeepSeek）</div>`;
+      } catch (e) {
+        previewHost.style.display = "block";
+        previewHost.textContent = "预览失败：" + (e?.message || e);
+      } finally {
+        previewBtn.textContent = "预览";
+        previewBtn.disabled = false;
+      }
+    };
+  } catch {
+  }
   renderPeakHoursEditor(doc);
   renderModelsEditor(doc);
   fillDebugModelSelect(doc);
@@ -2808,7 +3352,21 @@ function renderModelsEditor(doc) {
   };
 }
 function modelRow(model, p, isBuiltin, usePeak) {
-  const hit = (v) => v !== void 0 && v !== "" ? v : "";
+  const cur = (() => {
+    try {
+      return getDisplayCurrency();
+    } catch {
+      return { code: "CNY", symbol: "¥", rate: 1 };
+    }
+  })();
+  const toDisplay = (v) => {
+    if (v === "" || v == null) return "";
+    const num = parseFloat(String(v));
+    if (!isFinite(num)) return String(v);
+    const d = cur.code === "USD" ? num / cur.rate : num;
+    return String(Math.round(d * 1e4) / 1e4);
+  };
+  const hit = (v) => v !== void 0 && v !== "" ? toDisplay(v) : "";
   return `<div data-model="${esc(model)}" data-builtin="${isBuiltin ? "1" : "0"}" style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;background:var(--ds-card-inner);display:grid;gap:8px;">
     <div style="display:flex;align-items:center;gap:8px;">
       <input value="${esc(model)}" ${isBuiltin ? "readonly" : ""} style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:${isBuiltin ? "var(--ds-sidebar-bg)" : "var(--ds-card-inner)"};font-size:12px;" />
@@ -2825,7 +3383,7 @@ function modelRow(model, p, isBuiltin, usePeak) {
         ${field("peak.hit", hit(p.peak.hit))}${field("peak.miss", hit(p.peak.miss))}${field("peak.output", hit(p.peak.output))}
       </div>
     </div>
-    <div style="font-size:10px;color:var(--ds-text-3);">单位：¥/百万 tokens · 内置模型不可删除，价格可覆盖</div>
+    <div style="font-size:10px;color:var(--ds-text-3);">单位：${cur.code}/百万 tokens（${cur.symbol}）· 内置模型不可删除，价格可覆盖</div>
   </div>`;
 }
 function field(key, val) {
@@ -2835,14 +3393,22 @@ function field(key, val) {
 function readRow(row) {
   const peak = row.querySelector(".aus-cm-peak")?.checked ?? true;
   const out = { usePeakPricing: peak, offpeak: {}, peak: {} };
+  const cur = (() => {
+    try {
+      return getDisplayCurrency();
+    } catch {
+      return { code: "CNY", rate: 1 };
+    }
+  })();
   row.querySelectorAll("input[data-price]").forEach((el) => {
     const k = el.getAttribute("data-price");
     const v = el.value.trim();
     if (v === "") return;
     const num = parseFloat(v);
     if (isNaN(num)) return;
+    const cny = cur.code === "USD" ? Math.round(num * cur.rate * 1e4) / 1e4 : num;
     const [zone, field2] = k.split(".");
-    out[zone][field2] = num;
+    out[zone][field2] = cny;
   });
   return out;
 }
@@ -3023,8 +3589,17 @@ function computeOverview() {
     }
   } catch {
   }
+  const balanceText = (() => {
+    try {
+      const v = bal != null && bal !== "" ? parseFloat(String(bal)) : NaN;
+      if (!isNaN(v)) return formatMoney(v, 2);
+      return formatMoney(0, 2);
+    } catch {
+      return bal ? "¥" + bal + " CNY" : "¥0.00 CNY";
+    }
+  })();
   return {
-    balanceText: bal ? "¥" + bal + " CNY" : "¥0.00 CNY",
+    balanceText,
     totalCost,
     totalTokens,
     hit,
@@ -3292,7 +3867,20 @@ function fmt(n) {
   return n.toLocaleString("zh-CN");
 }
 function CNY(n) {
-  return "¥" + n.toFixed(4) + " CNY";
+  try {
+    return formatMoney(n, 4);
+  } catch {
+    return "¥" + n.toFixed(4) + " CNY";
+  }
+}
+function moneyHtml(cny, digits = 4) {
+  try {
+    const cur = getDisplayCurrency();
+    const v = cur.code === "USD" ? cny / cur.rate : cny;
+    return `${cur.symbol}${v.toFixed(digits)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">${cur.code}</span>`;
+  } catch {
+    return `¥${(cny || 0).toFixed(digits)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span>`;
+  }
 }
 const FOUR_OPTIONS = [
   { key: "avg_cost", label: "每轮费用" },
@@ -3349,7 +3937,7 @@ function getFourDisplay(key, v) {
   const title = FOUR_LABEL_MAP.get(key) || key;
   switch (key) {
     case "avg_cost":
-      return { title, html: `¥${(v.avgCost || 0).toFixed(4)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span>` };
+      return { title, html: moneyHtml(v.avgCost || 0, 4) };
     case "avg_tokens":
       return { title, html: `${Math.round(v.avgTokens || 0).toLocaleString("zh-CN")}` };
     case "avg_duration":
@@ -3357,11 +3945,11 @@ function getFourDisplay(key, v) {
     case "avg_rate":
       return { title: "输出速率", html: `${Math.round(v.avgRate || 0)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">t/s</span>` };
     case "avg_input_cost":
-      return { title, html: `¥${(v.avgInputCost || 0).toFixed(4)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span>` };
+      return { title, html: moneyHtml(v.avgInputCost || 0, 4) };
     case "avg_input_tokens":
       return { title, html: `${Math.round(v.avgInputTokens || 0).toLocaleString("zh-CN")}` };
     case "avg_output_cost":
-      return { title, html: `¥${(v.avgOutputCost || 0).toFixed(4)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span>` };
+      return { title, html: moneyHtml(v.avgOutputCost || 0, 4) };
     case "avg_output_tokens":
       return { title, html: `${Math.round(v.avgOutputTokens || 0).toLocaleString("zh-CN")}` };
     case "avg_think_time": {
@@ -3456,7 +4044,13 @@ function renderOverview() {
     }
   }
   const costEl = doc.getElementById("aus-total-cost");
-  if (costEl) costEl.textContent = "¥" + v.totalCost.toFixed(4) + " CNY";
+  if (costEl) {
+    try {
+      costEl.textContent = formatMoney(v.totalCost, 4);
+    } catch {
+      costEl.textContent = "¥" + v.totalCost.toFixed(4) + " CNY";
+    }
+  }
   const tokEl = doc.getElementById("aus-total-tokens");
   if (tokEl) tokEl.textContent = fmt(v.totalTokens) + " tokens";
   const histHost = doc.getElementById("aus-overview-history");
@@ -3528,6 +4122,11 @@ function renderChatSummaryOverview() {
     tbody.innerHTML = rows.map((r) => {
       const avgRate = r.avgHitRate > 0 ? r.avgHitRate.toFixed(1) + "%" : "—";
       const colorRate = r.avgHitRate >= 50 ? "var(--ds-green)" : r.avgHitRate > 0 ? "var(--ds-text)" : "var(--ds-text-3)";
+      let costTxt = `¥${r.cost.toFixed(4)}`;
+      try {
+        costTxt = formatMoney(r.cost, 4);
+      } catch {
+      }
       return `<tr style="border-bottom:1px solid var(--ds-card);">
         <td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;" title="${esc$1(r.chatId || "null")}">${esc$1(r.displayName)}</td>
         <td style="padding:6px 8px;text-align:right;">${r.count}</td>
@@ -3535,7 +4134,7 @@ function renderChatSummaryOverview() {
         <td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString("zh-CN")}</td>
         <td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString("zh-CN")}</td>
         <td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString("zh-CN")}</td>
-        <td style="padding:6px 8px;text-align:right;color:var(--ds-text);">¥${r.cost.toFixed(4)}</td>
+        <td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${costTxt}</td>
         <td style="padding:6px 8px;text-align:right;">${Math.round(r.avgTokens).toLocaleString("zh-CN")}</td>
         <td style="padding:6px 8px;text-align:right;color:${colorRate};">${avgRate}</td>
       </tr>`;
@@ -3905,6 +4504,16 @@ function calcXInterval(labels, el) {
 }
 async function drawBarLine(el, id, labels, series) {
   try {
+    const curCur = (() => {
+      try {
+        return getDisplayCurrency();
+      } catch {
+        return { code: "CNY", symbol: "¥", rate: 1 };
+      }
+    })();
+    if (curCur.code === "USD") {
+      for (const s of series) if (s.kind === "cost" || s.name.includes("费用") || s.name.toLowerCase().includes("cost")) s.data = s.data.map((v) => Number((Number(v) / curCur.rate).toFixed(4)));
+    }
     const ec = await getEcharts$1();
     let c = charts$1[id];
     if (!c || c.isDisposed?.()) {
@@ -3932,6 +4541,16 @@ async function drawBarLine(el, id, labels, series) {
         });
       })()
     };
+    if (id === "cost") {
+      opts.yAxis = { type: "value", axisLabel: { fontSize: 10, color: themeColor$2("--ds-text-3", "#9CA3AF"), formatter: (v) => curCur.symbol + Number(v).toFixed(2) }, splitLine: { lineStyle: { color: themeColor$2("--ds-card", "#F6F7F8") } } };
+      opts.tooltip = { trigger: "axis", backgroundColor: themeColor$2("--ds-card-inner", "#FFFFFF"), borderColor: themeColor$2("--ds-border", "#E5E7EB"), textStyle: { fontSize: 11 }, formatter: (params) => {
+        let html = `<div style="font-weight:600;margin-bottom:6px;">${params[0]?.axisValueLabel || ""}</div>`;
+        for (const p of params) {
+          html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${curCur.symbol}${Number(p.value).toFixed(4)} ${curCur.code}</span></div>`;
+        }
+        return `<div style="padding:4px 2px;min-width:160px;">${html}</div>`;
+      } };
+    }
     if (id === "hit") {
       opts.series = [{ name: "命中率", type: "line", data: series[0].data, areaStyle: { opacity: 0.12, color: series[0].color }, lineStyle: { color: series[0].color }, itemStyle: { color: series[0].color }, smooth: true }];
       opts.yAxis = { max: 100, axisLabel: { formatter: (v) => v + "%" } };
@@ -4849,9 +5468,19 @@ async function renderChart(filteredRaw) {
   const cBorder = themeColor("--ds-border", "#E5E7EB");
   const cCard = themeColor("--ds-card", "#F6F7F8");
   const cText3 = themeColor("--ds-text-3", "#9CA3AF");
+  const curCur = (() => {
+    try {
+      return getDisplayCurrency();
+    } catch {
+      return { code: "CNY", symbol: "¥", rate: 1 };
+    }
+  })();
+  if (hasCost) {
+    for (const s of series) if (s.kind === "cost") s.data = s.data.map((v) => curCur.code === "USD" ? Number((Number(v) / curCur.rate).toFixed(4)) : v);
+  }
   const yAxis = [];
   if (hasToken) yAxis.push({ type: "value", name: "tokens", position: "left", axisLine: { show: false }, splitLine: { lineStyle: { color: cCard } }, axisLabel: { color: cText3, fontSize: 10 } });
-  if (hasCost) yAxis.push({ type: "value", name: "CNY", position: hasToken ? "right" : "left", axisLine: { show: false }, splitLine: { show: false }, axisLabel: { color: cText3, fontSize: 10, formatter: (v) => "¥" + v } });
+  if (hasCost) yAxis.push({ type: "value", name: curCur.code, position: hasToken ? "right" : "left", axisLine: { show: false }, splitLine: { show: false }, axisLabel: { color: cText3, fontSize: 10, formatter: (v) => curCur.symbol + (curCur.code === "USD" ? Number(v).toFixed(4) : Number(v).toFixed(4)) } });
   const lastBarIdx = (() => {
     const indices = series.map((_, i) => i).filter((i) => series[i].kind !== "cost");
     const target = indices.length ? indices : series.map((_, i) => i);
@@ -4898,7 +5527,9 @@ async function renderChart(filteredRaw) {
         for (const p of params) {
           const v = p.value;
           const unit = Y_OPTIONS.find((o) => o.label === p.seriesName)?.unit || "";
-          html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${unit === "CNY" ? "¥" + Number(v).toFixed(4) : Number(v).toLocaleString() + " " + unit}</span></div>`;
+          const isCost = unit === "CNY";
+          const disp = isCost ? curCur.symbol + Number(v).toFixed(4) + " " + curCur.code : Number(v).toLocaleString() + " " + unit;
+          html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${disp}</span></div>`;
         }
         return `<div style="padding:4px 2px;min-width:180px;">${html}</div>`;
       }
@@ -4995,8 +5626,15 @@ function renderModelSummary(filtered) {
   } else {
     list.sort((a, b) => a.m.localeCompare(b.m));
   }
+  const fmtC = (v) => {
+    try {
+      return formatMoney(v || 0, 4);
+    } catch {
+      return "¥" + (v || 0).toFixed(4) + " CNY";
+    }
+  };
   const rows = list.map((r) => {
-    return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc$1(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">¥${r.cost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;">¥${r.avgCost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
+    return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc$1(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${fmtC(r.cost)}</td><td style="padding:6px 8px;text-align:right;">${fmtC(r.avgCost)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
   }).join("");
   tbody.innerHTML = rows;
 }
@@ -5052,7 +5690,13 @@ async function renderStatsView() {
     totalTok += e.total_tokens || 0;
   }
   const costEl = doc.getElementById("aus-stats-cost");
-  if (costEl) costEl.textContent = "¥" + totalCost.toFixed(2) + " CNY";
+  if (costEl) {
+    try {
+      costEl.textContent = formatMoney(totalCost, 2);
+    } catch {
+      costEl.textContent = "¥" + totalCost.toFixed(2) + " CNY";
+    }
+  }
   const reqEl = doc.getElementById("aus-stats-req");
   if (reqEl) reqEl.textContent = String(totalReq);
   const tokEl = doc.getElementById("aus-stats-tok");
@@ -5567,7 +6211,13 @@ function renderForecastView() {
     const cNext = costAt(fit.segLen, fit, p);
     host.innerHTML = `<div style="line-height:1.6;">
       <div style="font-size:13px;font-weight:700;color:var(--ds-text);">预计还可 <span style="color:var(--ds-green);">~${rShow} 轮</span>（余额口径）· ±${Math.abs(R.R_high - R.R_low) / 2 | 0}</div>
-      <div style="font-size:11px;color:var(--ds-text-2);margin-top:4px;">每轮新增 ≈ ${deltaTok.toLocaleString()} tok · 命中率(近5) ${hitPct}% · 下一轮成本 ≈ ¥${cNext.toFixed(4)} · 下一轮 prompt ≈ ${Math.round(next.prompt).toLocaleString()} tok</div>
+      <div style="font-size:11px;color:var(--ds-text-2);margin-top:4px;">每轮新增 ≈ ${deltaTok.toLocaleString()} tok · 命中率(近5) ${hitPct}% · 下一轮成本 ≈ ${(() => {
+      try {
+        return formatMoney(cNext, 4);
+      } catch {
+        return "¥" + cNext.toFixed(4) + " CNY";
+      }
+    })()} · 下一轮 prompt ≈ ${Math.round(next.prompt).toLocaleString()} tok</div>
       <div style="display:flex;gap:8px;margin-top:10px;">
         <div style="flex:1;background:var(--ds-card);border-radius:6px;height:8px;position:relative;overflow:hidden;"><div style="position:absolute;left:0;top:0;bottom:0;width:${Math.min(100, R.R / Math.max(10, R.R + (rCtx || 0)) * 100)}%;background:var(--ds-green);"></div></div>
         <div style="flex:1;background:var(--ds-card);border-radius:6px;height:8px;position:relative;overflow:hidden;"><div style="position:absolute;left:0;top:0;bottom:0;width:${rCtx != null ? Math.min(100, rCtx / Math.max(10, rCtx) * 100) : 0}%;background:${rCtx != null && rCtx < rShow ? "var(--ds-red)" : "var(--ds-purple-bg)"};"></div></div>
@@ -5737,9 +6387,22 @@ function refreshUI() {
     if (!s) return;
     const bal = state$2.customBalance || state$2.balance?.balance;
     const balEl = doc.getElementById("aus-balance");
-    if (balEl) balEl.textContent = bal ? "¥" + bal + " CNY" : "¥0.00 CNY";
+    if (balEl) {
+      try {
+        const v = bal ? parseFloat(String(bal)) : NaN;
+        balEl.textContent = !isNaN(v) ? formatMoney(v, 2) : formatMoney(0, 2);
+      } catch {
+        balEl.textContent = bal ? "¥" + bal + " CNY" : "¥0.00 CNY";
+      }
+    }
     const totalCostEl = doc.getElementById("aus-total-cost");
-    if (totalCostEl) totalCostEl.textContent = "¥" + (s.total_cost || 0).toFixed(4) + " CNY";
+    if (totalCostEl) {
+      try {
+        totalCostEl.textContent = formatMoney(s.total_cost || 0, 4);
+      } catch {
+        totalCostEl.textContent = "¥" + (s.total_cost || 0).toFixed(4) + " CNY";
+      }
+    }
     const tokEl = doc.getElementById("aus-total-tokens");
     if (tokEl) tokEl.textContent = (s.total_tokens || 0).toLocaleString("zh-CN") + " tokens";
     renderHistory(doc, s);
@@ -5790,6 +6453,17 @@ function renderHistoryInner(doc, fullHist) {
     const mp = (h.cache_miss_tokens || 0) / total2 * 100;
     const op = (h.completion_tokens || 0) / total2 * 100;
     const hps = hp.toFixed(1), mps = mp.toFixed(1), ops = op.toFixed(1);
+    const fmtMoney = (v, d = 4) => {
+      try {
+        return formatMoney(v || 0, d);
+      } catch {
+        return "¥" + (v || 0).toFixed(d) + " CNY";
+      }
+    };
+    const c4 = fmtMoney(h.cost || 0, 4);
+    const c6 = fmtMoney(h.cost || 0, 6);
+    const in6 = fmtMoney(h.input_cost || 0, 6);
+    const out6 = fmtMoney(h.output_cost || 0, 6);
     return `
     <div style="padding:10px 12px;background:var(--ds-card);border-radius:10px;margin-bottom:8px;font-size:12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -5799,7 +6473,7 @@ function renderHistoryInner(doc, fullHist) {
         </div>
         <div style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
           <div>
-            <div style="font-weight:700;color:var(--ds-text);">¥${(h.cost || 0).toFixed(4)}</div>
+            <div style="font-weight:700;color:var(--ds-text);">${c4}</div>
           </div>
           <div style="display:flex;gap:4px;">
             <button class="aus-compare-old" data-ts="${h.timestamp}" style="padding:4px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;">旧</button>
@@ -5857,9 +6531,9 @@ function renderHistoryInner(doc, fullHist) {
           <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">费用明细</div>
             <div style="display:grid;gap:6px;margin-top:6px;font-size:11px;">
-              <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输入费用</span><span style="font-weight:600;color:var(--ds-text);">¥${(h.input_cost || 0).toFixed(6)}</span></div>
-              <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输出费用</span><span style="font-weight:600;color:var(--ds-text);">¥${(h.output_cost || 0).toFixed(6)}</span></div>
-              <div style="display:flex;justify-content:space-between;border-top:1px solid var(--ds-card);padding-top:6px;margin-top:2px;"><span style="color:var(--ds-text);font-weight:600;">总费用</span><span style="font-weight:700;color:var(--ds-text);">¥${(h.cost || 0).toFixed(6)}</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输入费用</span><span style="font-weight:600;color:var(--ds-text);">${in6}</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输出费用</span><span style="font-weight:600;color:var(--ds-text);">${out6}</span></div>
+              <div style="display:flex;justify-content:space-between;border-top:1px solid var(--ds-card);padding-top:6px;margin-top:2px;"><span style="color:var(--ds-text);font-weight:600;">总费用</span><span style="font-weight:700;color:var(--ds-text);">${c6}</span></div>
             </div>
           </div>
         </div>
@@ -6124,7 +6798,7 @@ function createPanel() {
       <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;">
         <div style="display:flex;flex-direction:column;min-width:0;" id="aus-brand">
           <span style="font-size:13px;font-weight:700;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
-          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v${"3.0.2"}</span>
+          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v${"3.0.3"}</span>
         </div>
         <button id="aus-sidebar-toggle" style="width:28px;height:28px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;">‹</button>
       </div>
@@ -6277,7 +6951,7 @@ function createPanel() {
                 <div id="aus-update-banner" style="display:none;padding:8px 10px;border-radius:8px;background:var(--ds-yellow-bg);border:1px solid var(--ds-yellow-border);font-size:11px;color:var(--ds-text);"></div>
                 <div style="display:flex;gap:8px;align-items:center;">
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:11px;">检查更新</button>
-                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v${"3.0.2"} · 每 6 小时自动检查</span>
+                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v${"3.0.3"} · 每 6 小时自动检查</span>
                 </div>
               </div>
             </div>
@@ -6440,7 +7114,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-BHEgAkXY.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-wl5Jk0y3.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -6493,7 +7167,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-BHEgAkXY.js").then((m) => m.maybeAutoCheck());
+    import("./update-wl5Jk0y3.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }
@@ -6746,6 +7420,16 @@ async function onDelete() {
   } catch {
   }
   try {
+    const m3 = await Promise.resolve().then(() => currency);
+    m3.stopRateTimer?.();
+  } catch {
+  }
+  try {
+    const m4 = await Promise.resolve().then(() => pricingSync);
+    m4.stopPricingSyncTimer?.();
+  } catch {
+  }
+  try {
     localStorage.removeItem("ds_ds_webdav_pass");
   } catch {
   }
@@ -6779,6 +7463,14 @@ function onEnable() {
   }
   try {
     Promise.resolve().then(() => balance).then((m) => m.restartBalanceTimer?.());
+  } catch {
+  }
+  try {
+    Promise.resolve().then(() => currency).then((m) => m.restartRateTimer?.());
+  } catch {
+  }
+  try {
+    Promise.resolve().then(() => pricingSync).then((m) => m.restartPricingSyncTimer?.());
   } catch {
   }
 }
@@ -6816,6 +7508,16 @@ async function onDisable() {
     m2.stopBalanceTimer?.();
   } catch {
   }
+  try {
+    const m3 = await Promise.resolve().then(() => currency);
+    m3.stopRateTimer?.();
+  } catch {
+  }
+  try {
+    const m4 = await Promise.resolve().then(() => pricingSync);
+    m4.stopPricingSyncTimer?.();
+  } catch {
+  }
 }
 async function onActivate() {
   ensureStyleScope();
@@ -6839,6 +7541,16 @@ async function init() {
   try {
     const m = await Promise.resolve().then(() => balance);
     m.restartBalanceTimer?.();
+  } catch {
+  }
+  try {
+    const m = await Promise.resolve().then(() => currency);
+    m.restartRateTimer?.();
+  } catch {
+  }
+  try {
+    const m = await Promise.resolve().then(() => pricingSync);
+    m.restartPricingSyncTimer?.();
   } catch {
   }
   try {
@@ -6939,7 +7651,7 @@ async function init() {
   }
   setTimeout(() => {
     try {
-      import("./update-BHEgAkXY.js").then((m) => m.maybeAutoCheck());
+      import("./update-wl5Jk0y3.js").then((m) => m.maybeAutoCheck());
     } catch {
     }
   }, 3e3);

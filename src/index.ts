@@ -79,6 +79,8 @@ export async function onDelete() {
   try { const m = await import('./ui/panel'); (m as any).resetPanelState?.(); } catch {}
   try { const m = await import('./ui/peak-dot'); (m as any).stopPeakDot?.(); } catch {}
   try { const m2 = await import('./services/balance'); (m2 as any).stopBalanceTimer?.(); } catch {}
+  try { const m3 = await import('./services/currency'); (m3 as any).stopRateTimer?.(); } catch {}
+  try { const m4 = await import('./services/pricing-sync'); (m4 as any).stopPricingSyncTimer?.(); } catch {}
   // 清理卸载残留
   try { localStorage.removeItem('ds_ds_webdav_pass'); } catch {}
   try { localStorage.removeItem('ds_ds_peak_dot_pos'); } catch {}
@@ -89,7 +91,7 @@ export async function onDelete() {
   } catch {}
   try { delete (globalThis as any).ApiUsageStat; delete (globalThis as any).ApiUsageStatInterceptor; } catch {}
 }
-export function onEnable() { log.debug('enabled'); try { import('./services/interception').then(m=>m.installInterception()); } catch {} try { import('./services/balance').then(m=> (m as any).restartBalanceTimer?.()); } catch {} }
+export function onEnable() { log.debug('enabled'); try { import('./services/interception').then(m=>m.installInterception()); } catch {} try { import('./services/balance').then(m=> (m as any).restartBalanceTimer?.()); } catch {} try { import('./services/currency').then(m=> (m as any).restartRateTimer?.()); } catch {} try { import('./services/pricing-sync').then(m=> (m as any).restartPricingSyncTimer?.()); } catch {} }
 export async function onDisable() {
   log.debug('disabled');
   try { const { flushSaveHot } = await import('./store/persistence'); flushSaveHot(); } catch {}
@@ -104,6 +106,8 @@ export async function onDisable() {
   try { const m = await import('./ui/panel'); (m as any).resetPanelState?.(); } catch {}
   try { const m = await import('./ui/peak-dot'); (m as any).stopPeakDot?.(); } catch {}
   try { const m2 = await import('./services/balance'); (m2 as any).stopBalanceTimer?.(); } catch {}
+  try { const m3 = await import('./services/currency'); (m3 as any).stopRateTimer?.(); } catch {}
+  try { const m4 = await import('./services/pricing-sync'); (m4 as any).stopPricingSyncTimer?.(); } catch {}
 }
 export async function onActivate() { ensureStyleScope(); try { injectWandEntry(); ensureWandEntry(); } catch {} }
 
@@ -113,6 +117,8 @@ async function init() {
   // 隔离数据初始化错误，不影响入口注入
   try { await initStore(); } catch (e) { console.error('[API用量统计] initStore 失败', e); }
   try { const m = await import('./services/balance'); (m as any).restartBalanceTimer?.(); } catch {}
+  try { const m = await import('./services/currency'); (m as any).restartRateTimer?.(); } catch {}
+  try { const m = await import('./services/pricing-sync'); (m as any).restartPricingSyncTimer?.(); } catch {}
   try { installInterception(); } catch {}
   const mount = () => {
     try { applyTheme((state.settings as any).theme); } catch {}

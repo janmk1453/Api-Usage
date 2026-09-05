@@ -11,6 +11,7 @@ import { initExtraCharts, renderExtraCharts } from './extra-charts';
 import { renderForecastView, initForecastView } from './forecast-view';
 import { applyTheme } from '../services/theme';
 import { DataEvents, on as onDataEvent } from '../data/events';
+import { formatMoney, getDisplayCurrency } from '../services/currency';
 
 declare const __APP_VERSION__: string;
 
@@ -29,9 +30,13 @@ export function refreshUI() {
     if (!s) return;
     const bal = state.customBalance || state.balance?.balance;
     const balEl = doc.getElementById('aus-balance');
-    if (balEl) balEl.textContent = bal ? '¥' + bal + ' CNY' : '¥0.00 CNY';
+    if (balEl) {
+      try {  const v = bal ? parseFloat(String(bal)) : NaN; balEl.textContent = !isNaN(v) ? formatMoney(v, 2) : formatMoney(0, 2); } catch { balEl.textContent = bal ? '¥' + bal + ' CNY' : '¥0.00 CNY'; }
+    }
     const totalCostEl = doc.getElementById('aus-total-cost');
-    if (totalCostEl) totalCostEl.textContent = '¥' + (s.total_cost || 0).toFixed(4) + ' CNY';
+    if (totalCostEl) {
+      try {  totalCostEl.textContent = formatMoney(s.total_cost || 0, 4); } catch { totalCostEl.textContent = '¥' + (s.total_cost || 0).toFixed(4) + ' CNY'; }
+    }
     const tokEl = doc.getElementById('aus-total-tokens');
     if (tokEl) tokEl.textContent = (s.total_tokens || 0).toLocaleString('zh-CN') + ' tokens';
     renderHistory(doc, s);
@@ -75,6 +80,8 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
     const mp = ((h.cache_miss_tokens || 0) / total * 100);
     const op = ((h.completion_tokens || 0) / total * 100);
     const hps = hp.toFixed(1), mps = mp.toFixed(1), ops = op.toFixed(1);
+    const fmtMoney = (v:number,d=4)=>{ try{  return formatMoney(v||0,d);} catch{ return '¥'+(v||0).toFixed(d)+' CNY'; } };
+    const c4 = fmtMoney(h.cost||0,4); const c6 = fmtMoney(h.cost||0,6); const in6 = fmtMoney(h.input_cost||0,6); const out6 = fmtMoney(h.output_cost||0,6);
     return `
     <div style="padding:10px 12px;background:var(--ds-card);border-radius:10px;margin-bottom:8px;font-size:12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -84,7 +91,7 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
         </div>
         <div style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
           <div>
-            <div style="font-weight:700;color:var(--ds-text);">¥${(h.cost || 0).toFixed(4)}</div>
+            <div style="font-weight:700;color:var(--ds-text);">${c4}</div>
           </div>
           <div style="display:flex;gap:4px;">
             <button class="aus-compare-old" data-ts="${h.timestamp}" style="padding:4px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;">旧</button>
@@ -138,9 +145,9 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
           <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">费用明细</div>
             <div style="display:grid;gap:6px;margin-top:6px;font-size:11px;">
-              <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输入费用</span><span style="font-weight:600;color:var(--ds-text);">¥${(h.input_cost||0).toFixed(6)}</span></div>
-              <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输出费用</span><span style="font-weight:600;color:var(--ds-text);">¥${(h.output_cost||0).toFixed(6)}</span></div>
-              <div style="display:flex;justify-content:space-between;border-top:1px solid var(--ds-card);padding-top:6px;margin-top:2px;"><span style="color:var(--ds-text);font-weight:600;">总费用</span><span style="font-weight:700;color:var(--ds-text);">¥${(h.cost||0).toFixed(6)}</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输入费用</span><span style="font-weight:600;color:var(--ds-text);">${in6}</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输出费用</span><span style="font-weight:600;color:var(--ds-text);">${out6}</span></div>
+              <div style="display:flex;justify-content:space-between;border-top:1px solid var(--ds-card);padding-top:6px;margin-top:2px;"><span style="color:var(--ds-text);font-weight:600;">总费用</span><span style="font-weight:700;color:var(--ds-text);">${c6}</span></div>
             </div>
           </div>
         </div>

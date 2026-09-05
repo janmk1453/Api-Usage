@@ -15,6 +15,18 @@ export type WebdavSettings = {
 
 export type ThemeMode = 'light' | 'dark';
 
+export type PricingSyncMode = 'add-missing' | 'overwrite-unlocked' | 'overwrite-all';
+export type PricingSyncSettings = {
+  enabled: boolean;
+  mode: PricingSyncMode;
+  exchangeRate: number;
+  useLiveRate: boolean;
+  autoIntervalHours: number;
+  lastSync: number | null;
+  lastRateFetch: number | null;
+  recalcOnSync: boolean;
+};
+
 export type HistoryScope = 'all' | 'current';
 // 概览四块可自定义指标
 export type OverviewFourKey =
@@ -51,6 +63,7 @@ export type Settings = {
   overviewFour: OverviewFourKey[];
   statsFour: StatsFourKey[];
   modelsPricingCollapsed?: boolean;
+  pricingSync: PricingSyncSettings;
 };
 
 export const defaultSettings = (): Settings => ({
@@ -75,6 +88,16 @@ export const defaultSettings = (): Settings => ({
   overviewFour: ['avg_cost', 'avg_tokens', 'avg_duration', 'avg_rate', 'avg_input_tokens', 'avg_output_tokens', 'avg_hit_rate', 'max_total'],
   statsFour: ['avg_cost', 'avg_tokens', 'avg_think_ratio', 'truncation_rate'],
   modelsPricingCollapsed: true,
+  pricingSync: {
+    enabled: false,
+    mode: 'add-missing',
+    exchangeRate: 7.2,
+    useLiveRate: true,
+    autoIntervalHours: 0,
+    lastSync: null,
+    lastRateFetch: null,
+    recalcOnSync: false,
+  },
 });
 
 export type Balance = {
