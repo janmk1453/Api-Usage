@@ -1,6 +1,7 @@
 import { PRICING, DEFAULT_PEAK_HOURS } from '../constants/pricing';
 import type { Settings } from '../types/settings';
 import { isPeakHour as isPeakHourRaw, isWeekendDay } from '../utils/date';
+import { formatMoney as _formatMoney } from './currency';
 
 export { isWeekendDay };
 
@@ -115,5 +116,6 @@ export function calcSavings(
 }
 
 export function fmtCost(model: string, cost: number, digits = 4, settings: Settings): string {
-  return hasPriceForModel(model, settings) ? '¥' + (cost || 0).toFixed(digits) : '¥价格未设置';
+  if (!hasPriceForModel(model, settings)) return '¥价格未设置';
+  try { return _formatMoney(cost || 0, digits); } catch { return '¥' + (cost || 0).toFixed(digits) + ' CNY'; }
 }

@@ -45,3 +45,11 @@ export const STORAGE_KEYS = {
 export const EXPORT_FORMAT_VERSION = 1;
 export const WEBDAV_SYNC_FILE = 'DeepSeekStatSync.json';
 export const WEBDAV_REMOTE_VERSION = 1;
+
+// models.dev 自动同步常量
+export const PRICING_SYNC_SOURCE = 'https://models.dev/api.json';
+export const PRICING_SYNC_FALLBACK = 'https://raw.githubusercontent.com/anomalyco/opencode/main/models.json';
+// USD→CNY 汇率，默认兜底
+export const DEFAULT_EXCHANGE_RATE = 7.2;
+export const EXCHANGE_RATE_FETCH_INTERVAL = 24 * 60 * 60 * 1000;
+export const PRICING_SYNC_INTERVAL_MIN = 0; // 0 仅手动

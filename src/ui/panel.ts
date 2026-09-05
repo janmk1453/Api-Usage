@@ -11,6 +11,7 @@ import { initExtraCharts, renderExtraCharts } from './extra-charts';
 import { renderForecastView, initForecastView } from './forecast-view';
 import { applyTheme } from '../services/theme';
 import { DataEvents, on as onDataEvent } from '../data/events';
+import { formatMoney, getDisplayCurrency } from '../services/currency';
 
 declare const __APP_VERSION__: string;
 
@@ -29,9 +30,13 @@ export function refreshUI() {
     if (!s) return;
     const bal = state.customBalance || state.balance?.balance;
     const balEl = doc.getElementById('aus-balance');
-    if (balEl) balEl.textContent = bal ? '¥' + bal + ' CNY' : '¥0.00 CNY';
+    if (balEl) {
+      try {  const v = bal ? parseFloat(String(bal)) : NaN; balEl.textContent = !isNaN(v) ? formatMoney(v, 2) : formatMoney(0, 2); } catch { balEl.textContent = bal ? '¥' + bal + ' CNY' : '¥0.00 CNY'; }
+    }
     const totalCostEl = doc.getElementById('aus-total-cost');
-    if (totalCostEl) totalCostEl.textContent = '¥' + (s.total_cost || 0).toFixed(4) + ' CNY';
+    if (totalCostEl) {
+      try {  totalCostEl.textContent = formatMoney(s.total_cost || 0, 4); } catch { totalCostEl.textContent = '¥' + (s.total_cost || 0).toFixed(4) + ' CNY'; }
+    }
     const tokEl = doc.getElementById('aus-total-tokens');
     if (tokEl) tokEl.textContent = (s.total_tokens || 0).toLocaleString('zh-CN') + ' tokens';
     renderHistory(doc, s);
@@ -75,6 +80,8 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
     const mp = ((h.cache_miss_tokens || 0) / total * 100);
     const op = ((h.completion_tokens || 0) / total * 100);
     const hps = hp.toFixed(1), mps = mp.toFixed(1), ops = op.toFixed(1);
+    const fmtMoney = (v:number,d=4)=>{ try{  return formatMoney(v||0,d);} catch{ return '¥'+(v||0).toFixed(d)+' CNY'; } };
+    const c4 = fmtMoney(h.cost||0,4); const c6 = fmtMoney(h.cost||0,6); const in6 = fmtMoney(h.input_cost||0,6); const out6 = fmtMoney(h.output_cost||0,6);
     return `
     <div style="padding:10px 12px;background:var(--ds-card);border-radius:10px;margin-bottom:8px;font-size:12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -84,7 +91,7 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
         </div>
         <div style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
           <div>
-            <div style="font-weight:700;color:var(--ds-text);">¥${(h.cost || 0).toFixed(4)}</div>
+            <div style="font-weight:700;color:var(--ds-text);">${c4}</div>
           </div>
           <div style="display:flex;gap:4px;">
             <button class="aus-compare-old" data-ts="${h.timestamp}" style="padding:4px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;">旧</button>
@@ -138,9 +145,9 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
           <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">费用明细</div>
             <div style="display:grid;gap:6px;margin-top:6px;font-size:11px;">
-              <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输入费用</span><span style="font-weight:600;color:var(--ds-text);">¥${(h.input_cost||0).toFixed(6)}</span></div>
-              <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输出费用</span><span style="font-weight:600;color:var(--ds-text);">¥${(h.output_cost||0).toFixed(6)}</span></div>
-              <div style="display:flex;justify-content:space-between;border-top:1px solid var(--ds-card);padding-top:6px;margin-top:2px;"><span style="color:var(--ds-text);font-weight:600;">总费用</span><span style="font-weight:700;color:var(--ds-text);">¥${(h.cost||0).toFixed(6)}</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输入费用</span><span style="font-weight:600;color:var(--ds-text);">${in6}</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输出费用</span><span style="font-weight:600;color:var(--ds-text);">${out6}</span></div>
+              <div style="display:flex;justify-content:space-between;border-top:1px solid var(--ds-card);padding-top:6px;margin-top:2px;"><span style="color:var(--ds-text);font-weight:600;">总费用</span><span style="font-weight:700;color:var(--ds-text);">${c6}</span></div>
             </div>
           </div>
         </div>
@@ -384,11 +391,20 @@ export function createPanel() {
                 <span style="color:var(--ds-text-2);">悬停查看日期</span>
               </div>
             </div>
+            <div id="aus-chat-summary-overview" class="ds-card" style="margin-top:12px;overflow:auto;">
+              <div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">按对话统计</div>
+              <table style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap;min-width:720px;">
+                <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">对话</th><th style="padding:6px 8px;">轮次</th><th style="padding:6px 8px;">命中</th><th style="padding:6px 8px;">未命中</th><th style="padding:6px 8px;">输出</th><th style="padding:6px 8px;">总 Tokens</th><th style="padding:6px 8px;">总费用</th><th style="padding:6px 8px;">平均 Token/轮</th><th style="padding:6px 8px;">平均命中率</th></tr></thead>
+                <tbody id="aus-chat-summary-tbody"><tr><td colspan="9" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
+              </table>
+              <div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;">按总 Token 倒序 · 数据来源为全部历史（不受统计页筛选影响）</div>
+            </div>
             </div>
            <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span><span style="font-size:10px;">▼</span></div>
               <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);">全部</span><span style="font-size:10px;">▼</span></div>
+              <div id="aus-chat-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">对话</span><span id="aus-chat-label" style="font-weight:600;color:var(--ds-text);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
               <div id="aus-range-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);overflow:hidden;flex-direction:row;">
                 <div style="min-width:120px;border-right:1px solid var(--ds-card);padding:8px;display:grid;gap:2px;">
                   <div data-range="all" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">全部</div>
@@ -403,6 +419,7 @@ export function createPanel() {
                 <div id="aus-date-calendar" style="padding:12px;display:none;"></div>
               </div>
               <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:160px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
+              <div id="aus-chat-dropdown" style="display:none;position:absolute;top:40px;left:320px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-height:260px;overflow:auto;padding:8px;"></div>
             </div>
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
               <div class="ds-card"><div style="font-size:11px;color:var(--ds-text-2);">消费金额</div><div id="aus-stats-cost" style="font-size:22px;font-weight:700;color:var(--ds-text);margin-top:6px;">¥0.00 CNY</div></div>
@@ -433,6 +450,11 @@ export function createPanel() {
           </div>
           <div data-view="forecast" style="display:none;">
             <div style="display:grid;gap:12px;">
+              <div style="display:flex;align-items:center;gap:8px;position:relative;flex-wrap:wrap;">
+                <div id="aus-forecast-chat-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">对话</span><span id="aus-forecast-chat-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">当前对话</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-forecast-chat-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:220px;max-height:260px;overflow:auto;padding:8px;"></div>
+                <span style="font-size:10px;color:var(--ds-text-3);">切换对话以查看对应预测，能耗/趋势均随之更新</span>
+              </div>
               <div id="aus-forecast-card" class="ds-card"></div>
               <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">能耗标识（RP 能耗效率）</div><div id="aus-energy-badge"></div></div>
               <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">预测趋势（输入 token 按轮次 + 拟合/置信带/上限）</div><div id="aus-forecast-chart" style="height:260px;"></div></div>

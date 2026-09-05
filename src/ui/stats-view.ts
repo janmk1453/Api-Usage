@@ -14,6 +14,8 @@ let customEnd = '';
 let pickerOpen = false;
 let selectedModel: string = '__all__';
 let modelPickerOpen = false;
+let selectedChat: string = '__all__';
+let chatPickerOpen = false;
 
 // 模型汇总表排序：点击表头（除模型外）正序/倒序切换
 type SummarySortKey = 'count' | 'hit' | 'miss' | 'out' | 'total' | 'cost' | 'avgCost' | 'avgDur' | 'avgRate';
@@ -120,6 +122,31 @@ function filterByModel(entries: any[]): any[] {
   return entries.filter(e => e.model === selectedModel);
 }
 
+function getRecordedChatsFrom(list: any[]): Array<{ chatId: string | null; chatName: string | null; displayName: string }> {
+  const map = new Map<string, { chatId: string | null; chatName: string | null }>();
+  for (const h of list || []) {
+    const cid = (h.chatId ?? null) as string | null;
+    const cname = (h.chatName ?? null) as string | null;
+    const key = cid ?? '__null__';
+    if (!map.has(key)) map.set(key, { chatId: cid, chatName: cname });
+    else if (cname && !map.get(key)!.chatName) map.get(key)!.chatName = cname;
+  }
+  return Array.from(map.values()).map(v => {
+    let display = v.chatName || '';
+    if (!display) {
+      if (v.chatId) display = v.chatId.length > 18 ? v.chatId.slice(0, 8) + '…' + v.chatId.slice(-4) : v.chatId;
+      else display = '未分组/旧数据';
+    }
+    return { chatId: v.chatId, chatName: v.chatName, displayName: display };
+  }).sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+}
+
+function filterByChat(entries: any[]): any[] {
+  if (selectedChat === '__all__') return entries;
+  if (selectedChat === '__null__') return entries.filter(e => !e.chatId);
+  return entries.filter(e => (e.chatId ?? null) === selectedChat);
+}
+
 let calendarOffset = 0;
 
 function updateRangeHighlight() {
@@ -200,6 +227,34 @@ function renderModelPicker() {
   });
 }
 
+function renderChatPicker(chatHist?: any[]) {
+  const doc = getDoc();
+  const dropdown = doc.getElementById('aus-chat-dropdown');
+  const label = doc.getElementById('aus-chat-label');
+  if (!dropdown || !label) return;
+  const list = chatHist ? getRecordedChatsFrom(chatHist) : getRecordedChatsFrom((getSelectedSave() as any)?.history || []);
+  const find = list.find(c => (c.chatId ?? '__null__') === selectedChat);
+  label.textContent = selectedChat === '__all__' ? '全部' : (find?.displayName || selectedChat);
+  label.title = find?.chatId || find?.displayName || '';
+  let html = `<div data-chat="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${selectedChat==='__all__'?'background:var(--ds-card);font-weight:600;':''}">全部</div>`;
+  for (const c of list) {
+    const key = c.chatId ?? '__null__';
+    const active = key === selectedChat ? 'background:var(--ds-card);font-weight:600;' : '';
+    html += `<div data-chat="${esc(key)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}" title="${esc(c.chatId || '')}">${esc(c.displayName)}</div>`;
+  }
+  if (!list.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">暂无对话</div>';
+  dropdown.innerHTML = html;
+  dropdown.querySelectorAll('[data-chat]').forEach((el: any) => {
+    el.onclick = () => {
+      selectedChat = el.getAttribute('data-chat') || '__all__';
+      chatPickerOpen = false;
+      dropdown.style.display = 'none';
+      renderChatPicker(chatHist);
+      renderStatsView();
+    };
+  });
+}
+
 function bindPicker() {
   const doc = getDoc();
   const btn = doc.getElementById('aus-range-btn');
@@ -208,9 +263,11 @@ function bindPicker() {
     btn.onclick = () => {
       pickerOpen = !pickerOpen;
       dropdown.style.display = pickerOpen ? 'flex' : 'none';
-      // 关闭模型下拉
+      // 关闭其他下拉
       const md = doc.getElementById('aus-model-dropdown');
       if (md) { md.style.display = 'none'; modelPickerOpen = false; }
+      const cd = doc.getElementById('aus-chat-dropdown');
+      if (cd) { cd.style.display = 'none'; chatPickerOpen = false; }
       if (pickerOpen) renderCalendar();
     };
     doc.querySelectorAll('[data-range]').forEach((el: any) => {
@@ -233,7 +290,30 @@ function bindPicker() {
       mDropdown.style.display = modelPickerOpen ? 'block' : 'none';
       const rDrop = doc.getElementById('aus-range-dropdown');
       if (rDrop) { rDrop.style.display = 'none'; pickerOpen = false; }
+      const cDrop = doc.getElementById('aus-chat-dropdown');
+      if (cDrop) { cDrop.style.display = 'none'; chatPickerOpen = false; }
       if (modelPickerOpen) renderModelPicker();
+    };
+  }
+  const cBtn = doc.getElementById('aus-chat-btn');
+  const cDropdown = doc.getElementById('aus-chat-dropdown');
+  if (cBtn && cDropdown) {
+    cBtn.onclick = () => {
+      chatPickerOpen = !chatPickerOpen;
+      cDropdown.style.display = chatPickerOpen ? 'block' : 'none';
+      const rDrop = doc.getElementById('aus-range-dropdown');
+      if (rDrop) { rDrop.style.display = 'none'; pickerOpen = false; }
+      const mDrop = doc.getElementById('aus-model-dropdown');
+      if (mDrop) { mDrop.style.display = 'none'; modelPickerOpen = false; }
+      if (chatPickerOpen) {
+        // 基于全量历史构造对话列表，需异步时用缓存
+        (async () => {
+          try {
+            const h = await getHistoryForStats();
+            renderChatPicker(h);
+          } catch { renderChatPicker(); }
+        })();
+      }
     };
   }
   // 关闭
@@ -247,6 +327,11 @@ function bindPicker() {
     if (modelPickerOpen && !t.closest('#aus-model-dropdown') && !t.closest('#aus-model-btn')) {
       modelPickerOpen = false;
       const d = doc.getElementById('aus-model-dropdown');
+      if (d) d.style.display = 'none';
+    }
+    if (chatPickerOpen && !t.closest('#aus-chat-dropdown') && !t.closest('#aus-chat-btn')) {
+      chatPickerOpen = false;
+      const d = doc.getElementById('aus-chat-dropdown');
       if (d) d.style.display = 'none';
     }
   });
@@ -277,7 +362,7 @@ function renderChartSelectors() {
     el.onchange = () => {
       toggleY(el.getAttribute('data-ykey') as any);
       renderChartSelectors();
-      const s:any = getSelectedSave(); const filtered = filterByModel(filterByRange(s.history||[])); renderChart(filtered);
+      const s:any = getSelectedSave(); const filtered = filterByChat(filterByModel(filterByRange(s.history||[]))); renderChart(filtered);
     };
   });
   // X 单选
@@ -295,7 +380,7 @@ function renderChartSelectors() {
       setXSelected(el.getAttribute('data-xkey') as any);
       chartXOpen=false; xDrop.style.display='none';
       renderChartSelectors();
-      const s:any = getSelectedSave(); const filtered = filterByModel(filterByRange(s.history||[])); renderChart(filtered);
+      const s:any = getSelectedSave(); const filtered = filterByChat(filterByModel(filterByRange(s.history||[]))); renderChart(filtered);
     };
   });
 }
@@ -384,9 +469,14 @@ async function renderChart(filteredRaw: any[]) {
   const cBorder = themeColor('--ds-border', '#E5E7EB');
   const cCard = themeColor('--ds-card', '#F6F7F8');
   const cText3 = themeColor('--ds-text-3', '#9CA3AF');
+  const curCur = (()=>{ try{  return getDisplayCurrency(); } catch{ return {code:'CNY',symbol:'¥',rate:1} as any; } })();
+  if (hasCost) {
+    // 费用单位动态换算：CNY→USD 时图表数据需除以汇率
+    for (const s of series) if (s.kind==='cost') s.data = s.data.map((v:any)=> curCur.code==='USD' ? Number((Number(v)/curCur.rate).toFixed(4)) : v);
+  }
   const yAxis: any[] = [];
   if (hasToken) yAxis.push({ type:'value', name:'tokens', position:'left', axisLine:{show:false}, splitLine:{lineStyle:{color:cCard}}, axisLabel:{color:cText3,fontSize:10} });
-  if (hasCost) yAxis.push({ type:'value', name:'CNY', position: hasToken?'right':'left', axisLine:{show:false}, splitLine:{show:false}, axisLabel:{color:cText3,fontSize:10,formatter:(v:number)=>'¥'+v} });
+  if (hasCost) yAxis.push({ type:'value', name:curCur.code, position: hasToken?'right':'left', axisLine:{show:false}, splitLine:{show:false}, axisLabel:{color:cText3,fontSize:10,formatter:(v:number)=> curCur.symbol + (curCur.code==='USD' ? (Number(v)).toFixed(4) : Number(v).toFixed(4))} });
   // 堆叠柱仅最顶段圆角，其余直角无缝衔接（修复紫/橙/绿段间缝隙）
   const lastBarIdx = (() => {
     const indices = series.map((_, i) => i).filter(i => series[i].kind !== 'cost'); // 仅 token 堆叠取最后，深色同理；cost 单轴不在此堆
@@ -436,7 +526,9 @@ async function renderChart(filteredRaw: any[]) {
         for (const p of params) {
           const v = p.value;
           const unit = Y_OPTIONS.find((o:any)=>o.label===p.seriesName)?.unit || '';
-          html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${unit==='CNY'?'¥'+Number(v).toFixed(4):Number(v).toLocaleString()+' '+unit}</span></div>`;
+          const isCost = unit==='CNY';
+          const disp = isCost ? (curCur.symbol + Number(v).toFixed(4) + ' ' + curCur.code) : (Number(v).toLocaleString()+' '+unit);
+          html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${disp}</span></div>`;
         }
         return `<div style="padding:4px 2px;min-width:180px;">${html}</div>`;
       }
@@ -501,8 +593,9 @@ function renderModelSummary(filtered: any[]) {
   } else {
     list.sort((a, b) => a.m.localeCompare(b.m));
   }
+  const fmtC = (v:number)=>{ try{  return formatMoney(v||0,4);} catch{ return '¥'+(v||0).toFixed(4)+' CNY'; } };
   const rows = list.map(r => {
-     return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">¥${r.cost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;">¥${r.avgCost.toFixed(4)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
+     return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${fmtC(r.cost)}</td><td style="padding:6px 8px;text-align:right;">${fmtC(r.avgCost)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
   }).join('');
   tbody.innerHTML = rows;
 }
@@ -547,12 +640,13 @@ export async function renderStatsView() {
   if (!s) return;
   const allHistory: any[] = await getHistoryForStats();
   const timeFiltered = filterByRange(allHistory);
-  const summaryFiltered = filterByModel(timeFiltered);
-  const chartFiltered = filterByModel(timeFiltered);
+  const modelFiltered = filterByModel(timeFiltered);
+  const summaryFiltered = filterByChat(modelFiltered);
+  const chartFiltered = filterByChat(modelFiltered);
   let totalCost = 0, totalReq = summaryFiltered.length, totalTok = 0;
   for (const e of summaryFiltered) { totalCost += e.cost || 0; totalTok += e.total_tokens || 0; }
   const costEl = doc.getElementById('aus-stats-cost');
-  if (costEl) costEl.textContent = '¥' + totalCost.toFixed(2) + ' CNY';
+  if (costEl) { try {  costEl.textContent = formatMoney(totalCost, 2); } catch { costEl.textContent = '¥' + totalCost.toFixed(2) + ' CNY'; } }
   const reqEl = doc.getElementById('aus-stats-req');
   if (reqEl) reqEl.textContent = String(totalReq);
   const tokEl = doc.getElementById('aus-stats-tok');
@@ -560,6 +654,7 @@ export async function renderStatsView() {
   renderStatsFour(summaryFiltered);
   renderModelSummary(summaryFiltered);
   renderModelPicker();
+  renderChatPicker(allHistory);
   renderChartSelectors();
   // 首次加载时统计页为 display:none，跳过图表渲染，等待 switchView 切到统计页时再渲染，避免 0 尺寸报错
   const statsViewEl = doc.querySelector('[data-view="stats"]') as HTMLElement | null;
@@ -575,6 +670,7 @@ export async function renderStatsView() {
 
 // 统计页 4 小块（响应时间+模型双维度筛选）
 import { saveHot } from '../store/persistence';
+import { formatMoney, getDisplayCurrency } from '../services/currency';
 function ensureStatsFour(): string[] {
   const def = ['avg_cost','avg_tokens','avg_think_ratio','truncation_rate'];
   let cur: any = (state as any).statsFour;
@@ -620,7 +716,7 @@ function openStatsFourDrop(idx:number, v:any) {
       (state as any).statsFour = arr;
       try { saveHot({ settings: state as any }); } catch {}
       drop.style.display='none';
-      const curFiltered = (()=>{ try { const s:any=getSelectedSave(); const all = (s?.history||[]); const tf = filterByRange(all); return filterByModel(tf); } catch { return []; } })();
+      const curFiltered = (()=>{ try { const s:any=getSelectedSave(); const all = (s?.history||[]); const tf = filterByRange(all); return filterByChat(filterByModel(tf)); } catch { return []; } })();
       renderStatsFour(curFiltered);
     };
   });

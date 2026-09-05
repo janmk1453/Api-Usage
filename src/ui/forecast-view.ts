@@ -2,6 +2,8 @@ import { state } from '../store/index';
 import { fitSegments, remainingRounds as calcR, ctxLimitRounds, costAt, nextPromptWithBand, ctxLimitForModel } from '../stats/forecast';
 import { energyScore, topPowerChats } from '../stats/energyScore';
 import { getPricing } from '../services/pricing';
+import { esc } from '../utils/date';
+import { formatMoney, getDisplayCurrency } from '../services/currency';
 
 function getDoc(){ return (window.parent as any)?.document ?? document; }
 function currentChatId(): string | null {
@@ -14,23 +16,121 @@ function balanceNum(): number | null {
   return isNaN(n)? null : n;
 }
 
+// 对话自选（与统计页统一胶囊 UI）
+let selectedForecastKey: string = '__current__';
+let forecastChatPickerOpen = false;
+
+function getRecordedChatsForForecast(list: any[]): Array<{ chatId: string | null; chatName: string | null; displayName: string }> {
+  const map = new Map<string, { chatId: string | null; chatName: string | null }>();
+  for (const h of list || []) {
+    const cid = (h.chatId ?? null) as string | null;
+    const cname = (h.chatName ?? null) as string | null;
+    const key = cid ?? '__null__';
+    if (!map.has(key)) map.set(key, { chatId: cid, chatName: cname });
+    else if (cname && !map.get(key)!.chatName) map.get(key)!.chatName = cname;
+  }
+  return Array.from(map.values()).map(v => {
+    let display = v.chatName || '';
+    if (!display) {
+      if (v.chatId) display = v.chatId.length > 18 ? v.chatId.slice(0, 8) + '…' + v.chatId.slice(-4) : v.chatId;
+      else display = '未分组/旧数据';
+    }
+    return { chatId: v.chatId, chatName: v.chatName, displayName: display };
+  }).sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+}
+
+function getEffectiveHist(fullHist: any[]): any[] {
+  if (selectedForecastKey === '__all__') return fullHist.slice();
+  if (selectedForecastKey === '__current__') {
+    const cur = currentChatId();
+    if (!cur) return fullHist.slice();
+    return fullHist.filter((h: any) => (h.chatId ?? null) === cur);
+  }
+  if (selectedForecastKey === '__null__') return fullHist.filter((h: any) => !h.chatId);
+  return fullHist.filter((h: any) => (h.chatId ?? null) === selectedForecastKey);
+}
+
+function getForecastLabel(fullHist: any[]): string {
+  if (selectedForecastKey === '__current__') return '当前对话';
+  if (selectedForecastKey === '__all__') return '全部';
+  if (selectedForecastKey === '__null__') return '未分组/旧数据';
+  const found = getRecordedChatsForForecast(fullHist).find(c => (c.chatId ?? '__null__') === selectedForecastKey);
+  return found?.displayName || selectedForecastKey;
+}
+
+function renderForecastChatPicker(fullHist: any[]) {
+  const doc = getDoc();
+  const btn = doc.getElementById('aus-forecast-chat-btn') as HTMLElement | null;
+  const dropdown = doc.getElementById('aus-forecast-chat-dropdown') as HTMLElement | null;
+  const label = doc.getElementById('aus-forecast-chat-label') as HTMLElement | null;
+  if (!btn || !dropdown || !label) return;
+  label.textContent = getForecastLabel(fullHist);
+  const chats = getRecordedChatsForForecast(fullHist);
+  let html = '';
+  const curActive = selectedForecastKey === '__current__' ? 'background:var(--ds-card);font-weight:600;' : '';
+  html += `<div data-fchat="__current__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${curActive}">当前对话</div>`;
+  const allActive = selectedForecastKey === '__all__' ? 'background:var(--ds-card);font-weight:600;' : '';
+  html += `<div data-fchat="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${allActive}">全部</div>`;
+  for (const c of chats) {
+    const key = c.chatId ?? '__null__';
+    const active = key === selectedForecastKey ? 'background:var(--ds-card);font-weight:600;' : '';
+    html += `<div data-fchat="${esc(key)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}" title="${esc(c.chatId || '')}">${esc(c.displayName)}</div>`;
+  }
+  if (!chats.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">暂无对话</div>';
+  dropdown.innerHTML = html;
+  dropdown.querySelectorAll('[data-fchat]').forEach((el: any) => {
+    el.onclick = () => {
+      selectedForecastKey = el.getAttribute('data-fchat') || '__current__';
+      forecastChatPickerOpen = false;
+      dropdown.style.display = 'none';
+      renderForecastView();
+    };
+  });
+}
+
+function bindForecastChatPicker() {
+  const doc = getDoc();
+  const btn = doc.getElementById('aus-forecast-chat-btn') as HTMLElement | null;
+  const dropdown = doc.getElementById('aus-forecast-chat-dropdown') as HTMLElement | null;
+  if (!btn || !dropdown) return;
+  if ((bindForecastChatPicker as any)._bound) return;
+  (bindForecastChatPicker as any)._bound = true;
+  btn.onclick = () => {
+    forecastChatPickerOpen = !forecastChatPickerOpen;
+    dropdown.style.display = forecastChatPickerOpen ? 'block' : 'none';
+    if (forecastChatPickerOpen) {
+      const hist: any[] = (state as any).history || [];
+      renderForecastChatPicker(hist);
+    }
+  };
+  doc.addEventListener('click', (e: any) => {
+    const t = e.target as HTMLElement;
+    if (forecastChatPickerOpen && !t.closest('#aus-forecast-chat-dropdown') && !t.closest('#aus-forecast-chat-btn')) {
+      forecastChatPickerOpen = false;
+      const d = doc.getElementById('aus-forecast-chat-dropdown') as HTMLElement | null;
+      if (d) d.style.display = 'none';
+    }
+  });
+}
+
 
 export function renderForecastView(){
   const doc=getDoc();
   const hist:any[] = (state as any).history||[];
-  const chatId = currentChatId();
-  const selHist = chatId? hist.filter((h:any)=>(h.chatId??null)===chatId): hist.slice();
-  // 预测卡（主页面与概览复用）
+  try { renderForecastChatPicker(hist); } catch {}
+  try { bindForecastChatPicker(); } catch {}
+  const effectiveHist = getEffectiveHist(hist);
+  // 预测卡（主页面与概览复用）— 基于自选对话的预测
   const renderCard = (host: HTMLElement | null) => {
     if (!host) return;
-    if (selHist.length < 3) {
+    if (effectiveHist.length < 3) {
       host.innerHTML = `<div style="text-align:center;padding:16px;color:var(--ds-text-3);font-size:12px;">继续对话以启用预测（需 ≥3 轮当前对话样本）</div>`;
       return;
     }
-    const fit = fitSegments(hist, chatId);
+    const fit = fitSegments(effectiveHist, null);
     if (!fit) { host.innerHTML = `<div style="padding:12px;color:var(--ds-text-2);font-size:12px;">暂无数据</div>`; return; }
     const bal = balanceNum();
-    const model = selHist[selHist.length-1]?.model || 'deepseek-v4-flash';
+    const model = effectiveHist[effectiveHist.length-1]?.model || 'deepseek-v4-flash';
     const pricing = getPricing(model, state.settings as any);
     const p = pricing.offpeak;
     const R = bal!=null? calcR(bal, fit, p): { R:0, R_low:0, R_high:0 };
@@ -43,7 +143,7 @@ export function renderForecastView(){
     const cNext = costAt(fit.segLen, fit, p);
     host.innerHTML = `<div style="line-height:1.6;">
       <div style="font-size:13px;font-weight:700;color:var(--ds-text);">预计还可 <span style="color:var(--ds-green);">~${rShow} 轮</span>（余额口径）· ±${Math.abs(R.R_high-R.R_low)/2|0}</div>
-      <div style="font-size:11px;color:var(--ds-text-2);margin-top:4px;">每轮新增 ≈ ${deltaTok.toLocaleString()} tok · 命中率(近5) ${hitPct}% · 下一轮成本 ≈ ¥${cNext.toFixed(4)} · 下一轮 prompt ≈ ${Math.round(next.prompt).toLocaleString()} tok</div>
+      <div style="font-size:11px;color:var(--ds-text-2);margin-top:4px;">每轮新增 ≈ ${deltaTok.toLocaleString()} tok · 命中率(近5) ${hitPct}% · 下一轮成本 ≈ ${(()=>{ try{  return formatMoney(cNext,4);} catch{ return '¥'+cNext.toFixed(4)+' CNY';}})()} · 下一轮 prompt ≈ ${Math.round(next.prompt).toLocaleString()} tok</div>
       <div style="display:flex;gap:8px;margin-top:10px;">
         <div style="flex:1;background:var(--ds-card);border-radius:6px;height:8px;position:relative;overflow:hidden;"><div style="position:absolute;left:0;top:0;bottom:0;width:${Math.min(100,(R.R/ Math.max(10,R.R+(rCtx||0)))*100)}%;background:var(--ds-green);"></div></div>
         <div style="flex:1;background:var(--ds-card);border-radius:6px;height:8px;position:relative;overflow:hidden;"><div style="position:absolute;left:0;top:0;bottom:0;width:${rCtx!=null?Math.min(100,(rCtx/ Math.max(10,rCtx))*100):0}%;background:${(rCtx!=null&&rCtx<rShow)?'var(--ds-red)':'var(--ds-purple-bg)'};"></div></div>
@@ -53,11 +153,10 @@ export function renderForecastView(){
     </div>`;
   };
   renderCard(doc.getElementById('aus-forecast-card'));
-  // 能耗标识
+  // 能耗标识 — 随自选对话联动
   const badgeHost = doc.getElementById('aus-energy-badge');
   if (badgeHost) {
-    const chatId2 = currentChatId();
-    const r = energyScore(hist, chatId2);
+    const r = energyScore(effectiveHist, null);
     const grade = r.grade;
     const colors: Record<string,string> = { A:'#16a34a', B:'#22c55e', C:'#84cc16', D:'#eab308', E:'#f97316', F:'#ef4444', G:'#dc2626' };
     const grades: string[] = ['A','B','C','D','E','F','G'];
@@ -66,18 +165,18 @@ export function renderForecastView(){
       <div style="display:flex;flex-direction:column;gap:2px;">
         ${grades.map((g,i)=>`<div style="display:flex;align-items:center;gap:6px;"><span style="width:28px;height:22px;border-radius:4px;background:${colors[g]};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;">${g}</span>${i===idx?`<span style="color:${colors[g]};font-weight:700;">◀ 当前</span>`:''}</div>`).join('')}
       </div>
-      <div style="flex:1;display:grid;gap:6px;font-size:11px;">
+        <div style="flex:1;display:grid;gap:6px;font-size:11px;">
         <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">增速 Δ</span><span style="font-weight:600;">${Math.round(r.metrics.delta).toLocaleString()} tok/轮</span></div>
         <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输出</span><span style="font-weight:600;">${Math.round(r.metrics.out).toLocaleString()} tok/轮</span></div>
         <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">效率</span><span style="font-weight:600;">${(r.metrics.efficiency*100).toFixed(1)}%</span></div>
-        <div style="font-size:10px;color:var(--ds-text-3);margin-top:4px;">综合评分 ${r.score.toFixed(0)} · ${grade} 级 · 样本 ${ (chatId2? hist.filter((h:any)=>(h.chatId??null)===chatId2).length : hist.length)} 轮</div>
+        <div style="font-size:10px;color:var(--ds-text-3);margin-top:4px;">综合评分 ${r.score.toFixed(0)} · ${grade} 级 · 样本 ${effectiveHist.length} 轮 · ${esc(getForecastLabel(hist))}</div>
       </div>
     </div>`;
   }
-  // 预测图
-  renderForecastChart(hist, chatId);
-  // 敏感度滑块
-  renderSensitivity(hist, chatId);
+  // 预测图 — 随自选对话
+  renderForecastChart(effectiveHist, null);
+  // 敏感度滑块 — 随自选对话
+  renderSensitivity(effectiveHist, null);
   // 对比视图
   renderCompare(hist);
 }
@@ -90,7 +189,7 @@ async function renderForecastChart(history:any[], chatId:string|null){
   if (!history.length) { el.innerHTML='<div style="text-align:center;padding:40px;color:var(--ds-text-3);">暂无数据</div>'; return; }
   const fit = fitSegments(history, chatId);
   if (!fit || fit.segLen<1) { el.innerHTML='<div style="text-align:center;padding:40px;color:var(--ds-text-3);">样本不足</div>'; return; }
-  const sorted = [...history].filter(h=> (h.chatId??null)===chatId).sort((a,b)=>a.timestamp-b.timestamp);
+  const sorted = (chatId ? [...history].filter(h=> (h.chatId??null)===chatId) : [...history]).sort((a,b)=>a.timestamp-b.timestamp);
   const y = sorted.map((h:any)=> h.prompt_tokens ?? (h.cache_hit_tokens||0)+(h.cache_miss_tokens||0));
   // 历史拟合段
   const fitLine = y.map((_,i)=> fit.C0 + fit.delta * ((fit.segStart + i)>=sorted.length - fit.segLen ? ((fit.segStart + i)- (sorted.length-fit.segLen)) : 0));
@@ -149,7 +248,7 @@ function renderSensitivity(history:any[], chatId:string|null){
     if (bal==null){ if(resEl) resEl.textContent='未设置余额，无法估算剩余轮数'; return; }
     // 临时覆盖 hit
     const tmp={...fit, hitEwma:h} as any;
-    const model = (history.filter((hh:any)=>(hh.chatId??null)===chatId).slice(-1)[0]?.model)||'deepseek-v4-flash';
+    const model = ((chatId ? history.filter((hh:any)=>(hh.chatId??null)===chatId) : history).slice(-1)[0]?.model)||'deepseek-v4-flash';
     const pricing = getPricing(model, state.settings as any);
     const R = calcR(bal, tmp, pricing.offpeak);
     if(resEl) resEl.textContent = `命中 ${slider.value}% 时预计剩余 ${R.R} 轮（±${Math.abs(R.R_high-R.R_low)/2|0}），降 10% 约少 ${Math.abs(R.R - calcR(bal,{...fit,hitEwma:Math.max(0,h-0.1)} as any,pricing.offpeak).R)} 轮`;

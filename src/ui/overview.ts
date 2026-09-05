@@ -1,11 +1,23 @@
-import { computeOverview } from '../data/computed';
+import { computeOverview, computeChatStats } from '../data/computed';
 import { renderHeatmap } from './heatmap';
 import { state } from '../store/index';
 import { saveHot } from '../store/persistence';
+import { esc } from '../utils/date';
 import type { OverviewFourKey } from '../types/settings';
+import { formatMoney, getDisplayCurrency } from '../services/currency';
 
 function fmt(n: number) { return n.toLocaleString('zh-CN'); }
-function CNY(n: number) { return '¥' + n.toFixed(4) + ' CNY'; }
+function CNY(n: number) {
+  try {  return formatMoney(n, 4); } catch { return '¥' + n.toFixed(4) + ' CNY'; }
+}
+function moneyHtml(cny: number, digits = 4): string {
+  try {
+    
+    const cur: any = getDisplayCurrency();
+    const v = cur.code === 'USD' ? cny / cur.rate : cny;
+    return `${cur.symbol}${v.toFixed(digits)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">${cur.code}</span>`;
+  } catch { return `¥${(cny||0).toFixed(digits)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span>`; }
+}
 
 type FourOpt = { key: OverviewFourKey; label: string };
 export const FOUR_OPTIONS: FourOpt[] = [
@@ -56,13 +68,13 @@ function ensureFour(): OverviewFourKey[] {
 export function getFourDisplay(key: OverviewFourKey, v: any): { title:string; html:string } {
   const title = FOUR_LABEL_MAP.get(key) || key;
   switch (key) {
-    case 'avg_cost': return { title, html: `¥${(v.avgCost||0).toFixed(4)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span>` };
+    case 'avg_cost': return { title, html: moneyHtml(v.avgCost||0, 4) };
     case 'avg_tokens': return { title, html: `${Math.round(v.avgTokens||0).toLocaleString('zh-CN')}` };
     case 'avg_duration': return { title, html: `${(v.avgDuration||0).toFixed(1)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">s</span>` };
     case 'avg_rate': return { title: '输出速率', html: `${Math.round(v.avgRate||0)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">t/s</span>` };
-    case 'avg_input_cost': return { title, html: `¥${(v.avgInputCost||0).toFixed(4)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span>` };
+    case 'avg_input_cost': return { title, html: moneyHtml(v.avgInputCost||0, 4) };
     case 'avg_input_tokens': return { title, html: `${Math.round(v.avgInputTokens||0).toLocaleString('zh-CN')}` };
-    case 'avg_output_cost': return { title, html: `¥${(v.avgOutputCost||0).toFixed(4)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">CNY</span>` };
+    case 'avg_output_cost': return { title, html: moneyHtml(v.avgOutputCost||0, 4) };
     case 'avg_output_tokens': return { title, html: `${Math.round(v.avgOutputTokens||0).toLocaleString('zh-CN')}` };
     case 'avg_think_time': {
       const has = (v.avgThinkTime||0) > 0;
@@ -153,7 +165,9 @@ export function renderOverview() {
     }
   }
   const costEl = doc.getElementById('aus-total-cost');
-  if (costEl) costEl.textContent = '¥' + v.totalCost.toFixed(4) + ' CNY';
+  if (costEl) {
+    try {  costEl.textContent = formatMoney(v.totalCost, 4); } catch { costEl.textContent = '¥' + v.totalCost.toFixed(4) + ' CNY'; }
+  }
   const tokEl = doc.getElementById('aus-total-tokens');
   if (tokEl) tokEl.textContent = fmt(v.totalTokens) + ' tokens';
 
@@ -210,4 +224,53 @@ export function renderOverview() {
     const hist: any[] = (state.history || []) as any[];
     renderHeatmap(hist);
   } catch {}
+  // 按对话统计列表（热力图下方，类似趋势预测·对比 Top，全量历史聚合，数据走 computed 唯一算入口）
+  try { renderChatSummaryOverview(); } catch {}
+}
+
+function renderChatSummaryOverview() {
+  const doc = (window.parent as any)?.document ?? document;
+  const tbody = doc.getElementById('aus-chat-summary-tbody') as HTMLElement | null;
+  const card = doc.getElementById('aus-chat-summary-overview') as HTMLElement | null;
+  if (!card) return;
+  if (!tbody) return;
+  const renderRows = (rows: ReturnType<typeof computeChatStats>) => {
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r => {
+      const avgRate = r.avgHitRate > 0 ? r.avgHitRate.toFixed(1) + '%' : '—';
+      const colorRate = r.avgHitRate >= 50 ? 'var(--ds-green)' : r.avgHitRate > 0 ? 'var(--ds-text)' : 'var(--ds-text-3)';
+      let costTxt = `¥${r.cost.toFixed(4)}`;
+      try {  costTxt = formatMoney(r.cost, 4); } catch {}
+      return `<tr style="border-bottom:1px solid var(--ds-card);">
+        <td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;" title="${esc(r.chatId || 'null')}">${esc(r.displayName)}</td>
+        <td style="padding:6px 8px;text-align:right;">${r.count}</td>
+        <td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString('zh-CN')}</td>
+        <td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString('zh-CN')}</td>
+        <td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString('zh-CN')}</td>
+        <td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString('zh-CN')}</td>
+        <td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${costTxt}</td>
+        <td style="padding:6px 8px;text-align:right;">${Math.round(r.avgTokens).toLocaleString('zh-CN')}</td>
+        <td style="padding:6px 8px;text-align:right;color:${colorRate};">${avgRate}</td>
+      </tr>`;
+    }).join('');
+  };
+  const hotRows = computeChatStats();
+  renderRows(hotRows);
+  // 若存在冷存储全量（IndexedDB），异步补全以确保按对话统计完整（hot 仅 50 条）
+  (async () => {
+    try {
+      const mod: any = await import('../store/persistence');
+      if (!mod.getAllHistory) return;
+      const all: any[] = await mod.getAllHistory();
+      if (!all || all.length <= (state.history?.length || 0)) return;
+      const fullRows = computeChatStats(all);
+      // 避免无变化时重复渲染
+      if (fullRows.length !== hotRows.length || fullRows.some((r, i) => r.total !== hotRows[i]?.total)) {
+        renderRows(fullRows);
+      }
+    } catch {}
+  })();
 }

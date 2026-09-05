@@ -2,6 +2,7 @@ import { state } from '../store/index';
 import { decryptKey, encryptKey } from '../utils/crypto';
 import { saveHot } from '../store/persistence';
 import { log, toast } from '../utils/logger';
+import { formatMoney, getDisplayCurrency } from './currency';
 
 export function getApiKey(): string {
   try {
@@ -45,7 +46,7 @@ export async function queryBalance(silent = false): Promise<any> {
       state.balance = bal;
       saveHot({ balance: bal });
       try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
-      if (!silent) toast('success', '余额已更新 ¥' + i.total_balance);
+      if (!silent) { try {  toast('success', '余额已更新 ' + formatMoney(parseFloat(String(i.total_balance))||0, 2)); } catch { toast('success', '余额已更新 ¥' + i.total_balance); } }
       return bal;
     }
     if (!silent) toast('error', d.error?.message || '查询失败');
