@@ -1748,7 +1748,7 @@ function exportHistory() {
   const pad = (n) => n < 10 ? "0" + n : "" + n;
   const safeSettings = JSON.parse(JSON.stringify(state$2.settings || {}));
   if (safeSettings.webdav) safeSettings.webdav = { url: "", username: "", path: "", proxy: "" };
-  const _appVer = "3.0.1";
+  const _appVer = "3.0.2";
   const payload = {
     format: "deepseek-stat-export",
     version: EXPORT_FORMAT_VERSION,
@@ -3055,6 +3055,38 @@ function computeOverview() {
     truncationRate
   };
 }
+function computeChatStats(hist) {
+  const s = getSelectedSave();
+  const history = hist ?? (s?.history || []);
+  if (!history.length) return [];
+  const map2 = /* @__PURE__ */ new Map();
+  for (const h of history) {
+    const cid = h.chatId ?? null;
+    const cname = h.chatName ?? null;
+    const key = cid ?? "__null__";
+    if (!map2.has(key)) map2.set(key, { chatId: cid, chatName: cname, count: 0, hit: 0, miss: 0, out: 0, total: 0, cost: 0 });
+    const e = map2.get(key);
+    if (cname && !e.chatName) e.chatName = cname;
+    e.count++;
+    e.hit += h.cache_hit_tokens || 0;
+    e.miss += h.cache_miss_tokens || 0;
+    e.out += h.completion_tokens || 0;
+    e.total += h.total_tokens || 0;
+    e.cost += h.cost || 0;
+  }
+  const rows = Array.from(map2.values()).map((e) => {
+    let display = e.chatName || "";
+    if (!display) {
+      if (e.chatId) display = e.chatId.length > 18 ? e.chatId.slice(0, 8) + "…" + e.chatId.slice(-4) : e.chatId;
+      else display = "未分组/旧数据";
+    }
+    const totIn = e.hit + e.miss;
+    const avgHitRate = totIn > 0 ? e.hit / totIn * 100 : 0;
+    return { chatId: e.chatId, chatName: e.chatName, displayName: display, count: e.count, hit: e.hit, miss: e.miss, out: e.out, total: e.total, cost: e.cost, avgTokens: e.count ? e.total / e.count : 0, avgHitRate };
+  });
+  rows.sort((a, b) => b.total - a.total);
+  return rows;
+}
 function computeStatsFour(filtered) {
   if (!filtered || !filtered.length) {
     return { avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, avgInputCost: 0, avgInputTokens: 0, avgOutputCost: 0, avgOutputTokens: 0, avgThinkTime: 0, avgThinkTokens: 0, avgHitRate: 0, latestHitRate: null, maxOutput: 0, maxInput: 0, maxTotal: 0, avgThinkRatio: 0, truncationRate: 0, rounds: 0 };
@@ -3477,6 +3509,53 @@ function renderOverview() {
     renderHeatmap(hist);
   } catch {
   }
+  try {
+    renderChatSummaryOverview();
+  } catch {
+  }
+}
+function renderChatSummaryOverview() {
+  const doc = window.parent?.document ?? document;
+  const tbody = doc.getElementById("aus-chat-summary-tbody");
+  const card = doc.getElementById("aus-chat-summary-overview");
+  if (!card) return;
+  if (!tbody) return;
+  const renderRows = (rows) => {
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map((r) => {
+      const avgRate = r.avgHitRate > 0 ? r.avgHitRate.toFixed(1) + "%" : "—";
+      const colorRate = r.avgHitRate >= 50 ? "var(--ds-green)" : r.avgHitRate > 0 ? "var(--ds-text)" : "var(--ds-text-3)";
+      return `<tr style="border-bottom:1px solid var(--ds-card);">
+        <td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;" title="${esc$1(r.chatId || "null")}">${esc$1(r.displayName)}</td>
+        <td style="padding:6px 8px;text-align:right;">${r.count}</td>
+        <td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString("zh-CN")}</td>
+        <td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString("zh-CN")}</td>
+        <td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString("zh-CN")}</td>
+        <td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString("zh-CN")}</td>
+        <td style="padding:6px 8px;text-align:right;color:var(--ds-text);">¥${r.cost.toFixed(4)}</td>
+        <td style="padding:6px 8px;text-align:right;">${Math.round(r.avgTokens).toLocaleString("zh-CN")}</td>
+        <td style="padding:6px 8px;text-align:right;color:${colorRate};">${avgRate}</td>
+      </tr>`;
+    }).join("");
+  };
+  const hotRows = computeChatStats();
+  renderRows(hotRows);
+  (async () => {
+    try {
+      const mod = await Promise.resolve().then(() => persistence);
+      if (!mod.getAllHistory) return;
+      const all = await mod.getAllHistory();
+      if (!all || all.length <= (state$2.history?.length || 0)) return;
+      const fullRows = computeChatStats(all);
+      if (fullRows.length !== hotRows.length || fullRows.some((r, i) => r.total !== hotRows[i]?.total)) {
+        renderRows(fullRows);
+      }
+    } catch {
+    }
+  })();
 }
 const Y_OPTIONS = [
   { key: "input_hit_token", label: "输入(命中) token", unit: "tokens", kind: "token", color: "#0BA25E" },
@@ -4248,6 +4327,8 @@ let customEnd = "";
 let pickerOpen = false;
 let selectedModel = "__all__";
 let modelPickerOpen = false;
+let selectedChat = "__all__";
+let chatPickerOpen = false;
 let summarySortKey = null;
 let summarySortDir = "desc";
 let lastSummaryFiltered = null;
@@ -4368,6 +4449,29 @@ function filterByModel(entries) {
   if (selectedModel === "__all__") return entries;
   return entries.filter((e) => e.model === selectedModel);
 }
+function getRecordedChatsFrom(list) {
+  const map2 = /* @__PURE__ */ new Map();
+  for (const h of list || []) {
+    const cid = h.chatId ?? null;
+    const cname = h.chatName ?? null;
+    const key = cid ?? "__null__";
+    if (!map2.has(key)) map2.set(key, { chatId: cid, chatName: cname });
+    else if (cname && !map2.get(key).chatName) map2.get(key).chatName = cname;
+  }
+  return Array.from(map2.values()).map((v) => {
+    let display = v.chatName || "";
+    if (!display) {
+      if (v.chatId) display = v.chatId.length > 18 ? v.chatId.slice(0, 8) + "…" + v.chatId.slice(-4) : v.chatId;
+      else display = "未分组/旧数据";
+    }
+    return { chatId: v.chatId, chatName: v.chatName, displayName: display };
+  }).sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""));
+}
+function filterByChat(entries) {
+  if (selectedChat === "__all__") return entries;
+  if (selectedChat === "__null__") return entries.filter((e) => !e.chatId);
+  return entries.filter((e) => (e.chatId ?? null) === selectedChat);
+}
 function updateRangeHighlight() {
   const doc = getDoc$3();
   doc.querySelectorAll("[data-range]").forEach((el) => {
@@ -4452,6 +4556,33 @@ function renderModelPicker() {
     };
   });
 }
+function renderChatPicker(chatHist) {
+  const doc = getDoc$3();
+  const dropdown = doc.getElementById("aus-chat-dropdown");
+  const label = doc.getElementById("aus-chat-label");
+  if (!dropdown || !label) return;
+  const list = chatHist ? getRecordedChatsFrom(chatHist) : getRecordedChatsFrom(getSelectedSave()?.history || []);
+  const find = list.find((c) => (c.chatId ?? "__null__") === selectedChat);
+  label.textContent = selectedChat === "__all__" ? "全部" : find?.displayName || selectedChat;
+  label.title = find?.chatId || find?.displayName || "";
+  let html = `<div data-chat="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${selectedChat === "__all__" ? "background:var(--ds-card);font-weight:600;" : ""}">全部</div>`;
+  for (const c of list) {
+    const key = c.chatId ?? "__null__";
+    const active = key === selectedChat ? "background:var(--ds-card);font-weight:600;" : "";
+    html += `<div data-chat="${esc$1(key)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}" title="${esc$1(c.chatId || "")}">${esc$1(c.displayName)}</div>`;
+  }
+  if (!list.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">暂无对话</div>';
+  dropdown.innerHTML = html;
+  dropdown.querySelectorAll("[data-chat]").forEach((el) => {
+    el.onclick = () => {
+      selectedChat = el.getAttribute("data-chat") || "__all__";
+      chatPickerOpen = false;
+      dropdown.style.display = "none";
+      renderChatPicker(chatHist);
+      renderStatsView();
+    };
+  });
+}
 function bindPicker() {
   const doc = getDoc$3();
   const btn = doc.getElementById("aus-range-btn");
@@ -4464,6 +4595,11 @@ function bindPicker() {
       if (md) {
         md.style.display = "none";
         modelPickerOpen = false;
+      }
+      const cd = doc.getElementById("aus-chat-dropdown");
+      if (cd) {
+        cd.style.display = "none";
+        chatPickerOpen = false;
       }
       if (pickerOpen) renderCalendar();
     };
@@ -4493,7 +4629,40 @@ function bindPicker() {
         rDrop.style.display = "none";
         pickerOpen = false;
       }
+      const cDrop = doc.getElementById("aus-chat-dropdown");
+      if (cDrop) {
+        cDrop.style.display = "none";
+        chatPickerOpen = false;
+      }
       if (modelPickerOpen) renderModelPicker();
+    };
+  }
+  const cBtn = doc.getElementById("aus-chat-btn");
+  const cDropdown = doc.getElementById("aus-chat-dropdown");
+  if (cBtn && cDropdown) {
+    cBtn.onclick = () => {
+      chatPickerOpen = !chatPickerOpen;
+      cDropdown.style.display = chatPickerOpen ? "block" : "none";
+      const rDrop = doc.getElementById("aus-range-dropdown");
+      if (rDrop) {
+        rDrop.style.display = "none";
+        pickerOpen = false;
+      }
+      const mDrop = doc.getElementById("aus-model-dropdown");
+      if (mDrop) {
+        mDrop.style.display = "none";
+        modelPickerOpen = false;
+      }
+      if (chatPickerOpen) {
+        (async () => {
+          try {
+            const h = await getHistoryForStats();
+            renderChatPicker(h);
+          } catch {
+            renderChatPicker();
+          }
+        })();
+      }
     };
   }
   doc.addEventListener("click", (e) => {
@@ -4506,6 +4675,11 @@ function bindPicker() {
     if (modelPickerOpen && !t.closest("#aus-model-dropdown") && !t.closest("#aus-model-btn")) {
       modelPickerOpen = false;
       const d = doc.getElementById("aus-model-dropdown");
+      if (d) d.style.display = "none";
+    }
+    if (chatPickerOpen && !t.closest("#aus-chat-dropdown") && !t.closest("#aus-chat-btn")) {
+      chatPickerOpen = false;
+      const d = doc.getElementById("aus-chat-dropdown");
       if (d) d.style.display = "none";
     }
   });
@@ -4534,7 +4708,7 @@ function renderChartSelectors() {
       toggleY(el.getAttribute("data-ykey"));
       renderChartSelectors();
       const s = getSelectedSave();
-      const filtered = filterByModel(filterByRange(s.history || []));
+      const filtered = filterByChat(filterByModel(filterByRange(s.history || [])));
       renderChart(filtered);
     };
   });
@@ -4554,7 +4728,7 @@ function renderChartSelectors() {
       xDrop.style.display = "none";
       renderChartSelectors();
       const s = getSelectedSave();
-      const filtered = filterByModel(filterByRange(s.history || []));
+      const filtered = filterByChat(filterByModel(filterByRange(s.history || [])));
       renderChart(filtered);
     };
   });
@@ -4869,8 +5043,9 @@ async function renderStatsView() {
   if (!s) return;
   const allHistory = await getHistoryForStats();
   const timeFiltered = filterByRange(allHistory);
-  const summaryFiltered = filterByModel(timeFiltered);
-  const chartFiltered = filterByModel(timeFiltered);
+  const modelFiltered = filterByModel(timeFiltered);
+  const summaryFiltered = filterByChat(modelFiltered);
+  const chartFiltered = filterByChat(modelFiltered);
   let totalCost = 0, totalReq = summaryFiltered.length, totalTok = 0;
   for (const e of summaryFiltered) {
     totalCost += e.cost || 0;
@@ -4885,6 +5060,7 @@ async function renderStatsView() {
   renderStatsFour(summaryFiltered);
   renderModelSummary(summaryFiltered);
   renderModelPicker();
+  renderChatPicker(allHistory);
   renderChartSelectors();
   const statsViewEl = doc.querySelector('[data-view="stats"]');
   const isStatsHidden = statsViewEl ? statsViewEl.style.display === "none" || statsViewEl.offsetParent === null : false;
@@ -4956,7 +5132,7 @@ function openStatsFourDrop(idx, v) {
           const s = getSelectedSave();
           const all = s?.history || [];
           const tf = filterByRange(all);
-          return filterByModel(tf);
+          return filterByChat(filterByModel(tf));
         } catch {
           return [];
         }
@@ -5852,7 +6028,7 @@ function createPanel() {
       <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;">
         <div style="display:flex;flex-direction:column;min-width:0;" id="aus-brand">
           <span style="font-size:13px;font-weight:700;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
-          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v${"3.0.1"}</span>
+          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v${"3.0.2"}</span>
         </div>
         <button id="aus-sidebar-toggle" style="width:28px;height:28px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;">‹</button>
       </div>
@@ -5904,11 +6080,20 @@ function createPanel() {
                 <span style="color:var(--ds-text-2);">悬停查看日期</span>
               </div>
             </div>
+            <div id="aus-chat-summary-overview" class="ds-card" style="margin-top:12px;overflow:auto;">
+              <div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">按对话统计</div>
+              <table style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap;min-width:720px;">
+                <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">对话</th><th style="padding:6px 8px;">轮次</th><th style="padding:6px 8px;">命中</th><th style="padding:6px 8px;">未命中</th><th style="padding:6px 8px;">输出</th><th style="padding:6px 8px;">总 Tokens</th><th style="padding:6px 8px;">总费用</th><th style="padding:6px 8px;">平均 Token/轮</th><th style="padding:6px 8px;">平均命中率</th></tr></thead>
+                <tbody id="aus-chat-summary-tbody"><tr><td colspan="9" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
+              </table>
+              <div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;">按总 Token 倒序 · 数据来源为全部历史（不受统计页筛选影响）</div>
+            </div>
             </div>
            <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span><span style="font-size:10px;">▼</span></div>
               <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);">全部</span><span style="font-size:10px;">▼</span></div>
+              <div id="aus-chat-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">对话</span><span id="aus-chat-label" style="font-weight:600;color:var(--ds-text);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
               <div id="aus-range-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);overflow:hidden;flex-direction:row;">
                 <div style="min-width:120px;border-right:1px solid var(--ds-card);padding:8px;display:grid;gap:2px;">
                   <div data-range="all" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">全部</div>
@@ -5923,6 +6108,7 @@ function createPanel() {
                 <div id="aus-date-calendar" style="padding:12px;display:none;"></div>
               </div>
               <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:160px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
+              <div id="aus-chat-dropdown" style="display:none;position:absolute;top:40px;left:320px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-height:260px;overflow:auto;padding:8px;"></div>
             </div>
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
               <div class="ds-card"><div style="font-size:11px;color:var(--ds-text-2);">消费金额</div><div id="aus-stats-cost" style="font-size:22px;font-weight:700;color:var(--ds-text);margin-top:6px;">¥0.00 CNY</div></div>
@@ -5990,7 +6176,7 @@ function createPanel() {
                 <div id="aus-update-banner" style="display:none;padding:8px 10px;border-radius:8px;background:var(--ds-yellow-bg);border:1px solid var(--ds-yellow-border);font-size:11px;color:var(--ds-text);"></div>
                 <div style="display:flex;gap:8px;align-items:center;">
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:11px;">检查更新</button>
-                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v${"3.0.1"} · 每 6 小时自动检查</span>
+                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v${"3.0.2"} · 每 6 小时自动检查</span>
                 </div>
               </div>
             </div>
@@ -6153,7 +6339,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-DI_XjyNI.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-TXXyjQmr.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -6206,7 +6392,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-DI_XjyNI.js").then((m) => m.maybeAutoCheck());
+    import("./update-TXXyjQmr.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }
@@ -6652,7 +6838,7 @@ async function init() {
   }
   setTimeout(() => {
     try {
-      import("./update-DI_XjyNI.js").then((m) => m.maybeAutoCheck());
+      import("./update-TXXyjQmr.js").then((m) => m.maybeAutoCheck());
     } catch {
     }
   }, 3e3);

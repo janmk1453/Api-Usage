@@ -119,6 +119,64 @@ export function computeStats(range: TimeRange): StatsView {
   return { range, totalCost, totalRequests: filtered.length, totalTokens, byDay, byModel };
 }
 
+export type ChatSummaryRow = {
+  chatId: string | null;
+  chatName: string | null;
+  displayName: string;
+  count: number;
+  hit: number; miss: number; out: number; total: number; cost: number;
+  avgTokens: number;
+  avgHitRate: number;
+};
+
+export function getRecordedChats(): Array<{ chatId: string | null; chatName: string | null; displayName: string }> {
+  const s: any = getSelectedSave();
+  const map = new Map<string, { chatId: string | null; chatName: string | null }>();
+  for (const h of s?.history || []) {
+    const cid = (h.chatId ?? null) as string | null;
+    const cname = (h.chatName ?? null) as string | null;
+    const key = cid ?? '__null__';
+    if (!map.has(key)) map.set(key, { chatId: cid, chatName: cname });
+    else if (cname && !map.get(key)!.chatName) map.get(key)!.chatName = cname;
+  }
+  return Array.from(map.values()).map(v => {
+    let display = v.chatName || '';
+    if (!display) {
+      if (v.chatId) display = v.chatId.length > 18 ? v.chatId.slice(0, 8) + '…' + v.chatId.slice(-4) : v.chatId;
+      else display = '未分组/旧数据';
+    }
+    return { chatId: v.chatId, chatName: v.chatName, displayName: display };
+  }).sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+}
+
+export function computeChatStats(hist?: any[]): ChatSummaryRow[] {
+  const s: any = getSelectedSave();
+  const history: any[] = hist ?? (s?.history || []);
+  if (!history.length) return [];
+  const map = new Map<string, { chatId: string | null; chatName: string | null; count: number; hit: number; miss: number; out: number; total: number; cost: number }>();
+  for (const h of history) {
+    const cid = (h.chatId ?? null) as string | null;
+    const cname = (h.chatName ?? null) as string | null;
+    const key = cid ?? '__null__';
+    if (!map.has(key)) map.set(key, { chatId: cid, chatName: cname, count: 0, hit: 0, miss: 0, out: 0, total: 0, cost: 0 });
+    const e = map.get(key)!;
+    if (cname && !e.chatName) e.chatName = cname;
+    e.count++; e.hit += h.cache_hit_tokens || 0; e.miss += h.cache_miss_tokens || 0; e.out += h.completion_tokens || 0; e.total += h.total_tokens || 0; e.cost += h.cost || 0;
+  }
+  const rows: ChatSummaryRow[] = Array.from(map.values()).map(e => {
+    let display = e.chatName || '';
+    if (!display) {
+      if (e.chatId) display = e.chatId.length > 18 ? e.chatId.slice(0, 8) + '…' + e.chatId.slice(-4) : e.chatId;
+      else display = '未分组/旧数据';
+    }
+    const totIn = e.hit + e.miss;
+    const avgHitRate = totIn > 0 ? (e.hit / totIn * 100) : 0;
+    return { chatId: e.chatId, chatName: e.chatName, displayName: display, count: e.count, hit: e.hit, miss: e.miss, out: e.out, total: e.total, cost: e.cost, avgTokens: e.count ? e.total / e.count : 0, avgHitRate };
+  });
+  rows.sort((a, b) => b.total - a.total);
+  return rows;
+}
+
 export function computeStatsFour(filtered: any[]): { avgCost:number; avgTokens:number; avgDuration:number; avgRate:number; avgInputCost:number; avgInputTokens:number; avgOutputCost:number; avgOutputTokens:number; avgThinkTime:number; avgThinkTokens:number; avgHitRate:number; latestHitRate:number|null; maxOutput:number; maxInput:number; maxTotal:number; avgThinkRatio:number; truncationRate:number; rounds:number } {
   if (!filtered || !filtered.length) {
     return { avgCost:0, avgTokens:0, avgDuration:0, avgRate:0, avgInputCost:0, avgInputTokens:0, avgOutputCost:0, avgOutputTokens:0, avgThinkTime:0, avgThinkTokens:0, avgHitRate:0, latestHitRate:null, maxOutput:0, maxInput:0, maxTotal:0, avgThinkRatio:0, truncationRate:0, rounds:0 };

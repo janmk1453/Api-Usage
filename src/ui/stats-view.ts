@@ -14,6 +14,8 @@ let customEnd = '';
 let pickerOpen = false;
 let selectedModel: string = '__all__';
 let modelPickerOpen = false;
+let selectedChat: string = '__all__';
+let chatPickerOpen = false;
 
 // 模型汇总表排序：点击表头（除模型外）正序/倒序切换
 type SummarySortKey = 'count' | 'hit' | 'miss' | 'out' | 'total' | 'cost' | 'avgCost' | 'avgDur' | 'avgRate';
@@ -120,6 +122,31 @@ function filterByModel(entries: any[]): any[] {
   return entries.filter(e => e.model === selectedModel);
 }
 
+function getRecordedChatsFrom(list: any[]): Array<{ chatId: string | null; chatName: string | null; displayName: string }> {
+  const map = new Map<string, { chatId: string | null; chatName: string | null }>();
+  for (const h of list || []) {
+    const cid = (h.chatId ?? null) as string | null;
+    const cname = (h.chatName ?? null) as string | null;
+    const key = cid ?? '__null__';
+    if (!map.has(key)) map.set(key, { chatId: cid, chatName: cname });
+    else if (cname && !map.get(key)!.chatName) map.get(key)!.chatName = cname;
+  }
+  return Array.from(map.values()).map(v => {
+    let display = v.chatName || '';
+    if (!display) {
+      if (v.chatId) display = v.chatId.length > 18 ? v.chatId.slice(0, 8) + '…' + v.chatId.slice(-4) : v.chatId;
+      else display = '未分组/旧数据';
+    }
+    return { chatId: v.chatId, chatName: v.chatName, displayName: display };
+  }).sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+}
+
+function filterByChat(entries: any[]): any[] {
+  if (selectedChat === '__all__') return entries;
+  if (selectedChat === '__null__') return entries.filter(e => !e.chatId);
+  return entries.filter(e => (e.chatId ?? null) === selectedChat);
+}
+
 let calendarOffset = 0;
 
 function updateRangeHighlight() {
@@ -200,6 +227,34 @@ function renderModelPicker() {
   });
 }
 
+function renderChatPicker(chatHist?: any[]) {
+  const doc = getDoc();
+  const dropdown = doc.getElementById('aus-chat-dropdown');
+  const label = doc.getElementById('aus-chat-label');
+  if (!dropdown || !label) return;
+  const list = chatHist ? getRecordedChatsFrom(chatHist) : getRecordedChatsFrom((getSelectedSave() as any)?.history || []);
+  const find = list.find(c => (c.chatId ?? '__null__') === selectedChat);
+  label.textContent = selectedChat === '__all__' ? '全部' : (find?.displayName || selectedChat);
+  label.title = find?.chatId || find?.displayName || '';
+  let html = `<div data-chat="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${selectedChat==='__all__'?'background:var(--ds-card);font-weight:600;':''}">全部</div>`;
+  for (const c of list) {
+    const key = c.chatId ?? '__null__';
+    const active = key === selectedChat ? 'background:var(--ds-card);font-weight:600;' : '';
+    html += `<div data-chat="${esc(key)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}" title="${esc(c.chatId || '')}">${esc(c.displayName)}</div>`;
+  }
+  if (!list.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">暂无对话</div>';
+  dropdown.innerHTML = html;
+  dropdown.querySelectorAll('[data-chat]').forEach((el: any) => {
+    el.onclick = () => {
+      selectedChat = el.getAttribute('data-chat') || '__all__';
+      chatPickerOpen = false;
+      dropdown.style.display = 'none';
+      renderChatPicker(chatHist);
+      renderStatsView();
+    };
+  });
+}
+
 function bindPicker() {
   const doc = getDoc();
   const btn = doc.getElementById('aus-range-btn');
@@ -208,9 +263,11 @@ function bindPicker() {
     btn.onclick = () => {
       pickerOpen = !pickerOpen;
       dropdown.style.display = pickerOpen ? 'flex' : 'none';
-      // 关闭模型下拉
+      // 关闭其他下拉
       const md = doc.getElementById('aus-model-dropdown');
       if (md) { md.style.display = 'none'; modelPickerOpen = false; }
+      const cd = doc.getElementById('aus-chat-dropdown');
+      if (cd) { cd.style.display = 'none'; chatPickerOpen = false; }
       if (pickerOpen) renderCalendar();
     };
     doc.querySelectorAll('[data-range]').forEach((el: any) => {
@@ -233,7 +290,30 @@ function bindPicker() {
       mDropdown.style.display = modelPickerOpen ? 'block' : 'none';
       const rDrop = doc.getElementById('aus-range-dropdown');
       if (rDrop) { rDrop.style.display = 'none'; pickerOpen = false; }
+      const cDrop = doc.getElementById('aus-chat-dropdown');
+      if (cDrop) { cDrop.style.display = 'none'; chatPickerOpen = false; }
       if (modelPickerOpen) renderModelPicker();
+    };
+  }
+  const cBtn = doc.getElementById('aus-chat-btn');
+  const cDropdown = doc.getElementById('aus-chat-dropdown');
+  if (cBtn && cDropdown) {
+    cBtn.onclick = () => {
+      chatPickerOpen = !chatPickerOpen;
+      cDropdown.style.display = chatPickerOpen ? 'block' : 'none';
+      const rDrop = doc.getElementById('aus-range-dropdown');
+      if (rDrop) { rDrop.style.display = 'none'; pickerOpen = false; }
+      const mDrop = doc.getElementById('aus-model-dropdown');
+      if (mDrop) { mDrop.style.display = 'none'; modelPickerOpen = false; }
+      if (chatPickerOpen) {
+        // 基于全量历史构造对话列表，需异步时用缓存
+        (async () => {
+          try {
+            const h = await getHistoryForStats();
+            renderChatPicker(h);
+          } catch { renderChatPicker(); }
+        })();
+      }
     };
   }
   // 关闭
@@ -247,6 +327,11 @@ function bindPicker() {
     if (modelPickerOpen && !t.closest('#aus-model-dropdown') && !t.closest('#aus-model-btn')) {
       modelPickerOpen = false;
       const d = doc.getElementById('aus-model-dropdown');
+      if (d) d.style.display = 'none';
+    }
+    if (chatPickerOpen && !t.closest('#aus-chat-dropdown') && !t.closest('#aus-chat-btn')) {
+      chatPickerOpen = false;
+      const d = doc.getElementById('aus-chat-dropdown');
       if (d) d.style.display = 'none';
     }
   });
@@ -277,7 +362,7 @@ function renderChartSelectors() {
     el.onchange = () => {
       toggleY(el.getAttribute('data-ykey') as any);
       renderChartSelectors();
-      const s:any = getSelectedSave(); const filtered = filterByModel(filterByRange(s.history||[])); renderChart(filtered);
+      const s:any = getSelectedSave(); const filtered = filterByChat(filterByModel(filterByRange(s.history||[]))); renderChart(filtered);
     };
   });
   // X 单选
@@ -295,7 +380,7 @@ function renderChartSelectors() {
       setXSelected(el.getAttribute('data-xkey') as any);
       chartXOpen=false; xDrop.style.display='none';
       renderChartSelectors();
-      const s:any = getSelectedSave(); const filtered = filterByModel(filterByRange(s.history||[])); renderChart(filtered);
+      const s:any = getSelectedSave(); const filtered = filterByChat(filterByModel(filterByRange(s.history||[]))); renderChart(filtered);
     };
   });
 }
@@ -547,8 +632,9 @@ export async function renderStatsView() {
   if (!s) return;
   const allHistory: any[] = await getHistoryForStats();
   const timeFiltered = filterByRange(allHistory);
-  const summaryFiltered = filterByModel(timeFiltered);
-  const chartFiltered = filterByModel(timeFiltered);
+  const modelFiltered = filterByModel(timeFiltered);
+  const summaryFiltered = filterByChat(modelFiltered);
+  const chartFiltered = filterByChat(modelFiltered);
   let totalCost = 0, totalReq = summaryFiltered.length, totalTok = 0;
   for (const e of summaryFiltered) { totalCost += e.cost || 0; totalTok += e.total_tokens || 0; }
   const costEl = doc.getElementById('aus-stats-cost');
@@ -560,6 +646,7 @@ export async function renderStatsView() {
   renderStatsFour(summaryFiltered);
   renderModelSummary(summaryFiltered);
   renderModelPicker();
+  renderChatPicker(allHistory);
   renderChartSelectors();
   // 首次加载时统计页为 display:none，跳过图表渲染，等待 switchView 切到统计页时再渲染，避免 0 尺寸报错
   const statsViewEl = doc.querySelector('[data-view="stats"]') as HTMLElement | null;
@@ -620,7 +707,7 @@ function openStatsFourDrop(idx:number, v:any) {
       (state as any).statsFour = arr;
       try { saveHot({ settings: state as any }); } catch {}
       drop.style.display='none';
-      const curFiltered = (()=>{ try { const s:any=getSelectedSave(); const all = (s?.history||[]); const tf = filterByRange(all); return filterByModel(tf); } catch { return []; } })();
+      const curFiltered = (()=>{ try { const s:any=getSelectedSave(); const all = (s?.history||[]); const tf = filterByRange(all); return filterByChat(filterByModel(tf)); } catch { return []; } })();
       renderStatsFour(curFiltered);
     };
   });
