@@ -2,7 +2,7 @@
 
 ## 概览
 
-SillyTavern 原生扩展 `API用量统计`（`manifest: api-usage-stat@3.0.1`），从 `deepseek-tavern-script` 酒馆助手脚本迁移而来。
+SillyTavern 原生扩展 `API用量统计`（`manifest: api-usage-stat@3.0.3`），从 `deepseek-tavern-script` 酒馆助手脚本迁移而来。
 
 - **真源**：`D:/Desktop/DeepSeek/Api-Usage`（独立仓库 `https://github.com/janmk1453/Api-Usage`，`main` 稳定 / `dev` 测试 双分支）
 - **归档**：`pr/RE3.0/迁移重构计划.md` 仅作设计归档，不作为开发目录
@@ -32,19 +32,19 @@ Api-Usage/
 ├── i18n/zh-cn.json
 ├── templates/panel.html   # 预留 Handlebars
 ├── src/
-│   ├── index.ts           # 入口：repository.hydrate + 魔法棒注入 + 全屏面板 + 峰值圆点（ST 未就绪时轮询重试 installInterception）+ 延迟自动检查更新
-│   ├── constants/pricing.ts  # PRICING/DEFAULT_PEAK_HOURS/MAX_HISTORY/DETAIL_KEEP/STORAGE_KEYS
-│   ├── types/save.ts, settings.ts
+│   ├── index.ts           # 入口：repository.hydrate + 魔法棒注入 + 全屏面板 + 峰值圆点（ST 未就绪时轮询重试 installInterception）+ 汇率/定价格式同步定时器（24h）+ 延迟自动检查更新
+│   ├── constants/pricing.ts  # PRICING/DEFAULT_PEAK_HOURS/MAX_HISTORY/DETAIL_KEEP/STORAGE_KEYS + PRICING_SYNC_SOURCE/FALLBACK/DEFAULT_EXCHANGE_RATE
+│   ├── types/save.ts, settings.ts # settings 含 PricingSyncSettings{enabled,mode,exchangeRate,useLiveRate,autoIntervalHours,lastSync,lastRateFetch,recalcOnSync}
 │   ├── data/              # ★ 统一数据框架（所有存/取/算/展的唯一通路）
 │   │   ├── types.ts       # Snapshot/Aggregated/TimeRange/OverviewView/StatsView
-│   │   ├── repository.ts  # 唯一写入口：addEntry(5s指纹去重+finishReason)/recalcAll/replaceAll(默认合并+清洗)/hydrate + persist（剥离隐私字段）
-│   │   ├── computed.ts    # 唯一算入口：computeOverview/computeStats/getFilteredHistory/computeStatsFour
+│   │   ├── repository.ts  # 唯一写入口：addEntry(5s指纹去重+finishReason)/recalcAll/replaceAll(默认合并+清洗)/hydrate（含 pricingSync 迁移）+ persist（剥离隐私字段）
+│   │   ├── computed.ts    # 唯一算入口：computeOverview/computeStats/getFilteredHistory/computeStatsFour + computeChatStats/getRecordedChats（对话维度聚合）
 │   │   └── events.ts      # DataEvents.UPDATED/HISTORY_ADDED/SETTINGS_CHANGED
 │   ├── store/index.ts, persistence.ts # 单一历史聚合（已废弃多存档，saves 仅作迁移兼容；append/getAllHistory 指纹去重 timestamp|model|total）
-│   ├── services/pricing.ts, interception.ts(fetch透传+TTFT/思维链/截断解析+指纹去重，GENERATION_ENDED主路径，install/uninstall幂等), balance.ts, import-export.ts(单一历史+清洗), sync.ts(单一历史+清洗), debug.ts, theme.ts(applyTheme 同步 overlay), update.ts(检查更新，main 分支 manifest 对比，6h 节流)
+│   ├── services/pricing.ts, interception.ts(fetch透传+TTFT/思维链/截断解析+指纹去重，GENERATION_ENDED主路径，install/uninstall幂等), balance.ts(余额 toast 按币种格式化), import-export.ts(单一历史+清洗), sync.ts(单一历史+清洗), debug.ts, theme.ts(applyTheme 同步 overlay), update.ts(检查更新，main 分支 manifest 对比，6h 节流), currency.ts(USD↔CNY 动态换算、getDisplayCurrency/formatMoney、fetchLiveRate 双源 24h), pricing-sync.ts(models.dev 拉取、USD→CNY*rate、峰谷 2×合成、add-missing/overwrite-unlocked/overwrite-all 预览与同步)
 │   ├── stats/forecast.ts, energyScore.ts # 预测核心：分段回归/二次方程求 R，能耗评分 A-G
 │   ├── utils/date.ts, crypto.ts(XOR+UTF-8), logger.ts
-│   └── ui/panel.ts(全屏+absolute定位+DeepSeek式侧边栏display切换+汉堡+forecast 独立页), overview.ts(双明细+8块2列+热力图), stats-view.ts(直输日期+双维度+4小块+图表Y/X配置+隐藏跳过), chart-config.ts(Y 8×X 5 聚合), heatmap.ts(GitHub风格近2年Token热力图，块内横向滑动), forecast-view.ts(趋势预测 Beta), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情), settings.ts(完整设置+不回显密钥), peak-dot.ts, customize.ts
+│   └── ui/panel.ts(全屏+absolute定位+DeepSeek式侧边栏display切换+汉堡+forecast 对话选择), overview.ts(双明细+8块2列+热力图+按对话统计表 cold 异步补全、动态币种), stats-view.ts(直输日期+三维度 time∩model∩chat+4小块+图表Y/X配置+费用轴按币种换算), chart-config.ts(Y 8×X 5 聚合), heatmap.ts(GitHub风格近2年Token热力图，块内横向滑动), forecast-view.ts(趋势预测 Beta，自选对话胶囊，能耗/预测/敏感度随选中对话联动), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情费用按币种), settings.ts(完整设置+不回显密钥+模型价格自动同步卡片，双向币种换算), extra-charts.ts(额外 6 图费用轴按币种换算), peak-dot.ts, customize.ts
 ├── README.md
 └── LICENSE
 ```
@@ -69,17 +69,18 @@ node --check index.js
 ## 页面与数据
 
 ### 用量概览（overview）
-- **双余额卡**：充值余额（`customBalance|balance`）+ 累计消费（`¥ + CNY` + `tokens`）
-- **双明细**：历史消耗（Token 历史/命中/未命中/输出，`gap:10px + 行内 padding:4px` 与右侧对齐）与支出明细（预计节省/支出输入/输出，分两行，`token` 灰 `10px #9CA3AF`）并列
-- **四小块→八小块**：默认 8 块 `repeat(4,1fr)`，`≤760px` 与 `≤480px` 保持 `repeat(2,1fr)` 两列（`gap 10px→8px`，卡片 `10px 12px`），支持 `overviewFour` 自定义 `14` 指标（`computeOverview` 单源，通用兜底排除 `#aus-overview-four`）
+- **双余额卡**：充值余额（`customBalance|balance`）+ 累计消费（动态币种 `¥ CNY ↔ $ USD` 按 `pricingSync.enabled` 切换，`formatMoney(cny)` 经 `getDisplayCurrency()` 换算，余额 toast 同步）+ `tokens`
+- **双明细**：历史消耗（Token 历史/命中/未命中/输出，`gap:10px + 行内 padding:4px` 与右侧对齐）与支出明细（预计节省/支出输入/输出，分两行，`token` 灰 `10px #9CA3AF`，金额均经 `CNY()/moneyHtml()` 按币种换算）并列
+- **四小块→八小块**：默认 8 块 `repeat(4,1fr)`，`≤760px` 与 `≤480px` 保持 `repeat(2,1fr)` 两列（`gap 10px→8px`，卡片 `10px 12px`），支持 `overviewFour` 自定义 `14` 指标（`computeOverview` 单源，费用类经 `moneyHtml()` 动态 `CNY/USD`，通用兜底排除 `#aus-overview-four`）
 - **热力图**：`Token 使用量热力图`（GitHub 风格，近 2 年按日聚合，5 级绿阶 `EBEDF0→216E39/161b22→aceebb`，`#aus-heatmap-card-overview` 块不超出、内部 `overflow-x:auto` 横向滑动，与 `模型汇总` 块一致，悬停显示日期+Token，渲染于 `overview.ts → heatmap.ts`，数据源 `state.history` 全量）
+- **按对话统计**：热力图下方 `#aus-chat-summary-overview` 按 `chatId` 聚合（`computeChatStats` 单源，按总 Token 倒序，列：对话/轮次/命中/未命中/输出/总 Tokens/总费用/平均 Token/平均命中率，费用经 `formatMoney`，`cold` 全量异步补全，`displayName` 截断 `chatId 8…4`/`未分组/旧数据`）
 
 ### 用量统计（stats）
-- **双维度**：时间维度（`全部/今天/昨天/近 7 天/近 30 天/本月/上月/自定义` 直输日期，仅 `自定义` 时显示日历，`‹/›` 月份切换，`全部` 为 `2020-01-01~今日`）仅影响 `消费金额/API 次数/Tokens/模型汇总`；模型维度（同款胶囊，列表为所有已记录模型 + 全部）影响本页所有内容（`三块`+`汇总表`+`图表`）；筛选为 `time ∩ model`，日历选中态仅对当前选项生效
-- **三块**：消费金额 `CNY`/API 请求次数/Tokens
-- **四小块**：模型汇总表上方 4 块 `repeat(4,1fr)`，竖屏 `repeat(2,1fr)`，与概览 8 块同体系（`statsFour`，响应双维度过滤，`computeStatsFour` 单源，支持 `avg_think_ratio/truncation_rate`）
-- **模型汇总表**：`10` 列（模型/调用/命中/未命中/输出/总/总成本/平均成本/平均耗时/平均速率），横向可滚动，随双维度联动
-- **图表**：首图通用 `图表`（`Y` 8 项多选 + `X` 5 维度双胶囊，默认 `总 Token`）+ 下方 `6` 图 `2×3` 网格（Token/费用堆叠同柱 `stack:'total'` + 曲线、命中 `100%` 面积、请求数柱、耗时/速率双轴、模型环），均支持 `Y/X` 独立配置与按 `time ∩ model` 联动，`vite.define` 修复 `process` 未定义，**隐藏时跳过初始化**（`display:none` 则不渲染，切到统计页再 `setTimeout 60ms` 触发，避免 `clientWidth 0` 误报 `图表容器未就绪`）
+- **三维度**：时间维度（`全部/今天/昨天/近 7 天/近 30 天/本月/上月/自定义` 直输日期，仅 `自定义` 时显示日历，`‹/›` 月份切换，`全部` 为 `2020-01-01~今日`）仅影响 `消费金额/API 次数/Tokens/模型汇总`；模型维度（同款胶囊，列表为所有已记录模型 + 全部）与对话维度（同款胶囊，列表为所有已记录 `chatId` + 全部/未分组）均影响本页所有内容（`三块`+`汇总表`+`图表`）；筛选为 `time ∩ model ∩ chat`，三胶囊互斥关闭、点外关闭
+- **三块**：消费金额（动态币种 `CNY/USD` 经 `formatMoney`）/API 请求次数/Tokens
+- **四小块**：模型汇总表上方 4 块 `repeat(4,1fr)`，竖屏 `repeat(2,1fr)`，与概览 8 块同体系（`statsFour`，响应三维度过滤，`computeStatsFour` 单源，支持 `avg_think_ratio/truncation_rate`，费用类按币种换算）
+- **模型汇总表**：`10` 列（模型/调用/命中/未命中/输出/总/总成本/平均成本/平均耗时/平均速率），横向可滚动，随三维度联动，费用列经 `formatMoney`
+- **图表**：首图通用 `图表`（`Y` 8 项多选 + `X` 5 维度双胶囊，默认 `总 Token`，费用 `Y` 经 `getDisplayCurrency()` 换算，`yAxis name=CNY/USD`，`tooltip` 按币种显示）+ 下方 `6` 图 `2×3` 网格（Token/费用堆叠同柱 `stack:'total'` + 曲线、命中 `100%` 面积、请求数柱、耗时/速率双轴、模型环，费用图 `drawBarLine` 内按币种除率），均支持 `Y/X` 独立配置与按 `time ∩ model ∩ chat` 联动，`vite.define` 修复 `process` 未定义，**隐藏时跳过初始化**（`display:none` 则不渲染，切到统计页再 `setTimeout 60ms` 触发，避免 `clientWidth 0` 误报 `图表容器未就绪`）
 
 ### 历史记录
 - 列表按 `timestamp` 倒序，卡片含模型/时间、`in/out/duration/rate`、费用、旧/新/详情
@@ -87,12 +88,12 @@ node --check index.js
 - **内联详情**：点击详情向下展开固定 `320→520px`（`15` 字段按 `基础/性能/Token/费用` 四块 + `4 Tab`：请求参数/完整响应/Raw 用量/消息内容，`pre` `160px` 滚动，收起切换）
 
 ### 趋势预测（Beta，独立页）
-- **入口**：侧边栏 `趋势预测（Beta）`，`data-view="forecast"` 独立页，概览不再嵌入预测卡（避免与统计混淆）
-- **预测核心**：`src/stats/forecast.ts` 分段回归（回落点 `≥30%` 分段，仅末段，最小二乘 `C₀+nΔ`，`R²` 择优 `linear/log/recent-mean`）+ `remainingRounds` 解二次方程（`Δ±σ` 给区间）+ `ctxLimitRounds`；`forecast-view.ts` 渲染预测卡（余额口径 `R`/`R(ctx)` 双条、下一轮 `prompt/cost/hit`）、预测图（历史散点+拟合虚线+预测延伸+置信带+`ctxLimit` 参考线）、敏感度滑块（假设命中率实时重算）、对比视图（`topPowerChats` 最耗对话）
-- **能耗评分**：`src/stats/energyScore.ts` 6 指标加权（`Δ 25%/out 20%/效率 20%/命中 15%/截断 10%/思维链占比 10%`）→ `A-G`，冷启动绝对阈值表，随历史自动切分位
+- **入口**：侧边栏 `趋势预测（Beta）`，`data-view="forecast"` 独立页，概览不再嵌入预测卡（避免与统计混淆）；顶部自选对话胶囊（`当前对话/全部/各对话`，与统计页同款，默认 `__current__` 跟随当前聊天，`__null__` 为未分组），切换后全页联动
+- **预测核心**：`src/stats/forecast.ts` 分段回归（回落点 `≥30%` 分段，仅末段，最小二乘 `C₀+nΔ`，`R²` 择优 `linear/log/recent-mean`）+ `remainingRounds` 解二次方程（`Δ±σ` 给区间）+ `ctxLimitRounds`；`forecast-view.ts` 渲染预测卡（余额口径 `R`/`R(ctx)` 双条、下一轮 `prompt/cost/hit` 经 `formatMoney` 按币种）、预测图（历史散点+拟合虚线+预测延伸+置信带+`ctxLimit` 参考线，`chatId=null` 时不过滤）、敏感度滑块（假设命中率实时重算，模型取选中对话末轮）、对比视图（`topPowerChats` 最耗对话保持全局）
+- **能耗评分**：`src/stats/energyScore.ts` 6 指标加权（`Δ 25%/out 20%/效率 20%/命中 15%/截断 10%/思维链占比 10%`）→ `A-G`，冷启动绝对阈值表，随历史自动切分位；`forecast-view.ts` 中能耗标识已改为基于选中对话 `energyScore(effectiveHist,null)`，文案顯示选中对话名与样本数
 
 ### 设置（完整迁移原脚本）
-- `颜色模式（浅色/深色，胶囊下拉，`settings.theme` + `theme.ts:applyTheme` 即时切换，与用量统计·模型选择同款） / API 密钥 / 自动校准余额（开关+间隔）/ 自定义余额 / 新价格机制（开关+日期+今日）/ 高峰时段（可增删跨天，改后重算）/ 模型与价格（内置 3 模型可覆写+自定义增删，峰谷开关，三价 ¥/百万）/ 调试（开关+hit/miss/output/model/date/batchCount+生成）/ 峰值圆点（开关+重置）/ WebDAV（url/user/pass/path/proxy+同步，`https` 强制，`pull-merge-push`）`，全部主题变量卡片，改后 `recalcAll`+`refreshUI`
+- `颜色模式（浅色/深色，胶囊下拉，`settings.theme` + `theme.ts:applyTheme` 即时切换，与用量统计·模型选择同款） / API 密钥 / 自动校准余额（开关+间隔）/ 自定义余额 / 新价格机制（开关+日期+今日）/ 高峰时段（可增删跨天，改后重算）/ 模型与价格（内置 3 模型可覆写+自定义增删，峰谷开关，三价 动态 `CNY/USD` 经 `getDisplayCurrency()`，输入框双向换算）/ 模型价格自动同步（`pricingSync.enabled` 默认关闭，模式 `add-missing/overwrite-unlocked/overwrite-all` 胶囊、汇率 `USD→CNY` 输入 + `useLiveRate` 每 24h 双源自动获取 + `autoIntervalHours`  + `recalcOnSync` + 立即同步/预览，`models.dev` 拉取 `USD→CNY*rate` 合成峰谷 `2×`）/ 调试（开关+hit/miss/output/model/date/batchCount+生成）/ 峰值圆点（开关+重置）/ WebDAV（url/user/pass/path/proxy+同步，`https` 强制，`pull-merge-push`）`，全部主题变量卡片，改后 `recalcAll`+`refreshUI`；货币切换时 `formatMoney(cny)` 全站即时换算（余额 toast 同步）
 
 ## 样式规范（DeepSeek 截图定版）
 
@@ -104,11 +105,12 @@ node --check index.js
 
 ## 常见任务
 
-- **改定价/峰谷**：`src/constants/pricing.ts` + `src/services/pricing.ts`（纯函数，`isPeakHour(ts, peakHours)` 不读全局）
+- **改定价/峰谷**：`src/constants/pricing.ts` + `src/services/pricing.ts`（纯函数，`isPeakHour(ts, peakHours)` 不读全局）+ `src/services/currency.ts`（币种换算、24h 汇率）+ `src/services/pricing-sync.ts`（models.dev 同步、2×峰谷合成）
 - **改面板/导航**：`src/ui/panel.ts`（全屏+`positionPanel` 定位置换+`applyCollapsed`）+ `style.css`（`#aus-mobile-header` 汉堡 + `display` 切换，无过渡）
-- **改概览/统计**：`src/ui/overview.ts` + `src/ui/stats-view.ts`（双维度过滤）+ `src/data/computed.ts` + `src/ui/heatmap.ts`（概览热力图，GitHub 风格，近 2 年，块内滑动）
-- **改历史详情/占比**：`src/ui/panel.ts`（`renderHistory` 内联展开 + 三色条）
-- **改同步/导入**：`src/services/sync.ts` + `src/services/import-export.ts`（单一历史）
+- **改概览/统计**：`src/ui/overview.ts` + `src/ui/stats-view.ts`（三维度 time∩model∩chat 过滤）+ `src/data/computed.ts`（computeChatStats 单源）+ `src/ui/heatmap.ts`（概览热力图，GitHub 风格，近 2 年，块内滑动）
+- **改历史详情/占比**：`src/ui/panel.ts`（`renderHistory` 内联展开 + 三色条，费用按币种）
+- **改同步/导入**：`src/services/sync.ts` + `src/services/import-export.ts`（单一历史）+ `src/services/pricing-sync.ts`（models.dev 价格同步）
+- **改预测**：`src/ui/forecast-view.ts`（自选对话胶囊、能耗/预测/敏感度联动）+ `src/stats/forecast.ts`
 
 ## 调试规范（Playwright MCP）
 
@@ -165,6 +167,7 @@ git push origin main --tags
 - **详情双占比去重**：性能块与 Token 消耗块曾各显示一次“思维链占比”，后收敛为仅性能块保留，Token 块改为单列占满的“思维链 Token”
 - **三块竖屏**：统计页 `消费金额/API 次数/Tokens` 在 `760px` 下已为 `1fr` 单列三行，满足一行一列需求；新增 `statsFour` 4 块在竖屏为 `2×2`
 - **自定义日期**：统计页 `自定义` 原为双月日历，现为直输 `input[type=date]` 两框 + 应用按钮，`max` 限今日，自动纠正起止倒置
+- **货币与同步**：开关开启时全站 `formatMoney(cny)` → `$/USD`（`CNY/rate`），关闭回 `¥/CNY`；`models.dev` 价为 `$US` 仅 `cost` 无 `currency`，同步时 `USD→CNY*rate` 再 `peak=2×offpeak` 合成 DeepSeek 峰谷；模型价格输入框开启 `USD` 时双向换算（显示 `CNY/rate`，保存 `USD*rate`）；汇率双源 `open.er-api.com → api.exchangerate-api.com` 24h 节流，定时器随 `pricingSync.enabled/useLiveRate` 启停
 
 ## 注意事项
 
