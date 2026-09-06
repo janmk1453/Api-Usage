@@ -7114,7 +7114,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-wl5Jk0y3.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-DZ1jv8j-.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -7167,7 +7167,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-wl5Jk0y3.js").then((m) => m.maybeAutoCheck());
+    import("./update-DZ1jv8j-.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }
@@ -7649,12 +7649,6 @@ async function init() {
     });
   } catch {
   }
-  setTimeout(() => {
-    try {
-      import("./update-wl5Jk0y3.js").then((m) => m.maybeAutoCheck());
-    } catch {
-    }
-  }, 3e3);
   globalThis.ApiUsageStat = { MODULE, refreshUI, updatePeakDot, openPanel, closePanel, togglePanel, state: state$2, injectWandEntry: ensureWandEntry };
 }
 init();

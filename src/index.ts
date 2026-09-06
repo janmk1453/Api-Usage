@@ -147,8 +147,7 @@ async function init() {
   } catch {}
   try { getDoc().addEventListener('keydown', (e: KeyboardEvent) => { if (e.key === 'Escape') closePanel(); }); } catch {}
   try { window.addEventListener('pagehide', () => { try { import('./store/persistence').then(m => (m as any).flushSaveHot?.()); } catch {} }); } catch {}
-  // 扩展加载后延迟自动检查更新（6 小时节流）
-  setTimeout(() => { try { import('./services/update').then(m => m.maybeAutoCheck()); } catch {} }, 3000);
+  // 不在启动期自动检查更新（外网不可达时会长时间挂起请求），改由用户打开面板时触发（openPanel → maybeAutoCheck，6 小时节流）
   (globalThis as any).ApiUsageStat = { MODULE, refreshUI, updatePeakDot, openPanel, closePanel, togglePanel, state, injectWandEntry: ensureWandEntry };
 }
 

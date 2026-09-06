@@ -1,8 +1,9 @@
-import { t as toast, l as log } from "./index-stJlcyxE.js";
+import { t as toast, l as log } from "./index-BUbJw68m.js";
 const CURRENT_VERSION = "3.0.3";
 const REMOTE_MANIFEST = "https://raw.githubusercontent.com/janmk1453/Api-Usage/main/manifest.json";
 const REPO_URL = "https://github.com/janmk1453/Api-Usage";
 const INTERVAL_MS = 6 * 60 * 60 * 1e3;
+const TIMEOUT_MS = 5 * 1e3;
 const LAST_CHECK_KEY = "aus_update_last_check";
 const LAST_NOTIFIED_KEY = "aus_update_last_notified_version";
 function getParentFetch() {
@@ -56,9 +57,17 @@ async function checkUpdate(manual = false) {
   }
   setStoredLastCheck(Date.now());
   const rf = getParentFetch();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => {
+    try {
+      ctrl.abort();
+    } catch {
+    }
+  }, TIMEOUT_MS);
   try {
     const url = REMOTE_MANIFEST + "?t=" + Date.now();
-    const resp = await rf(url, { method: "GET", headers: { Accept: "application/json" }, cache: "no-store" });
+    const resp = await rf(url, { method: "GET", headers: { Accept: "application/json" }, cache: "no-store", signal: ctrl.signal });
+    clearTimeout(timer);
     if (!resp?.ok) throw new Error("HTTP " + resp.status);
     const data = await resp.json();
     const remoteVer = String(data?.version || "").trim();
@@ -106,6 +115,7 @@ async function checkUpdate(manual = false) {
     }
     return { hasUpdate, current: CURRENT_VERSION, remote: remoteVer };
   } catch (e) {
+    clearTimeout(timer);
     log.debug("检查更新失败", e?.message || e);
     if (manual) toast("error", "检查更新失败：" + (e?.message || String(e)));
     return null;

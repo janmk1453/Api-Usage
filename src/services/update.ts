@@ -5,6 +5,7 @@ const CURRENT_VERSION: string = (typeof __APP_VERSION__ !== 'undefined' ? __APP_
 const REMOTE_MANIFEST = 'https://raw.githubusercontent.com/janmk1453/Api-Usage/main/manifest.json';
 const REPO_URL = 'https://github.com/janmk1453/Api-Usage';
 const INTERVAL_MS = 6 * 60 * 60 * 1000;
+const TIMEOUT_MS = 5 * 1000;
 const LAST_CHECK_KEY = 'aus_update_last_check';
 const LAST_NOTIFIED_KEY = 'aus_update_last_notified_version';
 
@@ -53,10 +54,14 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
   }
   setStoredLastCheck(Date.now());
   const rf = getParentFetch();
+  // 外网不可达时 TCP 超时可能长达 20~35s，主动 5s 中断
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => { try { ctrl.abort(); } catch {} }, TIMEOUT_MS);
   try {
     // cache-bust
     const url = REMOTE_MANIFEST + '?t=' + Date.now();
-    const resp: any = await rf(url, { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store' as any } as any);
+    const resp: any = await rf(url, { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store' as any, signal: ctrl.signal } as any);
+    clearTimeout(timer);
     if (!resp?.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
     const remoteVer = String(data?.version || '').trim();
@@ -91,6 +96,7 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
     }
     return { hasUpdate, current: CURRENT_VERSION, remote: remoteVer };
   } catch (e: any) {
+    clearTimeout(timer);
     log.debug('检查更新失败', e?.message || e);
     if (manual) toast('error', '检查更新失败：' + (e?.message || String(e)));
     return null;
