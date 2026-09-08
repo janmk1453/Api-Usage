@@ -6439,6 +6439,66 @@ function initForecastView() {
 function getDoc$1() {
   return window.parent?.document ?? document;
 }
+function prettyFullResponse(resp) {
+  if (resp == null) return "（原文已清理）";
+  if (typeof resp !== "string") {
+    try {
+      return JSON.stringify(resp, null, 2);
+    } catch {
+      return String(resp);
+    }
+  }
+  const text = resp.trim();
+  if (text.indexOf("data:") === -1) {
+    try {
+      return JSON.stringify(JSON.parse(text), null, 2);
+    } catch {
+      return text;
+    }
+  }
+  let id = "", model = "", finish = null, usage = null;
+  let content = "", reasoning = "", chunks = 0;
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line.startsWith("data:")) continue;
+    const payload = line.slice(5).trim();
+    if (!payload || payload === "[DONE]") continue;
+    let chunk;
+    try {
+      chunk = JSON.parse(payload);
+    } catch {
+      continue;
+    }
+    chunks++;
+    if (chunk.id) id = chunk.id;
+    if (chunk.model) model = chunk.model;
+    if (chunk.usage) usage = chunk.usage;
+    const ch = Array.isArray(chunk.choices) ? chunk.choices[0] : null;
+    if (ch) {
+      const d = ch.delta || {};
+      if (typeof d.reasoning_content === "string") reasoning += d.reasoning_content;
+      else if (typeof d.reasoning === "string") reasoning += d.reasoning;
+      if (typeof d.content === "string") content += d.content;
+      if (ch.finish_reason) finish = ch.finish_reason;
+    }
+  }
+  const head = [];
+  if (id) head.push(`id: ${id}`);
+  if (model) head.push(`model: ${model}`);
+  head.push(`chunks: ${chunks}`);
+  head.push(`finish_reason: ${finish ?? "（无）"}`);
+  if (usage) head.push(`usage: ${JSON.stringify(usage)}`);
+  const body = [];
+  if (reasoning) body.push(`【思维链】
+${reasoning}`);
+  body.push(`【正文】
+${content || "（无内容）"}`);
+  return `${head.join("\n")}
+
+${body.join("\n\n")}
+
+—— 已合并 SSE 增量并隐藏重复字段 ——`;
+}
 let panelCreated = false;
 let panelOpen = false;
 let collapsed = false;
@@ -6607,7 +6667,7 @@ function renderHistoryInner(doc, fullHist) {
           <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">消息内容 (Messages)</button>
         </div>
         <pre class="aus-tab-content" data-content="req-${h.timestamp}" style="flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : "（原文已清理，仅保留统计）")}</pre>
-        <pre class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(h.fullResponse ? typeof h.fullResponse === "string" ? h.fullResponse : JSON.stringify(h.fullResponse, null, 2) : "（原文已清理）")}</pre>
+        <pre class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(prettyFullResponse(h.fullResponse))}</pre>
         <pre class="aus-tab-content" data-content="raw-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
         <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(h.messages && h.messages.length ? JSON.stringify(h.messages, null, 2) : "（原文已清理——超过保留条数 10 条，仅统计可用）")}</pre>
       </div>
@@ -7177,7 +7237,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-DUbObEqi.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-BmHSopzV.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -7230,7 +7290,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-DUbObEqi.js").then((m) => m.maybeAutoCheck());
+    import("./update-BmHSopzV.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

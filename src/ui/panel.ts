@@ -18,6 +18,50 @@ declare const __APP_VERSION__: string;
 
 function getDoc(): Document { return (window.parent as any)?.document ?? document; }
 
+// 精简展示完整响应：SSE 流式合并增量内容，隐藏 id/created/object/choices/index/delta 等重复字段
+function prettyFullResponse(resp: any): string {
+  if (resp == null) return '（原文已清理）';
+  if (typeof resp !== 'string') {
+    try { return JSON.stringify(resp, null, 2); } catch { return String(resp); }
+  }
+  const text = resp.trim();
+  if (text.indexOf('data:') === -1) {
+    try { return JSON.stringify(JSON.parse(text), null, 2); } catch { return text; }
+  }
+  let id = '', model = '', finish: string | null = null, usage: any = null;
+  let content = '', reasoning = '', chunks = 0;
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line.startsWith('data:')) continue;
+    const payload = line.slice(5).trim();
+    if (!payload || payload === '[DONE]') continue;
+    let chunk: any;
+    try { chunk = JSON.parse(payload); } catch { continue; }
+    chunks++;
+    if (chunk.id) id = chunk.id;
+    if (chunk.model) model = chunk.model;
+    if (chunk.usage) usage = chunk.usage;
+    const ch = Array.isArray(chunk.choices) ? chunk.choices[0] : null;
+    if (ch) {
+      const d = ch.delta || {};
+      if (typeof d.reasoning_content === 'string') reasoning += d.reasoning_content;
+      else if (typeof d.reasoning === 'string') reasoning += d.reasoning;
+      if (typeof d.content === 'string') content += d.content;
+      if (ch.finish_reason) finish = ch.finish_reason;
+    }
+  }
+  const head: string[] = [];
+  if (id) head.push(`id: ${id}`);
+  if (model) head.push(`model: ${model}`);
+  head.push(`chunks: ${chunks}`);
+  head.push(`finish_reason: ${finish ?? '（无）'}`);
+  if (usage) head.push(`usage: ${JSON.stringify(usage)}`);
+  const body: string[] = [];
+  if (reasoning) body.push(`【思维链】\n${reasoning}`);
+  body.push(`【正文】\n${content || '（无内容）'}`);
+  return `${head.join('\n')}\n\n${body.join('\n\n')}\n\n—— 已合并 SSE 增量并隐藏重复字段 ——`;
+}
+
 let panelCreated = false;
 let panelOpen = false;
 let currentView: 'overview' | 'stats' | 'history' | 'forecast' | 'settings' | 'help' | 'about' = 'overview';
@@ -159,7 +203,7 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
           <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">消息内容 (Messages)</button>
         </div>
         <pre class="aus-tab-content" data-content="req-${h.timestamp}" style="flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : (h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : '（原文已清理，仅保留统计）'))}</pre>
-        <pre class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.fullResponse ? (typeof h.fullResponse === 'string' ? h.fullResponse : JSON.stringify(h.fullResponse, null, 2)) : '（原文已清理）')}</pre>
+        <pre class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(prettyFullResponse(h.fullResponse))}</pre>
         <pre class="aus-tab-content" data-content="raw-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
         <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.messages && (h as any).messages.length ? JSON.stringify(h.messages, null, 2) : '（原文已清理——超过保留条数 10 条，仅统计可用）')}</pre>
       </div>
