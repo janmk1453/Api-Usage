@@ -817,6 +817,37 @@ function getFilteredHistoryForScope() {
   if (!cur) return state$2.history || [];
   return (state$2.history || []).filter((h) => h.chatId === cur);
 }
+function normalizeSettings(incoming) {
+  const def = defaultSettings();
+  const src = incoming && typeof incoming === "object" ? incoming : {};
+  const merged = { ...def };
+  for (const k of Object.keys(def)) {
+    if (src[k] !== void 0) merged[k] = src[k];
+  }
+  merged.webdav = { ...def.webdav, ...src.webdav || {} };
+  merged.pricingSync = { ...def.pricingSync, ...src.pricingSync || {} };
+  if (!isFinite(parseFloat(String(merged.pricingSync.exchangeRate))) || parseFloat(String(merged.pricingSync.exchangeRate)) <= 0) merged.pricingSync.exchangeRate = 7.2;
+  if (!Array.isArray(merged.peakHours) || !merged.peakHours.length) merged.peakHours = def.peakHours;
+  if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
+  if (!merged.historyScope) merged.historyScope = def.historyScope;
+  if (!merged.theme) merged.theme = def.theme;
+  if (typeof merged.modelsPricingCollapsed !== "boolean") merged.modelsPricingCollapsed = true;
+  if (!Array.isArray(merged.overviewFour) || merged.overviewFour.length !== 8 && merged.overviewFour.length !== 4) merged.overviewFour = def.overviewFour;
+  if (Array.isArray(merged.overviewFour) && merged.overviewFour.length === 4) {
+    merged.overviewFour = [...merged.overviewFour, ...def.overviewFour.slice(4)];
+  }
+  try {
+    const valid = /* @__PURE__ */ new Set(["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_cost", "avg_input_tokens", "avg_output_cost", "avg_output_tokens", "avg_think_time", "avg_think_tokens", "avg_hit_rate", "latest_hit_rate", "max_output", "max_input", "max_total", "avg_think_ratio", "truncation_rate"]);
+    if (Array.isArray(merged.overviewFour)) merged.overviewFour = merged.overviewFour.map((k) => valid.has(k) ? k : "avg_cost");
+    if (merged.overviewFour.length !== 8) merged.overviewFour = def.overviewFour;
+    if (!Array.isArray(merged.statsFour) || merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
+    const validStats = /* @__PURE__ */ new Set(["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_cost", "avg_input_tokens", "avg_output_cost", "avg_output_tokens", "avg_think_time", "avg_think_tokens", "avg_think_ratio", "truncation_rate", "avg_hit_rate", "latest_hit_rate", "max_output", "max_input", "max_total"]);
+    if (Array.isArray(merged.statsFour)) merged.statsFour = merged.statsFour.map((k) => validStats.has(k) ? k : "avg_cost");
+    if (merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
+  } catch {
+  }
+  return merged;
+}
 function sanitizeFullRequest(fr) {
   if (!fr || typeof fr !== "object") return fr;
   const keep = {};
@@ -1135,31 +1166,7 @@ const repository = {
       }
     }
     if (next.settings !== void 0) {
-      const def = defaultSettings();
-      const incoming = next.settings || {};
-      const merged = { ...def, ...incoming };
-      merged.webdav = { ...def.webdav, ...incoming.webdav || {} };
-      merged.pricingSync = { ...def.pricingSync, ...incoming.pricingSync || {} };
-      if (!isFinite(parseFloat(String(merged.pricingSync.exchangeRate))) || parseFloat(String(merged.pricingSync.exchangeRate)) <= 0) merged.pricingSync.exchangeRate = 7.2;
-      if (!Array.isArray(merged.peakHours) || !merged.peakHours.length) merged.peakHours = def.peakHours;
-      if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
-      if (!merged.historyScope) merged.historyScope = def.historyScope;
-      if (!merged.theme) merged.theme = def.theme;
-      if (typeof merged.modelsPricingCollapsed !== "boolean") merged.modelsPricingCollapsed = true;
-      if (!Array.isArray(merged.overviewFour) || merged.overviewFour.length !== 8 && merged.overviewFour.length !== 4) merged.overviewFour = def.overviewFour;
-      if (Array.isArray(merged.overviewFour) && merged.overviewFour.length === 4) {
-        merged.overviewFour = [...merged.overviewFour, ...def.overviewFour.slice(4)];
-      }
-      try {
-        const valid = /* @__PURE__ */ new Set(["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_cost", "avg_input_tokens", "avg_output_cost", "avg_output_tokens", "avg_think_time", "avg_think_tokens", "avg_hit_rate", "latest_hit_rate", "max_output", "max_input", "max_total", "avg_think_ratio", "truncation_rate"]);
-        if (Array.isArray(merged.overviewFour)) merged.overviewFour = merged.overviewFour.map((k) => valid.has(k) ? k : "avg_cost");
-        if (merged.overviewFour.length !== 8) merged.overviewFour = def.overviewFour;
-        if (!Array.isArray(merged.statsFour) || merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
-        const validStats = /* @__PURE__ */ new Set(["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_cost", "avg_input_tokens", "avg_output_cost", "avg_output_tokens", "avg_think_time", "avg_think_tokens", "avg_think_ratio", "truncation_rate", "avg_hit_rate", "latest_hit_rate", "max_output", "max_input", "max_total"]);
-        if (Array.isArray(merged.statsFour)) merged.statsFour = merged.statsFour.map((k) => validStats.has(k) ? k : "avg_cost");
-        if (merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
-      } catch {
-      }
+      state$2.settings = normalizeSettings(next.settings);
       try {
         let need = false;
         for (const h of state$2.history) {
@@ -1174,7 +1181,6 @@ const repository = {
         if (need) saveHot({ history: state$2.history });
       } catch {
       }
-      state$2.settings = merged;
     }
     if (next.balance !== void 0) state$2.balance = next.balance;
     if (next.customBalance !== void 0) state$2.customBalance = next.customBalance;
@@ -1234,7 +1240,7 @@ const repository = {
       if (hot.output_cost !== void 0) state$2.output_cost = hot.output_cost;
       if (hot.rounds !== void 0) state$2.rounds = hot.rounds;
       if (hot.startTime !== void 0) state$2.startTime = hot.startTime;
-      if (hot.settings) state$2.settings = { ...state$2.settings, ...hot.settings };
+      if (hot.settings) state$2.settings = normalizeSettings(hot.settings);
       if (hot.balance) state$2.balance = hot.balance;
       if (hot.customBalance) state$2.customBalance = hot.customBalance;
       if (hot.messageCount) state$2.messageCount = hot.messageCount;
@@ -5722,13 +5728,13 @@ async function renderStatsView() {
 }
 function ensureStatsFour() {
   const def = ["avg_cost", "avg_tokens", "avg_think_ratio", "truncation_rate"];
-  let cur = state$2.statsFour;
+  let cur = state$2.settings.statsFour;
   const valid = new Set(FOUR_OPTIONS.map((o) => o.key));
   if (!Array.isArray(cur) || cur.length !== 4 || cur.some((k) => !valid.has(k))) {
     cur = def.slice();
-    state$2.statsFour = cur;
+    state$2.settings.statsFour = cur;
     try {
-      saveHot({ settings: state$2 });
+      saveHot({ settings: state$2.settings });
     } catch {
     }
     return cur;
@@ -5765,9 +5771,9 @@ function openStatsFourDrop(idx, v) {
       const at = Number(el.getAttribute("data-sfour"));
       const arr = ensureStatsFour().slice();
       arr[at] = key;
-      state$2.statsFour = arr;
+      state$2.settings.statsFour = arr;
       try {
-        saveHot({ settings: state$2 });
+        saveHot({ settings: state$2.settings });
       } catch {
       }
       drop.style.display = "none";
@@ -6930,14 +6936,14 @@ function createPanel() {
           </div>
           <div data-view="help" style="display:none;">
             <div style="display:grid;gap:12px;">
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DC2626;font-weight:600;margin-bottom:6px;">⚠️ 安全提示</div><div style="color:var(--ds-text-2);">在本扩展中填入 API 密钥存在安全风险。密钥仅经 XOR 混淆后存储于 SillyTavern 设置中，建议使用权限受限的 API 密钥。</div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（余额和缓存命中仅支持 DeepSeek 官方）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div><div>3. 切换时间维度或模型查看不同范围的统计</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DC2626;font-weight:600;margin-bottom:6px;">⚠️ 安全提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>在本扩展中填入 API 密钥存在安全风险。密钥仅经 XOR 混淆后存储于 SillyTavern 设置中，建议使用权限受限的 API 密钥。</div><div>使用模型价格自动同步时将从 models.dev 下载相关数据，不对数据准确和安全做保障；不对使用自定义的 WebDAV 服务导致的安全问题做保障。</div><div>余额查询通过 <a href="https://api.deepseek.com/user/balance" target="_blank" style="color:var(--ds-text);text-decoration:underline;">https://api.deepseek.com/user/balance</a> 官方 API 实现，将会发送你填写的 API 密钥。</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（余额查询仅支持 DeepSeek 官方）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前（DeepSeek）高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DB2777;font-weight:600;margin-bottom:6px;">🔄 消息对比</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中找到想对比的两条消息，前者点“旧”，后者点“新”</div><div>2. 系统并排显示请求消息的文字差异</div><div>3. 差异点即缓存发散起始位置（前 N 条相同为缓存命中段）</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在用量统计中按时间维度筛选数据</div><div>2. 橙色堆叠柱展示多模型消费金额占比，悬浮查看分模型明细</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”展开固定区域</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div><div>3. 兼容峰谷计价分段</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0891B2;font-weight:600;margin-bottom:6px;">🧡 模型兼容</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 完全兼容 DeepSeek 官方 API</div><div>2. 尽量兼容不同厂商/渠道的请求格式，部分模型可能无命中数</div><div>3. 如数据异常，请携带完整请求与响应反馈</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-text-3);font-weight:600;margin-bottom:6px;">✨ 关于</div><div style="color:var(--ds-text-2);">本扩展由原脚本迁移重构（Vite + ECharts，浅色隔离）。原脚本由 AI 编写 <span style="color:var(--ds-text);">@janmk</span> · 仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);text-decoration:underline;">janmk1453/Api-Usage</a></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 切换时间维度、模型和对话查看不同范围的统计</div><div>2. 多图表展示多模请求参数，悬浮查看分模型明细</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”展开固定区域</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 等详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0891B2;font-weight:600;margin-bottom:6px;">🧡 模型兼容</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 完全兼容 DeepSeek 官方 API</div><div>2. 尽量兼容不同厂商/渠道的请求格式，部分模型可能无缓存命中</div><div>3. 如数据异常，请携带完整请求与响应反馈</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-text-3);font-weight:600;margin-bottom:6px;">✨ 关于</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>本扩展由原脚本（<a href="https://github.com/janmk1453/deepseek-tavern-script" target="_blank" style="color:var(--ds-text);text-decoration:underline;">deepseek-tavern-script</a>）迁移重构。</div><div><span style="color:var(--ds-text);">@janmk</span> · 仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);text-decoration:underline;">janmk1453/Api-Usage</a></div></div></div>
             </div>
           </div>
           <div data-view="about" style="display:none;">
@@ -7114,7 +7120,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-DZ1jv8j-.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-DjvH7bH-.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -7167,7 +7173,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-DZ1jv8j-.js").then((m) => m.maybeAutoCheck());
+    import("./update-DjvH7bH-.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

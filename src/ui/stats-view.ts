@@ -673,12 +673,12 @@ import { saveHot } from '../store/persistence';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 function ensureStatsFour(): string[] {
   const def = ['avg_cost','avg_tokens','avg_think_ratio','truncation_rate'];
-  let cur: any = (state as any).statsFour;
+  let cur: any = (state.settings as any).statsFour;
   const valid = new Set(FOUR_OPTIONS.map(o=>o.key));
   if (!Array.isArray(cur) || cur.length !== 4 || cur.some((k:any)=> !valid.has(k))) {
     cur = def.slice();
-    (state as any).statsFour = cur;
-    try { saveHot({ settings: state as any }); } catch {}
+    (state.settings as any).statsFour = cur;
+    try { saveHot({ settings: state.settings }); } catch {}
     return cur as string[];
   }
   return cur as string[];
@@ -713,8 +713,8 @@ function openStatsFourDrop(idx:number, v:any) {
       const at = Number(el.getAttribute('data-sfour'));
       const arr = ensureStatsFour().slice();
       arr[at] = key as any;
-      (state as any).statsFour = arr;
-      try { saveHot({ settings: state as any }); } catch {}
+      (state.settings as any).statsFour = arr;
+      try { saveHot({ settings: state.settings }); } catch {}
       drop.style.display='none';
       const curFiltered = (()=>{ try { const s:any=getSelectedSave(); const all = (s?.history||[]); const tf = filterByRange(all); return filterByChat(filterByModel(tf)); } catch { return []; } })();
       renderStatsFour(curFiltered);

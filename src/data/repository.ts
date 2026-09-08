@@ -43,6 +43,38 @@ export function getFilteredHistoryForScope(): any[] {
   return (state.history || []).filter((h: any) => h.chatId === cur);
 }
 
+// 归一化设置：只接受已知设置键，防止历史/余额等字段污染（如误将整个 state 存入 settings），并清洗非法值
+function normalizeSettings(incoming: any): any {
+  const def: any = defaultSettings();
+  const src: any = (incoming && typeof incoming === 'object') ? incoming : {};
+  const merged: any = { ...def };
+  for (const k of Object.keys(def)) {
+    if (src[k] !== undefined) merged[k] = src[k];
+  }
+  merged.webdav = { ...def.webdav, ...(src.webdav || {}) };
+  merged.pricingSync = { ...def.pricingSync, ...(src.pricingSync || {}) };
+  if (!isFinite(parseFloat(String(merged.pricingSync.exchangeRate))) || parseFloat(String(merged.pricingSync.exchangeRate)) <= 0) merged.pricingSync.exchangeRate = 7.2;
+  if (!Array.isArray(merged.peakHours) || !merged.peakHours.length) merged.peakHours = def.peakHours;
+  if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
+  if (!merged.historyScope) merged.historyScope = def.historyScope;
+  if (!merged.theme) merged.theme = def.theme;
+  if (typeof merged.modelsPricingCollapsed !== 'boolean') merged.modelsPricingCollapsed = true;
+  if (!Array.isArray(merged.overviewFour) || (merged.overviewFour.length !== 8 && merged.overviewFour.length !== 4)) merged.overviewFour = def.overviewFour;
+  if (Array.isArray(merged.overviewFour) && merged.overviewFour.length === 4) {
+    merged.overviewFour = [...merged.overviewFour, ...def.overviewFour.slice(4)];
+  }
+  try {
+    const valid = new Set(['avg_cost','avg_tokens','avg_duration','avg_rate','avg_input_cost','avg_input_tokens','avg_output_cost','avg_output_tokens','avg_think_time','avg_think_tokens','avg_hit_rate','latest_hit_rate','max_output','max_input','max_total','avg_think_ratio','truncation_rate']);
+    if (Array.isArray(merged.overviewFour)) merged.overviewFour = merged.overviewFour.map((k:any)=> valid.has(k)?k:'avg_cost');
+    if (merged.overviewFour.length !== 8) merged.overviewFour = def.overviewFour;
+    if (!Array.isArray(merged.statsFour) || merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
+    const validStats = new Set(['avg_cost','avg_tokens','avg_duration','avg_rate','avg_input_cost','avg_input_tokens','avg_output_cost','avg_output_tokens','avg_think_time','avg_think_tokens','avg_think_ratio','truncation_rate','avg_hit_rate','latest_hit_rate','max_output','max_input','max_total']);
+    if (Array.isArray(merged.statsFour)) merged.statsFour = merged.statsFour.map((k:any)=> validStats.has(k)?k:'avg_cost');
+    if (merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
+  } catch {}
+  return merged;
+}
+
 function sanitizeFullRequest(fr: any): any {
   if (!fr || typeof fr !== 'object') return fr;
   const keep: any = {};
@@ -319,32 +351,7 @@ export const repository = {
       }
     }
     if (next.settings !== undefined) {
-      const def: any = defaultSettings();
-      const incoming: any = next.settings || {};
-      // 深合并 webdav/peakHours/customModels，避免缺字段导致白屏
-      const merged: any = { ...def, ...incoming };
-      merged.webdav = { ...def.webdav, ...(incoming.webdav || {}) };
-      merged.pricingSync = { ...def.pricingSync, ...(incoming.pricingSync || {}) };
-      if (!isFinite(parseFloat(String(merged.pricingSync.exchangeRate))) || parseFloat(String(merged.pricingSync.exchangeRate)) <= 0) merged.pricingSync.exchangeRate = 7.2;
-      if (!Array.isArray(merged.peakHours) || !merged.peakHours.length) merged.peakHours = def.peakHours;
-      if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
-      if (!merged.historyScope) merged.historyScope = def.historyScope;
-      if (!merged.theme) merged.theme = def.theme;
-      if (typeof merged.modelsPricingCollapsed !== 'boolean') merged.modelsPricingCollapsed = true;
-      if (!Array.isArray(merged.overviewFour) || (merged.overviewFour.length !== 8 && merged.overviewFour.length !== 4)) merged.overviewFour = def.overviewFour;
-      if (Array.isArray(merged.overviewFour) && merged.overviewFour.length === 4) {
-        merged.overviewFour = [...merged.overviewFour, ...def.overviewFour.slice(4)];
-      }
-      // 清洗 overviewFour / statsFour 非法 key
-      try {
-        const valid = new Set(['avg_cost','avg_tokens','avg_duration','avg_rate','avg_input_cost','avg_input_tokens','avg_output_cost','avg_output_tokens','avg_think_time','avg_think_tokens','avg_hit_rate','latest_hit_rate','max_output','max_input','max_total','avg_think_ratio','truncation_rate']);
-        if (Array.isArray(merged.overviewFour)) merged.overviewFour = merged.overviewFour.map((k:any)=> valid.has(k)?k:'avg_cost');
-        if (merged.overviewFour.length !== 8) merged.overviewFour = def.overviewFour;
-        if (!Array.isArray(merged.statsFour) || merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
-        const validStats = new Set(['avg_cost','avg_tokens','avg_duration','avg_rate','avg_input_cost','avg_input_tokens','avg_output_cost','avg_output_tokens','avg_think_time','avg_think_tokens','avg_think_ratio','truncation_rate','avg_hit_rate','latest_hit_rate','max_output','max_input','max_total']);
-        if (Array.isArray(merged.statsFour)) merged.statsFour = merged.statsFour.map((k:any)=> validStats.has(k)?k:'avg_cost');
-        if (merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
-      } catch {}
+      state.settings = normalizeSettings(next.settings);
       // 旧历史补 finishReason/isTruncated（旧数据无该字段，默认 null/false，避免统计 NaN）
       try {
         let need = false;
@@ -354,7 +361,6 @@ export const repository = {
         }
         if (need) saveHot({ history: state.history } as any);
       } catch {}
-      state.settings = merged as any;
     }
     if (next.balance !== undefined) state.balance = next.balance;
     if (next.customBalance !== undefined) state.customBalance = next.customBalance as any;
@@ -417,7 +423,7 @@ export const repository = {
       if (hot.output_cost !== undefined) state.output_cost = hot.output_cost;
       if (hot.rounds !== undefined) state.rounds = hot.rounds;
       if (hot.startTime !== undefined) state.startTime = hot.startTime;
-      if (hot.settings) state.settings = { ...state.settings, ...hot.settings };
+      if (hot.settings) state.settings = normalizeSettings(hot.settings);
       if (hot.balance) state.balance = hot.balance;
       if (hot.customBalance) state.customBalance = hot.customBalance;
       if (hot.messageCount) state.messageCount = hot.messageCount;
