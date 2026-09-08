@@ -753,6 +753,19 @@ function emit(event, payload) {
     }
   });
 }
+const NORMAL_FINISH = /* @__PURE__ */ new Set([
+  "stop",
+  "eos",
+  "end_turn",
+  "stop_sequence",
+  "tool_calls",
+  "function_call",
+  "tool_use"
+]);
+function isTruncatedFinish(fr) {
+  if (!fr) return false;
+  return !NORMAL_FINISH.has(String(fr).toLowerCase());
+}
 const PREFIX = "[DS]";
 const warned = /* @__PURE__ */ new Set();
 let debugOn = false;
@@ -993,6 +1006,7 @@ const repository = {
       return null;
     }
     log.debug("addEntry 解析", { model, hit, miss, comp, total });
+    const fr = finishReason ?? usage?.__finish_reason ?? usage?.finish_reason ?? null;
     try {
       const now = Date.now();
       const fp = `${model}|${total}|${hit}|${miss}|${comp}`;
@@ -1001,10 +1015,27 @@ const repository = {
       if (lastFp === fp && lastFpTime && now - lastFpTime < 5e3) {
         try {
           const head = state$2.history[0];
-          if (fullResponse && head && !head.fullResponse) {
-            head.fullResponse = clampResponse(fullResponse);
-            if (state$2.lastUsage?.timestamp === head.timestamp) state$2.lastUsage.fullResponse = head.fullResponse;
-            persist();
+          if (head) {
+            let changed = false;
+            if (fullResponse && !head.fullResponse) {
+              head.fullResponse = clampResponse(fullResponse);
+              changed = true;
+            }
+            if (fr && !head.finishReason) {
+              head.finishReason = fr;
+              head.isTruncated = isTruncatedFinish(fr);
+              changed = true;
+            }
+            if (changed) {
+              if (state$2.lastUsage?.timestamp === head.timestamp) {
+                if (head.fullResponse) state$2.lastUsage.fullResponse = head.fullResponse;
+                if (head.finishReason) {
+                  state$2.lastUsage.finishReason = head.finishReason;
+                  state$2.lastUsage.isTruncated = head.isTruncated;
+                }
+              }
+              persist();
+            }
           }
         } catch {
         }
@@ -1023,9 +1054,8 @@ const repository = {
     lu.ttft = ttft || 0;
     lu.thinkTime = thinkTime || 0;
     lu.thinkTokens = thinkTokens;
-    const fr = finishReason ?? usage?.__finish_reason ?? usage?.finish_reason ?? null;
     lu.finishReason = fr;
-    lu.isTruncated = fr === "length";
+    lu.isTruncated = isTruncatedFinish(fr);
     lu.messages = (messages || []).map(clampMessage);
     const c = calcCost({ timestamp: lu.timestamp, model, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp }, state$2.settings);
     lu.cost = c.total;
@@ -1041,7 +1071,7 @@ const repository = {
     lu.chatId = chatId;
     lu.chatName = chatName;
     state$2.lastUsage = lu;
-    const fr2 = finishReason ?? usage?.__finish_reason ?? null;
+    const fr2 = fr;
     const entry = {
       timestamp: lu.timestamp,
       model,
@@ -1065,7 +1095,7 @@ const repository = {
       fullRequest,
       fullResponse: safeResponse,
       finishReason: fr2,
-      isTruncated: fr2 === "length",
+      isTruncated: isTruncatedFinish(fr2),
       chatId,
       chatName
     };
@@ -1197,8 +1227,10 @@ const repository = {
             h.finishReason = h.raw_usage?.__finish_reason ?? null;
             need = true;
           }
-          if (h.isTruncated === void 0) {
-            h.isTruncated = h.finishReason === "length";
+          const t = isTruncatedFinish(h.finishReason);
+          if (h.isTruncated !== t) {
+            h.isTruncated = t;
+            need = true;
           }
         }
         if (need) saveHot({ history: state$2.history });
@@ -1343,8 +1375,10 @@ const repository = {
           h.finishReason = h.raw_usage?.__finish_reason ?? null;
           need = true;
         }
-        if (h.isTruncated === void 0) {
-          h.isTruncated = h.finishReason === "length";
+        const t = isTruncatedFinish(h.finishReason);
+        if (h.isTruncated !== t) {
+          h.isTruncated = t;
+          need = true;
         }
       }
       if (need) try {
@@ -3601,7 +3635,7 @@ function computeOverview() {
     sumOut += h.completion_tokens || 0;
   }
   const avgThinkRatio = sumOut > 0 ? sumThink / sumOut * 100 : 0;
-  const truncCnt = hist.filter((h) => h.finishReason === "length" || h.isTruncated).length;
+  const truncCnt = hist.filter((h) => isTruncatedFinish(h.finishReason) || h.isTruncated).length;
   const truncationRate = hist.length ? truncCnt / hist.length * 100 : 0;
   const bal = state$2.customBalance || state$2.balance?.balance;
   let remainingRounds2 = null;
@@ -3729,7 +3763,7 @@ function computeStatsFour(filtered) {
     if (totTok > maxTotal) maxTotal = totTok;
     sumThink += h.thinkTokens || 0;
     sumOut += h.completion_tokens || 0;
-    if (h.finishReason === "length" || h.isTruncated) truncCnt++;
+    if (isTruncatedFinish(h.finishReason) || h.isTruncated) truncCnt++;
   }
   return {
     avgCost: totalCost / rounds,
@@ -6048,7 +6082,7 @@ function computeMetricsForChat(history, chatId) {
     return tot ? ch / tot : 0.5;
   });
   const hitRate = hitRates.length ? hitRates.slice(-5).reduce((a, b) => a + b, 0) / Math.min(5, hitRates.length) : 0.5;
-  const truncRate = filtered.filter((h) => h.finishReason === "length" || h.isTruncated).length / filtered.length;
+  const truncRate = filtered.filter((h) => isTruncatedFinish(h.finishReason) || h.isTruncated).length / filtered.length;
   const thinkRatio = (() => {
     const sOut = filtered.reduce((a, b) => a + (b.completion_tokens || 0), 0);
     const sThink = filtered.reduce((a, b) => a + (b.thinkTokens || 0), 0);
@@ -6542,7 +6576,7 @@ function renderHistoryInner(doc, fullHist) {
       if (!comp || !th) return "—";
       return (th / comp * 100).toFixed(1) + "%";
     })()}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">是否截断</div><div style="font-weight:600;margin-top:2px;color:${h.finishReason === "length" || h.isTruncated ? "var(--ds-red)" : "var(--ds-text)"};">${h.finishReason === "length" || h.isTruncated ? "是 (" + esc$1(h.finishReason || "length") + ")" : "否"}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">是否截断</div><div style="font-weight:600;margin-top:2px;color:${isTruncatedFinish(h.finishReason) || h.isTruncated ? "var(--ds-red)" : "var(--ds-text)"};">${isTruncatedFinish(h.finishReason) || h.isTruncated ? "是 (" + esc$1(h.finishReason || "length") + ")" : "否"}</div></div>
             </div>
           </div>
         </div>
@@ -7143,7 +7177,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-OQoBdjQ_.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-DUbObEqi.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -7196,7 +7230,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-OQoBdjQ_.js").then((m) => m.maybeAutoCheck());
+    import("./update-DUbObEqi.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

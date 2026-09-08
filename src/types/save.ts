@@ -20,7 +20,7 @@ export type HistoryEntry = {
   ttft?: number;
   thinkTime?: number;
   thinkTokens?: number;
-  /** SSE 最后一个非 null 的 choices[0].finish_reason，length 表示被 max_tokens 截断 */
+  /** SSE 最后一个非 null 的 choices[0].finish_reason；非正常结束（length / content_filter / sensitive 等）视为截断 */
   finishReason?: string | null;
   isTruncated?: boolean;
   chatId?: string | null;

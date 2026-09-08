@@ -5,6 +5,7 @@
 import { state, getSelectedSave } from '../store/index';
 import { calcSavings } from '../services/pricing';
 import { localDay } from '../utils/date';
+import { isTruncatedFinish } from '../utils/finish';
 import type { OverviewView, StatsView, TimeRange } from './types';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 
@@ -71,8 +72,8 @@ export function computeOverview(): OverviewView {
   let sumThink = 0, sumOut = 0;
   for (const h of hist) { sumThink += h.thinkTokens || 0; sumOut += h.completion_tokens || 0; }
   const avgThinkRatio = sumOut > 0 ? (sumThink / sumOut * 100) : 0;
-  // 截断率 = finishReason === 'length' 的占比
-  const truncCnt = hist.filter((h: any) => (h.finishReason === 'length' || h.isTruncated)).length;
+  // 截断率 = 非正常 finish_reason（length / content_filter / sensitive 等）的占比
+  const truncCnt = hist.filter((h: any) => (isTruncatedFinish(h.finishReason) || h.isTruncated)).length;
   const truncationRate = hist.length ? truncCnt / hist.length * 100 : 0;
   const bal = state.customBalance || state.balance?.balance;
   // 余额预测：仅基于 DeepSeek 官方模型历史（deepseek*），EWMA alpha=0.3，与原脚本一致
@@ -206,7 +207,7 @@ export function computeStatsFour(filtered: any[]): { avgCost:number; avgTokens:n
     const out = h.completion_tokens||0, inp = (h.cache_hit_tokens||0)+(h.cache_miss_tokens||0), totTok = h.total_tokens||0;
     if (out>maxOutput) maxOutput=out; if (inp>maxInput) maxInput=inp; if (totTok>maxTotal) maxTotal=totTok;
     sumThink += h.thinkTokens||0; sumOut += h.completion_tokens||0;
-    if (h.finishReason==='length' || h.isTruncated) truncCnt++;
+    if (isTruncatedFinish(h.finishReason) || h.isTruncated) truncCnt++;
   }
   return {
     avgCost: totalCost/rounds, avgTokens: totalTokens/rounds, avgDuration: totalDur/rounds/1000, avgRate: totalRate/rounds,

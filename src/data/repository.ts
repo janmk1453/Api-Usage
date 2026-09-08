@@ -10,6 +10,7 @@ import { emit, DataEvents } from './events';
 import type { Snapshot } from './types';
 import { defaultSettings } from '../types/settings';
 import { isUnsafeKey } from '../utils/date';
+import { isTruncatedFinish } from '../utils/finish';
 import { log } from '../utils/logger';
 
 function getCurrentChatId(): string | null {
@@ -226,6 +227,7 @@ export const repository = {
       return null as any;
     }
     log.debug('addEntry 解析', { model, hit, miss, comp, total });
+    const fr = finishReason ?? (usage as any)?.__finish_reason ?? (usage as any)?.finish_reason ?? null;
     // 指纹去重：5秒内同 model+total 防双记账（fetch 与 GENERATION_ENDED 并发）
     try {
       const now = Date.now();
@@ -233,13 +235,20 @@ export const repository = {
       const lastFp = (state as any)._lastFp as string | undefined;
       const lastFpTime = (state as any)._lastFpTime as number | undefined;
       if (lastFp === fp && lastFpTime && now - lastFpTime < 5000) {
-        // 重复记录：主路径先写入时缺完整响应，fetch 后解析到则回填，避免完整响应丢失
+        // 重复记录：主路径先写入时缺完整响应/finish_reason，fetch 后解析到则回填
         try {
           const head: any = state.history[0];
-          if (fullResponse && head && !head.fullResponse) {
-            head.fullResponse = clampResponse(fullResponse);
-            if ((state.lastUsage as any)?.timestamp === head.timestamp) (state.lastUsage as any).fullResponse = head.fullResponse;
-            persist();
+          if (head) {
+            let changed = false;
+            if (fullResponse && !head.fullResponse) { head.fullResponse = clampResponse(fullResponse); changed = true; }
+            if (fr && !head.finishReason) { head.finishReason = fr; head.isTruncated = isTruncatedFinish(fr); changed = true; }
+            if (changed) {
+              if ((state.lastUsage as any)?.timestamp === head.timestamp) {
+                if (head.fullResponse) (state.lastUsage as any).fullResponse = head.fullResponse;
+                if (head.finishReason) { (state.lastUsage as any).finishReason = head.finishReason; (state.lastUsage as any).isTruncated = head.isTruncated; }
+              }
+              persist();
+            }
           }
         } catch {}
         log.debug('addEntry 去重跳过(5s指纹)', { fp });
@@ -254,9 +263,8 @@ export const repository = {
     lu.duration = duration;
     lu.tokenRate = duration - (ttft || 0) > 50 && comp > 0 ? Math.round((comp / (duration - (ttft || 0))) * 1000) : 0;
     lu.ttft = ttft || 0; lu.thinkTime = thinkTime || 0; lu.thinkTokens = thinkTokens;
-    // 截断检测：finish_reason === 'length'
-    const fr = finishReason ?? (usage as any)?.__finish_reason ?? (usage as any)?.finish_reason ?? null;
-    lu.finishReason = fr; (lu as any).isTruncated = fr === 'length';
+    // 截断检测：非正常 finish_reason（length / content_filter / sensitive 等）
+    lu.finishReason = fr; (lu as any).isTruncated = isTruncatedFinish(fr);
     lu.messages = (messages || []).map(clampMessage);
     const c: any = calcCost({ timestamp: lu.timestamp, model, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp }, state.settings as any);
     lu.cost = c.total; lu.input_cost = c.input; lu.output_cost = c.output; lu.priceType = c.priceType;
@@ -268,13 +276,13 @@ export const repository = {
     (lu as any).chatId = chatId; (lu as any).chatName = chatName;
     state.lastUsage = lu;
 
-    const fr2 = finishReason ?? (usage as any)?.__finish_reason ?? null;
+    const fr2 = fr;
     const entry: any = {
       timestamp: lu.timestamp, model, prompt_tokens: hit + miss, cache_hit_tokens: hit, cache_miss_tokens: miss,
       completion_tokens: comp, total_tokens: total, input_cost: lu.input_cost, output_cost: lu.output_cost,
       cost: lu.cost, cache_hit_rate: (hit + miss) > 0 ? (hit / (hit + miss) * 100) : 0, priceType: lu.priceType,
       raw_usage: usage, messages: (messages || []).map(clampMessage), duration, ttft, thinkTime, thinkTokens, tokenRate: lu.tokenRate, fullRequest, fullResponse: safeResponse,
-      finishReason: fr2, isTruncated: fr2 === 'length',
+      finishReason: fr2, isTruncated: isTruncatedFinish(fr2),
       chatId, chatName,
     };
     log.debug('addEntry 即将写入', { model: entry.model, total: entry.total_tokens });
@@ -375,12 +383,13 @@ export const repository = {
     }
     if (next.settings !== undefined) {
       state.settings = normalizeSettings(next.settings);
-      // 旧历史补 finishReason/isTruncated（旧数据无该字段，默认 null/false，避免统计 NaN）
+      // 旧历史补 finishReason 并重算 isTruncated（兼容 sensitive/content_filter 等非正常结束）
       try {
         let need = false;
         for (const h of state.history as any[]) {
           if ((h as any).finishReason === undefined) { (h as any).finishReason = (h as any).raw_usage?.__finish_reason ?? null; need = true; }
-          if ((h as any).isTruncated === undefined) { (h as any).isTruncated = (h as any).finishReason === 'length'; }
+          const t = isTruncatedFinish((h as any).finishReason);
+          if ((h as any).isTruncated !== t) { (h as any).isTruncated = t; need = true; }
         }
         if (need) saveHot({ history: state.history } as any);
       } catch {}
@@ -496,12 +505,13 @@ export const repository = {
         try{ saveHot({settings:state.settings}); }catch{}
       } catch {}
     }
-    // 迁移：旧历史补 finishReason/isTruncated
+    // 迁移：旧历史补 finishReason 并重算 isTruncated（兼容 sensitive/content_filter 等非正常结束）
     try {
       let need = false;
       for (const h of state.history as any[]) {
         if ((h as any).finishReason === undefined) { (h as any).finishReason = (h as any).raw_usage?.__finish_reason ?? null; need = true; }
-        if ((h as any).isTruncated === undefined) { (h as any).isTruncated = (h as any).finishReason === 'length'; }
+        const t = isTruncatedFinish((h as any).finishReason);
+        if ((h as any).isTruncated !== t) { (h as any).isTruncated = t; need = true; }
       }
       if (need) try { saveHot({ history: state.history } as any); } catch {}
     } catch {}
