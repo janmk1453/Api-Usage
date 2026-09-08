@@ -53,7 +53,7 @@ const DEFAULT_PEAK_HOURS = [
   { start: "14:00", end: "18:00" }
 ];
 const MAX_HISTORY = 2e3;
-const DETAIL_KEEP = 3;
+const DETAIL_KEEP = 5;
 const STORAGE_KEYS = {
   KEY: "ds_api_key",
   BALANCE: "ds_balance_data",
@@ -6667,9 +6667,12 @@ function renderHistoryInner(doc, fullHist) {
           <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">消息内容 (Messages)</button>
         </div>
         <pre class="aus-tab-content" data-content="req-${h.timestamp}" style="flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : "（原文已清理，仅保留统计）")}</pre>
-        <pre class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(prettyFullResponse(h.fullResponse))}</pre>
+        <div class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;margin-top:2px;">
+          <pre style="margin:0;min-height:160px;max-height:360px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(prettyFullResponse(h.fullResponse))}</pre>
+          ${h.fullResponse ? `<div style="display:flex;justify-content:flex-end;margin-top:6px;"><button class="aus-res-raw-btn" data-ts="${h.timestamp}" style="padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">查看原始完整数据</button></div><pre class="aus-res-raw" data-ts="${h.timestamp}" style="display:none;margin:6px 0 0;max-height:360px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(typeof h.fullResponse === "string" ? h.fullResponse : JSON.stringify(h.fullResponse, null, 2))}</pre>` : ""}
+        </div>
         <pre class="aus-tab-content" data-content="raw-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
-        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(h.messages && h.messages.length ? JSON.stringify(h.messages, null, 2) : "（原文已清理——超过保留条数 10 条，仅统计可用）")}</pre>
+        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(h.messages && h.messages.length ? JSON.stringify(h.messages, null, 2) : "（原文已清理——仅最近 5 条保留，其余仅统计可用）")}</pre>
       </div>
     </div>
   `;
@@ -6743,6 +6746,17 @@ function renderHistoryInner(doc, fullHist) {
       });
       const target = root.querySelector(`[data-content="${tab}-${ts}"]`);
       if (target) target.style.display = "block";
+    });
+  });
+  host.querySelectorAll(".aus-res-raw-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const ts = btn.getAttribute("data-ts");
+      const root = btn.closest(".aus-detail-panel");
+      const pre = root?.querySelector(`.aus-res-raw[data-ts="${ts}"]`);
+      if (!pre) return;
+      const show = pre.style.display === "none";
+      pre.style.display = show ? "block" : "none";
+      btn.textContent = show ? "隐藏原始完整数据" : "查看原始完整数据";
     });
   });
 }
@@ -7237,7 +7251,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-BmHSopzV.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-DOTJ2ZkA.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -7290,7 +7304,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-BmHSopzV.js").then((m) => m.maybeAutoCheck());
+    import("./update-DOTJ2ZkA.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

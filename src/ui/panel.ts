@@ -203,9 +203,12 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
           <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">消息内容 (Messages)</button>
         </div>
         <pre class="aus-tab-content" data-content="req-${h.timestamp}" style="flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : (h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : '（原文已清理，仅保留统计）'))}</pre>
-        <pre class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(prettyFullResponse(h.fullResponse))}</pre>
+        <div class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;margin-top:2px;">
+          <pre style="margin:0;min-height:160px;max-height:360px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(prettyFullResponse(h.fullResponse))}</pre>
+          ${h.fullResponse ? `<div style="display:flex;justify-content:flex-end;margin-top:6px;"><button class="aus-res-raw-btn" data-ts="${h.timestamp}" style="padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">查看原始完整数据</button></div><pre class="aus-res-raw" data-ts="${h.timestamp}" style="display:none;margin:6px 0 0;max-height:360px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(typeof h.fullResponse === 'string' ? h.fullResponse : JSON.stringify(h.fullResponse, null, 2))}</pre>` : ''}
+        </div>
         <pre class="aus-tab-content" data-content="raw-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
-        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.messages && (h as any).messages.length ? JSON.stringify(h.messages, null, 2) : '（原文已清理——超过保留条数 10 条，仅统计可用）')}</pre>
+        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.messages && (h as any).messages.length ? JSON.stringify(h.messages, null, 2) : '（原文已清理——仅最近 5 条保留，其余仅统计可用）')}</pre>
       </div>
     </div>
   `;
@@ -239,6 +242,17 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
       root.querySelectorAll('.aus-tab-content').forEach((c: any) => { c.style.display = 'none'; });
       const target = root.querySelector(`[data-content="${tab}-${ts}"]`) as HTMLElement | null;
       if (target) target.style.display = 'block';
+    });
+  });
+  host.querySelectorAll('.aus-res-raw-btn').forEach((btn: any) => {
+    btn.addEventListener('click', () => {
+      const ts = btn.getAttribute('data-ts');
+      const root = btn.closest('.aus-detail-panel') as HTMLElement | null;
+      const pre = root?.querySelector(`.aus-res-raw[data-ts="${ts}"]`) as HTMLElement | null;
+      if (!pre) return;
+      const show = pre.style.display === 'none';
+      pre.style.display = show ? 'block' : 'none';
+      btn.textContent = show ? '隐藏原始完整数据' : '查看原始完整数据';
     });
   });
 }

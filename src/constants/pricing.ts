@@ -26,7 +26,8 @@ export const DEFAULT_PEAK_HOURS: Array<{ start: string; end: string }> = [
 ];
 
 export const MAX_HISTORY = 2000;
-export const DETAIL_KEEP = 3;
+// 保留最近 5 条记录的完整数据（消息/请求体/完整响应原文）
+export const DETAIL_KEEP = 5;
 
 export const STORAGE_KEYS = {
   KEY: 'ds_api_key',
