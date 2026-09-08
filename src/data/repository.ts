@@ -244,10 +244,20 @@ export const repository = {
             if (fr && !head.finishReason) { head.finishReason = fr; head.isTruncated = isTruncatedFinish(fr); changed = true; }
             const estThink = usage?.completion_tokens_details?.reasoning_tokens || (usage as any)?.__think_tokens_est || 0;
             if (estThink && !head.thinkTokens) { head.thinkTokens = estThink; changed = true; }
+            if (ttft && !head.ttft) {
+              head.ttft = ttft;
+              const dur = head.duration || 0;
+              head.tokenRate = dur - ttft > 50 && (head.completion_tokens || 0) > 0 ? Math.round((head.completion_tokens / (dur - ttft)) * 1000) : 0;
+              changed = true;
+            }
+            if (thinkTime && !head.thinkTime) { head.thinkTime = thinkTime; changed = true; }
             if (changed) {
               if ((state.lastUsage as any)?.timestamp === head.timestamp) {
                 if (head.fullResponse) (state.lastUsage as any).fullResponse = head.fullResponse;
                 if (head.finishReason) { (state.lastUsage as any).finishReason = head.finishReason; (state.lastUsage as any).isTruncated = head.isTruncated; }
+                if (head.ttft) { (state.lastUsage as any).ttft = head.ttft; (state.lastUsage as any).tokenRate = head.tokenRate; }
+                if (head.thinkTime) (state.lastUsage as any).thinkTime = head.thinkTime;
+                if (head.thinkTokens) (state.lastUsage as any).thinkTokens = head.thinkTokens;
               }
               persist();
             }

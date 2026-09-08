@@ -128,7 +128,8 @@ function installFetchCapture() {
               for (;;) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                if (first && value && value.byteLength) { ttft = nowMs() - t0; first = false; }
+                // 首字延迟：相对请求发出时刻（startTime），而非 clone 流开始读取时刻
+                if (first && value && value.byteLength) { ttft = Date.now() - startTime; first = false; }
                 const piece = dec.decode(value, { stream: true });
                 fullText += piece; buf += piece;
                 const nl = buf.lastIndexOf('\n');
@@ -144,7 +145,7 @@ function installFetchCapture() {
             if (streamBody && typeof (streamBody as any).getReader === 'function') {
               readStream(streamBody).catch(() => { try { finish(); } catch {} });
             } else {
-              clone.text().then((t) => { ttft = nowMs() - t0; parseAndProcess(t, ttft, 0); }).catch(()=>{});
+              clone.text().then((t) => { ttft = Date.now() - startTime; parseAndProcess(t, ttft, 0); }).catch(()=>{});
             }
           } catch (innerErr) {
             log.debug('fetch 流式读取异常，不影响原请求', (innerErr as any)?.message || innerErr);

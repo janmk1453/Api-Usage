@@ -1031,6 +1031,16 @@ const repository = {
               head.thinkTokens = estThink;
               changed = true;
             }
+            if (ttft && !head.ttft) {
+              head.ttft = ttft;
+              const dur = head.duration || 0;
+              head.tokenRate = dur - ttft > 50 && (head.completion_tokens || 0) > 0 ? Math.round(head.completion_tokens / (dur - ttft) * 1e3) : 0;
+              changed = true;
+            }
+            if (thinkTime && !head.thinkTime) {
+              head.thinkTime = thinkTime;
+              changed = true;
+            }
             if (changed) {
               if (state$2.lastUsage?.timestamp === head.timestamp) {
                 if (head.fullResponse) state$2.lastUsage.fullResponse = head.fullResponse;
@@ -1038,6 +1048,12 @@ const repository = {
                   state$2.lastUsage.finishReason = head.finishReason;
                   state$2.lastUsage.isTruncated = head.isTruncated;
                 }
+                if (head.ttft) {
+                  state$2.lastUsage.ttft = head.ttft;
+                  state$2.lastUsage.tokenRate = head.tokenRate;
+                }
+                if (head.thinkTime) state$2.lastUsage.thinkTime = head.thinkTime;
+                if (head.thinkTokens) state$2.lastUsage.thinkTokens = head.thinkTokens;
               }
               persist();
             }
@@ -1578,7 +1594,7 @@ function installFetchCapture() {
                   const { done, value } = await reader.read();
                   if (done) break;
                   if (first && value && value.byteLength) {
-                    ttft = nowMs() - t0;
+                    ttft = Date.now() - startTime;
                     first = false;
                   }
                   const piece = dec.decode(value, { stream: true });
@@ -1604,7 +1620,7 @@ function installFetchCapture() {
                 });
               } else {
                 clone.text().then((t) => {
-                  ttft = nowMs() - t0;
+                  ttft = Date.now() - startTime;
                   parseAndProcess(t, ttft, 0);
                 }).catch(() => {
                 });
@@ -7297,7 +7313,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-Chhvs3v7.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-PFpoJuS_.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -7350,7 +7366,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-Chhvs3v7.js").then((m) => m.maybeAutoCheck());
+    import("./update-PFpoJuS_.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }
