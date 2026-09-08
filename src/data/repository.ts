@@ -94,18 +94,31 @@ function clampMessage(m: any): any {
   return { ...m, content: c };
 }
 
+// 限制完整响应落盘大小，避免 settings.json 被超大 SSE 文本撑爆
+const RESPONSE_KEEP = 200000;
+function clampResponse(resp: any): any {
+  if (resp == null) return null;
+  if (typeof resp === 'string') {
+    return resp.length > RESPONSE_KEEP ? resp.slice(0, RESPONSE_KEEP) + '\n…[响应过长已截断]' : resp;
+  }
+  try {
+    const s = JSON.stringify(resp);
+    if (s.length > RESPONSE_KEEP) return s.slice(0, RESPONSE_KEEP) + '\n…[响应过长已截断]';
+  } catch {}
+  return resp;
+}
+
 function pruneDetails() {
   if (!state.history || !state.history.length) return;
   const hs = [...state.history].sort((a: any, b: any) => b.timestamp - a.timestamp);
   for (let i = 0; i < hs.length; i++) {
     const e: any = hs[i];
-    // fullResponse 对统计/展示无必要，一律清除（响应统计已在 raw_usage）
-    delete e.fullResponse;
     if (i >= DETAIL_KEEP) {
       delete e.messages;
       delete e.fullRequest;
+      delete e.fullResponse;
     } else {
-      // 保留条也裁剪 fullRequest 防止大 messages 落盘
+      // 保留前 DETAIL_KEEP 条的完整响应/请求；fullRequest 裁剪 messages 防止大对象落盘
       if (e.fullRequest && typeof e.fullRequest === 'object' && Array.isArray(e.fullRequest.messages)) {
         e.fullRequest = sanitizeFullRequest(e.fullRequest);
       }
@@ -220,6 +233,15 @@ export const repository = {
       const lastFp = (state as any)._lastFp as string | undefined;
       const lastFpTime = (state as any)._lastFpTime as number | undefined;
       if (lastFp === fp && lastFpTime && now - lastFpTime < 5000) {
+        // 重复记录：主路径先写入时缺完整响应，fetch 后解析到则回填，避免完整响应丢失
+        try {
+          const head: any = state.history[0];
+          if (fullResponse && head && !head.fullResponse) {
+            head.fullResponse = clampResponse(fullResponse);
+            if ((state.lastUsage as any)?.timestamp === head.timestamp) (state.lastUsage as any).fullResponse = head.fullResponse;
+            persist();
+          }
+        } catch {}
         log.debug('addEntry 去重跳过(5s指纹)', { fp });
         return null as any;
       }
@@ -238,7 +260,8 @@ export const repository = {
     lu.messages = (messages || []).map(clampMessage);
     const c: any = calcCost({ timestamp: lu.timestamp, model, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp }, state.settings as any);
     lu.cost = c.total; lu.input_cost = c.input; lu.output_cost = c.output; lu.priceType = c.priceType;
-    lu.raw_usage = usage; lu.fullRequest = fullRequest; lu.fullResponse = null;
+    const safeResponse = clampResponse(fullResponse);
+    lu.raw_usage = usage; lu.fullRequest = fullRequest; lu.fullResponse = safeResponse;
     // 记录所属对话，便于按对话过滤
     const chatId = getCurrentChatId();
     const chatName = getCurrentChatName();
@@ -250,7 +273,7 @@ export const repository = {
       timestamp: lu.timestamp, model, prompt_tokens: hit + miss, cache_hit_tokens: hit, cache_miss_tokens: miss,
       completion_tokens: comp, total_tokens: total, input_cost: lu.input_cost, output_cost: lu.output_cost,
       cost: lu.cost, cache_hit_rate: (hit + miss) > 0 ? (hit / (hit + miss) * 100) : 0, priceType: lu.priceType,
-      raw_usage: usage, messages: (messages || []).map(clampMessage), duration, ttft, thinkTime, thinkTokens, tokenRate: lu.tokenRate, fullRequest, fullResponse: null,
+      raw_usage: usage, messages: (messages || []).map(clampMessage), duration, ttft, thinkTime, thinkTokens, tokenRate: lu.tokenRate, fullRequest, fullResponse: safeResponse,
       finishReason: fr2, isTruncated: fr2 === 'length',
       chatId, chatName,
     };

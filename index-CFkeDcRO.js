@@ -863,15 +863,28 @@ function clampMessage(m) {
   const c = typeof m.content === "string" ? m.content.length > 600 ? m.content.slice(0, 600) + "…[截断]" : m.content : m.content;
   return { ...m, content: c };
 }
+const RESPONSE_KEEP = 2e5;
+function clampResponse(resp) {
+  if (resp == null) return null;
+  if (typeof resp === "string") {
+    return resp.length > RESPONSE_KEEP ? resp.slice(0, RESPONSE_KEEP) + "\n…[响应过长已截断]" : resp;
+  }
+  try {
+    const s = JSON.stringify(resp);
+    if (s.length > RESPONSE_KEEP) return s.slice(0, RESPONSE_KEEP) + "\n…[响应过长已截断]";
+  } catch {
+  }
+  return resp;
+}
 function pruneDetails() {
   if (!state$2.history || !state$2.history.length) return;
   const hs = [...state$2.history].sort((a, b) => b.timestamp - a.timestamp);
   for (let i = 0; i < hs.length; i++) {
     const e = hs[i];
-    delete e.fullResponse;
     if (i >= DETAIL_KEEP) {
       delete e.messages;
       delete e.fullRequest;
+      delete e.fullResponse;
     } else {
       if (e.fullRequest && typeof e.fullRequest === "object" && Array.isArray(e.fullRequest.messages)) {
         e.fullRequest = sanitizeFullRequest(e.fullRequest);
@@ -986,6 +999,15 @@ const repository = {
       const lastFp = state$2._lastFp;
       const lastFpTime = state$2._lastFpTime;
       if (lastFp === fp && lastFpTime && now - lastFpTime < 5e3) {
+        try {
+          const head = state$2.history[0];
+          if (fullResponse && head && !head.fullResponse) {
+            head.fullResponse = clampResponse(fullResponse);
+            if (state$2.lastUsage?.timestamp === head.timestamp) state$2.lastUsage.fullResponse = head.fullResponse;
+            persist();
+          }
+        } catch {
+        }
         log.debug("addEntry 去重跳过(5s指纹)", { fp });
         return null;
       }
@@ -1010,9 +1032,10 @@ const repository = {
     lu.input_cost = c.input;
     lu.output_cost = c.output;
     lu.priceType = c.priceType;
+    const safeResponse = clampResponse(fullResponse);
     lu.raw_usage = usage;
     lu.fullRequest = fullRequest;
-    lu.fullResponse = null;
+    lu.fullResponse = safeResponse;
     const chatId = getCurrentChatId();
     const chatName = getCurrentChatName();
     lu.chatId = chatId;
@@ -1040,7 +1063,7 @@ const repository = {
       thinkTokens,
       tokenRate: lu.tokenRate,
       fullRequest,
-      fullResponse: null,
+      fullResponse: safeResponse,
       finishReason: fr2,
       isTruncated: fr2 === "length",
       chatId,
@@ -1446,12 +1469,12 @@ function installFetchCapture() {
                   if (finishReason) usage.__finish_reason = finishReason;
                 } catch {
                 }
-                lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: data, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason };
+                lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: text, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason };
                 lastFetchModel = typeof model === "string" ? model : null;
                 lastFetchTime = Date.now();
                 log.debug("fetch 捕获 usage", { model, hasUsage: !!usage, finishReason });
                 try {
-                  processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal, finishReason);
+                  processUsage(usage, model, msgs, startTime, fullReq, text, ttftVal, thinkTimeVal, finishReason);
                 } catch (e) {
                   log.error("fetch 用量记录失败 " + (e?.message || e));
                 }
@@ -6550,7 +6573,7 @@ function renderHistoryInner(doc, fullHist) {
           <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">消息内容 (Messages)</button>
         </div>
         <pre class="aus-tab-content" data-content="req-${h.timestamp}" style="flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : "（原文已清理，仅保留统计）")}</pre>
-        <pre class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(h.fullResponse ? JSON.stringify(h.fullResponse, null, 2) : "（原文已清理）")}</pre>
+        <pre class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(h.fullResponse ? typeof h.fullResponse === "string" ? h.fullResponse : JSON.stringify(h.fullResponse, null, 2) : "（原文已清理）")}</pre>
         <pre class="aus-tab-content" data-content="raw-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
         <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(h.messages && h.messages.length ? JSON.stringify(h.messages, null, 2) : "（原文已清理——超过保留条数 10 条，仅统计可用）")}</pre>
       </div>
@@ -7120,7 +7143,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-DjvH7bH-.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-OQoBdjQ_.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -7173,7 +7196,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-DjvH7bH-.js").then((m) => m.maybeAutoCheck());
+    import("./update-OQoBdjQ_.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

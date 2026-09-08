@@ -70,11 +70,12 @@ function installFetchCapture() {
               const usage = (data as any).usage;
               // 将 finish_reason 挂到 usage 以便 repository 统一处理
               try { if (finishReason) (usage as any).__finish_reason = finishReason; } catch {}
-              lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: data, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason };
+              // 完整响应文本（非流式为完整 JSON，流式为 SSE 原文）供历史详情展示
+              lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: text, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason };
               lastFetchModel = typeof model === 'string' ? model : null;
               lastFetchTime = Date.now();
               log.debug('fetch 捕获 usage', { model, hasUsage: !!usage, finishReason });
-              try { processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal, finishReason); } catch (e) { log.error('fetch 用量记录失败 ' + ((e as any)?.message || e)); }
+              try { processUsage(usage, model, msgs, startTime, fullReq, text, ttftVal, thinkTimeVal, finishReason); } catch (e) { log.error('fetch 用量记录失败 ' + ((e as any)?.message || e)); }
             }
           };
           // 流式测量 TTFT 与思维链耗时：后台消费 clone 的 body 流，不阻塞原始响应透传
