@@ -10,6 +10,7 @@ import { emit, DataEvents } from './events';
 import type { Snapshot } from './types';
 import { defaultSettings } from '../types/settings';
 import { isUnsafeKey } from '../utils/date';
+import { isTruncatedFinish } from '../utils/finish';
 import { log } from '../utils/logger';
 
 function getCurrentChatId(): string | null {
@@ -43,6 +44,38 @@ export function getFilteredHistoryForScope(): any[] {
   return (state.history || []).filter((h: any) => h.chatId === cur);
 }
 
+// 归一化设置：只接受已知设置键，防止历史/余额等字段污染（如误将整个 state 存入 settings），并清洗非法值
+function normalizeSettings(incoming: any): any {
+  const def: any = defaultSettings();
+  const src: any = (incoming && typeof incoming === 'object') ? incoming : {};
+  const merged: any = { ...def };
+  for (const k of Object.keys(def)) {
+    if (src[k] !== undefined) merged[k] = src[k];
+  }
+  merged.webdav = { ...def.webdav, ...(src.webdav || {}) };
+  merged.pricingSync = { ...def.pricingSync, ...(src.pricingSync || {}) };
+  if (!isFinite(parseFloat(String(merged.pricingSync.exchangeRate))) || parseFloat(String(merged.pricingSync.exchangeRate)) <= 0) merged.pricingSync.exchangeRate = 7.2;
+  if (!Array.isArray(merged.peakHours) || !merged.peakHours.length) merged.peakHours = def.peakHours;
+  if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
+  if (!merged.historyScope) merged.historyScope = def.historyScope;
+  if (!merged.theme) merged.theme = def.theme;
+  if (typeof merged.modelsPricingCollapsed !== 'boolean') merged.modelsPricingCollapsed = true;
+  if (!Array.isArray(merged.overviewFour) || (merged.overviewFour.length !== 8 && merged.overviewFour.length !== 4)) merged.overviewFour = def.overviewFour;
+  if (Array.isArray(merged.overviewFour) && merged.overviewFour.length === 4) {
+    merged.overviewFour = [...merged.overviewFour, ...def.overviewFour.slice(4)];
+  }
+  try {
+    const valid = new Set(['avg_cost','avg_tokens','avg_duration','avg_rate','avg_input_cost','avg_input_tokens','avg_output_cost','avg_output_tokens','avg_think_time','avg_think_tokens','avg_hit_rate','latest_hit_rate','max_output','max_input','max_total','avg_think_ratio','truncation_rate']);
+    if (Array.isArray(merged.overviewFour)) merged.overviewFour = merged.overviewFour.map((k:any)=> valid.has(k)?k:'avg_cost');
+    if (merged.overviewFour.length !== 8) merged.overviewFour = def.overviewFour;
+    if (!Array.isArray(merged.statsFour) || merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
+    const validStats = new Set(['avg_cost','avg_tokens','avg_duration','avg_rate','avg_input_cost','avg_input_tokens','avg_output_cost','avg_output_tokens','avg_think_time','avg_think_tokens','avg_think_ratio','truncation_rate','avg_hit_rate','latest_hit_rate','max_output','max_input','max_total']);
+    if (Array.isArray(merged.statsFour)) merged.statsFour = merged.statsFour.map((k:any)=> validStats.has(k)?k:'avg_cost');
+    if (merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
+  } catch {}
+  return merged;
+}
+
 function sanitizeFullRequest(fr: any): any {
   if (!fr || typeof fr !== 'object') return fr;
   const keep: any = {};
@@ -62,18 +95,31 @@ function clampMessage(m: any): any {
   return { ...m, content: c };
 }
 
+// 限制完整响应落盘大小，避免 settings.json 被超大 SSE 文本撑爆
+const RESPONSE_KEEP = 200000;
+function clampResponse(resp: any): any {
+  if (resp == null) return null;
+  if (typeof resp === 'string') {
+    return resp.length > RESPONSE_KEEP ? resp.slice(0, RESPONSE_KEEP) + '\n…[响应过长已截断]' : resp;
+  }
+  try {
+    const s = JSON.stringify(resp);
+    if (s.length > RESPONSE_KEEP) return s.slice(0, RESPONSE_KEEP) + '\n…[响应过长已截断]';
+  } catch {}
+  return resp;
+}
+
 function pruneDetails() {
   if (!state.history || !state.history.length) return;
   const hs = [...state.history].sort((a: any, b: any) => b.timestamp - a.timestamp);
   for (let i = 0; i < hs.length; i++) {
     const e: any = hs[i];
-    // fullResponse 对统计/展示无必要，一律清除（响应统计已在 raw_usage）
-    delete e.fullResponse;
     if (i >= DETAIL_KEEP) {
       delete e.messages;
       delete e.fullRequest;
+      delete e.fullResponse;
     } else {
-      // 保留条也裁剪 fullRequest 防止大 messages 落盘
+      // 保留前 DETAIL_KEEP 条的完整响应/请求；fullRequest 裁剪 messages 防止大对象落盘
       if (e.fullRequest && typeof e.fullRequest === 'object' && Array.isArray(e.fullRequest.messages)) {
         e.fullRequest = sanitizeFullRequest(e.fullRequest);
       }
@@ -181,6 +227,7 @@ export const repository = {
       return null as any;
     }
     log.debug('addEntry 解析', { model, hit, miss, comp, total });
+    const fr = finishReason ?? (usage as any)?.__finish_reason ?? (usage as any)?.finish_reason ?? null;
     // 指纹去重：5秒内同 model+total 防双记账（fetch 与 GENERATION_ENDED 并发）
     try {
       const now = Date.now();
@@ -188,6 +235,34 @@ export const repository = {
       const lastFp = (state as any)._lastFp as string | undefined;
       const lastFpTime = (state as any)._lastFpTime as number | undefined;
       if (lastFp === fp && lastFpTime && now - lastFpTime < 5000) {
+        // 重复记录：主路径先写入时缺完整响应/finish_reason，fetch 后解析到则回填
+        try {
+          const head: any = state.history[0];
+          if (head) {
+            let changed = false;
+            if (fullResponse && !head.fullResponse) { head.fullResponse = clampResponse(fullResponse); changed = true; }
+            if (fr && !head.finishReason) { head.finishReason = fr; head.isTruncated = isTruncatedFinish(fr); changed = true; }
+            const estThink = usage?.completion_tokens_details?.reasoning_tokens || (usage as any)?.__think_tokens_est || 0;
+            if (estThink && !head.thinkTokens) { head.thinkTokens = estThink; changed = true; }
+            if (ttft && !head.ttft) {
+              head.ttft = ttft;
+              const dur = head.duration || 0;
+              head.tokenRate = dur - ttft > 50 && (head.completion_tokens || 0) > 0 ? Math.round((head.completion_tokens / (dur - ttft)) * 1000) : 0;
+              changed = true;
+            }
+            if (thinkTime && !head.thinkTime) { head.thinkTime = thinkTime; changed = true; }
+            if (changed) {
+              if ((state.lastUsage as any)?.timestamp === head.timestamp) {
+                if (head.fullResponse) (state.lastUsage as any).fullResponse = head.fullResponse;
+                if (head.finishReason) { (state.lastUsage as any).finishReason = head.finishReason; (state.lastUsage as any).isTruncated = head.isTruncated; }
+                if (head.ttft) { (state.lastUsage as any).ttft = head.ttft; (state.lastUsage as any).tokenRate = head.tokenRate; }
+                if (head.thinkTime) (state.lastUsage as any).thinkTime = head.thinkTime;
+                if (head.thinkTokens) (state.lastUsage as any).thinkTokens = head.thinkTokens;
+              }
+              persist();
+            }
+          }
+        } catch {}
         log.debug('addEntry 去重跳过(5s指纹)', { fp });
         return null as any;
       }
@@ -196,30 +271,30 @@ export const repository = {
     } catch {}
     const lu: any = { timestamp: Date.now(), model, prompt_tokens: hit + miss, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp, total_tokens: total };
     const duration = startTime ? Date.now() - startTime : 0;
-    const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || 0;
+    const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || (usage as any)?.__think_tokens_est || 0;
     lu.duration = duration;
     lu.tokenRate = duration - (ttft || 0) > 50 && comp > 0 ? Math.round((comp / (duration - (ttft || 0))) * 1000) : 0;
     lu.ttft = ttft || 0; lu.thinkTime = thinkTime || 0; lu.thinkTokens = thinkTokens;
-    // 截断检测：finish_reason === 'length'
-    const fr = finishReason ?? (usage as any)?.__finish_reason ?? (usage as any)?.finish_reason ?? null;
-    lu.finishReason = fr; (lu as any).isTruncated = fr === 'length';
+    // 截断检测：非正常 finish_reason（length / content_filter / sensitive 等）
+    lu.finishReason = fr; (lu as any).isTruncated = isTruncatedFinish(fr);
     lu.messages = (messages || []).map(clampMessage);
     const c: any = calcCost({ timestamp: lu.timestamp, model, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp }, state.settings as any);
     lu.cost = c.total; lu.input_cost = c.input; lu.output_cost = c.output; lu.priceType = c.priceType;
-    lu.raw_usage = usage; lu.fullRequest = fullRequest; lu.fullResponse = null;
+    const safeResponse = clampResponse(fullResponse);
+    lu.raw_usage = usage; lu.fullRequest = fullRequest; lu.fullResponse = safeResponse;
     // 记录所属对话，便于按对话过滤
     const chatId = getCurrentChatId();
     const chatName = getCurrentChatName();
     (lu as any).chatId = chatId; (lu as any).chatName = chatName;
     state.lastUsage = lu;
 
-    const fr2 = finishReason ?? (usage as any)?.__finish_reason ?? null;
+    const fr2 = fr;
     const entry: any = {
       timestamp: lu.timestamp, model, prompt_tokens: hit + miss, cache_hit_tokens: hit, cache_miss_tokens: miss,
       completion_tokens: comp, total_tokens: total, input_cost: lu.input_cost, output_cost: lu.output_cost,
       cost: lu.cost, cache_hit_rate: (hit + miss) > 0 ? (hit / (hit + miss) * 100) : 0, priceType: lu.priceType,
-      raw_usage: usage, messages: (messages || []).map(clampMessage), duration, ttft, thinkTime, thinkTokens, tokenRate: lu.tokenRate, fullRequest, fullResponse: null,
-      finishReason: fr2, isTruncated: fr2 === 'length',
+      raw_usage: usage, messages: (messages || []).map(clampMessage), duration, ttft, thinkTime, thinkTokens, tokenRate: lu.tokenRate, fullRequest, fullResponse: safeResponse,
+      finishReason: fr2, isTruncated: isTruncatedFinish(fr2),
       chatId, chatName,
     };
     log.debug('addEntry 即将写入', { model: entry.model, total: entry.total_tokens });
@@ -319,42 +394,17 @@ export const repository = {
       }
     }
     if (next.settings !== undefined) {
-      const def: any = defaultSettings();
-      const incoming: any = next.settings || {};
-      // 深合并 webdav/peakHours/customModels，避免缺字段导致白屏
-      const merged: any = { ...def, ...incoming };
-      merged.webdav = { ...def.webdav, ...(incoming.webdav || {}) };
-      merged.pricingSync = { ...def.pricingSync, ...(incoming.pricingSync || {}) };
-      if (!isFinite(parseFloat(String(merged.pricingSync.exchangeRate))) || parseFloat(String(merged.pricingSync.exchangeRate)) <= 0) merged.pricingSync.exchangeRate = 7.2;
-      if (!Array.isArray(merged.peakHours) || !merged.peakHours.length) merged.peakHours = def.peakHours;
-      if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
-      if (!merged.historyScope) merged.historyScope = def.historyScope;
-      if (!merged.theme) merged.theme = def.theme;
-      if (typeof merged.modelsPricingCollapsed !== 'boolean') merged.modelsPricingCollapsed = true;
-      if (!Array.isArray(merged.overviewFour) || (merged.overviewFour.length !== 8 && merged.overviewFour.length !== 4)) merged.overviewFour = def.overviewFour;
-      if (Array.isArray(merged.overviewFour) && merged.overviewFour.length === 4) {
-        merged.overviewFour = [...merged.overviewFour, ...def.overviewFour.slice(4)];
-      }
-      // 清洗 overviewFour / statsFour 非法 key
-      try {
-        const valid = new Set(['avg_cost','avg_tokens','avg_duration','avg_rate','avg_input_cost','avg_input_tokens','avg_output_cost','avg_output_tokens','avg_think_time','avg_think_tokens','avg_hit_rate','latest_hit_rate','max_output','max_input','max_total','avg_think_ratio','truncation_rate']);
-        if (Array.isArray(merged.overviewFour)) merged.overviewFour = merged.overviewFour.map((k:any)=> valid.has(k)?k:'avg_cost');
-        if (merged.overviewFour.length !== 8) merged.overviewFour = def.overviewFour;
-        if (!Array.isArray(merged.statsFour) || merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
-        const validStats = new Set(['avg_cost','avg_tokens','avg_duration','avg_rate','avg_input_cost','avg_input_tokens','avg_output_cost','avg_output_tokens','avg_think_time','avg_think_tokens','avg_think_ratio','truncation_rate','avg_hit_rate','latest_hit_rate','max_output','max_input','max_total']);
-        if (Array.isArray(merged.statsFour)) merged.statsFour = merged.statsFour.map((k:any)=> validStats.has(k)?k:'avg_cost');
-        if (merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
-      } catch {}
-      // 旧历史补 finishReason/isTruncated（旧数据无该字段，默认 null/false，避免统计 NaN）
+      state.settings = normalizeSettings(next.settings);
+      // 旧历史补 finishReason 并重算 isTruncated（兼容 sensitive/content_filter 等非正常结束）
       try {
         let need = false;
         for (const h of state.history as any[]) {
           if ((h as any).finishReason === undefined) { (h as any).finishReason = (h as any).raw_usage?.__finish_reason ?? null; need = true; }
-          if ((h as any).isTruncated === undefined) { (h as any).isTruncated = (h as any).finishReason === 'length'; }
+          const t = isTruncatedFinish((h as any).finishReason);
+          if ((h as any).isTruncated !== t) { (h as any).isTruncated = t; need = true; }
         }
         if (need) saveHot({ history: state.history } as any);
       } catch {}
-      state.settings = merged as any;
     }
     if (next.balance !== undefined) state.balance = next.balance;
     if (next.customBalance !== undefined) state.customBalance = next.customBalance as any;
@@ -417,7 +467,7 @@ export const repository = {
       if (hot.output_cost !== undefined) state.output_cost = hot.output_cost;
       if (hot.rounds !== undefined) state.rounds = hot.rounds;
       if (hot.startTime !== undefined) state.startTime = hot.startTime;
-      if (hot.settings) state.settings = { ...state.settings, ...hot.settings };
+      if (hot.settings) state.settings = normalizeSettings(hot.settings);
       if (hot.balance) state.balance = hot.balance;
       if (hot.customBalance) state.customBalance = hot.customBalance;
       if (hot.messageCount) state.messageCount = hot.messageCount;
@@ -467,12 +517,13 @@ export const repository = {
         try{ saveHot({settings:state.settings}); }catch{}
       } catch {}
     }
-    // 迁移：旧历史补 finishReason/isTruncated
+    // 迁移：旧历史补 finishReason 并重算 isTruncated（兼容 sensitive/content_filter 等非正常结束）
     try {
       let need = false;
       for (const h of state.history as any[]) {
         if ((h as any).finishReason === undefined) { (h as any).finishReason = (h as any).raw_usage?.__finish_reason ?? null; need = true; }
-        if ((h as any).isTruncated === undefined) { (h as any).isTruncated = (h as any).finishReason === 'length'; }
+        const t = isTruncatedFinish((h as any).finishReason);
+        if ((h as any).isTruncated !== t) { (h as any).isTruncated = t; need = true; }
       }
       if (need) try { saveHot({ history: state.history } as any); } catch {}
     } catch {}

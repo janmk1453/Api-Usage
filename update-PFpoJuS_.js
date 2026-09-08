@@ -1,5 +1,5 @@
-import { t as toast, l as log } from "./index-BUbJw68m.js";
-const CURRENT_VERSION = "3.0.3";
+import { t as toast, l as log } from "./index-Ci2hd4fq.js";
+const CURRENT_VERSION = "3.0.4";
 const REMOTE_MANIFEST = "https://raw.githubusercontent.com/janmk1453/Api-Usage/main/manifest.json";
 const REPO_URL = "https://github.com/janmk1453/Api-Usage";
 const INTERVAL_MS = 6 * 60 * 60 * 1e3;
@@ -50,6 +50,14 @@ function setStoredLastCheck(t) {
   } catch {
   }
 }
+function getBanner() {
+  try {
+    const doc = window.parent?.document ?? document;
+    return doc.getElementById("aus-update-banner");
+  } catch {
+    return null;
+  }
+}
 async function checkUpdate(manual = false) {
   if (!manual) {
     const last = getStoredLastCheck();
@@ -73,6 +81,7 @@ async function checkUpdate(manual = false) {
     const remoteVer = String(data?.version || "").trim();
     if (!remoteVer) throw new Error("远程版本为空");
     const hasUpdate = isNewer(remoteVer, CURRENT_VERSION);
+    const banner = getBanner();
     if (hasUpdate) {
       try {
         const lastNotified = (() => {
@@ -91,33 +100,20 @@ async function checkUpdate(manual = false) {
         }
       } catch {
       }
-      try {
-        const doc = window.parent?.document ?? document;
-        const banner = doc.getElementById("aus-update-banner");
-        if (banner) {
-          banner.style.display = "block";
-          banner.innerHTML = `发现新版本 <b>v${remoteVer}</b>（当前 v${CURRENT_VERSION}） <a href="${REPO_URL}" target="_blank" style="color:var(--ds-green);text-decoration:underline;">前往更新</a>`;
-        }
-      } catch {
-      }
-    } else if (manual) {
-      toast("info", `已是最新版本 v${CURRENT_VERSION}`);
-      try {
-        const doc = window.parent?.document ?? document;
-        const banner = doc.getElementById("aus-update-banner");
-        if (banner) {
-          banner.style.display = "none";
-        }
-      } catch {
+      if (banner) {
+        banner.style.display = "block";
+        banner.innerHTML = `发现新版本 <b>v${remoteVer}</b>（当前 v${CURRENT_VERSION}） <a href="${REPO_URL}" target="_blank" style="color:var(--ds-green);text-decoration:underline;">前往更新</a>`;
       }
     } else {
+      toast("info", `API用量统计已是最新版本 v${CURRENT_VERSION}`);
+      if (banner) banner.style.display = "none";
       log.debug("检查更新：已是最新 v" + CURRENT_VERSION);
     }
     return { hasUpdate, current: CURRENT_VERSION, remote: remoteVer };
   } catch (e) {
     clearTimeout(timer);
     log.debug("检查更新失败", e?.message || e);
-    if (manual) toast("error", "检查更新失败：" + (e?.message || String(e)));
+    toast("warning", "检查更新失败：" + (e?.message || String(e)));
     return null;
   }
 }

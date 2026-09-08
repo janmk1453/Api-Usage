@@ -47,6 +47,18 @@ function setStoredLastCheck(t: number) {
   } catch {}
 }
 
+function getBanner(): HTMLElement | null {
+  try {
+    const doc = (window.parent as any)?.document ?? document;
+    return doc.getElementById('aus-update-banner') as HTMLElement | null;
+  } catch { return null; }
+}
+
+/**
+ * 检查更新（版本号对比）
+ * @param manual 手动点击“检查更新”按钮触发；false 为打开面板时的自动检查（6h 节流）
+ * 三种结果均给出状态提示：已是最新 / 有更新 / 检查失败
+ */
 export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean; current: string; remote: string } | null> {
   if (!manual) {
     const last = getStoredLastCheck();
@@ -67,6 +79,7 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
     const remoteVer = String(data?.version || '').trim();
     if (!remoteVer) throw new Error('远程版本为空');
     const hasUpdate = isNewer(remoteVer, CURRENT_VERSION);
+    const banner = getBanner();
     if (hasUpdate) {
       try {
         const lastNotified = (() => { try { return localStorage.getItem(LAST_NOTIFIED_KEY) || ''; } catch { return ''; } })();
@@ -75,30 +88,22 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
           try { localStorage.setItem(LAST_NOTIFIED_KEY, remoteVer); } catch {}
         }
       } catch {}
-      // 在关于页内提示横幅
-      try {
-        const doc = (window.parent as any)?.document ?? document;
-        const banner = doc.getElementById('aus-update-banner');
-        if (banner) {
-          banner.style.display = 'block';
-          banner.innerHTML = `发现新版本 <b>v${remoteVer}</b>（当前 v${CURRENT_VERSION}） <a href="${REPO_URL}" target="_blank" style="color:var(--ds-green);text-decoration:underline;">前往更新</a>`;
-        }
-      } catch {}
-    } else if (manual) {
-      toast('info', `已是最新版本 v${CURRENT_VERSION}`);
-      try {
-        const doc = (window.parent as any)?.document ?? document;
-        const banner = doc.getElementById('aus-update-banner');
-        if (banner) { banner.style.display = 'none'; }
-      } catch {}
+      if (banner) {
+        banner.style.display = 'block';
+        banner.innerHTML = `发现新版本 <b>v${remoteVer}</b>（当前 v${CURRENT_VERSION}） <a href="${REPO_URL}" target="_blank" style="color:var(--ds-green);text-decoration:underline;">前往更新</a>`;
+      }
     } else {
+      // 已是最新：手动与自动检查均给出提示
+      toast('info', `API用量统计已是最新版本 v${CURRENT_VERSION}`);
+      if (banner) banner.style.display = 'none';
       log.debug('检查更新：已是最新 v' + CURRENT_VERSION);
     }
     return { hasUpdate, current: CURRENT_VERSION, remote: remoteVer };
   } catch (e: any) {
     clearTimeout(timer);
     log.debug('检查更新失败', e?.message || e);
-    if (manual) toast('error', '检查更新失败：' + (e?.message || String(e)));
+    // 检查失败：手动与自动检查均给出提示
+    toast('warning', '检查更新失败：' + (e?.message || String(e)));
     return null;
   }
 }

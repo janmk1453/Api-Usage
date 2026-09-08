@@ -2,6 +2,7 @@
  * Q4 RP 能耗效率评分 — 基于 6 指标加权分档 A-G
  */
 import { fitSegments } from './forecast';
+import { isTruncatedFinish } from '../utils/finish';
 
 type Metrics = {
   delta: number; // tok/轮
@@ -47,7 +48,7 @@ export function computeMetricsForChat(history: any[], chatId: string | null): Me
   const efficiency = totalTok ? sumOut / totalTok : 0;
   const hitRates = filtered.map(h => { const ch = h.cache_hit_tokens || 0, cm = h.cache_miss_tokens || 0, tot = ch + cm; return tot ? ch / tot : 0.5; });
   const hitRate = hitRates.length ? hitRates.slice(-5).reduce((a, b) => a + b, 0) / Math.min(5, hitRates.length) : 0.5;
-  const truncRate = filtered.filter(h => h.finishReason === 'length' || h.isTruncated).length / filtered.length;
+  const truncRate = filtered.filter(h => isTruncatedFinish(h.finishReason) || h.isTruncated).length / filtered.length;
   const thinkRatio = (() => {
     const sOut = filtered.reduce((a, b) => a + (b.completion_tokens || 0), 0);
     const sThink = filtered.reduce((a, b) => a + (b.thinkTokens || 0), 0);

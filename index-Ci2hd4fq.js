@@ -53,7 +53,7 @@ const DEFAULT_PEAK_HOURS = [
   { start: "14:00", end: "18:00" }
 ];
 const MAX_HISTORY = 2e3;
-const DETAIL_KEEP = 3;
+const DETAIL_KEEP = 5;
 const STORAGE_KEYS = {
   KEY: "ds_api_key",
   BALANCE: "ds_balance_data",
@@ -753,6 +753,19 @@ function emit(event, payload) {
     }
   });
 }
+const NORMAL_FINISH = /* @__PURE__ */ new Set([
+  "stop",
+  "eos",
+  "end_turn",
+  "stop_sequence",
+  "tool_calls",
+  "function_call",
+  "tool_use"
+]);
+function isTruncatedFinish(fr) {
+  if (!fr) return false;
+  return !NORMAL_FINISH.has(String(fr).toLowerCase());
+}
 const PREFIX = "[DS]";
 const warned = /* @__PURE__ */ new Set();
 let debugOn = false;
@@ -817,6 +830,37 @@ function getFilteredHistoryForScope() {
   if (!cur) return state$2.history || [];
   return (state$2.history || []).filter((h) => h.chatId === cur);
 }
+function normalizeSettings(incoming) {
+  const def = defaultSettings();
+  const src = incoming && typeof incoming === "object" ? incoming : {};
+  const merged = { ...def };
+  for (const k of Object.keys(def)) {
+    if (src[k] !== void 0) merged[k] = src[k];
+  }
+  merged.webdav = { ...def.webdav, ...src.webdav || {} };
+  merged.pricingSync = { ...def.pricingSync, ...src.pricingSync || {} };
+  if (!isFinite(parseFloat(String(merged.pricingSync.exchangeRate))) || parseFloat(String(merged.pricingSync.exchangeRate)) <= 0) merged.pricingSync.exchangeRate = 7.2;
+  if (!Array.isArray(merged.peakHours) || !merged.peakHours.length) merged.peakHours = def.peakHours;
+  if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
+  if (!merged.historyScope) merged.historyScope = def.historyScope;
+  if (!merged.theme) merged.theme = def.theme;
+  if (typeof merged.modelsPricingCollapsed !== "boolean") merged.modelsPricingCollapsed = true;
+  if (!Array.isArray(merged.overviewFour) || merged.overviewFour.length !== 8 && merged.overviewFour.length !== 4) merged.overviewFour = def.overviewFour;
+  if (Array.isArray(merged.overviewFour) && merged.overviewFour.length === 4) {
+    merged.overviewFour = [...merged.overviewFour, ...def.overviewFour.slice(4)];
+  }
+  try {
+    const valid = /* @__PURE__ */ new Set(["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_cost", "avg_input_tokens", "avg_output_cost", "avg_output_tokens", "avg_think_time", "avg_think_tokens", "avg_hit_rate", "latest_hit_rate", "max_output", "max_input", "max_total", "avg_think_ratio", "truncation_rate"]);
+    if (Array.isArray(merged.overviewFour)) merged.overviewFour = merged.overviewFour.map((k) => valid.has(k) ? k : "avg_cost");
+    if (merged.overviewFour.length !== 8) merged.overviewFour = def.overviewFour;
+    if (!Array.isArray(merged.statsFour) || merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
+    const validStats = /* @__PURE__ */ new Set(["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_cost", "avg_input_tokens", "avg_output_cost", "avg_output_tokens", "avg_think_time", "avg_think_tokens", "avg_think_ratio", "truncation_rate", "avg_hit_rate", "latest_hit_rate", "max_output", "max_input", "max_total"]);
+    if (Array.isArray(merged.statsFour)) merged.statsFour = merged.statsFour.map((k) => validStats.has(k) ? k : "avg_cost");
+    if (merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
+  } catch {
+  }
+  return merged;
+}
 function sanitizeFullRequest(fr) {
   if (!fr || typeof fr !== "object") return fr;
   const keep = {};
@@ -832,15 +876,28 @@ function clampMessage(m) {
   const c = typeof m.content === "string" ? m.content.length > 600 ? m.content.slice(0, 600) + "…[截断]" : m.content : m.content;
   return { ...m, content: c };
 }
+const RESPONSE_KEEP = 2e5;
+function clampResponse(resp) {
+  if (resp == null) return null;
+  if (typeof resp === "string") {
+    return resp.length > RESPONSE_KEEP ? resp.slice(0, RESPONSE_KEEP) + "\n…[响应过长已截断]" : resp;
+  }
+  try {
+    const s = JSON.stringify(resp);
+    if (s.length > RESPONSE_KEEP) return s.slice(0, RESPONSE_KEEP) + "\n…[响应过长已截断]";
+  } catch {
+  }
+  return resp;
+}
 function pruneDetails() {
   if (!state$2.history || !state$2.history.length) return;
   const hs = [...state$2.history].sort((a, b) => b.timestamp - a.timestamp);
   for (let i = 0; i < hs.length; i++) {
     const e = hs[i];
-    delete e.fullResponse;
     if (i >= DETAIL_KEEP) {
       delete e.messages;
       delete e.fullRequest;
+      delete e.fullResponse;
     } else {
       if (e.fullRequest && typeof e.fullRequest === "object" && Array.isArray(e.fullRequest.messages)) {
         e.fullRequest = sanitizeFullRequest(e.fullRequest);
@@ -949,12 +1006,60 @@ const repository = {
       return null;
     }
     log.debug("addEntry 解析", { model, hit, miss, comp, total });
+    const fr = finishReason ?? usage?.__finish_reason ?? usage?.finish_reason ?? null;
     try {
       const now = Date.now();
       const fp = `${model}|${total}|${hit}|${miss}|${comp}`;
       const lastFp = state$2._lastFp;
       const lastFpTime = state$2._lastFpTime;
       if (lastFp === fp && lastFpTime && now - lastFpTime < 5e3) {
+        try {
+          const head = state$2.history[0];
+          if (head) {
+            let changed = false;
+            if (fullResponse && !head.fullResponse) {
+              head.fullResponse = clampResponse(fullResponse);
+              changed = true;
+            }
+            if (fr && !head.finishReason) {
+              head.finishReason = fr;
+              head.isTruncated = isTruncatedFinish(fr);
+              changed = true;
+            }
+            const estThink = usage?.completion_tokens_details?.reasoning_tokens || usage?.__think_tokens_est || 0;
+            if (estThink && !head.thinkTokens) {
+              head.thinkTokens = estThink;
+              changed = true;
+            }
+            if (ttft && !head.ttft) {
+              head.ttft = ttft;
+              const dur = head.duration || 0;
+              head.tokenRate = dur - ttft > 50 && (head.completion_tokens || 0) > 0 ? Math.round(head.completion_tokens / (dur - ttft) * 1e3) : 0;
+              changed = true;
+            }
+            if (thinkTime && !head.thinkTime) {
+              head.thinkTime = thinkTime;
+              changed = true;
+            }
+            if (changed) {
+              if (state$2.lastUsage?.timestamp === head.timestamp) {
+                if (head.fullResponse) state$2.lastUsage.fullResponse = head.fullResponse;
+                if (head.finishReason) {
+                  state$2.lastUsage.finishReason = head.finishReason;
+                  state$2.lastUsage.isTruncated = head.isTruncated;
+                }
+                if (head.ttft) {
+                  state$2.lastUsage.ttft = head.ttft;
+                  state$2.lastUsage.tokenRate = head.tokenRate;
+                }
+                if (head.thinkTime) state$2.lastUsage.thinkTime = head.thinkTime;
+                if (head.thinkTokens) state$2.lastUsage.thinkTokens = head.thinkTokens;
+              }
+              persist();
+            }
+          }
+        } catch {
+        }
         log.debug("addEntry 去重跳过(5s指纹)", { fp });
         return null;
       }
@@ -964,30 +1069,30 @@ const repository = {
     }
     const lu = { timestamp: Date.now(), model, prompt_tokens: hit + miss, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp, total_tokens: total };
     const duration = startTime ? Date.now() - startTime : 0;
-    const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || 0;
+    const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || usage?.__think_tokens_est || 0;
     lu.duration = duration;
     lu.tokenRate = duration - (ttft || 0) > 50 && comp > 0 ? Math.round(comp / (duration - (ttft || 0)) * 1e3) : 0;
     lu.ttft = ttft || 0;
     lu.thinkTime = thinkTime || 0;
     lu.thinkTokens = thinkTokens;
-    const fr = finishReason ?? usage?.__finish_reason ?? usage?.finish_reason ?? null;
     lu.finishReason = fr;
-    lu.isTruncated = fr === "length";
+    lu.isTruncated = isTruncatedFinish(fr);
     lu.messages = (messages || []).map(clampMessage);
     const c = calcCost({ timestamp: lu.timestamp, model, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp }, state$2.settings);
     lu.cost = c.total;
     lu.input_cost = c.input;
     lu.output_cost = c.output;
     lu.priceType = c.priceType;
+    const safeResponse = clampResponse(fullResponse);
     lu.raw_usage = usage;
     lu.fullRequest = fullRequest;
-    lu.fullResponse = null;
+    lu.fullResponse = safeResponse;
     const chatId = getCurrentChatId();
     const chatName = getCurrentChatName();
     lu.chatId = chatId;
     lu.chatName = chatName;
     state$2.lastUsage = lu;
-    const fr2 = finishReason ?? usage?.__finish_reason ?? null;
+    const fr2 = fr;
     const entry = {
       timestamp: lu.timestamp,
       model,
@@ -1009,9 +1114,9 @@ const repository = {
       thinkTokens,
       tokenRate: lu.tokenRate,
       fullRequest,
-      fullResponse: null,
+      fullResponse: safeResponse,
       finishReason: fr2,
-      isTruncated: fr2 === "length",
+      isTruncated: isTruncatedFinish(fr2),
       chatId,
       chatName
     };
@@ -1135,31 +1240,7 @@ const repository = {
       }
     }
     if (next.settings !== void 0) {
-      const def = defaultSettings();
-      const incoming = next.settings || {};
-      const merged = { ...def, ...incoming };
-      merged.webdav = { ...def.webdav, ...incoming.webdav || {} };
-      merged.pricingSync = { ...def.pricingSync, ...incoming.pricingSync || {} };
-      if (!isFinite(parseFloat(String(merged.pricingSync.exchangeRate))) || parseFloat(String(merged.pricingSync.exchangeRate)) <= 0) merged.pricingSync.exchangeRate = 7.2;
-      if (!Array.isArray(merged.peakHours) || !merged.peakHours.length) merged.peakHours = def.peakHours;
-      if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
-      if (!merged.historyScope) merged.historyScope = def.historyScope;
-      if (!merged.theme) merged.theme = def.theme;
-      if (typeof merged.modelsPricingCollapsed !== "boolean") merged.modelsPricingCollapsed = true;
-      if (!Array.isArray(merged.overviewFour) || merged.overviewFour.length !== 8 && merged.overviewFour.length !== 4) merged.overviewFour = def.overviewFour;
-      if (Array.isArray(merged.overviewFour) && merged.overviewFour.length === 4) {
-        merged.overviewFour = [...merged.overviewFour, ...def.overviewFour.slice(4)];
-      }
-      try {
-        const valid = /* @__PURE__ */ new Set(["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_cost", "avg_input_tokens", "avg_output_cost", "avg_output_tokens", "avg_think_time", "avg_think_tokens", "avg_hit_rate", "latest_hit_rate", "max_output", "max_input", "max_total", "avg_think_ratio", "truncation_rate"]);
-        if (Array.isArray(merged.overviewFour)) merged.overviewFour = merged.overviewFour.map((k) => valid.has(k) ? k : "avg_cost");
-        if (merged.overviewFour.length !== 8) merged.overviewFour = def.overviewFour;
-        if (!Array.isArray(merged.statsFour) || merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
-        const validStats = /* @__PURE__ */ new Set(["avg_cost", "avg_tokens", "avg_duration", "avg_rate", "avg_input_cost", "avg_input_tokens", "avg_output_cost", "avg_output_tokens", "avg_think_time", "avg_think_tokens", "avg_think_ratio", "truncation_rate", "avg_hit_rate", "latest_hit_rate", "max_output", "max_input", "max_total"]);
-        if (Array.isArray(merged.statsFour)) merged.statsFour = merged.statsFour.map((k) => validStats.has(k) ? k : "avg_cost");
-        if (merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
-      } catch {
-      }
+      state$2.settings = normalizeSettings(next.settings);
       try {
         let need = false;
         for (const h of state$2.history) {
@@ -1167,14 +1248,15 @@ const repository = {
             h.finishReason = h.raw_usage?.__finish_reason ?? null;
             need = true;
           }
-          if (h.isTruncated === void 0) {
-            h.isTruncated = h.finishReason === "length";
+          const t = isTruncatedFinish(h.finishReason);
+          if (h.isTruncated !== t) {
+            h.isTruncated = t;
+            need = true;
           }
         }
         if (need) saveHot({ history: state$2.history });
       } catch {
       }
-      state$2.settings = merged;
     }
     if (next.balance !== void 0) state$2.balance = next.balance;
     if (next.customBalance !== void 0) state$2.customBalance = next.customBalance;
@@ -1234,7 +1316,7 @@ const repository = {
       if (hot.output_cost !== void 0) state$2.output_cost = hot.output_cost;
       if (hot.rounds !== void 0) state$2.rounds = hot.rounds;
       if (hot.startTime !== void 0) state$2.startTime = hot.startTime;
-      if (hot.settings) state$2.settings = { ...state$2.settings, ...hot.settings };
+      if (hot.settings) state$2.settings = normalizeSettings(hot.settings);
       if (hot.balance) state$2.balance = hot.balance;
       if (hot.customBalance) state$2.customBalance = hot.customBalance;
       if (hot.messageCount) state$2.messageCount = hot.messageCount;
@@ -1314,8 +1396,10 @@ const repository = {
           h.finishReason = h.raw_usage?.__finish_reason ?? null;
           need = true;
         }
-        if (h.isTruncated === void 0) {
-          h.isTruncated = h.finishReason === "length";
+        const t = isTruncatedFinish(h.finishReason);
+        if (h.isTruncated !== t) {
+          h.isTruncated = t;
+          need = true;
         }
       }
       if (need) try {
@@ -1363,6 +1447,34 @@ function setLastRequest(messages, start) {
   lastStart = start || Date.now();
 }
 const TARGET_API = "/api/backends/chat-completions/generate";
+function estimateThinkTokens(text, usage) {
+  if (!usage || typeof usage !== "object") return;
+  const detail = usage.completion_tokens_details;
+  if (detail && typeof detail.reasoning_tokens === "number" && detail.reasoning_tokens > 0) return;
+  let thinkChars = 0, contentChars = 0;
+  for (const raw of String(text || "").split("\n")) {
+    const line = raw.trim();
+    if (!line.startsWith("data:")) continue;
+    const payload = line.slice(5).trim();
+    if (!payload || payload === "[DONE]") continue;
+    let chunk;
+    try {
+      chunk = JSON.parse(payload);
+    } catch {
+      continue;
+    }
+    const d = chunk?.choices?.[0]?.delta;
+    if (!d) continue;
+    if (typeof d.reasoning_content === "string") thinkChars += d.reasoning_content.length;
+    else if (typeof d.reasoning === "string") thinkChars += d.reasoning.length;
+    if (typeof d.content === "string") contentChars += d.content.length;
+  }
+  if (thinkChars > 0) {
+    const comp = usage.completion_tokens || usage.output_tokens || 0;
+    const total = thinkChars + contentChars;
+    usage.__think_tokens_est = total > 0 ? Math.round(comp * (thinkChars / total)) : 0;
+  }
+}
 function installFetchCapture() {
   try {
     const p = window.parent || window;
@@ -1440,12 +1552,16 @@ function installFetchCapture() {
                   if (finishReason) usage.__finish_reason = finishReason;
                 } catch {
                 }
-                lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: data, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason };
+                try {
+                  estimateThinkTokens(text, usage);
+                } catch {
+                }
+                lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: text, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason };
                 lastFetchModel = typeof model === "string" ? model : null;
                 lastFetchTime = Date.now();
                 log.debug("fetch 捕获 usage", { model, hasUsage: !!usage, finishReason });
                 try {
-                  processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal, finishReason);
+                  processUsage(usage, model, msgs, startTime, fullReq, text, ttftVal, thinkTimeVal, finishReason);
                 } catch (e) {
                   log.error("fetch 用量记录失败 " + (e?.message || e));
                 }
@@ -1478,7 +1594,7 @@ function installFetchCapture() {
                   const { done, value } = await reader.read();
                   if (done) break;
                   if (first && value && value.byteLength) {
-                    ttft = nowMs() - t0;
+                    ttft = Date.now() - startTime;
                     first = false;
                   }
                   const piece = dec.decode(value, { stream: true });
@@ -1504,7 +1620,7 @@ function installFetchCapture() {
                 });
               } else {
                 clone.text().then((t) => {
-                  ttft = nowMs() - t0;
+                  ttft = Date.now() - startTime;
                   parseAndProcess(t, ttft, 0);
                 }).catch(() => {
                 });
@@ -1732,6 +1848,15 @@ function refresh() {
   }
 }
 function processUsage(usage, model, messages, startTime, fullRequest = null, fullResponse = null, ttft = 0, thinkTime = 0, finishReason = null) {
+  try {
+    const fp = lastFetchUsage;
+    if (fp?.usage && Date.now() - lastFetchTime < 5e3) {
+      const est = fp.usage.__think_tokens_est;
+      const hasReal = usage?.completion_tokens_details && typeof usage.completion_tokens_details.reasoning_tokens === "number" && usage.completion_tokens_details.reasoning_tokens > 0;
+      if (est && !hasReal && !usage?.__think_tokens_est) usage.__think_tokens_est = est;
+    }
+  } catch {
+  }
   repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason);
   refresh();
 }
@@ -1910,7 +2035,7 @@ function exportHistory() {
   const pad = (n) => n < 10 ? "0" + n : "" + n;
   const safeSettings = JSON.parse(JSON.stringify(state$2.settings || {}));
   if (safeSettings.webdav) safeSettings.webdav = { url: "", username: "", path: "", proxy: "" };
-  const _appVer = "3.0.3";
+  const _appVer = "3.0.4";
   const payload = {
     format: "deepseek-stat-export",
     version: EXPORT_FORMAT_VERSION,
@@ -3572,7 +3697,7 @@ function computeOverview() {
     sumOut += h.completion_tokens || 0;
   }
   const avgThinkRatio = sumOut > 0 ? sumThink / sumOut * 100 : 0;
-  const truncCnt = hist.filter((h) => h.finishReason === "length" || h.isTruncated).length;
+  const truncCnt = hist.filter((h) => isTruncatedFinish(h.finishReason) || h.isTruncated).length;
   const truncationRate = hist.length ? truncCnt / hist.length * 100 : 0;
   const bal = state$2.customBalance || state$2.balance?.balance;
   let remainingRounds2 = null;
@@ -3700,7 +3825,7 @@ function computeStatsFour(filtered) {
     if (totTok > maxTotal) maxTotal = totTok;
     sumThink += h.thinkTokens || 0;
     sumOut += h.completion_tokens || 0;
-    if (h.finishReason === "length" || h.isTruncated) truncCnt++;
+    if (isTruncatedFinish(h.finishReason) || h.isTruncated) truncCnt++;
   }
   return {
     avgCost: totalCost / rounds,
@@ -5722,13 +5847,13 @@ async function renderStatsView() {
 }
 function ensureStatsFour() {
   const def = ["avg_cost", "avg_tokens", "avg_think_ratio", "truncation_rate"];
-  let cur = state$2.statsFour;
+  let cur = state$2.settings.statsFour;
   const valid = new Set(FOUR_OPTIONS.map((o) => o.key));
   if (!Array.isArray(cur) || cur.length !== 4 || cur.some((k) => !valid.has(k))) {
     cur = def.slice();
-    state$2.statsFour = cur;
+    state$2.settings.statsFour = cur;
     try {
-      saveHot({ settings: state$2 });
+      saveHot({ settings: state$2.settings });
     } catch {
     }
     return cur;
@@ -5765,9 +5890,9 @@ function openStatsFourDrop(idx, v) {
       const at = Number(el.getAttribute("data-sfour"));
       const arr = ensureStatsFour().slice();
       arr[at] = key;
-      state$2.statsFour = arr;
+      state$2.settings.statsFour = arr;
       try {
-        saveHot({ settings: state$2 });
+        saveHot({ settings: state$2.settings });
       } catch {
       }
       drop.style.display = "none";
@@ -6019,7 +6144,7 @@ function computeMetricsForChat(history, chatId) {
     return tot ? ch / tot : 0.5;
   });
   const hitRate = hitRates.length ? hitRates.slice(-5).reduce((a, b) => a + b, 0) / Math.min(5, hitRates.length) : 0.5;
-  const truncRate = filtered.filter((h) => h.finishReason === "length" || h.isTruncated).length / filtered.length;
+  const truncRate = filtered.filter((h) => isTruncatedFinish(h.finishReason) || h.isTruncated).length / filtered.length;
   const thinkRatio = (() => {
     const sOut = filtered.reduce((a, b) => a + (b.completion_tokens || 0), 0);
     const sThink = filtered.reduce((a, b) => a + (b.thinkTokens || 0), 0);
@@ -6376,6 +6501,66 @@ function initForecastView() {
 function getDoc$1() {
   return window.parent?.document ?? document;
 }
+function prettyFullResponse(resp) {
+  if (resp == null) return "（原文已清理）";
+  if (typeof resp !== "string") {
+    try {
+      return JSON.stringify(resp, null, 2);
+    } catch {
+      return String(resp);
+    }
+  }
+  const text = resp.trim();
+  if (text.indexOf("data:") === -1) {
+    try {
+      return JSON.stringify(JSON.parse(text), null, 2);
+    } catch {
+      return text;
+    }
+  }
+  let id = "", model = "", finish = null, usage = null;
+  let content = "", reasoning = "", chunks = 0;
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line.startsWith("data:")) continue;
+    const payload = line.slice(5).trim();
+    if (!payload || payload === "[DONE]") continue;
+    let chunk;
+    try {
+      chunk = JSON.parse(payload);
+    } catch {
+      continue;
+    }
+    chunks++;
+    if (chunk.id) id = chunk.id;
+    if (chunk.model) model = chunk.model;
+    if (chunk.usage) usage = chunk.usage;
+    const ch = Array.isArray(chunk.choices) ? chunk.choices[0] : null;
+    if (ch) {
+      const d = ch.delta || {};
+      if (typeof d.reasoning_content === "string") reasoning += d.reasoning_content;
+      else if (typeof d.reasoning === "string") reasoning += d.reasoning;
+      if (typeof d.content === "string") content += d.content;
+      if (ch.finish_reason) finish = ch.finish_reason;
+    }
+  }
+  const head = [];
+  if (id) head.push(`id: ${id}`);
+  if (model) head.push(`model: ${model}`);
+  head.push(`chunks: ${chunks}`);
+  head.push(`finish_reason: ${finish ?? "（无）"}`);
+  if (usage) head.push(`usage: ${JSON.stringify(usage)}`);
+  const body = [];
+  if (reasoning) body.push(`【思维链】
+${reasoning}`);
+  body.push(`【正文】
+${content || "（无内容）"}`);
+  return `${head.join("\n")}
+
+${body.join("\n\n")}
+
+—— 已合并 SSE 增量并隐藏重复字段 ——`;
+}
 let panelCreated = false;
 let panelOpen = false;
 let collapsed = false;
@@ -6513,7 +6698,7 @@ function renderHistoryInner(doc, fullHist) {
       if (!comp || !th) return "—";
       return (th / comp * 100).toFixed(1) + "%";
     })()}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">是否截断</div><div style="font-weight:600;margin-top:2px;color:${h.finishReason === "length" || h.isTruncated ? "var(--ds-red)" : "var(--ds-text)"};">${h.finishReason === "length" || h.isTruncated ? "是 (" + esc$1(h.finishReason || "length") + ")" : "否"}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">是否截断</div><div style="font-weight:600;margin-top:2px;color:${isTruncatedFinish(h.finishReason) || h.isTruncated ? "var(--ds-red)" : "var(--ds-text)"};">${isTruncatedFinish(h.finishReason) || h.isTruncated ? "是 (" + esc$1(h.finishReason || "length") + ")" : "否"}</div></div>
             </div>
           </div>
         </div>
@@ -6544,9 +6729,12 @@ function renderHistoryInner(doc, fullHist) {
           <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">消息内容 (Messages)</button>
         </div>
         <pre class="aus-tab-content" data-content="req-${h.timestamp}" style="flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : "（原文已清理，仅保留统计）")}</pre>
-        <pre class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(h.fullResponse ? JSON.stringify(h.fullResponse, null, 2) : "（原文已清理）")}</pre>
+        <div class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;margin-top:2px;">
+          <pre style="margin:0;min-height:160px;max-height:360px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(prettyFullResponse(h.fullResponse))}</pre>
+          ${h.fullResponse ? `<div style="display:flex;justify-content:flex-end;margin-top:6px;"><button class="aus-res-raw-btn" data-ts="${h.timestamp}" style="padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">查看原始完整数据</button></div><pre class="aus-res-raw" data-ts="${h.timestamp}" style="display:none;margin:6px 0 0;max-height:360px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(typeof h.fullResponse === "string" ? h.fullResponse : JSON.stringify(h.fullResponse, null, 2))}</pre>` : ""}
+        </div>
         <pre class="aus-tab-content" data-content="raw-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
-        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(h.messages && h.messages.length ? JSON.stringify(h.messages, null, 2) : "（原文已清理——超过保留条数 10 条，仅统计可用）")}</pre>
+        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$1(h.messages && h.messages.length ? JSON.stringify(h.messages, null, 2) : "（原文已清理——仅最近 5 条保留，其余仅统计可用）")}</pre>
       </div>
     </div>
   `;
@@ -6620,6 +6808,17 @@ function renderHistoryInner(doc, fullHist) {
       });
       const target = root.querySelector(`[data-content="${tab}-${ts}"]`);
       if (target) target.style.display = "block";
+    });
+  });
+  host.querySelectorAll(".aus-res-raw-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const ts = btn.getAttribute("data-ts");
+      const root = btn.closest(".aus-detail-panel");
+      const pre = root?.querySelector(`.aus-res-raw[data-ts="${ts}"]`);
+      if (!pre) return;
+      const show = pre.style.display === "none";
+      pre.style.display = show ? "block" : "none";
+      btn.textContent = show ? "隐藏原始完整数据" : "查看原始完整数据";
     });
   });
 }
@@ -6798,7 +6997,7 @@ function createPanel() {
       <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;">
         <div style="display:flex;flex-direction:column;min-width:0;" id="aus-brand">
           <span style="font-size:13px;font-weight:700;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
-          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v${"3.0.3"}</span>
+          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v${"3.0.4"}</span>
         </div>
         <button id="aus-sidebar-toggle" style="width:28px;height:28px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;">‹</button>
       </div>
@@ -6930,14 +7129,14 @@ function createPanel() {
           </div>
           <div data-view="help" style="display:none;">
             <div style="display:grid;gap:12px;">
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DC2626;font-weight:600;margin-bottom:6px;">⚠️ 安全提示</div><div style="color:var(--ds-text-2);">在本扩展中填入 API 密钥存在安全风险。密钥仅经 XOR 混淆后存储于 SillyTavern 设置中，建议使用权限受限的 API 密钥。</div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（余额和缓存命中仅支持 DeepSeek 官方）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div><div>3. 切换时间维度或模型查看不同范围的统计</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DC2626;font-weight:600;margin-bottom:6px;">⚠️ 安全提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>在本扩展中填入 API 密钥存在安全风险。密钥仅经 XOR 混淆后存储于 SillyTavern 设置中，建议使用权限受限的 API 密钥。</div><div>使用模型价格自动同步时将从 models.dev 下载相关数据，不对数据准确和安全做保障；不对使用自定义的 WebDAV 服务导致的安全问题做保障。</div><div>余额查询通过 <a href="https://api.deepseek.com/user/balance" target="_blank" style="color:var(--ds-text);text-decoration:underline;">https://api.deepseek.com/user/balance</a> 官方 API 实现，将会发送你填写的 API 密钥。</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（余额查询仅支持 DeepSeek 官方）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前（DeepSeek）高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DB2777;font-weight:600;margin-bottom:6px;">🔄 消息对比</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中找到想对比的两条消息，前者点“旧”，后者点“新”</div><div>2. 系统并排显示请求消息的文字差异</div><div>3. 差异点即缓存发散起始位置（前 N 条相同为缓存命中段）</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在用量统计中按时间维度筛选数据</div><div>2. 橙色堆叠柱展示多模型消费金额占比，悬浮查看分模型明细</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”展开固定区域</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div><div>3. 兼容峰谷计价分段</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0891B2;font-weight:600;margin-bottom:6px;">🧡 模型兼容</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 完全兼容 DeepSeek 官方 API</div><div>2. 尽量兼容不同厂商/渠道的请求格式，部分模型可能无命中数</div><div>3. 如数据异常，请携带完整请求与响应反馈</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-text-3);font-weight:600;margin-bottom:6px;">✨ 关于</div><div style="color:var(--ds-text-2);">本扩展由原脚本迁移重构（Vite + ECharts，浅色隔离）。原脚本由 AI 编写 <span style="color:var(--ds-text);">@janmk</span> · 仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);text-decoration:underline;">janmk1453/Api-Usage</a></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 切换时间维度、模型和对话查看不同范围的统计</div><div>2. 多图表展示多模请求参数，悬浮查看分模型明细</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”展开固定区域</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 等详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0891B2;font-weight:600;margin-bottom:6px;">🧡 模型兼容</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 完全兼容 DeepSeek 官方 API</div><div>2. 尽量兼容不同厂商/渠道的请求格式，部分模型可能无缓存命中</div><div>3. 如数据异常，请携带完整请求与响应反馈</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-text-3);font-weight:600;margin-bottom:6px;">✨ 关于</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>本扩展由原脚本（<a href="https://github.com/janmk1453/deepseek-tavern-script" target="_blank" style="color:var(--ds-text);text-decoration:underline;">deepseek-tavern-script</a>）迁移重构。</div><div><span style="color:var(--ds-text);">@janmk</span> · 仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);text-decoration:underline;">janmk1453/Api-Usage</a></div></div></div>
             </div>
           </div>
           <div data-view="about" style="display:none;">
@@ -6951,7 +7150,7 @@ function createPanel() {
                 <div id="aus-update-banner" style="display:none;padding:8px 10px;border-radius:8px;background:var(--ds-yellow-bg);border:1px solid var(--ds-yellow-border);font-size:11px;color:var(--ds-text);"></div>
                 <div style="display:flex;gap:8px;align-items:center;">
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:11px;">检查更新</button>
-                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v${"3.0.3"} · 每 6 小时自动检查</span>
+                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v${"3.0.4"} · 每 6 小时自动检查</span>
                 </div>
               </div>
             </div>
@@ -7114,7 +7313,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-DZ1jv8j-.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-PFpoJuS_.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -7167,7 +7366,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-DZ1jv8j-.js").then((m) => m.maybeAutoCheck());
+    import("./update-PFpoJuS_.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

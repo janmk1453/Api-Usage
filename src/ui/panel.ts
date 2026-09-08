@@ -1,5 +1,6 @@
 import { state, getSelectedSave, getHistoryForDisplay } from '../store/index';
 import { esc, localDay, localTimeHM } from '../utils/date';
+import { isTruncatedFinish } from '../utils/finish';
 import { saveHot } from '../store/persistence';
 import { queryBalance } from '../services/balance';
 import { bindImportExport } from '../services/import-export';
@@ -16,6 +17,50 @@ import { formatMoney, getDisplayCurrency } from '../services/currency';
 declare const __APP_VERSION__: string;
 
 function getDoc(): Document { return (window.parent as any)?.document ?? document; }
+
+// 精简展示完整响应：SSE 流式合并增量内容，隐藏 id/created/object/choices/index/delta 等重复字段
+function prettyFullResponse(resp: any): string {
+  if (resp == null) return '（原文已清理）';
+  if (typeof resp !== 'string') {
+    try { return JSON.stringify(resp, null, 2); } catch { return String(resp); }
+  }
+  const text = resp.trim();
+  if (text.indexOf('data:') === -1) {
+    try { return JSON.stringify(JSON.parse(text), null, 2); } catch { return text; }
+  }
+  let id = '', model = '', finish: string | null = null, usage: any = null;
+  let content = '', reasoning = '', chunks = 0;
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line.startsWith('data:')) continue;
+    const payload = line.slice(5).trim();
+    if (!payload || payload === '[DONE]') continue;
+    let chunk: any;
+    try { chunk = JSON.parse(payload); } catch { continue; }
+    chunks++;
+    if (chunk.id) id = chunk.id;
+    if (chunk.model) model = chunk.model;
+    if (chunk.usage) usage = chunk.usage;
+    const ch = Array.isArray(chunk.choices) ? chunk.choices[0] : null;
+    if (ch) {
+      const d = ch.delta || {};
+      if (typeof d.reasoning_content === 'string') reasoning += d.reasoning_content;
+      else if (typeof d.reasoning === 'string') reasoning += d.reasoning;
+      if (typeof d.content === 'string') content += d.content;
+      if (ch.finish_reason) finish = ch.finish_reason;
+    }
+  }
+  const head: string[] = [];
+  if (id) head.push(`id: ${id}`);
+  if (model) head.push(`model: ${model}`);
+  head.push(`chunks: ${chunks}`);
+  head.push(`finish_reason: ${finish ?? '（无）'}`);
+  if (usage) head.push(`usage: ${JSON.stringify(usage)}`);
+  const body: string[] = [];
+  if (reasoning) body.push(`【思维链】\n${reasoning}`);
+  body.push(`【正文】\n${content || '（无内容）'}`);
+  return `${head.join('\n')}\n\n${body.join('\n\n')}\n\n—— 已合并 SSE 增量并隐藏重复字段 ——`;
+}
 
 let panelCreated = false;
 let panelOpen = false;
@@ -127,7 +172,7 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
               <div><div style="color:var(--ds-text-2);font-size:10px;">速率</div><div style="font-weight:600;color:var(--ds-green);margin-top:2px;">${h.tokenRate||0} t/s</div></div>
               <div><div style="color:var(--ds-text-2);font-size:10px;">思维链耗时</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${(h.thinkTime||0)>0?((h.thinkTime||0)/1000).toFixed(1)+'s':'—'}</div></div>
               <div><div style="color:var(--ds-text-2);font-size:10px;">思维链占比</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${(()=>{ const comp=h.completion_tokens||0, th=h.thinkTokens||0; if(!comp||!th) return '—'; return (th/comp*100).toFixed(1)+'%';})()}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">是否截断</div><div style="font-weight:600;margin-top:2px;color:${(h.finishReason==='length'||h.isTruncated)?'var(--ds-red)':'var(--ds-text)'};">${(h.finishReason==='length'||h.isTruncated)?'是 ('+(esc(h.finishReason||'length'))+')':'否'}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">是否截断</div><div style="font-weight:600;margin-top:2px;color:${(isTruncatedFinish(h.finishReason)||h.isTruncated)?'var(--ds-red)':'var(--ds-text)'};">${(isTruncatedFinish(h.finishReason)||h.isTruncated)?'是 ('+(esc(h.finishReason||'length'))+')':'否'}</div></div>
             </div>
           </div>
         </div>
@@ -158,9 +203,12 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
           <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">消息内容 (Messages)</button>
         </div>
         <pre class="aus-tab-content" data-content="req-${h.timestamp}" style="flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : (h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : '（原文已清理，仅保留统计）'))}</pre>
-        <pre class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.fullResponse ? JSON.stringify(h.fullResponse, null, 2) : '（原文已清理）')}</pre>
+        <div class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;margin-top:2px;">
+          <pre style="margin:0;min-height:160px;max-height:360px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(prettyFullResponse(h.fullResponse))}</pre>
+          ${h.fullResponse ? `<div style="display:flex;justify-content:flex-end;margin-top:6px;"><button class="aus-res-raw-btn" data-ts="${h.timestamp}" style="padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">查看原始完整数据</button></div><pre class="aus-res-raw" data-ts="${h.timestamp}" style="display:none;margin:6px 0 0;max-height:360px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(typeof h.fullResponse === 'string' ? h.fullResponse : JSON.stringify(h.fullResponse, null, 2))}</pre>` : ''}
+        </div>
         <pre class="aus-tab-content" data-content="raw-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
-        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.messages && (h as any).messages.length ? JSON.stringify(h.messages, null, 2) : '（原文已清理——超过保留条数 10 条，仅统计可用）')}</pre>
+        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.messages && (h as any).messages.length ? JSON.stringify(h.messages, null, 2) : '（原文已清理——仅最近 5 条保留，其余仅统计可用）')}</pre>
       </div>
     </div>
   `;
@@ -194,6 +242,17 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
       root.querySelectorAll('.aus-tab-content').forEach((c: any) => { c.style.display = 'none'; });
       const target = root.querySelector(`[data-content="${tab}-${ts}"]`) as HTMLElement | null;
       if (target) target.style.display = 'block';
+    });
+  });
+  host.querySelectorAll('.aus-res-raw-btn').forEach((btn: any) => {
+    btn.addEventListener('click', () => {
+      const ts = btn.getAttribute('data-ts');
+      const root = btn.closest('.aus-detail-panel') as HTMLElement | null;
+      const pre = root?.querySelector(`.aus-res-raw[data-ts="${ts}"]`) as HTMLElement | null;
+      if (!pre) return;
+      const show = pre.style.display === 'none';
+      pre.style.display = show ? 'block' : 'none';
+      btn.textContent = show ? '隐藏原始完整数据' : '查看原始完整数据';
     });
   });
 }
@@ -471,14 +530,14 @@ export function createPanel() {
           </div>
           <div data-view="help" style="display:none;">
             <div style="display:grid;gap:12px;">
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DC2626;font-weight:600;margin-bottom:6px;">⚠️ 安全提示</div><div style="color:var(--ds-text-2);">在本扩展中填入 API 密钥存在安全风险。密钥仅经 XOR 混淆后存储于 SillyTavern 设置中，建议使用权限受限的 API 密钥。</div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（余额和缓存命中仅支持 DeepSeek 官方）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div><div>3. 切换时间维度或模型查看不同范围的统计</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DC2626;font-weight:600;margin-bottom:6px;">⚠️ 安全提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>在本扩展中填入 API 密钥存在安全风险。密钥仅经 XOR 混淆后存储于 SillyTavern 设置中，建议使用权限受限的 API 密钥。</div><div>使用模型价格自动同步时将从 models.dev 下载相关数据，不对数据准确和安全做保障；不对使用自定义的 WebDAV 服务导致的安全问题做保障。</div><div>余额查询通过 <a href="https://api.deepseek.com/user/balance" target="_blank" style="color:var(--ds-text);text-decoration:underline;">https://api.deepseek.com/user/balance</a> 官方 API 实现，将会发送你填写的 API 密钥。</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（余额查询仅支持 DeepSeek 官方）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前（DeepSeek）高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DB2777;font-weight:600;margin-bottom:6px;">🔄 消息对比</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中找到想对比的两条消息，前者点“旧”，后者点“新”</div><div>2. 系统并排显示请求消息的文字差异</div><div>3. 差异点即缓存发散起始位置（前 N 条相同为缓存命中段）</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在用量统计中按时间维度筛选数据</div><div>2. 橙色堆叠柱展示多模型消费金额占比，悬浮查看分模型明细</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”展开固定区域</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div><div>3. 兼容峰谷计价分段</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0891B2;font-weight:600;margin-bottom:6px;">🧡 模型兼容</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 完全兼容 DeepSeek 官方 API</div><div>2. 尽量兼容不同厂商/渠道的请求格式，部分模型可能无命中数</div><div>3. 如数据异常，请携带完整请求与响应反馈</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-text-3);font-weight:600;margin-bottom:6px;">✨ 关于</div><div style="color:var(--ds-text-2);">本扩展由原脚本迁移重构（Vite + ECharts，浅色隔离）。原脚本由 AI 编写 <span style="color:var(--ds-text);">@janmk</span> · 仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);text-decoration:underline;">janmk1453/Api-Usage</a></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 切换时间维度、模型和对话查看不同范围的统计</div><div>2. 多图表展示多模请求参数，悬浮查看分模型明细</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”展开固定区域</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 等详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0891B2;font-weight:600;margin-bottom:6px;">🧡 模型兼容</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 完全兼容 DeepSeek 官方 API</div><div>2. 尽量兼容不同厂商/渠道的请求格式，部分模型可能无缓存命中</div><div>3. 如数据异常，请携带完整请求与响应反馈</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-text-3);font-weight:600;margin-bottom:6px;">✨ 关于</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>本扩展由原脚本（<a href="https://github.com/janmk1453/deepseek-tavern-script" target="_blank" style="color:var(--ds-text);text-decoration:underline;">deepseek-tavern-script</a>）迁移重构。</div><div><span style="color:var(--ds-text);">@janmk</span> · 仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);text-decoration:underline;">janmk1453/Api-Usage</a></div></div></div>
             </div>
           </div>
           <div data-view="about" style="display:none;">

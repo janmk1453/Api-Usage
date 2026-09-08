@@ -15,6 +15,33 @@ export function setLastRequest(messages: any[], start: number) {
 
 const TARGET_API = '/api/backends/chat-completions/generate';
 
+// 部分厂商（如 GLM）usage 不返回 reasoning_tokens，但 SSE 含 reasoning_content；
+// 按思维链/正文的字符占比从 completion_tokens 中估算思维链 token
+function estimateThinkTokens(text: string, usage: any) {
+  if (!usage || typeof usage !== 'object') return;
+  const detail = usage.completion_tokens_details;
+  if (detail && typeof detail.reasoning_tokens === 'number' && detail.reasoning_tokens > 0) return;
+  let thinkChars = 0, contentChars = 0;
+  for (const raw of String(text || '').split('\n')) {
+    const line = raw.trim();
+    if (!line.startsWith('data:')) continue;
+    const payload = line.slice(5).trim();
+    if (!payload || payload === '[DONE]') continue;
+    let chunk: any;
+    try { chunk = JSON.parse(payload); } catch { continue; }
+    const d = chunk?.choices?.[0]?.delta;
+    if (!d) continue;
+    if (typeof d.reasoning_content === 'string') thinkChars += d.reasoning_content.length;
+    else if (typeof d.reasoning === 'string') thinkChars += d.reasoning.length;
+    if (typeof d.content === 'string') contentChars += d.content.length;
+  }
+  if (thinkChars > 0) {
+    const comp = usage.completion_tokens || usage.output_tokens || 0;
+    const total = thinkChars + contentChars;
+    usage.__think_tokens_est = total > 0 ? Math.round(comp * (thinkChars / total)) : 0;
+  }
+}
+
 function installFetchCapture() {
   try {
     const p: any = (window as any).parent || window;
@@ -70,11 +97,13 @@ function installFetchCapture() {
               const usage = (data as any).usage;
               // 将 finish_reason 挂到 usage 以便 repository 统一处理
               try { if (finishReason) (usage as any).__finish_reason = finishReason; } catch {}
-              lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: data, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason };
+              try { estimateThinkTokens(text, usage); } catch {}
+              // 完整响应文本（非流式为完整 JSON，流式为 SSE 原文）供历史详情展示
+              lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: text, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason };
               lastFetchModel = typeof model === 'string' ? model : null;
               lastFetchTime = Date.now();
               log.debug('fetch 捕获 usage', { model, hasUsage: !!usage, finishReason });
-              try { processUsage(usage, model, msgs, startTime, fullReq, data, ttftVal, thinkTimeVal, finishReason); } catch (e) { log.error('fetch 用量记录失败 ' + ((e as any)?.message || e)); }
+              try { processUsage(usage, model, msgs, startTime, fullReq, text, ttftVal, thinkTimeVal, finishReason); } catch (e) { log.error('fetch 用量记录失败 ' + ((e as any)?.message || e)); }
             }
           };
           // 流式测量 TTFT 与思维链耗时：后台消费 clone 的 body 流，不阻塞原始响应透传
@@ -99,7 +128,8 @@ function installFetchCapture() {
               for (;;) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                if (first && value && value.byteLength) { ttft = nowMs() - t0; first = false; }
+                // 首字延迟：相对请求发出时刻（startTime），而非 clone 流开始读取时刻
+                if (first && value && value.byteLength) { ttft = Date.now() - startTime; first = false; }
                 const piece = dec.decode(value, { stream: true });
                 fullText += piece; buf += piece;
                 const nl = buf.lastIndexOf('\n');
@@ -115,7 +145,7 @@ function installFetchCapture() {
             if (streamBody && typeof (streamBody as any).getReader === 'function') {
               readStream(streamBody).catch(() => { try { finish(); } catch {} });
             } else {
-              clone.text().then((t) => { ttft = nowMs() - t0; parseAndProcess(t, ttft, 0); }).catch(()=>{});
+              clone.text().then((t) => { ttft = Date.now() - startTime; parseAndProcess(t, ttft, 0); }).catch(()=>{});
             }
           } catch (innerErr) {
             log.debug('fetch 流式读取异常，不影响原请求', (innerErr as any)?.message || innerErr);
@@ -312,6 +342,15 @@ function refresh() {
 }
 
 export function processUsage(usage: any, model: string, messages: any[], startTime: number, fullRequest: any = null, fullResponse: any = null, ttft = 0, thinkTime = 0, finishReason: string | null = null) {
+  // 主路径 usage 多来自 ST，可能缺 reasoning_tokens；从最近 fetch 的估算值补上
+  try {
+    const fp: any = lastFetchUsage;
+    if (fp?.usage && Date.now() - lastFetchTime < 5000) {
+      const est = (fp.usage as any).__think_tokens_est;
+      const hasReal = usage?.completion_tokens_details && typeof usage.completion_tokens_details.reasoning_tokens === 'number' && usage.completion_tokens_details.reasoning_tokens > 0;
+      if (est && !hasReal && !(usage as any)?.__think_tokens_est) (usage as any).__think_tokens_est = est;
+    }
+  } catch {}
   repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason);
   refresh();
 }
