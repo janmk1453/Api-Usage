@@ -7251,7 +7251,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-DOTJ2ZkA.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-htiks0Wx.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -7304,7 +7304,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-DOTJ2ZkA.js").then((m) => m.maybeAutoCheck());
+    import("./update-htiks0Wx.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }
