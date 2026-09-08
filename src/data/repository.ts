@@ -242,6 +242,8 @@ export const repository = {
             let changed = false;
             if (fullResponse && !head.fullResponse) { head.fullResponse = clampResponse(fullResponse); changed = true; }
             if (fr && !head.finishReason) { head.finishReason = fr; head.isTruncated = isTruncatedFinish(fr); changed = true; }
+            const estThink = usage?.completion_tokens_details?.reasoning_tokens || (usage as any)?.__think_tokens_est || 0;
+            if (estThink && !head.thinkTokens) { head.thinkTokens = estThink; changed = true; }
             if (changed) {
               if ((state.lastUsage as any)?.timestamp === head.timestamp) {
                 if (head.fullResponse) (state.lastUsage as any).fullResponse = head.fullResponse;
@@ -259,7 +261,7 @@ export const repository = {
     } catch {}
     const lu: any = { timestamp: Date.now(), model, prompt_tokens: hit + miss, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp, total_tokens: total };
     const duration = startTime ? Date.now() - startTime : 0;
-    const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || 0;
+    const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || (usage as any)?.__think_tokens_est || 0;
     lu.duration = duration;
     lu.tokenRate = duration - (ttft || 0) > 50 && comp > 0 ? Math.round((comp / (duration - (ttft || 0))) * 1000) : 0;
     lu.ttft = ttft || 0; lu.thinkTime = thinkTime || 0; lu.thinkTokens = thinkTokens;

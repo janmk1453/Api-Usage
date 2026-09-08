@@ -1026,6 +1026,11 @@ const repository = {
               head.isTruncated = isTruncatedFinish(fr);
               changed = true;
             }
+            const estThink = usage?.completion_tokens_details?.reasoning_tokens || usage?.__think_tokens_est || 0;
+            if (estThink && !head.thinkTokens) {
+              head.thinkTokens = estThink;
+              changed = true;
+            }
             if (changed) {
               if (state$2.lastUsage?.timestamp === head.timestamp) {
                 if (head.fullResponse) state$2.lastUsage.fullResponse = head.fullResponse;
@@ -1048,7 +1053,7 @@ const repository = {
     }
     const lu = { timestamp: Date.now(), model, prompt_tokens: hit + miss, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp, total_tokens: total };
     const duration = startTime ? Date.now() - startTime : 0;
-    const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || 0;
+    const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || usage?.__think_tokens_est || 0;
     lu.duration = duration;
     lu.tokenRate = duration - (ttft || 0) > 50 && comp > 0 ? Math.round(comp / (duration - (ttft || 0)) * 1e3) : 0;
     lu.ttft = ttft || 0;
@@ -1426,6 +1431,34 @@ function setLastRequest(messages, start) {
   lastStart = start || Date.now();
 }
 const TARGET_API = "/api/backends/chat-completions/generate";
+function estimateThinkTokens(text, usage) {
+  if (!usage || typeof usage !== "object") return;
+  const detail = usage.completion_tokens_details;
+  if (detail && typeof detail.reasoning_tokens === "number" && detail.reasoning_tokens > 0) return;
+  let thinkChars = 0, contentChars = 0;
+  for (const raw of String(text || "").split("\n")) {
+    const line = raw.trim();
+    if (!line.startsWith("data:")) continue;
+    const payload = line.slice(5).trim();
+    if (!payload || payload === "[DONE]") continue;
+    let chunk;
+    try {
+      chunk = JSON.parse(payload);
+    } catch {
+      continue;
+    }
+    const d = chunk?.choices?.[0]?.delta;
+    if (!d) continue;
+    if (typeof d.reasoning_content === "string") thinkChars += d.reasoning_content.length;
+    else if (typeof d.reasoning === "string") thinkChars += d.reasoning.length;
+    if (typeof d.content === "string") contentChars += d.content.length;
+  }
+  if (thinkChars > 0) {
+    const comp = usage.completion_tokens || usage.output_tokens || 0;
+    const total = thinkChars + contentChars;
+    usage.__think_tokens_est = total > 0 ? Math.round(comp * (thinkChars / total)) : 0;
+  }
+}
 function installFetchCapture() {
   try {
     const p = window.parent || window;
@@ -1501,6 +1534,10 @@ function installFetchCapture() {
                 const usage = data.usage;
                 try {
                   if (finishReason) usage.__finish_reason = finishReason;
+                } catch {
+                }
+                try {
+                  estimateThinkTokens(text, usage);
                 } catch {
                 }
                 lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: text, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason };
@@ -1795,6 +1832,15 @@ function refresh() {
   }
 }
 function processUsage(usage, model, messages, startTime, fullRequest = null, fullResponse = null, ttft = 0, thinkTime = 0, finishReason = null) {
+  try {
+    const fp = lastFetchUsage;
+    if (fp?.usage && Date.now() - lastFetchTime < 5e3) {
+      const est = fp.usage.__think_tokens_est;
+      const hasReal = usage?.completion_tokens_details && typeof usage.completion_tokens_details.reasoning_tokens === "number" && usage.completion_tokens_details.reasoning_tokens > 0;
+      if (est && !hasReal && !usage?.__think_tokens_est) usage.__think_tokens_est = est;
+    }
+  } catch {
+  }
   repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason);
   refresh();
 }
@@ -1973,7 +2019,7 @@ function exportHistory() {
   const pad = (n) => n < 10 ? "0" + n : "" + n;
   const safeSettings = JSON.parse(JSON.stringify(state$2.settings || {}));
   if (safeSettings.webdav) safeSettings.webdav = { url: "", username: "", path: "", proxy: "" };
-  const _appVer = "3.0.3";
+  const _appVer = "3.0.4";
   const payload = {
     format: "deepseek-stat-export",
     version: EXPORT_FORMAT_VERSION,
@@ -6935,7 +6981,7 @@ function createPanel() {
       <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;">
         <div style="display:flex;flex-direction:column;min-width:0;" id="aus-brand">
           <span style="font-size:13px;font-weight:700;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
-          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v${"3.0.3"}</span>
+          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v${"3.0.4"}</span>
         </div>
         <button id="aus-sidebar-toggle" style="width:28px;height:28px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;">‹</button>
       </div>
@@ -7088,7 +7134,7 @@ function createPanel() {
                 <div id="aus-update-banner" style="display:none;padding:8px 10px;border-radius:8px;background:var(--ds-yellow-bg);border:1px solid var(--ds-yellow-border);font-size:11px;color:var(--ds-text);"></div>
                 <div style="display:flex;gap:8px;align-items:center;">
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:11px;">检查更新</button>
-                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v${"3.0.3"} · 每 6 小时自动检查</span>
+                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v${"3.0.4"} · 每 6 小时自动检查</span>
                 </div>
               </div>
             </div>
@@ -7251,7 +7297,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-htiks0Wx.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-Chhvs3v7.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -7304,7 +7350,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-htiks0Wx.js").then((m) => m.maybeAutoCheck());
+    import("./update-Chhvs3v7.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }
