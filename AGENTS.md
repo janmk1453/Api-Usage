@@ -33,7 +33,7 @@ Api-Usage/
 ├── templates/panel.html   # 预留 Handlebars
 ├── src/
 │   ├── index.ts           # 入口：repository.hydrate + 魔法棒注入 + 全屏面板 + 峰值圆点（ST 未就绪时轮询重试 installInterception）+ 汇率/定价格式同步定时器（24h）+ 延迟自动检查更新
-│   ├── constants/pricing.ts  # PRICING/DEFAULT_PEAK_HOURS/MAX_HISTORY/DETAIL_KEEP/STORAGE_KEYS + PRICING_SYNC_SOURCE/FALLBACK/DEFAULT_EXCHANGE_RATE
+│   ├── constants/pricing.ts  # PRICING/DEFAULT_PEAK_HOURS/MAX_HISTORY/DETAIL_KEEP/STORAGE_KEYS + PRICING_SYNC_SOURCE/FALLBACK/DEFAULT_EXCHANGE_RATE + PRICE_HISTORY/PriceSegment（内置模型多段价格历史，flash 2026-09-10 12:00 新旧两段已预置）
 │   ├── types/save.ts, settings.ts # settings 含 PricingSyncSettings{enabled,mode,exchangeRate,useLiveRate,autoIntervalHours,lastSync,lastRateFetch,recalcOnSync}
 │   ├── data/              # ★ 统一数据框架（所有存/取/算/展的唯一通路）
 │   │   ├── types.ts       # Snapshot/Aggregated/TimeRange/OverviewView/StatsView
@@ -44,7 +44,7 @@ Api-Usage/
 │   ├── services/pricing.ts, interception.ts(fetch透传+TTFT/思维链/截断解析+指纹去重，GENERATION_ENDED主路径，install/uninstall幂等), balance.ts(余额 toast 按币种格式化), import-export.ts(单一历史+清洗), sync.ts(单一历史+清洗), debug.ts, theme.ts(applyTheme 同步 overlay), update.ts(检查更新，main 分支 manifest 对比，6h 节流), currency.ts(USD↔CNY 动态换算、getDisplayCurrency/formatMoney、fetchLiveRate 双源 24h), pricing-sync.ts(models.dev 拉取、USD→CNY*rate、峰谷 2×合成、add-missing/overwrite-unlocked/overwrite-all 预览与同步)
 │   ├── stats/forecast.ts, energyScore.ts # 预测核心：分段回归/二次方程求 R，能耗评分 A-G
 │   ├── utils/date.ts, crypto.ts(XOR+UTF-8), logger.ts
-│   └── ui/panel.ts(全屏+absolute定位+DeepSeek式侧边栏display切换+汉堡+forecast 对话选择), overview.ts(双明细+8块2列+热力图+按对话统计表 cold 异步补全、动态币种), stats-view.ts(直输日期+三维度 time∩model∩chat+4小块+图表Y/X配置+费用轴按币种换算), chart-config.ts(Y 8×X 5 聚合), heatmap.ts(GitHub风格近2年Token热力图，块内横向滑动), forecast-view.ts(趋势预测 Beta，自选对话胶囊，能耗/预测/敏感度随选中对话联动), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情费用按币种), settings.ts(完整设置+不回显密钥+模型价格自动同步卡片，双向币种换算), extra-charts.ts(额外 6 图费用轴按币种换算), peak-dot.ts, customize.ts
+│   └── ui/panel.ts(全屏+absolute定位+DeepSeek式侧边栏display切换+汉堡+forecast 对话选择), overview.ts(双明细+8块2列+热力图+按对话统计表 cold 异步补全、动态币种), stats-view.ts(直输日期+三维度 time∩model∩chat+4小块+图表Y/X配置+费用轴按币种换算), chart-config.ts(Y 8×X 5 聚合), heatmap.ts(GitHub风格近2年Token热力图，块内横向滑动), forecast-view.ts(趋势预测 Beta，自选对话胶囊，能耗/预测/敏感度随选中对话联动，能耗信息列限宽 210~340px 紧贴等级条), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情费用按币种), settings.ts(完整设置+不回显密钥+模型价格自动同步卡片，双向币种换算), extra-charts.ts(额外 6 图费用轴按币种换算), peak-dot.ts, customize.ts
 ├── README.md
 └── LICENSE
 ```
@@ -106,6 +106,7 @@ node --check index.js
 ## 常见任务
 
 - **改定价/峰谷**：`src/constants/pricing.ts` + `src/services/pricing.ts`（纯函数，`isPeakHour(ts, peakHours)` 不读全局）+ `src/services/currency.ts`（币种换算、24h 汇率）+ `src/services/pricing-sync.ts`（models.dev 同步、2×峰谷合成）
+- **加价格段（多段定价）**：`PRICE_HISTORY[模型].push({since: 生效时间戳, offpeak, peak, usePeakPricing?, peakHours?, label?})`（按 `since` 升序，命中 `timestamp>=since` 最后一段，未来段同样写法）；`findSegment/effectivePricingFor` 按记录时间查段，`calcCost/calcSavings` 段规则峰谷优先（无段规则回落用户设置），`getPricing` 取当前命中段展示，`recalcAll` 逐条按各自时间重算故统计/图表/详情自动正确；自定义模型价优先不回退
 - **改面板/导航**：`src/ui/panel.ts`（全屏+`positionPanel` 定位置换+`applyCollapsed`）+ `style.css`（`#aus-mobile-header` 汉堡 + `display` 切换，无过渡）
 - **改概览/统计**：`src/ui/overview.ts` + `src/ui/stats-view.ts`（三维度 time∩model∩chat 过滤）+ `src/data/computed.ts`（computeChatStats 单源）+ `src/ui/heatmap.ts`（概览热力图，GitHub 风格，近 2 年，块内滑动）
 - **改历史详情/占比**：`src/ui/panel.ts`（`renderHistory` 内联展开 + 三色条，费用按币种）
