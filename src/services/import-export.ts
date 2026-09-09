@@ -1,6 +1,7 @@
 import { state } from '../store/index';
 import { EXPORT_FORMAT_VERSION } from '../constants/pricing';
 import { repository } from '../data/repository';
+import { isDeepSeekOfficialModel } from './pricing';
 
 declare const __APP_VERSION__: string;
 
@@ -85,6 +86,7 @@ export function normalizeImportData(raw: any): { data?: any; error?: string; ski
 }
 
 export function applyImportedData(d: any, mode: 'overwrite' | 'merge') {
+  let addedOfficial = 0;
   if (mode === 'overwrite') {
     repository.replaceAll({
       history: (d.history || []),
@@ -113,7 +115,23 @@ export function applyImportedData(d: any, mode: 'overwrite' | 'merge') {
     const merged = [...toAdd, ...state.history].sort((a: any, b: any) => b.timestamp - a.timestamp);
     // 合并时不覆盖余额/设置
     repository.replaceAll({ history: merged } as any);
+    // 合并新增的官方模型轮次（addEntry 口径：仅 deepseek 官方模型计轮）
+    for (const h of toAdd) { try { if (isDeepSeekOfficialModel(h.model)) addedOfficial++; } catch {} }
   }
+  // 导入后按当前价格段重算每条费用，再按历史重算累计聚合（修复合并后累计不变、跨规则导入费用失真）
+  try { repository.recalcAll(); } catch {}
+  try {
+    let tt = 0, tc = 0, it = 0, ot = 0, ch = 0, cm = 0, ic = 0, oc = 0;
+    for (const h of state.history || []) {
+      tt += h.total_tokens || 0; tc += h.cost || 0;
+      it += (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0); ot += h.completion_tokens || 0;
+      ch += h.cache_hit_tokens || 0; cm += h.cache_miss_tokens || 0;
+      ic += h.input_cost || 0; oc += h.output_cost || 0;
+    }
+    const patch: any = { total_tokens: tt, total_cost: tc, input_tokens: it, output_tokens: ot, cache_hit_tokens: ch, cache_miss_tokens: cm, input_cost: ic, output_cost: oc };
+    if (mode === 'merge') patch.rounds = (state.rounds || 0) + addedOfficial;
+    repository.replaceAll(patch);
+  } catch {}
   try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
 }
 
