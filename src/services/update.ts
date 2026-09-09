@@ -141,11 +141,9 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
               banner.style.display = 'block';
               banner.innerHTML = `发现新提交 <b>${remoteLabel}</b>（当前 ${localLabel}） <a href="${REPO_URL}" target="_blank" style="color:var(--ds-green);text-decoration:underline;">前往更新</a>`;
             }
-          } else if (manual) {
+          } else {
             toast('info', `已是最新版本（${localLabel}）`);
             if (banner) banner.style.display = 'none';
-          } else {
-            log.debug('检查更新：已是最新 ' + localLabel);
           }
           return { hasUpdate: cmp.hasUpdate, current: localLabel, remote: remoteLabel };
         }
@@ -178,16 +176,14 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
         banner.style.display = 'block';
         banner.innerHTML = `发现新版本 <b>v${remoteVer}</b>（当前 v${CURRENT_VERSION}） <a href="${REPO_URL}" target="_blank" style="color:var(--ds-green);text-decoration:underline;">前往更新</a>`;
       }
-    } else if (manual) {
+    } else {
       toast('info', `已是最新版本 v${CURRENT_VERSION}`);
       if (banner) banner.style.display = 'none';
-    } else {
-      log.debug('检查更新：已是最新 v' + CURRENT_VERSION);
     }
     return { hasUpdate, current: CURRENT_VERSION, remote: remoteVer };
   } catch (e: any) {
     log.debug('检查更新失败', e?.message || e);
-    if (manual) toast('error', '检查更新失败：' + (e?.message || String(e)));
+    toast('error', '检查更新失败：' + (e?.message || String(e)));
     return null;
   }
 }
