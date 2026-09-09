@@ -1,4 +1,5 @@
 // 2026-09-10 12:00+08:00 起 flash 新定价：空闲 0.02/1/4，高峰 2×（0.04/2/8）；该时间前沿用旧价
+// 同时刻起：新增 deepseek-v4.1-flash（V4F 迭代替代版，同价）；deepseek-v4-pro 请求路由至 V4.1 Flash，按同价计费
 export const FLASH_PRICE_CUTOFF = new Date('2026-09-10T12:00:00+08:00').getTime();
 export const FLASH_OLD_PRICING = {
   offpeak: { hit: 0.05, miss: 1.5, output: 4.5 },
@@ -21,10 +22,15 @@ export const PRICING = {
     offpeak: { hit: 0.02, miss: 1, output: 4 },
     peak: { hit: 0.04, miss: 2, output: 8 },
   },
+  'deepseek-v4.1-flash': {
+    usePeakPricing: true,
+    offpeak: { hit: 0.02, miss: 1, output: 4 },
+    peak: { hit: 0.04, miss: 2, output: 8 },
+  },
   'deepseek-v4-pro': {
     usePeakPricing: true,
-    offpeak: { hit: 0.15, miss: 4.5, output: 13.5 },
-    peak: { hit: 0.30, miss: 9.0, output: 27.0 },
+    offpeak: { hit: 0.02, miss: 1, output: 4 },
+    peak: { hit: 0.04, miss: 2, output: 8 },
   },
   'deepseek-v4-flash-vision-exp': {
     usePeakPricing: true,
@@ -62,12 +68,29 @@ export const PRICE_HISTORY: Record<string, PriceSegment[]> = {
       label: '2026-09-10 12:00 起新价',
     },
   ],
+  'deepseek-v4.1-flash': [
+    {
+      since: 0,
+      offpeak: { ...PRICING['deepseek-v4.1-flash'].offpeak },
+      peak: { ...PRICING['deepseek-v4.1-flash'].peak },
+      usePeakPricing: true,
+      label: 'V4F 迭代替代版，与 2026-09-10 新规同价',
+    },
+  ],
   'deepseek-v4-pro': [
     {
       since: 0,
+      offpeak: { hit: 0.15, miss: 4.5, output: 13.5 },
+      peak: { hit: 0.30, miss: 9.0, output: 27.0 },
+      usePeakPricing: true,
+      label: '2026-09-10 12:00 前旧价',
+    },
+    {
+      since: FLASH_PRICE_CUTOFF,
       offpeak: { ...PRICING['deepseek-v4-pro'].offpeak },
       peak: { ...PRICING['deepseek-v4-pro'].peak },
       usePeakPricing: true,
+      label: '2026-09-10 12:00 起路由至 V4.1 Flash，按新规计价',
     },
   ],
   'deepseek-v4-flash-vision-exp': [

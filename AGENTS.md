@@ -33,8 +33,7 @@ Api-Usage/
 ├── templates/panel.html   # 预留 Handlebars
 ├── src/
 │   ├── index.ts           # 入口：repository.hydrate + 魔法棒注入 + 全屏面板 + 峰值圆点（ST 未就绪时轮询重试 installInterception）+ 汇率/定价格式同步定时器（24h）+ 延迟自动检查更新
-│   ├── constants/pricing.ts  # PRICING/DEFAULT_PEAK_HOURS/MAX_HISTORY/DETAIL_KEEP/STORAGE_KEYS + PRICING_SYNC_SOURCE/FALLBACK/DEFAULT_EXCHANGE_RATE + PRICE_HISTORY/PriceSegment（内置模型多段价格历史，flash 2026-09-10 12:00 新旧两段已预置）
-│   ├── types/save.ts, settings.ts # settings 含 PricingSyncSettings{enabled,mode,exchangeRate,useLiveRate,autoIntervalHours,lastSync,lastRateFetch,recalcOnSync}
+│   ├── constants/pricing.ts  # PRICING/DEFAULT_PEAK_HOURS/MAX_HISTORY/DETAIL_KEEP/STORAGE_KEYS + PRICING_SYNC_SOURCE/FALLBACK/DEFAULT_EXCHANGE_RATE + PRICE_HISTORY/PriceSegment（内置模型多段价格历史，flash 新旧两段、pro 新旧两段、v4.1-flash 单段已预置，切换点 2026-09-10 12:00+08:00）│   ├── types/save.ts, settings.ts # settings 含 PricingSyncSettings{enabled,mode,exchangeRate,useLiveRate,autoIntervalHours,lastSync,lastRateFetch,recalcOnSync}
 │   ├── data/              # ★ 统一数据框架（所有存/取/算/展的唯一通路）
 │   │   ├── types.ts       # Snapshot/Aggregated/TimeRange/OverviewView/StatsView
 │   │   ├── repository.ts  # 唯一写入口：addEntry(5s指纹去重+finishReason)/recalcAll/replaceAll(默认合并+清洗)/hydrate（含 pricingSync 迁移）+ persist（剥离隐私字段）
@@ -93,7 +92,7 @@ node --check index.js
 - **能耗评分**：`src/stats/energyScore.ts` 6 指标加权（`Δ 25%/out 20%/效率 20%/命中 15%/截断 10%/思维链占比 10%`）→ `A-G`，冷启动绝对阈值表，随历史自动切分位；`forecast-view.ts` 中能耗标识已改为基于选中对话 `energyScore(effectiveHist,null)`，文案顯示选中对话名与样本数
 
 ### 设置（完整迁移原脚本）
-- `颜色模式（浅色/深色，胶囊下拉，`settings.theme` + `theme.ts:applyTheme` 即时切换，与用量统计·模型选择同款） / API 密钥 / 自动校准余额（开关+间隔）/ 自定义余额 / 新价格机制（开关+日期+今日）/ 高峰时段（可增删跨天，改后重算）/ 模型与价格（内置 3 模型可覆写+自定义增删，峰谷开关，三价 动态 `CNY/USD` 经 `getDisplayCurrency()`，输入框双向换算）/ 模型价格自动同步（`pricingSync.enabled` 默认关闭，模式 `add-missing/overwrite-unlocked/overwrite-all` 胶囊、汇率 `USD→CNY` 输入 + `useLiveRate` 每 24h 双源自动获取 + `autoIntervalHours`  + `recalcOnSync` + 立即同步/预览，`models.dev` 拉取 `USD→CNY*rate` 合成峰谷 `2×`）/ 调试（开关+hit/miss/output/model/date/batchCount+生成）/ 峰值圆点（开关+重置）/ WebDAV（url/user/pass/path/proxy+同步，`https` 强制，`pull-merge-push`）`，全部主题变量卡片，改后 `recalcAll`+`refreshUI`；货币切换时 `formatMoney(cny)` 全站即时换算（余额 toast 同步）
+- `颜色模式（浅色/深色，胶囊下拉，`settings.theme` + `theme.ts:applyTheme` 即时切换，与用量统计·模型选择同款） / API 密钥 / 自动校准余额（开关+间隔）/ 自定义余额 / 新价格机制（开关+日期+今日）/ 高峰时段（可增删跨天，改后重算）/ 模型与价格（内置 4 模型 flash/v4.1-flash/pro/vision-exp 可覆写+自定义增删，峰谷开关，三价 动态 `CNY/USD` 经 `getDisplayCurrency()`，输入框双向换算）/ 模型价格自动同步（`pricingSync.enabled` 默认关闭，模式 `add-missing/overwrite-unlocked/overwrite-all` 胶囊、汇率 `USD→CNY` 输入 + `useLiveRate` 每 24h 双源自动获取 + `autoIntervalHours`  + `recalcOnSync` + 立即同步/预览，`models.dev` 拉取 `USD→CNY*rate` 合成峰谷 `2×`）/ 调试（开关+hit/miss/output/model/date/batchCount+生成）/ 峰值圆点（开关+重置）/ WebDAV（url/user/pass/path/proxy+同步，`https` 强制，`pull-merge-push`）`，全部主题变量卡片，改后 `recalcAll`+`refreshUI`；货币切换时 `formatMoney(cny)` 全站即时换算（余额 toast 同步）
 
 ## 样式规范（DeepSeek 截图定版）
 

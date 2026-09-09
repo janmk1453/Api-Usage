@@ -34,6 +34,7 @@ function normalizeModel(model: string): string {
   const low = m.toLowerCase();
   if ((MODEL_ALIASES as any)[low]) return (MODEL_ALIASES as any)[low];
   if (low === 'deepseek-v4-flash') return 'deepseek-v4-flash';
+  if (low === 'deepseek-v4.1-flash') return 'deepseek-v4.1-flash';
   if (low === 'deepseek-v4-pro') return 'deepseek-v4-pro';
   if (low === 'deepseek-v4-flash-vision-exp') return 'deepseek-v4-flash-vision-exp';
   // 精确匹配后不再回落 deepseek -> flash，保持原名以便无价提示
