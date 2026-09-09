@@ -3,7 +3,6 @@ import { toast, log } from '../utils/logger';
 declare const __APP_VERSION__: string;
 const CURRENT_VERSION: string = (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.0.0') as string;
 const REPO = 'janmk1453/Api-Usage';
-const REPO_URL = 'https://github.com/' + REPO;
 const REMOTE_MANIFEST = `https://raw.githubusercontent.com/${REPO}/main/manifest.json`;
 const EXTENSION_FOLDER = 'Api-Usage';
 const TIMEOUT_MS = 5 * 1000;
@@ -134,12 +133,12 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
           if (cmp.hasUpdate) {
             const key = cmp.remoteSha || remoteLabel;
             if (getLastNotified() !== key || manual) {
-              toast('info', `发现 main 分支新提交（${localLabel} → ${remoteLabel}），请前往仓库更新：${REPO_URL}`);
+              toast('info', `发现 main 分支新提交（${localLabel} → ${remoteLabel}），请前往「扩展程序 → 管理扩展程序」更新`);
               setLastNotified(key);
             }
             if (banner) {
               banner.style.display = 'block';
-              banner.innerHTML = `发现新提交 <b>${remoteLabel}</b>（当前 ${localLabel}） <a href="${REPO_URL}" target="_blank" style="color:var(--ds-green);text-decoration:underline;">前往更新</a>`;
+              banner.innerHTML = `发现新提交 <b>${remoteLabel}</b>（当前 ${localLabel}），请前往「扩展程序 → 管理扩展程序」更新`;
             }
           } else {
             toast('info', `已是最新版本（${localLabel}）`);
@@ -169,12 +168,12 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
     const hasUpdate = isNewer(remoteVer, CURRENT_VERSION);
     if (hasUpdate) {
       if (getLastNotified() !== remoteVer || manual) {
-        toast('info', `发现新版本 v${remoteVer}（当前 v${CURRENT_VERSION}），请前往仓库更新：${REPO_URL}`);
+        toast('info', `发现新版本 v${remoteVer}（当前 v${CURRENT_VERSION}），请前往「扩展程序 → 管理扩展程序」更新`);
         setLastNotified(remoteVer);
       }
       if (banner) {
         banner.style.display = 'block';
-        banner.innerHTML = `发现新版本 <b>v${remoteVer}</b>（当前 v${CURRENT_VERSION}） <a href="${REPO_URL}" target="_blank" style="color:var(--ds-green);text-decoration:underline;">前往更新</a>`;
+        banner.innerHTML = `发现新版本 <b>v${remoteVer}</b>（当前 v${CURRENT_VERSION}），请前往「扩展程序 → 管理扩展程序」更新`;
       }
     } else {
       toast('info', `已是最新版本 v${CURRENT_VERSION}`);
