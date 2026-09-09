@@ -31,11 +31,16 @@ const defaultSettings = () => ({
     recalcOnSync: false
   }
 });
+const FLASH_PRICE_CUTOFF = (/* @__PURE__ */ new Date("2026-09-10T12:00:00+08:00")).getTime();
+const FLASH_OLD_PRICING = {
+  offpeak: { hit: 0.05, miss: 1.5, output: 4.5 },
+  peak: { hit: 0.1, miss: 3, output: 9 }
+};
 const PRICING = {
   "deepseek-v4-flash": {
     usePeakPricing: true,
-    offpeak: { hit: 0.05, miss: 1.5, output: 4.5 },
-    peak: { hit: 0.1, miss: 3, output: 9 }
+    offpeak: { hit: 0.02, miss: 1, output: 4 },
+    peak: { hit: 0.04, miss: 2, output: 8 }
   },
   "deepseek-v4-pro": {
     usePeakPricing: true,
@@ -698,10 +703,24 @@ function isPeakHour(timestamp, settings) {
   const hours = settings && settings.peakHours || DEFAULT_PEAK_HOURS;
   return isPeakHour$1(timestamp, hours);
 }
+function hasCustomForModel(model, settings) {
+  const raw = model || "deepseek-v4-flash";
+  const m = normalizeModel(raw);
+  for (const cm of settings.customModels || []) if (cm?.model === raw || cm?.model === m) return true;
+  return false;
+}
+function effectivePricingFor(model, uTs, settings, base) {
+  const m = normalizeModel(model || "deepseek-v4-flash");
+  if (m === "deepseek-v4-flash" && !hasCustomForModel(model, settings) && uTs < FLASH_PRICE_CUTOFF) {
+    return { usePeakPricing: true, offpeak: FLASH_OLD_PRICING.offpeak, peak: FLASH_OLD_PRICING.peak };
+  }
+  return base;
+}
 function calcCost(u, settings) {
   const model = u.model || "deepseek-v4-flash";
   if (!hasPriceForModel(model, settings)) return { input: 0, output: 0, total: 0, priceType: "old" };
-  const pricing = getPricing$1(model, settings);
+  const basePricing = getPricing$1(model, settings);
+  const pricing = effectivePricingFor(model, u.timestamp, settings, basePricing);
   const useNewPricing = settings.useNewPricing && u.timestamp >= settings.newPricingDate;
   let p;
   let priceType;
@@ -721,7 +740,8 @@ function calcCost(u, settings) {
 function calcSavings(u, settings) {
   const model = u.model || "deepseek-v4-flash";
   if (!hasPriceForModel(model, settings)) return 0;
-  const pricing = getPricing$1(model, settings);
+  const basePricing = getPricing$1(model, settings);
+  const pricing = effectivePricingFor(model, u.timestamp, settings, basePricing);
   const useNewPricing = settings.useNewPricing && u.timestamp >= settings.newPricingDate;
   let p;
   if (useNewPricing && pricing.usePeakPricing !== false && isDeepSeekOfficialModel(model)) {
@@ -7313,7 +7333,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-PFpoJuS_.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-BUx400cQ.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -7366,7 +7386,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-PFpoJuS_.js").then((m) => m.maybeAutoCheck());
+    import("./update-BUx400cQ.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

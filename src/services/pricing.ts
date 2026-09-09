@@ -1,4 +1,4 @@
-import { PRICING, DEFAULT_PEAK_HOURS } from '../constants/pricing';
+import { PRICING, DEFAULT_PEAK_HOURS, FLASH_PRICE_CUTOFF, FLASH_OLD_PRICING } from '../constants/pricing';
 import type { Settings } from '../types/settings';
 import { isPeakHour as isPeakHourRaw, isWeekendDay } from '../utils/date';
 import { formatMoney as _formatMoney } from './currency';
@@ -76,13 +76,29 @@ export function isPeakHour(timestamp: number, settings: Settings): boolean {
 }
 
 // 1:1 calcCost（含周末豁免、仅 deepseek* 峰谷、useNewPricing/newPricingDate）
+// 2026-09-10 12:00+08:00 起 flash 默认内置价自动切换为 0.02/1/4（峰 2×），该时间前沿用旧价 0.05/1.5/4.5（峰 2×）；自定义价格优先不回退
+function hasCustomForModel(model: string, settings: Settings): boolean {
+  const raw = model || 'deepseek-v4-flash';
+  const m = normalizeModel(raw);
+  for (const cm of (settings as any).customModels || []) if (cm?.model === raw || cm?.model === m) return true;
+  return false;
+}
+function effectivePricingFor(model: string, uTs: number, settings: Settings, base: any) {
+  const m = normalizeModel(model || 'deepseek-v4-flash');
+  if (m === 'deepseek-v4-flash' && !hasCustomForModel(model, settings) && uTs < FLASH_PRICE_CUTOFF) {
+    return { usePeakPricing: true, offpeak: FLASH_OLD_PRICING.offpeak, peak: FLASH_OLD_PRICING.peak } as any;
+  }
+  return base;
+}
+
 export function calcCost(
   u: { timestamp: number; model: string; prompt_cache_hit_tokens: number; prompt_cache_miss_tokens: number; completion_tokens: number },
   settings: Settings
 ): { input: number; output: number; total: number; priceType: string } {
   const model = u.model || 'deepseek-v4-flash';
   if (!hasPriceForModel(model, settings)) return { input: 0, output: 0, total: 0, priceType: 'old' };
-  const pricing = getPricing(model, settings);
+  const basePricing = getPricing(model, settings);
+  const pricing = effectivePricingFor(model, u.timestamp, settings, basePricing);
   const useNewPricing = settings.useNewPricing && u.timestamp >= settings.newPricingDate;
   let p: any;
   let priceType: string;
@@ -106,7 +122,8 @@ export function calcSavings(
 ): number {
   const model = u.model || 'deepseek-v4-flash';
   if (!hasPriceForModel(model, settings)) return 0;
-  const pricing = getPricing(model, settings);
+  const basePricing = getPricing(model, settings);
+  const pricing = effectivePricingFor(model, u.timestamp, settings, basePricing);
   const useNewPricing = settings.useNewPricing && u.timestamp >= settings.newPricingDate;
   let p: any;
   if (useNewPricing && pricing.usePeakPricing !== false && isDeepSeekOfficialModel(model)) {

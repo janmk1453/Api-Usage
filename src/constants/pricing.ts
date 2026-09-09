@@ -1,9 +1,16 @@
-// 迁移自 DeepSeek使用预测.js:6-10，1:1 保留数值与语义
+// 2026-09-10 12:00+08:00 起 flash 新定价：空闲 0.02/1/4，高峰 2×（0.04/2/8）；该时间前沿用旧价
+export const FLASH_PRICE_CUTOFF = new Date('2026-09-10T12:00:00+08:00').getTime();
+export const FLASH_OLD_PRICING = {
+  offpeak: { hit: 0.05, miss: 1.5, output: 4.5 },
+  peak: { hit: 0.10, miss: 3.0, output: 9.0 },
+} as const;
+
+// 迁移自 DeepSeek使用预测.js:6-10，1:1 保留数值与语义（flash 已按 2026-09-10 新政更新为 0.02/1/4 与 2×）
 export const PRICING = {
   'deepseek-v4-flash': {
     usePeakPricing: true,
-    offpeak: { hit: 0.05, miss: 1.5, output: 4.5 },
-    peak: { hit: 0.10, miss: 3.0, output: 9.0 },
+    offpeak: { hit: 0.02, miss: 1, output: 4 },
+    peak: { hit: 0.04, miss: 2, output: 8 },
   },
   'deepseek-v4-pro': {
     usePeakPricing: true,
