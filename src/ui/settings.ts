@@ -4,7 +4,7 @@ import { saveApiKey } from '../services/balance';
 import { doSyncNow, saveWebdavPass } from '../services/sync';
 import { decryptKey } from '../utils/crypto';
 import { applyTheme } from '../services/theme';
-import { PRICING, DEFAULT_PEAK_HOURS } from '../constants/pricing';
+import { PRICING, DEFAULT_PEAK_HOURS, HIDDEN_PRICING_MODELS } from '../constants/pricing';
 import { recalcAllCosts } from '../services/interception';
 import { generateDebugBatch } from '../services/debug';
 import { getDisplayCurrency } from '../services/currency';
@@ -552,7 +552,7 @@ function renderPeakHoursEditor(doc: Document) {
 function renderModelsEditor(doc: Document) {
   const list = doc.getElementById('aus-custom-models-list') as HTMLElement | null;
   if (!list) return;
-  const builtin = Object.keys(PRICING);
+  const builtin = Object.keys(PRICING).filter((m) => HIDDEN_PRICING_MODELS.indexOf(m) === -1);
   const cms: any[] = (state.settings as any).customModels || [];
   const rows: string[] = [];
   for (const m of builtin) {
@@ -561,7 +561,7 @@ function renderModelsEditor(doc: Document) {
     rows.push(modelRow(m, p, true, usePeak));
   }
   for (const e of cms) {
-    if (e?.model && builtin.indexOf(e.model) === -1) {
+    if (e?.model && builtin.indexOf(e.model) === -1 && HIDDEN_PRICING_MODELS.indexOf(e.model) === -1) {
       const p: any = getPricing(e.model);
       rows.push(modelRow(e.model, p, false, p.usePeakPricing !== false));
     }

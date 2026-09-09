@@ -92,7 +92,7 @@ node --check index.js
 - **能耗评分**：`src/stats/energyScore.ts` 6 指标加权（`Δ 25%/out 20%/效率 20%/命中 15%/截断 10%/思维链占比 10%`）→ `A-G`，冷启动绝对阈值表，随历史自动切分位；`forecast-view.ts` 中能耗标识已改为基于选中对话 `energyScore(effectiveHist,null)`，文案顯示选中对话名与样本数
 
 ### 设置（完整迁移原脚本）
-- `颜色模式（浅色/深色，胶囊下拉，`settings.theme` + `theme.ts:applyTheme` 即时切换，与用量统计·模型选择同款） / API 密钥 / 自动校准余额（开关+间隔）/ 自定义余额 / 新价格机制（开关+日期+今日）/ 高峰时段（可增删跨天，改后重算）/ 模型与价格（内置 4 模型 flash/v4.1-flash/pro/vision-exp 可覆写+自定义增删，峰谷开关，三价 动态 `CNY/USD` 经 `getDisplayCurrency()`，输入框双向换算）/ 模型价格自动同步（`pricingSync.enabled` 默认关闭，模式 `add-missing/overwrite-unlocked/overwrite-all` 胶囊、汇率 `USD→CNY` 输入 + `useLiveRate` 每 24h 双源自动获取 + `autoIntervalHours`  + `recalcOnSync` + 立即同步/预览，`models.dev` 拉取 `USD→CNY*rate` 合成峰谷 `2×`）/ 调试（开关+hit/miss/output/model/date/batchCount+生成）/ 峰值圆点（开关+重置）/ WebDAV（url/user/pass/path/proxy+同步，`https` 强制，`pull-merge-push`）`，全部主题变量卡片，改后 `recalcAll`+`refreshUI`；货币切换时 `formatMoney(cny)` 全站即时换算（余额 toast 同步）
+- `颜色模式（浅色/深色，胶囊下拉，`settings.theme` + `theme.ts:applyTheme` 即时切换，与用量统计·模型选择同款） / API 密钥 / 自动校准余额（开关+间隔）/ 自定义余额 / 新价格机制（开关+日期+今日）/ 高峰时段（可增删跨天，改后重算）/ 模型与价格（内置 4 模型 flash/v4.1-flash/pro/vision-exp 可覆写+自定义增删，其中 v4-flash 已替代隐藏不外显但保留计价+自定义覆盖仍生效，峰谷开关，三价 动态 `CNY/USD` 经 `getDisplayCurrency()`，输入框双向换算）/ 模型价格自动同步（`pricingSync.enabled` 默认关闭，模式 `add-missing/overwrite-unlocked/overwrite-all` 胶囊、汇率 `USD→CNY` 输入 + `useLiveRate` 每 24h 双源自动获取 + `autoIntervalHours`  + `recalcOnSync` + 立即同步/预览，`models.dev` 拉取 `USD→CNY*rate` 合成峰谷 `2×`）/ 调试（开关+hit/miss/output/model/date/batchCount+生成）/ 峰值圆点（开关+重置）/ WebDAV（url/user/pass/path/proxy+同步，`https` 强制，`pull-merge-push`）`，全部主题变量卡片，改后 `recalcAll`+`refreshUI`；货币切换时 `formatMoney(cny)` 全站即时换算（余额 toast 同步）
 
 ## 样式规范（DeepSeek 截图定版）
 

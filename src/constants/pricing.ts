@@ -103,6 +103,9 @@ export const PRICE_HISTORY: Record<string, PriceSegment[]> = {
   ],
 };
 
+// 已被替代、不再外显价格设置的内置模型：计价与历史数据不受影响，仅设置页价格编辑器隐藏
+export const HIDDEN_PRICING_MODELS: string[] = ['deepseek-v4-flash'];
+
 export const MAX_HISTORY = 2000;
 // 保留最近 5 条记录的完整数据（消息/请求体/完整响应原文）
 export const DETAIL_KEEP = 5;
