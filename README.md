@@ -17,7 +17,7 @@
 - **设置**：`颜色模式（胶囊下拉）/ API 密钥（不回显）/ 余额 / 峰谷时段 / 模型与价格（内置可覆写+自定义增删，三价 ¥/百万）/ 调试（批量模拟，8% 截断）/ 峰值圆点 / WebDAV`，全部受 `recalcAll` 联动
 - **导入导出**：白名单 `deepseek-stat-export v1`，`覆盖/合并`（按 `timestamp` 去重），`history` 中 `messages/fullRequest/fullResponse/raw_usage` 仅保留统计字段
 - **云同步**：`WebDAV` `pull-merge-push` 双向合并（`history` 去重，`_debug` 已隔离），不含密钥与聊天内容，`https` 强制，支持 `CORS` 代理
-- **检查更新**：关于页按钮 + 打开扩展自动检查（`6h` 节流，有更新 `toast+横幅`，无更新静默）；扩展内版本号由 `manifest.json` 单源注入（`vite.define __APP_VERSION__`），侧边栏/关于/导出同步
+- **检查更新**：关于页按钮 + 打开扩展自动检查（每次打开面板都执行，有更新 `toast+横幅`，无更新静默）；扩展内版本号由 `manifest.json` 单源注入（`vite.define __APP_VERSION__`），侧边栏/关于/导出同步
 ## 安装
 
 1. `SillyTavern → 扩展程序 → 安装扩展程序 → 输入`https://github.com/janmk1453/Api-Usage`（稳定 `main`）
@@ -27,7 +27,7 @@
 ## 更新
 
 1. `SillyTavern → 扩展程序 → 管理扩展程序 → 在下方找到`API用量统计`，等待一会右侧会出现更新按钮同时文字变绿
-2. 或进入扩展 `关于` 页点击 `检查更新`（自动检查 `6h` 节流，有更新 `toast+横幅`）
+2. 或进入扩展 `关于` 页点击 `检查更新`（自动检查无节流，有更新 `toast+横幅`）
 3. 更新后刷新网页（`Ctrl+Shift+R` 若遇 `404 index-*.js` 需清缓存）
 
 ## 快速开始

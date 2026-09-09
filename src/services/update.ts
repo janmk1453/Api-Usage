@@ -6,7 +6,6 @@ const REPO = 'janmk1453/Api-Usage';
 const REPO_URL = 'https://github.com/' + REPO;
 const REMOTE_MANIFEST = `https://raw.githubusercontent.com/${REPO}/main/manifest.json`;
 const EXTENSION_FOLDER = 'Api-Usage';
-const INTERVAL_MS = 6 * 60 * 60 * 1000;
 const TIMEOUT_MS = 5 * 1000;
 const LOCAL_TIMEOUT_MS = 15000;
 const LAST_CHECK_KEY = 'aus_update_last_check';
@@ -39,9 +38,6 @@ function isNewer(remote: string, local: string): boolean {
   return false;
 }
 
-function getStoredLastCheck(): number {
-  try { return parseInt(localStorage.getItem(LAST_CHECK_KEY) || '0', 10) || 0; } catch { return 0; }
-}
 function setStoredLastCheck(t: number) {
   try { localStorage.setItem(LAST_CHECK_KEY, String(t)); } catch {}
   try {
@@ -119,10 +115,7 @@ function getBanner(): HTMLElement | null {
 }
 
 export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean; current: string; remote: string } | null> {
-  if (!manual) {
-    const last = getStoredLastCheck();
-    if (Date.now() - last < INTERVAL_MS) return null;
-  }
+  // 自动检查不节流，每次打开面板都执行；手动检查同样直接执行
   setStoredLastCheck(Date.now());
   const banner = getBanner();
 

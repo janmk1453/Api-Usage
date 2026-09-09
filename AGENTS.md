@@ -40,7 +40,7 @@ Api-Usage/
 │   │   ├── computed.ts    # 唯一算入口：computeOverview/computeStats/getFilteredHistory/computeStatsFour + computeChatStats/getRecordedChats（对话维度聚合）
 │   │   └── events.ts      # DataEvents.UPDATED/HISTORY_ADDED/SETTINGS_CHANGED
 │   ├── store/index.ts, persistence.ts # 单一历史聚合（已废弃多存档，saves 仅作迁移兼容；append/getAllHistory 指纹去重 timestamp|model|total）
-│   ├── services/pricing.ts, interception.ts(fetch透传+TTFT/思维链/截断解析+指纹去重，GENERATION_ENDED主路径，install/uninstall幂等), balance.ts(余额 toast 按币种格式化), import-export.ts(单一历史+清洗), sync.ts(单一历史+清洗), debug.ts, theme.ts(applyTheme 同步 overlay), update.ts(检查更新，main 分支 manifest 对比，6h 节流), currency.ts(USD↔CNY 动态换算、getDisplayCurrency/formatMoney、fetchLiveRate 双源 24h), pricing-sync.ts(models.dev 拉取、USD→CNY*rate、峰谷 2×合成、add-missing/overwrite-unlocked/overwrite-all 预览与同步)
+│   ├── services/pricing.ts, interception.ts(fetch透传+TTFT/思维链/截断解析+指纹去重，GENERATION_ENDED主路径，install/uninstall幂等), balance.ts(余额 toast 按币种格式化), import-export.ts(单一历史+清洗), sync.ts(单一历史+清洗), debug.ts, theme.ts(applyTheme 同步 overlay), update.ts(检查更新，main 提交哈希优先、失败回退 manifest 版本对比，自动检查不节流), currency.ts(USD↔CNY 动态换算、getDisplayCurrency/formatMoney、fetchLiveRate 双源 24h), pricing-sync.ts(models.dev 拉取、USD→CNY*rate、峰谷 2×合成、add-missing/overwrite-unlocked/overwrite-all 预览与同步)
 │   ├── stats/forecast.ts, energyScore.ts # 预测核心：分段回归/二次方程求 R，能耗评分 A-G
 │   ├── utils/date.ts, crypto.ts(XOR+UTF-8), logger.ts
 │   └── ui/panel.ts(全屏+absolute定位+DeepSeek式侧边栏display切换+汉堡+forecast 对话选择), overview.ts(双明细+8块2列+热力图+按对话统计表 cold 异步补全、动态币种), stats-view.ts(直输日期+三维度 time∩model∩chat+4小块+图表Y/X配置+费用轴按币种换算), chart-config.ts(Y 8×X 5 聚合), heatmap.ts(GitHub风格近2年Token热力图，块内横向滑动), forecast-view.ts(趋势预测 Beta，自选对话胶囊，能耗/预测/敏感度随选中对话联动，能耗信息列限宽 210~340px 紧贴等级条), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情费用按币种), settings.ts(完整设置+不回显密钥+模型价格自动同步卡片，双向币种换算), extra-charts.ts(额外 6 图费用轴按币种换算), peak-dot.ts, customize.ts
@@ -133,7 +133,7 @@ node --check index.js
   3. 回滚：`main` 上 `git revert` 并递增 `patch`
 - **产物铁律**：`Vite lib` 产物为 `index.js(入口) + index-*.js/update-*.js + ECharts 9 块`，`index.js` 为 `import "./index-*.js"` 存根，**必须**随 `index.js` 一并 `git add` 提交，缺一则 `404 index-*.js` 导致 `[object Event]` 加载失败并中断后续扩展；`style.css` 同理直出，`outDir: '.' + emptyOutDir:false` 禁止误删。
 - **主题一致性**：`defaultSettings.theme` 默认为 `light`，与隔离样式浅色保持一致；旧用户无 `theme` 字段时迁移补 `light`，禁止在更新中强制覆为 `dark`
-- **检查更新**：`src/services/update.ts` 固定对比 `raw.githubusercontent.../main/manifest.json` 的 `version` 与本地 `__APP_VERSION__`，自动检查 `6h` 节流（`localStorage + extensionSettings._updateLastCheck`），关于页按钮为手动触发（忽略节流），有更新 `toast + 横幅`，无更新静默（手动时提示已是最新）
+- **检查更新**：`src/services/update.ts` 优先对比 `main` 提交哈希（本地扩展提交经 GitHub compare 判领先，失败回退 `raw.githubusercontent.../main/manifest.json` 的 `version` 与本地 `__APP_VERSION__` 对比），自动检查不节流（每次打开面板都执行），关于页按钮为手动触发，有更新 `toast + 横幅`，无更新静默（手动时提示已是最新）
 
 ## 提交与发布
 
