@@ -1,4 +1,4 @@
-import { o, a, b, c, d, e } from "./index-COoKzRZA.js";
+import { o, a, b, c, d, e } from "./index-lsqvxWNF.js";
 export {
   o as onActivate,
   a as onDelete,
