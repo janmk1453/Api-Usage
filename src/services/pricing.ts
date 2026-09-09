@@ -1,4 +1,5 @@
-import { PRICING, DEFAULT_PEAK_HOURS, FLASH_PRICE_CUTOFF, FLASH_OLD_PRICING } from '../constants/pricing';
+import { PRICING, DEFAULT_PEAK_HOURS, PRICE_HISTORY } from '../constants/pricing';
+import type { PriceSegment } from '../constants/pricing';
 import type { Settings } from '../types/settings';
 import { isPeakHour as isPeakHourRaw, isWeekendDay } from '../utils/date';
 import { formatMoney as _formatMoney } from './currency';
@@ -52,6 +53,9 @@ export function getPricing(model: string, settings: Settings) {
       };
     }
   }
+  // 无自定义时返回当前时间命中段的价格（未来段不影响当前展示）
+  const seg = findSegment(m, Date.now());
+  if (seg) return { usePeakPricing: seg.usePeakPricing !== false, offpeak: seg.offpeak, peak: seg.peak };
   return base;
 }
 
@@ -76,7 +80,23 @@ export function isPeakHour(timestamp: number, settings: Settings): boolean {
 }
 
 // 1:1 calcCost（含周末豁免、仅 deepseek* 峰谷、useNewPricing/newPricingDate）
-// 2026-09-10 12:00+08:00 起 flash 默认内置价自动切换为 0.02/1/4（峰 2×），该时间前沿用旧价 0.05/1.5/4.5（峰 2×）；自定义价格优先不回退
+// 多段价格：按记录 timestamp 命中 PRICE_HISTORY 中 timestamp >= since 的最后一段；
+// 自定义价格优先不回退；段自带 peakHours 优先于用户当前设置（历史峰谷规则不随当前设置漂移）
+// 未来段（since 为未来时间）预置后自动生效，当前记录不受影响
+function findSegment(normalizedModel: string, uTs: number): PriceSegment | null {
+  const segs = (PRICE_HISTORY as any)[normalizedModel] as PriceSegment[] | undefined;
+  if (!segs || !segs.length) return null;
+  let hit: PriceSegment | null = null;
+  for (const s of segs) {
+    if (uTs >= s.since) hit = s;
+    else break;
+  }
+  return hit;
+}
+function peakHoursFor(seg: PriceSegment | null, settings: Settings): any {
+  if (seg?.peakHours?.length) return seg.peakHours;
+  return (settings && (settings as any).peakHours) || (DEFAULT_PEAK_HOURS as any);
+}
 function hasCustomForModel(model: string, settings: Settings): boolean {
   const raw = model || 'deepseek-v4-flash';
   const m = normalizeModel(raw);
@@ -85,8 +105,10 @@ function hasCustomForModel(model: string, settings: Settings): boolean {
 }
 function effectivePricingFor(model: string, uTs: number, settings: Settings, base: any) {
   const m = normalizeModel(model || 'deepseek-v4-flash');
-  if (m === 'deepseek-v4-flash' && !hasCustomForModel(model, settings) && uTs < FLASH_PRICE_CUTOFF) {
-    return { usePeakPricing: true, offpeak: FLASH_OLD_PRICING.offpeak, peak: FLASH_OLD_PRICING.peak } as any;
+  if (hasCustomForModel(model, settings)) return base;
+  const seg = findSegment(m, uTs);
+  if (seg) {
+    return { usePeakPricing: seg.usePeakPricing !== false, offpeak: seg.offpeak, peak: seg.peak } as any;
   }
   return base;
 }
@@ -99,11 +121,13 @@ export function calcCost(
   if (!hasPriceForModel(model, settings)) return { input: 0, output: 0, total: 0, priceType: 'old' };
   const basePricing = getPricing(model, settings);
   const pricing = effectivePricingFor(model, u.timestamp, settings, basePricing);
+  const segForHours = hasCustomForModel(model, settings) ? null : findSegment(normalizeModel(model), u.timestamp);
+  const hours = peakHoursFor(segForHours, settings);
   const useNewPricing = settings.useNewPricing && u.timestamp >= settings.newPricingDate;
   let p: any;
   let priceType: string;
   if (useNewPricing && pricing.usePeakPricing !== false && isDeepSeekOfficialModel(model)) {
-    const isPeak = isPeakHour(u.timestamp, settings);
+    const isPeak = isPeakHourRaw(u.timestamp, hours);
     p = isPeak ? pricing.peak : pricing.offpeak;
     priceType = isPeak ? 'new-peak' : 'new-offpeak';
   } else {
@@ -124,10 +148,12 @@ export function calcSavings(
   if (!hasPriceForModel(model, settings)) return 0;
   const basePricing = getPricing(model, settings);
   const pricing = effectivePricingFor(model, u.timestamp, settings, basePricing);
+  const segForHours = hasCustomForModel(model, settings) ? null : findSegment(normalizeModel(model), u.timestamp);
+  const hours = peakHoursFor(segForHours, settings);
   const useNewPricing = settings.useNewPricing && u.timestamp >= settings.newPricingDate;
   let p: any;
   if (useNewPricing && pricing.usePeakPricing !== false && isDeepSeekOfficialModel(model)) {
-    p = isPeakHour(u.timestamp, settings) ? pricing.peak : pricing.offpeak;
+    p = isPeakHourRaw(u.timestamp, hours) ? pricing.peak : pricing.offpeak;
   } else p = pricing.offpeak;
   return ((u.prompt_cache_hit_tokens || 0) / 1e6) * (p.miss - p.hit);
 }
