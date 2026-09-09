@@ -109,7 +109,7 @@ node --check index.js
 - **改面板/导航**：`src/ui/panel.ts`（全屏+`positionPanel` 定位置换+`applyCollapsed`）+ `style.css`（`#aus-mobile-header` 汉堡 + `display` 切换，无过渡）
 - **改概览/统计**：`src/ui/overview.ts` + `src/ui/stats-view.ts`（三维度 time∩model∩chat 过滤）+ `src/data/computed.ts`（computeChatStats 单源）+ `src/ui/heatmap.ts`（概览热力图，GitHub 风格，近 2 年，块内滑动）
 - **改历史详情/占比**：`src/ui/panel.ts`（`renderHistory` 内联展开 + 三色条，费用按币种）
-- **改同步/导入**：`src/services/sync.ts` + `src/services/import-export.ts`（单一历史）+ `src/services/pricing-sync.ts`（models.dev 价格同步）
+- **改同步/导入**：`src/services/sync.ts` + `src/services/import-export.ts`（单一历史，导出经 `getAllHistory` 含冷库全量，导入超 `MAX_HISTORY` 自动回冷库）+ `src/services/pricing-sync.ts`（models.dev 价格同步）
 - **改预测**：`src/ui/forecast-view.ts`（自选对话胶囊、能耗/预测/敏感度联动）+ `src/stats/forecast.ts`
 
 ## 调试规范（Playwright MCP）
