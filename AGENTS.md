@@ -2,7 +2,7 @@
 
 ## 概览
 
-SillyTavern 原生扩展 `API用量统计`（`manifest: api-usage-stat@3.0.3`），从 `deepseek-tavern-script` 酒馆助手脚本迁移而来。
+SillyTavern 原生扩展 `API用量统计`（清单 `api-usage-stat`，版本以 `manifest.json#version` 为准，文档内禁止写死版本号），从 `deepseek-tavern-script` 酒馆助手脚本迁移而来。
 
 - **真源**：`D:/Desktop/DeepSeek/Api-Usage`（独立仓库 `https://github.com/janmk1453/Api-Usage`，`main` 稳定 / `dev` 测试 双分支）
 - **归档**：`pr/RE3.0/迁移重构计划.md` 仅作设计归档，不作为开发目录
@@ -127,10 +127,11 @@ node --check index.js
 
 - **分支模型**：`main` 稳定发布（普通用户跟踪）/ `dev` 日常测试（开发者自用酒馆中手动将扩展更新源切为 `dev`）；`beta` 可选作小范围公测。禁止直接 `push main` 做测试，所有功能先在 `dev` 验证。
 - **版本真源**：`manifest.json#version` 唯一来源，`vite.config.ts` 注入 `__APP_VERSION__`，侧边栏/关于/导出/检查更新均取此值，禁止硬编码 `v3.0.x`
-- **开发→测试→发布**：
+- **版本号推进管控（最高优先级，强制）**：没有用户当轮的**明确要求**，一律禁止推进版本号。禁止执行 `npm version`，禁止改动 `manifest.json#version` 与 `package.json#version`，禁止新建或移动 `vX.Y.Z` 标签，禁止合并到 `main`，禁止执行 `git push origin main --tags`。`dev` 上完成需求只做常规提交与 `git push origin dev`；版本推进、打标签、合并 `main` 与正式发布均属发布动作，必须等用户明确下达（一次明确要求只覆盖当轮那一次发布），未获要求时即使功能已通过 `typecheck + build + node --check` 也不得自行推进。
+- **开发→测试→发布**（其中第 2、3 步仅在用户明确要求发布时执行）：
   1. `feature/* → dev`：`npm run typecheck && build && node --check index.js` → `git push origin dev` → 酒馆切 `dev` 分支真机测试
-  2. `dev → main`：测试通过后 `git checkout main && git merge --no-ff dev && npm version patch/minor && git tag vX.Y.Z && git push origin main --tags`
-  3. 回滚：`main` 上 `git revert` 并递增 `patch`
+  2. `dev → main`（**仅用户明确要求时**）：`git checkout main && git merge --no-ff dev` → 推进 `patch/minor`（改 `manifest.json`+`package.json`）→ `git tag vX.Y.Z` → `git push origin main --tags`
+  3. 回滚（**仅用户明确要求时**）：`main` 上 `git revert` 并按需递增 `patch`
 - **产物铁律**：`Vite lib` 产物为 `index.js(入口) + index-*.js/update-*.js + ECharts 9 块`，`index.js` 为 `import "./index-*.js"` 存根，**必须**随 `index.js` 一并 `git add` 提交，缺一则 `404 index-*.js` 导致 `[object Event]` 加载失败并中断后续扩展；`style.css` 同理直出，`outDir: '.' + emptyOutDir:false` 禁止误删。
 - **主题一致性**：`defaultSettings.theme` 默认为 `light`，与隔离样式浅色保持一致；旧用户无 `theme` 字段时迁移补 `light`，禁止在更新中强制覆为 `dark`
 - **检查更新**：`src/services/update.ts` 优先对比 `main` 提交哈希（本地扩展提交经 GitHub compare 判领先，失败回退 `raw.githubusercontent.../main/manifest.json` 的 `version` 与本地 `__APP_VERSION__` 对比），自动检查 1h 节流（`localStorage + extensionSettings._updateLastCheck`，1 小时内最多一次），关于页按钮为手动触发（不受节流），有更新 `toast + 横幅`，已是最新/检查失败时自动与手动均 `toast` 提示
@@ -146,7 +147,7 @@ git add src/ style.css manifest.json index.js index-*.js update-*.js Axis-*.js .
 git commit -m "feat/fix: ..."
 git push origin dev   # 仅 dev，用户无感知
 
-# 正式发布（dev 已验证）
+# 正式发布（仅在用户明确要求时执行；未获要求禁止推进版本号、合并 main、打标签）
 git checkout main && git merge --no-ff dev
 npm version patch  # 或 minor，自动改 manifest+package 并打 tag
 # 确认侧边栏版本号已跟随 __APP_VERSION__ 更新
@@ -154,8 +155,8 @@ npm run build && git add . && git commit --amend --no-edit
 git push origin main --tags
 ```
 
-- **自动提交规则**：完整完成一项独立修改后必须立即执行提交推送，无需等待用户二次确认。单项定义：通过 `typecheck + build + node --check` 且满足用户当轮需求即视为完成。提交需包含 `src/` 源码与 `index.js/style.css` 产物，`commit` 信息遵循 `fix/feat/docs:` 前缀并简述本次变更点。
-- **提交时机（强制）**：所有修改必须在完整完成并验证通过后最后统一提交，禁止边改边提、分步提交或提前推送。提交前必须依次通过 `npm run typecheck`、`npm run build`、`node --check index.js`，且 `index.js/style.css` 与源码保持一致后，一次性 `git add src/ style.css manifest.json index.js` 并推送，单轮需求仅产生一次提交。
+- **自动提交规则**：完整完成一项独立修改后必须立即执行提交推送，无需等待用户二次确认。单项定义：通过 `typecheck + build + node --check` 且满足用户当轮需求即视为完成。提交需包含 `src/` 源码与 `index.js/style.css` 产物，`commit` 信息遵循 `fix/feat/docs:` 前缀并简述本次变更点。该自动提交仅限 `dev` 的常规提交，不含版本号推进、合并 `main` 与打标签。
+- **提交时机（强制）**：所有修改必须在完整完成并验证通过后最后统一提交，禁止边改边提、分步提交或提前推送。提交前必须依次通过 `npm run typecheck`、`npm run build`、`node --check index.js`，且 `index.js/style.css` 与源码保持一致后，一次性 `git add src/ style.css manifest.json index.js` 并推送，单轮需求仅产生一次提交。同样禁止在未获明确要求时改动版本号字段。
 - 产物 `index.js 150k` + `ECharts` 分包（`Axis-*` 等 9 个）随仓库提交以保离线加载，`style.css` 直出，勿手改产物；`vite.config.ts` 已 `define: { process.env.NODE_ENV, __APP_VERSION__ }` 防浏览器 `process` 报错且实现版本单源化
 - `RE3.0` 仅同步产物备份，不作为提交源
 
