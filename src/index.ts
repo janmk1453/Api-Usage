@@ -126,6 +126,8 @@ async function init() {
     try { ensureWandEntry(); } catch {}
     try { createPeakDot(); } catch {}
     try { refreshUI(); } catch {}
+    // 版本更新后自动清理历史遗留：早期版本把 models.dev 全量模型写进了“模型与价格”列表
+    try { import('./services/pricing-sync').then((m: any) => m.markLegacySyncedModels?.()).catch(() => {}); } catch {}
   };
   if ((globalThis as any).SillyTavern?.getContext) mount();
   else window.setTimeout(mount, 1500);

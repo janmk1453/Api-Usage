@@ -4,6 +4,11 @@ export type CustomModel = {
   usePeakPricing?: boolean;
   offpeak: { hit: string | number; miss: string | number; output: string | number };
   peak: { hit: string | number; miss: string | number; output: string | number };
+  /**
+   * models.dev 自动同步写入的价格条目：仅参与计价，默认不在“模型与价格”列表中显示。
+   * 用户在设置页手工改价或调峰谷后，该标记会被移除（转为普通自定义模型）。
+   */
+  synced?: boolean;
 };
 
 export type WebdavSettings = {
@@ -25,6 +30,10 @@ export type PricingSyncSettings = {
   lastSync: number | null;
   lastRateFetch: number | null;
   recalcOnSync: boolean;
+  /** 是否在“模型与价格”列表中展开显示已同步模型（默认 false，仅参与计价） */
+  showSyncedModels: boolean;
+  /** 旧数据同步模型标记迁移版本：0 表示尚未处理（用于版本更新后自动清理列表） */
+  syncedMarkVersion: number;
 };
 
 export type HistoryScope = 'all' | 'current';
@@ -97,6 +106,8 @@ export const defaultSettings = (): Settings => ({
     lastSync: null,
     lastRateFetch: null,
     recalcOnSync: false,
+    showSyncedModels: false,
+    syncedMarkVersion: 0,
   },
 });
 

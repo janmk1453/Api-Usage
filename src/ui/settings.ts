@@ -9,8 +9,9 @@ import { recalcAllCosts } from '../services/interception';
 import { generateDebugBatch } from '../services/debug';
 import { getDisplayCurrency } from '../services/currency';
 import { getPricing as resolvePricing } from '../services/pricing';
-import { syncPricingFromModelsDev, previewSync, fetchModelsDevCatalog } from '../services/pricing-sync';
+import { syncPricingFromModelsDev, previewSync, fetchModelsDevCatalog, removeSyncedModels, isSyncedCustomModel } from '../services/pricing-sync';
 import { fetchLiveRate } from '../services/currency';
+import { toast } from '../utils/logger';
 
 function esc(s: string) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
@@ -68,12 +69,12 @@ export function renderSettings(doc: Document) {
       <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">高峰时段</span><button id="aus-btn-add-peak-hour" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 添加</button></div><div id="aus-peak-hours-list" style="display:grid;gap:6px;margin-top:8px;"></div><div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;">支持跨天（如 22:00-02:00），周末自动低谷。</div></div>
 
       <!-- 模型与价格（可折叠，默认收起） -->
-      <div class="ds-card"><div id="aus-models-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型与价格（<span id="aus-model-price-unit">${getDisplayCurrency().code}/百万 tokens</span>）</span><div style="display:flex;align-items:center;gap:8px;"><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 自定义模型</button><span id="aus-models-toggle" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;user-select:none;line-height:1;">▼ 展开</span></div></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
+      <div class="ds-card"><div id="aus-models-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型与价格（<span id="aus-model-price-unit">${getDisplayCurrency().code}/百万 tokens</span>）</span><div style="display:flex;align-items:center;gap:8px;"><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 自定义模型</button><span id="aus-models-toggle" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;user-select:none;line-height:1;">▼ 展开</span></div></div><div id="aus-models-sync-note" style="display:none;margin-top:8px;padding:8px 10px;border:1px dashed var(--ds-border);border-radius:10px;background:var(--ds-sidebar-bg);font-size:11px;color:var(--ds-text-2);line-height:1.6;"></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
 
       <!-- 模型价格自动同步（models.dev） -->
       <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型价格自动同步（models.dev）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-pricing-sync-enabled" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-pricing-sync-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
         <div id="aus-pricing-sync-panel" style="display:${s.pricingSync?.enabled ? 'grid':'none'};margin-top:10px;gap:10px;">
-          <div style="font-size:11px;color:var(--ds-text-2);line-height:1.6;">开启后所有价格、余额、图表将以 <b style="color:var(--ds-text);">美元 $/USD</b> 展示（按汇率动态换算），自动从 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 拉取全量模型价格，人民币时仍以 ¥/CNY 展示，数据源为 USD/百万 tokens，已按峰谷规则本地合成 DeepSeek 峰价（2×谷）。功能默认关闭。</div>
+          <div style="font-size:11px;color:var(--ds-text-2);line-height:1.6;">开启后所有价格、余额、图表将以 <b style="color:var(--ds-text);">美元 $/USD</b> 展示（按汇率动态换算），自动从 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 拉取全量模型价格，人民币时仍以 ¥/CNY 展示，数据源为 USD/百万 tokens，已按峰谷规则本地合成 DeepSeek 峰价（2×谷）。功能默认关闭。<br />同步来的模型价格<b style="color:var(--ds-text);">不会出现在上方“模型与价格”列表中</b>（仅参与计费，可在该卡片内展开查看）；<b style="color:var(--ds-text);">关闭本开关会自动移除这些同步价格</b>。</div>
           <div style="display:flex;align-items:center;justify-content:space-between;position:relative;"><span style="font-size:12px;color:var(--ds-text);">同步模式</span><div id="aus-pricing-sync-mode-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:12px;cursor:pointer;"><span id="aus-pricing-sync-mode-label" style="font-weight:600;color:var(--ds-text);">仅新增</span><span style="font-size:10px;">▼</span></div><div id="aus-pricing-sync-mode-dropdown" style="display:none;position:absolute;top:40px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
             <div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">汇率 USD→CNY</div><input id="aus-exchange-rate" type="number" step="0.0001" min="0" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div>
@@ -424,12 +425,23 @@ export function renderSettings(doc: Document) {
       const lastSync = ps.lastSync ? new Date(ps.lastSync).toLocaleString('zh-CN') : '未同步';
       syncStatus.textContent = `上次同步：${lastSync} · 模式：${modeMap[ps.mode]||ps.mode}`;
     }
-    if (enabledEl) enabledEl.onchange = () => {
+    if (enabledEl) enabledEl.onchange = async () => {
       (state.settings as any).pricingSync.enabled = enabledEl.checked;
       if (slider) slider.style.left = enabledEl.checked ? '23px' : '3px';
       if (panel) panel.style.display = enabledEl.checked ? 'grid' : 'none';
+      // 关闭自动同步时清理同步进来的模型价格（否则会以隐藏态残留，影响计价口径）
+      let removed = 0;
+      if (!enabledEl.checked) {
+        try {
+          const m: any = await import('../services/pricing-sync');
+          // 先补做旧数据识别（避免未标记的残留项漏删），再统一移除同步条目
+          try { await m.markLegacySyncedModels?.({ skipRerender: true }); } catch {}
+          removed = m.removeSyncedModels ? m.removeSyncedModels() : 0;
+        } catch { removed = 0; }
+      }
       saveHot({ settings: state.settings });
       try { import('../services/currency').then(m=> (m as any).restartRateTimer?.()); import('../services/pricing-sync').then(m=> (m as any).restartPricingSyncTimer?.()); } catch {}
+      if (removed) { renderModelsEditor(doc); fillDebugModelSelect(doc); recalcAllCosts(); toast('success', `已移除 ${removed} 个同步模型价格`); }
       try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
       const unitEl = doc.getElementById('aus-model-price-unit') as HTMLElement | null;
       if (unitEl) { try{  unitEl.textContent = getDisplayCurrency().code + '/百万 tokens'; }catch{} }
@@ -555,6 +567,8 @@ function renderModelsEditor(doc: Document) {
   if (!list) return;
   const builtin = Object.keys(PRICING).filter((m) => HIDDEN_PRICING_MODELS.indexOf(m) === -1);
   const cms: any[] = (state.settings as any).customModels || [];
+  const showSynced = (state.settings as any).pricingSync?.showSyncedModels === true;
+  const syncedCount = cms.filter((c: any) => isSyncedCustomModel(c)).length;
   const rows: string[] = [];
   for (const m of builtin) {
     const p: any = getPricing(m);
@@ -562,12 +576,15 @@ function renderModelsEditor(doc: Document) {
     rows.push(modelRow(m, p, true, usePeak));
   }
   for (const e of cms) {
+    // models.dev 同步模型默认隐藏，仅参与计价（可在提示条中展开查看）
+    if (isSyncedCustomModel(e) && !showSynced) continue;
     if (e?.model && builtin.indexOf(e.model) === -1 && HIDDEN_PRICING_MODELS.indexOf(e.model) === -1) {
       const p: any = getPricing(e.model);
-      rows.push(modelRow(e.model, p, false, p.usePeakPricing !== false));
+      rows.push(modelRow(e.model, p, false, p.usePeakPricing !== false, isSyncedCustomModel(e)));
     }
   }
   list.innerHTML = rows.join('');
+  renderModelsSyncNote(doc, syncedCount, showSynced);
   list.querySelectorAll('input[type="checkbox"].aus-cm-peak').forEach((el: any) => {
     el.onchange = () => {
       const row = el.closest('[data-model]') as HTMLElement;
@@ -604,7 +621,44 @@ function renderModelsEditor(doc: Document) {
   };
 }
 
-function modelRow(model: string, p: any, isBuiltin: boolean, usePeak: boolean) {
+/** 已同步模型提示条：说明隐藏原因，并提供展开查看 / 一次性移除入口 */
+function renderModelsSyncNote(doc: Document, syncedCount: number, showSynced: boolean) {
+  const note = doc.getElementById('aus-models-sync-note') as HTMLElement | null;
+  if (!note) return;
+  if (!syncedCount) { note.style.display = 'none'; note.innerHTML = ''; return; }
+  note.style.display = 'block';
+  note.innerHTML = `已从 models.dev 同步 <b style="color:var(--ds-text);">${syncedCount}</b> 个模型价格，默认隐藏不显示（仍照常参与计费）。
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+      <button id="aus-toggle-synced-models" style="padding:5px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">${showSynced ? '隐藏同步模型' : '显示同步模型'}</button>
+      <button id="aus-clear-synced-models" style="padding:5px 10px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:11px;cursor:pointer;">移除全部同步模型</button>
+    </div>`;
+  const toggleBtn = doc.getElementById('aus-toggle-synced-models') as HTMLElement | null;
+  if (toggleBtn) toggleBtn.onclick = () => {
+    (state.settings as any).pricingSync.showSyncedModels = !showSynced;
+    saveHot({ settings: state.settings });
+    renderModelsEditor(doc);
+  };
+  const clearBtn = doc.getElementById('aus-clear-synced-models') as HTMLElement | null;
+  if (clearBtn) {
+    let armed = false;
+    clearBtn.onclick = () => {
+      if (!armed) {
+        armed = true;
+        clearBtn.textContent = '确认移除？再点一次';
+        setTimeout(() => { armed = false; try { clearBtn.textContent = '移除全部同步模型'; } catch {} }, 4000);
+        return;
+      }
+      const n = removeSyncedModels();
+      renderModelsEditor(doc);
+      fillDebugModelSelect(doc);
+      recalcAllCosts();
+      try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+      if (n) toast('success', `已移除 ${n} 个同步模型价格`);
+    };
+  }
+}
+
+function modelRow(model: string, p: any, isBuiltin: boolean, usePeak: boolean, synced = false) {
   const cur = (()=>{ try{ return getDisplayCurrency(); } catch{ return {code:'CNY',symbol:'¥',rate:1} as any; } })();
   const toDisplay = (v:any)=> {
     if (v===''||v==null) return '';
@@ -614,9 +668,10 @@ function modelRow(model: string, p: any, isBuiltin: boolean, usePeak: boolean) {
     return String(Math.round(d*10000)/10000);
   };
   const hit = (v: any) => v !== undefined && v !== '' ? toDisplay(v) : '';
-  return `<div data-model="${esc(model)}" data-builtin="${isBuiltin ? '1':'0'}" style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;background:var(--ds-card-inner);display:grid;gap:8px;">
+  return `<div data-model="${esc(model)}" data-builtin="${isBuiltin ? '1':'0'}" data-synced="${synced ? '1':'0'}" style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;background:var(--ds-card-inner);display:grid;gap:8px;">
     <div style="display:flex;align-items:center;gap:8px;">
       <input value="${esc(model)}" ${isBuiltin ? 'readonly' : ''} style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:${isBuiltin ? 'var(--ds-sidebar-bg)':'var(--ds-card-inner)'};font-size:12px;" />
+      ${synced ? '<span title="来自 models.dev 自动同步" style="flex-shrink:0;padding:2px 8px;border-radius:999px;background:var(--ds-green-bg);color:var(--ds-green);font-size:10px;font-weight:600;">已同步</span>' : ''}
       <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" class="aus-cm-peak" ${usePeak ? 'checked':''} /> 峰谷</label>
       ${isBuiltin ? '' : '<button data-del="1" style="padding:4px 8px;border:1px solid var(--ds-red-border);border-radius:6px;background:var(--ds-red-bg);color:var(--ds-red);font-size:11px;cursor:pointer;">删除</button>'}
     </div>
@@ -630,7 +685,7 @@ function modelRow(model: string, p: any, isBuiltin: boolean, usePeak: boolean) {
         ${field('peak.hit', hit(p.peak.hit))}${field('peak.miss', hit(p.peak.miss))}${field('peak.output', hit(p.peak.output))}
       </div>
     </div>
-    <div style="font-size:10px;color:var(--ds-text-3);">单位：${cur.code}/百万 tokens（${cur.symbol}）· 内置模型不可删除，价格可覆盖</div>
+    <div style="font-size:10px;color:var(--ds-text-3);">单位：${cur.code}/百万 tokens（${cur.symbol}）· ${synced ? '同步模型：手动改价后转为自定义模型' : '内置模型不可删除，价格可覆盖'}</div>
   </div>`;
 }
 function field(key: string, val: any) {
@@ -655,7 +710,7 @@ function readRow(row: HTMLElement) {
 function upsertCustom(model: string, patch: any) {
   const cms: any[] = (state.settings as any).customModels;
   let found = cms.find((c: any) => c.model === model);
-  if (found) Object.assign(found, patch);
+  if (found) { Object.assign(found, patch); delete found.synced; } // 手动调整即转为自定义模型，不再隐藏
   else cms.push({ model, usePeakPricing: patch.usePeakPricing, offpeak: {}, peak: {} });
 }
 function saveCustomRow(model: string, prices: any, isBuiltin: boolean) {
@@ -670,6 +725,7 @@ function saveCustomRow(model: string, prices: any, isBuiltin: boolean) {
   if (isBuiltin && prices.usePeakPricing && same) {
     if (idx !== -1) cms.splice(idx, 1);
   } else {
+    // 手工改价即视为自定义模型：不带 synced 标记，保持可见
     const entry = { model, usePeakPricing: prices.usePeakPricing, offpeak: prices.offpeak, peak: prices.peak };
     if (idx !== -1) cms[idx] = entry; else cms.push(entry);
   }
@@ -684,7 +740,7 @@ function fillDebugModelSelect(doc: Document) {
   const sel = doc.getElementById('aus-debug-model') as HTMLSelectElement | null;
   if (!sel) return;
   const models = Object.keys(PRICING)
-    .concat(((state.settings as any).customModels || []).map((c: any) => c.model).filter(Boolean))
+    .concat(((state.settings as any).customModels || []).filter((c: any) => !isSyncedCustomModel(c)).map((c: any) => c.model).filter(Boolean))
     .filter((m: string) => HIDDEN_PRICING_MODELS.indexOf(m) === -1);
   const uniq = Array.from(new Set(models));
   sel.innerHTML = uniq.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
