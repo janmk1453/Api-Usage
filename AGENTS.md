@@ -128,10 +128,13 @@ node --check index.js
 - **分支模型**：`main` 稳定发布（普通用户跟踪）/ `dev` 日常测试（开发者自用酒馆中手动将扩展更新源切为 `dev`）；`beta` 可选作小范围公测。禁止直接 `push main` 做测试，所有功能先在 `dev` 验证。
 - **版本真源**：`manifest.json#version` 唯一来源，`vite.config.ts` 注入 `__APP_VERSION__`，侧边栏/关于/导出/检查更新均取此值，禁止硬编码 `v3.0.x`
 - **版本号推进管控（最高优先级，强制）**：没有用户当轮的**明确要求**，一律禁止推进版本号。禁止执行 `npm version`，禁止改动 `manifest.json#version` 与 `package.json#version`，禁止新建或移动 `vX.Y.Z` 标签，禁止合并到 `main`，禁止执行 `git push origin main --tags`。`dev` 上完成需求只做常规提交与 `git push origin dev`；版本推进、打标签、合并 `main` 与正式发布均属发布动作，必须等用户明确下达（一次明确要求只覆盖当轮那一次发布），未获要求时即使功能已通过 `typecheck + build + node --check` 也不得自行推进。
-- **开发→测试→发布**（其中第 2、3 步仅在用户明确要求发布时执行）：
+- **合并 ≠ 授权推进版本（最高优先级，强制，2026-09-10 事故后追加）**：用户说“合并到主线 / 合并 main / 发布”**只授权合并本身**，不等于授权推进版本号或打标签。除非用户在同一轮**明确说出目标版本号**（如“推进到 3.0.8”）或明确要求“推进 patch/minor 版本号并打标签”，否则合并 `main` 时 `manifest.json#version`、`package.json#version`、`package-lock.json#version` 一律保持原值，禁止 `git tag`、禁止 `git push --tags`，只做 `git merge --no-ff dev` + 常规 `git push origin main`。授权范围按**字面最小化**解释：任何“看起来顺理成章”的配套动作都不构成授权，宁可少做一步、等用户补一句。
+- **违规回退义务（最高优先级，强制）**：一旦擅自推进了版本号或打了标签，必须立刻回退：把 `manifest.json` + `package.json` + `package-lock.json` 改回原版本号 → `npm run typecheck && npm run build && node --check index.js` 重建产物 → 提交推送 → 删除本地与远端多余标签（`git tag -d vX.Y.Z`、`git push origin :refs/tags/vX.Y.Z`），并在回复中明确说明已回退。
+- **开发→测试→发布**（合并与版本推进是两次独立授权，缺一不可省略）：
   1. `feature/* → dev`：`npm run typecheck && build && node --check index.js` → `git push origin dev` → 酒馆切 `dev` 分支真机测试
-  2. `dev → main`（**仅用户明确要求时**）：`git checkout main && git merge --no-ff dev` → 推进 `patch/minor`（改 `manifest.json`+`package.json`）→ `git tag vX.Y.Z` → `git push origin main --tags`
-  3. 回滚（**仅用户明确要求时**）：`main` 上 `git revert` 并按需递增 `patch`
+  2. `dev → main`（**仅用户当轮明确要求“合并”时**）：`git checkout main && git merge --no-ff dev` → 解决 `index.js` 等产物冲突 → `git push origin main`；**到合并为止**，版本号与标签保持原样
+  3. 版本推进 + 打标签（**必须由用户当轮单独明确授权**）：`manifest.json` + `package.json` + `package-lock.json` 同步改为目标版本 → `npm run build` 重建产物 → 提交 → `git tag vX.Y.Z` → `git push origin main --tags`
+  4. 回滚（**仅用户明确要求时**）：按用户指定版本回退并重建产物，多余标签在本地与远端一并删除
 - **产物铁律**：`Vite lib` 产物为 `index.js(入口) + index-*.js/update-*.js + ECharts 9 块`，`index.js` 为 `import "./index-*.js"` 存根，**必须**随 `index.js` 一并 `git add` 提交，缺一则 `404 index-*.js` 导致 `[object Event]` 加载失败并中断后续扩展；`style.css` 同理直出，`outDir: '.' + emptyOutDir:false` 禁止误删。
 - **主题一致性**：`defaultSettings.theme` 默认为 `light`，与隔离样式浅色保持一致；旧用户无 `theme` 字段时迁移补 `light`，禁止在更新中强制覆为 `dark`
 - **检查更新**：`src/services/update.ts` 优先对比 `main` 提交哈希（本地扩展提交经 GitHub compare 判领先，失败回退 `raw.githubusercontent.../main/manifest.json` 的 `version` 与本地 `__APP_VERSION__` 对比），自动检查 1h 节流（`localStorage + extensionSettings._updateLastCheck`，1 小时内最多一次），关于页按钮为手动触发（不受节流），有更新 `toast + 横幅`，已是最新/检查失败时自动与手动均 `toast` 提示
@@ -147,11 +150,15 @@ git add src/ style.css manifest.json index.js index-*.js update-*.js Axis-*.js .
 git commit -m "feat/fix: ..."
 git push origin dev   # 仅 dev，用户无感知
 
-# 正式发布（仅在用户明确要求时执行；未获要求禁止推进版本号、合并 main、打标签）
+# ① 合并主线（用户说“合并到主线”时只做这一步，版本号与标签一律保持原样）
 git checkout main && git merge --no-ff dev
-npm version patch  # 或 minor，自动改 manifest+package 并打 tag
-# 确认侧边栏版本号已跟随 __APP_VERSION__ 更新
-npm run build && git add . && git commit --amend --no-edit
+git push origin main
+
+# ② 推进版本 + 打标签（必须由用户当轮单独明确授权，例如“推进到 3.0.8”“发一个 patch”）
+#    未获独立授权时禁止执行下面任何一行
+# 同步改 manifest.json + package.json + package-lock.json 的 version 为目标版本号
+npm run build && git add . && git commit -m "chore: 版本号推进至 vX.Y.Z 并重建产物"
+git tag vX.Y.Z
 git push origin main --tags
 ```
 
