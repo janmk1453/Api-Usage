@@ -1,3 +1,10 @@
 node_modules/
 .DS_Store
 *.log
+
+# Playwright 定位产物（仅用于问题定位，不入库）
+.playwright-mcp/
+
+# 本地草稿文档
+deepseek-ui-reference.md
+趋势预测初步计划.md
