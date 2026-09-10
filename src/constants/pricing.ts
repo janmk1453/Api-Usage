@@ -1,9 +1,23 @@
-// 2026-09-10 12:00+08:00 起 flash 新定价：空闲 0.02/1/4，高峰 2×（0.04/2/8）；该时间前沿用旧价
-// 同时刻起：新增 deepseek-v4.1-flash（V4F 迭代替代版，同价）；deepseek-v4-pro 请求路由至 V4.1 Flash，按同价计费
+// 定价时间线（北京时间）：
+// 2026-09-10 12:00 起 flash 新定价：空闲 0.02/1/4，高峰 2×（0.04/2/8）；该时间前沿用旧价
+// 2026-09-14 12:00 起 V4 Pro 下线，请求路由至 V4.1 Flash（deepseek-flash），按 V4.1 Flash 价格计费；峰谷时间不变
 export const FLASH_PRICE_CUTOFF = new Date('2026-09-10T12:00:00+08:00').getTime();
+export const V4_PRO_RETIRE_CUTOFF = new Date('2026-09-14T12:00:00+08:00').getTime();
 export const FLASH_OLD_PRICING = {
   offpeak: { hit: 0.05, miss: 1.5, output: 4.5 },
   peak: { hit: 0.10, miss: 3.0, output: 9.0 },
+} as const;
+
+// V4 Pro 独立定价（2026-09-14 12:00 下线前有效）
+export const V4_PRO_PRICING = {
+  offpeak: { hit: 0.15, miss: 4.5, output: 13.5 },
+  peak: { hit: 0.30, miss: 9.0, output: 27.0 },
+} as const;
+
+// V4.1 Flash（现役模型名 deepseek-flash）定价：空闲 0.02/1/4，高峰 2×
+export const V41_FLASH_PRICING = {
+  offpeak: { hit: 0.02, miss: 1, output: 4 },
+  peak: { hit: 0.04, miss: 2, output: 8 },
 } as const;
 
 // 多段价格历史：按模型 + 生效时间戳命中段，支持过去/现在/未来任意多段
@@ -17,21 +31,25 @@ export type PriceSegment = {
   label?: string;
 };
 export const PRICING = {
+  // 旧 flash 模型名：已替代不外显，保留计价能力供历史记录使用
   'deepseek-v4-flash': {
     usePeakPricing: true,
-    offpeak: { hit: 0.02, miss: 1, output: 4 },
-    peak: { hit: 0.04, miss: 2, output: 8 },
+    offpeak: { ...V41_FLASH_PRICING.offpeak },
+    peak: { ...V41_FLASH_PRICING.peak },
   },
-  'deepseek-v4.1-flash': {
+  // V4.1 Flash 现役模型名（原 deepseek-v4.1-flash 更名而来）
+  'deepseek-flash': {
     usePeakPricing: true,
-    offpeak: { hit: 0.02, miss: 1, output: 4 },
-    peak: { hit: 0.04, miss: 2, output: 8 },
+    offpeak: { ...V41_FLASH_PRICING.offpeak },
+    peak: { ...V41_FLASH_PRICING.peak },
   },
+  // V4 Pro：2026-09-14 12:00 前按独立价，之后路由至 V4.1 Flash 并按其价计费
   'deepseek-v4-pro': {
     usePeakPricing: true,
-    offpeak: { hit: 0.02, miss: 1, output: 4 },
-    peak: { hit: 0.04, miss: 2, output: 8 },
+    offpeak: { ...V4_PRO_PRICING.offpeak },
+    peak: { ...V4_PRO_PRICING.peak },
   },
+  // 已下架：不外显，保留计价能力供历史记录使用
   'deepseek-v4-flash-vision-exp': {
     usePeakPricing: true,
     offpeak: { hit: 0.05, miss: 1.5, output: 4.5 },
@@ -68,29 +86,29 @@ export const PRICE_HISTORY: Record<string, PriceSegment[]> = {
       label: '2026-09-10 12:00 起新价',
     },
   ],
-  'deepseek-v4.1-flash': [
+  'deepseek-flash': [
     {
       since: 0,
-      offpeak: { ...PRICING['deepseek-v4.1-flash'].offpeak },
-      peak: { ...PRICING['deepseek-v4.1-flash'].peak },
+      offpeak: { ...PRICING['deepseek-flash'].offpeak },
+      peak: { ...PRICING['deepseek-flash'].peak },
       usePeakPricing: true,
-      label: 'V4F 迭代替代版，与 2026-09-10 新规同价',
+      label: 'V4.1 Flash：空闲 0.02/1/4，高峰 2×',
     },
   ],
   'deepseek-v4-pro': [
     {
       since: 0,
-      offpeak: { hit: 0.15, miss: 4.5, output: 13.5 },
-      peak: { hit: 0.30, miss: 9.0, output: 27.0 },
+      offpeak: { ...V4_PRO_PRICING.offpeak },
+      peak: { ...V4_PRO_PRICING.peak },
       usePeakPricing: true,
-      label: '2026-09-10 12:00 前旧价',
+      label: '2026-09-14 12:00 前 V4 Pro 独立定价',
     },
     {
-      since: FLASH_PRICE_CUTOFF,
-      offpeak: { ...PRICING['deepseek-v4-pro'].offpeak },
-      peak: { ...PRICING['deepseek-v4-pro'].peak },
+      since: V4_PRO_RETIRE_CUTOFF,
+      offpeak: { ...PRICING['deepseek-flash'].offpeak },
+      peak: { ...PRICING['deepseek-flash'].peak },
       usePeakPricing: true,
-      label: '2026-09-10 12:00 起路由至 V4.1 Flash，按新规计价',
+      label: '2026-09-14 12:00 起 V4 Pro 下线路由至 V4.1 Flash，按其价计费',
     },
   ],
   'deepseek-v4-flash-vision-exp': [
@@ -103,8 +121,13 @@ export const PRICE_HISTORY: Record<string, PriceSegment[]> = {
   ],
 };
 
-// 已被替代、不再外显价格设置的内置模型：计价与历史数据不受影响，仅设置页价格编辑器隐藏
-export const HIDDEN_PRICING_MODELS: string[] = ['deepseek-v4-flash'];
+// 已被替代/下架、不再外显价格设置的内置模型：计价与历史数据不受影响，仅设置页价格编辑器与调试模型下拉隐藏
+// deepseek-v4.1-flash 为 V4.1 Flash 的旧键，仅作历史记录与旧自定义价兼容
+export const HIDDEN_PRICING_MODELS: string[] = [
+  'deepseek-v4-flash',
+  'deepseek-v4-flash-vision-exp',
+  'deepseek-v4.1-flash',
+];
 
 export const MAX_HISTORY = 2000;
 // 保留最近 5 条记录的完整数据（消息/请求体/完整响应原文）

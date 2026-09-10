@@ -8,6 +8,7 @@ import { PRICING, DEFAULT_PEAK_HOURS, HIDDEN_PRICING_MODELS } from '../constants
 import { recalcAllCosts } from '../services/interception';
 import { generateDebugBatch } from '../services/debug';
 import { getDisplayCurrency } from '../services/currency';
+import { getPricing as resolvePricing } from '../services/pricing';
 import { syncPricingFromModelsDev, previewSync, fetchModelsDevCatalog } from '../services/pricing-sync';
 import { fetchLiveRate } from '../services/currency';
 
@@ -675,25 +676,21 @@ function saveCustomRow(model: string, prices: any, isBuiltin: boolean) {
   saveHot({ settings: state.settings }); recalcAllCosts(); try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
 }
 function getPricing(model: string) {
-  const m = model || 'deepseek-v4-flash';
-  const base: any = (PRICING as any)[m] || (PRICING as any)['deepseek-v4-flash'];
-  for (const cm of (state.settings as any).customModels || []) {
-    if (cm?.model === m) {
-      const merge = (b: any, c: any) => ({ hit: c?.hit !== '' && c?.hit !== undefined ? parseFloat(c.hit) : b.hit, miss: c?.miss !== '' && c?.miss !== undefined ? parseFloat(c.miss) : b.miss, output: c?.output !== '' && c?.output !== undefined ? parseFloat(c.output) : b.output });
-      return { usePeakPricing: cm.usePeakPricing !== false, offpeak: merge(base.offpeak, cm.offpeak), peak: merge(base.peak, cm.peak) };
-    }
-  }
-  return base;
+  const m = model || 'deepseek-flash';
+  // 走统一计价入口：按 PRICE_HISTORY 当前命中段展示（V4 Pro 2026-09-14 12:00 后自动显示 V4.1 Flash 价）
+  try { return resolvePricing(m, state.settings); } catch { return (PRICING as any)[m] || (PRICING as any)['deepseek-v4-flash']; }
 }
 function fillDebugModelSelect(doc: Document) {
   const sel = doc.getElementById('aus-debug-model') as HTMLSelectElement | null;
   if (!sel) return;
-  const models = Object.keys(PRICING).concat(((state.settings as any).customModels || []).map((c: any) => c.model).filter(Boolean));
+  const models = Object.keys(PRICING)
+    .concat(((state.settings as any).customModels || []).map((c: any) => c.model).filter(Boolean))
+    .filter((m: string) => HIDDEN_PRICING_MODELS.indexOf(m) === -1);
   const uniq = Array.from(new Set(models));
   sel.innerHTML = uniq.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
   const cur = (state.settings as any).debugModel;
   if (uniq.indexOf(cur) === -1) {
-    (state.settings as any).debugModel = uniq[0] || 'deepseek-v4-flash';
+    (state.settings as any).debugModel = uniq[0] || 'deepseek-flash';
     try { saveHot({ settings: state.settings }); } catch {}
   }
   sel.value = (state.settings as any).debugModel;

@@ -26,19 +26,29 @@ function mergePrices(base: { hit: number; miss: number; output: number }, custom
 
 const MODEL_ALIASES: Record<string,string> = {
   'deepseek-v4-flash-vision': 'deepseek-v4-flash-vision-exp',
+  // 2026-09 更名：V4.1 Flash 统一为 deepseek-flash，历史记录与旧自定义价继续命中
+  'deepseek-v4.1-flash': 'deepseek-flash',
 };
 
-function normalizeModel(model: string): string {
+export function normalizeModel(model: string): string {
   if (!model) return 'deepseek-v4-flash';
   let m = String(model).trim().replace(/^\[[^\]]+\]/, '').trim();
   const low = m.toLowerCase();
   if ((MODEL_ALIASES as any)[low]) return (MODEL_ALIASES as any)[low];
+  if (low === 'deepseek-flash') return 'deepseek-flash';
   if (low === 'deepseek-v4-flash') return 'deepseek-v4-flash';
-  if (low === 'deepseek-v4.1-flash') return 'deepseek-v4.1-flash';
   if (low === 'deepseek-v4-pro') return 'deepseek-v4-pro';
   if (low === 'deepseek-v4-flash-vision-exp') return 'deepseek-v4-flash-vision-exp';
   // 精确匹配后不再回落 deepseek -> flash，保持原名以便无价提示
   return m;
+}
+
+// 自定义价匹配：按归一化键匹配，兼容 renamed 模型（如 deepseek-v4.1-flash → deepseek-flash）
+function matchCustom(cm: any, m: string, raw?: string): boolean {
+  if (!cm || !cm.model) return false;
+  if (raw && cm.model === raw) return true;
+  if (cm.model === m) return true;
+  return normalizeModel(cm.model) === m;
 }
 
 export function getPricing(model: string, settings: Settings) {
@@ -46,7 +56,7 @@ export function getPricing(model: string, settings: Settings) {
   const m = normalizeModel(raw);
   const base: any = (PRICING as any)[m] || (PRICING as any)['deepseek-v4-flash'];
   for (const cm of settings.customModels || []) {
-    if (cm?.model === raw || cm?.model === m) {
+    if (matchCustom(cm, m, raw)) {
       return {
         usePeakPricing: cm.usePeakPricing !== false,
         offpeak: mergePrices(base.offpeak, cm.offpeak),
@@ -64,7 +74,7 @@ export function hasPriceForModel(model: string, settings: Settings): boolean {
   const raw = model || 'deepseek-v4-flash';
   const m = normalizeModel(raw);
   if ((PRICING as any)[m]) return true;
-  for (const cm of settings.customModels || []) if (cm?.model === raw || cm?.model === m) return true;
+  for (const cm of settings.customModels || []) if (matchCustom(cm, m, raw)) return true;
   // 仅 deepseek 系有内置价，非 deepseek 若未自定义则无价
   return false;
 }
@@ -101,7 +111,7 @@ function peakHoursFor(seg: PriceSegment | null, settings: Settings): any {
 function hasCustomForModel(model: string, settings: Settings): boolean {
   const raw = model || 'deepseek-v4-flash';
   const m = normalizeModel(raw);
-  for (const cm of (settings as any).customModels || []) if (cm?.model === raw || cm?.model === m) return true;
+  for (const cm of (settings as any).customModels || []) if (matchCustom(cm, m, raw)) return true;
   return false;
 }
 function effectivePricingFor(model: string, uTs: number, settings: Settings, base: any) {
