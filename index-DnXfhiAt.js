@@ -31,16 +31,26 @@ const defaultSettings = () => ({
     recalcOnSync: false
   }
 });
+const FLASH_PRICE_CUTOFF = (/* @__PURE__ */ new Date("2026-09-10T12:00:00+08:00")).getTime();
+const FLASH_OLD_PRICING = {
+  offpeak: { hit: 0.05, miss: 1.5, output: 4.5 },
+  peak: { hit: 0.1, miss: 3, output: 9 }
+};
 const PRICING = {
   "deepseek-v4-flash": {
     usePeakPricing: true,
-    offpeak: { hit: 0.05, miss: 1.5, output: 4.5 },
-    peak: { hit: 0.1, miss: 3, output: 9 }
+    offpeak: { hit: 0.02, miss: 1, output: 4 },
+    peak: { hit: 0.04, miss: 2, output: 8 }
+  },
+  "deepseek-v4.1-flash": {
+    usePeakPricing: true,
+    offpeak: { hit: 0.02, miss: 1, output: 4 },
+    peak: { hit: 0.04, miss: 2, output: 8 }
   },
   "deepseek-v4-pro": {
     usePeakPricing: true,
-    offpeak: { hit: 0.15, miss: 4.5, output: 13.5 },
-    peak: { hit: 0.3, miss: 9, output: 27 }
+    offpeak: { hit: 0.02, miss: 1, output: 4 },
+    peak: { hit: 0.04, miss: 2, output: 8 }
   },
   "deepseek-v4-flash-vision-exp": {
     usePeakPricing: true,
@@ -52,6 +62,58 @@ const DEFAULT_PEAK_HOURS = [
   { start: "09:00", end: "12:00" },
   { start: "14:00", end: "18:00" }
 ];
+const PRICE_HISTORY = {
+  "deepseek-v4-flash": [
+    {
+      since: 0,
+      offpeak: { ...FLASH_OLD_PRICING.offpeak },
+      peak: { ...FLASH_OLD_PRICING.peak },
+      usePeakPricing: true,
+      label: "2026-09-10 12:00 前旧价"
+    },
+    {
+      since: FLASH_PRICE_CUTOFF,
+      offpeak: { ...PRICING["deepseek-v4-flash"].offpeak },
+      peak: { ...PRICING["deepseek-v4-flash"].peak },
+      usePeakPricing: true,
+      label: "2026-09-10 12:00 起新价"
+    }
+  ],
+  "deepseek-v4.1-flash": [
+    {
+      since: 0,
+      offpeak: { ...PRICING["deepseek-v4.1-flash"].offpeak },
+      peak: { ...PRICING["deepseek-v4.1-flash"].peak },
+      usePeakPricing: true,
+      label: "V4F 迭代替代版，与 2026-09-10 新规同价"
+    }
+  ],
+  "deepseek-v4-pro": [
+    {
+      since: 0,
+      offpeak: { hit: 0.15, miss: 4.5, output: 13.5 },
+      peak: { hit: 0.3, miss: 9, output: 27 },
+      usePeakPricing: true,
+      label: "2026-09-10 12:00 前旧价"
+    },
+    {
+      since: FLASH_PRICE_CUTOFF,
+      offpeak: { ...PRICING["deepseek-v4-pro"].offpeak },
+      peak: { ...PRICING["deepseek-v4-pro"].peak },
+      usePeakPricing: true,
+      label: "2026-09-10 12:00 起路由至 V4.1 Flash，按新规计价"
+    }
+  ],
+  "deepseek-v4-flash-vision-exp": [
+    {
+      since: 0,
+      offpeak: { ...PRICING["deepseek-v4-flash-vision-exp"].offpeak },
+      peak: { ...PRICING["deepseek-v4-flash-vision-exp"].peak },
+      usePeakPricing: true
+    }
+  ]
+};
+const HIDDEN_PRICING_MODELS = ["deepseek-v4-flash"];
 const MAX_HISTORY = 2e3;
 const DETAIL_KEEP = 5;
 const STORAGE_KEYS = {
@@ -490,7 +552,7 @@ function isWeekendDay(timestamp) {
   const day = new Date(t).getDay();
   return day === 6 || day === 0;
 }
-function isPeakHour$1(timestamp, peakHours) {
+function isPeakHour(timestamp, peakHours) {
   if (isWeekendDay(timestamp)) return false;
   const d = new Date(timestamp);
   const totalMinutes = d.getHours() * 60 + d.getMinutes();
@@ -663,6 +725,7 @@ function normalizeModel(model) {
   const low = m.toLowerCase();
   if (MODEL_ALIASES[low]) return MODEL_ALIASES[low];
   if (low === "deepseek-v4-flash") return "deepseek-v4-flash";
+  if (low === "deepseek-v4.1-flash") return "deepseek-v4.1-flash";
   if (low === "deepseek-v4-pro") return "deepseek-v4-pro";
   if (low === "deepseek-v4-flash-vision-exp") return "deepseek-v4-flash-vision-exp";
   return m;
@@ -680,6 +743,8 @@ function getPricing$1(model, settings) {
       };
     }
   }
+  const seg = findSegment(m, Date.now());
+  if (seg) return { usePeakPricing: seg.usePeakPricing !== false, offpeak: seg.offpeak, peak: seg.peak };
   return base;
 }
 function hasPriceForModel(model, settings) {
@@ -694,19 +759,47 @@ function isDeepSeekOfficialModel(m) {
   const norm = normalizeModel(m);
   return norm.toLowerCase().indexOf("deepseek") === 0 || String(m).toLowerCase().includes("deepseek");
 }
-function isPeakHour(timestamp, settings) {
-  const hours = settings && settings.peakHours || DEFAULT_PEAK_HOURS;
-  return isPeakHour$1(timestamp, hours);
+function findSegment(normalizedModel, uTs) {
+  const segs = PRICE_HISTORY[normalizedModel];
+  if (!segs || !segs.length) return null;
+  let hit = null;
+  for (const s of segs) {
+    if (uTs >= s.since) hit = s;
+    else break;
+  }
+  return hit;
+}
+function peakHoursFor(seg, settings) {
+  if (seg?.peakHours?.length) return seg.peakHours;
+  return settings && settings.peakHours || DEFAULT_PEAK_HOURS;
+}
+function hasCustomForModel(model, settings) {
+  const raw = model || "deepseek-v4-flash";
+  const m = normalizeModel(raw);
+  for (const cm of settings.customModels || []) if (cm?.model === raw || cm?.model === m) return true;
+  return false;
+}
+function effectivePricingFor(model, uTs, settings, base) {
+  const m = normalizeModel(model || "deepseek-v4-flash");
+  if (hasCustomForModel(model, settings)) return base;
+  const seg = findSegment(m, uTs);
+  if (seg) {
+    return { usePeakPricing: seg.usePeakPricing !== false, offpeak: seg.offpeak, peak: seg.peak };
+  }
+  return base;
 }
 function calcCost(u, settings) {
   const model = u.model || "deepseek-v4-flash";
   if (!hasPriceForModel(model, settings)) return { input: 0, output: 0, total: 0, priceType: "old" };
-  const pricing = getPricing$1(model, settings);
+  const basePricing = getPricing$1(model, settings);
+  const pricing = effectivePricingFor(model, u.timestamp, settings, basePricing);
+  const segForHours = hasCustomForModel(model, settings) ? null : findSegment(normalizeModel(model), u.timestamp);
+  const hours = peakHoursFor(segForHours, settings);
   const useNewPricing = settings.useNewPricing && u.timestamp >= settings.newPricingDate;
   let p;
   let priceType;
   if (useNewPricing && pricing.usePeakPricing !== false && isDeepSeekOfficialModel(model)) {
-    const isPeak2 = isPeakHour(u.timestamp, settings);
+    const isPeak2 = isPeakHour(u.timestamp, hours);
     p = isPeak2 ? pricing.peak : pricing.offpeak;
     priceType = isPeak2 ? "new-peak" : "new-offpeak";
   } else {
@@ -721,11 +814,14 @@ function calcCost(u, settings) {
 function calcSavings(u, settings) {
   const model = u.model || "deepseek-v4-flash";
   if (!hasPriceForModel(model, settings)) return 0;
-  const pricing = getPricing$1(model, settings);
+  const basePricing = getPricing$1(model, settings);
+  const pricing = effectivePricingFor(model, u.timestamp, settings, basePricing);
+  const segForHours = hasCustomForModel(model, settings) ? null : findSegment(normalizeModel(model), u.timestamp);
+  const hours = peakHoursFor(segForHours, settings);
   const useNewPricing = settings.useNewPricing && u.timestamp >= settings.newPricingDate;
   let p;
   if (useNewPricing && pricing.usePeakPricing !== false && isDeepSeekOfficialModel(model)) {
-    p = isPeakHour(u.timestamp, settings) ? pricing.peak : pricing.offpeak;
+    p = isPeakHour(u.timestamp, hours) ? pricing.peak : pricing.offpeak;
   } else p = pricing.offpeak;
   return (u.prompt_cache_hit_tokens || 0) / 1e6 * (p.miss - p.hit);
 }
@@ -3413,7 +3509,7 @@ function renderPeakHoursEditor(doc) {
 function renderModelsEditor(doc) {
   const list = doc.getElementById("aus-custom-models-list");
   if (!list) return;
-  const builtin = Object.keys(PRICING);
+  const builtin = Object.keys(PRICING).filter((m) => HIDDEN_PRICING_MODELS.indexOf(m) === -1);
   const cms = state$2.settings.customModels || [];
   const rows = [];
   for (const m of builtin) {
@@ -3422,7 +3518,7 @@ function renderModelsEditor(doc) {
     rows.push(modelRow(m, p, true, usePeak));
   }
   for (const e of cms) {
-    if (e?.model && builtin.indexOf(e.model) === -1) {
+    if (e?.model && builtin.indexOf(e.model) === -1 && HIDDEN_PRICING_MODELS.indexOf(e.model) === -1) {
       const p = getPricing(e.model);
       rows.push(modelRow(e.model, p, false, p.usePeakPricing !== false));
     }
@@ -6359,14 +6455,14 @@ function renderForecastView() {
     const colors = { A: "#16a34a", B: "#22c55e", C: "#84cc16", D: "#eab308", E: "#f97316", F: "#ef4444", G: "#dc2626" };
     const grades = ["A", "B", "C", "D", "E", "F", "G"];
     const idx = grades.indexOf(grade);
-    badgeHost.innerHTML = `<div style="display:flex;gap:12px;align-items:center;">
-      <div style="display:flex;flex-direction:column;gap:2px;">
+    badgeHost.innerHTML = `<div style="display:flex;gap:12px;align-items:center;justify-content:flex-start;">
+      <div style="display:flex;flex-direction:column;gap:2px;flex:none;">
         ${grades.map((g, i) => `<div style="display:flex;align-items:center;gap:6px;"><span style="width:28px;height:22px;border-radius:4px;background:${colors[g]};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;">${g}</span>${i === idx ? `<span style="color:${colors[g]};font-weight:700;">◀ 当前</span>` : ""}</div>`).join("")}
       </div>
-        <div style="flex:1;display:grid;gap:6px;font-size:11px;">
-        <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">增速 Δ</span><span style="font-weight:600;">${Math.round(r.metrics.delta).toLocaleString()} tok/轮</span></div>
-        <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输出</span><span style="font-weight:600;">${Math.round(r.metrics.out).toLocaleString()} tok/轮</span></div>
-        <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">效率</span><span style="font-weight:600;">${(r.metrics.efficiency * 100).toFixed(1)}%</span></div>
+        <div style="flex:0 1 300px;min-width:210px;max-width:340px;display:grid;gap:6px;font-size:11px;">
+        <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:var(--ds-text-2);">增速 Δ</span><span style="font-weight:600;white-space:nowrap;">${Math.round(r.metrics.delta).toLocaleString()} tok/轮</span></div>
+        <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:var(--ds-text-2);">输出</span><span style="font-weight:600;white-space:nowrap;">${Math.round(r.metrics.out).toLocaleString()} tok/轮</span></div>
+        <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:var(--ds-text-2);">效率</span><span style="font-weight:600;white-space:nowrap;">${(r.metrics.efficiency * 100).toFixed(1)}%</span></div>
         <div style="font-size:10px;color:var(--ds-text-3);margin-top:4px;">综合评分 ${r.score.toFixed(0)} · ${grade} 级 · 样本 ${effectiveHist.length} 轮 · ${esc$1(getForecastLabel(hist))}</div>
       </div>
     </div>`;
@@ -7313,7 +7409,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-PFpoJuS_.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-B_dTuLde.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -7366,7 +7462,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-PFpoJuS_.js").then((m) => m.maybeAutoCheck());
+    import("./update-B_dTuLde.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

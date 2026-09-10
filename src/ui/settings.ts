@@ -4,10 +4,11 @@ import { saveApiKey } from '../services/balance';
 import { doSyncNow, saveWebdavPass } from '../services/sync';
 import { decryptKey } from '../utils/crypto';
 import { applyTheme } from '../services/theme';
-import { PRICING, DEFAULT_PEAK_HOURS } from '../constants/pricing';
+import { PRICING, DEFAULT_PEAK_HOURS, HIDDEN_PRICING_MODELS } from '../constants/pricing';
 import { recalcAllCosts } from '../services/interception';
 import { generateDebugBatch } from '../services/debug';
 import { getDisplayCurrency } from '../services/currency';
+import { getPricing as resolvePricing } from '../services/pricing';
 import { syncPricingFromModelsDev, previewSync, fetchModelsDevCatalog } from '../services/pricing-sync';
 import { fetchLiveRate } from '../services/currency';
 
@@ -552,7 +553,7 @@ function renderPeakHoursEditor(doc: Document) {
 function renderModelsEditor(doc: Document) {
   const list = doc.getElementById('aus-custom-models-list') as HTMLElement | null;
   if (!list) return;
-  const builtin = Object.keys(PRICING);
+  const builtin = Object.keys(PRICING).filter((m) => HIDDEN_PRICING_MODELS.indexOf(m) === -1);
   const cms: any[] = (state.settings as any).customModels || [];
   const rows: string[] = [];
   for (const m of builtin) {
@@ -561,7 +562,7 @@ function renderModelsEditor(doc: Document) {
     rows.push(modelRow(m, p, true, usePeak));
   }
   for (const e of cms) {
-    if (e?.model && builtin.indexOf(e.model) === -1) {
+    if (e?.model && builtin.indexOf(e.model) === -1 && HIDDEN_PRICING_MODELS.indexOf(e.model) === -1) {
       const p: any = getPricing(e.model);
       rows.push(modelRow(e.model, p, false, p.usePeakPricing !== false));
     }
@@ -675,25 +676,21 @@ function saveCustomRow(model: string, prices: any, isBuiltin: boolean) {
   saveHot({ settings: state.settings }); recalcAllCosts(); try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
 }
 function getPricing(model: string) {
-  const m = model || 'deepseek-v4-flash';
-  const base: any = (PRICING as any)[m] || (PRICING as any)['deepseek-v4-flash'];
-  for (const cm of (state.settings as any).customModels || []) {
-    if (cm?.model === m) {
-      const merge = (b: any, c: any) => ({ hit: c?.hit !== '' && c?.hit !== undefined ? parseFloat(c.hit) : b.hit, miss: c?.miss !== '' && c?.miss !== undefined ? parseFloat(c.miss) : b.miss, output: c?.output !== '' && c?.output !== undefined ? parseFloat(c.output) : b.output });
-      return { usePeakPricing: cm.usePeakPricing !== false, offpeak: merge(base.offpeak, cm.offpeak), peak: merge(base.peak, cm.peak) };
-    }
-  }
-  return base;
+  const m = model || 'deepseek-flash';
+  // 走统一计价入口：按 PRICE_HISTORY 当前命中段展示（V4 Pro 2026-09-14 12:00 后自动显示 V4.1 Flash 价）
+  try { return resolvePricing(m, state.settings); } catch { return (PRICING as any)[m] || (PRICING as any)['deepseek-v4-flash']; }
 }
 function fillDebugModelSelect(doc: Document) {
   const sel = doc.getElementById('aus-debug-model') as HTMLSelectElement | null;
   if (!sel) return;
-  const models = Object.keys(PRICING).concat(((state.settings as any).customModels || []).map((c: any) => c.model).filter(Boolean));
+  const models = Object.keys(PRICING)
+    .concat(((state.settings as any).customModels || []).map((c: any) => c.model).filter(Boolean))
+    .filter((m: string) => HIDDEN_PRICING_MODELS.indexOf(m) === -1);
   const uniq = Array.from(new Set(models));
   sel.innerHTML = uniq.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
   const cur = (state.settings as any).debugModel;
   if (uniq.indexOf(cur) === -1) {
-    (state.settings as any).debugModel = uniq[0] || 'deepseek-v4-flash';
+    (state.settings as any).debugModel = uniq[0] || 'deepseek-flash';
     try { saveHot({ settings: state.settings }); } catch {}
   }
   sel.value = (state.settings as any).debugModel;

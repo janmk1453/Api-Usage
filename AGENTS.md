@@ -33,18 +33,17 @@ Api-Usage/
 ├── templates/panel.html   # 预留 Handlebars
 ├── src/
 │   ├── index.ts           # 入口：repository.hydrate + 魔法棒注入 + 全屏面板 + 峰值圆点（ST 未就绪时轮询重试 installInterception）+ 汇率/定价格式同步定时器（24h）+ 延迟自动检查更新
-│   ├── constants/pricing.ts  # PRICING/DEFAULT_PEAK_HOURS/MAX_HISTORY/DETAIL_KEEP/STORAGE_KEYS + PRICING_SYNC_SOURCE/FALLBACK/DEFAULT_EXCHANGE_RATE
-│   ├── types/save.ts, settings.ts # settings 含 PricingSyncSettings{enabled,mode,exchangeRate,useLiveRate,autoIntervalHours,lastSync,lastRateFetch,recalcOnSync}
+│   ├── constants/pricing.ts  # PRICING/DEFAULT_PEAK_HOURS/MAX_HISTORY/DETAIL_KEEP/STORAGE_KEYS + PRICING_SYNC_SOURCE/FALLBACK/DEFAULT_EXCHANGE_RATE + PRICE_HISTORY/PriceSegment + FLASH_PRICE_CUTOFF(2026-09-10 12:00)/V4_PRO_RETIRE_CUTOFF(2026-09-14 12:00)（内置模型多段价格历史：deepseek-v4-flash 新旧两段、deepseek-v4-pro 独立价段+下线路由段、deepseek-flash 单段；V4.1 Flash 现役模型名为 deepseek-flash，V4 Pro 下线后按同价计费）│   ├── types/save.ts, settings.ts # settings 含 PricingSyncSettings{enabled,mode,exchangeRate,useLiveRate,autoIntervalHours,lastSync,lastRateFetch,recalcOnSync}
 │   ├── data/              # ★ 统一数据框架（所有存/取/算/展的唯一通路）
 │   │   ├── types.ts       # Snapshot/Aggregated/TimeRange/OverviewView/StatsView
 │   │   ├── repository.ts  # 唯一写入口：addEntry(5s指纹去重+finishReason)/recalcAll/replaceAll(默认合并+清洗)/hydrate（含 pricingSync 迁移）+ persist（剥离隐私字段）
 │   │   ├── computed.ts    # 唯一算入口：computeOverview/computeStats/getFilteredHistory/computeStatsFour + computeChatStats/getRecordedChats（对话维度聚合）
 │   │   └── events.ts      # DataEvents.UPDATED/HISTORY_ADDED/SETTINGS_CHANGED
 │   ├── store/index.ts, persistence.ts # 单一历史聚合（已废弃多存档，saves 仅作迁移兼容；append/getAllHistory 指纹去重 timestamp|model|total）
-│   ├── services/pricing.ts, interception.ts(fetch透传+TTFT/思维链/截断解析+指纹去重，GENERATION_ENDED主路径，install/uninstall幂等), balance.ts(余额 toast 按币种格式化), import-export.ts(单一历史+清洗), sync.ts(单一历史+清洗), debug.ts, theme.ts(applyTheme 同步 overlay), update.ts(检查更新，main 分支 manifest 对比，6h 节流), currency.ts(USD↔CNY 动态换算、getDisplayCurrency/formatMoney、fetchLiveRate 双源 24h), pricing-sync.ts(models.dev 拉取、USD→CNY*rate、峰谷 2×合成、add-missing/overwrite-unlocked/overwrite-all 预览与同步)
+│   ├── services/pricing.ts, interception.ts(fetch透传+TTFT/思维链/截断解析+指纹去重，GENERATION_ENDED主路径，install/uninstall幂等), balance.ts(余额 toast 按币种格式化), import-export.ts(单一历史+清洗), sync.ts(单一历史+清洗), debug.ts, theme.ts(applyTheme 同步 overlay), update.ts(检查更新，main 提交哈希优先、失败回退 manifest 版本对比，自动检查 1h 节流), currency.ts(USD↔CNY 动态换算、getDisplayCurrency/formatMoney、fetchLiveRate 双源 24h), pricing-sync.ts(models.dev 拉取、USD→CNY*rate、峰谷 2×合成、add-missing/overwrite-unlocked/overwrite-all 预览与同步)
 │   ├── stats/forecast.ts, energyScore.ts # 预测核心：分段回归/二次方程求 R，能耗评分 A-G
 │   ├── utils/date.ts, crypto.ts(XOR+UTF-8), logger.ts
-│   └── ui/panel.ts(全屏+absolute定位+DeepSeek式侧边栏display切换+汉堡+forecast 对话选择), overview.ts(双明细+8块2列+热力图+按对话统计表 cold 异步补全、动态币种), stats-view.ts(直输日期+三维度 time∩model∩chat+4小块+图表Y/X配置+费用轴按币种换算), chart-config.ts(Y 8×X 5 聚合), heatmap.ts(GitHub风格近2年Token热力图，块内横向滑动), forecast-view.ts(趋势预测 Beta，自选对话胶囊，能耗/预测/敏感度随选中对话联动), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情费用按币种), settings.ts(完整设置+不回显密钥+模型价格自动同步卡片，双向币种换算), extra-charts.ts(额外 6 图费用轴按币种换算), peak-dot.ts, customize.ts
+│   └── ui/panel.ts(全屏+absolute定位+DeepSeek式侧边栏display切换+汉堡+forecast 对话选择), overview.ts(双明细+8块2列+热力图+按对话统计表 cold 异步补全、动态币种), stats-view.ts(直输日期+三维度 time∩model∩chat+4小块+图表Y/X配置+费用轴按币种换算), chart-config.ts(Y 8×X 5 聚合), heatmap.ts(GitHub风格近2年Token热力图，块内横向滑动), forecast-view.ts(趋势预测 Beta，自选对话胶囊，能耗/预测/敏感度随选中对话联动，能耗信息列限宽 210~340px 紧贴等级条), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情费用按币种), settings.ts(完整设置+不回显密钥+模型价格自动同步卡片，双向币种换算), extra-charts.ts(额外 6 图费用轴按币种换算), peak-dot.ts, customize.ts
 ├── README.md
 └── LICENSE
 ```
@@ -93,7 +92,7 @@ node --check index.js
 - **能耗评分**：`src/stats/energyScore.ts` 6 指标加权（`Δ 25%/out 20%/效率 20%/命中 15%/截断 10%/思维链占比 10%`）→ `A-G`，冷启动绝对阈值表，随历史自动切分位；`forecast-view.ts` 中能耗标识已改为基于选中对话 `energyScore(effectiveHist,null)`，文案顯示选中对话名与样本数
 
 ### 设置（完整迁移原脚本）
-- `颜色模式（浅色/深色，胶囊下拉，`settings.theme` + `theme.ts:applyTheme` 即时切换，与用量统计·模型选择同款） / API 密钥 / 自动校准余额（开关+间隔）/ 自定义余额 / 新价格机制（开关+日期+今日）/ 高峰时段（可增删跨天，改后重算）/ 模型与价格（内置 3 模型可覆写+自定义增删，峰谷开关，三价 动态 `CNY/USD` 经 `getDisplayCurrency()`，输入框双向换算）/ 模型价格自动同步（`pricingSync.enabled` 默认关闭，模式 `add-missing/overwrite-unlocked/overwrite-all` 胶囊、汇率 `USD→CNY` 输入 + `useLiveRate` 每 24h 双源自动获取 + `autoIntervalHours`  + `recalcOnSync` + 立即同步/预览，`models.dev` 拉取 `USD→CNY*rate` 合成峰谷 `2×`）/ 调试（开关+hit/miss/output/model/date/batchCount+生成）/ 峰值圆点（开关+重置）/ WebDAV（url/user/pass/path/proxy+同步，`https` 强制，`pull-merge-push`）`，全部主题变量卡片，改后 `recalcAll`+`refreshUI`；货币切换时 `formatMoney(cny)` 全站即时换算（余额 toast 同步）
+- `颜色模式（浅色/深色，胶囊下拉，`settings.theme` + `theme.ts:applyTheme` 即时切换，与用量统计·模型选择同款） / API 密钥 / 自动校准余额（开关+间隔）/ 自定义余额 / 新价格机制（开关+日期+今日）/ 高峰时段（可增删跨天，改后重算）/ 模型与价格（外显内置模型 `deepseek-flash`（V4.1 Flash）与 `deepseek-v4-pro` 可覆写+自定义增删；`deepseek-v4-flash` 旧键、已下架 `deepseek-v4-flash-vision-exp` 隐藏不外显但保留计价+自定义覆盖仍生效，`deepseek-v4.1-flash` 作为 `deepseek-flash` 旧键仅历史记录兼容；设置页价格随价格段自动切换，峰谷开关，三价 动态 `CNY/USD` 经 `getDisplayCurrency()`，输入框双向换算）/ 模型价格自动同步（`pricingSync.enabled` 默认关闭，模式 `add-missing/overwrite-unlocked/overwrite-all` 胶囊、汇率 `USD→CNY` 输入 + `useLiveRate` 每 24h 双源自动获取 + `autoIntervalHours`  + `recalcOnSync` + 立即同步/预览，`models.dev` 拉取 `USD→CNY*rate` 合成峰谷 `2×`）/ 调试（开关+hit/miss/output/model/date/batchCount+生成，模型下拉同步隐藏已下架/替代模型）/ 峰值圆点（开关+重置）/ WebDAV（url/user/pass/path/proxy+同步，`https` 强制，`pull-merge-push`）`，全部主题变量卡片，改后 `recalcAll`+`refreshUI`；货币切换时 `formatMoney(cny)` 全站即时换算（余额 toast 同步）
 
 ## 样式规范（DeepSeek 截图定版）
 
@@ -106,10 +105,11 @@ node --check index.js
 ## 常见任务
 
 - **改定价/峰谷**：`src/constants/pricing.ts` + `src/services/pricing.ts`（纯函数，`isPeakHour(ts, peakHours)` 不读全局）+ `src/services/currency.ts`（币种换算、24h 汇率）+ `src/services/pricing-sync.ts`（models.dev 同步、2×峰谷合成）
+- **加价格段（多段定价）**：`PRICE_HISTORY[模型].push({since: 生效时间戳, offpeak, peak, usePeakPricing?, peakHours?, label?})`（按 `since` 升序，命中 `timestamp>=since` 最后一段，未来段同样写法）；`findSegment/effectivePricingFor` 按记录时间查段，`calcCost/calcSavings` 段规则峰谷优先（无段规则回落用户设置），`getPricing` 取当前命中段展示，`recalcAll` 逐条按各自时间重算故统计/图表/详情自动正确；自定义模型价优先不回退
 - **改面板/导航**：`src/ui/panel.ts`（全屏+`positionPanel` 定位置换+`applyCollapsed`）+ `style.css`（`#aus-mobile-header` 汉堡 + `display` 切换，无过渡）
 - **改概览/统计**：`src/ui/overview.ts` + `src/ui/stats-view.ts`（三维度 time∩model∩chat 过滤）+ `src/data/computed.ts`（computeChatStats 单源）+ `src/ui/heatmap.ts`（概览热力图，GitHub 风格，近 2 年，块内滑动）
 - **改历史详情/占比**：`src/ui/panel.ts`（`renderHistory` 内联展开 + 三色条，费用按币种）
-- **改同步/导入**：`src/services/sync.ts` + `src/services/import-export.ts`（单一历史）+ `src/services/pricing-sync.ts`（models.dev 价格同步）
+- **改同步/导入**：`src/services/sync.ts` + `src/services/import-export.ts`（单一历史，导出经 `getAllHistory` 含冷库全量，导入超 `MAX_HISTORY` 自动回冷库）+ `src/services/pricing-sync.ts`（models.dev 价格同步）
 - **改预测**：`src/ui/forecast-view.ts`（自选对话胶囊、能耗/预测/敏感度联动）+ `src/stats/forecast.ts`
 
 ## 调试规范（Playwright MCP）
@@ -133,7 +133,7 @@ node --check index.js
   3. 回滚：`main` 上 `git revert` 并递增 `patch`
 - **产物铁律**：`Vite lib` 产物为 `index.js(入口) + index-*.js/update-*.js + ECharts 9 块`，`index.js` 为 `import "./index-*.js"` 存根，**必须**随 `index.js` 一并 `git add` 提交，缺一则 `404 index-*.js` 导致 `[object Event]` 加载失败并中断后续扩展；`style.css` 同理直出，`outDir: '.' + emptyOutDir:false` 禁止误删。
 - **主题一致性**：`defaultSettings.theme` 默认为 `light`，与隔离样式浅色保持一致；旧用户无 `theme` 字段时迁移补 `light`，禁止在更新中强制覆为 `dark`
-- **检查更新**：`src/services/update.ts` 固定对比 `raw.githubusercontent.../main/manifest.json` 的 `version` 与本地 `__APP_VERSION__`，自动检查 `6h` 节流（`localStorage + extensionSettings._updateLastCheck`），关于页按钮为手动触发（忽略节流），有更新 `toast + 横幅`，无更新静默（手动时提示已是最新）
+- **检查更新**：`src/services/update.ts` 优先对比 `main` 提交哈希（本地扩展提交经 GitHub compare 判领先，失败回退 `raw.githubusercontent.../main/manifest.json` 的 `version` 与本地 `__APP_VERSION__` 对比），自动检查 1h 节流（`localStorage + extensionSettings._updateLastCheck`，1 小时内最多一次），关于页按钮为手动触发（不受节流），有更新 `toast + 横幅`，已是最新/检查失败时自动与手动均 `toast` 提示
 
 ## 提交与发布
 

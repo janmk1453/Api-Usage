@@ -161,14 +161,14 @@ export function renderForecastView(){
     const colors: Record<string,string> = { A:'#16a34a', B:'#22c55e', C:'#84cc16', D:'#eab308', E:'#f97316', F:'#ef4444', G:'#dc2626' };
     const grades: string[] = ['A','B','C','D','E','F','G'];
     const idx = grades.indexOf(grade);
-    badgeHost.innerHTML = `<div style="display:flex;gap:12px;align-items:center;">
-      <div style="display:flex;flex-direction:column;gap:2px;">
+    badgeHost.innerHTML = `<div style="display:flex;gap:12px;align-items:center;justify-content:flex-start;">
+      <div style="display:flex;flex-direction:column;gap:2px;flex:none;">
         ${grades.map((g,i)=>`<div style="display:flex;align-items:center;gap:6px;"><span style="width:28px;height:22px;border-radius:4px;background:${colors[g]};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;">${g}</span>${i===idx?`<span style="color:${colors[g]};font-weight:700;">◀ 当前</span>`:''}</div>`).join('')}
       </div>
-        <div style="flex:1;display:grid;gap:6px;font-size:11px;">
-        <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">增速 Δ</span><span style="font-weight:600;">${Math.round(r.metrics.delta).toLocaleString()} tok/轮</span></div>
-        <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输出</span><span style="font-weight:600;">${Math.round(r.metrics.out).toLocaleString()} tok/轮</span></div>
-        <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">效率</span><span style="font-weight:600;">${(r.metrics.efficiency*100).toFixed(1)}%</span></div>
+        <div style="flex:0 1 300px;min-width:210px;max-width:340px;display:grid;gap:6px;font-size:11px;">
+        <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:var(--ds-text-2);">增速 Δ</span><span style="font-weight:600;white-space:nowrap;">${Math.round(r.metrics.delta).toLocaleString()} tok/轮</span></div>
+        <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:var(--ds-text-2);">输出</span><span style="font-weight:600;white-space:nowrap;">${Math.round(r.metrics.out).toLocaleString()} tok/轮</span></div>
+        <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:var(--ds-text-2);">效率</span><span style="font-weight:600;white-space:nowrap;">${(r.metrics.efficiency*100).toFixed(1)}%</span></div>
         <div style="font-size:10px;color:var(--ds-text-3);margin-top:4px;">综合评分 ${r.score.toFixed(0)} · ${grade} 级 · 样本 ${effectiveHist.length} 轮 · ${esc(getForecastLabel(hist))}</div>
       </div>
     </div>`;
