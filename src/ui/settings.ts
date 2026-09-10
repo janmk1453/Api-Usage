@@ -69,7 +69,7 @@ export function renderSettings(doc: Document) {
       <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">高峰时段</span><button id="aus-btn-add-peak-hour" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 添加</button></div><div id="aus-peak-hours-list" style="display:grid;gap:6px;margin-top:8px;"></div><div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;">支持跨天（如 22:00-02:00），周末自动低谷。</div></div>
 
       <!-- 模型与价格（可折叠，默认收起） -->
-      <div class="ds-card"><div id="aus-models-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型与价格（<span id="aus-model-price-unit">${getDisplayCurrency().code}/百万 tokens</span>）</span><div style="display:flex;align-items:center;gap:8px;"><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 自定义模型</button><span id="aus-models-toggle" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;user-select:none;line-height:1;">▼ 展开</span></div></div><div id="aus-models-sync-note" style="display:none;margin-top:8px;padding:8px 10px;border:1px dashed var(--ds-border);border-radius:10px;background:var(--ds-sidebar-bg);font-size:11px;color:var(--ds-text-2);line-height:1.6;"></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
+      <div class="ds-card"><div id="aus-models-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型与价格（<span id="aus-model-price-unit">${getDisplayCurrency().code}/百万 tokens</span>）</span><div style="display:flex;align-items:center;gap:8px;"><button id="aus-btn-clear-custom-models" style="padding:6px 10px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:11px;cursor:pointer;">清空自定义模型</button><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 自定义模型</button><span id="aus-models-toggle" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;user-select:none;line-height:1;">▼ 展开</span></div></div><div id="aus-models-sync-note" style="display:none;margin-top:8px;padding:8px 10px;border:1px dashed var(--ds-border);border-radius:10px;background:var(--ds-sidebar-bg);font-size:11px;color:var(--ds-text-2);line-height:1.6;"></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
 
       <!-- 模型价格自动同步（models.dev） -->
       <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型价格自动同步（models.dev）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-pricing-sync-enabled" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-pricing-sync-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
@@ -511,9 +511,34 @@ export function renderSettings(doc: Document) {
     if (toggleEl) toggleEl.onclick = (e: any) => { e.stopPropagation(); applyCollapsed((listEl?.style.display !== 'none') ? true : false); };
     if (headerEl) headerEl.onclick = (e: any) => {
       const target = e.target as HTMLElement;
-      if (target.closest('#aus-btn-add-model') || target.closest('#aus-models-toggle')) return;
+      if (target.closest('#aus-btn-add-model') || target.closest('#aus-btn-clear-custom-models') || target.closest('#aus-models-toggle')) return;
       applyCollapsed((listEl?.style.display !== 'none') ? true : false);
     };
+    // 清空自定义模型（折叠状态即可用）：二次确认后仅清 settings.customModels，
+    // 脚本内置的 PRICING / PRICE_HISTORY（含未外显模型与过去/现在/未来价格段）一律不动
+    const clearAllBtn = doc.getElementById('aus-btn-clear-custom-models') as HTMLElement | null;
+    if (clearAllBtn) {
+      let armed = false;
+      let armTimer: any = null;
+      const resetLabel = () => { armed = false; try { clearAllBtn.textContent = '清空自定义模型'; } catch {} };
+      clearAllBtn.onclick = () => {
+        if (!armed) {
+          armed = true;
+          clearAllBtn.textContent = '确认清空？再点一次';
+          armTimer = setTimeout(() => { armTimer = null; resetLabel(); }, 4000);
+          return;
+        }
+        if (armTimer) { clearTimeout(armTimer); armTimer = null; }
+        resetLabel();
+        const n = clearAllCustomModels();
+        renderModelsEditor(doc);
+        fillDebugModelSelect(doc);
+        recalcAllCosts();
+        try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+        if (n) toast('success', `已清空 ${n} 项自定义模型与价格，内置模型计价规则保持不变`);
+        else toast('info', '当前没有自定义模型可清空');
+      };
+    }
     if (addBtn) addBtn.addEventListener('click', () => {
       const wasCollapsed = listEl?.style.display === 'none';
       if (wasCollapsed) applyCollapsed(false);
@@ -712,6 +737,21 @@ function upsertCustom(model: string, patch: any) {
   let found = cms.find((c: any) => c.model === model);
   if (found) { Object.assign(found, patch); delete found.synced; } // 手动调整即转为自定义模型，不再隐藏
   else cms.push({ model, usePeakPricing: patch.usePeakPricing, offpeak: {}, peak: {} });
+}
+
+/**
+ * 清空全部自定义模型与覆盖价格（含 models.dev 同步项）。
+ * 仅清空 settings.customModels —— 脚本内置的 PRICING / PRICE_HISTORY 完全不动，
+ * 因此未外显模型（如已下架/旧键）以及过去/现在/未来的多段计价规则都照常生效。
+ */
+function clearAllCustomModels(): number {
+  const cms: any[] = (state.settings as any).customModels || [];
+  const n = cms.length;
+  (state.settings as any).customModels = [];
+  const ps: any = (state.settings as any).pricingSync;
+  if (ps) ps.showSyncedModels = false;
+  saveHot({ settings: state.settings });
+  return n;
 }
 function saveCustomRow(model: string, prices: any, isBuiltin: boolean) {
   const base: any = (PRICING as any)[model];
