@@ -214,9 +214,9 @@
   .aus-wallet-summary > div > div:first-child { font-size: 10px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .aus-wallet-summary > div > div:nth-child(2) { font-size: clamp(15px, 3.4cqi, 20px) !important; }
   .aus-wallet-summary > div > div:nth-child(3) { font-size: 9px !important; line-height: 1.35; }
-  .aus-wallet-header { grid-template-columns: 1fr; }
-  .aus-wallet-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .aus-wallet-actions { justify-content: flex-start; }
+  .aus-wallet-header { grid-template-columns: 1fr !important; }
+  .aus-wallet-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  .aus-wallet-actions { justify-content: flex-start !important; }
   .aus-wallet-two-col { grid-template-columns: 1fr !important; }
 }
 @container ausbody (min-width: 761px) {
