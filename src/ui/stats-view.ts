@@ -320,7 +320,7 @@ function renderCredentialPicker(history?: any[], endpoint = selectedEndpoint) {
   });
 }
 
-function positionStatsDropdown(btn: HTMLElement, dropdown: HTMLElement) {
+export function positionFilterDropdown(btn: HTMLElement, dropdown: HTMLElement) {
   try {
     const doc = getDoc();
     const panel = doc.getElementById('aus-panel') as HTMLElement | null;
@@ -378,7 +378,7 @@ function bindPicker() {
       dropdown.style.display = pickerOpen ? 'flex' : 'none';
       if (pickerOpen) {
         renderCalendar();
-        positionStatsDropdown(btn as HTMLElement, dropdown as HTMLElement);
+        positionFilterDropdown(btn as HTMLElement, dropdown as HTMLElement);
       }
     };
     doc.querySelectorAll('[data-range]').forEach((el: any) => {
@@ -402,7 +402,7 @@ function bindPicker() {
       mDropdown.style.display = modelPickerOpen ? 'block' : 'none';
       if (modelPickerOpen) {
         renderModelPicker(lastStatsHistory);
-        positionStatsDropdown(mBtn as HTMLElement, mDropdown as HTMLElement);
+        positionFilterDropdown(mBtn as HTMLElement, mDropdown as HTMLElement);
       }
     };
   }
@@ -419,7 +419,7 @@ function bindPicker() {
             const h = await getHistoryForStats();
             renderChatPicker(h);
           } catch { renderChatPicker(); }
-          positionStatsDropdown(cBtn as HTMLElement, cDropdown as HTMLElement);
+          positionFilterDropdown(cBtn as HTMLElement, cDropdown as HTMLElement);
         })();
       }
     };
@@ -433,7 +433,7 @@ function bindPicker() {
       eDropdown.style.display = endpointPickerOpen ? 'block' : 'none';
       if (endpointPickerOpen) {
         renderEndpointPicker(lastStatsHistory);
-        positionStatsDropdown(eBtn as HTMLElement, eDropdown as HTMLElement);
+        positionFilterDropdown(eBtn as HTMLElement, eDropdown as HTMLElement);
       }
     };
   }
@@ -446,7 +446,7 @@ function bindPicker() {
       kDropdown.style.display = credentialPickerOpen ? 'block' : 'none';
       if (credentialPickerOpen) {
         renderCredentialPicker(lastStatsHistory);
-        positionStatsDropdown(kBtn as HTMLElement, kDropdown as HTMLElement);
+        positionFilterDropdown(kBtn as HTMLElement, kDropdown as HTMLElement);
       }
     };
   }

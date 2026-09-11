@@ -239,7 +239,8 @@
   #aus-panel .aus-tab-btn, #aus-panel .ds-btn-pill { min-height: 40px; }
 }
 /* 下拉弹层统一：窄屏不贴边溢出 */
-.ds-popover, #aus-range-dropdown, #aus-model-dropdown, #aus-chat-dropdown, #aus-endpoint-dropdown, #aus-credential-dropdown {
+.ds-popover, #aus-range-dropdown, #aus-model-dropdown, #aus-chat-dropdown, #aus-endpoint-dropdown, #aus-credential-dropdown,
+#aus-history-model-dropdown, #aus-history-chat-dropdown, #aus-history-endpoint-dropdown, #aus-history-credential-dropdown {
   max-width: min(320px, calc(100vw - 24px));
 }
 #aus-mobile-header { display:none; height:56px; align-items:center; padding:0 16px; flex-shrink:0; border-bottom:1px solid var(--ds-border); background:var(--ds-card-inner); }
@@ -262,6 +263,10 @@
 #aus-chat-dropdown,
 #aus-endpoint-dropdown,
 #aus-credential-dropdown,
+#aus-history-model-dropdown,
+#aus-history-chat-dropdown,
+#aus-history-endpoint-dropdown,
+#aus-history-credential-dropdown,
 #aus-chart-y-dropdown,
 #aus-chart-x-dropdown,
 [id^="aus-four-drop-"],
@@ -346,6 +351,10 @@
   #aus-chat-dropdown,
   #aus-endpoint-dropdown,
   #aus-credential-dropdown,
+  #aus-history-model-dropdown,
+  #aus-history-chat-dropdown,
+  #aus-history-endpoint-dropdown,
+  #aus-history-credential-dropdown,
   #aus-chart-y-dropdown,
   #aus-chart-x-dropdown,
   [id^="aus-four-drop-"],

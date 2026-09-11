@@ -1,4 +1,4 @@
-import { t as toast, l as log } from "./index-CeGETS4u.js";
+import { t as toast, l as log } from "./index-C9hp98y8.js";
 const CURRENT_VERSION = "3.0.7";
 const REPO = "janmk1453/Api-Usage";
 const REMOTE_MANIFEST = `https://raw.githubusercontent.com/${REPO}/main/manifest.json`;

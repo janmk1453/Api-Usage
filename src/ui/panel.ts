@@ -7,12 +7,19 @@ import { bindImportExport } from '../services/import-export';
 import { renderSettings } from './settings';
 import { bindHistoryCompare, renderUsageDetail } from './compare';
 import { renderOverview } from './overview';
-import { initStatsView, renderStatsView } from './stats-view';
+import { initStatsView, positionFilterDropdown, renderStatsView } from './stats-view';
 import { initExtraCharts, renderExtraCharts } from './extra-charts';
 import { renderForecastView, initForecastView } from './forecast-view';
 import { applyTheme } from '../services/theme';
 import { DataEvents, on as onDataEvent } from '../data/events';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
+import {
+  STATS_FILTER_ALL,
+  STATS_FILTER_UNKNOWN,
+  filterStatsHistory,
+  getCredentialFilterOptions,
+  getEndpointFilterOptions,
+} from '../data/computed';
 
 declare const __APP_VERSION__: string;
 
@@ -96,12 +103,203 @@ const HISTORY_PAGE_SIZE = 30;
 let historyFullCache: any[] | null = null;
 let historyCacheScope = '';
 let historyLoading = false;
+const historyFilters = {
+  model: STATS_FILTER_ALL,
+  chat: STATS_FILTER_ALL,
+  endpoint: STATS_FILTER_ALL,
+  credential: STATS_FILTER_ALL,
+};
+let historyFilterBase: any[] = [];
 try { onDataEvent(DataEvents.HISTORY_ADDED, () => { historyFullCache = null; }); } catch {}
+
+type HistoryFilterKind = keyof typeof historyFilters;
+type HistoryFilterOption = { id: string; label: string; title?: string; unknown?: boolean };
+
+function historyFiltersActive(): boolean {
+  return Object.values(historyFilters).some((value) => value !== STATS_FILTER_ALL);
+}
+
+function resetHistoryFilters() {
+  historyFilters.model = STATS_FILTER_ALL;
+  historyFilters.chat = STATS_FILTER_ALL;
+  historyFilters.endpoint = STATS_FILTER_ALL;
+  historyFilters.credential = STATS_FILTER_ALL;
+  historyPage = 1;
+}
+
+function getHistoryChatOptions(history: any[]): HistoryFilterOption[] {
+  const map = new Map<string, { id: string; label: string; title: string }>();
+  for (const entry of history || []) {
+    const chatId = entry?.chatId ?? null;
+    const id = chatId ?? '__null__';
+    const chatName = String(entry?.chatName || '').trim();
+    const label = chatName || (chatId
+      ? (String(chatId).length > 18 ? `${String(chatId).slice(0, 8)}…${String(chatId).slice(-4)}` : String(chatId))
+      : '未分组/旧数据');
+    const current = map.get(id);
+    if (!current) {
+      map.set(id, { id, label, title: String(chatId || label) });
+    } else if (chatName && current.label !== chatName) {
+      current.label = chatName;
+      current.title = String(chatId || chatName);
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'));
+}
+
+function closeHistoryFilterDropdowns() {
+  const doc = getDoc();
+  for (const kind of ['model', 'chat', 'endpoint', 'credential'] as HistoryFilterKind[]) {
+    const dropdown = doc.getElementById(`aus-history-${kind}-dropdown`);
+    if (dropdown) (dropdown as HTMLElement).style.display = 'none';
+  }
+}
+
+function renderHistoryFilterDropdown(
+  kind: HistoryFilterKind,
+  selected: string,
+  options: HistoryFilterOption[],
+  emptyText: string,
+  onSelect: (value: string) => void,
+) {
+  const doc = getDoc();
+  const dropdown = doc.getElementById(`aus-history-${kind}-dropdown`);
+  if (!dropdown) return;
+  const item = (id: string, label: string, title = label) => {
+    const active = id === selected ? 'background:var(--ds-card);font-weight:600;' : '';
+    return `<div data-history-value="${esc(id)}" title="${esc(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${esc(label)}</div>`;
+  };
+  let html = item(STATS_FILTER_ALL, '全部');
+  for (const option of options) html += item(option.id, option.label, option.title || option.label);
+  if (!options.length) html += `<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">${esc(emptyText)}</div>`;
+  dropdown.innerHTML = html;
+  dropdown.querySelectorAll('[data-history-value]').forEach((element: any) => {
+    element.onclick = () => onSelect(element.getAttribute('data-history-value') || STATS_FILTER_ALL);
+  });
+}
+
+function renderHistoryFilters(history: any[]) {
+  historyFilterBase = history || [];
+  const doc = getDoc();
+  const models = Array.from(new Set(historyFilterBase.map((entry) => String(entry?.model || '').trim()).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b, 'zh-CN'))
+    .map((id) => ({ id, label: id }));
+  if (historyFilters.model !== STATS_FILTER_ALL && !models.some((option) => option.id === historyFilters.model)) {
+    historyFilters.model = STATS_FILTER_ALL;
+  }
+  const chats = getHistoryChatOptions(historyFilterBase);
+  if (historyFilters.chat !== STATS_FILTER_ALL && !chats.some((option) => option.id === historyFilters.chat)) {
+    historyFilters.chat = STATS_FILTER_ALL;
+  }
+  const endpoints = getEndpointFilterOptions(historyFilterBase);
+  if (historyFilters.endpoint !== STATS_FILTER_ALL && !endpoints.some((option) => option.id === historyFilters.endpoint)) {
+    historyFilters.endpoint = STATS_FILTER_ALL;
+    historyFilters.credential = STATS_FILTER_ALL;
+  }
+  const credentials = getCredentialFilterOptions(historyFilterBase, historyFilters.endpoint);
+  if (historyFilters.credential !== STATS_FILTER_ALL && !credentials.some((option) => option.id === historyFilters.credential)) {
+    historyFilters.credential = STATS_FILTER_ALL;
+  }
+
+  const labelMap: Record<HistoryFilterKind, string> = {
+    model: historyFilters.model === STATS_FILTER_ALL ? '全部' : historyFilters.model,
+    chat: historyFilters.chat === STATS_FILTER_ALL
+      ? '全部'
+      : chats.find((option) => option.id === historyFilters.chat)?.label || historyFilters.chat,
+    endpoint: historyFilters.endpoint === STATS_FILTER_ALL
+      ? '全部'
+      : historyFilters.endpoint === STATS_FILTER_UNKNOWN
+        ? '未记录接入'
+        : endpoints.find((option) => option.id === historyFilters.endpoint)?.label || historyFilters.endpoint,
+    credential: historyFilters.credential === STATS_FILTER_ALL
+      ? '全部'
+      : historyFilters.credential === STATS_FILTER_UNKNOWN
+        ? '未识别密钥'
+        : credentials.find((option) => option.id === historyFilters.credential)?.label || historyFilters.credential,
+  };
+  for (const kind of ['model', 'chat', 'endpoint', 'credential'] as HistoryFilterKind[]) {
+    const label = doc.getElementById(`aus-history-${kind}-label`);
+    if (label) {
+      label.textContent = labelMap[kind];
+      label.title = labelMap[kind];
+    }
+  }
+  renderHistoryFilterDropdown('model', historyFilters.model, models, '暂无模型', (value) => {
+    historyFilters.model = value;
+    historyPage = 1;
+    closeHistoryFilterDropdowns();
+    renderHistory(doc, getSelectedSave());
+  });
+  renderHistoryFilterDropdown('chat', historyFilters.chat, chats, '暂无对话', (value) => {
+    historyFilters.chat = value;
+    historyPage = 1;
+    closeHistoryFilterDropdowns();
+    renderHistory(doc, getSelectedSave());
+  });
+  renderHistoryFilterDropdown('endpoint', historyFilters.endpoint, endpoints, '暂无接入记录', (value) => {
+    historyFilters.endpoint = value;
+    historyFilters.credential = STATS_FILTER_ALL;
+    historyPage = 1;
+    closeHistoryFilterDropdowns();
+    renderHistory(doc, getSelectedSave());
+  });
+  renderHistoryFilterDropdown('credential', historyFilters.credential, credentials, '暂无密钥记录', (value) => {
+    historyFilters.credential = value;
+    historyPage = 1;
+    closeHistoryFilterDropdowns();
+    renderHistory(doc, getSelectedSave());
+  });
+}
+
+function filteredHistoryForDisplay(history: any[]): any[] {
+  return filterStatsHistory(history, {
+    model: historyFilters.model,
+    chat: historyFilters.chat,
+    endpoint: historyFilters.endpoint,
+    credential: historyFilters.credential,
+  });
+}
+
+function bindHistoryFilters(doc: Document) {
+  const controls: Array<[HistoryFilterKind, string]> = [
+    ['model', '#aus-history-model-btn'],
+    ['chat', '#aus-history-chat-btn'],
+    ['endpoint', '#aus-history-endpoint-btn'],
+    ['credential', '#aus-history-credential-btn'],
+  ];
+  for (const [kind, selector] of controls) {
+    const button = doc.querySelector(selector) as HTMLElement | null;
+    const dropdown = doc.getElementById(`aus-history-${kind}-dropdown`) as HTMLElement | null;
+    if (!button || !dropdown) continue;
+    button.onclick = () => {
+      const willOpen = dropdown.style.display !== 'block';
+      closeHistoryFilterDropdowns();
+      if (!willOpen) return;
+      renderHistoryFilters(historyFilterBase);
+      dropdown.style.display = 'block';
+      positionFilterDropdown(button, dropdown);
+    };
+  }
+  doc.addEventListener('click', (event: any) => {
+    const target = event.target as HTMLElement;
+    if (!target.closest('#aus-history-filter-host')) closeHistoryFilterDropdowns();
+  });
+}
 
 function renderHistoryInner(doc: Document, fullHist: any[]) {
   const host = doc.getElementById('aus-history');
   if (!host) return;
   const total = fullHist.length;
+  if (!total) {
+    host.innerHTML = `<div style="text-align:center;padding:24px;color:var(--ds-text-3);font-size:12px;line-height:1.8;">当前筛选无记录<br/><button id="aus-history-filter-reset" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">清除筛选</button></div>`;
+    const reset = doc.getElementById('aus-history-filter-reset') as HTMLButtonElement | null;
+    if (reset) reset.onclick = () => {
+      resetHistoryFilters();
+      closeHistoryFilterDropdowns();
+      renderHistory(doc, getSelectedSave());
+    };
+    return;
+  }
   const totalPages = Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE));
   if (historyPage > totalPages) historyPage = totalPages;
   if (historyPage < 1) historyPage = 1;
@@ -292,7 +490,8 @@ function renderHistory(doc: Document, s: any) {
   // 同步先渲染：若已有全量缓存则直接用缓存分页，否则用热数据分页（30条），避免一次渲染2000条
   let fullForRender: any[] = hist;
   if (historyFullCache && historyFullCache.length > hist.length) fullForRender = historyFullCache;
-  renderHistoryInner(doc, fullForRender);
+  renderHistoryFilters(fullForRender);
+  renderHistoryInner(doc, filteredHistoryForDisplay(fullForRender));
   // 异步加载全量（热+冷）以支持 2000 条翻页，加载后若更多数据则二次渲染；统计已用聚合 totals，不受此展示分页影响
   if (historyLoading) return;
   const needFull = hist.length >= HISTORY_PAGE_SIZE || historyFullCache !== null || fullForRender.length >= HISTORY_PAGE_SIZE;
@@ -313,7 +512,8 @@ function renderHistory(doc: Document, s: any) {
       if (full.length <= hist.length) return;
       historyFullCache = full;
       // 若当前页仍指向热数据页，需保持页码但更新总数
-      renderHistoryInner(doc, full);
+      renderHistoryFilters(full);
+      renderHistoryInner(doc, filteredHistoryForDisplay(full));
     } catch {} finally { historyLoading = false; }
   })();
 }
@@ -536,6 +736,24 @@ export function createPanel() {
             </div>
           </div>
           <div data-view="history" style="display:none;">
+            <div id="aus-history-filter-host" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
+              <div class="aus-stats-filter">
+                <div id="aus-history-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-history-model-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-history-model-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
+                <div id="aus-history-chat-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">对话</span><span id="aus-history-chat-label" style="font-weight:600;color:var(--ds-text);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-history-chat-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
+                <div id="aus-history-endpoint-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">接入类型</span><span id="aus-history-endpoint-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-history-endpoint-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
+                <div id="aus-history-credential-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-history-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-history-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+            </div>
             <div id="aus-diff" class="ds-card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">缓存断点</span><button id="aus-diff-fullscreen" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">全屏</button></div><div style="font-size:11px;color:var(--ds-text-3);">在历史中各选一条 旧/新 对比，橙/绿高亮即发散点</div></div>
             <div id="aus-history"></div>
           </div>
@@ -690,6 +908,7 @@ export function createPanel() {
     window.addEventListener('resize', onResize);
   } catch {}
   bindPanel(doc);
+  bindHistoryFilters(doc);
   bindImportExport(doc);
   renderSettings(doc);
   bindHistoryCompare();
