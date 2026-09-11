@@ -3,6 +3,7 @@
  * 已废弃多存档，迁移时将所有旧 saves 合并为单一历史
  */
 import { STORAGE_KEYS } from '../constants/pricing';
+import { historyRecordKey } from '../utils/history-key';
 
 const MODULE = 'api_usage_stat';
 export const HOT_KEEP = 50;
@@ -227,7 +228,7 @@ export async function appendHistoryCold(entries: any[]) {
   if (!entries.length) return;
   const cold = await loadHistoryCold();
   // 去重：按 timestamp+model+total 指纹，避免同毫秒双记账误删/重复写入
-  const keyOf = (h: any) => `${h.timestamp}|${h.model||''}|${h.total_tokens||0}`;
+  const keyOf = historyRecordKey;
   const seen = new Set(cold.map((h: any) => keyOf(h)));
   const toAdd = entries.filter((h: any) => !seen.has(keyOf(h)));
   if (!toAdd.length) return;
@@ -248,7 +249,7 @@ export async function getAllHistory(): Promise<any[]> {
   const hot = getExtensionSettings()?.history || [];
   const cold = await loadHistoryCold();
   const merged = [...hot, ...cold].sort((a: any, b: any) => b.timestamp - a.timestamp);
-  const keyOf = (h: any) => `${h.timestamp}|${h.model||''}|${h.total_tokens||0}`;
+  const keyOf = historyRecordKey;
   const seen = new Set<string>();
   const dedup: any[] = [];
   for (const h of merged) { const k = keyOf(h); if (!seen.has(k)) { seen.add(k); dedup.push(h); } }

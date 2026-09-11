@@ -3,6 +3,7 @@ import { EXPORT_FORMAT_VERSION } from '../constants/pricing';
 import { repository } from '../data/repository';
 import { isDeepSeekOfficialModel } from './pricing';
 import { mergeWalletCollections } from '../data/wallets';
+import { historyRecordKey } from '../utils/history-key';
 
 declare const __APP_VERSION__: string;
 
@@ -116,11 +117,12 @@ export function applyImportedData(d: any, mode: 'overwrite' | 'merge') {
       messageCount: d.messageCount,
     } as any);
   } else {
-    // 合并：按 timestamp 去重
-    const seen = new Set((state.history || []).map((h: any) => h.timestamp));
+    // 合并：按记录身份去重，避免同一毫秒的跨钱包记录被误删
+    const seen = new Set((state.history || []).map((h: any) => historyRecordKey(h)));
     const toAdd: any[] = [];
     for (const h of d.history || []) {
-      if (!seen.has(h.timestamp)) { seen.add(h.timestamp); toAdd.push(h); }
+      const key = historyRecordKey(h);
+      if (!seen.has(key)) { seen.add(key); toAdd.push(h); }
     }
     const merged = [...toAdd, ...state.history].sort((a: any, b: any) => b.timestamp - a.timestamp);
     // 合并时不覆盖余额/设置

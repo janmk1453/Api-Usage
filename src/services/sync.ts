@@ -4,6 +4,7 @@ import { decryptKey, encryptKey } from '../utils/crypto';
 import { repository } from '../data/repository';
 import { isUnsafeKey } from '../utils/date';
 import { mergeWalletCollections } from '../data/wallets';
+import { historyRecordKey } from '../utils/history-key';
 
 const WEBDAV_PASS_KEY = 'ds_webdav_pass';
 
@@ -117,7 +118,7 @@ function mergeBundles(remote: any, local: any) {
   // 清洗原型污染
   const clean = (arr: any[]) => arr.map((e:any)=>{ if(e&&typeof e==='object') for(const k of Object.keys(e)) if(isUnsafeKey(k)) delete e[k]; return e; });
   const lh = clean(toHistory(ld)), rh = clean(toHistory(rd));
-  const keyOf = (h:any)=> `${h.timestamp}|${h.model||''}|${h.total_tokens||0}`;
+  const keyOf = historyRecordKey;
   const lseen = new Set(lh.map((h: any) => keyOf(h)));
   const rseen = new Set(rh.map((h: any) => keyOf(h)));
   let pulled = 0, pushed = 0;

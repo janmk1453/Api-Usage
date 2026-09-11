@@ -32,6 +32,7 @@ import {
 } from './wallets';
 import { DEEPSEEK_WALLET_ID, type WalletConfig } from '../types/wallet';
 import { migrateLegacyWalletApiKey } from '../services/wallet-secrets';
+import { historyRecordKey } from '../utils/history-key';
 
 function getCurrentChatId(): string | null {
   try {
@@ -870,7 +871,7 @@ export const repository = {
         all = all.concat(h);
       }
       all.sort((a: any, b: any) => b.timestamp - a.timestamp);
-      const keyOf = (h: any) => `${h.timestamp}|${h.model||''}|${h.total_tokens||0}`;
+      const keyOf = historyRecordKey;
       const seen = new Set<string>();
       const dedup: any[] = [];
       for (const h of all) { const k = keyOf(h); if (!seen.has(k)) { seen.add(k); dedup.push(h); } }
