@@ -17,7 +17,7 @@ SillyTavern 原生扩展 `API用量统计`（清单 `api-usage-stat`，版本以
 - **语言**：`TypeScript 5 strict`
 - **图表**：`ECharts 5` 按需 `echarts/core + Bar/Line + Grid/Tooltip/CanvasRenderer`，动态分包（`core` 等 9 产物，已提交，随 `index.js` 按需加载），`Y` 8 选项×`X` 5 维度（见下）
 - **样式**：无框架，`SmartTheme` 隔离 + `DeepSeek 官方浅色`（`#FFFFFF/#F6F7F8/#111827/#FF6A00/#E6F8EC`，`Microsoft YaHei`，`14px` 圆角，无阴影/无滤镜以保锐利，`absolute` 定位置换修复窄屏 `fixed` 漂移）+ 双主题（`light/dark`，`style.css` 同名变量覆盖 + `services/theme.ts` 切换 + 设置中胶囊下拉，深色高对比 `#0F1419/#1E242E/#E5E7EB`，ECharts 经 `themeColor()` 动态取变量，默认 `light`）
-- **存储**：`extensionSettings[api_usage_stat]` 热 `50` 条 + `IndexedDB api_usage_stat_db` 冷分页（旧多存档已合并为单一历史，`XOR` 密钥兼容，自动迁移备份）；钱包配置、忽略列表和 `overviewWalletId` 随热设置持久化，钱包校准密钥单独存放于 `extensionSettings.walletSecrets` 且不参与导出
+- **存储**：`extensionSettings[api_usage_stat]` 热 `50` 条 + `IndexedDB api_usage_stat_db` 冷分页（旧多存档已合并为单一历史，`XOR` 密钥兼容，自动迁移备份）；钱包配置、忽略列表、`overviewWalletId` 与 `overviewWalletManuallySet` 随热设置持久化，钱包校准密钥单独存放于 `extensionSettings.walletSecrets` 且不参与导出
 - **最低版本**：`manifest.minimum_client_version 1.11.0`；接入类型筛选兼容最低版本，API 密钥条目区分依赖酒馆 `>=1.14.0`（更早版本无多条密钥编号，归入未识别密钥）
 
 ## 目录
@@ -38,7 +38,7 @@ Api-Usage/
 ├── src/
 │   ├── index.ts           # 入口：repository.hydrate + 魔法棒注入 + 全屏面板 + 峰值圆点（ST 未就绪时轮询重试 installInterception）+ 汇率/定价格式同步定时器（24h）+ 延迟自动检查更新
 │   ├── constants/pricing.ts  # PRICING/DEFAULT_PEAK_HOURS/MAX_HISTORY/DETAIL_KEEP/STORAGE_KEYS + PRICING_SYNC_SOURCE/FALLBACK/DEFAULT_EXCHANGE_RATE + PRICE_HISTORY/PriceSegment + FLASH_PRICE_CUTOFF(2026-09-10 12:00)/V4_PRO_RETIRE_CUTOFF(2026-09-14 12:00)（内置模型多段价格历史：deepseek-v4-flash 新旧两段、deepseek-v4-pro 独立价段+下线路由段、deepseek-flash 单段；V4.1 Flash 现役模型名为 deepseek-flash，V4 Pro 下线后按同价计费）
-│   ├── types/save.ts, settings.ts, wallet.ts # HistoryEntry 含 sourceType/endpointId/endpointLabel/credentialId/credentialLabel/walletId/pricingSource；settings 含 overviewWalletId 与 PricingSyncSettings；wallet.ts 定义 WalletConfig/WalletModel/WalletPriceRule/币种与 catalogProvider 映射
+│   ├── types/save.ts, settings.ts, wallet.ts # HistoryEntry 含 sourceType/endpointId/endpointLabel/credentialId/credentialLabel/walletId/pricingSource；settings 含 overviewWalletId/overviewWalletManuallySet 与 PricingSyncSettings；wallet.ts 定义 WalletConfig/WalletModel/WalletPriceRule/币种与 catalogProvider 映射
 │   ├── data/              # ★ 统一数据框架（所有存/取/算/展的唯一通路）
 │   │   ├── types.ts       # Snapshot/Aggregated/TimeRange/OverviewView/StatsView
 │   │   ├── fingerprint.ts # 用量去重指纹：model/token + endpointId/credentialId
@@ -118,6 +118,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **models.dev**：每个钱包配置 `catalogProvider`。价格来源胶囊只展示第一方模型厂商（DeepSeek/OpenAI/Anthropic/Google/Mistral/xAI/Moonshot AI/Z.AI/MiniMax/Cohere），不展示 OpenRouter、Groq、SiliconFlow、Fireworks 等聚合或托管渠道；旧第三方来源在标准化时归为 `null`（不自动同步）。开启同步后支持 `add-missing/overwrite-unlocked/overwrite-all`，锁定规则仅允许全部覆盖模式修改。关闭同步会移除未锁定的同步价格并重算
 - **忽略与恢复**：删除钱包改为加入 `walletIgnored`，后续请求不自动重建、不参与余额合计，历史仍保留 `walletId`；钱包页可恢复显示。DeepSeek 官方钱包不可忽略
 - **响应式**：钱包汇总卡在所有宽度保持一行三列，仅压缩字号和间距；`≤760px` 时钱包 header 改为单列顺序，五项指标用三列网格自动换行，展开/同步/忽略按钮落到指标下方并完整显示；钱包双栏区域改为单列。钱包卡内容使用边框面板，不嵌套 `.ds-card`
+- **使用说明**：帮助页必须保留隐私声明、免责声明和钱包说明。隐私声明需明确区分酒馆密钥识别信息与用户主动填写的钱包校准密钥；免责声明需说明不对 models.dev 数据中的商业化中转站名称或推荐关系负责。
 
 ### 设置
 - 保留全局控制：颜色模式、历史显示范围、自动校准总开关与间隔、新价格机制（日期）、新钱包默认峰谷、models.dev 自动同步、调试、峰值圆点和 WebDAV
@@ -140,6 +141,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **改面板/导航**：`src/ui/panel.ts`（全屏+`positionPanel` 定位置换+`applyCollapsed`）+ `style.css`（`#aus-mobile-header` 汉堡 + `display` 切换，无过渡；改动钱包 header 响应式时必须保持覆盖规则优先级高于通用网格规则）
 - **改概览/统计**：`src/ui/overview.ts` + `src/ui/stats-view.ts`（五维度 time∩model∩chat∩endpoint∩credential 过滤）+ `src/data/computed.ts`（`computeChatStats` / `filterStatsHistory` / 接入与密钥选项单源）+ `src/ui/heatmap.ts`（概览热力图，GitHub 风格，近 2 年，块内滑动）
 - **改钱包**：`src/types/wallet.ts`（结构与默认值）+ `src/data/wallets.ts`（纯逻辑）+ `src/data/repository.ts`（迁移、自动建钱包、钱包 CRUD、余额和冷热重算）+ `src/ui/wallet-view.ts`（页面交互）+ `src/services/wallet-secrets.ts`（钱包校准密钥）+ `style.css`（收起态三栏、窄屏三列指标与操作按钮换行）
+- **改使用说明/隐私**：`src/ui/panel.ts` 的使用说明卡片与 `README.md` 隐私声明必须同步；不得把酒馆掩码密钥写成可获取的明文密钥，也不得声称 XOR 是安全加密
 - **改历史筛选/详情/占比**：`src/ui/panel.ts`（`renderHistory` 四维度筛选 + 筛选后分页 + 内联展开 + 三色条，费用按币种）
 - **改连接身份/隐私**：`src/services/connection-identity.ts`（地址规范、密钥条目映射）+ `src/services/interception.ts`（请求开始快照）+ `src/data/fingerprint.ts`（连接感知去重）；严格隐私模式禁止读取 `proxy_password` 与 `custom_include_headers`
 - **改同步/导入**：`src/services/sync.ts` + `src/services/import-export.ts`（保持 `deepseek-stat-export v1` 兼容；钱包配置通过可选 `wallets/walletIgnored/walletFormat:2` 携带；WebDAV 包版本为 `2` 且兼容读取旧 `1`；历史按 `historyRecordKey` 的 timestamp/model/token/接入/钱包/密钥综合身份去重；导出经 `getAllHistory` 含冷库全量，导入超 `MAX_HISTORY` 自动回冷库，任何钱包校准密钥均不导出）+ `src/services/pricing-sync.ts`（models.dev 按钱包同步）
@@ -217,6 +219,7 @@ git push origin main --tags
 - **截断率/思维链占比**：`finish_reason === 'length'` 判截断，`thinkTokens/completion_tokens` 算占比，统计块与详情均基于此；`isTruncated` 持久化于 `HistoryEntry`
 - **详情双占比去重**：性能块与 Token 消耗块曾各显示一次“思维链占比”，后收敛为仅性能块保留，Token 块改为单列占满的“思维链 Token”
 - **密钥身份与隐私**：普通官方接口的密钥由酒馆后端注入，扩展只读活动密钥条目编号、标签和掩码末三位；反向代理的 `proxy_password` 与 `custom_include_headers` 不读取、不比较、不持久化，因此同一中转地址下的反向代理密码无法细分
+- **隐私与免责声明口径**：酒馆密钥只写“编号、备注、掩码末三位”，用户主动填入的校准密钥才写“实际可用密钥”；明确标注 XOR 不是安全加密。价格来源与模型同步免责声明必须说明不对 models.dev 数据中的商业化中转站负责，且不构成推荐或商业关系
 - **连接身份落盘**：`HistoryEntry` 只保存 `sourceType/endpointId/endpointLabel/credentialId/credentialLabel`，其中接入地址经短哈希生成稳定标识，界面仅显示域名与路径；新增字段为可选兼容字段，随导入导出和 WebDAV 同步透传，不改变导出格式版本
 - **钱包计费隔离**：同一模型名在不同钱包可以使用完全不同的价格和峰谷；匹配顺序为钱包当前模型名/来源模型名/别名，先用 `walletId` 定位历史归属，旧记录才回退接入地址或全局价格
 - **钱包迁移边界**：旧 `customModels` 复制到 DeepSeek 官方钱包但原全局数组保留；带接入地址的旧历史会建立钱包并尽量复制对应旧价格，未识别接入或无地址记录继续使用旧全局兜底
