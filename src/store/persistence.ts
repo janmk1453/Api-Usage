@@ -79,7 +79,13 @@ export function saveHot(patch: Record<string, any>) {
   const next = { ...cur, ...patch, _updated: Date.now() };
   pendingNext = next;
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { saveTimer = null; pendingNext = null; saveExtensionSettings(next); }, 300);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    const latest = getExtensionSettings() || {};
+    const merged = { ...latest, ...(pendingNext || next) };
+    pendingNext = null;
+    saveExtensionSettings(merged);
+  }, 300);
 }
 
 export function flushSaveHot() {
@@ -88,7 +94,7 @@ export function flushSaveHot() {
   if (pendingNext) {
     const next = pendingNext;
     pendingNext = null;
-    saveExtensionSettings(next);
+    saveExtensionSettings({ ...(getExtensionSettings() || {}), ...next });
   }
 }
 
@@ -232,6 +238,10 @@ export async function appendHistoryCold(entries: any[]) {
     const cur = getExtensionSettings();
     if (cur) saveExtensionSettings({ ...cur, _coldCount: next.length, _updated: Date.now() });
   } catch {}
+}
+
+export async function saveHistoryCold(entries: any[]): Promise<void> {
+  await dbSet('cold_history', JSON.stringify(Array.isArray(entries) ? entries : []));
 }
 
 export async function getAllHistory(): Promise<any[]> {

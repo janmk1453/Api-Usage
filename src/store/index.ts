@@ -1,6 +1,7 @@
 import { defaultSettings, type Settings } from '../types/settings';
 import type { HistoryEntry } from '../types/save';
 import { MAX_HISTORY, DETAIL_KEEP } from '../constants/pricing';
+import type { WalletConfig } from '../types/wallet';
 
 export type State = {
   // 单一聚合（废弃多存档）
@@ -19,6 +20,8 @@ export type State = {
   settings: Settings;
   balance: any;
   customBalance: string | null;
+  wallets: WalletConfig[];
+  walletIgnored: string[];
   messageCount: number;
   // 兼容旧多存档（仅迁移用，不再对外暴露）
   _legacySaves?: Record<string, any>;
@@ -41,6 +44,8 @@ export const state: State = {
   settings: defaultSettings(),
   balance: null,
   customBalance: null,
+  wallets: [],
+  walletIgnored: [],
   messageCount: 0,
 };
 

@@ -1,0 +1,85 @@
+import { describe, expect, it } from 'vitest';
+import { defaultSettings } from '../types/settings';
+import {
+  createDeepSeekWallet,
+  createWalletFromConnection,
+  findWalletModel,
+  mergeWalletCollections,
+  normalizeWallets,
+  observeCredential,
+  observeModel,
+  walletBalanceToCny,
+  walletModelMatches,
+} from './wallets';
+import { DEEPSEEK_WALLET_ID } from '../types/wallet';
+
+describe('钱包数据', () => {
+  it('始终保留 DeepSeek 官方钱包并预置现役模型', () => {
+    const settings = defaultSettings();
+    const wallets = normalizeWallets([], settings, 1000);
+    const official = wallets.find((wallet) => wallet.id === DEEPSEEK_WALLET_ID);
+
+    expect(official).toBeTruthy();
+    expect(official?.sourceType).toBe('deepseek');
+    expect(official?.models.some((model) => model.model === 'deepseek-flash')).toBe(true);
+  });
+
+  it('按接入链接创建钱包并记录密钥与模型观测项', () => {
+    const settings = defaultSettings();
+    const wallet = createWalletFromConnection({
+      sourceType: 'custom',
+      endpointId: 'endpoint-a',
+      endpointLabel: 'relay.example/v1',
+      credentialId: 'secret:custom:a',
+      credentialLabel: '主密钥 •••abc',
+    }, settings, 1000);
+    expect(wallet).toBeTruthy();
+
+    observeCredential(wallet!, 'secret:custom:a', '主密钥 •••abc', 2000);
+    const observed = observeModel(wallet!, 'vendor-model', 2000);
+    expect(wallet!.credentials[0]).toMatchObject({ id: 'secret:custom:a', lastSeen: 2000 });
+    expect(observed.model).toMatchObject({ model: 'vendor-model', source: 'discovered' });
+    expect(observed.model?.price.priceConfigured).toBe(false);
+  });
+
+  it('模型改名保留旧名别名并继续命中', () => {
+    const settings = defaultSettings();
+    const wallet = createWalletFromConnection({
+      sourceType: 'custom',
+      endpointId: 'endpoint-b',
+      endpointLabel: 'relay.example/v2',
+      credentialId: null,
+      credentialLabel: null,
+    }, settings, 1000)!;
+    observeModel(wallet, 'old-name', 1000);
+    const model = wallet.models[0];
+    model.aliases.push(model.model);
+    model.model = 'new-name';
+
+    expect(walletModelMatches(model, 'old-name')).toBe(true);
+    expect(findWalletModel(wallet, 'new-name')?.id).toBe(model.id);
+  });
+
+  it('按币种换算钱包余额', () => {
+    const wallet = createDeepSeekWallet(defaultSettings(), 1000);
+    wallet.balance.amount = '10';
+    wallet.balance.currency = 'USD';
+    expect(walletBalanceToCny(wallet, 7.2)).toBeCloseTo(72, 8);
+    wallet.balance.currency = 'CNY';
+    expect(walletBalanceToCny(wallet, 7.2)).toBe(10);
+  });
+
+  it('合并钱包时保留较新价格并合并观测项', () => {
+    const settings = defaultSettings();
+    const local = createDeepSeekWallet(settings, 1000);
+    local.updatedAt = 2000;
+    local.credentials = [{ id: 'a', label: '本地密钥', lastSeen: 2000 }];
+    const remote = createDeepSeekWallet(settings, 1000);
+    remote.updatedAt = 3000;
+    remote.credentials = [{ id: 'b', label: '远端密钥', lastSeen: 3000 }];
+
+    const merged = mergeWalletCollections([local], [remote]);
+    expect(merged[0].updatedAt).toBe(3000);
+    expect(merged[0].credentials.map((item) => item.id).sort()).toEqual(['a', 'b']);
+  });
+});

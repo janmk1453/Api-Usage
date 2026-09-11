@@ -1,5 +1,6 @@
 import { state, getSelectedSave } from '../store/index';
 import { calcSavings } from '../services/pricing';
+import { findWalletForHistory } from '../data/wallets';
 
 function getDoc(): Document { return (window.parent as any)?.document ?? document; }
 
@@ -20,7 +21,15 @@ export function renderStats() {
   const avgTokens = rounds ? totalTokens / rounds : 0;
   // 预计节省：对每条按 miss-hit 差价重算（简化用总 hit * 平均差价）
   let savings = 0;
-  try { for (const h of s.history || []) savings += calcSavings({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state.settings); } catch {}
+  try {
+    for (const h of s.history || []) {
+      savings += calcSavings(
+        { timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 },
+        state.settings,
+        findWalletForHistory(state.wallets, h),
+      );
+    }
+  } catch {}
   const inputCost = s.input_cost || 0, outputCost = s.output_cost || 0;
   const latest = (s.history || [])[0];
   const latestRate = latest ? (latest.cache_hit_rate || 0) : 0;

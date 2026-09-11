@@ -10,9 +10,11 @@ import { renderOverview } from './overview';
 import { initStatsView, positionFilterDropdown, renderStatsView } from './stats-view';
 import { initExtraCharts, renderExtraCharts } from './extra-charts';
 import { renderForecastView, initForecastView } from './forecast-view';
+import { renderWalletView } from './wallet-view';
 import { applyTheme } from '../services/theme';
 import { DataEvents, on as onDataEvent } from '../data/events';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
+import { repository } from '../data/repository';
 import {
   STATS_FILTER_ALL,
   STATS_FILTER_UNKNOWN,
@@ -71,7 +73,7 @@ function prettyFullResponse(resp: any): string {
 
 let panelCreated = false;
 let panelOpen = false;
-let currentView: 'overview' | 'stats' | 'history' | 'forecast' | 'settings' | 'help' | 'about' = 'overview';
+let currentView: 'overview' | 'stats' | 'history' | 'forecast' | 'wallet' | 'settings' | 'help' | 'about' = 'overview';
 let collapsed = false;
 
 export function refreshUI() {
@@ -95,6 +97,7 @@ export function refreshUI() {
     renderOverview();
     renderStatsView();
     try { renderForecastView(); } catch {}
+    try { renderWalletView(); } catch {}
   } catch {}
 }
 
@@ -358,7 +361,9 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">基础信息</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;font-size:11px;">
               <div><div style="color:var(--ds-text-2);font-size:10px;">模型</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${esc(h.model||'—')}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">时段</div><div style="font-weight:600;margin-top:2px;color:var(--ds-text);">${h.priceType==='new-peak'?'高峰':h.priceType==='new-offpeak'?'非高峰':'旧价格'}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">时段</div><div style="font-weight:600;margin-top:2px;color:var(--ds-text);">${h.priceType==='new-peak'||h.priceType==='wallet-peak'?'高峰':h.priceType==='new-offpeak'||h.priceType==='wallet-offpeak'?'非高峰':h.priceType==='unpriced'?'待定价':'旧价格'}</div></div>
+              <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">钱包</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${esc(repository.getWallet(String(h.walletId||''))?.name || h.endpointLabel || '未归属钱包')}</div></div>
+              <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">计价来源</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${h.pricingSource==='wallet'?'钱包规则':h.pricingSource==='builtin'?'DeepSeek 内置':h.pricingSource==='unpriced'?'待定价':h.pricingSource==='legacy'?'旧全局规则':'旧记录兜底'}</div></div>
               <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">时间</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${new Date(h.timestamp).toLocaleString('zh-CN')}</div></div>
             </div>
           </div>
@@ -536,7 +541,7 @@ function switchView(view: typeof currentView) {
     if (v === view) el.classList.add('active');
     else el.classList.remove('active');
   });
-  const titles: any = { overview: '用量概览', stats: '用量统计', history: '历史记录', forecast: '趋势预测（Beta）', settings: '设置', help: '使用说明', about: '关于' };
+  const titles: any = { overview: '用量概览', stats: '用量统计', history: '历史记录', forecast: '趋势预测（Beta）', wallet: '钱包', settings: '设置', help: '使用说明', about: '关于' };
   const titleEl = doc.getElementById('aus-page-title');
   if (titleEl) titleEl.textContent = titles[view] || '';
   refreshUI();
@@ -555,6 +560,9 @@ function switchView(view: typeof currentView) {
   }
   if (view === 'forecast') {
     setTimeout(() => { try { renderForecastView(); } catch {} }, 60);
+  }
+  if (view === 'wallet') {
+    setTimeout(() => { try { renderWalletView(); } catch {} }, 60);
   }
 }
 
@@ -608,6 +616,7 @@ export function createPanel() {
           <div class="aus-nav-item" data-nav="stats" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">▦</span><span class="aus-nav-label">用量统计</span></div>
           <div class="aus-nav-item" data-nav="history" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">≡</span><span class="aus-nav-label">历史记录</span></div>
           <div class="aus-nav-item" data-nav="forecast" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">⬈</span><span class="aus-nav-label">趋势预测（Beta）</span></div>
+          <div class="aus-nav-item" data-nav="wallet" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">▣</span><span class="aus-nav-label">钱包</span></div>
         </div>
         <div style="flex:1;"></div>
         <div class="aus-nav-group" style="display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--ds-border);padding-top:8px;">
@@ -626,7 +635,7 @@ export function createPanel() {
         <div style="max-width:1100px;margin:0 auto;display:grid;gap:16px;">
           <div data-view="overview">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div class="ds-card"><div class="ds-card-title">充值余额</div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div id="aus-balance-remaining" style="font-size:11px;color:var(--ds-text-2);margin-top:6px;min-height:16px;"></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:11px;">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导出</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导入</button></div></div>
+              <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div class="ds-card-title">充值余额</div><div id="aus-overview-wallet-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;"><span style="color:var(--ds-text-2);">余额口径</span><span id="aus-overview-wallet-label" style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部钱包合计</span><span>▼</span></div><div id="aus-overview-wallet-dropdown" style="display:none;position:absolute;top:44px;right:10px;z-index:20;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:190px;max-height:260px;overflow:auto;"></div></div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div id="aus-balance-remaining" style="font-size:11px;color:var(--ds-text-2);margin-top:6px;min-height:16px;"></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:11px;">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导出</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导入</button></div></div>
               <div class="ds-card"><div class="ds-card-title">累计消费</div><div class="ds-card-val" id="aus-total-cost">¥0.0000<small>CNY</small></div><div style="font-size:11px;color:var(--ds-text-3);margin-top:2px;" id="aus-total-tokens">0 tokens</div></div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
@@ -734,6 +743,9 @@ export function createPanel() {
               <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">敏感度 · 假设命中率</div><div id="aus-forecast-sensitivity"></div></div>
               <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">对比 · 最耗对话 Top</div><div id="aus-forecast-compare"></div></div>
             </div>
+          </div>
+          <div data-view="wallet" style="display:none;">
+            <div id="aus-wallet"></div>
           </div>
           <div data-view="history" style="display:none;">
             <div id="aus-history-filter-host" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">

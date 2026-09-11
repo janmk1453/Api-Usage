@@ -209,6 +209,8 @@
   #aus-overview-four { grid-template-columns: repeat(2, 1fr) !important; gap: clamp(8px, 1.5cqi, 10px) !important; }
   #aus-stats-four { grid-template-columns: repeat(2, 1fr) !important; gap: clamp(8px, 1.5cqi, 10px) !important; }
   #aus-extra-charts, #aus-model-trends { grid-template-columns: 1fr !important; }
+  .aus-wallet-summary { grid-template-columns: 1fr !important; }
+  .aus-wallet-two-col { grid-template-columns: 1fr !important; }
 }
 @container ausbody (min-width: 761px) {
   #aus-mobile-header { display: none !important; }

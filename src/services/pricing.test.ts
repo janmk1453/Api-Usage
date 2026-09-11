@@ -7,6 +7,7 @@ import {
   isDeepSeekOfficialModel,
   normalizeModel,
 } from './pricing';
+import type { WalletConfig } from '../types/wallet';
 
 function makeSettings(overrides: Partial<Settings> = {}): Settings {
   return { ...defaultSettings(), ...overrides };
@@ -24,6 +25,34 @@ function usage(timestamp: number, model: string, miss = 1_000_000) {
 
 function localTimestamp(year: number, month: number, day: number, hour: number): number {
   return new Date(year, month - 1, day, hour, 0, 0, 0).getTime();
+}
+
+function makeWallet(overrides: Partial<WalletConfig> = {}): WalletConfig {
+  return {
+    id: 'wallet:test',
+    name: '测试钱包',
+    kind: 'relay',
+    sourceType: 'custom',
+    endpointId: 'endpoint-test',
+    endpointLabel: 'relay.test/v1',
+    endpointDisplay: 'relay.test/v1',
+    catalogProvider: 'deepseek',
+    balance: {
+      mode: 'manual',
+      amount: null,
+      currency: 'CNY',
+      primaryCredentialId: null,
+      lastCalibrated: null,
+    },
+    peakHours: [{ start: '09:00', end: '12:00' }],
+    weekendOffpeak: false,
+    credentials: [],
+    models: [],
+    createdAt: 0,
+    updatedAt: 0,
+    lastUsedAt: null,
+    ...overrides,
+  };
 }
 
 describe('模型定价', () => {
@@ -94,6 +123,116 @@ describe('模型定价', () => {
     expect(calcCost(usage(timestamp, 'third-party'), empty).total).toBe(0);
     expect(hasPriceForModel('third-party', custom)).toBe(true);
     expect(calcCost(usage(timestamp, 'third-party'), custom).total).toBe(1);
+  });
+
+  it('按钱包隔离同名模型价格', () => {
+    const timestamp = localTimestamp(2026, 9, 11, 13);
+    const settings = makeSettings();
+    const first = makeWallet({
+      id: 'wallet:first',
+      models: [{
+        id: 'model:first',
+        sourceModel: 'shared-model',
+        model: 'shared-model',
+        aliases: [],
+        price: {
+          usePeakPricing: false,
+          offpeak: { hit: 0, miss: 1, output: 0 },
+          peak: { hit: 0, miss: 1, output: 0 },
+          priceConfigured: true,
+        },
+        source: 'manual',
+        locked: false,
+        discoveredAt: 0,
+        lastSeen: 0,
+        updatedAt: 0,
+      }],
+    });
+    const second = makeWallet({
+      id: 'wallet:second',
+      models: [{
+        ...first.models[0],
+        id: 'model:second',
+        price: {
+          usePeakPricing: false,
+          offpeak: { hit: 0, miss: 2, output: 0 },
+          peak: { hit: 0, miss: 2, output: 0 },
+          priceConfigured: true,
+        },
+      }],
+    });
+
+    expect(calcCost(usage(timestamp, 'shared-model'), settings, first).total).toBe(1);
+    expect(calcCost(usage(timestamp, 'shared-model'), settings, second).total).toBe(2);
+  });
+
+  it('非 DeepSeek 模型也可按钱包峰谷规则计费', () => {
+    const settings = makeSettings();
+    const wallet = makeWallet({
+      models: [{
+        id: 'model:peak',
+        sourceModel: 'glm-5',
+        model: 'glm-5',
+        aliases: [],
+        price: {
+          usePeakPricing: true,
+          offpeak: { hit: 0, miss: 1, output: 0 },
+          peak: { hit: 0, miss: 3, output: 0 },
+          priceConfigured: true,
+        },
+        source: 'manual',
+        locked: false,
+        discoveredAt: 0,
+        lastSeen: 0,
+        updatedAt: 0,
+      }],
+    });
+
+    expect(calcCost(usage(localTimestamp(2026, 9, 11, 10), 'glm-5'), settings, wallet)).toMatchObject({
+      total: 3,
+      priceType: 'wallet-peak',
+      source: 'wallet',
+    });
+    expect(calcCost(usage(localTimestamp(2026, 9, 11, 13), 'glm-5'), settings, wallet).total).toBe(1);
+  });
+
+  it('钱包待定价模型先返回零费用，配置后按钱包价计费', () => {
+    const settings = makeSettings();
+    const timestamp = localTimestamp(2026, 9, 11, 13);
+    const wallet = makeWallet({
+      id: 'wallet:pending',
+      models: [{
+        id: 'model:pending',
+        sourceModel: 'relay-model',
+        model: 'relay-model',
+        aliases: [],
+        price: {
+          usePeakPricing: true,
+          offpeak: { hit: 0, miss: 0, output: 0 },
+          peak: { hit: 0, miss: 0, output: 0 },
+          priceConfigured: false,
+        },
+        source: 'discovered',
+        locked: false,
+        discoveredAt: 0,
+        lastSeen: 0,
+        updatedAt: 0,
+      }],
+    });
+
+    expect(calcCost(usage(timestamp, 'relay-model'), settings, wallet)).toMatchObject({
+      total: 0,
+      priceType: 'unpriced',
+      source: 'unpriced',
+    });
+    wallet.models[0].price = {
+      usePeakPricing: false,
+      offpeak: { hit: 0, miss: 1.5, output: 0 },
+      peak: { hit: 0, miss: 2, output: 0 },
+      priceConfigured: true,
+    };
+    wallet.models[0].source = 'manual';
+    expect(calcCost(usage(timestamp, 'relay-model'), settings, wallet).total).toBe(1.5);
   });
 
   it('V4 Pro 下线后按 V4 Flash 价格计费', () => {

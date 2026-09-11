@@ -35,6 +35,10 @@ export type HistoryEntry = {
   credentialId?: string | null;
   /** 不包含明文密钥的展示名称 */
   credentialLabel?: string | null;
+  /** 请求归属的钱包标识；旧记录为空 */
+  walletId?: string | null;
+  /** 本次费用的计价来源 */
+  pricingSource?: 'wallet' | 'builtin' | 'legacy' | 'legacy-unassigned' | 'unpriced';
 };
 
 export type Save = {

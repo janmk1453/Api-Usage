@@ -7,7 +7,8 @@ import { calcSavings } from '../services/pricing';
 import { localDay } from '../utils/date';
 import { isTruncatedFinish } from '../utils/finish';
 import type { OverviewView, StatsView, TimeRange } from './types';
-import { formatMoney, getDisplayCurrency } from '../services/currency';
+import { formatMoney, getDisplayCurrency, getWalletExchangeRate } from '../services/currency';
+import { findWalletForHistory, walletBalanceToCny } from './wallets';
 
 export const STATS_FILTER_ALL = '__all__';
 export const STATS_FILTER_UNKNOWN = '__unknown__';
@@ -137,15 +138,23 @@ export function getFilteredHistory(range?: TimeRange): any[] {
   });
 }
 
-export function computeOverview(): OverviewView {
+export function computeOverview(balanceWalletId = 'all'): OverviewView {
   const s: any = getSelectedSave();
-  if (!s) return { balanceText: '¥0.00 CNY', totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0, remainingRounds: null, avgInputCost: 0, avgInputTokens: 0, avgOutputCost: 0, avgOutputTokens: 0, avgThinkTime: 0, avgThinkTokens: 0, avgHitRate: 0, latestHitRate: null, maxOutput: 0, maxInput: 0, maxTotal: 0, avgThinkRatio: 0, truncationRate: 0 } as any;
+  if (!s) return { balanceText: '¥0.00 CNY', hasBalance: false, walletBalanceCount: 0, totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0, remainingRounds: null, avgInputCost: 0, avgInputTokens: 0, avgOutputCost: 0, avgOutputTokens: 0, avgThinkTime: 0, avgThinkTokens: 0, avgHitRate: 0, latestHitRate: null, maxOutput: 0, maxInput: 0, maxTotal: 0, avgThinkRatio: 0, truncationRate: 0 } as any;
   const totalCost = s.total_cost || 0;
   const totalTokens = s.total_tokens || 0;
   const hit = s.cache_hit_tokens || 0, miss = s.cache_miss_tokens || 0, output = s.output_tokens || 0;
   const hitRate = hit + miss > 0 ? (hit / (hit + miss) * 100) : 0;
   let savings = 0;
-  try { for (const h of s.history || []) savings += calcSavings({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state.settings as any); } catch {}
+  try {
+    for (const h of s.history || []) {
+      savings += calcSavings(
+        { timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 },
+        state.settings as any,
+        findWalletForHistory(state.wallets, h),
+      );
+    }
+  } catch {}
   const rounds = s.rounds || 0;
   const hist: any[] = s.history || [];
   const avgCost = rounds ? totalCost / rounds : 0;
@@ -193,31 +202,51 @@ export function computeOverview(): OverviewView {
   // 截断率 = 非正常 finish_reason（length / content_filter / sensitive 等）的占比
   const truncCnt = hist.filter((h: any) => (isTruncatedFinish(h.finishReason) || h.isTruncated)).length;
   const truncationRate = hist.length ? truncCnt / hist.length * 100 : 0;
-  const bal = state.customBalance || state.balance?.balance;
-  // 余额预测：仅基于 DeepSeek 官方模型历史（deepseek*），EWMA alpha=0.3，与原脚本一致
+  const ignored = new Set(state.walletIgnored || []);
+  const activeWallets = (state.wallets || []).filter((wallet) => !ignored.has(wallet.id));
+  const selectedWallet = balanceWalletId !== 'all'
+    ? activeWallets.find((wallet) => wallet.id === balanceWalletId) || null
+    : null;
+  const balanceWallets = selectedWallet ? [selectedWallet] : activeWallets;
+  let balanceCny: number | null = null;
+  let walletBalanceCount = 0;
+  for (const wallet of balanceWallets) {
+    const value = walletBalanceToCny(wallet, getWalletExchangeRate());
+    if (value == null) continue;
+    walletBalanceCount++;
+    balanceCny = (balanceCny ?? 0) + value;
+  }
+  if (balanceCny == null && !selectedWallet) {
+    const legacy = state.customBalance || state.balance?.balance;
+    const value = legacy != null && legacy !== '' ? parseFloat(String(legacy)) : NaN;
+    if (Number.isFinite(value)) {
+      balanceCny = value;
+      walletBalanceCount = 1;
+    }
+  }
+  // 余额预测：按当前余额口径过滤历史，EWMA alpha=0.3。
   let remainingRounds: number | null = null;
   try {
-    const balNum = bal != null && bal !== '' ? parseFloat(String(bal)) : NaN;
+    const balNum = balanceCny == null ? NaN : balanceCny;
     if (!isNaN(balNum) && s.history?.length) {
-      const dsHist = (s.history || []).filter((h: any) => typeof h.model === 'string' && h.model.toLowerCase().indexOf('deepseek') === 0);
-      if (dsHist.length) {
+      const scopedHist = (s.history || []).filter((h: any) => !selectedWallet || h.walletId === selectedWallet.id);
+      if (scopedHist.length) {
         const alpha = 0.3;
-        let ewma = dsHist[dsHist.length - 1].cost || 0;
-        for (let i = dsHist.length - 2; i >= 0; i--) ewma = alpha * (dsHist[i].cost || 0) + (1 - alpha) * ewma;
+        let ewma = scopedHist[scopedHist.length - 1].cost || 0;
+        for (let i = scopedHist.length - 2; i >= 0; i--) ewma = alpha * (scopedHist[i].cost || 0) + (1 - alpha) * ewma;
         if (ewma > 0) remainingRounds = Math.floor(balNum / ewma);
       }
     }
   } catch {}
   const balanceText = (() => {
     try {
-      
-      const v = bal != null && bal !== '' ? parseFloat(String(bal)) : NaN;
-      if (!isNaN(v)) return formatMoney(v, 2);
-      return formatMoney(0, 2);
-    } catch { return bal ? '¥' + bal + ' CNY' : '¥0.00 CNY'; }
+      return formatMoney(balanceCny == null ? 0 : balanceCny, 2);
+    } catch { return '¥' + (balanceCny || 0).toFixed(2) + ' CNY'; }
   })();
   return {
     balanceText,
+    hasBalance: balanceCny != null,
+    walletBalanceCount,
     totalCost, totalTokens, hit, miss, output, hitRate, savings,
     inputCost: s.input_cost || 0, outputCost: s.output_cost || 0,
     avgCost, avgTokens, avgDuration, avgRate, rounds, remainingRounds,
@@ -338,4 +367,23 @@ export function computeStatsFour(filtered: any[]): { avgCost:number; avgTokens:n
     truncationRate: truncCnt/rounds*100,
     rounds,
   };
+}
+
+export type WalletStats = {
+  requests: number;
+  tokens: number;
+  cost: number;
+};
+
+export function computeWalletStats(walletId: string): WalletStats {
+  let requests = 0;
+  let tokens = 0;
+  let cost = 0;
+  for (const entry of state.history || []) {
+    if (entry.walletId !== walletId) continue;
+    requests++;
+    tokens += entry.total_tokens || 0;
+    cost += entry.cost || 0;
+  }
+  return { requests, tokens, cost };
 }

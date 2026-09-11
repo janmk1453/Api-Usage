@@ -1,6 +1,9 @@
 import { PRICING, DEFAULT_PEAK_HOURS, PRICE_HISTORY } from '../constants/pricing';
 import type { PriceSegment } from '../constants/pricing';
 import type { Settings } from '../types/settings';
+import type { WalletConfig, WalletModel, WalletPriceTier } from '../types/wallet';
+import { DEEPSEEK_WALLET_ID } from '../types/wallet';
+import { findWalletModel } from '../data/wallets';
 import { isPeakHour as isPeakHourRaw, isWeekendDay } from '../utils/date';
 import { formatMoney as _formatMoney } from './currency';
 
@@ -21,6 +24,22 @@ function mergePrices(base: { hit: number; miss: number; output: number }, custom
     hit: custom.hit !== undefined && custom.hit !== '' ? parseFloat(custom.hit) : base.hit,
     miss: custom.miss !== undefined && custom.miss !== '' ? parseFloat(custom.miss) : base.miss,
     output: custom.output !== undefined && custom.output !== '' ? parseFloat(custom.output) : base.output,
+  };
+}
+
+function normalizeWalletTier(tier: WalletPriceTier | undefined): { hit: number; miss: number; output: number } {
+  return {
+    hit: Number.isFinite(Number(tier?.hit)) ? Number(tier?.hit) : 0,
+    miss: Number.isFinite(Number(tier?.miss)) ? Number(tier?.miss) : 0,
+    output: Number.isFinite(Number(tier?.output)) ? Number(tier?.output) : 0,
+  };
+}
+
+function walletPricing(rule: WalletModel): { usePeakPricing: boolean; offpeak: any; peak: any } {
+  return {
+    usePeakPricing: rule.price.usePeakPricing !== false,
+    offpeak: normalizeWalletTier(rule.price.offpeak),
+    peak: normalizeWalletTier(rule.price.peak),
   };
 }
 
@@ -51,10 +70,38 @@ function matchCustom(cm: any, m: string, raw?: string): boolean {
   return normalizeModel(cm.model) === m;
 }
 
-export function getPricing(model: string, settings: Settings) {
+export function getPricing(model: string, settings: Settings, wallet?: WalletConfig | null) {
   const raw = model || 'deepseek-v4-flash';
   const m = normalizeModel(raw);
   const base: any = (PRICING as any)[m] || (PRICING as any)['deepseek-v4-flash'];
+  const walletRule = wallet ? findWalletModel(wallet, raw) : null;
+  if (walletRule) {
+    if (walletRule.source === 'builtin' && wallet?.id === DEEPSEEK_WALLET_ID) {
+      const seg = findSegment(m, Date.now());
+      if (seg) return { usePeakPricing: seg.usePeakPricing !== false, offpeak: seg.offpeak, peak: seg.peak };
+      return base;
+    }
+    if (walletRule.price.priceConfigured) return walletPricing(walletRule);
+    if (wallet?.id === DEEPSEEK_WALLET_ID && (PRICING as any)[m]) {
+      const seg = findSegment(m, Date.now());
+      if (seg) return { usePeakPricing: seg.usePeakPricing !== false, offpeak: seg.offpeak, peak: seg.peak };
+      return base;
+    }
+    return {
+      usePeakPricing: true,
+      offpeak: { hit: 0, miss: 0, output: 0 },
+      peak: { hit: 0, miss: 0, output: 0 },
+      pending: true,
+    };
+  }
+  if (wallet && wallet.id !== DEEPSEEK_WALLET_ID) {
+    return {
+      usePeakPricing: true,
+      offpeak: { hit: 0, miss: 0, output: 0 },
+      peak: { hit: 0, miss: 0, output: 0 },
+      pending: true,
+    };
+  }
   for (const cm of settings.customModels || []) {
     if (matchCustom(cm, m, raw)) {
       return {
@@ -70,9 +117,18 @@ export function getPricing(model: string, settings: Settings) {
   return base;
 }
 
-export function hasPriceForModel(model: string, settings: Settings): boolean {
+export function hasPriceForModel(model: string, settings: Settings, wallet?: WalletConfig | null): boolean {
   const raw = model || 'deepseek-v4-flash';
   const m = normalizeModel(raw);
+  if (wallet) {
+    const rule = findWalletModel(wallet, raw);
+    if (rule) {
+      if (rule.source === 'builtin' && wallet.id === DEEPSEEK_WALLET_ID) return !!(PRICING as any)[m];
+      return rule.price.priceConfigured === true || (wallet.id === DEEPSEEK_WALLET_ID && !!(PRICING as any)[m]);
+    }
+    if (wallet.id === DEEPSEEK_WALLET_ID) return !!(PRICING as any)[m];
+    return false;
+  }
   if ((PRICING as any)[m]) return true;
   for (const cm of settings.customModels || []) if (matchCustom(cm, m, raw)) return true;
   // 仅 deepseek 系有内置价，非 deepseek 若未自定义则无价
@@ -88,6 +144,27 @@ export function isDeepSeekOfficialModel(m: unknown): boolean {
 export function isPeakHour(timestamp: number, settings: Settings): boolean {
   const hours = (settings && settings.peakHours) || (DEFAULT_PEAK_HOURS as any);
   return isPeakHourRaw(timestamp, hours);
+}
+
+function isWithinPeakHours(timestamp: number, peakHours: Array<{ start: string; end: string }>): boolean {
+  const d = new Date(timestamp);
+  const totalMinutes = d.getHours() * 60 + d.getMinutes();
+  for (const h of peakHours || []) {
+    if (!h || !h.start || !h.end) continue;
+    const p = h.start.split(':');
+    const q = h.end.split(':');
+    const sp = parseInt(p[0]) * 60 + parseInt(p[1] || '0');
+    const ep = parseInt(q[0]) * 60 + parseInt(q[1] || '0');
+    if (sp < ep) {
+      if (totalMinutes >= sp && totalMinutes < ep) return true;
+    } else if (totalMinutes >= sp || totalMinutes < ep) return true;
+  }
+  return false;
+}
+
+function isWalletPeakHour(timestamp: number, wallet: WalletConfig): boolean {
+  if (wallet.weekendOffpeak !== false && isWeekendDay(timestamp)) return false;
+  return isWithinPeakHours(timestamp, wallet.peakHours?.length ? wallet.peakHours : DEFAULT_PEAK_HOURS);
 }
 
 // 1:1 calcCost（含周末豁免、仅 deepseek* 峰谷、useNewPricing/newPricingDate）
@@ -126,11 +203,36 @@ function effectivePricingFor(model: string, uTs: number, settings: Settings, bas
 
 export function calcCost(
   u: { timestamp: number; model: string; prompt_cache_hit_tokens: number; prompt_cache_miss_tokens: number; completion_tokens: number },
-  settings: Settings
-): { input: number; output: number; total: number; priceType: string } {
+  settings: Settings,
+  wallet?: WalletConfig | null,
+): { input: number; output: number; total: number; priceType: string; source: 'wallet' | 'builtin' | 'legacy' | 'legacy-unassigned' | 'unpriced' } {
   const model = u.model || 'deepseek-v4-flash';
-  if (!hasPriceForModel(model, settings)) return { input: 0, output: 0, total: 0, priceType: 'old' };
-  const basePricing = getPricing(model, settings);
+  const walletRule = wallet ? findWalletModel(wallet, model) : null;
+  const useWalletRule = !!walletRule
+    && walletRule.price.priceConfigured
+    && walletRule.source !== 'builtin';
+  if (!wallet && !hasPriceForModel(model, settings)) {
+    return { input: 0, output: 0, total: 0, priceType: 'old', source: 'legacy-unassigned' };
+  }
+  if (wallet && !hasPriceForModel(model, settings, wallet)) {
+    return { input: 0, output: 0, total: 0, priceType: 'unpriced', source: 'unpriced' };
+  }
+  if (useWalletRule && wallet) {
+    const pricing = walletPricing(walletRule);
+    const usePeak = pricing.usePeakPricing !== false && isWalletPeakHour(u.timestamp, wallet);
+    const p: any = usePeak ? pricing.peak : pricing.offpeak;
+    const ih = (u.prompt_cache_hit_tokens / 1e6) * p.hit;
+    const im = (u.prompt_cache_miss_tokens / 1e6) * p.miss;
+    const o = (u.completion_tokens / 1e6) * p.output;
+    return {
+      input: ih + im,
+      output: o,
+      total: ih + im + o,
+      priceType: usePeak ? 'wallet-peak' : 'wallet-offpeak',
+      source: 'wallet',
+    };
+  }
+  const basePricing = getPricing(model, settings, wallet);
   const pricing = effectivePricingFor(model, u.timestamp, settings, basePricing);
   const segForHours = hasCustomForModel(model, settings) ? null : findSegment(normalizeModel(model), u.timestamp);
   const hours = peakHoursFor(segForHours, settings);
@@ -148,16 +250,35 @@ export function calcCost(
   const ih = (u.prompt_cache_hit_tokens / 1e6) * p.hit;
   const im = (u.prompt_cache_miss_tokens / 1e6) * p.miss;
   const o = (u.completion_tokens / 1e6) * p.output;
-  return { input: ih + im, output: o, total: ih + im + o, priceType };
+  return {
+    input: ih + im,
+    output: o,
+    total: ih + im + o,
+    priceType,
+    source: wallet
+      ? (wallet.id === DEEPSEEK_WALLET_ID ? 'builtin' : 'unpriced')
+      : (hasCustomForModel(model, settings) ? 'legacy' : 'legacy-unassigned'),
+  };
 }
 
 export function calcSavings(
   u: { prompt_cache_hit_tokens: number; timestamp: number; model: string; prompt_cache_miss_tokens: number; completion_tokens: number },
-  settings: Settings
+  settings: Settings,
+  wallet?: WalletConfig | null,
 ): number {
   const model = u.model || 'deepseek-v4-flash';
-  if (!hasPriceForModel(model, settings)) return 0;
-  const basePricing = getPricing(model, settings);
+  const walletRule = wallet ? findWalletModel(wallet, model) : null;
+  const useWalletRule = !!walletRule
+    && walletRule.price.priceConfigured
+    && walletRule.source !== 'builtin';
+  if (!hasPriceForModel(model, settings, wallet)) return 0;
+  if (useWalletRule && wallet) {
+    const pricing = walletPricing(walletRule);
+    const usePeak = pricing.usePeakPricing !== false && isWalletPeakHour(u.timestamp, wallet);
+    const p: any = usePeak ? pricing.peak : pricing.offpeak;
+    return ((u.prompt_cache_hit_tokens || 0) / 1e6) * (p.miss - p.hit);
+  }
+  const basePricing = getPricing(model, settings, wallet);
   const pricing = effectivePricingFor(model, u.timestamp, settings, basePricing);
   const segForHours = hasCustomForModel(model, settings) ? null : findSegment(normalizeModel(model), u.timestamp);
   const hours = peakHoursFor(segForHours, settings);

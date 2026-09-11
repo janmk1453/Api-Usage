@@ -3,9 +3,10 @@
  * 已废弃多存档，所有数据归一至 state.history + 聚合字段
  */
 import { state, getSelectedSave } from '../store/index';
-import { saveHot, loadHot, loadHistoryCold, appendHistoryCold, getAllHistory } from '../store/persistence';
-import { calcCost, isDeepSeekOfficialModel } from '../services/pricing';
-import { MAX_HISTORY, DETAIL_KEEP } from '../constants/pricing';
+import { saveHot, loadHot, loadHistoryCold, appendHistoryCold, getAllHistory, saveHistoryCold } from '../store/persistence';
+import { calcCost, isDeepSeekOfficialModel, normalizeModel } from '../services/pricing';
+import { getWalletExchangeRate } from '../services/currency';
+import { MAX_HISTORY, DETAIL_KEEP, PRICING } from '../constants/pricing';
 import { emit, DataEvents } from './events';
 import type { Snapshot } from './types';
 import { defaultSettings } from '../types/settings';
@@ -14,6 +15,22 @@ import { isTruncatedFinish } from '../utils/finish';
 import { log } from '../utils/logger';
 import { usageFingerprint } from './fingerprint';
 import type { HistoryConnection } from '../services/connection-identity';
+import {
+  createDeepSeekWallet,
+  createWalletFromConnection,
+  ensureDeepSeekWallet,
+  findWalletForConnection,
+  findWalletForHistory,
+  findWalletModel,
+  normalizeWalletPriceRule,
+  normalizeWallets,
+  observeCredential,
+  observeModel,
+  walletIdForEndpoint,
+  isDeepSeekOfficialConnection,
+} from './wallets';
+import { DEEPSEEK_WALLET_ID, type WalletConfig } from '../types/wallet';
+import { migrateLegacyWalletApiKey } from '../services/wallet-secrets';
 
 function getCurrentChatId(): string | null {
   try {
@@ -36,6 +53,248 @@ function getCurrentChatId(): string | null {
 function getCurrentChatName(): string | null {
   const id = getCurrentChatId();
   return id ? String(id) : null;
+}
+
+function numericPrice(value: unknown, fallback: number): number {
+  const n = typeof value === 'number' ? value : parseFloat(String(value));
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function legacyCustomPriceRule(custom: any) {
+  const normalized = normalizeModel(String(custom?.model || ''));
+  const base: any = (PRICING as any)[normalized] || (PRICING as any)['deepseek-flash'];
+  return normalizeWalletPriceRule({
+    usePeakPricing: custom?.usePeakPricing !== false,
+    offpeak: {
+      hit: numericPrice(custom?.offpeak?.hit, base.offpeak.hit),
+      miss: numericPrice(custom?.offpeak?.miss, base.offpeak.miss),
+      output: numericPrice(custom?.offpeak?.output, base.offpeak.output),
+    },
+    peak: {
+      hit: numericPrice(custom?.peak?.hit, base.peak.hit),
+      miss: numericPrice(custom?.peak?.miss, base.peak.miss),
+      output: numericPrice(custom?.peak?.output, base.peak.output),
+    },
+    priceConfigured: true,
+  });
+}
+
+function migrateLegacyPricing(wallet: WalletConfig, customModels: any[]): boolean {
+  if (wallet.legacyPricingImported) return false;
+  const now = Date.now();
+  for (const custom of customModels || []) {
+    const sourceModel = String(custom?.model || '').trim();
+    if (!sourceModel) continue;
+    const existing = findWalletModel(wallet, sourceModel);
+    const source = custom?.synced === true ? 'sync' as const : 'manual' as const;
+    if (existing) {
+      existing.price = legacyCustomPriceRule(custom);
+      existing.source = source;
+      existing.locked = false;
+      existing.updatedAt = now;
+    } else {
+      wallet.models.push({
+        id: `legacy:${sourceModel}`,
+        sourceModel,
+        model: sourceModel,
+        aliases: [],
+        price: legacyCustomPriceRule(custom),
+        source,
+        locked: false,
+        discoveredAt: now,
+        lastSeen: now,
+        updatedAt: now,
+      });
+    }
+  }
+  wallet.legacyPricingImported = true;
+  wallet.updatedAt = now;
+  return true;
+}
+
+function migrateLegacyBalance(wallet: WalletConfig): boolean {
+  if (wallet.balance.amount != null && String(wallet.balance.amount).trim() !== '') return false;
+  const custom = state.customBalance != null && String(state.customBalance).trim() !== ''
+    ? String(state.customBalance)
+    : (state.balance?.balance != null ? String(state.balance.balance) : '');
+  if (!custom) return false;
+  wallet.balance.amount = custom;
+  wallet.balance.currency = String(state.balance?.currency || '').toUpperCase() === 'USD' ? 'USD' : 'CNY';
+  wallet.balance.mode = 'manual';
+  wallet.balance.lastCalibrated = Number(state.balance?.timestamp) || null;
+  wallet.updatedAt = Date.now();
+  return true;
+}
+
+function historyConnection(entry: any): HistoryConnection | null {
+  if (!entry || (!entry.endpointId && !entry.sourceType)) return null;
+  return {
+    sourceType: entry.sourceType ?? null,
+    endpointId: entry.endpointId ?? null,
+    endpointLabel: entry.endpointLabel ?? null,
+    credentialId: entry.credentialId ?? null,
+    credentialLabel: entry.credentialLabel ?? null,
+  };
+}
+
+function ensureWalletForConnection(
+  wallets: WalletConfig[],
+  ignored: Set<string>,
+  connection: HistoryConnection | null,
+  now = Date.now(),
+): { wallet: WalletConfig | null; changed: boolean } {
+  if (!connection || !connection.endpointId) return { wallet: null, changed: false };
+  let wallet = findWalletForConnection(wallets, connection);
+  let changed = false;
+  if (!wallet) {
+    const id = isDeepSeekOfficialConnection(connection)
+      ? DEEPSEEK_WALLET_ID
+      : walletIdForEndpoint(connection.endpointId);
+    if (!id || ignored.has(id)) return { wallet: null, changed: false };
+    const created = isDeepSeekOfficialConnection(connection)
+      ? createDeepSeekWallet(state.settings, now)
+      : createWalletFromConnection(connection, state.settings, now);
+    if (!created) return { wallet: null, changed: false };
+    wallets.push(created);
+    wallet = created;
+    changed = true;
+  }
+  if (connection.endpointId && wallet.endpointId !== connection.endpointId && wallet.id !== DEEPSEEK_WALLET_ID) {
+    wallet.endpointId = connection.endpointId;
+    wallet.updatedAt = now;
+    changed = true;
+  }
+  if (connection.endpointLabel) {
+    const label = String(connection.endpointLabel).trim();
+    if (label && (!wallet.endpointLabel || wallet.endpointLabel !== label)) {
+      wallet.endpointLabel = label;
+      wallet.endpointDisplay = label;
+      if (!wallet.legacyPricingImported || wallet.name === wallet.endpointLabel) wallet.name = label;
+      wallet.updatedAt = now;
+      changed = true;
+    }
+  }
+  if (observeCredential(wallet, connection.credentialId, connection.credentialLabel, now)) {
+    wallet.updatedAt = now;
+    changed = true;
+  }
+  return { wallet, changed };
+}
+
+function refreshBuiltinWalletModels(wallet: WalletConfig, now = Date.now()): boolean {
+  if (wallet.id !== DEEPSEEK_WALLET_ID) return false;
+  let changed = false;
+  const defaults = createDeepSeekWallet(state.settings, wallet.createdAt || now);
+  for (const builtin of defaults.models) {
+    const existing = wallet.models.find((item) => item.sourceModel === builtin.sourceModel);
+    if (!existing) {
+      wallet.models.push(builtin);
+      changed = true;
+      continue;
+    }
+    if (existing.source !== 'builtin' || existing.locked) continue;
+    if (JSON.stringify(existing.price) !== JSON.stringify(builtin.price)) {
+      existing.price = builtin.price;
+      existing.updatedAt = now;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function migrateWallets(hot: any, cold: any[] = []): boolean {
+  const now = Date.now();
+  const normalized = normalizeWallets(state.wallets, state.settings, now);
+  let changed = normalized !== state.wallets;
+  state.wallets = normalized;
+  state.walletIgnored = Array.isArray(state.walletIgnored)
+    ? Array.from(new Set(state.walletIgnored.map((id) => String(id || '').trim()).filter(Boolean)))
+    : [];
+  const ignored = new Set(state.walletIgnored);
+  const official = state.wallets.find((wallet) => wallet.id === DEEPSEEK_WALLET_ID)
+    || createDeepSeekWallet(state.settings, now);
+  if (!state.wallets.some((wallet) => wallet.id === official.id)) state.wallets.unshift(official);
+  changed = migrateLegacyPricing(official, state.settings.customModels || []) || changed;
+  changed = migrateLegacyBalance(official) || changed;
+  changed = refreshBuiltinWalletModels(official, now) || changed;
+  migrateLegacyWalletApiKey(official.id);
+  const allHistory = [...(cold || []), ...(state.history || [])];
+  for (const entry of allHistory) {
+    const connection = historyConnection(entry);
+    if (!connection) continue;
+    const observed = ensureWalletForConnection(state.wallets, ignored, connection, Number(entry.timestamp) || now);
+    if (observed.changed) changed = true;
+    if (!observed.wallet) continue;
+    if (observed.wallet.id !== entry.walletId) {
+      entry.walletId = observed.wallet.id;
+      changed = true;
+    }
+    if (shouldTrackWalletModel(observed.wallet, String(entry.model || ''))) {
+      const model = observeModel(observed.wallet, String(entry.model || ''), Number(entry.timestamp) || now);
+      if (model.model && model.model.price.priceConfigured !== true) {
+        const legacy = (state.settings.customModels || []).find((custom: any) => {
+          try {
+            return normalizeModel(String(custom?.model || '')) === normalizeModel(String(entry.model || ''))
+              || String(custom?.model || '') === String(entry.model || '');
+          } catch {
+            return false;
+          }
+        });
+        if (legacy) {
+          model.model.price = legacyCustomPriceRule(legacy);
+          model.model.source = legacy.synced === true ? 'sync' : 'manual';
+          model.model.updatedAt = Number(entry.timestamp) || now;
+          model.changed = true;
+        }
+      }
+      if (model.changed) {
+        observed.wallet.updatedAt = now;
+        changed = true;
+      }
+    }
+    if (!observed.wallet.lastUsedAt || Number(entry.timestamp) > observed.wallet.lastUsedAt) {
+      observed.wallet.lastUsedAt = Number(entry.timestamp) || now;
+      changed = true;
+    }
+  }
+  if (hot && Array.isArray(hot.wallets) && state.wallets.length === 0) {
+    state.wallets = normalizeWallets(hot.wallets, state.settings, now);
+    changed = true;
+  }
+  return changed;
+}
+
+function recalcEntryCost(entry: any, wallet: WalletConfig | null) {
+  return calcCost({
+    timestamp: entry.timestamp,
+    model: entry.model,
+    prompt_cache_hit_tokens: entry.cache_hit_tokens || 0,
+    prompt_cache_miss_tokens: entry.cache_miss_tokens || 0,
+    completion_tokens: entry.completion_tokens || 0,
+  }, state.settings as any, wallet);
+}
+
+function applyCostPatch(entry: any, cost: ReturnType<typeof calcCost>): void {
+  entry.input_cost = cost.input;
+  entry.output_cost = cost.output;
+  entry.cost = cost.total;
+  entry.priceType = cost.priceType;
+  entry.pricingSource = cost.source;
+}
+
+function applyTotalDelta(previous: { input: number; output: number; total: number }, next: { input: number; output: number; total: number }): void {
+  state.input_cost += (next.input || 0) - (previous.input || 0);
+  state.output_cost += (next.output || 0) - (previous.output || 0);
+  state.total_cost += (next.total || 0) - (previous.total || 0);
+}
+
+function shouldTrackWalletModel(wallet: WalletConfig, model: string): boolean {
+  if (wallet.id !== DEEPSEEK_WALLET_ID) return true;
+  try {
+    return !(PRICING as any)[normalizeModel(model)];
+  } catch {
+    return true;
+  }
 }
 
 export function getFilteredHistoryForScope(): any[] {
@@ -161,6 +420,8 @@ function persist() {
     settings: state.settings,
     balance: state.balance,
     customBalance: state.customBalance,
+    wallets: state.wallets,
+    walletIgnored: state.walletIgnored,
     messageCount: state.messageCount,
     lastUsage: safeLastUsage,
   });
@@ -175,6 +436,8 @@ export const repository = {
       settings: state.settings,
       balance: state.balance,
       customBalance: state.customBalance,
+      wallets: state.wallets,
+      walletIgnored: state.walletIgnored,
       messageCount: state.messageCount,
       lastUsage: state.lastUsage,
       history: state.history as any,
@@ -198,6 +461,62 @@ export const repository = {
   async getColdHistory() { return loadHistoryCold(); },
 
   async getAllHistory() { return getAllHistory(); },
+
+  getWallets(): WalletConfig[] {
+    return state.wallets || [];
+  },
+
+  getWallet(walletId: string): WalletConfig | null {
+    return (state.wallets || []).find((wallet) => wallet.id === walletId) || null;
+  },
+
+  getIgnoredWalletIds(): string[] {
+    return [...(state.walletIgnored || [])];
+  },
+
+  replaceWallets(next: WalletConfig[], ignored?: string[]): void {
+    state.wallets = ensureDeepSeekWallet(normalizeWallets(next, state.settings, Date.now()), state.settings, Date.now());
+    if (ignored !== undefined) {
+      state.walletIgnored = Array.from(new Set(ignored.map((id) => String(id || '').trim()).filter((id) => id && id !== DEEPSEEK_WALLET_ID)));
+    }
+    persist();
+    emit(DataEvents.SETTINGS_CHANGED);
+  },
+
+  updateWallet(walletId: string, updater: (wallet: WalletConfig) => void): WalletConfig | null {
+    const wallet = (state.wallets || []).find((item) => item.id === walletId);
+    if (!wallet) return null;
+    updater(wallet);
+    wallet.updatedAt = Date.now();
+    persist();
+    emit(DataEvents.SETTINGS_CHANGED);
+    return wallet;
+  },
+
+  setWalletIgnored(walletId: string, ignored: boolean): boolean {
+    if (!walletId || walletId === DEEPSEEK_WALLET_ID) return false;
+    if (ignored) {
+      if (!state.walletIgnored.includes(walletId)) state.walletIgnored.push(walletId);
+    } else {
+      state.walletIgnored = state.walletIgnored.filter((id) => id !== walletId);
+    }
+    persist();
+    emit(DataEvents.SETTINGS_CHANGED);
+    return true;
+  },
+
+  setWalletBalance(walletId: string, amount: string | null, currency: 'CNY' | 'USD' = 'CNY', calibrated = false): WalletConfig | null {
+    return this.updateWallet(walletId, (wallet) => {
+      wallet.balance.amount = amount == null || String(amount).trim() === '' ? null : String(amount);
+      wallet.balance.currency = currency === 'USD' ? 'USD' : 'CNY';
+      wallet.balance.mode = calibrated ? 'auto' : 'manual';
+      if (calibrated) wallet.balance.lastCalibrated = Date.now();
+    });
+  },
+
+  recalcEntryWallet(entry: any): WalletConfig | null {
+    return findWalletForHistory(state.wallets, entry);
+  },
 
   addEntry(
     usage: any,
@@ -244,6 +563,36 @@ export const repository = {
     }
     log.debug('addEntry 解析', { model, hit, miss, comp, total });
     const fr = finishReason ?? (usage as any)?.__finish_reason ?? (usage as any)?.finish_reason ?? null;
+    const nowTs = Date.now();
+    let wallet: WalletConfig | null = null;
+    try {
+      const observed = ensureWalletForConnection(
+        state.wallets,
+        new Set(state.walletIgnored || []),
+        connection,
+        nowTs,
+      );
+      wallet = observed.wallet;
+      if (wallet) {
+        if (shouldTrackWalletModel(wallet, model)) {
+          const modelObservation = observeModel(wallet, model, nowTs);
+          if (modelObservation.changed) wallet.updatedAt = nowTs;
+          if (
+            modelObservation.model?.source === 'discovered'
+            && modelObservation.model.price.priceConfigured !== true
+            && (state.settings as any).pricingSync?.enabled
+          ) {
+            try {
+              import('../services/pricing-sync')
+                .then((module) => module.syncPricingFromModelsDev({ silent: true }))
+                .then(() => this.recalcWallet(wallet!.id))
+                .catch(() => {});
+            } catch {}
+          }
+        }
+        wallet.lastUsedAt = nowTs;
+      }
+    } catch {}
     // 指纹去重：5秒内同 model+total 防双记账（fetch 与 GENERATION_ENDED 并发）
     try {
       const now = Date.now();
@@ -271,6 +620,10 @@ export const repository = {
               for (const key of ['sourceType', 'endpointId', 'endpointLabel', 'credentialId', 'credentialLabel'] as const) {
                 if (!head[key] && connection[key]) { head[key] = connection[key]; changed = true; }
               }
+            }
+            if (wallet && !head.walletId) {
+              head.walletId = wallet.id;
+              changed = true;
             }
             if (changed) {
               if ((state.lastUsage as any)?.timestamp === head.timestamp) {
@@ -304,8 +657,10 @@ export const repository = {
     // 截断检测：非正常 finish_reason（length / content_filter / sensitive 等）
     lu.finishReason = fr; (lu as any).isTruncated = isTruncatedFinish(fr);
     lu.messages = (messages || []).map(clampMessage);
-    const c: any = calcCost({ timestamp: lu.timestamp, model, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp }, state.settings as any);
+    const c: any = calcCost({ timestamp: lu.timestamp, model, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp }, state.settings as any, wallet);
     lu.cost = c.total; lu.input_cost = c.input; lu.output_cost = c.output; lu.priceType = c.priceType;
+    lu.walletId = wallet?.id ?? null;
+    lu.pricingSource = c.source;
     const safeResponse = clampResponse(fullResponse);
     lu.raw_usage = usage; lu.fullRequest = fullRequest; lu.fullResponse = safeResponse;
     // 记录所属对话，便于按对话过滤
@@ -334,15 +689,28 @@ export const repository = {
       endpointLabel: connection?.endpointLabel ?? null,
       credentialId: connection?.credentialId ?? null,
       credentialLabel: connection?.credentialLabel ?? null,
+      walletId: wallet?.id ?? null,
+      pricingSource: c.source,
     };
     log.debug('addEntry 即将写入', { model: entry.model, total: entry.total_tokens });
     state.history.unshift(entry);
     state.total_tokens += total; state.total_cost += lu.cost; state.input_tokens += hit + miss; state.output_tokens += comp;
     state.cache_hit_tokens += hit; state.cache_miss_tokens += miss; state.input_cost += lu.input_cost; state.output_cost += lu.output_cost;
     if (isDeepSeekOfficialModel(model)) state.rounds += 1;
-    // 余额本地预扣（与原脚本一致，仅作本地估算，查询后校准）
+    // 余额本地预扣；钱包存在时只扣钱包余额，未归属请求仍兼容旧全局余额。
     try {
-      if (state.customBalance != null && String(state.customBalance).trim() !== '') {
+      if (wallet) {
+        const current = wallet.balance.amount == null || wallet.balance.amount === ''
+          ? NaN
+          : parseFloat(String(wallet.balance.amount));
+        if (Number.isFinite(current)) {
+          const cost = wallet.balance.currency === 'USD'
+            ? lu.cost / getWalletExchangeRate()
+            : lu.cost;
+          wallet.balance.amount = (current - cost).toFixed(4);
+          wallet.updatedAt = Date.now();
+        }
+      } else if (state.customBalance != null && String(state.customBalance).trim() !== '') {
         const cur = parseFloat(String(state.customBalance));
         if (!isNaN(cur)) state.customBalance = (cur - lu.cost).toFixed(4);
       } else if (state.balance && (state.balance as any).balance != null && String((state.balance as any).balance).trim() !== '') {
@@ -367,11 +735,57 @@ export const repository = {
 
   recalcAll() {
     for (const h of state.history || []) {
-      const c: any = calcCost({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state.settings as any);
-      h.input_cost = c.input; h.output_cost = c.output; h.cost = c.total; h.priceType = c.priceType;
+      const wallet = findWalletForHistory(state.wallets, h);
+      const previous = {
+        input: Number(h.input_cost) || 0,
+        output: Number(h.output_cost) || 0,
+        total: Number(h.cost) || 0,
+      };
+      const c = recalcEntryCost(h, wallet);
+      applyCostPatch(h, c);
+      applyTotalDelta(previous, c);
       h.cache_hit_rate = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) > 0 ? ((h.cache_hit_tokens || 0) / ((h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0)) * 100) : 0;
     }
     persist();
+  },
+
+  async recalcWallet(walletId: string): Promise<number> {
+    const wallet = state.wallets.find((item) => item.id === walletId) || null;
+    if (!wallet) return 0;
+    let changed = 0;
+    for (const h of state.history || []) {
+      if (findWalletForHistory(state.wallets, h)?.id !== wallet.id) continue;
+      const previous = {
+        input: Number(h.input_cost) || 0,
+        output: Number(h.output_cost) || 0,
+        total: Number(h.cost) || 0,
+      };
+      const c = recalcEntryCost(h, wallet);
+      applyCostPatch(h, c);
+      applyTotalDelta(previous, c);
+      h.cache_hit_rate = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) > 0 ? ((h.cache_hit_tokens || 0) / ((h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0)) * 100) : 0;
+      changed++;
+    }
+    try {
+      const cold = await loadHistoryCold();
+      let coldChanged = false;
+      for (const h of cold) {
+        if (findWalletForHistory(state.wallets, h)?.id !== wallet.id) continue;
+        const previous = {
+          input: Number(h.input_cost) || 0,
+          output: Number(h.output_cost) || 0,
+          total: Number(h.cost) || 0,
+        };
+        const c = recalcEntryCost(h, wallet);
+        applyCostPatch(h, c);
+        applyTotalDelta(previous, c);
+        coldChanged = true;
+        changed++;
+      }
+      if (coldChanged) await saveHistoryCold(cold);
+    } catch {}
+    persist();
+    return changed;
   },
 
   replaceAll(next: Partial<Snapshot> & any) {
@@ -446,10 +860,17 @@ export const repository = {
     }
     if (next.balance !== undefined) state.balance = next.balance;
     if (next.customBalance !== undefined) state.customBalance = next.customBalance as any;
+    if (next.wallets !== undefined) state.wallets = normalizeWallets(next.wallets, state.settings, Date.now());
+    if (next.walletIgnored !== undefined) {
+      state.walletIgnored = Array.isArray(next.walletIgnored)
+        ? Array.from(new Set(next.walletIgnored.map((id: unknown) => String(id || '').trim()).filter(Boolean)))
+        : [];
+    }
     if (next.messageCount !== undefined) state.messageCount = next.messageCount as any;
     if (next.lastUsage !== undefined) state.lastUsage = next.lastUsage as any;
     persist();
     if (next.settings) emit(DataEvents.SETTINGS_CHANGED);
+    if (next.wallets !== undefined || next.walletIgnored !== undefined) emit(DataEvents.SETTINGS_CHANGED);
     if (next.balance !== undefined || next.customBalance !== undefined) emit(DataEvents.BALANCE_CHANGED);
   },
 
@@ -508,12 +929,18 @@ export const repository = {
       if (hot.settings) state.settings = normalizeSettings(hot.settings);
       if (hot.balance) state.balance = hot.balance;
       if (hot.customBalance) state.customBalance = hot.customBalance;
+      if (hot.wallets) state.wallets = normalizeWallets(hot.wallets, state.settings, Date.now());
+      if (Array.isArray(hot.walletIgnored)) state.walletIgnored = hot.walletIgnored;
       if (hot.messageCount) state.messageCount = hot.messageCount;
       if (hot.lastUsage) state.lastUsage = hot.lastUsage;
     }
     // 迁移：旧设置无 historyScope 时补默认值 all
     if (!(state.settings as any).historyScope) {
       (state.settings as any).historyScope = 'all';
+      try { saveHot({ settings: state.settings }); } catch {}
+    }
+    if (!(state.settings as any).overviewWalletId) {
+      (state.settings as any).overviewWalletId = 'all';
       try { saveHot({ settings: state.settings }); } catch {}
     }
     // 迁移：旧设置无 overviewFour 时补默认八块（兼容旧4块）
@@ -577,6 +1004,14 @@ export const repository = {
       }
     }
     if (needPersistChatId) try { saveHot({ history: state.history }); } catch {}
+    let coldForWalletMigration: any[] = [];
+    try { coldForWalletMigration = await loadHistoryCold(); } catch {}
+    if (migrateWallets(hot, coldForWalletMigration)) {
+      try { saveHot({ wallets: state.wallets, walletIgnored: state.walletIgnored }); } catch {}
+      if (coldForWalletMigration.length) {
+        try { await saveHistoryCold(coldForWalletMigration); } catch {}
+      }
+    }
     // 自动清理历史中的全 0 污染条目（由之前 token_count 误判产生）
     try { this.pruneZeroEntries(); } catch {}
     // 对历史成本按归一化模型重算，修复 [masa]/[OR] 前缀导致的 0 费用

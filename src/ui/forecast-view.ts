@@ -3,17 +3,32 @@ import { fitSegments, remainingRounds as calcR, ctxLimitRounds, costAt, nextProm
 import { energyScore, topPowerChats } from '../stats/energyScore';
 import { getPricing } from '../services/pricing';
 import { esc } from '../utils/date';
-import { formatMoney, getDisplayCurrency } from '../services/currency';
+import { formatMoney } from '../services/currency';
+import { getWalletExchangeRate } from '../services/currency';
+import { findWalletForHistory, walletBalanceToCny } from '../data/wallets';
 
 function getDoc(){ return (window.parent as any)?.document ?? document; }
 function currentChatId(): string | null {
   try { const ctx:any=(globalThis as any).SillyTavern?.getContext?.(); return ctx?.getCurrentChatId?.()||null; } catch { return null; }
 }
 function balanceNum(): number | null {
-  const b = (state as any).customBalance || (state as any).balance?.balance;
-  if (b==null||b==='') return null;
-  const n = parseFloat(String(b));
-  return isNaN(n)? null : n;
+  const ignored = new Set(state.walletIgnored || []);
+  const selected = String((state.settings as any).overviewWalletId || 'all');
+  const wallets = (state.wallets || []).filter((wallet) => !ignored.has(wallet.id));
+  const target = selected === 'all' ? wallets : wallets.filter((wallet) => wallet.id === selected);
+  let total: number | null = null;
+  for (const wallet of target) {
+    const value = walletBalanceToCny(wallet, getWalletExchangeRate());
+    if (value == null) continue;
+    total = (total ?? 0) + value;
+  }
+  if (total == null) {
+    const fallback = (state as any).customBalance || (state as any).balance?.balance;
+    if (fallback == null || fallback === '') return null;
+    const value = parseFloat(String(fallback));
+    if (Number.isFinite(value)) total = value;
+  }
+  return total;
 }
 
 // 对话自选（与统计页统一胶囊 UI）
@@ -130,8 +145,9 @@ export function renderForecastView(){
     const fit = fitSegments(effectiveHist, null);
     if (!fit) { host.innerHTML = `<div style="padding:12px;color:var(--ds-text-2);font-size:12px;">暂无数据</div>`; return; }
     const bal = balanceNum();
-    const model = effectiveHist[effectiveHist.length-1]?.model || 'deepseek-v4-flash';
-    const pricing = getPricing(model, state.settings as any);
+    const latestEntry = effectiveHist[effectiveHist.length - 1];
+    const model = latestEntry?.model || 'deepseek-v4-flash';
+    const pricing = getPricing(model, state.settings as any, findWalletForHistory(state.wallets, latestEntry || {}));
     const p = pricing.offpeak;
     const R = bal!=null? calcR(bal, fit, p): { R:0, R_low:0, R_high:0 };
     const ctxLim = ctxLimitForModel(model);
@@ -248,8 +264,9 @@ function renderSensitivity(history:any[], chatId:string|null){
     if (bal==null){ if(resEl) resEl.textContent='未设置余额，无法估算剩余轮数'; return; }
     // 临时覆盖 hit
     const tmp={...fit, hitEwma:h} as any;
-    const model = ((chatId ? history.filter((hh:any)=>(hh.chatId??null)===chatId) : history).slice(-1)[0]?.model)||'deepseek-v4-flash';
-    const pricing = getPricing(model, state.settings as any);
+    const latestEntry = (chatId ? history.filter((hh:any)=>(hh.chatId??null)===chatId) : history).slice(-1)[0];
+    const model = latestEntry?.model || 'deepseek-v4-flash';
+    const pricing = getPricing(model, state.settings as any, findWalletForHistory(state.wallets, latestEntry || {}));
     const R = calcR(bal, tmp, pricing.offpeak);
     if(resEl) resEl.textContent = `命中 ${slider.value}% 时预计剩余 ${R.R} 轮（±${Math.abs(R.R_high-R.R_low)/2|0}），降 10% 约少 ${Math.abs(R.R - calcR(bal,{...fit,hitEwma:Math.max(0,h-0.1)} as any,pricing.offpeak).R)} 轮`;
   };

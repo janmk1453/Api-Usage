@@ -135,6 +135,10 @@ export function shortHash(text: string): string {
   return h1 + h2;
 }
 
+export function officialEndpointId(sourceType: string): string {
+  return shortHash(`${sourceType}|official:${sourceType}`);
+}
+
 export function normalizeEndpoint(raw: string): { canonical: string; label: string } | null {
   const value = String(raw || '').trim();
   if (!value) return null;

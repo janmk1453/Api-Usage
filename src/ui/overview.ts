@@ -5,6 +5,7 @@ import { saveHot } from '../store/persistence';
 import { esc } from '../utils/date';
 import type { OverviewFourKey } from '../types/settings';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
+import { repository } from '../data/repository';
 
 function fmt(n: number) { return n.toLocaleString('zh-CN'); }
 function CNY(n: number) {
@@ -111,6 +112,7 @@ export function getFourDisplay(key: OverviewFourKey, v: any): { title:string; ht
 }
 
 let fourBound = false;
+let overviewWalletBound = false;
 function bindFour() {
   if (fourBound) return;
   fourBound = true;
@@ -152,7 +154,52 @@ function openFourDrop(idx:number, v:any) {
 
 export function renderOverview() {
   const doc = (window.parent as any)?.document ?? document;
-  const v = computeOverview();
+  const ignored = new Set(repository.getIgnoredWalletIds());
+  const wallets = repository.getWallets().filter((wallet) => !ignored.has(wallet.id));
+  const selectedWalletId = String((state.settings as any).overviewWalletId || 'all');
+  const activeWalletId = selectedWalletId !== 'all' && wallets.some((wallet) => wallet.id === selectedWalletId)
+    ? selectedWalletId
+    : 'all';
+  const v = computeOverview(activeWalletId);
+  const walletBtn = doc.getElementById('aus-overview-wallet-btn');
+  const walletLabel = doc.getElementById('aus-overview-wallet-label');
+  const walletDrop = doc.getElementById('aus-overview-wallet-dropdown') as HTMLElement | null;
+  if (walletLabel) {
+    walletLabel.textContent = activeWalletId === 'all'
+      ? '全部钱包合计'
+      : wallets.find((wallet) => wallet.id === activeWalletId)?.name || '全部钱包合计';
+  }
+  if (walletDrop) {
+    const item = (id: string, label: string) => {
+      const active = id === activeWalletId;
+      return `<div data-overview-wallet="${esc(id)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:11px;${active ? 'background:var(--ds-card);font-weight:600;' : ''}">${esc(label)}</div>`;
+    };
+    walletDrop.innerHTML = item('all', '全部钱包合计') + wallets.map((wallet) => item(wallet.id, wallet.name)).join('');
+    walletDrop.querySelectorAll('[data-overview-wallet]').forEach((el: any) => {
+      el.onclick = () => {
+        (state.settings as any).overviewWalletId = el.getAttribute('data-overview-wallet') || 'all';
+        try { saveHot({ settings: state.settings }); } catch {}
+        walletDrop.style.display = 'none';
+        renderOverview();
+      };
+    });
+  }
+  if (walletBtn && walletDrop) {
+    walletBtn.onclick = (event: Event) => {
+      event.stopPropagation();
+      walletDrop.style.display = walletDrop.style.display === 'block' ? 'none' : 'block';
+    };
+  }
+  if (!overviewWalletBound) {
+    overviewWalletBound = true;
+    doc.addEventListener('click', (event: any) => {
+      const target = event.target as HTMLElement;
+      const drop = doc.getElementById('aus-overview-wallet-dropdown') as HTMLElement | null;
+      if (drop && !target?.closest?.('#aus-overview-wallet-dropdown') && !target?.closest?.('#aus-overview-wallet-btn')) {
+        drop.style.display = 'none';
+      }
+    });
+  }
 
   const balEl = doc.getElementById('aus-balance');
   if (balEl) balEl.textContent = v.balanceText;
@@ -160,8 +207,7 @@ export function renderOverview() {
   if (remEl) {
     if (v.remainingRounds != null) remEl.textContent = '预计还可进行 ' + v.remainingRounds.toLocaleString('zh-CN') + ' 轮对话（仅 DeepSeek 官方）';
     else {
-      const hasBal = !!(state.customBalance || state.balance?.balance);
-      remEl.textContent = hasBal ? '暂无 DeepSeek 对话数据，无法预测' : '查询余额后可预测剩余轮次';
+      remEl.textContent = v.hasBalance ? '暂无可用于预测的费用记录' : '设置钱包余额后可预测剩余轮次';
     }
   }
   const costEl = doc.getElementById('aus-total-cost');
