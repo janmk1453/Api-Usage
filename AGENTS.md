@@ -108,7 +108,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **入口**：侧边栏 `钱包`，`data-view="wallet"` 独立页；页面顶部为钱包汇总卡，下面按接入链接展示钱包，最后展示已忽略接入口
 - **钱包粒度**：一个 `endpointId` 对应一个钱包，同一链接下多个密钥归入同一钱包；默认始终有不可删除的 DeepSeek 官方钱包。历史中已有识别的接入会在迁移时回填，新请求首次出现未忽略接入时自动创建钱包并命名成接入地址
 - **固定与可编辑**：接入地址、接入类型、已识别密钥身份只读；钱包名称、模型名、价格、价格来源、峰谷规则、手工余额和忽略状态可编辑。模型改名会保留旧名别名，旧请求仍能命中规则
-- **默认收起**：每个钱包默认 `collapsed=true`，收起时仍展示钱包名、接入地址、余额、密钥数、模型数、请求数、费用和待定价数量；展开状态按钱包独立记忆并随导入导出/WebDAV 同步
+- **默认收起**：每个钱包默认 `collapsed=true`；宽屏收起态采用“身份区 + 五项指标 + 操作区”三栏，指标固定为余额、密钥数、模型数、请求数、费用，待定价数显示为状态徽标，避免中间留白。展开状态按钱包独立记忆并随导入导出/WebDAV 同步
 - **余额**：币种首版支持 `CNY/USD`，手工余额可直接填写；自动校准只开放给 DeepSeek 官方直连钱包，默认使用钱包内单独保存的校准密钥，可选一个主密钥作为账号身份。多密钥不会自动相加。钱包余额在每次请求按当前币种预扣，成功校准后覆盖为服务端余额
 - **密钥隐私**：普通官方接口只记录酒馆密钥条目编号、标签和掩码末三位；反向代理 `proxy_password` 与 `custom_include_headers` 继续不读取、不比较、不持久化，因此按“未识别密钥”处理
 - **钱包模型**：模型条目含 `sourceModel/model/aliases/price/source/locked`；非峰与高峰均包含命中、未命中、输出三价。每条规则可关闭峰谷、锁定防止同步覆盖。每个钱包可独立配置跨天峰谷时段与“周末全天低谷”
@@ -117,7 +117,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **待定价重算**：保存模型价格、修改峰谷、修改周末规则或同步价格后调用 `repository.recalcWallet(walletId)`，同时处理热历史和 IndexedDB 冷历史，并修正累计费用
 - **models.dev**：每个钱包配置 `catalogProvider`。开启同步后，官方接入自动映射来源，中转站由用户选择；支持 `add-missing/overwrite-unlocked/overwrite-all`，锁定规则仅允许全部覆盖模式修改。关闭同步会移除未锁定的同步价格并重算
 - **忽略与恢复**：删除钱包改为加入 `walletIgnored`，后续请求不自动重建、不参与余额合计，历史仍保留 `walletId`；钱包页可恢复显示。DeepSeek 官方钱包不可忽略
-- **响应式**：钱包汇总卡在所有宽度保持一行三列，仅压缩字号和间距；钱包双栏区域在窄屏改为单列。钱包卡内容使用边框面板，不嵌套 `.ds-card`
+- **响应式**：钱包汇总卡在所有宽度保持一行三列，仅压缩字号和间距；`≤760px` 时钱包 header 改为单列顺序，五项指标用三列网格自动换行，展开/同步/忽略按钮落到指标下方并完整显示；钱包双栏区域改为单列。钱包卡内容使用边框面板，不嵌套 `.ds-card`
 
 ### 设置
 - 保留全局控制：颜色模式、历史显示范围、自动校准总开关与间隔、新价格机制（日期）、新钱包默认峰谷、models.dev 自动同步、调试、峰值圆点和 WebDAV
@@ -131,15 +131,15 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - 选择器统一：所有选择类 UI 必须使用用量统计·模型选择同款胶囊下拉（`#xxx-btn` 胶囊 `999px` + `#xxx-dropdown` 绝对定位 `12px` 圆角 `box-shadow`），禁止原生 `select`，选中态 `background:var(--ds-card)` 加粗
 - 魔法棒悬停：`background: transparent !important`
 - 文字：`Microsoft YaHei`，无 `antialiased/optimizeLegibility` 干预
-- 移动端：`≤760px` 侧边栏 `display:none` 默认隐藏、`#aus-mobile-header` 汉堡（`24px` `☰`，`display:flex`）瞬时呼出 `is-open`，无遮罩无动画；`#aus-panel flex:column + #aus-panel-body flex:row`（`#aus-main overflow-x:hidden + min-width:0` 约束防止 720px 表撑开），概览 8 块保持 `repeat(2,1fr)` 两列，钱包汇总卡强制保持 `repeat(3,minmax(0,1fr))` 一行三列，钱包双栏和其他网格 `4→1` 列，窄屏所有胶囊下拉 `overflow:visible + z-index:50` 不被裁剪
+- 移动端：`≤760px` 侧边栏 `display:none` 默认隐藏、`#aus-mobile-header` 汉堡（`24px` `☰`，`display:flex`）瞬时呼出 `is-open`，无遮罩无动画；`#aus-panel flex:column + #aus-panel-body flex:row`（`#aus-main overflow-x:hidden + min-width:0` 约束防止 720px 表撑开），概览 8 块保持 `repeat(2,1fr)` 两列，钱包汇总卡强制保持 `repeat(3,minmax(0,1fr))` 一行三列，钱包 header 五项指标保持三列换行、操作按钮单独一行，钱包双栏和其他网格 `4→1` 列，窄屏所有胶囊下拉 `overflow:visible + z-index:50` 不被裁剪
 
 ## 常见任务
 
 - **改定价/峰谷**：内置价看 `src/constants/pricing.ts` + `src/services/pricing.ts`；钱包价和独立峰谷看 `src/data/wallets.ts` + `src/ui/wallet-view.ts`；`calcCost/calcSavings/getPricing/hasPriceForModel` 均支持可选钱包上下文，未传钱包时保持旧行为
 - **加价格段（多段定价）**：`PRICE_HISTORY[模型].push({since: 生效时间戳, offpeak, peak, usePeakPricing?, peakHours?, label?})`（按 `since` 升序，命中 `timestamp>=since` 最后一段，未来段同样写法）；内置段按记录时间查询，钱包手工/同步规则覆盖后不分段；改价后按钱包执行冷热重算
-- **改面板/导航**：`src/ui/panel.ts`（全屏+`positionPanel` 定位置换+`applyCollapsed`）+ `style.css`（`#aus-mobile-header` 汉堡 + `display` 切换，无过渡）
+- **改面板/导航**：`src/ui/panel.ts`（全屏+`positionPanel` 定位置换+`applyCollapsed`）+ `style.css`（`#aus-mobile-header` 汉堡 + `display` 切换，无过渡；改动钱包 header 响应式时必须保持覆盖规则优先级高于通用网格规则）
 - **改概览/统计**：`src/ui/overview.ts` + `src/ui/stats-view.ts`（五维度 time∩model∩chat∩endpoint∩credential 过滤）+ `src/data/computed.ts`（`computeChatStats` / `filterStatsHistory` / 接入与密钥选项单源）+ `src/ui/heatmap.ts`（概览热力图，GitHub 风格，近 2 年，块内滑动）
-- **改钱包**：`src/types/wallet.ts`（结构与默认值）+ `src/data/wallets.ts`（纯逻辑）+ `src/data/repository.ts`（迁移、自动建钱包、钱包 CRUD、余额和冷热重算）+ `src/ui/wallet-view.ts`（页面交互）+ `src/services/wallet-secrets.ts`（钱包校准密钥）
+- **改钱包**：`src/types/wallet.ts`（结构与默认值）+ `src/data/wallets.ts`（纯逻辑）+ `src/data/repository.ts`（迁移、自动建钱包、钱包 CRUD、余额和冷热重算）+ `src/ui/wallet-view.ts`（页面交互）+ `src/services/wallet-secrets.ts`（钱包校准密钥）+ `style.css`（收起态三栏、窄屏三列指标与操作按钮换行）
 - **改历史筛选/详情/占比**：`src/ui/panel.ts`（`renderHistory` 四维度筛选 + 筛选后分页 + 内联展开 + 三色条，费用按币种）
 - **改连接身份/隐私**：`src/services/connection-identity.ts`（地址规范、密钥条目映射）+ `src/services/interception.ts`（请求开始快照）+ `src/data/fingerprint.ts`（连接感知去重）；严格隐私模式禁止读取 `proxy_password` 与 `custom_include_headers`
 - **改同步/导入**：`src/services/sync.ts` + `src/services/import-export.ts`（保持 `deepseek-stat-export v1` 兼容；钱包配置通过可选 `wallets/walletIgnored/walletFormat:2` 携带，导出经 `getAllHistory` 含冷库全量，导入超 `MAX_HISTORY` 自动回冷库，任何钱包校准密钥均不导出）+ `src/services/pricing-sync.ts`（models.dev 按钱包同步）
@@ -160,6 +160,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **钱包没有自动创建**：确认请求包含 `endpointId`，且对应 `wallet:<endpointId>` 未被加入 `walletIgnored`；反向代理仅创建按地址区分的钱包，不识别代理密码
 - **钱包展开状态异常**：状态存于 `WalletConfig.collapsed`，默认 `true`，旧数据缺字段也按收起处理；若展开后刷新仍收起，检查热持久化是否覆盖了 `wallets` 字段
 - **窄屏汇总错位**：钱包汇总卡必须使用 `repeat(3,minmax(0,1fr))`，内侧文本用省略号或缩小字号，不能退回 `1fr` 三行
+- **下拉被卡片边框遮挡**：概览“余额口径”卡片使用 `.aus-overview-balance-card` 提升独立层叠上下文并保持 `overflow:visible`；钱包卡使用 `[data-wallet-card]:focus-within` 与下拉 `z-index:120`。新增浮层时必须同时检查父卡片层叠上下文，不能只提高下拉自身 `z-index`
 
 ## 版本与发布管控（新增，基于分支隔离）
 
@@ -222,6 +223,8 @@ git push origin main --tags
 - **余额口径**：概览钱包选择器只影响充值余额和剩余轮次预测，累计消费、热力图、按对话统计等保持全量；余额汇总按 `CNY/USD` 换算，钱包扣费按钱包自身币种
 - **WalletConfig 兼容**：新增字段必须提供默认值；`collapsed` 缺省为 `true`，`legacyPricingImported` 防止重复迁移，`walletIgnored` 决定是否允许自动重建
 - **旧价回填边界**：同名校验只按完整模型名匹配，不做别名/归一化；只运行一次并覆盖升级时的热冷历史，新请求仍用钱包自身规则。匹配钱包价格变更时，`recalcWallet` 会同时重算引用该钱包的 `legacy-match` 条目
+- **钱包收起态留白**：收起态不能只把指标塞进身份区下方；宽屏使用身份、五项指标、操作区三栏，窄屏按身份、三列指标、操作按钮三行排列，保证按钮和数据均可见
+- **响应式规则顺序**：钱包专用响应式网格若写在通用网格之前，必须用足够的优先级覆盖后面的通用规则；否则窄屏会继续按桌面三栏计算并裁切指标/按钮
 - **筛选与分页顺序**：统计页统一走 `filterStatsHistory`；历史页先对热冷全量历史执行 `model ∩ chat ∩ endpoint ∩ credential`，再进行 `30/页` 分页，筛选不参与分页会导致总数错误
 - **三块竖屏**：统计页 `消费金额/API 次数/Tokens` 在 `760px` 下已为 `1fr` 单列三行，满足一行一列需求；新增 `statsFour` 4 块在竖屏为 `2×2`
 - **自定义日期**：统计页 `自定义` 原为双月日历，现为直输 `input[type=date]` 两框 + 应用按钮，`max` 限今日，自动纠正起止倒置
