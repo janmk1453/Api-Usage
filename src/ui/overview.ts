@@ -161,6 +161,7 @@ export function renderOverview() {
     ? selectedWalletId
     : 'all';
   const v = computeOverview(activeWalletId);
+  const walletCard = doc.querySelector('.aus-overview-balance-card') as HTMLElement | null;
   const walletBtn = doc.getElementById('aus-overview-wallet-btn');
   const walletLabel = doc.getElementById('aus-overview-wallet-label');
   const walletDrop = doc.getElementById('aus-overview-wallet-dropdown') as HTMLElement | null;
@@ -180,6 +181,7 @@ export function renderOverview() {
         (state.settings as any).overviewWalletId = el.getAttribute('data-overview-wallet') || 'all';
         try { saveHot({ settings: state.settings }); } catch {}
         walletDrop.style.display = 'none';
+        walletCard?.classList.remove('is-wallet-dropdown-open');
         renderOverview();
       };
     });
@@ -187,7 +189,9 @@ export function renderOverview() {
   if (walletBtn && walletDrop) {
     walletBtn.onclick = (event: Event) => {
       event.stopPropagation();
-      walletDrop.style.display = walletDrop.style.display === 'block' ? 'none' : 'block';
+      const open = walletDrop.style.display !== 'block';
+      walletDrop.style.display = open ? 'block' : 'none';
+      walletCard?.classList.toggle('is-wallet-dropdown-open', open);
     };
   }
   if (!overviewWalletBound) {
@@ -197,6 +201,7 @@ export function renderOverview() {
       const drop = doc.getElementById('aus-overview-wallet-dropdown') as HTMLElement | null;
       if (drop && !target?.closest?.('#aus-overview-wallet-dropdown') && !target?.closest?.('#aus-overview-wallet-btn')) {
         drop.style.display = 'none';
+        walletCard?.classList.remove('is-wallet-dropdown-open');
       }
     });
   }

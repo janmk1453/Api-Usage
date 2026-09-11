@@ -6188,6 +6188,7 @@ function renderOverview() {
   const selectedWalletId = String(state$2.settings.overviewWalletId || "all");
   const activeWalletId = selectedWalletId !== "all" && wallets.some((wallet) => wallet.id === selectedWalletId) ? selectedWalletId : "all";
   const v = computeOverview(activeWalletId);
+  const walletCard = doc.querySelector(".aus-overview-balance-card");
   const walletBtn = doc.getElementById("aus-overview-wallet-btn");
   const walletLabel = doc.getElementById("aus-overview-wallet-label");
   const walletDrop = doc.getElementById("aus-overview-wallet-dropdown");
@@ -6208,6 +6209,7 @@ function renderOverview() {
         } catch {
         }
         walletDrop.style.display = "none";
+        walletCard?.classList.remove("is-wallet-dropdown-open");
         renderOverview();
       };
     });
@@ -6215,7 +6217,9 @@ function renderOverview() {
   if (walletBtn && walletDrop) {
     walletBtn.onclick = (event) => {
       event.stopPropagation();
-      walletDrop.style.display = walletDrop.style.display === "block" ? "none" : "block";
+      const open = walletDrop.style.display !== "block";
+      walletDrop.style.display = open ? "block" : "none";
+      walletCard?.classList.toggle("is-wallet-dropdown-open", open);
     };
   }
   if (!overviewWalletBound) {
@@ -6225,6 +6229,7 @@ function renderOverview() {
       const drop = doc.getElementById("aus-overview-wallet-dropdown");
       if (drop && !target?.closest?.("#aus-overview-wallet-dropdown") && !target?.closest?.("#aus-overview-wallet-btn")) {
         drop.style.display = "none";
+        walletCard?.classList.remove("is-wallet-dropdown-open");
       }
     });
   }
@@ -10318,7 +10323,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-CHBpCqA9.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-BueDyCsf.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -10371,7 +10376,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-CHBpCqA9.js").then((m) => m.maybeAutoCheck());
+    import("./update-BueDyCsf.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

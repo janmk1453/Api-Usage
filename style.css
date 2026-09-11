@@ -188,7 +188,7 @@
 #aus-sidebar-overlay { display: none; }
 #aus-sidebar-overlay.is-open {
   display: block !important;
-  position: absolute !important; inset: 0 !important; z-index: 300 !important;
+  position: absolute !important; inset: 0 !important; z-index: 20 !important;
   background: var(--ds-overlay) !important;
 }
 
@@ -201,7 +201,7 @@
   }
   #aus-sidebar.is-open {
     display: flex !important;
-    position: absolute !important; left: 0; top: 0; bottom: 0; z-index: 310 !important;
+    position: absolute !important; left: 0; top: 0; bottom: 0; z-index: 30 !important;
     box-shadow: 8px 0 24px rgba(0,0,0,0.18) !important;
   }
   #aus-sidebar-toggle { display: none !important; }
@@ -274,8 +274,8 @@
 .aus-overview-balance-card {
   overflow: visible !important;
 }
-.aus-overview-balance-card:focus-within {
-  z-index: 80 !important;
+.aus-overview-balance-card.is-wallet-dropdown-open {
+  z-index: 50 !important;
 }
 #aus-overview-wallet-dropdown {
   z-index: 100 !important;
@@ -364,9 +364,9 @@
   #aus-panel-body { flex-direction: row !important; /* 不设 relative，让抽屉以 #aus-panel 为锚点覆盖 header */ }
   /* 覆盖式抽屉：侧栏绝对定位不挤压主区 + 遮罩点外关闭 */
   #aus-sidebar { display:none !important; width:240px !important; min-width:240px !important; max-width:240px !important; }
-  #aus-sidebar.is-open { display:flex !important; position:absolute !important; left:0; top:0; bottom:0; z-index:310 !important; box-shadow:8px 0 24px rgba(0,0,0,0.18) !important; }
+  #aus-sidebar.is-open { display:flex !important; position:absolute !important; left:0; top:0; bottom:0; z-index:30 !important; box-shadow:8px 0 24px rgba(0,0,0,0.18) !important; }
   #aus-sidebar-overlay { display:none !important; }
-  #aus-sidebar-overlay.is-open { display:block !important; position:absolute !important; inset:0 !important; z-index:300 !important; background:var(--ds-overlay) !important; }
+  #aus-sidebar-overlay.is-open { display:block !important; position:absolute !important; inset:0 !important; z-index:20 !important; background:var(--ds-overlay) !important; }
   #aus-sidebar-toggle { display:none !important; }
   /* 窄屏呼出时强制还原完整导航样式，避免宽屏折叠残留导致间距/动画异常 */
   #aus-sidebar #aus-brand { display:flex !important; }
