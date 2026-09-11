@@ -32,6 +32,7 @@ Api-Usage/
 ├── .github/workflows/ci.yml # GitHub Actions：只读 CI + main 预览预发布
 ├── scripts/verify-ci.mjs  # 版本单源、清单路径、分包引用链与孤立产物检查
 ├── scripts/preview-package.mjs # main 预览包：git archive、SHA-256、压缩包清单校验
+├── scripts/preview-notes.mjs # main 预览说明：按提交区间生成短哈希、说明与链接
 ├── i18n/zh-cn.json
 ├── templates/panel.html   # 预留 Handlebars
 ├── src/
@@ -70,7 +71,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **拦截**：`GENERATION_ENDED → chat[].extra.api_usage` 主路径，`ApiUsageStatInterceptor` 辅路径，`repository.addEntry/recalcAll` 1:1 脚本
 - **数据框架**：所有存/取/算/展必须走 `src/data/` — `repository` 唯一写、`computed` 唯一算（`computeOverview` 供概览 8 块，`computeStats` 供统计）、`events` 订阅刷新；禁止在 UI 直接读写 `state.history` 聚合或手算
 - **持久化**：`saveHot` 节流 `300ms`，`loadHot/migrateIfNeeded` 仅由 `repository.hydrate` 调用，已自动将旧多存档合并为单一历史（`hot 50` + `cold_history`）
-- **CI**：`.github/workflows/ci.yml` 在 `dev/main` 推送及目标为 `dev/main` 的合并请求中执行，使用 Node 24；顺序为 `typecheck → test → build → node --check → verify:ci → 工作区零差异`。`verify` 只读；仅 `main` 推送或从 `main` 手动触发时，成功后再执行 `contents: write` 的 `preview` 作业，创建或更新 `preview-<12位提交哈希>` 预发布。`dev` 与合并请求不发布，CI 不提交、不修改三个版本字段、不操作正式 `vX.Y.Z` 标签
+- **CI**：`.github/workflows/ci.yml` 在 `dev/main` 推送及目标为 `dev/main` 的合并请求中执行，使用 Node 24；顺序为 `typecheck → test → build → node --check → verify:ci → 工作区零差异`。`verify` 只读；仅 `main` 推送或从 `main` 手动触发时，成功后再执行 `contents: write` 的 `preview` 作业，创建或更新 `preview-<12位提交哈希>` 预发布。预览说明优先列出上一个 `preview-*` 到当前提交的全部提交；首次预览回退最近正式 `vX.Y.Z` 标签，仍无标签时只列当前提交。`dev` 与合并请求不发布，CI 不提交、不修改三个版本字段、不操作正式 `vX.Y.Z` 标签
 
 ## 页面与数据
 
@@ -174,7 +175,7 @@ git push origin main --tags
 
 - **自动提交规则**：完整完成一项独立修改后必须立即执行提交推送，无需等待用户二次确认。单项定义：通过 `typecheck + test + build + node --check + verify:ci` 且满足用户当轮需求即视为完成。提交需包含 `src/` 源码与 `index.js/style.css` 产物，`commit` 信息遵循 `fix/feat/docs:` 前缀并简述本次变更点。该自动提交仅限 `dev` 的常规提交，不含版本号推进、合并 `main` 与打标签。
 - **提交时机（强制）**：所有修改必须在完整完成并验证通过后最后统一提交，禁止边改边提、分步提交或提前推送。提交前必须依次通过 `npm run typecheck`、`npm test`、`npm run build`、`node --check index.js`、`npm run verify:ci`，且 `index.js/style.css` 与源码保持一致后，一次性添加源码、测试、CI 配置与产物并推送，单轮需求仅产生一次提交。同样禁止在未获明确要求时改动版本号字段。
-- **预览包本地验证**：可用 `node scripts/preview-package.mjs <输出目录> HEAD` 复现 `main` 预览包；脚本只读取指定提交，通过 `git archive` 生成压缩包，并校验清单、入口、引用链、允许文件集合、压缩包结构和 SHA-256。不得修改源码或提交产物后再打包。
+- **预览包本地验证**：可用 `node scripts/preview-package.mjs <输出目录> HEAD` 复现 `main` 预览包；脚本只读取指定提交，通过 `git archive` 生成压缩包，并校验清单、入口、引用链、允许文件集合、压缩包结构和 SHA-256。可用 `node scripts/preview-notes.mjs <输出文件> HEAD` 复现更新日志，生成时优先读取上一个 `preview-*`（首次回退最近正式标签）到当前提交的全部提交。不得修改源码或提交产物后再打包。
 - 产物入口存根 `index.js` + `ECharts` 等 hash 分包随仓库提交以保离线加载，`style.css` 直出，勿手改产物；`vite.config.ts` 已 `define: { process.env.NODE_ENV, __APP_VERSION__ }` 防浏览器 `process` 报错且实现版本单源化
 - `RE3.0` 仅同步产物备份，不作为提交源
 
