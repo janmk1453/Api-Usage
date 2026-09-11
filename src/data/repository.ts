@@ -988,7 +988,15 @@ export const repository = {
       try { saveHot({ settings: state.settings }); } catch {}
     }
     if (!(state.settings as any).overviewWalletId) {
-      (state.settings as any).overviewWalletId = 'all';
+      (state.settings as any).overviewWalletId = DEEPSEEK_WALLET_ID;
+      (state.settings as any).overviewWalletManuallySet = false;
+      try { saveHot({ settings: state.settings }); } catch {}
+    }
+    if ((state.settings as any).overviewWalletManuallySet !== true) {
+      if ((state.settings as any).overviewWalletId === 'all') {
+        (state.settings as any).overviewWalletId = DEEPSEEK_WALLET_ID;
+      }
+      (state.settings as any).overviewWalletManuallySet = true;
       try { saveHot({ settings: state.settings }); } catch {}
     }
     // 迁移：旧设置无 overviewFour 时补默认八块（兼容旧4块）

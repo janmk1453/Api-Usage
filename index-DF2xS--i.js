@@ -1,6 +1,7 @@
 const defaultSettings = () => ({
   theme: "light",
-  overviewWalletId: "all",
+  overviewWalletId: "wallet:deepseek-official",
+  overviewWalletManuallySet: false,
   autoBalance: false,
   balanceInterval: 10,
   debug: false,
@@ -2797,7 +2798,18 @@ const repository = {
       }
     }
     if (!state$2.settings.overviewWalletId) {
-      state$2.settings.overviewWalletId = "all";
+      state$2.settings.overviewWalletId = DEEPSEEK_WALLET_ID;
+      state$2.settings.overviewWalletManuallySet = false;
+      try {
+        saveHot({ settings: state$2.settings });
+      } catch {
+      }
+    }
+    if (state$2.settings.overviewWalletManuallySet !== true) {
+      if (state$2.settings.overviewWalletId === "all") {
+        state$2.settings.overviewWalletId = DEEPSEEK_WALLET_ID;
+      }
+      state$2.settings.overviewWalletManuallySet = true;
       try {
         saveHot({ settings: state$2.settings });
       } catch {
@@ -6264,6 +6276,7 @@ function renderOverview() {
     walletDrop.querySelectorAll("[data-overview-wallet]").forEach((el) => {
       el.onclick = () => {
         state$2.settings.overviewWalletId = el.getAttribute("data-overview-wallet") || "all";
+        state$2.settings.overviewWalletManuallySet = true;
         try {
           saveHot({ settings: state$2.settings });
         } catch {
@@ -10385,7 +10398,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-BJMZaIZP.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-BhmJdj3-.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -10438,7 +10451,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-BJMZaIZP.js").then((m) => m.maybeAutoCheck());
+    import("./update-BhmJdj3-.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

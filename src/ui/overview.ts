@@ -225,6 +225,7 @@ export function renderOverview() {
     walletDrop.querySelectorAll('[data-overview-wallet]').forEach((el: any) => {
       el.onclick = () => {
         (state.settings as any).overviewWalletId = el.getAttribute('data-overview-wallet') || 'all';
+        (state.settings as any).overviewWalletManuallySet = true;
         try { saveHot({ settings: state.settings }); } catch {}
         walletDrop.style.display = 'none';
         renderOverview();

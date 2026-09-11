@@ -80,7 +80,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 ## 页面与数据
 
 ### 用量概览（overview）
-- **双余额卡**：充值余额（默认全部钱包合计，胶囊下拉可切换单一钱包；仅此选择影响余额和剩余轮次预测，其他概览指标仍按全量历史）+ 累计消费（动态币种 `¥ CNY ↔ $ USD` 按 `pricingSync.enabled` 切换，`formatMoney(cny)` 经 `getDisplayCurrency()` 换算）+ `tokens`
+- **双余额卡**：充值余额（默认 DeepSeek 官方钱包，胶囊下拉可切换全部钱包合计或其他钱包；仅此选择影响余额和剩余轮次预测，其他概览指标仍按全量历史。旧 `all` 默认值一次性迁移到官方钱包，用户手动选择后由 `overviewWalletManuallySet` 保护）+ 累计消费（动态币种 `¥ CNY ↔ $ USD` 按 `pricingSync.enabled` 切换，`formatMoney(cny)` 经 `getDisplayCurrency()` 换算）+ `tokens`
 - **双明细**：历史消耗（Token 历史/命中/未命中/输出，`gap:10px + 行内 padding:4px` 与右侧对齐）与支出明细（预计节省/支出输入/输出，分两行，`token` 灰 `10px #9CA3AF`，金额均经 `CNY()/moneyHtml()` 按币种换算）并列
 - **四小块→八小块**：默认 8 块 `repeat(4,1fr)`，`≤760px` 与 `≤480px` 保持 `repeat(2,1fr)` 两列（`gap 10px→8px`，卡片 `10px 12px`），支持 `overviewFour` 自定义 `14` 指标（`computeOverview` 单源，费用类经 `moneyHtml()` 动态 `CNY/USD`，通用兜底排除 `#aus-overview-four`）
 - **热力图**：`Token 使用量热力图`（GitHub 风格，近 2 年按日聚合，5 级绿阶 `EBEDF0→216E39/161b22→aceebb`，`#aus-heatmap-card-overview` 块不超出、内部 `overflow-x:auto` 横向滑动，与 `模型汇总` 块一致，悬停显示日期+Token，渲染于 `overview.ts → heatmap.ts`，数据源 `state.history` 全量）
