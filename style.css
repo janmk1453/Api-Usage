@@ -274,9 +274,6 @@
 .aus-overview-balance-card {
   overflow: visible !important;
 }
-.aus-overview-balance-card.is-wallet-dropdown-open {
-  z-index: 50 !important;
-}
 #aus-overview-wallet-dropdown {
   z-index: 100 !important;
 }

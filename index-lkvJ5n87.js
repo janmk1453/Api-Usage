@@ -5490,7 +5490,7 @@ const settings = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProp
 }, Symbol.toStringTag, { value: "Module" }));
 let selOld = null;
 let selNew = null;
-function getDoc$8() {
+function getDoc$9() {
   return window.parent?.document ?? document;
 }
 function diffMessages(oldMsgs, newMsgs) {
@@ -5506,7 +5506,7 @@ function diffMessages(oldMsgs, newMsgs) {
   return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${aCtx}</div><div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${bCtx}</div></div><div style="font-size:11px;color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
 }
 function bindHistoryCompare() {
-  const doc = getDoc$8();
+  const doc = getDoc$9();
   doc.addEventListener("click", (e) => {
     const t = e.target;
     if (!t) return;
@@ -5523,7 +5523,7 @@ function bindHistoryCompare() {
   });
 }
 function renderDiff() {
-  const doc = getDoc$8();
+  const doc = getDoc$9();
   const host = doc.getElementById("aus-diff");
   if (!host) return;
   if (selOld == null || selNew == null) {
@@ -5877,12 +5877,12 @@ function computeWalletStats(walletId) {
   }
   return { requests, tokens, cost };
 }
-function getDoc$7() {
+function getDoc$8() {
   return window.parent?.document ?? document;
 }
 function themeIsDark() {
   try {
-    const doc = getDoc$7();
+    const doc = getDoc$8();
     const p = doc.getElementById("aus-panel");
     return p?.getAttribute("data-ds-theme") === "dark";
   } catch {
@@ -5890,7 +5890,7 @@ function themeIsDark() {
   }
 }
 function renderHeatmap(filtered) {
-  const doc = getDoc$7();
+  const doc = getDoc$8();
   const container = doc.getElementById("aus-heatmap-container-overview") || doc.getElementById("aus-heatmap-container");
   const legendEl = doc.getElementById("aus-heatmap-legend-overview") || doc.getElementById("aus-heatmap-legend");
   const labelsEl = doc.getElementById("aus-heatmap-labels-overview") || doc.getElementById("aus-heatmap-labels");
@@ -6012,6 +6012,9 @@ function renderHeatmap(filtered) {
   setTimeout(() => {
     if (scrollEl) scrollEl.scrollLeft = scrollEl.scrollWidth;
   }, 50);
+}
+function getDoc$7() {
+  return window.parent?.document ?? document;
 }
 function fmt(n) {
   return n.toLocaleString("zh-CN");
@@ -6141,6 +6144,54 @@ function getFourDisplay(key, v) {
 }
 let fourBound = false;
 let overviewWalletBound = false;
+let overviewWalletViewportBound = false;
+function closeOverviewWalletDropdown() {
+  const dropdown = getDoc$7().getElementById("aus-overview-wallet-dropdown");
+  if (dropdown) dropdown.style.display = "none";
+}
+function bindOverviewWalletViewport() {
+  if (overviewWalletViewportBound) return;
+  overviewWalletViewportBound = true;
+  try {
+    (window.parent || window).addEventListener("resize", closeOverviewWalletDropdown, { passive: true });
+  } catch {
+  }
+  try {
+    window.addEventListener("resize", closeOverviewWalletDropdown, { passive: true });
+  } catch {
+  }
+  try {
+    getDoc$7().getElementById("aus-main")?.addEventListener("scroll", closeOverviewWalletDropdown, { passive: true });
+  } catch {
+  }
+}
+function positionOverviewWalletDropdown(btn, dropdown) {
+  try {
+    const panel2 = getDoc$7().getElementById("aus-panel");
+    const panelRect = panel2?.getBoundingClientRect();
+    const btnRect = btn.getBoundingClientRect();
+    const viewportWidth = window.parent?.innerWidth ?? window.innerWidth;
+    const viewportHeight = window.parent?.innerHeight ?? window.innerHeight;
+    const available = Math.max(180, Math.min(280, viewportWidth - 16));
+    dropdown.style.position = "fixed";
+    dropdown.style.width = `${available}px`;
+    dropdown.style.minWidth = "0";
+    dropdown.style.maxWidth = `${viewportWidth - 16}px`;
+    dropdown.style.maxHeight = `${Math.max(120, viewportHeight - 24)}px`;
+    const left = Math.max(8, Math.min(btnRect.right - available, viewportWidth - available - 8));
+    const estimatedHeight = Math.min(dropdown.scrollHeight || 220, viewportHeight - 24);
+    const openUp = btnRect.bottom + 6 + estimatedHeight > viewportHeight - 8;
+    const top = openUp ? Math.max(8, btnRect.top - estimatedHeight - 6) : btnRect.bottom + 6;
+    dropdown.style.top = `${Math.round(top)}px`;
+    dropdown.style.left = `${Math.round(left)}px`;
+    dropdown.style.right = "auto";
+    dropdown.style.zIndex = "100500";
+    if (panelRect) {
+      dropdown.style.pointerEvents = "auto";
+    }
+  } catch {
+  }
+}
 function bindFour() {
   if (fourBound) return;
   fourBound = true;
@@ -6188,7 +6239,6 @@ function renderOverview() {
   const selectedWalletId = String(state$2.settings.overviewWalletId || "all");
   const activeWalletId = selectedWalletId !== "all" && wallets.some((wallet) => wallet.id === selectedWalletId) ? selectedWalletId : "all";
   const v = computeOverview(activeWalletId);
-  const walletCard = doc.querySelector(".aus-overview-balance-card");
   const walletBtn = doc.getElementById("aus-overview-wallet-btn");
   const walletLabel = doc.getElementById("aus-overview-wallet-label");
   const walletDrop = doc.getElementById("aus-overview-wallet-dropdown");
@@ -6209,7 +6259,6 @@ function renderOverview() {
         } catch {
         }
         walletDrop.style.display = "none";
-        walletCard?.classList.remove("is-wallet-dropdown-open");
         renderOverview();
       };
     });
@@ -6219,7 +6268,10 @@ function renderOverview() {
       event.stopPropagation();
       const open = walletDrop.style.display !== "block";
       walletDrop.style.display = open ? "block" : "none";
-      walletCard?.classList.toggle("is-wallet-dropdown-open", open);
+      if (open) {
+        bindOverviewWalletViewport();
+        positionOverviewWalletDropdown(walletBtn, walletDrop);
+      }
     };
   }
   if (!overviewWalletBound) {
@@ -6229,7 +6281,6 @@ function renderOverview() {
       const drop = doc.getElementById("aus-overview-wallet-dropdown");
       if (drop && !target?.closest?.("#aus-overview-wallet-dropdown") && !target?.closest?.("#aus-overview-wallet-btn")) {
         drop.style.display = "none";
-        walletCard?.classList.remove("is-wallet-dropdown-open");
       }
     });
   }
@@ -10138,7 +10189,7 @@ function createPanel() {
           </div>
           <div data-view="help" style="display:none;">
             <div style="display:grid;gap:12px;">
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DC2626;font-weight:600;margin-bottom:6px;">⚠️ 安全提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>在本扩展中填入 API 密钥存在安全风险。密钥仅经 XOR 混淆后存储于 SillyTavern 设置中，建议使用权限受限的 API 密钥。</div><div>使用模型价格自动同步时将从 models.dev 下载相关数据，不对数据准确和安全做保障；不对使用自定义的 WebDAV 服务导致的安全问题做保障。</div><div>余额查询通过 <a href="https://api.deepseek.com/user/balance" target="_blank" style="color:var(--ds-text);text-decoration:underline;">https://api.deepseek.com/user/balance</a> 官方 API 实现，将会发送你填写的 API 密钥。</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DC2626;font-weight:600;margin-bottom:6px;">隐私声明</div><div style="color:var(--ds-text-2);display:grid;gap:6px;"><div>酒馆中的“所谓 API 密钥”：本扩展只读取密钥条目的编号、用户备注和掩码末三位，用于区分请求来源；不会读取、保存或上传酒馆中的完整明文密钥。</div><div>用户主动填入钱包的校准密钥：这是可实际使用的密钥，仅用于查询 DeepSeek 官方余额；保存时仅做 XOR 混淆，存储于 SillyTavern 扩展设置中，不会进入历史记录、模型价格、统计、日志、导入导出或 WebDAV 同步。</div><div>自动校准余额时，该密钥仅由浏览器直接发送至 <a href="https://api.deepseek.com/user/balance" target="_blank" style="color:var(--ds-text);text-decoration:underline;">https://api.deepseek.com/user/balance</a>。XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。</div><div>模型价格同步会访问 models.dev；自定义 WebDAV 的数据安全由用户选择的存储服务与网络环境决定。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（余额查询仅支持 DeepSeek 官方）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前（DeepSeek）高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DB2777;font-weight:600;margin-bottom:6px;">🔄 消息对比</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中找到想对比的两条消息，前者点“旧”，后者点“新”</div><div>2. 系统并排显示请求消息的文字差异</div><div>3. 差异点即缓存发散起始位置（前 N 条相同为缓存命中段）</div></div></div>
@@ -10323,7 +10374,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-BueDyCsf.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-BbkYGp4f.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -10376,7 +10427,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-BueDyCsf.js").then((m) => m.maybeAutoCheck());
+    import("./update-BbkYGp4f.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

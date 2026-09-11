@@ -7,6 +7,10 @@ import type { OverviewFourKey } from '../types/settings';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 import { repository } from '../data/repository';
 
+function getDoc(): Document {
+  return (window.parent as any)?.document ?? document;
+}
+
 function fmt(n: number) { return n.toLocaleString('zh-CN'); }
 function CNY(n: number) {
   try {  return formatMoney(n, 4); } catch { return '¥' + n.toFixed(4) + ' CNY'; }
@@ -113,6 +117,49 @@ export function getFourDisplay(key: OverviewFourKey, v: any): { title:string; ht
 
 let fourBound = false;
 let overviewWalletBound = false;
+let overviewWalletViewportBound = false;
+
+function closeOverviewWalletDropdown(): void {
+  const dropdown = getDoc().getElementById('aus-overview-wallet-dropdown') as HTMLElement | null;
+  if (dropdown) dropdown.style.display = 'none';
+}
+
+function bindOverviewWalletViewport(): void {
+  if (overviewWalletViewportBound) return;
+  overviewWalletViewportBound = true;
+  try { ((window.parent as any) || window).addEventListener('resize', closeOverviewWalletDropdown, { passive: true } as any); } catch {}
+  try { window.addEventListener('resize', closeOverviewWalletDropdown, { passive: true } as any); } catch {}
+  try { getDoc().getElementById('aus-main')?.addEventListener('scroll', closeOverviewWalletDropdown, { passive: true } as any); } catch {}
+}
+
+function positionOverviewWalletDropdown(btn: HTMLElement, dropdown: HTMLElement): void {
+  try {
+    const panel = getDoc().getElementById('aus-panel') as HTMLElement | null;
+    const panelRect = panel?.getBoundingClientRect();
+    const btnRect = btn.getBoundingClientRect();
+    const viewportWidth = ((window.parent as any)?.innerWidth ?? window.innerWidth);
+    const viewportHeight = ((window.parent as any)?.innerHeight ?? window.innerHeight);
+    const available = Math.max(180, Math.min(280, viewportWidth - 16));
+    dropdown.style.position = 'fixed';
+    dropdown.style.width = `${available}px`;
+    dropdown.style.minWidth = '0';
+    dropdown.style.maxWidth = `${viewportWidth - 16}px`;
+    dropdown.style.maxHeight = `${Math.max(120, viewportHeight - 24)}px`;
+    const left = Math.max(8, Math.min(btnRect.right - available, viewportWidth - available - 8));
+    const estimatedHeight = Math.min(dropdown.scrollHeight || 220, viewportHeight - 24);
+    const openUp = btnRect.bottom + 6 + estimatedHeight > viewportHeight - 8;
+    const top = openUp
+      ? Math.max(8, btnRect.top - estimatedHeight - 6)
+      : btnRect.bottom + 6;
+    dropdown.style.top = `${Math.round(top)}px`;
+    dropdown.style.left = `${Math.round(left)}px`;
+    dropdown.style.right = 'auto';
+    dropdown.style.zIndex = '100500';
+    if (panelRect) {
+      dropdown.style.pointerEvents = 'auto';
+    }
+  } catch {}
+}
 function bindFour() {
   if (fourBound) return;
   fourBound = true;
@@ -161,7 +208,6 @@ export function renderOverview() {
     ? selectedWalletId
     : 'all';
   const v = computeOverview(activeWalletId);
-  const walletCard = doc.querySelector('.aus-overview-balance-card') as HTMLElement | null;
   const walletBtn = doc.getElementById('aus-overview-wallet-btn');
   const walletLabel = doc.getElementById('aus-overview-wallet-label');
   const walletDrop = doc.getElementById('aus-overview-wallet-dropdown') as HTMLElement | null;
@@ -181,7 +227,6 @@ export function renderOverview() {
         (state.settings as any).overviewWalletId = el.getAttribute('data-overview-wallet') || 'all';
         try { saveHot({ settings: state.settings }); } catch {}
         walletDrop.style.display = 'none';
-        walletCard?.classList.remove('is-wallet-dropdown-open');
         renderOverview();
       };
     });
@@ -191,7 +236,10 @@ export function renderOverview() {
       event.stopPropagation();
       const open = walletDrop.style.display !== 'block';
       walletDrop.style.display = open ? 'block' : 'none';
-      walletCard?.classList.toggle('is-wallet-dropdown-open', open);
+      if (open) {
+        bindOverviewWalletViewport();
+        positionOverviewWalletDropdown(walletBtn as HTMLElement, walletDrop);
+      }
     };
   }
   if (!overviewWalletBound) {
@@ -201,7 +249,6 @@ export function renderOverview() {
       const drop = doc.getElementById('aus-overview-wallet-dropdown') as HTMLElement | null;
       if (drop && !target?.closest?.('#aus-overview-wallet-dropdown') && !target?.closest?.('#aus-overview-wallet-btn')) {
         drop.style.display = 'none';
-        walletCard?.classList.remove('is-wallet-dropdown-open');
       }
     });
   }

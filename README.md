@@ -107,6 +107,10 @@ npm run verify:ci
 
 - **WebDAV CORS**：坚果云等不返回 `CORS` 头，需配置代理
 
+## 隐私声明
+
+酒馆中的“所谓 API 密钥”：扩展只读取密钥条目的编号、用户备注和掩码末三位，用于区分请求来源，不读取、保存或上传完整明文密钥。用户主动填入钱包的校准密钥是实际可用的密钥，仅用于查询 DeepSeek 官方余额；它仅经 XOR 混淆后存放于 SillyTavern 扩展设置，不进入历史记录、统计、日志、导入导出或 WebDAV，自动校准时仅由浏览器直接发送至 `https://api.deepseek.com/user/balance`。XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。
+
 ## 技术说明
 
 - 统一数据框架 `src/data/`：`repository` 唯一写（`addEntry/recalcAll/replaceAll/hydrate` 含 `finishReason/isTruncated`）、`computed` 唯一算（`computeOverview/computeStatsFour`）、`events` 订阅刷新，禁止在 `UI` 直写 `state`
