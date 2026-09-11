@@ -53,6 +53,7 @@ export type WalletConfig = {
   weekendOffpeak: boolean;
   credentials: WalletCredentialObservation[];
   models: WalletModel[];
+  collapsed: boolean;
   createdAt: number;
   updatedAt: number;
   lastUsedAt: number | null;

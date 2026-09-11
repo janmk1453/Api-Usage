@@ -205,7 +205,7 @@ export function renderOverview() {
   if (balEl) balEl.textContent = v.balanceText;
   const remEl = doc.getElementById('aus-balance-remaining');
   if (remEl) {
-    if (v.remainingRounds != null) remEl.textContent = '预计还可进行 ' + v.remainingRounds.toLocaleString('zh-CN') + ' 轮对话（仅 DeepSeek 官方）';
+    if (v.remainingRounds != null) remEl.textContent = '预计还可进行 ' + v.remainingRounds.toLocaleString('zh-CN') + ' 轮对话';
     else {
       remEl.textContent = v.hasBalance ? '暂无可用于预测的费用记录' : '设置钱包余额后可预测剩余轮次';
     }

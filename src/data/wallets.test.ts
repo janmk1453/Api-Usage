@@ -22,6 +22,23 @@ describe('钱包数据', () => {
     expect(official).toBeTruthy();
     expect(official?.sourceType).toBe('deepseek');
     expect(official?.models.some((model) => model.model === 'deepseek-flash')).toBe(true);
+    expect(official?.collapsed).toBe(true);
+  });
+
+  it('钱包默认收起并记忆展开状态', () => {
+    const settings = defaultSettings();
+    const wallet = createWalletFromConnection({
+      sourceType: 'custom',
+      endpointId: 'collapsed-endpoint',
+      endpointLabel: 'relay.collapsed/v1',
+      credentialId: null,
+      credentialLabel: null,
+    }, settings, 1000)!;
+    expect(wallet.collapsed).toBe(true);
+    wallet.collapsed = false;
+    const normalized = normalizeWallets([wallet], settings, 1000)
+      .find((item) => item.id === wallet.id)!;
+    expect(normalized.collapsed).toBe(false);
   });
 
   it('按接入链接创建钱包并记录密钥与模型观测项', () => {

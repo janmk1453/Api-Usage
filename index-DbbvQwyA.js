@@ -1037,6 +1037,7 @@ function normalizeWallet(raw, settings2, now = Date.now()) {
     weekendOffpeak: raw.weekendOffpeak !== false,
     credentials: Array.from(credentialMap.values()),
     models: Array.from(modelMap.values()),
+    collapsed: raw.collapsed !== false,
     createdAt,
     updatedAt: finiteNumber(raw.updatedAt, createdAt),
     lastUsedAt: raw.lastUsedAt == null ? null : finiteNumber(raw.lastUsedAt, 0),
@@ -1095,6 +1096,7 @@ function createDeepSeekWallet(settings2, now = Date.now()) {
     weekendOffpeak: true,
     credentials: [],
     models,
+    collapsed: true,
     createdAt: now,
     updatedAt: now,
     lastUsedAt: null,
@@ -1128,6 +1130,7 @@ function createWalletFromConnection(connection, settings2, now = Date.now()) {
     weekendOffpeak: false,
     credentials: [],
     models: [],
+    collapsed: true,
     createdAt: now,
     updatedAt: now,
     lastUsedAt: null,
@@ -6157,7 +6160,7 @@ function renderOverview() {
   if (balEl) balEl.textContent = v.balanceText;
   const remEl = doc.getElementById("aus-balance-remaining");
   if (remEl) {
-    if (v.remainingRounds != null) remEl.textContent = "预计还可进行 " + v.remainingRounds.toLocaleString("zh-CN") + " 轮对话（仅 DeepSeek 官方）";
+    if (v.remainingRounds != null) remEl.textContent = "预计还可进行 " + v.remainingRounds.toLocaleString("zh-CN") + " 轮对话";
     else {
       remEl.textContent = v.hasBalance ? "暂无可用于预测的费用记录" : "设置钱包余额后可预测剩余轮次";
     }
@@ -8753,6 +8756,7 @@ function renderWalletCard(wallet) {
   const pending = walletPendingModelCount(wallet);
   const isOfficial = wallet.id === DEEPSEEK_WALLET_ID;
   const selectedCredential2 = wallet.credentials.find((item) => item.id === wallet.balance.primaryCredentialId);
+  const collapsed2 = wallet.collapsed !== false;
   return `
     <section class="ds-card" data-wallet-card="${esc$1(wallet.id)}" style="display:grid;gap:12px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
@@ -8763,14 +8767,16 @@ function renderWalletCard(wallet) {
             ${pending ? `<span style="padding:3px 8px;border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:10px;">${pending} 个待定价</span>` : ""}
           </div>
           <div style="font-size:11px;color:var(--ds-text-2);word-break:break-all;">${esc$1(wallet.endpointDisplay || wallet.endpointLabel || "本机官方接口")}</div>
-          <div style="font-size:10px;color:var(--ds-text-3);">接入类型：${esc$1(wallet.sourceType || "未识别")} · 密钥 ${wallet.credentials.length} 个 · 模型 ${wallet.models.length} 个 · 请求 ${stats.requests} · 费用 ${money(stats.cost)}</div>
+          <div style="font-size:10px;color:var(--ds-text-3);">余额 ${esc$1(walletBalanceText(wallet))} · 接入类型：${esc$1(wallet.sourceType || "未识别")} · 密钥 ${wallet.credentials.length} 个 · 模型 ${wallet.models.length} 个 · 请求 ${stats.requests} · 费用 ${money(stats.cost)}</div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
+          <button data-wallet-toggle="1" data-wallet-id="${esc$1(wallet.id)}" style="padding:7px 11px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">${collapsed2 ? "展开 ▼" : "收起 ▲"}</button>
           ${wallet.catalogProvider ? '<button data-wallet-sync="1" data-wallet-id="' + esc$1(wallet.id) + '" style="padding:7px 11px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">同步价格</button>' : ""}
           ${isOfficial ? "" : '<button data-wallet-ignore="1" data-wallet-id="' + esc$1(wallet.id) + '" style="padding:7px 11px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:11px;cursor:pointer;">忽略钱包</button>'}
         </div>
       </div>
 
+      <div data-wallet-body="1" style="display:${collapsed2 ? "none" : "grid"};gap:12px;">
       <div class="aus-wallet-two-col" style="display:grid;grid-template-columns:minmax(250px,1fr) minmax(260px,1fr);gap:10px;">
         <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
@@ -8824,6 +8830,7 @@ function renderWalletCard(wallet) {
             <tbody>${renderModelRows(wallet)}</tbody>
           </table>
         </div>
+      </div>
       </div>
     </section>`;
 }
@@ -8887,6 +8894,16 @@ function readModelPrices(row) {
   return result;
 }
 function bindWalletView(doc) {
+  doc.querySelectorAll("[data-wallet-toggle]").forEach((button) => {
+    button.onclick = () => {
+      const walletId = button.getAttribute("data-wallet-id");
+      if (!walletId) return;
+      repository.updateWallet(walletId, (wallet) => {
+        wallet.collapsed = wallet.collapsed === false;
+      });
+      renderWalletView();
+    };
+  });
   doc.querySelectorAll("[data-wallet-name]").forEach((input) => {
     input.onchange = () => {
       const walletId = input.getAttribute("data-wallet-id");
@@ -10220,7 +10237,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-wOPABbkO.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-CVFEqGhm.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -10273,7 +10290,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-wOPABbkO.js").then((m) => m.maybeAutoCheck());
+    import("./update-CVFEqGhm.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

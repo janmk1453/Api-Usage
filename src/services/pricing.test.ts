@@ -48,6 +48,7 @@ function makeWallet(overrides: Partial<WalletConfig> = {}): WalletConfig {
     weekendOffpeak: false,
     credentials: [],
     models: [],
+    collapsed: true,
     createdAt: 0,
     updatedAt: 0,
     lastUsedAt: null,

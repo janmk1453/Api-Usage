@@ -209,7 +209,11 @@
   #aus-overview-four { grid-template-columns: repeat(2, 1fr) !important; gap: clamp(8px, 1.5cqi, 10px) !important; }
   #aus-stats-four { grid-template-columns: repeat(2, 1fr) !important; gap: clamp(8px, 1.5cqi, 10px) !important; }
   #aus-extra-charts, #aus-model-trends { grid-template-columns: 1fr !important; }
-  .aus-wallet-summary { grid-template-columns: 1fr !important; }
+  .aus-wallet-summary { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: clamp(4px, 1.4cqi, 10px) !important; }
+  .aus-wallet-summary > div { min-width: 0; }
+  .aus-wallet-summary > div > div:first-child { font-size: 10px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .aus-wallet-summary > div > div:nth-child(2) { font-size: clamp(15px, 3.4cqi, 20px) !important; }
+  .aus-wallet-summary > div > div:nth-child(3) { font-size: 9px !important; line-height: 1.35; }
   .aus-wallet-two-col { grid-template-columns: 1fr !important; }
 }
 @container ausbody (min-width: 761px) {

@@ -174,6 +174,7 @@ function renderWalletCard(wallet: WalletConfig): string {
   const pending = walletPendingModelCount(wallet);
   const isOfficial = wallet.id === DEEPSEEK_WALLET_ID;
   const selectedCredential = wallet.credentials.find((item) => item.id === wallet.balance.primaryCredentialId);
+  const collapsed = wallet.collapsed !== false;
   return `
     <section class="ds-card" data-wallet-card="${esc(wallet.id)}" style="display:grid;gap:12px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
@@ -184,14 +185,16 @@ function renderWalletCard(wallet: WalletConfig): string {
             ${pending ? `<span style="padding:3px 8px;border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:10px;">${pending} 个待定价</span>` : ''}
           </div>
           <div style="font-size:11px;color:var(--ds-text-2);word-break:break-all;">${esc(wallet.endpointDisplay || wallet.endpointLabel || '本机官方接口')}</div>
-          <div style="font-size:10px;color:var(--ds-text-3);">接入类型：${esc(wallet.sourceType || '未识别')} · 密钥 ${wallet.credentials.length} 个 · 模型 ${wallet.models.length} 个 · 请求 ${stats.requests} · 费用 ${money(stats.cost)}</div>
+          <div style="font-size:10px;color:var(--ds-text-3);">余额 ${esc(walletBalanceText(wallet))} · 接入类型：${esc(wallet.sourceType || '未识别')} · 密钥 ${wallet.credentials.length} 个 · 模型 ${wallet.models.length} 个 · 请求 ${stats.requests} · 费用 ${money(stats.cost)}</div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
+          <button data-wallet-toggle="1" data-wallet-id="${esc(wallet.id)}" style="padding:7px 11px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">${collapsed ? '展开 ▼' : '收起 ▲'}</button>
           ${wallet.catalogProvider ? '<button data-wallet-sync="1" data-wallet-id="' + esc(wallet.id) + '" style="padding:7px 11px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">同步价格</button>' : ''}
           ${isOfficial ? '' : '<button data-wallet-ignore="1" data-wallet-id="' + esc(wallet.id) + '" style="padding:7px 11px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:11px;cursor:pointer;">忽略钱包</button>'}
         </div>
       </div>
 
+      <div data-wallet-body="1" style="display:${collapsed ? 'none' : 'grid'};gap:12px;">
       <div class="aus-wallet-two-col" style="display:grid;grid-template-columns:minmax(250px,1fr) minmax(260px,1fr);gap:10px;">
         <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
@@ -245,6 +248,7 @@ function renderWalletCard(wallet: WalletConfig): string {
             <tbody>${renderModelRows(wallet)}</tbody>
           </table>
         </div>
+      </div>
       </div>
     </section>`;
 }
@@ -312,6 +316,17 @@ function readModelPrices(row: HTMLElement): Record<'offpeak' | 'peak', WalletPri
 }
 
 function bindWalletView(doc: Document): void {
+  doc.querySelectorAll('[data-wallet-toggle]').forEach((button: any) => {
+    button.onclick = () => {
+      const walletId = button.getAttribute('data-wallet-id');
+      if (!walletId) return;
+      repository.updateWallet(walletId, (wallet) => {
+        wallet.collapsed = wallet.collapsed === false;
+      });
+      renderWalletView();
+    };
+  });
+
   doc.querySelectorAll('[data-wallet-name]').forEach((input: any) => {
     input.onchange = () => {
       const walletId = input.getAttribute('data-wallet-id');
