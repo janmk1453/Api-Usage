@@ -175,19 +175,28 @@ function renderWalletCard(wallet: WalletConfig): string {
   const isOfficial = wallet.id === DEEPSEEK_WALLET_ID;
   const selectedCredential = wallet.credentials.find((item) => item.id === wallet.balance.primaryCredentialId);
   const collapsed = wallet.collapsed !== false;
+  const metrics = [
+    { label: '余额', value: walletBalanceText(wallet), title: walletBalanceText(wallet) },
+    { label: '密钥', value: `${wallet.credentials.length} 个`, title: '已识别密钥数量' },
+    { label: '模型', value: `${wallet.models.length} 个`, title: '已识别模型数量' },
+    { label: '请求', value: stats.requests.toLocaleString('zh-CN'), title: '已记录请求次数' },
+    { label: '费用', value: money(stats.cost), title: '该钱包累计费用' },
+  ];
   return `
     <section class="ds-card" data-wallet-card="${esc(wallet.id)}" style="display:grid;gap:12px;">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-        <div style="display:grid;gap:5px;min-width:240px;flex:1;">
+      <div class="aus-wallet-header">
+        <div class="aus-wallet-identity" style="display:grid;gap:5px;min-width:0;">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <input data-wallet-name="1" data-wallet-id="${esc(wallet.id)}" value="${esc(wallet.name)}" style="min-width:180px;max-width:360px;flex:1;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:13px;font-weight:600;" />
+            <input data-wallet-name="1" data-wallet-id="${esc(wallet.id)}" value="${esc(wallet.name)}" style="min-width:160px;max-width:100%;flex:1;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:13px;font-weight:600;" />
             <span style="padding:3px 8px;border-radius:999px;background:${isOfficial ? 'var(--ds-green-bg)' : 'var(--ds-card-inner)'};color:${isOfficial ? 'var(--ds-green)' : 'var(--ds-text-2)'};font-size:10px;">${isOfficial ? 'DeepSeek 官方' : '中转/自定义'}</span>
             ${pending ? `<span style="padding:3px 8px;border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:10px;">${pending} 个待定价</span>` : ''}
           </div>
-          <div style="font-size:11px;color:var(--ds-text-2);word-break:break-all;">${esc(wallet.endpointDisplay || wallet.endpointLabel || '本机官方接口')}</div>
-          <div style="font-size:10px;color:var(--ds-text-3);">余额 ${esc(walletBalanceText(wallet))} · 接入类型：${esc(wallet.sourceType || '未识别')} · 密钥 ${wallet.credentials.length} 个 · 模型 ${wallet.models.length} 个 · 请求 ${stats.requests} · 费用 ${money(stats.cost)}</div>
+          <div style="font-size:10px;color:var(--ds-text-3);word-break:break-all;">${esc(wallet.endpointDisplay || wallet.endpointLabel || '本机官方接口')} · ${esc(wallet.sourceType || '未识别')}</div>
         </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
+        <div class="aus-wallet-metrics">
+          ${metrics.map((item) => `<div class="aus-wallet-metric" title="${esc(item.title)}"><div class="aus-wallet-metric-label">${esc(item.label)}</div><div class="aus-wallet-metric-value">${esc(item.value)}</div></div>`).join('')}
+        </div>
+        <div class="aus-wallet-actions">
           <button data-wallet-toggle="1" data-wallet-id="${esc(wallet.id)}" style="padding:7px 11px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">${collapsed ? '展开 ▼' : '收起 ▲'}</button>
           ${wallet.catalogProvider ? '<button data-wallet-sync="1" data-wallet-id="' + esc(wallet.id) + '" style="padding:7px 11px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">同步价格</button>' : ''}
           ${isOfficial ? '' : '<button data-wallet-ignore="1" data-wallet-id="' + esc(wallet.id) + '" style="padding:7px 11px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:11px;cursor:pointer;">忽略钱包</button>'}

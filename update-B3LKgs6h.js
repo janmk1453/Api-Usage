@@ -1,5 +1,5 @@
-import { t as toast, l as log } from "./index-DbbvQwyA.js";
-const CURRENT_VERSION = "3.0.7";
+import { t as toast, l as log } from "./index-CLUDKCiE.js";
+const CURRENT_VERSION = "3.0.8";
 const REPO = "janmk1453/Api-Usage";
 const REMOTE_MANIFEST = `https://raw.githubusercontent.com/${REPO}/main/manifest.json`;
 const EXTENSION_FOLDER = "Api-Usage";

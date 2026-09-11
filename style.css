@@ -214,6 +214,9 @@
   .aus-wallet-summary > div > div:first-child { font-size: 10px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .aus-wallet-summary > div > div:nth-child(2) { font-size: clamp(15px, 3.4cqi, 20px) !important; }
   .aus-wallet-summary > div > div:nth-child(3) { font-size: 9px !important; line-height: 1.35; }
+  .aus-wallet-header { grid-template-columns: 1fr; }
+  .aus-wallet-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .aus-wallet-actions { justify-content: flex-start; }
   .aus-wallet-two-col { grid-template-columns: 1fr !important; }
 }
 @container ausbody (min-width: 761px) {
@@ -233,6 +236,40 @@
   display: grid;
   gap: clamp(8px, 1.5cqi, 12px);
   grid-template-columns: repeat(4, 1fr);
+}
+.aus-wallet-header {
+  display: grid;
+  grid-template-columns: minmax(230px, 1.15fr) minmax(420px, 1.9fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+.aus-wallet-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(58px, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+.aus-wallet-metric { min-width: 0; }
+.aus-wallet-metric-label {
+  font-size: 10px;
+  color: var(--ds-text-3);
+  white-space: nowrap;
+}
+.aus-wallet-metric-value {
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ds-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aus-wallet-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 /* 表格：全宽横向滚动，不做首列粘性（避免与 ds-card 灰底形成白/灰切割，图1底色问题） */
 #aus-model-summary { background: transparent; }
