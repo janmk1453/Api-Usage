@@ -1240,6 +1240,36 @@ function walletPendingModelCount(wallet) {
     return model.price.priceConfigured !== true;
   }).length;
 }
+function findExactPricedModelMatch(wallets, model, ignoredWalletIds = []) {
+  const requested = String(model || "");
+  if (!requested) return null;
+  const ignored = new Set(ignoredWalletIds);
+  const candidates = [];
+  for (const wallet of wallets || []) {
+    if (ignored.has(wallet.id)) continue;
+    for (const item of wallet.models || []) {
+      if (!item.price.priceConfigured || item.model !== requested) continue;
+      candidates.push({
+        walletId: wallet.id,
+        model: item.model,
+        official: wallet.id === DEEPSEEK_WALLET_ID ? 1 : 0,
+        updatedAt: item.updatedAt || 0
+      });
+    }
+  }
+  const official = (wallets || []).find((wallet) => wallet.id === DEEPSEEK_WALLET_ID);
+  if (official && !ignored.has(official.id) && PRICING[requested]) {
+    candidates.push({
+      walletId: official.id,
+      model: requested,
+      official: 1,
+      updatedAt: Number.MAX_SAFE_INTEGER
+    });
+  }
+  candidates.sort((a, b) => b.official - a.official || b.updatedAt - a.updatedAt);
+  if (!candidates.length) return null;
+  return { walletId: candidates[0].walletId, model: candidates[0].model };
+}
 function mergeWalletCollections(local, remote) {
   const map2 = /* @__PURE__ */ new Map();
   for (const wallet of normalizeWallets(local, {
@@ -2003,27 +2033,35 @@ function migrateWallets(hot, cold = []) {
       changed = true;
     }
   }
+  const backfillDone = Number(hot?._walletPricingBackfillVersion || 0) >= WALLET_PRICING_BACKFILL_VERSION;
+  if (!backfillDone) {
+    changed = backfillLegacyExactPricing(allHistory) || changed;
+    if (hot && typeof hot === "object") hot._walletPricingBackfillVersion = WALLET_PRICING_BACKFILL_VERSION;
+    changed = true;
+  }
   if (hot && Array.isArray(hot.wallets) && state$2.wallets.length === 0) {
     state$2.wallets = normalizeWallets(hot.wallets, state$2.settings, now);
     changed = true;
   }
   return changed;
 }
+const WALLET_PRICING_BACKFILL_VERSION = 1;
 function recalcEntryCost(entry, wallet) {
+  const legacyWallet = entry?.legacyPricingWalletId ? state$2.wallets.find((item) => item.id === entry.legacyPricingWalletId) || null : null;
   return calcCost({
     timestamp: entry.timestamp,
     model: entry.model,
     prompt_cache_hit_tokens: entry.cache_hit_tokens || 0,
     prompt_cache_miss_tokens: entry.cache_miss_tokens || 0,
     completion_tokens: entry.completion_tokens || 0
-  }, state$2.settings, wallet);
+  }, state$2.settings, legacyWallet || wallet);
 }
 function applyCostPatch(entry, cost) {
   entry.input_cost = cost.input;
   entry.output_cost = cost.output;
   entry.cost = cost.total;
   entry.priceType = cost.priceType;
-  entry.pricingSource = cost.source;
+  entry.pricingSource = entry.legacyPricingWalletId ? "legacy-match" : cost.source;
 }
 function applyTotalDelta(previous, next) {
   state$2.input_cost += (next.input || 0) - (previous.input || 0);
@@ -2037,6 +2075,38 @@ function shouldTrackWalletModel(wallet, model) {
   } catch {
     return true;
   }
+}
+function backfillLegacyExactPricing(allHistory) {
+  let changed = false;
+  const ignored = new Set(state$2.walletIgnored || []);
+  for (const entry of allHistory || []) {
+    if (!entry || entry.legacyPricingWalletId) continue;
+    const sourceWallet = findWalletForHistory(state$2.wallets, entry);
+    if (!sourceWallet) continue;
+    const current = calcCost({
+      timestamp: entry.timestamp,
+      model: entry.model,
+      prompt_cache_hit_tokens: entry.cache_hit_tokens || 0,
+      prompt_cache_miss_tokens: entry.cache_miss_tokens || 0,
+      completion_tokens: entry.completion_tokens || 0
+    }, state$2.settings, sourceWallet);
+    if (current.source !== "unpriced") continue;
+    const match = findExactPricedModelMatch(state$2.wallets, String(entry.model || ""), ignored);
+    if (!match || match.walletId === sourceWallet.id) continue;
+    entry.legacyPricingWalletId = match.walletId;
+    entry.legacyPricingModel = match.model;
+    const previous = {
+      input: Number(entry.input_cost) || 0,
+      output: Number(entry.output_cost) || 0,
+      total: Number(entry.cost) || 0
+    };
+    const matchedWallet = state$2.wallets.find((wallet) => wallet.id === match.walletId) || null;
+    const cost = recalcEntryCost(entry, matchedWallet);
+    applyCostPatch(entry, cost);
+    applyTotalDelta(previous, cost);
+    changed = true;
+  }
+  return changed;
 }
 function getFilteredHistoryForScope() {
   const scope = state$2.settings.historyScope || "all";
@@ -2511,13 +2581,14 @@ const repository = {
     if (!wallet) return 0;
     let changed = 0;
     for (const h of state$2.history || []) {
-      if (findWalletForHistory(state$2.wallets, h)?.id !== wallet.id) continue;
+      const sourceWallet = findWalletForHistory(state$2.wallets, h);
+      if (sourceWallet?.id !== wallet.id && h.legacyPricingWalletId !== wallet.id) continue;
       const previous = {
         input: Number(h.input_cost) || 0,
         output: Number(h.output_cost) || 0,
         total: Number(h.cost) || 0
       };
-      const c = recalcEntryCost(h, wallet);
+      const c = recalcEntryCost(h, sourceWallet || wallet);
       applyCostPatch(h, c);
       applyTotalDelta(previous, c);
       h.cache_hit_rate = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) > 0 ? (h.cache_hit_tokens || 0) / ((h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0)) * 100 : 0;
@@ -2527,13 +2598,14 @@ const repository = {
       const cold = await loadHistoryCold();
       let coldChanged = false;
       for (const h of cold) {
-        if (findWalletForHistory(state$2.wallets, h)?.id !== wallet.id) continue;
+        const sourceWallet = findWalletForHistory(state$2.wallets, h);
+        if (sourceWallet?.id !== wallet.id && h.legacyPricingWalletId !== wallet.id) continue;
         const previous = {
           input: Number(h.input_cost) || 0,
           output: Number(h.output_cost) || 0,
           total: Number(h.cost) || 0
         };
-        const c = recalcEntryCost(h, wallet);
+        const c = recalcEntryCost(h, sourceWallet || wallet);
         applyCostPatch(h, c);
         applyTotalDelta(previous, c);
         coldChanged = true;
@@ -9568,7 +9640,7 @@ function renderHistoryInner(doc, fullHist) {
               <div><div style="color:var(--ds-text-2);font-size:10px;">模型</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${esc$1(h.model || "—")}</div></div>
               <div><div style="color:var(--ds-text-2);font-size:10px;">时段</div><div style="font-weight:600;margin-top:2px;color:var(--ds-text);">${h.priceType === "new-peak" || h.priceType === "wallet-peak" ? "高峰" : h.priceType === "new-offpeak" || h.priceType === "wallet-offpeak" ? "非高峰" : h.priceType === "unpriced" ? "待定价" : "旧价格"}</div></div>
               <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">钱包</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${esc$1(repository.getWallet(String(h.walletId || ""))?.name || h.endpointLabel || "未归属钱包")}</div></div>
-              <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">计价来源</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${h.pricingSource === "wallet" ? "钱包规则" : h.pricingSource === "builtin" ? "DeepSeek 内置" : h.pricingSource === "unpriced" ? "待定价" : h.pricingSource === "legacy" ? "旧全局规则" : "旧记录兜底"}</div></div>
+              <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">计价来源</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${h.pricingSource === "wallet" ? "钱包规则" : h.pricingSource === "builtin" ? "DeepSeek 内置" : h.pricingSource === "unpriced" ? "待定价" : h.pricingSource === "legacy-match" ? "旧数据同名价" : h.pricingSource === "legacy" ? "旧全局规则" : "旧记录兜底"}</div></div>
               <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">时间</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${new Date(h.timestamp).toLocaleString("zh-CN")}</div></div>
             </div>
           </div>
@@ -10246,7 +10318,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-B3LKgs6h.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-zBmkDQPu.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -10299,7 +10371,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-B3LKgs6h.js").then((m) => m.maybeAutoCheck());
+    import("./update-zBmkDQPu.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

@@ -3,6 +3,7 @@ import { defaultSettings } from '../types/settings';
 import {
   createDeepSeekWallet,
   createWalletFromConnection,
+  findExactPricedModelMatch,
   findWalletModel,
   mergeWalletCollections,
   normalizeWallets,
@@ -84,6 +85,27 @@ describe('钱包数据', () => {
     expect(walletBalanceToCny(wallet, 7.2)).toBeCloseTo(72, 8);
     wallet.balance.currency = 'CNY';
     expect(walletBalanceToCny(wallet, 7.2)).toBe(10);
+  });
+
+  it('仅按完整模型名查找旧数据可复用价格', () => {
+    const settings = defaultSettings();
+    const wallet = createWalletFromConnection({
+      sourceType: 'custom',
+      endpointId: 'exact-price-endpoint',
+      endpointLabel: 'relay.exact/v1',
+      credentialId: null,
+      credentialLabel: null,
+    }, settings, 1000)!;
+    observeModel(wallet, 'shared-price-model', 1000);
+    wallet.models[0].price.priceConfigured = true;
+    const wallets = [createDeepSeekWallet(settings, 1000), wallet];
+
+    expect(findExactPricedModelMatch(wallets, 'shared-price-model')).toEqual({
+      walletId: wallet.id,
+      model: 'shared-price-model',
+    });
+    expect(findExactPricedModelMatch(wallets, 'SHARED-PRICE-MODEL')).toBeNull();
+    expect(findExactPricedModelMatch(wallets, ' shared-price-model ')).toBeNull();
   });
 
   it('合并钱包时保留较新价格并合并观测项', () => {

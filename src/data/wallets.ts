@@ -466,6 +466,47 @@ export function walletPendingModelCount(wallet: WalletConfig): number {
   }).length;
 }
 
+export type ExactPricedModelMatch = {
+  walletId: string;
+  model: string;
+};
+
+/** 仅用于旧数据回填：按完整模型名查找已启用计价的模型，不做别名或归一化匹配。 */
+export function findExactPricedModelMatch(
+  wallets: WalletConfig[],
+  model: string,
+  ignoredWalletIds: Iterable<string> = [],
+): ExactPricedModelMatch | null {
+  const requested = String(model || '');
+  if (!requested) return null;
+  const ignored = new Set(ignoredWalletIds);
+  const candidates: Array<ExactPricedModelMatch & { official: number; updatedAt: number }> = [];
+  for (const wallet of wallets || []) {
+    if (ignored.has(wallet.id)) continue;
+    for (const item of wallet.models || []) {
+      if (!item.price.priceConfigured || item.model !== requested) continue;
+      candidates.push({
+        walletId: wallet.id,
+        model: item.model,
+        official: wallet.id === DEEPSEEK_WALLET_ID ? 1 : 0,
+        updatedAt: item.updatedAt || 0,
+      });
+    }
+  }
+  const official = (wallets || []).find((wallet) => wallet.id === DEEPSEEK_WALLET_ID);
+  if (official && !ignored.has(official.id) && (PRICING as any)[requested]) {
+    candidates.push({
+      walletId: official.id,
+      model: requested,
+      official: 1,
+      updatedAt: Number.MAX_SAFE_INTEGER,
+    });
+  }
+  candidates.sort((a, b) => b.official - a.official || b.updatedAt - a.updatedAt);
+  if (!candidates.length) return null;
+  return { walletId: candidates[0].walletId, model: candidates[0].model };
+}
+
 export function mergeWalletCollections(local: WalletConfig[], remote: WalletConfig[]): WalletConfig[] {
   const map = new Map<string, WalletConfig>();
   for (const wallet of normalizeWallets(local, {

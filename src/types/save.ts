@@ -38,7 +38,11 @@ export type HistoryEntry = {
   /** 请求归属的钱包标识；旧记录为空 */
   walletId?: string | null;
   /** 本次费用的计价来源 */
-  pricingSource?: 'wallet' | 'builtin' | 'legacy' | 'legacy-unassigned' | 'unpriced';
+  pricingSource?: 'wallet' | 'builtin' | 'legacy' | 'legacy-unassigned' | 'legacy-match' | 'unpriced';
+  /** 旧数据同名校验价来源钱包；仅迁移时写入，新请求不写 */
+  legacyPricingWalletId?: string | null;
+  /** 旧数据同名校验价来源模型名 */
+  legacyPricingModel?: string | null;
 };
 
 export type Save = {

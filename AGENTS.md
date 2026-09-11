@@ -113,6 +113,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **密钥隐私**：普通官方接口只记录酒馆密钥条目编号、标签和掩码末三位；反向代理 `proxy_password` 与 `custom_include_headers` 继续不读取、不比较、不持久化，因此按“未识别密钥”处理
 - **钱包模型**：模型条目含 `sourceModel/model/aliases/price/source/locked`；非峰与高峰均包含命中、未命中、输出三价。每条规则可关闭峰谷、锁定防止同步覆盖。每个钱包可独立配置跨天峰谷时段与“周末全天低谷”
 - **计价优先级**：钱包规则优先；DeepSeek 官方钱包无覆盖时使用内置 `PRICE_HISTORY` 多段价格；其他钱包无价格时标记待定价并计零费用。旧全局 `customModels` 复制到官方钱包并继续作为旧记录/未映射记录只读兜底
+- **旧数据同名校验价**：一次迁移中，若旧热/冷记录按当前钱包规则为 `unpriced`，且任意未忽略钱包存在模型名与记录完全相同的已配置价格，则给该历史条目写入 `legacyPricingWalletId/legacyPricingModel` 并以该钱包价格重算，`pricingSource=legacy-match`。新版本之后产生的请求不带该标记，仍按所属钱包原规则保持待定价
 - **待定价重算**：保存模型价格、修改峰谷、修改周末规则或同步价格后调用 `repository.recalcWallet(walletId)`，同时处理热历史和 IndexedDB 冷历史，并修正累计费用
 - **models.dev**：每个钱包配置 `catalogProvider`。开启同步后，官方接入自动映射来源，中转站由用户选择；支持 `add-missing/overwrite-unlocked/overwrite-all`，锁定规则仅允许全部覆盖模式修改。关闭同步会移除未锁定的同步价格并重算
 - **忽略与恢复**：删除钱包改为加入 `walletIgnored`，后续请求不自动重建、不参与余额合计，历史仍保留 `walletId`；钱包页可恢复显示。DeepSeek 官方钱包不可忽略
@@ -220,6 +221,7 @@ git push origin main --tags
 - **钱包迁移边界**：旧 `customModels` 复制到 DeepSeek 官方钱包但原全局数组保留；带接入地址的旧历史会建立钱包并尽量复制对应旧价格，未识别接入或无地址记录继续使用旧全局兜底
 - **余额口径**：概览钱包选择器只影响充值余额和剩余轮次预测，累计消费、热力图、按对话统计等保持全量；余额汇总按 `CNY/USD` 换算，钱包扣费按钱包自身币种
 - **WalletConfig 兼容**：新增字段必须提供默认值；`collapsed` 缺省为 `true`，`legacyPricingImported` 防止重复迁移，`walletIgnored` 决定是否允许自动重建
+- **旧价回填边界**：同名校验只按完整模型名匹配，不做别名/归一化；只运行一次并覆盖升级时的热冷历史，新请求仍用钱包自身规则。匹配钱包价格变更时，`recalcWallet` 会同时重算引用该钱包的 `legacy-match` 条目
 - **筛选与分页顺序**：统计页统一走 `filterStatsHistory`；历史页先对热冷全量历史执行 `model ∩ chat ∩ endpoint ∩ credential`，再进行 `30/页` 分页，筛选不参与分页会导致总数错误
 - **三块竖屏**：统计页 `消费金额/API 次数/Tokens` 在 `760px` 下已为 `1fr` 单列三行，满足一行一列需求；新增 `statsFour` 4 块在竖屏为 `2×2`
 - **自定义日期**：统计页 `自定义` 原为双月日历，现为直输 `input[type=date]` 两框 + 应用按钮，`max` 限今日，自动纠正起止倒置

@@ -21,6 +21,7 @@ import {
   ensureDeepSeekWallet,
   findWalletForConnection,
   findWalletForHistory,
+  findExactPricedModelMatch,
   findWalletModel,
   normalizeWalletPriceRule,
   normalizeWallets,
@@ -257,6 +258,12 @@ function migrateWallets(hot: any, cold: any[] = []): boolean {
       changed = true;
     }
   }
+  const backfillDone = Number(hot?._walletPricingBackfillVersion || 0) >= WALLET_PRICING_BACKFILL_VERSION;
+  if (!backfillDone) {
+    changed = backfillLegacyExactPricing(allHistory) || changed;
+    if (hot && typeof hot === 'object') hot._walletPricingBackfillVersion = WALLET_PRICING_BACKFILL_VERSION;
+    changed = true;
+  }
   if (hot && Array.isArray(hot.wallets) && state.wallets.length === 0) {
     state.wallets = normalizeWallets(hot.wallets, state.settings, now);
     changed = true;
@@ -264,14 +271,19 @@ function migrateWallets(hot: any, cold: any[] = []): boolean {
   return changed;
 }
 
+const WALLET_PRICING_BACKFILL_VERSION = 1;
+
 function recalcEntryCost(entry: any, wallet: WalletConfig | null) {
+  const legacyWallet = entry?.legacyPricingWalletId
+    ? state.wallets.find((item) => item.id === entry.legacyPricingWalletId) || null
+    : null;
   return calcCost({
     timestamp: entry.timestamp,
     model: entry.model,
     prompt_cache_hit_tokens: entry.cache_hit_tokens || 0,
     prompt_cache_miss_tokens: entry.cache_miss_tokens || 0,
     completion_tokens: entry.completion_tokens || 0,
-  }, state.settings as any, wallet);
+  }, state.settings as any, legacyWallet || wallet);
 }
 
 function applyCostPatch(entry: any, cost: ReturnType<typeof calcCost>): void {
@@ -279,7 +291,7 @@ function applyCostPatch(entry: any, cost: ReturnType<typeof calcCost>): void {
   entry.output_cost = cost.output;
   entry.cost = cost.total;
   entry.priceType = cost.priceType;
-  entry.pricingSource = cost.source;
+  entry.pricingSource = entry.legacyPricingWalletId ? 'legacy-match' : cost.source;
 }
 
 function applyTotalDelta(previous: { input: number; output: number; total: number }, next: { input: number; output: number; total: number }): void {
@@ -295,6 +307,39 @@ function shouldTrackWalletModel(wallet: WalletConfig, model: string): boolean {
   } catch {
     return true;
   }
+}
+
+function backfillLegacyExactPricing(allHistory: any[]): boolean {
+  let changed = false;
+  const ignored = new Set(state.walletIgnored || []);
+  for (const entry of allHistory || []) {
+    if (!entry || entry.legacyPricingWalletId) continue;
+    const sourceWallet = findWalletForHistory(state.wallets, entry);
+    if (!sourceWallet) continue;
+    const current = calcCost({
+      timestamp: entry.timestamp,
+      model: entry.model,
+      prompt_cache_hit_tokens: entry.cache_hit_tokens || 0,
+      prompt_cache_miss_tokens: entry.cache_miss_tokens || 0,
+      completion_tokens: entry.completion_tokens || 0,
+    }, state.settings as any, sourceWallet);
+    if (current.source !== 'unpriced') continue;
+    const match = findExactPricedModelMatch(state.wallets, String(entry.model || ''), ignored);
+    if (!match || match.walletId === sourceWallet.id) continue;
+    entry.legacyPricingWalletId = match.walletId;
+    entry.legacyPricingModel = match.model;
+    const previous = {
+      input: Number(entry.input_cost) || 0,
+      output: Number(entry.output_cost) || 0,
+      total: Number(entry.cost) || 0,
+    };
+    const matchedWallet = state.wallets.find((wallet) => wallet.id === match.walletId) || null;
+    const cost = recalcEntryCost(entry, matchedWallet);
+    applyCostPatch(entry, cost);
+    applyTotalDelta(previous, cost);
+    changed = true;
+  }
+  return changed;
 }
 
 export function getFilteredHistoryForScope(): any[] {
@@ -754,13 +799,14 @@ export const repository = {
     if (!wallet) return 0;
     let changed = 0;
     for (const h of state.history || []) {
-      if (findWalletForHistory(state.wallets, h)?.id !== wallet.id) continue;
+      const sourceWallet = findWalletForHistory(state.wallets, h);
+      if (sourceWallet?.id !== wallet.id && h.legacyPricingWalletId !== wallet.id) continue;
       const previous = {
         input: Number(h.input_cost) || 0,
         output: Number(h.output_cost) || 0,
         total: Number(h.cost) || 0,
       };
-      const c = recalcEntryCost(h, wallet);
+      const c = recalcEntryCost(h, sourceWallet || wallet);
       applyCostPatch(h, c);
       applyTotalDelta(previous, c);
       h.cache_hit_rate = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) > 0 ? ((h.cache_hit_tokens || 0) / ((h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0)) * 100) : 0;
@@ -770,13 +816,14 @@ export const repository = {
       const cold = await loadHistoryCold();
       let coldChanged = false;
       for (const h of cold) {
-        if (findWalletForHistory(state.wallets, h)?.id !== wallet.id) continue;
+        const sourceWallet = findWalletForHistory(state.wallets, h);
+        if (sourceWallet?.id !== wallet.id && h.legacyPricingWalletId !== wallet.id) continue;
         const previous = {
           input: Number(h.input_cost) || 0,
           output: Number(h.output_cost) || 0,
           total: Number(h.cost) || 0,
         };
-        const c = recalcEntryCost(h, wallet);
+        const c = recalcEntryCost(h, sourceWallet || wallet);
         applyCostPatch(h, c);
         applyTotalDelta(previous, c);
         coldChanged = true;
