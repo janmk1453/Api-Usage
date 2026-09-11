@@ -82,11 +82,15 @@
 ```bash
 npm install
 npm run typecheck
+npm test
 npm run build  # 产出 index.js + 动态分包 index-*.js/update-*.js + ECharts 9 块 + style.css
 node --check index.js
+npm run verify:ci
 ```
 
 产物为 `index.js（入口 re-export） + hash 分包`，**必须**与 `style.css` 一并提交，缺一则 `404` 导致 `[object Event]` 加载失败。
+
+推送 `dev/main` 或创建目标为 `dev/main` 的合并请求时，GitHub Actions 会执行严格类型检查、Vitest 核心单测、完整构建、全部分包语法检查、版本与引用链校验，并要求构建后的工作区与提交内容零差异。
 
 ## 数据
 
