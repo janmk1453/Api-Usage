@@ -1,14 +1,13 @@
 // 定价时间线（北京时间）：
 // 2026-09-10 12:00 起 flash 新定价：空闲 0.02/1/4，高峰 2×（0.04/2/8）；该时间前沿用旧价
-// 2026-09-14 12:00 起 V4 Pro 下线，请求路由至 V4.1 Flash（deepseek-flash），按 V4.1 Flash 价格计费；峰谷时间不变
+// V4 Pro 继续提供 API 调用服务，计费方式保持不变
 export const FLASH_PRICE_CUTOFF = new Date('2026-09-10T12:00:00+08:00').getTime();
-export const V4_PRO_RETIRE_CUTOFF = new Date('2026-09-14T12:00:00+08:00').getTime();
 export const FLASH_OLD_PRICING = {
   offpeak: { hit: 0.05, miss: 1.5, output: 4.5 },
   peak: { hit: 0.10, miss: 3.0, output: 9.0 },
 } as const;
 
-// V4 Pro 独立定价（2026-09-14 12:00 下线前有效）
+// V4 Pro 持续定价
 export const V4_PRO_PRICING = {
   offpeak: { hit: 0.15, miss: 4.5, output: 13.5 },
   peak: { hit: 0.30, miss: 9.0, output: 27.0 },
@@ -43,7 +42,7 @@ export const PRICING = {
     offpeak: { ...V41_FLASH_PRICING.offpeak },
     peak: { ...V41_FLASH_PRICING.peak },
   },
-  // V4 Pro：2026-09-14 12:00 前按独立价，之后路由至 V4.1 Flash 并按其价计费
+  // V4 Pro：继续提供 API 调用服务，按现价计费
   'deepseek-v4-pro': {
     usePeakPricing: true,
     offpeak: { ...V4_PRO_PRICING.offpeak },
@@ -101,14 +100,7 @@ export const PRICE_HISTORY: Record<string, PriceSegment[]> = {
       offpeak: { ...V4_PRO_PRICING.offpeak },
       peak: { ...V4_PRO_PRICING.peak },
       usePeakPricing: true,
-      label: '2026-09-14 12:00 前 V4 Pro 独立定价',
-    },
-    {
-      since: V4_PRO_RETIRE_CUTOFF,
-      offpeak: { ...PRICING['deepseek-flash'].offpeak },
-      peak: { ...PRICING['deepseek-flash'].peak },
-      usePeakPricing: true,
-      label: '2026-09-14 12:00 起 V4 Pro 下线路由至 V4.1 Flash，按其价计费',
+      label: 'V4 Pro 持续定价：空闲 0.15/4.5/13.5，高峰 2×',
     },
   ],
   'deepseek-v4-flash-vision-exp': [
