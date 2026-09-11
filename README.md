@@ -24,6 +24,14 @@
 2. 测试通道：`管理扩展程序 → 更新源分支` 填 `dev` 可抢先体验（`dev` 的 `v3.0.1-dev.*` 不推送给 `main` 用户）
 3. 启用后刷新网页，左下角魔法棒出现 `API用量统计` 入口
 
+## 预览版下载
+
+`main` 分支每次通过完整 CI 后会自动生成 `preview-<提交哈希>` 预发布包，包含清单、入口、全部分包、样式、国际化、模板、说明与许可证，并附带 `.sha256` 校验文件。
+
+[浏览并下载 `preview-*` 预发布构建](https://github.com/janmk1453/Api-Usage/releases?q=preview-&expanded=true)
+
+`dev` 分支只执行 CI，不创建标签或 Release。预览身份由提交哈希区分，不修改 `manifest.json`、`package.json` 与锁文件中的版本号。
+
 ## 更新
 
 1. `SillyTavern → 扩展程序 → 管理扩展程序 → 在下方找到`API用量统计`，等待一会右侧会出现更新按钮同时文字变绿
@@ -82,11 +90,17 @@
 ```bash
 npm install
 npm run typecheck
+npm test
 npm run build  # 产出 index.js + 动态分包 index-*.js/update-*.js + ECharts 9 块 + style.css
 node --check index.js
+npm run verify:ci
 ```
 
 产物为 `index.js（入口 re-export） + hash 分包`，**必须**与 `style.css` 一并提交，缺一则 `404` 导致 `[object Event]` 加载失败。
+
+推送 `dev/main` 或创建目标为 `dev/main` 的合并请求时，GitHub Actions 会执行严格类型检查、Vitest 核心单测、完整构建、全部分包语法检查、版本与引用链校验，并要求构建后的工作区与提交内容零差异。
+
+`main` 分支完整 CI 通过后，工作流还会使用 `git archive` 打包当前提交、复算 SHA-256 并校验压缩包文件清单，最后创建或更新 `preview-<12位提交哈希>` 预发布。`dev` 与合并请求不会进入发布作业。
 
 ## 数据
 
