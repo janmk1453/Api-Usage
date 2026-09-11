@@ -22,6 +22,10 @@ function usage(timestamp: number, model: string, miss = 1_000_000) {
   };
 }
 
+function localTimestamp(year: number, month: number, day: number, hour: number): number {
+  return new Date(year, month - 1, day, hour, 0, 0, 0).getTime();
+}
+
 describe('模型定价', () => {
   it('归一化空值、前缀和模型别名', () => {
     expect(normalizeModel('')).toBe('deepseek-v4-flash');
@@ -38,8 +42,8 @@ describe('模型定价', () => {
 
   it('按记录时间命中 V4 Flash 新旧价格段', () => {
     const settings = makeSettings();
-    const beforeCutoff = new Date('2026-09-09T13:00:00+08:00').getTime();
-    const afterCutoff = new Date('2026-09-11T13:00:00+08:00').getTime();
+    const beforeCutoff = localTimestamp(2026, 9, 9, 13);
+    const afterCutoff = localTimestamp(2026, 9, 11, 13);
 
     expect(calcCost(usage(beforeCutoff, 'deepseek-v4-flash'), settings).total).toBeCloseTo(1.5, 8);
     expect(calcCost(usage(afterCutoff, 'deepseek-v4-flash'), settings).total).toBeCloseTo(1, 8);
@@ -47,8 +51,8 @@ describe('模型定价', () => {
 
   it('高峰双倍计价且周末回落为空闲价', () => {
     const settings = makeSettings();
-    const peak = new Date('2026-09-11T10:00:00+08:00').getTime();
-    const weekend = new Date('2026-09-12T10:00:00+08:00').getTime();
+    const peak = localTimestamp(2026, 9, 11, 10);
+    const weekend = localTimestamp(2026, 9, 12, 10);
 
     expect(calcCost(usage(peak, 'deepseek-v4-flash'), settings)).toMatchObject({
       total: 2,
@@ -69,7 +73,7 @@ describe('模型定价', () => {
         peak: { hit: '1', miss: '4', output: '6' },
       }],
     });
-    const peak = new Date('2026-09-11T10:00:00+08:00').getTime();
+    const peak = localTimestamp(2026, 9, 11, 10);
 
     expect(hasPriceForModel('deepseek-v4-pro', settings)).toBe(true);
     expect(calcCost(usage(peak, 'deepseek-v4-pro'), settings).total).toBe(2);
@@ -84,7 +88,7 @@ describe('模型定价', () => {
         peak: { hit: 0, miss: 2, output: 0 },
       }],
     });
-    const timestamp = new Date('2026-09-11T13:00:00+08:00').getTime();
+    const timestamp = localTimestamp(2026, 9, 11, 13);
 
     expect(hasPriceForModel('third-party', empty)).toBe(false);
     expect(calcCost(usage(timestamp, 'third-party'), empty).total).toBe(0);
@@ -94,13 +98,13 @@ describe('模型定价', () => {
 
   it('V4 Pro 下线后按 V4 Flash 价格计费', () => {
     const settings = makeSettings();
-    const retired = new Date('2026-09-15T13:00:00+08:00').getTime();
+    const retired = localTimestamp(2026, 9, 15, 13);
     expect(calcCost(usage(retired, 'deepseek-v4-pro'), settings).total).toBe(1);
   });
 
   it('节省金额按命中价与未命中价差额计算', () => {
     const settings = makeSettings();
-    const afterCutoff = new Date('2026-09-11T13:00:00+08:00').getTime();
+    const afterCutoff = localTimestamp(2026, 9, 11, 13);
     const saved = calcSavings(usage(afterCutoff, 'deepseek-flash', 0), settings);
     expect(saved).toBeCloseTo(0, 8);
 
