@@ -36,7 +36,6 @@ const defaultSettings = () => ({
   }
 });
 const FLASH_PRICE_CUTOFF = (/* @__PURE__ */ new Date("2026-09-10T12:00:00+08:00")).getTime();
-const V4_PRO_RETIRE_CUTOFF = (/* @__PURE__ */ new Date("2026-09-14T12:00:00+08:00")).getTime();
 const FLASH_OLD_PRICING = {
   offpeak: { hit: 0.05, miss: 1.5, output: 4.5 },
   peak: { hit: 0.1, miss: 3, output: 9 }
@@ -62,7 +61,7 @@ const PRICING = {
     offpeak: { ...V41_FLASH_PRICING.offpeak },
     peak: { ...V41_FLASH_PRICING.peak }
   },
-  // V4 Pro：2026-09-14 12:00 前按独立价，之后路由至 V4.1 Flash 并按其价计费
+  // V4 Pro：继续提供 API 调用服务，按现价计费
   "deepseek-v4-pro": {
     usePeakPricing: true,
     offpeak: { ...V4_PRO_PRICING.offpeak },
@@ -111,14 +110,7 @@ const PRICE_HISTORY = {
       offpeak: { ...V4_PRO_PRICING.offpeak },
       peak: { ...V4_PRO_PRICING.peak },
       usePeakPricing: true,
-      label: "2026-09-14 12:00 前 V4 Pro 独立定价"
-    },
-    {
-      since: V4_PRO_RETIRE_CUTOFF,
-      offpeak: { ...PRICING["deepseek-flash"].offpeak },
-      peak: { ...PRICING["deepseek-flash"].peak },
-      usePeakPricing: true,
-      label: "2026-09-14 12:00 起 V4 Pro 下线路由至 V4.1 Flash，按其价计费"
+      label: "V4 Pro 持续定价：空闲 0.15/4.5/13.5，高峰 2×"
     }
   ],
   "deepseek-v4-flash-vision-exp": [
@@ -10398,7 +10390,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-BhmJdj3-.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-DHWbR_AB.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -10451,7 +10443,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-BhmJdj3-.js").then((m) => m.maybeAutoCheck());
+    import("./update-DHWbR_AB.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

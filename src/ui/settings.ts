@@ -775,7 +775,7 @@ function saveCustomRow(model: string, prices: any, isBuiltin: boolean) {
 }
 function getPricing(model: string) {
   const m = model || 'deepseek-flash';
-  // 走统一计价入口：按 PRICE_HISTORY 当前命中段展示（V4 Pro 2026-09-14 12:00 后自动显示 V4.1 Flash 价）
+  // 走统一计价入口：按 PRICE_HISTORY 当前命中段展示
   try { return resolvePricing(m, state.settings); } catch { return (PRICING as any)[m] || (PRICING as any)['deepseek-v4-flash']; }
 }
 function fillDebugModelSelect(doc: Document) {

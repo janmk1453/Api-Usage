@@ -236,10 +236,10 @@ describe('模型定价', () => {
     expect(calcCost(usage(timestamp, 'relay-model'), settings, wallet).total).toBe(1.5);
   });
 
-  it('V4 Pro 下线后按 V4 Flash 价格计费', () => {
+  it('V4 Pro 在 2026-09-14 12:00 后继续按现价计费', () => {
     const settings = makeSettings();
-    const retired = localTimestamp(2026, 9, 15, 13);
-    expect(calcCost(usage(retired, 'deepseek-v4-pro'), settings).total).toBe(1);
+    const timestamp = localTimestamp(2026, 9, 15, 13);
+    expect(calcCost(usage(timestamp, 'deepseek-v4-pro'), settings).total).toBeCloseTo(4.5, 8);
   });
 
   it('节省金额按命中价与未命中价差额计算', () => {
