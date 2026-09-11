@@ -12,6 +12,13 @@ export function getEffectiveRate(): number {
   return r;
 }
 
+/** 钱包余额汇总使用固定配置汇率，不随展示币种开关关闭而退回 1。 */
+export function getWalletExchangeRate(): number {
+  const ps: any = (state.settings as any)?.pricingSync;
+  const r = parseFloat(String(ps?.exchangeRate));
+  return isFinite(r) && r > 0 ? r : DEFAULT_EXCHANGE_RATE;
+}
+
 export function getDisplayCurrency(): DisplayCurrency {
   const ps: any = (state.settings as any)?.pricingSync;
   if (ps?.enabled) {

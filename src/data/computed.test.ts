@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { computeChatStats, computeStatsFour } from './computed';
+import {
+  STATS_FILTER_UNKNOWN,
+  computeChatStats,
+  computeStatsFour,
+  filterStatsHistory,
+  getCredentialFilterOptions,
+  getEndpointFilterOptions,
+} from './computed';
 
 describe('统计聚合', () => {
   it('按对话聚合、生成回退名称并按总 Token 排序', () => {
@@ -103,5 +110,82 @@ describe('统计聚合', () => {
       latestHitRate: null,
       truncationRate: 0,
     });
+  });
+
+  it('按时间和接入维度执行交集过滤', () => {
+    const history = [
+      {
+        timestamp: new Date('2026-09-10T12:00:00+08:00').getTime(),
+        model: 'model-a',
+        chatId: 'chat-a',
+        endpointId: 'endpoint-a',
+        credentialId: 'secret:a',
+      },
+      {
+        timestamp: new Date('2026-09-10T13:00:00+08:00').getTime(),
+        model: 'model-a',
+        chatId: 'chat-a',
+        endpointId: 'endpoint-b',
+        credentialId: 'secret:b',
+      },
+      {
+        timestamp: new Date('2026-09-11T12:00:00+08:00').getTime(),
+        model: 'model-a',
+        chatId: 'chat-a',
+        endpointId: 'endpoint-a',
+        credentialId: 'secret:a',
+      },
+    ];
+
+    const filtered = filterStatsHistory(history, {
+      start: '2026-09-10',
+      end: '2026-09-10',
+      model: 'model-a',
+      chat: 'chat-a',
+      endpoint: 'endpoint-a',
+      credential: 'secret:a',
+    });
+
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].endpointId).toBe('endpoint-a');
+  });
+
+  it('旧记录可通过未记录和未识别哨兵筛选', () => {
+    const history = [
+      { timestamp: 1, model: 'old', chatId: null },
+      { timestamp: 2, model: 'new', chatId: null, endpointId: 'endpoint-a', credentialId: null },
+    ];
+
+    expect(filterStatsHistory(history, { endpoint: STATS_FILTER_UNKNOWN })).toHaveLength(1);
+    expect(filterStatsHistory(history, { endpoint: 'endpoint-a', credential: STATS_FILTER_UNKNOWN })).toHaveLength(1);
+  });
+
+  it('密钥选项按接入类型联动并保留未识别项', () => {
+    const history = [
+      {
+        timestamp: 3,
+        endpointId: 'endpoint-a',
+        endpointLabel: 'opencode.ai/zen/go/v1',
+        credentialId: 'secret:a',
+        credentialLabel: '主密钥 •••abc',
+      },
+      {
+        timestamp: 2,
+        endpointId: 'endpoint-a',
+        endpointLabel: 'opencode.ai/zen/go/v1',
+        credentialId: null,
+      },
+      {
+        timestamp: 1,
+        endpointId: 'endpoint-b',
+        endpointLabel: 'relay.example/v1',
+        credentialId: 'secret:b',
+        credentialLabel: '备用密钥 •••xyz',
+      },
+    ];
+
+    expect(getEndpointFilterOptions(history)).toHaveLength(2);
+    const credentials = getCredentialFilterOptions(history, 'endpoint-a');
+    expect(credentials.map((option) => option.id)).toEqual(['secret:a', STATS_FILTER_UNKNOWN]);
   });
 });

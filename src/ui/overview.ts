@@ -5,6 +5,11 @@ import { saveHot } from '../store/persistence';
 import { esc } from '../utils/date';
 import type { OverviewFourKey } from '../types/settings';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
+import { repository } from '../data/repository';
+
+function getDoc(): Document {
+  return (window.parent as any)?.document ?? document;
+}
 
 function fmt(n: number) { return n.toLocaleString('zh-CN'); }
 function CNY(n: number) {
@@ -111,6 +116,50 @@ export function getFourDisplay(key: OverviewFourKey, v: any): { title:string; ht
 }
 
 let fourBound = false;
+let overviewWalletBound = false;
+let overviewWalletViewportBound = false;
+
+function closeOverviewWalletDropdown(): void {
+  const dropdown = getDoc().getElementById('aus-overview-wallet-dropdown') as HTMLElement | null;
+  if (dropdown) dropdown.style.display = 'none';
+}
+
+function bindOverviewWalletViewport(): void {
+  if (overviewWalletViewportBound) return;
+  overviewWalletViewportBound = true;
+  try { ((window.parent as any) || window).addEventListener('resize', closeOverviewWalletDropdown, { passive: true } as any); } catch {}
+  try { window.addEventListener('resize', closeOverviewWalletDropdown, { passive: true } as any); } catch {}
+  try { getDoc().getElementById('aus-main')?.addEventListener('scroll', closeOverviewWalletDropdown, { passive: true } as any); } catch {}
+}
+
+function positionOverviewWalletDropdown(btn: HTMLElement, dropdown: HTMLElement): void {
+  try {
+    const panel = getDoc().getElementById('aus-panel') as HTMLElement | null;
+    const panelRect = panel?.getBoundingClientRect();
+    const btnRect = btn.getBoundingClientRect();
+    const viewportWidth = ((window.parent as any)?.innerWidth ?? window.innerWidth);
+    const viewportHeight = ((window.parent as any)?.innerHeight ?? window.innerHeight);
+    const available = Math.max(180, Math.min(280, viewportWidth - 16));
+    dropdown.style.position = 'fixed';
+    dropdown.style.width = `${available}px`;
+    dropdown.style.minWidth = '0';
+    dropdown.style.maxWidth = `${viewportWidth - 16}px`;
+    dropdown.style.maxHeight = `${Math.max(120, viewportHeight - 24)}px`;
+    const left = Math.max(8, Math.min(btnRect.right - available, viewportWidth - available - 8));
+    const estimatedHeight = Math.min(dropdown.scrollHeight || 220, viewportHeight - 24);
+    const openUp = btnRect.bottom + 6 + estimatedHeight > viewportHeight - 8;
+    const top = openUp
+      ? Math.max(8, btnRect.top - estimatedHeight - 6)
+      : btnRect.bottom + 6;
+    dropdown.style.top = `${Math.round(top)}px`;
+    dropdown.style.left = `${Math.round(left)}px`;
+    dropdown.style.right = 'auto';
+    dropdown.style.zIndex = '100500';
+    if (panelRect) {
+      dropdown.style.pointerEvents = 'auto';
+    }
+  } catch {}
+}
 function bindFour() {
   if (fourBound) return;
   fourBound = true;
@@ -152,16 +201,66 @@ function openFourDrop(idx:number, v:any) {
 
 export function renderOverview() {
   const doc = (window.parent as any)?.document ?? document;
-  const v = computeOverview();
+  const ignored = new Set(repository.getIgnoredWalletIds());
+  const wallets = repository.getWallets().filter((wallet) => !ignored.has(wallet.id));
+  const selectedWalletId = String((state.settings as any).overviewWalletId || 'all');
+  const activeWalletId = selectedWalletId !== 'all' && wallets.some((wallet) => wallet.id === selectedWalletId)
+    ? selectedWalletId
+    : 'all';
+  const v = computeOverview(activeWalletId);
+  const walletBtn = doc.getElementById('aus-overview-wallet-btn');
+  const walletLabel = doc.getElementById('aus-overview-wallet-label');
+  const walletDrop = doc.getElementById('aus-overview-wallet-dropdown') as HTMLElement | null;
+  if (walletLabel) {
+    walletLabel.textContent = activeWalletId === 'all'
+      ? '全部钱包合计'
+      : wallets.find((wallet) => wallet.id === activeWalletId)?.name || '全部钱包合计';
+  }
+  if (walletDrop) {
+    const item = (id: string, label: string) => {
+      const active = id === activeWalletId;
+      return `<div data-overview-wallet="${esc(id)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:11px;${active ? 'background:var(--ds-card);font-weight:600;' : ''}">${esc(label)}</div>`;
+    };
+    walletDrop.innerHTML = item('all', '全部钱包合计') + wallets.map((wallet) => item(wallet.id, wallet.name)).join('');
+    walletDrop.querySelectorAll('[data-overview-wallet]').forEach((el: any) => {
+      el.onclick = () => {
+        (state.settings as any).overviewWalletId = el.getAttribute('data-overview-wallet') || 'all';
+        (state.settings as any).overviewWalletManuallySet = true;
+        try { saveHot({ settings: state.settings }); } catch {}
+        walletDrop.style.display = 'none';
+        renderOverview();
+      };
+    });
+  }
+  if (walletBtn && walletDrop) {
+    walletBtn.onclick = (event: Event) => {
+      event.stopPropagation();
+      const open = walletDrop.style.display !== 'block';
+      walletDrop.style.display = open ? 'block' : 'none';
+      if (open) {
+        bindOverviewWalletViewport();
+        positionOverviewWalletDropdown(walletBtn as HTMLElement, walletDrop);
+      }
+    };
+  }
+  if (!overviewWalletBound) {
+    overviewWalletBound = true;
+    doc.addEventListener('click', (event: any) => {
+      const target = event.target as HTMLElement;
+      const drop = doc.getElementById('aus-overview-wallet-dropdown') as HTMLElement | null;
+      if (drop && !target?.closest?.('#aus-overview-wallet-dropdown') && !target?.closest?.('#aus-overview-wallet-btn')) {
+        drop.style.display = 'none';
+      }
+    });
+  }
 
   const balEl = doc.getElementById('aus-balance');
   if (balEl) balEl.textContent = v.balanceText;
   const remEl = doc.getElementById('aus-balance-remaining');
   if (remEl) {
-    if (v.remainingRounds != null) remEl.textContent = '预计还可进行 ' + v.remainingRounds.toLocaleString('zh-CN') + ' 轮对话（仅 DeepSeek 官方）';
+    if (v.remainingRounds != null) remEl.textContent = '预计还可进行 ' + v.remainingRounds.toLocaleString('zh-CN') + ' 轮对话';
     else {
-      const hasBal = !!(state.customBalance || state.balance?.balance);
-      remEl.textContent = hasBal ? '暂无 DeepSeek 对话数据，无法预测' : '查询余额后可预测剩余轮次';
+      remEl.textContent = v.hasBalance ? '暂无可用于预测的费用记录' : '设置钱包余额后可预测剩余轮次';
     }
   }
   const costEl = doc.getElementById('aus-total-cost');

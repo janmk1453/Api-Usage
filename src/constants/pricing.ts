@@ -149,7 +149,7 @@ export const STORAGE_KEYS = {
 
 export const EXPORT_FORMAT_VERSION = 1;
 export const WEBDAV_SYNC_FILE = 'DeepSeekStatSync.json';
-export const WEBDAV_REMOTE_VERSION = 1;
+export const WEBDAV_REMOTE_VERSION = 2;
 
 // models.dev 自动同步常量
 export const PRICING_SYNC_SOURCE = 'https://models.dev/api.json';

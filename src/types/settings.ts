@@ -52,6 +52,8 @@ export type StatsFourKey = 'avg_cost' | 'avg_tokens' | 'avg_duration' | 'avg_rat
   | 'avg_hit_rate' | 'latest_hit_rate' | 'max_output' | 'max_input' | 'max_total';
 export type Settings = {
   theme: ThemeMode;
+  overviewWalletId: string;
+  overviewWalletManuallySet: boolean;
   autoBalance: boolean;
   balanceInterval: number;
   debug: boolean;
@@ -77,6 +79,8 @@ export type Settings = {
 
 export const defaultSettings = (): Settings => ({
   theme: 'light',
+  overviewWalletId: 'wallet:deepseek-official',
+  overviewWalletManuallySet: false,
   autoBalance: false,
   balanceInterval: 10,
   debug: false,

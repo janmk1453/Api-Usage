@@ -4,7 +4,15 @@ import { Y_OPTIONS, X_OPTIONS, getYSelected, getXSelected, toggleY, setXSelected
 import { renderExtraCharts } from './extra-charts';
 import { renderModelTrends, initModelTrends } from './model-trends';
 import { DataEvents, on as onDataEvent } from '../data/events';
-import { computeStatsFour } from '../data/computed';
+import {
+  STATS_FILTER_ALL,
+  STATS_FILTER_UNKNOWN,
+  computeStatsFour,
+  filterStatsHistory,
+  getCredentialFilterOptions,
+  getEndpointFilterOptions,
+  type StatsHistoryFilter,
+} from '../data/computed';
 import { FOUR_OPTIONS, getFourDisplay } from './overview';
 
 type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom' | 'all';
@@ -12,10 +20,15 @@ let currentRange: RangeKey = '30d';
 let customStart = '';
 let customEnd = '';
 let pickerOpen = false;
-let selectedModel: string = '__all__';
+let selectedModel: string = STATS_FILTER_ALL;
 let modelPickerOpen = false;
-let selectedChat: string = '__all__';
+let selectedChat: string = STATS_FILTER_ALL;
 let chatPickerOpen = false;
+let selectedEndpoint: string = STATS_FILTER_ALL;
+let endpointPickerOpen = false;
+let selectedCredential: string = STATS_FILTER_ALL;
+let credentialPickerOpen = false;
+let lastStatsHistory: any[] = [];
 
 // 模型汇总表排序：点击表头（除模型外）正序/倒序切换
 type SummarySortKey = 'count' | 'hit' | 'miss' | 'out' | 'total' | 'cost' | 'avgCost' | 'avgDur' | 'avgRate';
@@ -102,24 +115,10 @@ function getRangeDates(): { start: string; end: string } {
   return { start: today, end: today };
 }
 
-function filterByRange(entries: any[]): any[] {
-  const { start, end } = getRangeDates();
-  return entries.filter(e => {
-    const k = localDay(e.timestamp);
-    return k >= start && k <= end;
-  });
-}
-
-function getRecordedModels(): string[] {
-  const s: any = getSelectedSave();
+function getRecordedModels(history?: any[]): string[] {
   const set = new Set<string>();
-  for (const h of s?.history || []) if (h?.model) set.add(h.model);
+  for (const h of history || []) if (h?.model) set.add(h.model);
   return Array.from(set).sort();
-}
-
-function filterByModel(entries: any[]): any[] {
-  if (selectedModel === '__all__') return entries;
-  return entries.filter(e => e.model === selectedModel);
 }
 
 function getRecordedChatsFrom(list: any[]): Array<{ chatId: string | null; chatName: string | null; displayName: string }> {
@@ -141,13 +140,17 @@ function getRecordedChatsFrom(list: any[]): Array<{ chatId: string | null; chatN
   }).sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
 }
 
-function filterByChat(entries: any[]): any[] {
-  if (selectedChat === '__all__') return entries;
-  if (selectedChat === '__null__') return entries.filter(e => !e.chatId);
-  return entries.filter(e => (e.chatId ?? null) === selectedChat);
+function currentStatsFilter(): StatsHistoryFilter {
+  const { start, end } = getRangeDates();
+  return {
+    start,
+    end,
+    model: selectedModel,
+    chat: selectedChat,
+    endpoint: selectedEndpoint,
+    credential: selectedCredential,
+  };
 }
-
-let calendarOffset = 0;
 
 function updateRangeHighlight() {
   const doc = getDoc();
@@ -202,12 +205,12 @@ function updatePickerLabel() {
   updateRangeHighlight();
 }
 
-function renderModelPicker() {
+function renderModelPicker(modelsHist?: any[]) {
   const doc = getDoc();
   const dropdown = doc.getElementById('aus-model-dropdown');
   const label = doc.getElementById('aus-model-label');
   if (!dropdown || !label) return;
-  const models = getRecordedModels();
+  const models = getRecordedModels(modelsHist);
   label.textContent = selectedModel === '__all__' ? '全部' : selectedModel;
   let html = `<div data-model="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${selectedModel==='__all__'?'background:var(--ds-card);font-weight:600;':''}">全部</div>`;
   for (const m of models) {
@@ -221,7 +224,6 @@ function renderModelPicker() {
       selectedModel = el.getAttribute('data-model') || '__all__';
       modelPickerOpen = false;
       dropdown.style.display = 'none';
-      renderModelPicker();
       renderStatsView();
     };
   });
@@ -255,6 +257,116 @@ function renderChatPicker(chatHist?: any[]) {
   });
 }
 
+function renderEndpointPicker(history?: any[]) {
+  const doc = getDoc();
+  const dropdown = doc.getElementById('aus-endpoint-dropdown');
+  const label = doc.getElementById('aus-endpoint-label');
+  if (!dropdown || !label) return;
+  const options = getEndpointFilterOptions(history || []);
+  const current = options.find((option) => option.id === selectedEndpoint);
+  label.textContent = selectedEndpoint === STATS_FILTER_ALL
+    ? '全部'
+    : selectedEndpoint === STATS_FILTER_UNKNOWN
+      ? '未记录接入'
+      : current?.label || selectedEndpoint;
+  label.title = label.textContent;
+  const optionHtml = (id: string, text: string, title: string) => {
+    const active = id === selectedEndpoint ? 'background:var(--ds-card);font-weight:600;' : '';
+    return `<div data-endpoint="${esc(id)}" title="${esc(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${esc(text)}</div>`;
+  };
+  let html = optionHtml(STATS_FILTER_ALL, '全部', '全部');
+  for (const option of options) html += optionHtml(option.id, option.label, option.label);
+  if (!options.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">暂无接入记录</div>';
+  dropdown.innerHTML = html;
+  dropdown.querySelectorAll('[data-endpoint]').forEach((el: any) => {
+    el.onclick = () => {
+      selectedEndpoint = el.getAttribute('data-endpoint') || STATS_FILTER_ALL;
+      selectedCredential = STATS_FILTER_ALL;
+      endpointPickerOpen = false;
+      dropdown.style.display = 'none';
+      renderStatsView();
+    };
+  });
+}
+
+function renderCredentialPicker(history?: any[], endpoint = selectedEndpoint) {
+  const doc = getDoc();
+  const dropdown = doc.getElementById('aus-credential-dropdown');
+  const label = doc.getElementById('aus-credential-label');
+  if (!dropdown || !label) return;
+  const options = getCredentialFilterOptions(history || [], endpoint);
+  const current = options.find((option) => option.id === selectedCredential);
+  label.textContent = selectedCredential === STATS_FILTER_ALL
+    ? '全部'
+    : selectedCredential === STATS_FILTER_UNKNOWN
+      ? '未识别密钥'
+      : current?.label || selectedCredential;
+  label.title = label.textContent;
+  const optionHtml = (id: string, text: string, title: string) => {
+    const active = id === selectedCredential ? 'background:var(--ds-card);font-weight:600;' : '';
+    return `<div data-credential="${esc(id)}" title="${esc(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${esc(text)}</div>`;
+  };
+  let html = optionHtml(STATS_FILTER_ALL, '全部', '全部');
+  for (const option of options) html += optionHtml(option.id, option.label, option.label);
+  if (!options.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">暂无密钥记录</div>';
+  dropdown.innerHTML = html;
+  dropdown.querySelectorAll('[data-credential]').forEach((el: any) => {
+    el.onclick = () => {
+      selectedCredential = el.getAttribute('data-credential') || STATS_FILTER_ALL;
+      credentialPickerOpen = false;
+      dropdown.style.display = 'none';
+      renderStatsView();
+    };
+  });
+}
+
+export function positionFilterDropdown(btn: HTMLElement, dropdown: HTMLElement) {
+  try {
+    const doc = getDoc();
+    const panel = doc.getElementById('aus-panel') as HTMLElement | null;
+    if (!panel) return;
+    const panelRect = panel.getBoundingClientRect();
+    const btnRect = btn.getBoundingClientRect();
+    const available = Math.max(160, panelRect.width - 16);
+    dropdown.style.maxWidth = `${available}px`;
+    dropdown.style.boxSizing = 'border-box';
+    const width = Math.min(dropdown.offsetWidth || 220, available);
+    const buttonLeft = btnRect.left - panelRect.left;
+    const desiredLeft = Math.max(8, Math.min(buttonLeft, panelRect.width - width - 8));
+    dropdown.style.left = `${desiredLeft - buttonLeft}px`;
+    dropdown.style.right = 'auto';
+  } catch {}
+}
+
+function closeFilterDropdowns(except?: 'range' | 'model' | 'chat' | 'endpoint' | 'credential') {
+  const doc = getDoc();
+  if (except !== 'range') {
+    pickerOpen = false;
+    const el = doc.getElementById('aus-range-dropdown');
+    if (el) el.style.display = 'none';
+  }
+  if (except !== 'model') {
+    modelPickerOpen = false;
+    const el = doc.getElementById('aus-model-dropdown');
+    if (el) el.style.display = 'none';
+  }
+  if (except !== 'chat') {
+    chatPickerOpen = false;
+    const el = doc.getElementById('aus-chat-dropdown');
+    if (el) el.style.display = 'none';
+  }
+  if (except !== 'endpoint') {
+    endpointPickerOpen = false;
+    const el = doc.getElementById('aus-endpoint-dropdown');
+    if (el) el.style.display = 'none';
+  }
+  if (except !== 'credential') {
+    credentialPickerOpen = false;
+    const el = doc.getElementById('aus-credential-dropdown');
+    if (el) el.style.display = 'none';
+  }
+}
+
 function bindPicker() {
   const doc = getDoc();
   const btn = doc.getElementById('aus-range-btn');
@@ -262,13 +374,12 @@ function bindPicker() {
   if (btn && dropdown) {
     btn.onclick = () => {
       pickerOpen = !pickerOpen;
+      closeFilterDropdowns('range');
       dropdown.style.display = pickerOpen ? 'flex' : 'none';
-      // 关闭其他下拉
-      const md = doc.getElementById('aus-model-dropdown');
-      if (md) { md.style.display = 'none'; modelPickerOpen = false; }
-      const cd = doc.getElementById('aus-chat-dropdown');
-      if (cd) { cd.style.display = 'none'; chatPickerOpen = false; }
-      if (pickerOpen) renderCalendar();
+      if (pickerOpen) {
+        renderCalendar();
+        positionFilterDropdown(btn as HTMLElement, dropdown as HTMLElement);
+      }
     };
     doc.querySelectorAll('[data-range]').forEach((el: any) => {
       el.onclick = () => {
@@ -287,12 +398,12 @@ function bindPicker() {
   if (mBtn && mDropdown) {
     mBtn.onclick = () => {
       modelPickerOpen = !modelPickerOpen;
+      closeFilterDropdowns('model');
       mDropdown.style.display = modelPickerOpen ? 'block' : 'none';
-      const rDrop = doc.getElementById('aus-range-dropdown');
-      if (rDrop) { rDrop.style.display = 'none'; pickerOpen = false; }
-      const cDrop = doc.getElementById('aus-chat-dropdown');
-      if (cDrop) { cDrop.style.display = 'none'; chatPickerOpen = false; }
-      if (modelPickerOpen) renderModelPicker();
+      if (modelPickerOpen) {
+        renderModelPicker(lastStatsHistory);
+        positionFilterDropdown(mBtn as HTMLElement, mDropdown as HTMLElement);
+      }
     };
   }
   const cBtn = doc.getElementById('aus-chat-btn');
@@ -300,23 +411,45 @@ function bindPicker() {
   if (cBtn && cDropdown) {
     cBtn.onclick = () => {
       chatPickerOpen = !chatPickerOpen;
+      closeFilterDropdowns('chat');
       cDropdown.style.display = chatPickerOpen ? 'block' : 'none';
-      const rDrop = doc.getElementById('aus-range-dropdown');
-      if (rDrop) { rDrop.style.display = 'none'; pickerOpen = false; }
-      const mDrop = doc.getElementById('aus-model-dropdown');
-      if (mDrop) { mDrop.style.display = 'none'; modelPickerOpen = false; }
       if (chatPickerOpen) {
-        // 基于全量历史构造对话列表，需异步时用缓存
         (async () => {
           try {
             const h = await getHistoryForStats();
             renderChatPicker(h);
           } catch { renderChatPicker(); }
+          positionFilterDropdown(cBtn as HTMLElement, cDropdown as HTMLElement);
         })();
       }
     };
   }
-  // 关闭
+  const eBtn = doc.getElementById('aus-endpoint-btn');
+  const eDropdown = doc.getElementById('aus-endpoint-dropdown');
+  if (eBtn && eDropdown) {
+    eBtn.onclick = () => {
+      endpointPickerOpen = !endpointPickerOpen;
+      closeFilterDropdowns('endpoint');
+      eDropdown.style.display = endpointPickerOpen ? 'block' : 'none';
+      if (endpointPickerOpen) {
+        renderEndpointPicker(lastStatsHistory);
+        positionFilterDropdown(eBtn as HTMLElement, eDropdown as HTMLElement);
+      }
+    };
+  }
+  const kBtn = doc.getElementById('aus-credential-btn');
+  const kDropdown = doc.getElementById('aus-credential-dropdown');
+  if (kBtn && kDropdown) {
+    kBtn.onclick = () => {
+      credentialPickerOpen = !credentialPickerOpen;
+      closeFilterDropdowns('credential');
+      kDropdown.style.display = credentialPickerOpen ? 'block' : 'none';
+      if (credentialPickerOpen) {
+        renderCredentialPicker(lastStatsHistory);
+        positionFilterDropdown(kBtn as HTMLElement, kDropdown as HTMLElement);
+      }
+    };
+  }
   doc.addEventListener('click', (e: any) => {
     const t = e.target as HTMLElement;
     if (pickerOpen && !t.closest('#aus-range-dropdown') && !t.closest('#aus-range-btn')) {
@@ -332,6 +465,16 @@ function bindPicker() {
     if (chatPickerOpen && !t.closest('#aus-chat-dropdown') && !t.closest('#aus-chat-btn')) {
       chatPickerOpen = false;
       const d = doc.getElementById('aus-chat-dropdown');
+      if (d) d.style.display = 'none';
+    }
+    if (endpointPickerOpen && !t.closest('#aus-endpoint-dropdown') && !t.closest('#aus-endpoint-btn')) {
+      endpointPickerOpen = false;
+      const d = doc.getElementById('aus-endpoint-dropdown');
+      if (d) d.style.display = 'none';
+    }
+    if (credentialPickerOpen && !t.closest('#aus-credential-dropdown') && !t.closest('#aus-credential-btn')) {
+      credentialPickerOpen = false;
+      const d = doc.getElementById('aus-credential-dropdown');
       if (d) d.style.display = 'none';
     }
   });
@@ -362,7 +505,7 @@ function renderChartSelectors() {
     el.onchange = () => {
       toggleY(el.getAttribute('data-ykey') as any);
       renderChartSelectors();
-      const s:any = getSelectedSave(); const filtered = filterByChat(filterByModel(filterByRange(s.history||[]))); renderChart(filtered);
+      renderStatsView();
     };
   });
   // X 单选
@@ -380,7 +523,7 @@ function renderChartSelectors() {
       setXSelected(el.getAttribute('data-xkey') as any);
       chartXOpen=false; xDrop.style.display='none';
       renderChartSelectors();
-      const s:any = getSelectedSave(); const filtered = filterByChat(filterByModel(filterByRange(s.history||[]))); renderChart(filtered);
+      renderStatsView();
     };
   });
 }
@@ -603,34 +746,35 @@ function renderModelSummary(filtered: any[]) {
 let cachedAllHistory: any[] | null = null;
 let allHistoryLoading = false;
 
-export function invalidateStatsCache() { cachedAllHistory = null; }
+export function invalidateStatsCache() {
+  cachedAllHistory = null;
+  lastStatsHistory = [];
+}
 try { onDataEvent(DataEvents.HISTORY_ADDED, () => { cachedAllHistory = null; }); } catch {}
 
 async function getHistoryForStats(): Promise<any[]> {
   const s: any = getSelectedSave();
   const hot: any[] = s?.history || [];
-  if (hot.length >= 400 || cachedAllHistory) {
-    if (cachedAllHistory) {
-      const keyOf = (h: any) => `${h.timestamp}|${h.model||''}|${h.total_tokens||0}`;
-      const seen = new Set(cachedAllHistory.map(keyOf));
-      const fresh = hot.filter((h: any) => !seen.has(keyOf(h)));
-      if (fresh.length) cachedAllHistory = [...fresh, ...cachedAllHistory].sort((a: any,b: any)=> b.timestamp - a.timestamp);
-      return cachedAllHistory;
-    }
-    if (allHistoryLoading) return hot;
-    allHistoryLoading = true;
-    try {
-      const mod: any = await import('../store/persistence');
-      if (mod.getAllHistory) {
-        const all = await mod.getAllHistory();
-        if (all && all.length > hot.length) {
-          cachedAllHistory = all;
-          return all;
-        }
-      }
-    } catch {}
-    finally { allHistoryLoading = false; }
+  if (cachedAllHistory) {
+    const keyOf = (h: any) => `${h.timestamp}|${h.model||''}|${h.total_tokens||0}`;
+    const seen = new Set(cachedAllHistory.map(keyOf));
+    const fresh = hot.filter((h: any) => !seen.has(keyOf(h)));
+    if (fresh.length) cachedAllHistory = [...fresh, ...cachedAllHistory].sort((a: any,b: any)=> b.timestamp - a.timestamp);
+    return cachedAllHistory;
   }
+  if (allHistoryLoading) return hot;
+  allHistoryLoading = true;
+  try {
+    const mod: any = await import('../store/persistence');
+    if (mod.getAllHistory) {
+      const all = await mod.getAllHistory();
+      const result = all || hot;
+      cachedAllHistory = result;
+      return result;
+    }
+  } catch {}
+  finally { allHistoryLoading = false; }
+  cachedAllHistory = hot;
   return hot;
 }
 
@@ -639,10 +783,18 @@ export async function renderStatsView() {
   const s: any = getSelectedSave();
   if (!s) return;
   const allHistory: any[] = await getHistoryForStats();
-  const timeFiltered = filterByRange(allHistory);
-  const modelFiltered = filterByModel(timeFiltered);
-  const summaryFiltered = filterByChat(modelFiltered);
-  const chartFiltered = filterByChat(modelFiltered);
+  lastStatsHistory = allHistory;
+  const endpointOptions = getEndpointFilterOptions(allHistory);
+  const validEndpoints = new Set([STATS_FILTER_ALL, ...endpointOptions.map((option) => option.id)]);
+  if (!validEndpoints.has(selectedEndpoint)) {
+    selectedEndpoint = STATS_FILTER_ALL;
+    selectedCredential = STATS_FILTER_ALL;
+  }
+  const credentialOptions = getCredentialFilterOptions(allHistory, selectedEndpoint);
+  const validCredentials = new Set([STATS_FILTER_ALL, ...credentialOptions.map((option) => option.id)]);
+  if (!validCredentials.has(selectedCredential)) selectedCredential = STATS_FILTER_ALL;
+  const summaryFiltered = filterStatsHistory(allHistory, currentStatsFilter());
+  const chartFiltered = summaryFiltered;
   let totalCost = 0, totalReq = summaryFiltered.length, totalTok = 0;
   for (const e of summaryFiltered) { totalCost += e.cost || 0; totalTok += e.total_tokens || 0; }
   const costEl = doc.getElementById('aus-stats-cost');
@@ -653,8 +805,10 @@ export async function renderStatsView() {
   if (tokEl) tokEl.textContent = totalTok.toLocaleString('zh-CN');
   renderStatsFour(summaryFiltered);
   renderModelSummary(summaryFiltered);
-  renderModelPicker();
+  renderModelPicker(allHistory);
   renderChatPicker(allHistory);
+  renderEndpointPicker(allHistory);
+  renderCredentialPicker(allHistory);
   renderChartSelectors();
   // 首次加载时统计页为 display:none，跳过图表渲染，等待 switchView 切到统计页时再渲染，避免 0 尺寸报错
   const statsViewEl = doc.querySelector('[data-view="stats"]') as HTMLElement | null;
@@ -716,8 +870,7 @@ function openStatsFourDrop(idx:number, v:any) {
       (state.settings as any).statsFour = arr;
       try { saveHot({ settings: state.settings }); } catch {}
       drop.style.display='none';
-      const curFiltered = (()=>{ try { const s:any=getSelectedSave(); const all = (s?.history||[]); const tf = filterByRange(all); return filterByChat(filterByModel(tf)); } catch { return []; } })();
-      renderStatsFour(curFiltered);
+      renderStatsView();
     };
   });
   drop.style.display = drop.style.display==='block' ? 'none' : 'block';

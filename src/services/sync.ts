@@ -3,6 +3,8 @@ import { WEBDAV_SYNC_FILE, WEBDAV_REMOTE_VERSION, MAX_HISTORY } from '../constan
 import { decryptKey, encryptKey } from '../utils/crypto';
 import { repository } from '../data/repository';
 import { isUnsafeKey } from '../utils/date';
+import { mergeWalletCollections } from '../data/wallets';
+import { historyRecordKey } from '../utils/history-key';
 
 const WEBDAV_PASS_KEY = 'ds_webdav_pass';
 
@@ -76,6 +78,7 @@ function buildLocalBundle(): any {
   return {
     format: 'deepseek-stat-sync',
     version: WEBDAV_REMOTE_VERSION,
+    walletFormat: 2,
     syncedAt: Date.now(),
     data: {
       history: stripHistory(state.history),
@@ -91,6 +94,8 @@ function buildLocalBundle(): any {
       startTime: state.startTime,
       balance: state.balance,
       customBalance: state.customBalance,
+      wallets: state.wallets,
+      walletIgnored: state.walletIgnored,
       settings: JSON.parse(JSON.stringify(state.settings)),
       messageCount: state.messageCount,
     },
@@ -113,7 +118,7 @@ function mergeBundles(remote: any, local: any) {
   // 清洗原型污染
   const clean = (arr: any[]) => arr.map((e:any)=>{ if(e&&typeof e==='object') for(const k of Object.keys(e)) if(isUnsafeKey(k)) delete e[k]; return e; });
   const lh = clean(toHistory(ld)), rh = clean(toHistory(rd));
-  const keyOf = (h:any)=> `${h.timestamp}|${h.model||''}|${h.total_tokens||0}`;
+  const keyOf = historyRecordKey;
   const lseen = new Set(lh.map((h: any) => keyOf(h)));
   const rseen = new Set(rh.map((h: any) => keyOf(h)));
   let pulled = 0, pushed = 0;
@@ -137,6 +142,8 @@ function mergeBundles(remote: any, local: any) {
     startTime: ld.startTime ?? rd.startTime ?? Date.now(),
     balance: ld.balance ?? rd.balance,
     customBalance: ld.customBalance ?? rd.customBalance,
+    wallets: mergeWalletCollections(ld.wallets || repository.getWallets(), rd.wallets || []),
+    walletIgnored: Array.from(new Set([...(ld.walletIgnored || []), ...(rd.walletIgnored || [])])),
     messageCount: ld.messageCount ?? rd.messageCount,
     settings: ld.settings ?? rd.settings,
   };

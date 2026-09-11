@@ -1,5 +1,7 @@
 const defaultSettings = () => ({
   theme: "light",
+  overviewWalletId: "wallet:deepseek-official",
+  overviewWalletManuallySet: false,
   autoBalance: false,
   balanceInterval: 10,
   debug: false,
@@ -150,7 +152,7 @@ const STORAGE_KEYS = {
 };
 const EXPORT_FORMAT_VERSION = 1;
 const WEBDAV_SYNC_FILE = "DeepSeekStatSync.json";
-const WEBDAV_REMOTE_VERSION = 1;
+const WEBDAV_REMOTE_VERSION = 2;
 const PRICING_SYNC_SOURCE = "https://models.dev/api.json";
 const PRICING_SYNC_FALLBACK = "https://raw.githubusercontent.com/anomalyco/opencode/main/models.json";
 const DEFAULT_EXCHANGE_RATE = 7.2;
@@ -171,6 +173,8 @@ const state$2 = {
   settings: defaultSettings(),
   balance: null,
   customBalance: null,
+  wallets: [],
+  walletIgnored: [],
   messageCount: 0
 };
 function getSelectedSave() {
@@ -226,8 +230,8 @@ function pruneHistoryDetails() {
       delete e.fullResponse;
     } else if (e.fullRequest && typeof e.fullRequest === "object" && Array.isArray(e.fullRequest.messages)) {
       const keep = {};
-      for (const k of ["model", "stream", "temperature", "max_tokens", "top_p", "stream_options"]) if (e.fullRequest[k] !== void 0) keep[k] = e.fullRequest[k];
-      keep.messages_length = e.fullRequest.messages.length;
+      for (const k of ["model", "stream", "temperature", "max_tokens", "top_p", "stream_options", "chat_completion_source", "endpoint"]) if (e.fullRequest[k] !== void 0) keep[k] = e.fullRequest[k];
+      keep.messages_length = Array.isArray(e.fullRequest.messages) ? e.fullRequest.messages.length : e.fullRequest.messages_length;
       e.fullRequest = keep;
     }
   }
@@ -262,6 +266,18 @@ const index = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePropert
   pruneHistoryDetails,
   state: state$2
 }, Symbol.toStringTag, { value: "Module" }));
+function historyRecordKey(entry) {
+  return JSON.stringify([
+    Number(entry?.timestamp) || 0,
+    String(entry?.model || ""),
+    Number(entry?.total_tokens) || 0,
+    Number(entry?.cache_hit_tokens) || 0,
+    Number(entry?.cache_miss_tokens) || 0,
+    Number(entry?.completion_tokens) || 0,
+    String(entry?.endpointId || entry?.walletId || ""),
+    String(entry?.credentialId || "")
+  ]);
+}
 const MODULE$1 = "api_usage_stat";
 const HOT_KEEP = 50;
 const DB_NAME = "api_usage_stat_db";
@@ -354,8 +370,10 @@ function saveHot(patch) {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     saveTimer = null;
+    const latest = getExtensionSettings() || {};
+    const merged = { ...latest, ...pendingNext || next };
     pendingNext = null;
-    saveExtensionSettings(next);
+    saveExtensionSettings(merged);
   }, 300);
 }
 function flushSaveHot() {
@@ -370,7 +388,7 @@ function flushSaveHot() {
   if (pendingNext) {
     const next = pendingNext;
     pendingNext = null;
-    saveExtensionSettings(next);
+    saveExtensionSettings({ ...getExtensionSettings() || {}, ...next });
   }
 }
 async function migrateIfNeeded() {
@@ -525,7 +543,7 @@ async function loadHistoryCold() {
 async function appendHistoryCold(entries) {
   if (!entries.length) return;
   const cold = await loadHistoryCold();
-  const keyOf = (h) => `${h.timestamp}|${h.model || ""}|${h.total_tokens || 0}`;
+  const keyOf = historyRecordKey;
   const seen = new Set(cold.map((h) => keyOf(h)));
   const toAdd = entries.filter((h) => !seen.has(keyOf(h)));
   if (!toAdd.length) return;
@@ -537,11 +555,14 @@ async function appendHistoryCold(entries) {
   } catch {
   }
 }
+async function saveHistoryCold(entries) {
+  await dbSet("cold_history", JSON.stringify(Array.isArray(entries) ? entries : []));
+}
 async function getAllHistory() {
   const hot = getExtensionSettings()?.history || [];
   const cold = await loadHistoryCold();
   const merged = [...hot, ...cold].sort((a, b) => b.timestamp - a.timestamp);
-  const keyOf = (h) => `${h.timestamp}|${h.model || ""}|${h.total_tokens || 0}`;
+  const keyOf = historyRecordKey;
   const seen = /* @__PURE__ */ new Set();
   const dedup = [];
   for (const h of merged) {
@@ -564,8 +585,256 @@ const persistence = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineP
   loadHot,
   migrateIfNeeded,
   saveExtensionSettings,
+  saveHistoryCold,
   saveHot
 }, Symbol.toStringTag, { value: "Module" }));
+const DEEPSEEK_WALLET_ID = "wallet:deepseek-official";
+const WALLET_CATALOG_PROVIDERS = [
+  { id: "deepseek", label: "DeepSeek" },
+  { id: "openai", label: "OpenAI" },
+  { id: "anthropic", label: "Anthropic" },
+  { id: "google", label: "Google" },
+  { id: "mistral", label: "Mistral" },
+  { id: "xai", label: "xAI" },
+  { id: "moonshotai", label: "Moonshot AI" },
+  { id: "zai", label: "Z.AI" },
+  { id: "minimax", label: "MiniMax" },
+  { id: "cohere", label: "Cohere" }
+];
+function isFirstPartyCatalogProvider(value) {
+  const id = String(value || "").trim().toLowerCase();
+  return WALLET_CATALOG_PROVIDERS.some((provider) => provider.id === id);
+}
+function defaultCatalogProvider(sourceType) {
+  const key = String(sourceType || "").trim().toLowerCase();
+  const map2 = {
+    deepseek: "deepseek",
+    openai: "openai",
+    claude: "anthropic",
+    makersuite: "google",
+    vertexai: "google",
+    mistralai: "mistral",
+    xai: "xai",
+    moonshot: "moonshotai",
+    zai: "zai",
+    minimax: "minimax",
+    cohere: "cohere"
+  };
+  return map2[key] || null;
+}
+function walletCurrencyOrDefault(value) {
+  return String(value || "").trim().toUpperCase() === "USD" ? "USD" : "CNY";
+}
+function emptyWalletPriceRule() {
+  return {
+    usePeakPricing: true,
+    offpeak: { hit: 0, miss: 0, output: 0 },
+    peak: { hit: 0, miss: 0, output: 0 },
+    priceConfigured: false
+  };
+}
+const FALLBACK_SECRET_KEYS = {
+  OPENAI: "api_key_openai",
+  CLAUDE: "api_key_claude",
+  OPENROUTER: "api_key_openrouter",
+  AI21: "api_key_ai21",
+  MAKERSUITE: "api_key_makersuite",
+  VERTEXAI: "api_key_vertexai",
+  MISTRALAI: "api_key_mistralai",
+  CUSTOM: "api_key_custom",
+  COHERE: "api_key_cohere",
+  PERPLEXITY: "api_key_perplexity",
+  GROQ: "api_key_groq",
+  ELECTRONHUB: "api_key_electronhub",
+  NANOGPT: "api_key_nanogpt",
+  DEEPSEEK: "api_key_deepseek",
+  AIMLAPI: "api_key_aimlapi",
+  XAI: "api_key_xai",
+  MOONSHOT: "api_key_moonshot",
+  FIREWORKS: "api_key_fireworks",
+  COMETAPI: "api_key_cometapi",
+  AZURE_OPENAI: "api_key_azure_openai",
+  ZAI: "api_key_zai",
+  SILICONFLOW: "api_key_siliconflow",
+  CHUTES: "api_key_chutes",
+  POLLINATIONS: "api_key_pollinations",
+  WORKERS_AI: "api_key_workers_ai",
+  MINIMAX: "api_key_minimax"
+};
+const SOURCE_SECRET_KEYS = {
+  openai: "OPENAI",
+  claude: "CLAUDE",
+  openrouter: "OPENROUTER",
+  ai21: "AI21",
+  makersuite: "MAKERSUITE",
+  vertexai: "VERTEXAI",
+  mistralai: "MISTRALAI",
+  custom: "CUSTOM",
+  cohere: "COHERE",
+  perplexity: "PERPLEXITY",
+  groq: "GROQ",
+  electronhub: "ELECTRONHUB",
+  nanogpt: "NANOGPT",
+  deepseek: "DEEPSEEK",
+  aimlapi: "AIMLAPI",
+  xai: "XAI",
+  moonshot: "MOONSHOT",
+  fireworks: "FIREWORKS",
+  cometapi: "COMETAPI",
+  azure_openai: "AZURE_OPENAI",
+  zai: "ZAI",
+  siliconflow: "SILICONFLOW",
+  chutes: "CHUTES",
+  pollinations: "POLLINATIONS",
+  workers_ai: "WORKERS_AI",
+  minimax: "MINIMAX"
+};
+const OFFICIAL_LABELS = {
+  deepseek: "DeepSeek 官方",
+  openai: "OpenAI 官方",
+  claude: "Claude 官方",
+  openrouter: "OpenRouter 官方",
+  groq: "Groq 官方",
+  mistralai: "Mistral 官方",
+  makersuite: "Google AI Studio 官方",
+  vertexai: "Vertex AI 官方",
+  cohere: "Cohere 官方",
+  siliconflow: "SiliconFlow 官方",
+  fireworks: "Fireworks 官方",
+  chutes: "Chutes 官方",
+  minimax: "MiniMax 官方",
+  xai: "xAI 官方",
+  zai: "Z.AI 官方",
+  moonshot: "Moonshot 官方",
+  custom: "自定义接口"
+};
+let secretsModulePromise = null;
+let secretsModule = null;
+function initConnectionIdentity() {
+  if (!secretsModulePromise) {
+    const modulePath = "/scripts/secrets.js";
+    secretsModulePromise = import(
+      /* @vite-ignore */
+      modulePath
+    ).then((mod) => {
+      secretsModule = mod;
+      try {
+        const task = mod.readSecretState?.();
+        task?.catch?.(() => {
+        });
+      } catch {
+      }
+      return mod;
+    }).catch(() => null);
+  }
+  return secretsModulePromise.then(() => void 0);
+}
+function hash32(text, seed) {
+  let h = seed >>> 0;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 1540483477);
+    h ^= h >>> 15;
+  }
+  h = Math.imul(h ^ h >>> 16, 2246822507);
+  h = Math.imul(h ^ h >>> 13, 3266489909);
+  return (h ^ h >>> 16) >>> 0;
+}
+function shortHash(text) {
+  const h1 = hash32(text, 2166136261).toString(16).padStart(8, "0");
+  const h2 = hash32(text, 2654435769).toString(16).padStart(8, "0");
+  return h1 + h2;
+}
+function officialEndpointId(sourceType) {
+  return shortHash(`${sourceType}|official:${sourceType}`);
+}
+function normalizeEndpoint(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return null;
+  const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : "https://" + value;
+  try {
+    const url = new URL(candidate);
+    const path = url.pathname.replace(/\/+$/, "");
+    const host = url.hostname + (url.port ? ":" + url.port : "");
+    const queryPairs = [];
+    url.searchParams.forEach((value2, key) => queryPairs.push([key, value2]));
+    const query = queryPairs.sort(([ak, av], [bk, bv]) => ak.localeCompare(bk) || av.localeCompare(bv)).map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v)).join("&");
+    const base = `${url.protocol}//${host}${path}`;
+    return {
+      canonical: base + (query ? "?" + query : ""),
+      label: host + path
+    };
+  } catch {
+    const fallback = value.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/\/+$/, "");
+    return fallback ? { canonical: fallback, label: fallback } : null;
+  }
+}
+function resolveSecretKey(sourceType, secretKeys) {
+  if (!sourceType) return null;
+  const keyName = SOURCE_SECRET_KEYS[sourceType];
+  if (!keyName) return null;
+  return secretKeys?.[keyName] || FALLBACK_SECRET_KEYS[keyName] || null;
+}
+function findSecret(state2, preferredKey, id) {
+  if (!state2 || typeof state2 !== "object") return null;
+  const search = (key) => {
+    const list = state2[key];
+    if (!Array.isArray(list)) return null;
+    const entry = id ? list.find((item) => item?.id === id) : list.find((item) => item?.active);
+    return entry?.id ? { ownerKey: key, entry } : null;
+  };
+  if (preferredKey) {
+    const found = search(preferredKey);
+    if (found) return found;
+  }
+  if (id) {
+    for (const key of Object.keys(state2)) {
+      const found = search(key);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+function credentialLabel(entry) {
+  const id = String(entry.id || "");
+  const base = String(entry.label || "").trim() || `密钥 ${id.slice(0, 6).toUpperCase()}`;
+  const tail = String(entry.value || "").replace(/[^a-zA-Z0-9]/g, "").slice(-3);
+  return tail ? `${base} •••${tail}` : base;
+}
+function buildEndpointContext(body) {
+  const sourceType = typeof body?.chat_completion_source === "string" && body.chat_completion_source.trim() ? body.chat_completion_source.trim() : null;
+  const rawEndpoint = typeof body?.custom_url === "string" && body.custom_url.trim() ? body.custom_url.trim() : typeof body?.reverse_proxy === "string" ? body.reverse_proxy.trim() : "";
+  const endpoint = rawEndpoint ? normalizeEndpoint(rawEndpoint) : null;
+  const endpointId = sourceType || endpoint ? shortHash(`${sourceType || "unknown"}|${endpoint?.canonical || "official:" + (sourceType || "unknown")}`) : null;
+  const endpointLabel = endpoint?.label || (sourceType ? OFFICIAL_LABELS[sourceType] || `${sourceType} 接口` : null);
+  return { sourceType, endpointId, endpointLabel };
+}
+function buildConnectionContext(body, secretState, secretKeys) {
+  const endpoint = buildEndpointContext(body);
+  const reverseProxy = typeof body?.reverse_proxy === "string" ? body.reverse_proxy.trim() : "";
+  if (reverseProxy) {
+    return { ...endpoint, credentialId: null, credentialLabel: null };
+  }
+  const secretId = typeof body?.secret_id === "string" && body.secret_id.trim() ? body.secret_id.trim() : null;
+  const preferredKey = resolveSecretKey(endpoint.sourceType, secretKeys);
+  const found = findSecret(secretState || {}, preferredKey, secretId);
+  if (!found) {
+    return { ...endpoint, credentialId: null, credentialLabel: null };
+  }
+  return {
+    ...endpoint,
+    credentialId: `secret:${found.ownerKey}:${found.entry.id}`,
+    credentialLabel: credentialLabel(found.entry)
+  };
+}
+function resolveRuntimeConnectionContext(body) {
+  initConnectionIdentity();
+  return buildConnectionContext(
+    body,
+    secretsModule?.secret_state || null,
+    secretsModule?.SECRET_KEYS
+  );
+}
 function isWeekendDay(timestamp) {
   const t = typeof timestamp === "number" ? timestamp : timestamp && timestamp.getTime ? timestamp.getTime() : 0;
   const day = new Date(t).getDay();
@@ -607,12 +876,464 @@ function esc$1(s) {
 function isUnsafeKey$1(k) {
   return k === "__proto__" || k === "constructor" || k === "prototype";
 }
+const DEEPSEEK_OFFICIAL_ENDPOINT_ID = officialEndpointId("deepseek");
+function cleanText(value) {
+  return String(value == null ? "" : value).trim();
+}
+function finiteNumber(value, fallback = 0) {
+  const n = typeof value === "number" ? value : parseFloat(String(value));
+  return Number.isFinite(n) ? n : fallback;
+}
+function safeId(s) {
+  return s.replace(/[^a-zA-Z0-9:_-]/g, "-").slice(0, 100);
+}
+function walletIdForEndpoint(endpointId) {
+  const id = cleanText(endpointId);
+  return id ? `wallet:${safeId(id)}` : null;
+}
+function isDeepSeekOfficialConnection(connection) {
+  return !!connection && cleanText(connection.sourceType).toLowerCase() === "deepseek" && (!connection.endpointId || connection.endpointId === DEEPSEEK_OFFICIAL_ENDPOINT_ID || cleanText(connection.endpointLabel) === "DeepSeek 官方");
+}
+function walletMatchesConnection(wallet, connection) {
+  if (!wallet || !connection) return false;
+  if (wallet.id === DEEPSEEK_WALLET_ID) return isDeepSeekOfficialConnection(connection);
+  if (wallet.endpointId && connection.endpointId) return wallet.endpointId === connection.endpointId;
+  if (wallet.sourceType && connection.sourceType) {
+    return wallet.sourceType === connection.sourceType && !wallet.endpointId && !connection.endpointId;
+  }
+  return false;
+}
+function findWalletForConnection(wallets, connection) {
+  if (!connection) return null;
+  for (const wallet of wallets || []) {
+    if (walletMatchesConnection(wallet, connection)) return wallet;
+  }
+  return null;
+}
+function findWalletForHistory(wallets, history) {
+  if (!history) return null;
+  if (history.walletId) {
+    const exact = (wallets || []).find((wallet) => wallet.id === history.walletId);
+    if (exact) return exact;
+  }
+  if (history.endpointId) {
+    const byEndpoint = (wallets || []).find((wallet) => wallet.endpointId === history.endpointId);
+    if (byEndpoint) return byEndpoint;
+  }
+  if (cleanText(history.sourceType).toLowerCase() === "deepseek") {
+    return (wallets || []).find((wallet) => wallet.id === DEEPSEEK_WALLET_ID) || null;
+  }
+  return null;
+}
+function clonePriceTier(tier, fallback) {
+  const src = tier && typeof tier === "object" ? tier : {};
+  return {
+    hit: finiteNumber(src.hit, finiteNumber(fallback?.hit, 0)),
+    miss: finiteNumber(src.miss, finiteNumber(fallback?.miss, 0)),
+    output: finiteNumber(src.output, finiteNumber(fallback?.output, 0))
+  };
+}
+function normalizeWalletPriceRule(raw) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  const configured = src.priceConfigured === true;
+  return {
+    usePeakPricing: src.usePeakPricing !== false,
+    offpeak: clonePriceTier(src.offpeak),
+    peak: clonePriceTier(src.peak),
+    priceConfigured: configured
+  };
+}
+function cloneWalletPriceRule(rule) {
+  return {
+    usePeakPricing: rule.usePeakPricing !== false,
+    offpeak: { ...rule.offpeak },
+    peak: { ...rule.peak },
+    priceConfigured: rule.priceConfigured === true
+  };
+}
+function normalizeAliases(raw, current) {
+  if (!Array.isArray(raw)) return [];
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const value of raw) {
+    const item = cleanText(value);
+    if (!item || item === current || seen.has(item)) continue;
+    seen.add(item);
+    out.push(item);
+  }
+  return out;
+}
+function normalizeWalletModel(raw, now = Date.now()) {
+  if (!raw || typeof raw !== "object") return null;
+  const sourceModel = cleanText(raw.sourceModel || raw.model);
+  if (!sourceModel) return null;
+  const model = cleanText(raw.model || sourceModel);
+  const source = ["builtin", "manual", "sync", "discovered"].includes(raw.source) ? raw.source : "discovered";
+  const discoveredAt = finiteNumber(raw.discoveredAt, now);
+  return {
+    id: cleanText(raw.id) || `${sourceModel}:${discoveredAt}`,
+    sourceModel,
+    model,
+    aliases: normalizeAliases(raw.aliases, model),
+    price: normalizeWalletPriceRule(raw.price),
+    source,
+    locked: raw.locked === true,
+    discoveredAt,
+    lastSeen: finiteNumber(raw.lastSeen, discoveredAt),
+    updatedAt: finiteNumber(raw.updatedAt, discoveredAt)
+  };
+}
+function normalizeCredential(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const id = cleanText(raw.id);
+  if (!id) return null;
+  return {
+    id,
+    label: cleanText(raw.label) || "未命名密钥",
+    lastSeen: finiteNumber(raw.lastSeen, 0)
+  };
+}
+function normalizePeakHours(raw, fallback) {
+  const list = Array.isArray(raw) ? raw : fallback;
+  const out = [];
+  for (const item of list || []) {
+    if (!item || typeof item !== "object") continue;
+    const start = cleanText(item.start);
+    const end = cleanText(item.end);
+    if (/^\d{2}:\d{2}$/.test(start) && /^\d{2}:\d{2}$/.test(end)) out.push({ start, end });
+  }
+  return out.length ? out : fallback.map((item) => ({ ...item }));
+}
+function normalizeWallet(raw, settings2, now = Date.now()) {
+  if (!raw || typeof raw !== "object") return null;
+  const id = cleanText(raw.id);
+  if (!id) return null;
+  for (const key of Object.keys(raw)) {
+    if (isUnsafeKey$1(key)) delete raw[key];
+  }
+  const endpointId = cleanText(raw.endpointId) || null;
+  const sourceType = cleanText(raw.sourceType) || null;
+  const kind = id === DEEPSEEK_WALLET_ID ? "official" : raw.kind === "official" ? "official" : "relay";
+  const name = cleanText(raw.name) || cleanText(raw.endpointLabel) || (kind === "official" ? "官方接口" : "未命名钱包");
+  const balanceRaw = raw.balance && typeof raw.balance === "object" ? raw.balance : {};
+  const models = Array.isArray(raw.models) ? raw.models.map((item) => normalizeWalletModel(item, now)).filter(Boolean) : [];
+  const credentials = Array.isArray(raw.credentials) ? raw.credentials.map((item) => normalizeCredential(item)).filter(Boolean) : [];
+  const modelMap = /* @__PURE__ */ new Map();
+  for (const model of models) {
+    const key = model.id || `${model.sourceModel}:${model.discoveredAt}`;
+    if (!modelMap.has(key)) modelMap.set(key, model);
+  }
+  const credentialMap = /* @__PURE__ */ new Map();
+  for (const credential of credentials) credentialMap.set(credential.id, credential);
+  const createdAt = finiteNumber(raw.createdAt, now);
+  const rawCatalogProvider = cleanText(raw.catalogProvider) || defaultCatalogProvider(sourceType);
+  return {
+    id,
+    name,
+    kind,
+    sourceType,
+    endpointId,
+    endpointLabel: cleanText(raw.endpointLabel) || null,
+    endpointDisplay: cleanText(raw.endpointDisplay || raw.endpointLabel) || null,
+    catalogProvider: isFirstPartyCatalogProvider(rawCatalogProvider) ? rawCatalogProvider : null,
+    balance: {
+      mode: balanceRaw.mode === "auto" ? "auto" : "manual",
+      amount: balanceRaw.amount == null || balanceRaw.amount === "" ? null : String(balanceRaw.amount),
+      currency: walletCurrencyOrDefault(balanceRaw.currency),
+      primaryCredentialId: cleanText(balanceRaw.primaryCredentialId) || null,
+      lastCalibrated: balanceRaw.lastCalibrated == null ? null : finiteNumber(balanceRaw.lastCalibrated, 0)
+    },
+    peakHours: normalizePeakHours(raw.peakHours, settings2.peakHours?.length ? settings2.peakHours : DEFAULT_PEAK_HOURS),
+    weekendOffpeak: raw.weekendOffpeak !== false,
+    credentials: Array.from(credentialMap.values()),
+    models: Array.from(modelMap.values()),
+    collapsed: raw.collapsed !== false,
+    createdAt,
+    updatedAt: finiteNumber(raw.updatedAt, createdAt),
+    lastUsedAt: raw.lastUsedAt == null ? null : finiteNumber(raw.lastUsedAt, 0),
+    legacyPricingImported: raw.legacyPricingImported === true
+  };
+}
+function visibleBuiltinModels() {
+  return Object.keys(PRICING).filter((model) => HIDDEN_PRICING_MODELS.indexOf(model) === -1);
+}
+function currentBuiltinPrice(model, now) {
+  const segments = PRICE_HISTORY[model];
+  let segment = null;
+  for (const item of segments || []) {
+    if (item && now >= item.since) segment = item;
+    else break;
+  }
+  const fallback = PRICING[model] || PRICING["deepseek-flash"];
+  const price = segment || fallback;
+  return {
+    usePeakPricing: price?.usePeakPricing !== false,
+    offpeak: clonePriceTier(price?.offpeak, fallback?.offpeak),
+    peak: clonePriceTier(price?.peak, fallback?.peak),
+    priceConfigured: true
+  };
+}
+function createDeepSeekWallet(settings2, now = Date.now()) {
+  const models = visibleBuiltinModels().map((model) => ({
+    id: `builtin:${model}`,
+    sourceModel: model,
+    model,
+    aliases: [],
+    price: currentBuiltinPrice(model, now),
+    source: "builtin",
+    locked: false,
+    discoveredAt: now,
+    lastSeen: now,
+    updatedAt: now
+  }));
+  return {
+    id: DEEPSEEK_WALLET_ID,
+    name: "DeepSeek 官方",
+    kind: "official",
+    sourceType: "deepseek",
+    endpointId: DEEPSEEK_OFFICIAL_ENDPOINT_ID,
+    endpointLabel: "DeepSeek 官方 API",
+    endpointDisplay: "DeepSeek 官方 API",
+    catalogProvider: "deepseek",
+    balance: {
+      mode: "manual",
+      amount: null,
+      currency: "CNY",
+      primaryCredentialId: null,
+      lastCalibrated: null
+    },
+    peakHours: (settings2.peakHours?.length ? settings2.peakHours : DEFAULT_PEAK_HOURS).map((item) => ({ ...item })),
+    weekendOffpeak: true,
+    credentials: [],
+    models,
+    collapsed: true,
+    createdAt: now,
+    updatedAt: now,
+    lastUsedAt: null,
+    legacyPricingImported: false
+  };
+}
+function createWalletFromConnection(connection, settings2, now = Date.now()) {
+  if (!connection || !connection.endpointId) return null;
+  if (isDeepSeekOfficialConnection(connection)) return createDeepSeekWallet(settings2, now);
+  const sourceType = cleanText(connection.sourceType) || null;
+  const label = cleanText(connection.endpointLabel) || (sourceType ? `${sourceType} 接口` : "未命名接入");
+  const id = walletIdForEndpoint(connection.endpointId);
+  if (!id) return null;
+  return {
+    id,
+    name: label,
+    kind: "relay",
+    sourceType,
+    endpointId: connection.endpointId,
+    endpointLabel: label,
+    endpointDisplay: label,
+    catalogProvider: defaultCatalogProvider(sourceType),
+    balance: {
+      mode: "manual",
+      amount: null,
+      currency: "CNY",
+      primaryCredentialId: null,
+      lastCalibrated: null
+    },
+    peakHours: (settings2.peakHours?.length ? settings2.peakHours : DEFAULT_PEAK_HOURS).map((item) => ({ ...item })),
+    weekendOffpeak: false,
+    credentials: [],
+    models: [],
+    collapsed: true,
+    createdAt: now,
+    updatedAt: now,
+    lastUsedAt: null,
+    legacyPricingImported: true
+  };
+}
+function ensureDeepSeekWallet(wallets, settings2, now = Date.now()) {
+  const list = Array.isArray(wallets) ? wallets : [];
+  const existing = list.find((wallet) => wallet.id === DEEPSEEK_WALLET_ID);
+  if (!existing) return [createDeepSeekWallet(settings2, now), ...list];
+  return list;
+}
+function normalizeWallets(raw, settings2, now = Date.now()) {
+  const list = Array.isArray(raw) ? raw.map((item) => normalizeWallet(item, settings2, now)).filter(Boolean) : [];
+  const map2 = /* @__PURE__ */ new Map();
+  for (const wallet of list) map2.set(wallet.id, wallet);
+  return ensureDeepSeekWallet(Array.from(map2.values()), settings2, now);
+}
+function cloneWallet(wallet) {
+  return {
+    ...wallet,
+    balance: { ...wallet.balance },
+    peakHours: wallet.peakHours.map((item) => ({ ...item })),
+    credentials: wallet.credentials.map((item) => ({ ...item })),
+    models: wallet.models.map((item) => ({
+      ...item,
+      aliases: [...item.aliases],
+      price: cloneWalletPriceRule(item.price)
+    }))
+  };
+}
+function observeCredential(wallet, credentialId, credentialLabel2, now = Date.now()) {
+  const id = cleanText(credentialId);
+  if (!id) return false;
+  const label = cleanText(credentialLabel2) || "未命名密钥";
+  const current = wallet.credentials.find((item) => item.id === id);
+  if (!current) {
+    wallet.credentials.push({ id, label, lastSeen: now });
+    return true;
+  }
+  let changed = false;
+  if (current.label !== label) {
+    current.label = label;
+    changed = true;
+  }
+  if (now > current.lastSeen) {
+    current.lastSeen = now;
+    changed = true;
+  }
+  return changed;
+}
+function normalizeModelKey(value) {
+  const key = cleanText(value).replace(/^\[[^\]]+\]/, "").trim().toLowerCase();
+  if (key === "deepseek-v4.1-flash") return "deepseek-flash";
+  if (key === "deepseek-v4-flash-vision") return "deepseek-v4-flash-vision-exp";
+  return key;
+}
+function walletModelMatches(model, requested) {
+  const target = normalizeModelKey(requested);
+  if (!target) return false;
+  const candidates = [model.model, model.sourceModel, ...model.aliases || []];
+  return candidates.some((candidate) => normalizeModelKey(candidate) === target);
+}
+function findWalletModel(wallet, model) {
+  if (!wallet || !model) return null;
+  for (const item of wallet.models || []) {
+    if (walletModelMatches(item, model)) return item;
+  }
+  return null;
+}
+function observeModel(wallet, modelName, now = Date.now()) {
+  const name = cleanText(modelName);
+  if (!name) return { changed: false, model: null };
+  const existing = findWalletModel(wallet, name);
+  if (existing) {
+    let changed = false;
+    if (now > existing.lastSeen) {
+      existing.lastSeen = now;
+      changed = true;
+    }
+    return { changed, model: existing };
+  }
+  const created = {
+    id: `model:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+    sourceModel: name,
+    model: name,
+    aliases: [],
+    price: emptyWalletPriceRule(),
+    source: "discovered",
+    locked: false,
+    discoveredAt: now,
+    lastSeen: now,
+    updatedAt: now
+  };
+  wallet.models.push(created);
+  return { changed: true, model: created };
+}
+function walletBalanceToCny(wallet, exchangeRate) {
+  const amount = wallet.balance.amount == null || wallet.balance.amount === "" ? NaN : parseFloat(String(wallet.balance.amount));
+  if (!Number.isFinite(amount)) return null;
+  const rate = Number.isFinite(exchangeRate) && exchangeRate > 0 ? exchangeRate : 1;
+  return wallet.balance.currency === "USD" ? amount * rate : amount;
+}
+function walletPendingModelCount(wallet) {
+  return (wallet.models || []).filter((model) => {
+    if (wallet.id === DEEPSEEK_WALLET_ID && model.source === "builtin") return false;
+    return model.price.priceConfigured !== true;
+  }).length;
+}
+function findExactPricedModelMatch(wallets, model, ignoredWalletIds = []) {
+  const requested = String(model || "");
+  if (!requested) return null;
+  const ignored = new Set(ignoredWalletIds);
+  const candidates = [];
+  for (const wallet of wallets || []) {
+    if (ignored.has(wallet.id)) continue;
+    for (const item of wallet.models || []) {
+      if (!item.price.priceConfigured || item.model !== requested) continue;
+      candidates.push({
+        walletId: wallet.id,
+        model: item.model,
+        official: wallet.id === DEEPSEEK_WALLET_ID ? 1 : 0,
+        updatedAt: item.updatedAt || 0
+      });
+    }
+  }
+  const official = (wallets || []).find((wallet) => wallet.id === DEEPSEEK_WALLET_ID);
+  if (official && !ignored.has(official.id) && PRICING[requested]) {
+    candidates.push({
+      walletId: official.id,
+      model: requested,
+      official: 1,
+      updatedAt: Number.MAX_SAFE_INTEGER
+    });
+  }
+  candidates.sort((a, b) => b.official - a.official || b.updatedAt - a.updatedAt);
+  if (!candidates.length) return null;
+  return { walletId: candidates[0].walletId, model: candidates[0].model };
+}
+function mergeWalletCollections(local, remote) {
+  const map2 = /* @__PURE__ */ new Map();
+  for (const wallet of normalizeWallets(local, {
+    peakHours: DEFAULT_PEAK_HOURS
+  })) map2.set(wallet.id, wallet);
+  for (const incoming of remote || []) {
+    const current = map2.get(incoming.id);
+    if (!current || incoming.updatedAt > current.updatedAt) {
+      const next = cloneWallet(incoming);
+      if (current) {
+        const credentialMap2 = new Map(next.credentials.map((item) => [item.id, item]));
+        for (const item of current.credentials) {
+          const existing = credentialMap2.get(item.id);
+          if (!existing || item.lastSeen > existing.lastSeen) credentialMap2.set(item.id, { ...item });
+        }
+        next.credentials = Array.from(credentialMap2.values());
+        const modelMap2 = new Map(next.models.map((item) => [item.sourceModel.toLowerCase(), item]));
+        for (const item of current.models) {
+          const key = item.sourceModel.toLowerCase();
+          const existing = modelMap2.get(key);
+          if (!existing || item.updatedAt > existing.updatedAt) modelMap2.set(key, { ...item, aliases: [...item.aliases] });
+        }
+        next.models = Array.from(modelMap2.values());
+      }
+      map2.set(incoming.id, next);
+      continue;
+    }
+    const credentialMap = new Map(current.credentials.map((item) => [item.id, item]));
+    for (const item of incoming.credentials) {
+      const existing = credentialMap.get(item.id);
+      if (!existing || item.lastSeen > existing.lastSeen) credentialMap.set(item.id, { ...item });
+    }
+    current.credentials = Array.from(credentialMap.values());
+    const modelMap = new Map(current.models.map((item) => [item.sourceModel.toLowerCase(), item]));
+    for (const item of incoming.models) {
+      const key = item.sourceModel.toLowerCase();
+      const existing = modelMap.get(key);
+      if (!existing || item.updatedAt > existing.updatedAt) modelMap.set(key, { ...item, aliases: [...item.aliases] });
+    }
+    current.models = Array.from(modelMap.values());
+  }
+  return Array.from(map2.values());
+}
 function getEffectiveRate() {
   const ps = state$2.settings?.pricingSync;
   if (!ps?.enabled) return 1;
   const r = parseFloat(String(ps.exchangeRate));
   if (!isFinite(r) || r <= 0) return DEFAULT_EXCHANGE_RATE;
   return r;
+}
+function getWalletExchangeRate() {
+  const ps = state$2.settings?.pricingSync;
+  const r = parseFloat(String(ps?.exchangeRate));
+  return isFinite(r) && r > 0 ? r : DEFAULT_EXCHANGE_RATE;
 }
 function getDisplayCurrency() {
   const ps = state$2.settings?.pricingSync;
@@ -621,24 +1342,24 @@ function getDisplayCurrency() {
   }
   return { code: "CNY", symbol: "¥", rate: 1 };
 }
-function cnyToDisplay(cny) {
+function cnyToDisplay$1(cny) {
   const cur = getDisplayCurrency();
   if (cur.code === "USD") return cny / cur.rate;
   return cny;
 }
-function displayToCny(display) {
+function displayToCny$1(display) {
   const cur = getDisplayCurrency();
   if (cur.code === "USD") return display * cur.rate;
   return display;
 }
 function formatMoney(cny, digits = 4) {
   const cur = getDisplayCurrency();
-  const v = cnyToDisplay(cny);
+  const v = cnyToDisplay$1(cny);
   return `${cur.symbol}${v.toFixed(digits)} ${cur.code}`;
 }
 function formatMoneyWithCode(cny, digits = 4, codeOverride) {
   const cur = codeOverride ? { code: codeOverride, symbol: codeOverride === "USD" ? "$" : "¥", rate: getEffectiveRate() } : getDisplayCurrency();
-  const v = codeOverride === "USD" ? cny / cur.rate : codeOverride === "CNY" ? cny : cnyToDisplay(cny);
+  const v = codeOverride === "USD" ? cny / cur.rate : codeOverride === "CNY" ? cny : cnyToDisplay$1(cny);
   const sym = codeOverride ? codeOverride === "USD" ? "$" : "¥" : cur.symbol;
   const code = codeOverride || cur.code;
   return `${sym}${v.toFixed(digits)} ${code}`;
@@ -716,14 +1437,15 @@ function stopRateTimer() {
 }
 const currency = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  cnyToDisplay,
-  displayToCny,
+  cnyToDisplay: cnyToDisplay$1,
+  displayToCny: displayToCny$1,
   fetchLiveRate,
   formatMoney,
   formatMoneyWithCode,
   formatRate,
   getDisplayCurrency,
   getEffectiveRate,
+  getWalletExchangeRate,
   restartRateTimer,
   stopRateTimer
 }, Symbol.toStringTag, { value: "Module" }));
@@ -733,6 +1455,20 @@ function mergePrices(base, custom) {
     hit: custom.hit !== void 0 && custom.hit !== "" ? parseFloat(custom.hit) : base.hit,
     miss: custom.miss !== void 0 && custom.miss !== "" ? parseFloat(custom.miss) : base.miss,
     output: custom.output !== void 0 && custom.output !== "" ? parseFloat(custom.output) : base.output
+  };
+}
+function normalizeWalletTier(tier) {
+  return {
+    hit: Number.isFinite(Number(tier?.hit)) ? Number(tier?.hit) : 0,
+    miss: Number.isFinite(Number(tier?.miss)) ? Number(tier?.miss) : 0,
+    output: Number.isFinite(Number(tier?.output)) ? Number(tier?.output) : 0
+  };
+}
+function walletPricing(rule) {
+  return {
+    usePeakPricing: rule.price.usePeakPricing !== false,
+    offpeak: normalizeWalletTier(rule.price.offpeak),
+    peak: normalizeWalletTier(rule.price.peak)
   };
 }
 const MODEL_ALIASES = {
@@ -757,10 +1493,38 @@ function matchCustom(cm, m, raw) {
   if (cm.model === m) return true;
   return normalizeModel(cm.model) === m;
 }
-function getPricing$1(model, settings2) {
+function getPricing$1(model, settings2, wallet) {
   const raw = model || "deepseek-v4-flash";
   const m = normalizeModel(raw);
   const base = PRICING[m] || PRICING["deepseek-v4-flash"];
+  const walletRule = wallet ? findWalletModel(wallet, raw) : null;
+  if (walletRule) {
+    if (walletRule.source === "builtin" && wallet?.id === DEEPSEEK_WALLET_ID) {
+      const seg2 = findSegment(m, Date.now());
+      if (seg2) return { usePeakPricing: seg2.usePeakPricing !== false, offpeak: seg2.offpeak, peak: seg2.peak };
+      return base;
+    }
+    if (walletRule.price.priceConfigured) return walletPricing(walletRule);
+    if (wallet?.id === DEEPSEEK_WALLET_ID && PRICING[m]) {
+      const seg2 = findSegment(m, Date.now());
+      if (seg2) return { usePeakPricing: seg2.usePeakPricing !== false, offpeak: seg2.offpeak, peak: seg2.peak };
+      return base;
+    }
+    return {
+      usePeakPricing: true,
+      offpeak: { hit: 0, miss: 0, output: 0 },
+      peak: { hit: 0, miss: 0, output: 0 },
+      pending: true
+    };
+  }
+  if (wallet && wallet.id !== DEEPSEEK_WALLET_ID) {
+    return {
+      usePeakPricing: true,
+      offpeak: { hit: 0, miss: 0, output: 0 },
+      peak: { hit: 0, miss: 0, output: 0 },
+      pending: true
+    };
+  }
   for (const cm of settings2.customModels || []) {
     if (matchCustom(cm, m, raw)) {
       return {
@@ -774,9 +1538,18 @@ function getPricing$1(model, settings2) {
   if (seg) return { usePeakPricing: seg.usePeakPricing !== false, offpeak: seg.offpeak, peak: seg.peak };
   return base;
 }
-function hasPriceForModel(model, settings2) {
+function hasPriceForModel(model, settings2, wallet) {
   const raw = model || "deepseek-v4-flash";
   const m = normalizeModel(raw);
+  if (wallet) {
+    const rule = findWalletModel(wallet, raw);
+    if (rule) {
+      if (rule.source === "builtin" && wallet.id === DEEPSEEK_WALLET_ID) return !!PRICING[m];
+      return rule.price.priceConfigured === true || wallet.id === DEEPSEEK_WALLET_ID && !!PRICING[m];
+    }
+    if (wallet.id === DEEPSEEK_WALLET_ID) return !!PRICING[m];
+    return false;
+  }
   if (PRICING[m]) return true;
   for (const cm of settings2.customModels || []) if (matchCustom(cm, m, raw)) return true;
   return false;
@@ -785,6 +1558,25 @@ function isDeepSeekOfficialModel(m) {
   if (typeof m !== "string") return false;
   const norm = normalizeModel(m);
   return norm.toLowerCase().indexOf("deepseek") === 0 || String(m).toLowerCase().includes("deepseek");
+}
+function isWithinPeakHours(timestamp, peakHours) {
+  const d = new Date(timestamp);
+  const totalMinutes = d.getHours() * 60 + d.getMinutes();
+  for (const h of peakHours || []) {
+    if (!h || !h.start || !h.end) continue;
+    const p = h.start.split(":");
+    const q = h.end.split(":");
+    const sp = parseInt(p[0]) * 60 + parseInt(p[1] || "0");
+    const ep = parseInt(q[0]) * 60 + parseInt(q[1] || "0");
+    if (sp < ep) {
+      if (totalMinutes >= sp && totalMinutes < ep) return true;
+    } else if (totalMinutes >= sp || totalMinutes < ep) return true;
+  }
+  return false;
+}
+function isWalletPeakHour(timestamp, wallet) {
+  if (wallet.weekendOffpeak !== false && isWeekendDay(timestamp)) return false;
+  return isWithinPeakHours(timestamp, wallet.peakHours?.length ? wallet.peakHours : DEFAULT_PEAK_HOURS);
 }
 function findSegment(normalizedModel, uTs) {
   const segs = PRICE_HISTORY[normalizedModel];
@@ -815,10 +1607,32 @@ function effectivePricingFor(model, uTs, settings2, base) {
   }
   return base;
 }
-function calcCost(u, settings2) {
+function calcCost(u, settings2, wallet) {
   const model = u.model || "deepseek-v4-flash";
-  if (!hasPriceForModel(model, settings2)) return { input: 0, output: 0, total: 0, priceType: "old" };
-  const basePricing = getPricing$1(model, settings2);
+  const walletRule = wallet ? findWalletModel(wallet, model) : null;
+  const useWalletRule = !!walletRule && walletRule.price.priceConfigured && walletRule.source !== "builtin";
+  if (!wallet && !hasPriceForModel(model, settings2)) {
+    return { input: 0, output: 0, total: 0, priceType: "old", source: "legacy-unassigned" };
+  }
+  if (wallet && !hasPriceForModel(model, settings2, wallet)) {
+    return { input: 0, output: 0, total: 0, priceType: "unpriced", source: "unpriced" };
+  }
+  if (useWalletRule && wallet) {
+    const pricing2 = walletPricing(walletRule);
+    const usePeak = pricing2.usePeakPricing !== false && isWalletPeakHour(u.timestamp, wallet);
+    const p2 = usePeak ? pricing2.peak : pricing2.offpeak;
+    const ih2 = u.prompt_cache_hit_tokens / 1e6 * p2.hit;
+    const im2 = u.prompt_cache_miss_tokens / 1e6 * p2.miss;
+    const o2 = u.completion_tokens / 1e6 * p2.output;
+    return {
+      input: ih2 + im2,
+      output: o2,
+      total: ih2 + im2 + o2,
+      priceType: usePeak ? "wallet-peak" : "wallet-offpeak",
+      source: "wallet"
+    };
+  }
+  const basePricing = getPricing$1(model, settings2, wallet);
   const pricing = effectivePricingFor(model, u.timestamp, settings2, basePricing);
   const segForHours = hasCustomForModel(model, settings2) ? null : findSegment(normalizeModel(model), u.timestamp);
   const hours = peakHoursFor(segForHours, settings2);
@@ -836,12 +1650,26 @@ function calcCost(u, settings2) {
   const ih = u.prompt_cache_hit_tokens / 1e6 * p.hit;
   const im = u.prompt_cache_miss_tokens / 1e6 * p.miss;
   const o = u.completion_tokens / 1e6 * p.output;
-  return { input: ih + im, output: o, total: ih + im + o, priceType };
+  return {
+    input: ih + im,
+    output: o,
+    total: ih + im + o,
+    priceType,
+    source: wallet ? wallet.id === DEEPSEEK_WALLET_ID ? "builtin" : "unpriced" : hasCustomForModel(model, settings2) ? "legacy" : "legacy-unassigned"
+  };
 }
-function calcSavings(u, settings2) {
+function calcSavings(u, settings2, wallet) {
   const model = u.model || "deepseek-v4-flash";
-  if (!hasPriceForModel(model, settings2)) return 0;
-  const basePricing = getPricing$1(model, settings2);
+  const walletRule = wallet ? findWalletModel(wallet, model) : null;
+  const useWalletRule = !!walletRule && walletRule.price.priceConfigured && walletRule.source !== "builtin";
+  if (!hasPriceForModel(model, settings2, wallet)) return 0;
+  if (useWalletRule && wallet) {
+    const pricing2 = walletPricing(walletRule);
+    const usePeak = pricing2.usePeakPricing !== false && isWalletPeakHour(u.timestamp, wallet);
+    const p2 = usePeak ? pricing2.peak : pricing2.offpeak;
+    return (u.prompt_cache_hit_tokens || 0) / 1e6 * (p2.miss - p2.hit);
+  }
+  const basePricing = getPricing$1(model, settings2, wallet);
   const pricing = effectivePricingFor(model, u.timestamp, settings2, basePricing);
   const segForHours = hasCustomForModel(model, settings2) ? null : findSegment(normalizeModel(model), u.timestamp);
   const hours = peakHoursFor(segForHours, settings2);
@@ -925,6 +1753,95 @@ const logger = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProper
   log,
   toast
 }, Symbol.toStringTag, { value: "Module" }));
+function usageFingerprint(model, total, hit, miss, completion, connection) {
+  return [
+    model,
+    total,
+    hit,
+    miss,
+    completion,
+    connection?.endpointId || "",
+    connection?.credentialId || ""
+  ].join("|");
+}
+const XOR_KEY = "ds-stats-v1-xor-key!@#$%^&*";
+function encryptKey(plaintext) {
+  if (!plaintext) return "";
+  try {
+    const utf8 = unescape(encodeURIComponent(plaintext));
+    let result = "";
+    for (let i = 0; i < utf8.length; i++) {
+      result += String.fromCharCode(utf8.charCodeAt(i) ^ XOR_KEY.charCodeAt(i % XOR_KEY.length));
+    }
+    return btoa(result);
+  } catch {
+    let result = "";
+    for (let i = 0; i < plaintext.length; i++) {
+      result += String.fromCharCode(plaintext.charCodeAt(i) ^ XOR_KEY.charCodeAt(i % XOR_KEY.length));
+    }
+    try {
+      return btoa(result);
+    } catch {
+      return "";
+    }
+  }
+}
+function decryptKey(ciphertext) {
+  if (!ciphertext) return "";
+  try {
+    const decoded = atob(ciphertext);
+    let result = "";
+    for (let i = 0; i < decoded.length; i++) {
+      result += String.fromCharCode(decoded.charCodeAt(i) ^ XOR_KEY.charCodeAt(i % XOR_KEY.length));
+    }
+    try {
+      return decodeURIComponent(escape(result));
+    } catch {
+      return result;
+    }
+  } catch {
+    return ciphertext;
+  }
+}
+const SECRETS_KEY = "walletSecrets";
+function readMap() {
+  try {
+    const settings2 = getExtensionSettings() || {};
+    const value = settings2[SECRETS_KEY];
+    return value && typeof value === "object" ? { ...value } : {};
+  } catch {
+    return {};
+  }
+}
+function getWalletApiKey(walletId) {
+  if (!walletId) return "";
+  try {
+    const encrypted = readMap()[walletId];
+    return encrypted ? decryptKey(encrypted) : "";
+  } catch {
+    return "";
+  }
+}
+function saveWalletApiKey(walletId, key) {
+  if (!walletId) return;
+  const settings2 = getExtensionSettings() || {};
+  const map2 = readMap();
+  const value = String(key || "").trim();
+  if (value) map2[walletId] = encryptKey(value);
+  else delete map2[walletId];
+  saveExtensionSettings({ ...settings2, [SECRETS_KEY]: map2, _updated: Date.now() });
+}
+function migrateLegacyWalletApiKey(walletId = DEEPSEEK_WALLET_ID) {
+  if (!walletId || getWalletApiKey(walletId)) return;
+  try {
+    const settings2 = getExtensionSettings() || {};
+    const encrypted = settings2.apiKey;
+    if (!encrypted) return;
+    const plain = decryptKey(encrypted);
+    if (plain) saveWalletApiKey(walletId, plain);
+  } catch {
+  }
+}
 function getCurrentChatId() {
   try {
     const ctx = globalThis.SillyTavern?.getContext?.();
@@ -945,6 +1862,261 @@ function getCurrentChatId() {
 function getCurrentChatName() {
   const id = getCurrentChatId();
   return id ? String(id) : null;
+}
+function numericPrice(value, fallback) {
+  const n = typeof value === "number" ? value : parseFloat(String(value));
+  return Number.isFinite(n) ? n : fallback;
+}
+function legacyCustomPriceRule(custom) {
+  const normalized = normalizeModel(String(custom?.model || ""));
+  const base = PRICING[normalized] || PRICING["deepseek-flash"];
+  return normalizeWalletPriceRule({
+    usePeakPricing: custom?.usePeakPricing !== false,
+    offpeak: {
+      hit: numericPrice(custom?.offpeak?.hit, base.offpeak.hit),
+      miss: numericPrice(custom?.offpeak?.miss, base.offpeak.miss),
+      output: numericPrice(custom?.offpeak?.output, base.offpeak.output)
+    },
+    peak: {
+      hit: numericPrice(custom?.peak?.hit, base.peak.hit),
+      miss: numericPrice(custom?.peak?.miss, base.peak.miss),
+      output: numericPrice(custom?.peak?.output, base.peak.output)
+    },
+    priceConfigured: true
+  });
+}
+function migrateLegacyPricing(wallet, customModels) {
+  if (wallet.legacyPricingImported) return false;
+  const now = Date.now();
+  for (const custom of customModels || []) {
+    const sourceModel = String(custom?.model || "").trim();
+    if (!sourceModel) continue;
+    const existing = findWalletModel(wallet, sourceModel);
+    const source = custom?.synced === true ? "sync" : "manual";
+    if (existing) {
+      existing.price = legacyCustomPriceRule(custom);
+      existing.source = source;
+      existing.locked = false;
+      existing.updatedAt = now;
+    } else {
+      wallet.models.push({
+        id: `legacy:${sourceModel}`,
+        sourceModel,
+        model: sourceModel,
+        aliases: [],
+        price: legacyCustomPriceRule(custom),
+        source,
+        locked: false,
+        discoveredAt: now,
+        lastSeen: now,
+        updatedAt: now
+      });
+    }
+  }
+  wallet.legacyPricingImported = true;
+  wallet.updatedAt = now;
+  return true;
+}
+function migrateLegacyBalance(wallet) {
+  if (wallet.balance.amount != null && String(wallet.balance.amount).trim() !== "") return false;
+  const custom = state$2.customBalance != null && String(state$2.customBalance).trim() !== "" ? String(state$2.customBalance) : state$2.balance?.balance != null ? String(state$2.balance.balance) : "";
+  if (!custom) return false;
+  wallet.balance.amount = custom;
+  wallet.balance.currency = String(state$2.balance?.currency || "").toUpperCase() === "USD" ? "USD" : "CNY";
+  wallet.balance.mode = "manual";
+  wallet.balance.lastCalibrated = Number(state$2.balance?.timestamp) || null;
+  wallet.updatedAt = Date.now();
+  return true;
+}
+function historyConnection(entry) {
+  if (!entry || !entry.endpointId && !entry.sourceType) return null;
+  return {
+    sourceType: entry.sourceType ?? null,
+    endpointId: entry.endpointId ?? null,
+    endpointLabel: entry.endpointLabel ?? null,
+    credentialId: entry.credentialId ?? null,
+    credentialLabel: entry.credentialLabel ?? null
+  };
+}
+function ensureWalletForConnection(wallets, ignored, connection, now = Date.now()) {
+  if (!connection || !connection.endpointId) return { wallet: null, changed: false };
+  let wallet = findWalletForConnection(wallets, connection);
+  let changed = false;
+  if (!wallet) {
+    const id = isDeepSeekOfficialConnection(connection) ? DEEPSEEK_WALLET_ID : walletIdForEndpoint(connection.endpointId);
+    if (!id || ignored.has(id)) return { wallet: null, changed: false };
+    const created = isDeepSeekOfficialConnection(connection) ? createDeepSeekWallet(state$2.settings, now) : createWalletFromConnection(connection, state$2.settings, now);
+    if (!created) return { wallet: null, changed: false };
+    wallets.push(created);
+    wallet = created;
+    changed = true;
+  }
+  if (connection.endpointId && wallet.endpointId !== connection.endpointId && wallet.id !== DEEPSEEK_WALLET_ID) {
+    wallet.endpointId = connection.endpointId;
+    wallet.updatedAt = now;
+    changed = true;
+  }
+  if (connection.endpointLabel) {
+    const label = String(connection.endpointLabel).trim();
+    if (label && (!wallet.endpointLabel || wallet.endpointLabel !== label)) {
+      wallet.endpointLabel = label;
+      wallet.endpointDisplay = label;
+      if (!wallet.legacyPricingImported || wallet.name === wallet.endpointLabel) wallet.name = label;
+      wallet.updatedAt = now;
+      changed = true;
+    }
+  }
+  if (observeCredential(wallet, connection.credentialId, connection.credentialLabel, now)) {
+    wallet.updatedAt = now;
+    changed = true;
+  }
+  return { wallet, changed };
+}
+function refreshBuiltinWalletModels(wallet, now = Date.now()) {
+  if (wallet.id !== DEEPSEEK_WALLET_ID) return false;
+  let changed = false;
+  const defaults = createDeepSeekWallet(state$2.settings, wallet.createdAt || now);
+  for (const builtin of defaults.models) {
+    const existing = wallet.models.find((item) => item.sourceModel === builtin.sourceModel);
+    if (!existing) {
+      wallet.models.push(builtin);
+      changed = true;
+      continue;
+    }
+    if (existing.source !== "builtin" || existing.locked) continue;
+    if (JSON.stringify(existing.price) !== JSON.stringify(builtin.price)) {
+      existing.price = builtin.price;
+      existing.updatedAt = now;
+      changed = true;
+    }
+  }
+  return changed;
+}
+function migrateWallets(hot, cold = []) {
+  const now = Date.now();
+  const normalized = normalizeWallets(state$2.wallets, state$2.settings, now);
+  let changed = normalized !== state$2.wallets;
+  state$2.wallets = normalized;
+  state$2.walletIgnored = Array.isArray(state$2.walletIgnored) ? Array.from(new Set(state$2.walletIgnored.map((id) => String(id || "").trim()).filter(Boolean))) : [];
+  const ignored = new Set(state$2.walletIgnored);
+  const official = state$2.wallets.find((wallet) => wallet.id === DEEPSEEK_WALLET_ID) || createDeepSeekWallet(state$2.settings, now);
+  if (!state$2.wallets.some((wallet) => wallet.id === official.id)) state$2.wallets.unshift(official);
+  changed = migrateLegacyPricing(official, state$2.settings.customModels || []) || changed;
+  changed = migrateLegacyBalance(official) || changed;
+  changed = refreshBuiltinWalletModels(official, now) || changed;
+  migrateLegacyWalletApiKey(official.id);
+  const allHistory = [...cold || [], ...state$2.history || []];
+  for (const entry of allHistory) {
+    const connection = historyConnection(entry);
+    if (!connection) continue;
+    const observed = ensureWalletForConnection(state$2.wallets, ignored, connection, Number(entry.timestamp) || now);
+    if (observed.changed) changed = true;
+    if (!observed.wallet) continue;
+    if (observed.wallet.id !== entry.walletId) {
+      entry.walletId = observed.wallet.id;
+      changed = true;
+    }
+    if (shouldTrackWalletModel(observed.wallet, String(entry.model || ""))) {
+      const model = observeModel(observed.wallet, String(entry.model || ""), Number(entry.timestamp) || now);
+      if (model.model && model.model.price.priceConfigured !== true) {
+        const legacy = (state$2.settings.customModels || []).find((custom) => {
+          try {
+            return normalizeModel(String(custom?.model || "")) === normalizeModel(String(entry.model || "")) || String(custom?.model || "") === String(entry.model || "");
+          } catch {
+            return false;
+          }
+        });
+        if (legacy) {
+          model.model.price = legacyCustomPriceRule(legacy);
+          model.model.source = legacy.synced === true ? "sync" : "manual";
+          model.model.updatedAt = Number(entry.timestamp) || now;
+          model.changed = true;
+        }
+      }
+      if (model.changed) {
+        observed.wallet.updatedAt = now;
+        changed = true;
+      }
+    }
+    if (!observed.wallet.lastUsedAt || Number(entry.timestamp) > observed.wallet.lastUsedAt) {
+      observed.wallet.lastUsedAt = Number(entry.timestamp) || now;
+      changed = true;
+    }
+  }
+  const backfillDone = Number(hot?._walletPricingBackfillVersion || 0) >= WALLET_PRICING_BACKFILL_VERSION;
+  if (!backfillDone) {
+    changed = backfillLegacyExactPricing(allHistory) || changed;
+    if (hot && typeof hot === "object") hot._walletPricingBackfillVersion = WALLET_PRICING_BACKFILL_VERSION;
+    changed = true;
+  }
+  if (hot && Array.isArray(hot.wallets) && state$2.wallets.length === 0) {
+    state$2.wallets = normalizeWallets(hot.wallets, state$2.settings, now);
+    changed = true;
+  }
+  return changed;
+}
+const WALLET_PRICING_BACKFILL_VERSION = 1;
+function recalcEntryCost(entry, wallet) {
+  const legacyWallet = entry?.legacyPricingWalletId ? state$2.wallets.find((item) => item.id === entry.legacyPricingWalletId) || null : null;
+  return calcCost({
+    timestamp: entry.timestamp,
+    model: entry.model,
+    prompt_cache_hit_tokens: entry.cache_hit_tokens || 0,
+    prompt_cache_miss_tokens: entry.cache_miss_tokens || 0,
+    completion_tokens: entry.completion_tokens || 0
+  }, state$2.settings, legacyWallet || wallet);
+}
+function applyCostPatch(entry, cost) {
+  entry.input_cost = cost.input;
+  entry.output_cost = cost.output;
+  entry.cost = cost.total;
+  entry.priceType = cost.priceType;
+  entry.pricingSource = entry.legacyPricingWalletId ? "legacy-match" : cost.source;
+}
+function applyTotalDelta(previous, next) {
+  state$2.input_cost += (next.input || 0) - (previous.input || 0);
+  state$2.output_cost += (next.output || 0) - (previous.output || 0);
+  state$2.total_cost += (next.total || 0) - (previous.total || 0);
+}
+function shouldTrackWalletModel(wallet, model) {
+  if (wallet.id !== DEEPSEEK_WALLET_ID) return true;
+  try {
+    return !PRICING[normalizeModel(model)];
+  } catch {
+    return true;
+  }
+}
+function backfillLegacyExactPricing(allHistory) {
+  let changed = false;
+  const ignored = new Set(state$2.walletIgnored || []);
+  for (const entry of allHistory || []) {
+    if (!entry || entry.legacyPricingWalletId) continue;
+    const sourceWallet = findWalletForHistory(state$2.wallets, entry);
+    if (!sourceWallet) continue;
+    const current = calcCost({
+      timestamp: entry.timestamp,
+      model: entry.model,
+      prompt_cache_hit_tokens: entry.cache_hit_tokens || 0,
+      prompt_cache_miss_tokens: entry.cache_miss_tokens || 0,
+      completion_tokens: entry.completion_tokens || 0
+    }, state$2.settings, sourceWallet);
+    if (current.source !== "unpriced") continue;
+    const match = findExactPricedModelMatch(state$2.wallets, String(entry.model || ""), ignored);
+    if (!match || match.walletId === sourceWallet.id) continue;
+    entry.legacyPricingWalletId = match.walletId;
+    entry.legacyPricingModel = match.model;
+    const previous = {
+      input: Number(entry.input_cost) || 0,
+      output: Number(entry.output_cost) || 0,
+      total: Number(entry.cost) || 0
+    };
+    const matchedWallet = state$2.wallets.find((wallet) => wallet.id === match.walletId) || null;
+    const cost = recalcEntryCost(entry, matchedWallet);
+    applyCostPatch(entry, cost);
+    applyTotalDelta(previous, cost);
+    changed = true;
+  }
+  return changed;
 }
 function getFilteredHistoryForScope() {
   const scope = state$2.settings.historyScope || "all";
@@ -989,10 +2161,11 @@ function normalizeSettings(incoming) {
 function sanitizeFullRequest(fr) {
   if (!fr || typeof fr !== "object") return fr;
   const keep = {};
-  for (const k of ["model", "stream", "temperature", "max_tokens", "top_p", "stream_options"]) {
+  for (const k of ["model", "stream", "temperature", "max_tokens", "top_p", "stream_options", "chat_completion_source", "endpoint"]) {
     if (fr[k] !== void 0) keep[k] = fr[k];
   }
   if (Array.isArray(fr.messages)) keep.messages_length = fr.messages.length;
+  else if (typeof fr.messages_length === "number") keep.messages_length = fr.messages_length;
   else if (typeof fr.messages === "number") keep.messages_length = fr.messages;
   return keep;
 }
@@ -1058,6 +2231,8 @@ function persist() {
     settings: state$2.settings,
     balance: state$2.balance,
     customBalance: state$2.customBalance,
+    wallets: state$2.wallets,
+    walletIgnored: state$2.walletIgnored,
     messageCount: state$2.messageCount,
     lastUsage: safeLastUsage
   });
@@ -1071,6 +2246,8 @@ const repository = {
       settings: state$2.settings,
       balance: state$2.balance,
       customBalance: state$2.customBalance,
+      wallets: state$2.wallets,
+      walletIgnored: state$2.walletIgnored,
       messageCount: state$2.messageCount,
       lastUsage: state$2.lastUsage,
       history: state$2.history,
@@ -1100,7 +2277,55 @@ const repository = {
   async getAllHistory() {
     return getAllHistory();
   },
-  addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft = 0, thinkTime = 0, finishReason = null) {
+  getWallets() {
+    return state$2.wallets || [];
+  },
+  getWallet(walletId) {
+    return (state$2.wallets || []).find((wallet) => wallet.id === walletId) || null;
+  },
+  getIgnoredWalletIds() {
+    return [...state$2.walletIgnored || []];
+  },
+  replaceWallets(next, ignored) {
+    state$2.wallets = ensureDeepSeekWallet(normalizeWallets(next, state$2.settings, Date.now()), state$2.settings, Date.now());
+    if (ignored !== void 0) {
+      state$2.walletIgnored = Array.from(new Set(ignored.map((id) => String(id || "").trim()).filter((id) => id && id !== DEEPSEEK_WALLET_ID)));
+    }
+    persist();
+    emit(DataEvents.SETTINGS_CHANGED);
+  },
+  updateWallet(walletId, updater) {
+    const wallet = (state$2.wallets || []).find((item) => item.id === walletId);
+    if (!wallet) return null;
+    updater(wallet);
+    wallet.updatedAt = Date.now();
+    persist();
+    emit(DataEvents.SETTINGS_CHANGED);
+    return wallet;
+  },
+  setWalletIgnored(walletId, ignored) {
+    if (!walletId || walletId === DEEPSEEK_WALLET_ID) return false;
+    if (ignored) {
+      if (!state$2.walletIgnored.includes(walletId)) state$2.walletIgnored.push(walletId);
+    } else {
+      state$2.walletIgnored = state$2.walletIgnored.filter((id) => id !== walletId);
+    }
+    persist();
+    emit(DataEvents.SETTINGS_CHANGED);
+    return true;
+  },
+  setWalletBalance(walletId, amount, currency2 = "CNY", calibrated = false) {
+    return this.updateWallet(walletId, (wallet) => {
+      wallet.balance.amount = amount == null || String(amount).trim() === "" ? null : String(amount);
+      wallet.balance.currency = currency2 === "USD" ? "USD" : "CNY";
+      wallet.balance.mode = calibrated ? "auto" : "manual";
+      if (calibrated) wallet.balance.lastCalibrated = Date.now();
+    });
+  },
+  recalcEntryWallet(entry) {
+    return findWalletForHistory(state$2.wallets, entry);
+  },
+  addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft = 0, thinkTime = 0, finishReason = null, connection = null) {
     messages = messages || [];
     if (!model) try {
       model = globalThis.SillyTavern?.getContext?.().model || "deepseek-v4-flash";
@@ -1132,9 +2357,35 @@ const repository = {
     }
     log.debug("addEntry 解析", { model, hit, miss, comp, total });
     const fr = finishReason ?? usage?.__finish_reason ?? usage?.finish_reason ?? null;
+    const nowTs = Date.now();
+    let wallet = null;
+    try {
+      const observed = ensureWalletForConnection(
+        state$2.wallets,
+        new Set(state$2.walletIgnored || []),
+        connection,
+        nowTs
+      );
+      wallet = observed.wallet;
+      if (wallet) {
+        if (shouldTrackWalletModel(wallet, model)) {
+          const modelObservation = observeModel(wallet, model, nowTs);
+          if (modelObservation.changed) wallet.updatedAt = nowTs;
+          if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && state$2.settings.pricingSync?.enabled) {
+            try {
+              Promise.resolve().then(() => pricingSync).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {
+              });
+            } catch {
+            }
+          }
+        }
+        wallet.lastUsedAt = nowTs;
+      }
+    } catch {
+    }
     try {
       const now = Date.now();
-      const fp = `${model}|${total}|${hit}|${miss}|${comp}`;
+      const fp = usageFingerprint(model, total, hit, miss, comp, connection);
       const lastFp = state$2._lastFp;
       const lastFpTime = state$2._lastFpTime;
       if (lastFp === fp && lastFpTime && now - lastFpTime < 5e3) {
@@ -1166,6 +2417,18 @@ const repository = {
               head.thinkTime = thinkTime;
               changed = true;
             }
+            if (connection) {
+              for (const key of ["sourceType", "endpointId", "endpointLabel", "credentialId", "credentialLabel"]) {
+                if (!head[key] && connection[key]) {
+                  head[key] = connection[key];
+                  changed = true;
+                }
+              }
+            }
+            if (wallet && !head.walletId) {
+              head.walletId = wallet.id;
+              changed = true;
+            }
             if (changed) {
               if (state$2.lastUsage?.timestamp === head.timestamp) {
                 if (head.fullResponse) state$2.lastUsage.fullResponse = head.fullResponse;
@@ -1179,6 +2442,11 @@ const repository = {
                 }
                 if (head.thinkTime) state$2.lastUsage.thinkTime = head.thinkTime;
                 if (head.thinkTokens) state$2.lastUsage.thinkTokens = head.thinkTokens;
+                if (head.sourceType) state$2.lastUsage.sourceType = head.sourceType;
+                if (head.endpointId) state$2.lastUsage.endpointId = head.endpointId;
+                if (head.endpointLabel) state$2.lastUsage.endpointLabel = head.endpointLabel;
+                if (head.credentialId) state$2.lastUsage.credentialId = head.credentialId;
+                if (head.credentialLabel) state$2.lastUsage.credentialLabel = head.credentialLabel;
               }
               persist();
             }
@@ -1203,11 +2471,13 @@ const repository = {
     lu.finishReason = fr;
     lu.isTruncated = isTruncatedFinish(fr);
     lu.messages = (messages || []).map(clampMessage);
-    const c = calcCost({ timestamp: lu.timestamp, model, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp }, state$2.settings);
+    const c = calcCost({ timestamp: lu.timestamp, model, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp }, state$2.settings, wallet);
     lu.cost = c.total;
     lu.input_cost = c.input;
     lu.output_cost = c.output;
     lu.priceType = c.priceType;
+    lu.walletId = wallet?.id ?? null;
+    lu.pricingSource = c.source;
     const safeResponse = clampResponse(fullResponse);
     lu.raw_usage = usage;
     lu.fullRequest = fullRequest;
@@ -1216,6 +2486,13 @@ const repository = {
     const chatName = getCurrentChatName();
     lu.chatId = chatId;
     lu.chatName = chatName;
+    if (connection) {
+      lu.sourceType = connection.sourceType;
+      lu.endpointId = connection.endpointId;
+      lu.endpointLabel = connection.endpointLabel;
+      lu.credentialId = connection.credentialId;
+      lu.credentialLabel = connection.credentialLabel;
+    }
     state$2.lastUsage = lu;
     const fr2 = fr;
     const entry = {
@@ -1243,7 +2520,14 @@ const repository = {
       finishReason: fr2,
       isTruncated: isTruncatedFinish(fr2),
       chatId,
-      chatName
+      chatName,
+      sourceType: connection?.sourceType ?? null,
+      endpointId: connection?.endpointId ?? null,
+      endpointLabel: connection?.endpointLabel ?? null,
+      credentialId: connection?.credentialId ?? null,
+      credentialLabel: connection?.credentialLabel ?? null,
+      walletId: wallet?.id ?? null,
+      pricingSource: c.source
     };
     log.debug("addEntry 即将写入", { model: entry.model, total: entry.total_tokens });
     state$2.history.unshift(entry);
@@ -1257,7 +2541,14 @@ const repository = {
     state$2.output_cost += lu.output_cost;
     if (isDeepSeekOfficialModel(model)) state$2.rounds += 1;
     try {
-      if (state$2.customBalance != null && String(state$2.customBalance).trim() !== "") {
+      if (wallet) {
+        const current = wallet.balance.amount == null || wallet.balance.amount === "" ? NaN : parseFloat(String(wallet.balance.amount));
+        if (Number.isFinite(current)) {
+          const cost = wallet.balance.currency === "USD" ? lu.cost / getWalletExchangeRate() : lu.cost;
+          wallet.balance.amount = (current - cost).toFixed(4);
+          wallet.updatedAt = Date.now();
+        }
+      } else if (state$2.customBalance != null && String(state$2.customBalance).trim() !== "") {
         const cur = parseFloat(String(state$2.customBalance));
         if (!isNaN(cur)) state$2.customBalance = (cur - lu.cost).toFixed(4);
       } else if (state$2.balance && state$2.balance.balance != null && String(state$2.balance.balance).trim() !== "") {
@@ -1282,14 +2573,59 @@ const repository = {
   },
   recalcAll() {
     for (const h of state$2.history || []) {
-      const c = calcCost({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state$2.settings);
-      h.input_cost = c.input;
-      h.output_cost = c.output;
-      h.cost = c.total;
-      h.priceType = c.priceType;
+      const wallet = findWalletForHistory(state$2.wallets, h);
+      const previous = {
+        input: Number(h.input_cost) || 0,
+        output: Number(h.output_cost) || 0,
+        total: Number(h.cost) || 0
+      };
+      const c = recalcEntryCost(h, wallet);
+      applyCostPatch(h, c);
+      applyTotalDelta(previous, c);
       h.cache_hit_rate = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) > 0 ? (h.cache_hit_tokens || 0) / ((h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0)) * 100 : 0;
     }
     persist();
+  },
+  async recalcWallet(walletId) {
+    const wallet = state$2.wallets.find((item) => item.id === walletId) || null;
+    if (!wallet) return 0;
+    let changed = 0;
+    for (const h of state$2.history || []) {
+      const sourceWallet = findWalletForHistory(state$2.wallets, h);
+      if (sourceWallet?.id !== wallet.id && h.legacyPricingWalletId !== wallet.id) continue;
+      const previous = {
+        input: Number(h.input_cost) || 0,
+        output: Number(h.output_cost) || 0,
+        total: Number(h.cost) || 0
+      };
+      const c = recalcEntryCost(h, sourceWallet || wallet);
+      applyCostPatch(h, c);
+      applyTotalDelta(previous, c);
+      h.cache_hit_rate = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) > 0 ? (h.cache_hit_tokens || 0) / ((h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0)) * 100 : 0;
+      changed++;
+    }
+    try {
+      const cold = await loadHistoryCold();
+      let coldChanged = false;
+      for (const h of cold) {
+        const sourceWallet = findWalletForHistory(state$2.wallets, h);
+        if (sourceWallet?.id !== wallet.id && h.legacyPricingWalletId !== wallet.id) continue;
+        const previous = {
+          input: Number(h.input_cost) || 0,
+          output: Number(h.output_cost) || 0,
+          total: Number(h.cost) || 0
+        };
+        const c = recalcEntryCost(h, sourceWallet || wallet);
+        applyCostPatch(h, c);
+        applyTotalDelta(previous, c);
+        coldChanged = true;
+        changed++;
+      }
+      if (coldChanged) await saveHistoryCold(cold);
+    } catch {
+    }
+    persist();
+    return changed;
   },
   replaceAll(next) {
     if (next.history !== void 0) {
@@ -1325,7 +2661,7 @@ const repository = {
         all = all.concat(h);
       }
       all.sort((a, b) => b.timestamp - a.timestamp);
-      const keyOf = (h) => `${h.timestamp}|${h.model || ""}|${h.total_tokens || 0}`;
+      const keyOf = historyRecordKey;
       const seen = /* @__PURE__ */ new Set();
       const dedup = [];
       for (const h of all) {
@@ -1385,10 +2721,15 @@ const repository = {
     }
     if (next.balance !== void 0) state$2.balance = next.balance;
     if (next.customBalance !== void 0) state$2.customBalance = next.customBalance;
+    if (next.wallets !== void 0) state$2.wallets = normalizeWallets(next.wallets, state$2.settings, Date.now());
+    if (next.walletIgnored !== void 0) {
+      state$2.walletIgnored = Array.isArray(next.walletIgnored) ? Array.from(new Set(next.walletIgnored.map((id) => String(id || "").trim()).filter(Boolean))) : [];
+    }
     if (next.messageCount !== void 0) state$2.messageCount = next.messageCount;
     if (next.lastUsage !== void 0) state$2.lastUsage = next.lastUsage;
     persist();
     if (next.settings) emit(DataEvents.SETTINGS_CHANGED);
+    if (next.wallets !== void 0 || next.walletIgnored !== void 0) emit(DataEvents.SETTINGS_CHANGED);
     if (next.balance !== void 0 || next.customBalance !== void 0) emit(DataEvents.BALANCE_CHANGED);
   },
   pruneZeroEntries() {
@@ -1444,11 +2785,31 @@ const repository = {
       if (hot.settings) state$2.settings = normalizeSettings(hot.settings);
       if (hot.balance) state$2.balance = hot.balance;
       if (hot.customBalance) state$2.customBalance = hot.customBalance;
+      if (hot.wallets) state$2.wallets = normalizeWallets(hot.wallets, state$2.settings, Date.now());
+      if (Array.isArray(hot.walletIgnored)) state$2.walletIgnored = hot.walletIgnored;
       if (hot.messageCount) state$2.messageCount = hot.messageCount;
       if (hot.lastUsage) state$2.lastUsage = hot.lastUsage;
     }
     if (!state$2.settings.historyScope) {
       state$2.settings.historyScope = "all";
+      try {
+        saveHot({ settings: state$2.settings });
+      } catch {
+      }
+    }
+    if (!state$2.settings.overviewWalletId) {
+      state$2.settings.overviewWalletId = DEEPSEEK_WALLET_ID;
+      state$2.settings.overviewWalletManuallySet = false;
+      try {
+        saveHot({ settings: state$2.settings });
+      } catch {
+      }
+    }
+    if (state$2.settings.overviewWalletManuallySet !== true) {
+      if (state$2.settings.overviewWalletId === "all") {
+        state$2.settings.overviewWalletId = DEEPSEEK_WALLET_ID;
+      }
+      state$2.settings.overviewWalletManuallySet = true;
       try {
         saveHot({ settings: state$2.settings });
       } catch {
@@ -1547,6 +2908,23 @@ const repository = {
       saveHot({ history: state$2.history });
     } catch {
     }
+    let coldForWalletMigration = [];
+    try {
+      coldForWalletMigration = await loadHistoryCold();
+    } catch {
+    }
+    if (migrateWallets(hot, coldForWalletMigration)) {
+      try {
+        saveHot({ wallets: state$2.wallets, walletIgnored: state$2.walletIgnored });
+      } catch {
+      }
+      if (coldForWalletMigration.length) {
+        try {
+          await saveHistoryCold(coldForWalletMigration);
+        } catch {
+        }
+      }
+    }
     try {
       this.pruneZeroEntries();
     } catch {
@@ -1569,11 +2947,33 @@ let lastStart = 0;
 let lastFetchUsage = null;
 let lastFetchModel = null;
 let lastFetchTime = 0;
+let lastFetchConnection = null;
+let lastFetchConnectionTime = 0;
 function setLastRequest(messages, start) {
   lastMessages = messages || [];
   lastStart = start || Date.now();
 }
 const TARGET_API = "/api/backends/chat-completions/generate";
+function safeRequestSnapshot(body, connection) {
+  if (!body || typeof body !== "object") return null;
+  const keep = {};
+  for (const key of ["model", "stream", "temperature", "max_tokens", "top_p", "stream_options", "chat_completion_source"]) {
+    if (body[key] !== void 0) keep[key] = body[key];
+  }
+  if (connection?.endpointLabel) keep.endpoint = connection.endpointLabel;
+  if (Array.isArray(body.messages)) keep.messages_length = body.messages.length;
+  return keep;
+}
+function recentConnection(maxAge = 12e4) {
+  try {
+    if (lastFetchConnection && Date.now() - lastFetchConnectionTime < maxAge && lastFetchConnectionTime >= lastFetchTime) {
+      return lastFetchConnection;
+    }
+    if (lastFetchUsage?.connection && Date.now() - lastFetchTime < maxAge) return lastFetchUsage.connection;
+  } catch {
+  }
+  return null;
+}
 function estimateThinkTokens(text, usage) {
   if (!usage || typeof usage !== "object") return;
   const detail = usage.completion_tokens_details;
@@ -1618,7 +3018,13 @@ function installFetchCapture() {
           reqBody = JSON.parse(args[1]?.body || "null");
         } catch {
         }
-        const fullReq = reqBody ? JSON.parse(JSON.stringify(reqBody)) : null;
+        const requestConnection = resolveRuntimeConnectionContext(reqBody || {});
+        const fullReq = safeRequestSnapshot(reqBody, requestConnection);
+        try {
+          lastFetchConnection = requestConnection;
+          lastFetchConnectionTime = Date.now();
+        } catch {
+        }
         let msgs = [];
         try {
           if (reqBody?.messages?.length) msgs = reqBody.messages.slice(-10);
@@ -1683,12 +3089,12 @@ function installFetchCapture() {
                   estimateThinkTokens(text, usage);
                 } catch {
                 }
-                lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: text, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason };
+                lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: text, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason, connection: requestConnection };
                 lastFetchModel = typeof model === "string" ? model : null;
                 lastFetchTime = Date.now();
                 log.debug("fetch 捕获 usage", { model, hasUsage: !!usage, finishReason });
                 try {
-                  processUsage(usage, model, msgs, startTime, fullReq, text, ttftVal, thinkTimeVal, finishReason);
+                  processUsage(usage, model, msgs, startTime, fullReq, text, ttftVal, thinkTimeVal, finishReason, requestConnection);
                 } catch (e) {
                   log.error("fetch 用量记录失败 " + (e?.message || e));
                 }
@@ -1783,6 +3189,10 @@ let rawFetchRef = null;
 let messageReceivedHandler = null;
 function installInterception() {
   try {
+    try {
+      initConnectionIdentity();
+    } catch {
+    }
     const ctx = globalThis.SillyTavern?.getContext?.();
     const es = ctx?.eventSource;
     const et = ctx?.event_types;
@@ -1893,7 +3303,7 @@ function onGenerationEnded(...args) {
         }
       } catch {
       }
-      processUsage(usage, model, lastMessages, lastStart, null, null, ttft, think, fr);
+      processUsage(usage, model, lastMessages, lastStart, null, null, ttft, think, fr, recentConnection(5e3));
       return;
     }
     if (tail?.swipe_info && typeof tail.swipe_info === "object") {
@@ -1914,7 +3324,7 @@ function onGenerationEnded(...args) {
             }
           } catch {
           }
-          processUsage(usage, model, lastMessages, lastStart, null, null, ttft, think, fr);
+          processUsage(usage, model, lastMessages, lastStart, null, null, ttft, think, fr, recentConnection(5e3));
           return;
         }
       }
@@ -1935,7 +3345,7 @@ function onGenerationEnded(...args) {
         }
       } catch {
       }
-      processUsage(maybeUsage, m, lastMessages, lastStart, null, null, ttft, think, fr);
+      processUsage(maybeUsage, m, lastMessages, lastStart, null, null, ttft, think, fr, recentConnection(5e3));
       return;
     }
     {
@@ -1952,7 +3362,7 @@ function onGenerationEnded(...args) {
         const fFr = fetchPack && fetchPack.finishReason || fetchUsage?.__finish_reason || null;
         log.debug("fetch 兜底命中", { model: fetchedModel });
         lastFetchUsage = null;
-        processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink, fFr);
+        processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink, fFr, fetchPack?.connection || recentConnection());
         return;
       } else if (lastFetchUsage) {
         const fu = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
@@ -1974,7 +3384,7 @@ function refresh() {
   } catch {
   }
 }
-function processUsage(usage, model, messages, startTime, fullRequest = null, fullResponse = null, ttft = 0, thinkTime = 0, finishReason = null) {
+function processUsage(usage, model, messages, startTime, fullRequest = null, fullResponse = null, ttft = 0, thinkTime = 0, finishReason = null, connection = null) {
   try {
     const fp = lastFetchUsage;
     if (fp?.usage && Date.now() - lastFetchTime < 5e3) {
@@ -1984,7 +3394,7 @@ function processUsage(usage, model, messages, startTime, fullRequest = null, ful
     }
   } catch {
   }
-  repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason);
+  repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason, connection);
   refresh();
 }
 function recalcAllCosts() {
@@ -1998,73 +3408,35 @@ const interception = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.define
   setLastRequest,
   uninstallInterception
 }, Symbol.toStringTag, { value: "Module" }));
-const XOR_KEY = "ds-stats-v1-xor-key!@#$%^&*";
-function encryptKey(plaintext) {
-  if (!plaintext) return "";
-  try {
-    const utf8 = unescape(encodeURIComponent(plaintext));
-    let result = "";
-    for (let i = 0; i < utf8.length; i++) {
-      result += String.fromCharCode(utf8.charCodeAt(i) ^ XOR_KEY.charCodeAt(i % XOR_KEY.length));
-    }
-    return btoa(result);
-  } catch {
-    let result = "";
-    for (let i = 0; i < plaintext.length; i++) {
-      result += String.fromCharCode(plaintext.charCodeAt(i) ^ XOR_KEY.charCodeAt(i % XOR_KEY.length));
-    }
-    try {
-      return btoa(result);
-    } catch {
-      return "";
-    }
-  }
-}
-function decryptKey(ciphertext) {
-  if (!ciphertext) return "";
-  try {
-    const decoded = atob(ciphertext);
-    let result = "";
-    for (let i = 0; i < decoded.length; i++) {
-      result += String.fromCharCode(decoded.charCodeAt(i) ^ XOR_KEY.charCodeAt(i % XOR_KEY.length));
-    }
-    try {
-      return decodeURIComponent(escape(result));
-    } catch {
-      return result;
-    }
-  } catch {
-    return ciphertext;
-  }
-}
 function getApiKey() {
-  try {
-    const ctx = globalThis.SillyTavern?.getContext?.();
-    const ext = ctx?.extensionSettings?.["api_usage_stat"];
-    if (ext?.apiKey) return decryptKey(ext.apiKey);
-  } catch {
-  }
-  return "";
+  return getWalletApiKey(DEEPSEEK_WALLET_ID);
 }
 function saveApiKey(key) {
-  try {
-    const ctx = globalThis.SillyTavern?.getContext?.();
-    if (ctx?.extensionSettings) {
-      ctx.extensionSettings["api_usage_stat"] = ctx.extensionSettings["api_usage_stat"] || {};
-      ctx.extensionSettings["api_usage_stat"].apiKey = encryptKey(key);
-      ctx.saveSettingsDebounced?.();
-    }
-  } catch {
-  }
+  saveWalletApiKey(DEEPSEEK_WALLET_ID, key);
 }
-let balanceInFlight = false;
-async function queryBalance(silent = false) {
-  if (balanceInFlight) return null;
-  balanceInFlight = true;
+function canAutoCalibrate(wallet) {
+  return wallet.id === DEEPSEEK_WALLET_ID && wallet.sourceType === "deepseek" && wallet.endpointId === DEEPSEEK_OFFICIAL_ENDPOINT_ID;
+}
+function walletCurrencyLabel(wallet) {
+  return `${wallet.balance.currency === "USD" ? "$" : "¥"}${wallet.balance.amount || "0"} ${wallet.balance.currency}`;
+}
+const balanceInFlight = /* @__PURE__ */ new Set();
+async function queryWalletBalance(walletId, silent = false) {
+  const wallet = repository.getWallet(walletId);
+  if (!wallet) {
+    if (!silent) toast("error", "钱包不存在");
+    return null;
+  }
+  if (!canAutoCalibrate(wallet)) {
+    if (!silent) toast("warning", "当前接入不支持自动校准，请使用手工余额");
+    return null;
+  }
+  if (balanceInFlight.has(walletId)) return null;
+  balanceInFlight.add(walletId);
   try {
-    const key = getApiKey();
+    const key = getWalletApiKey(walletId);
     if (!key) {
-      if (!silent) toast("error", "请先设置 API 密钥");
+      if (!silent) toast("error", "请先在该钱包填写 API 密钥");
       return null;
     }
     const ctrl = new AbortController();
@@ -2074,41 +3446,48 @@ async function queryBalance(silent = false) {
       } catch {
       }
     }, 15e3);
-    const r = await fetch("https://api.deepseek.com/user/balance", {
+    const response = await fetch("https://api.deepseek.com/user/balance", {
       method: "GET",
       headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
       signal: ctrl.signal
     });
     clearTimeout(to);
-    const d = await r.json();
-    if (d.is_available && d.balance_infos?.length) {
-      const i = d.balance_infos[0];
-      const bal = { balance: i.total_balance, currency: i.currency, available: d.is_available, timestamp: Date.now() };
-      state$2.balance = bal;
-      saveHot({ balance: bal });
-      try {
-        globalThis.ApiUsageStat?.refreshUI?.();
-      } catch {
-      }
-      if (!silent) {
+    const data = await response.json();
+    if (data.is_available && data.balance_infos?.length) {
+      const info = data.balance_infos[0];
+      const amount = String(info.total_balance ?? "0");
+      const currency2 = String(info.currency || "").toUpperCase() === "USD" ? "USD" : "CNY";
+      const updated = repository.setWalletBalance(walletId, amount, currency2, true);
+      if (walletId === DEEPSEEK_WALLET_ID) {
+        state$2.balance = {
+          balance: amount,
+          currency: currency2,
+          available: data.is_available,
+          timestamp: Date.now()
+        };
         try {
-          toast("success", "余额已更新 " + formatMoney(parseFloat(String(i.total_balance)) || 0, 2));
+          globalThis.ApiUsageStat?.refreshUI?.();
         } catch {
-          toast("success", "余额已更新 ¥" + i.total_balance);
         }
       }
-      return bal;
+      if (!silent && updated) toast("success", "余额已更新 " + walletCurrencyLabel(updated));
+      return updated;
     }
-    if (!silent) toast("error", d.error?.message || "查询失败");
+    if (!silent) toast("error", data.error?.message || "查询失败");
     return null;
-  } catch (e) {
-    const msg = e?.name === "AbortError" ? "查询超时(15s)" : e?.message || e;
-    log.error("余额查询失败", e);
-    if (!silent) toast("error", "网络错误: " + msg);
+  } catch (error) {
+    const message = error?.name === "AbortError" ? "查询超时(15s)" : error?.message || error;
+    log.error("余额查询失败", error);
+    if (!silent) toast("error", "网络错误: " + message);
     return null;
   } finally {
-    balanceInFlight = false;
+    balanceInFlight.delete(walletId);
   }
+}
+async function queryBalance(silent = false) {
+  const selected = String(state$2.settings.overviewWalletId || "all");
+  const walletId = selected === "all" ? DEEPSEEK_WALLET_ID : selected;
+  return queryWalletBalance(walletId, silent);
 }
 let balanceTimer = null;
 function restartBalanceTimer() {
@@ -2119,13 +3498,17 @@ function restartBalanceTimer() {
     }
     balanceTimer = null;
   }
-  const s = state$2.settings;
-  if (!s.autoBalance) return;
-  const min = Math.min(Math.max(parseInt(s.balanceInterval) || 10, 1), 1440);
+  const settings2 = state$2.settings;
+  if (!settings2.autoBalance) return;
+  const minutes = Math.min(Math.max(parseInt(settings2.balanceInterval) || 10, 1), 1440);
   balanceTimer = setInterval(() => {
-    queryBalance(true).catch(() => {
-    });
-  }, min * 60 * 1e3);
+    const ignored = new Set(state$2.walletIgnored || []);
+    for (const wallet of state$2.wallets || []) {
+      if (ignored.has(wallet.id) || wallet.balance.mode !== "auto") continue;
+      queryWalletBalance(wallet.id, true).catch(() => {
+      });
+    }
+  }, minutes * 60 * 1e3);
 }
 function stopBalanceTimer() {
   if (balanceTimer) {
@@ -2140,6 +3523,7 @@ const balance = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePrope
   __proto__: null,
   getApiKey,
   queryBalance,
+  queryWalletBalance,
   restartBalanceTimer,
   saveApiKey,
   stopBalanceTimer
@@ -2162,7 +3546,7 @@ async function exportHistory() {
   const pad = (n) => n < 10 ? "0" + n : "" + n;
   const safeSettings = JSON.parse(JSON.stringify(state$2.settings || {}));
   if (safeSettings.webdav) safeSettings.webdav = { url: "", username: "", path: "", proxy: "" };
-  const _appVer = "3.0.7";
+  const _appVer = "3.0.8";
   let fullHist = [];
   try {
     fullHist = await repository.getAllHistory();
@@ -2175,6 +3559,7 @@ async function exportHistory() {
     exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
     appVersion: _appVer,
     scope: "full",
+    walletFormat: 2,
     data: {
       history: stripHistory$1(fullHist),
       total_tokens: state$2.total_tokens,
@@ -2189,6 +3574,8 @@ async function exportHistory() {
       startTime: state$2.startTime,
       balance: state$2.balance,
       customBalance: state$2.customBalance,
+      wallets: state$2.wallets,
+      walletIgnored: state$2.walletIgnored,
       settings: safeSettings,
       messageCount: state$2.messageCount,
       // 兼容旧多存档导入：额外提供 saves 包装（同样全量）
@@ -2241,7 +3628,7 @@ function normalizeImportData(raw) {
     cleaned.push(nh);
   }
   cleaned.sort((a, b) => b.timestamp - a.timestamp);
-  return { data: { history: cleaned, balance: d.balance, customBalance: d.customBalance, settings: d.settings, messageCount: d.messageCount, total_tokens: d.total_tokens, total_cost: d.total_cost, input_tokens: d.input_tokens, output_tokens: d.output_tokens, cache_hit_tokens: d.cache_hit_tokens, cache_miss_tokens: d.cache_miss_tokens, input_cost: d.input_cost, output_cost: d.output_cost, rounds: d.rounds, startTime: d.startTime }, skipped: { entries: skipped } };
+  return { data: { history: cleaned, balance: d.balance, customBalance: d.customBalance, wallets: Array.isArray(d.wallets) ? d.wallets : void 0, walletIgnored: Array.isArray(d.walletIgnored) ? d.walletIgnored : void 0, settings: d.settings, messageCount: d.messageCount, total_tokens: d.total_tokens, total_cost: d.total_cost, input_tokens: d.input_tokens, output_tokens: d.output_tokens, cache_hit_tokens: d.cache_hit_tokens, cache_miss_tokens: d.cache_miss_tokens, input_cost: d.input_cost, output_cost: d.output_cost, rounds: d.rounds, startTime: d.startTime }, skipped: { entries: skipped } };
 }
 function applyImportedData(d, mode) {
   let addedOfficial = 0;
@@ -2260,20 +3647,29 @@ function applyImportedData(d, mode) {
       startTime: d.startTime ?? Date.now(),
       balance: d.balance,
       customBalance: d.customBalance,
+      wallets: d.wallets,
+      walletIgnored: d.walletIgnored,
       settings: d.settings,
       messageCount: d.messageCount
     });
   } else {
-    const seen = new Set((state$2.history || []).map((h) => h.timestamp));
+    const seen = new Set((state$2.history || []).map((h) => historyRecordKey(h)));
     const toAdd = [];
     for (const h of d.history || []) {
-      if (!seen.has(h.timestamp)) {
-        seen.add(h.timestamp);
+      const key = historyRecordKey(h);
+      if (!seen.has(key)) {
+        seen.add(key);
         toAdd.push(h);
       }
     }
     const merged = [...toAdd, ...state$2.history].sort((a, b) => b.timestamp - a.timestamp);
     repository.replaceAll({ history: merged });
+    if (Array.isArray(d.wallets)) {
+      repository.replaceAll({
+        wallets: mergeWalletCollections(repository.getWallets(), d.wallets),
+        walletIgnored: Array.from(/* @__PURE__ */ new Set([...state$2.walletIgnored || [], ...d.walletIgnored || []]))
+      });
+    }
     for (const h of toAdd) {
       try {
         if (isDeepSeekOfficialModel(h.model)) addedOfficial++;
@@ -2453,6 +3849,7 @@ function buildLocalBundle() {
   return {
     format: "deepseek-stat-sync",
     version: WEBDAV_REMOTE_VERSION,
+    walletFormat: 2,
     syncedAt: Date.now(),
     data: {
       history: stripHistory(state$2.history),
@@ -2468,6 +3865,8 @@ function buildLocalBundle() {
       startTime: state$2.startTime,
       balance: state$2.balance,
       customBalance: state$2.customBalance,
+      wallets: state$2.wallets,
+      walletIgnored: state$2.walletIgnored,
       settings: JSON.parse(JSON.stringify(state$2.settings)),
       messageCount: state$2.messageCount
     },
@@ -2492,7 +3891,7 @@ function mergeBundles(remote, local) {
     return e;
   });
   const lh = clean(toHistory(ld)), rh = clean(toHistory(rd));
-  const keyOf = (h) => `${h.timestamp}|${h.model || ""}|${h.total_tokens || 0}`;
+  const keyOf = historyRecordKey;
   const lseen = new Set(lh.map((h) => keyOf(h)));
   const rseen = new Set(rh.map((h) => keyOf(h)));
   let pulled = 0, pushed = 0;
@@ -2526,6 +3925,8 @@ function mergeBundles(remote, local) {
     startTime: ld.startTime ?? rd.startTime ?? Date.now(),
     balance: ld.balance ?? rd.balance,
     customBalance: ld.customBalance ?? rd.customBalance,
+    wallets: mergeWalletCollections(ld.wallets || repository.getWallets(), rd.wallets || []),
+    walletIgnored: Array.from(/* @__PURE__ */ new Set([...ld.walletIgnored || [], ...rd.walletIgnored || []])),
     messageCount: ld.messageCount ?? rd.messageCount,
     settings: ld.settings ?? rd.settings
   };
@@ -2697,9 +4098,16 @@ function priceClose(a, b, tol = 0.05) {
 function removeSyncedModels() {
   const cms = state$2.settings.customModels || [];
   const kept = cms.filter((c) => c?.synced !== true);
-  const removed = cms.length - kept.length;
-  if (removed <= 0) return 0;
+  let removed = cms.length - kept.length;
   state$2.settings.customModels = kept;
+  const nextWallets = repository.getWallets().map((wallet) => {
+    const next = cloneWallet(wallet);
+    const before = next.models.length;
+    next.models = next.models.filter((model) => !(model.source === "sync" && !model.locked));
+    removed += before - next.models.length;
+    return next;
+  });
+  if (removed > 0) repository.replaceWallets(nextWallets);
   try {
     saveHot({ settings: state$2.settings });
   } catch {
@@ -2783,31 +4191,115 @@ function buildCustomModelsFromCatalog(catalog, rate) {
   }
   return out;
 }
-function previewSync(catalog) {
-  const rate = getEffectiveRate() || DEFAULT_EXCHANGE_RATE;
-  const incoming = buildCustomModelsFromCatalog(catalog, rate);
-  const existing = new Map((state$2.settings.customModels || []).map((c) => [c.model, c]));
-  const mode = state$2.settings.pricingSync?.mode || "add-missing";
-  let added = 0, updated = 0, skipped = 0;
-  const samples = [];
-  for (const inc of incoming) {
-    const ex = existing.get(inc.model);
-    if (!ex) {
-      added++;
-      if (samples.length < 6) samples.push(inc);
-    } else {
-      const same = ex.offpeak?.hit === inc.offpeak.hit && ex.offpeak?.miss === inc.offpeak.miss && ex.offpeak?.output === inc.offpeak.output;
-      if (mode === "add-missing") skipped++;
-      else if (mode === "overwrite-all") {
-        if (!same) updated++;
-        else skipped++;
-      } else {
-        if (!same) updated++;
-        else skipped++;
-      }
-    }
+function buildProviderModelsFromCatalog(catalog, providerId, rate) {
+  const provider = catalog?.[providerId];
+  const models = provider?.models;
+  if (!models || typeof models !== "object") return [];
+  const out = [];
+  for (const modelId of Object.keys(models)) {
+    const cost = normalizeCost(models[modelId]?.cost);
+    if (!cost) continue;
+    const hit = toCNY(cost.hit, rate);
+    const miss = toCNY(cost.miss, rate);
+    const output = toCNY(cost.output, rate);
+    const usePeak = isDeepSeekOfficialModel(modelId);
+    out.push({
+      model: modelId,
+      usePeakPricing: usePeak,
+      offpeak: { hit, miss, output },
+      peak: usePeak ? {
+        hit: Math.round(hit * 2 * 1e4) / 1e4,
+        miss: Math.round(miss * 2 * 1e4) / 1e4,
+        output: Math.round(output * 2 * 1e4) / 1e4
+      } : { hit, miss, output }
+    });
   }
-  return { added, updated, skipped, total: incoming.length, samples };
+  return out;
+}
+function sameCatalogPrice(model, incoming) {
+  return model.price.usePeakPricing === incoming.usePeakPricing && model.price.offpeak.hit === incoming.offpeak.hit && model.price.offpeak.miss === incoming.offpeak.miss && model.price.offpeak.output === incoming.offpeak.output && model.price.peak.hit === incoming.peak.hit && model.price.peak.miss === incoming.peak.miss && model.price.peak.output === incoming.peak.output;
+}
+function applyCatalogToWallet(wallet, incoming, mode, counts, samples, affected) {
+  if (!wallet.catalogProvider || !incoming.length) return wallet;
+  const next = cloneWallet(wallet);
+  const now = Date.now();
+  for (const price of incoming) {
+    const existing = findWalletModel(next, price.model);
+    if (!existing) {
+      next.models.push({
+        id: `sync:${wallet.id}:${price.model}`,
+        sourceModel: price.model,
+        model: price.model,
+        aliases: [],
+        price: {
+          usePeakPricing: price.usePeakPricing,
+          offpeak: { ...price.offpeak },
+          peak: { ...price.peak },
+          priceConfigured: true
+        },
+        source: "sync",
+        locked: false,
+        discoveredAt: now,
+        lastSeen: now,
+        updatedAt: now
+      });
+      counts.added++;
+      affected.add(wallet.id);
+      if (samples.length < 6) samples.push({ model: price.model, ...price.offpeak });
+      continue;
+    }
+    if (mode === "add-missing") {
+      counts.skipped++;
+      continue;
+    }
+    if (existing.locked && mode !== "overwrite-all") {
+      counts.skipped++;
+      continue;
+    }
+    if (sameCatalogPrice(existing, price)) {
+      if (existing.source !== "sync") {
+        existing.source = "sync";
+        existing.updatedAt = now;
+        affected.add(wallet.id);
+      }
+      counts.skipped++;
+      continue;
+    }
+    existing.price = {
+      usePeakPricing: price.usePeakPricing,
+      offpeak: { ...price.offpeak },
+      peak: { ...price.peak },
+      priceConfigured: true
+    };
+    existing.source = "sync";
+    existing.updatedAt = now;
+    counts.updated++;
+    affected.add(wallet.id);
+    if (samples.length < 6) samples.push({ model: price.model, ...price.offpeak });
+  }
+  return next;
+}
+function previewSync(catalog) {
+  const rate = getWalletExchangeRate() || DEFAULT_EXCHANGE_RATE;
+  const mode = state$2.settings.pricingSync?.mode || "add-missing";
+  const samples = [];
+  const counts = { added: 0, updated: 0, skipped: 0 };
+  let total = 0;
+  const ignored = new Set(state$2.walletIgnored || []);
+  for (const wallet of state$2.wallets || []) {
+    if (ignored.has(wallet.id) || !wallet.catalogProvider) continue;
+    const incoming = buildProviderModelsFromCatalog(catalog, wallet.catalogProvider, rate);
+    total += incoming.length;
+    applyCatalogToWallet(
+      wallet,
+      incoming,
+      mode,
+      counts,
+      samples,
+      /* @__PURE__ */ new Set()
+    );
+  }
+  return { added: counts.added, updated: counts.updated, skipped: counts.skipped, total, samples };
 }
 async function syncPricingFromModelsDev(opts) {
   const silent = !!opts?.silent;
@@ -2815,50 +4307,39 @@ async function syncPricingFromModelsDev(opts) {
   if (!ps) return null;
   try {
     const catalog = await fetchModelsDevCatalog();
-    const rate = getEffectiveRate() || DEFAULT_EXCHANGE_RATE;
-    const incoming = buildCustomModelsFromCatalog(catalog, rate);
-    if (!incoming.length) {
+    const rate = getWalletExchangeRate() || DEFAULT_EXCHANGE_RATE;
+    const ignored = new Set(state$2.walletIgnored || []);
+    const counts = { added: 0, updated: 0, skipped: 0 };
+    const samples = [];
+    const affected = /* @__PURE__ */ new Set();
+    let total = 0;
+    const nextWallets = repository.getWallets().map((wallet) => {
+      if (ignored.has(wallet.id) || !wallet.catalogProvider) return wallet;
+      const incoming = buildProviderModelsFromCatalog(catalog, wallet.catalogProvider, rate);
+      total += incoming.length;
+      return applyCatalogToWallet(wallet, incoming, ps.mode || "add-missing", counts, samples, affected);
+    });
+    if (!total) {
       if (!silent) toast("warning", "models.dev 未返回可用价格");
       return null;
     }
-    const mode = ps.mode || "add-missing";
-    const map2 = new Map((state$2.settings.customModels || []).map((c) => [c.model, c]));
-    let added = 0, updated = 0, skipped = 0;
-    for (const inc of incoming) {
-      const ex = map2.get(inc.model);
-      if (!ex) {
-        map2.set(inc.model, inc);
-        added++;
-      } else {
-        if (mode === "add-missing") {
-          skipped++;
-          continue;
-        }
-        const same = ex.offpeak?.hit === inc.offpeak.hit && ex.offpeak?.miss === inc.offpeak.miss && ex.offpeak?.output === inc.offpeak.output && ex.peak?.hit === inc.peak.hit;
-        if (same) {
-          if (ex.synced !== true) ex.synced = true;
-          skipped++;
-          continue;
-        }
-        map2.set(inc.model, { ...inc, synced: ex.synced === true });
-        updated++;
-      }
-    }
-    state$2.settings.customModels = Array.from(map2.values());
+    repository.replaceWallets(nextWallets);
     ps.lastSync = Date.now();
     saveHot({ settings: state$2.settings });
-    try {
-      const { repository: repository2 } = await Promise.resolve().then(() => repository$1);
-      if (ps.recalcOnSync) repository2.recalcAll();
-    } catch {
+    if (ps.recalcOnSync) {
+      for (const walletId of affected) {
+        try {
+          await repository.recalcWallet(walletId);
+        } catch {
+        }
+      }
     }
     try {
       globalThis.ApiUsageStat?.refreshUI?.();
     } catch {
     }
-    const total = incoming.length;
-    const preview = { added, updated, skipped, total, samples: incoming.slice(0, 6).map((c) => ({ model: c.model, hit: c.offpeak.hit, miss: c.offpeak.miss, output: c.offpeak.output })) };
-    if (!silent) toast("success", `价格已同步：新增 ${added}（已隐藏不显示）更新 ${updated} 跳过 ${skipped}（共 ${total} 模型）`);
+    const preview = { ...counts, total, samples };
+    if (!silent) toast("success", `价格已同步：新增 ${counts.added} 更新 ${counts.updated} 跳过 ${counts.skipped}（共 ${total} 个钱包模型）`);
     log.debug("pricing sync done", preview);
     return preview;
   } catch (e) {
@@ -2940,8 +4421,9 @@ async function markLegacySyncedModels(opts) {
   }
   let marked = 0;
   if (catalog) {
-    const rate = getEffectiveRate() || DEFAULT_EXCHANGE_RATE;
-    const byName = new Map(buildCustomModelsFromCatalog(catalog, rate).map((e) => [e.model, e]));
+    const rate = getWalletExchangeRate() || DEFAULT_EXCHANGE_RATE;
+    const catalogEntries = buildCustomModelsFromCatalog(catalog, rate);
+    const byName = new Map(catalogEntries.map((e) => [e.model, e]));
     for (const c of pending) {
       const inc = byName.get(c.model);
       if (inc && priceClose(c.offpeak, inc.offpeak)) {
@@ -2949,6 +4431,20 @@ async function markLegacySyncedModels(opts) {
         marked++;
       }
     }
+    const nextWallets = repository.getWallets().map((wallet) => cloneWallet(wallet));
+    let walletMarked = false;
+    for (const wallet of nextWallets) {
+      for (const model of wallet.models) {
+        if (model.source === "builtin" || model.locked || model.source === "sync") continue;
+        const inc = byName.get(model.sourceModel) || byName.get(model.model);
+        if (inc && priceClose(model.price.offpeak, inc.offpeak)) {
+          model.source = "sync";
+          model.updatedAt = Date.now();
+          walletMarked = true;
+        }
+      }
+    }
+    if (walletMarked) repository.replaceWallets(nextWallets);
   } else if (pending.length >= 40) {
     for (const c of pending) {
       try {
@@ -3037,13 +4533,14 @@ function renderSettings(doc) {
       <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">历史显示范围</span><div id="aus-history-scope-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">范围</span><span id="aus-history-scope-label" style="font-weight:600;color:var(--ds-text);">全部历史</span><span style="font-size:10px;">▼</span></div></div><div id="aus-history-scope-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div><div style="font-size:11px;color:var(--ds-text-2);margin-top:6px;">全部历史展示所有对话的记录，当前对话仅展示与当前聊天文件关联的记录</div></div>
 
       <!-- API 密钥 -->
-      <div class="ds-card"><div style="font-size:11px;color:var(--ds-text-2);font-weight:500;margin-bottom:6px;">API 密钥</div><div style="display:flex;gap:8px;"><input id="aus-api-key" type="password" placeholder="输入 DeepSeek API 密钥" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;outline:none;" /><button id="aus-save-key" class="ds-btn-pill" style="padding:8px 14px;">保存</button></div><div id="aus-key-status" style="font-size:11px;color:var(--ds-text-2);margin-top:6px;"></div></div>
+      <div class="ds-card" style="display:none;"><div style="font-size:11px;color:var(--ds-text-2);font-weight:500;margin-bottom:6px;">API 密钥</div><div style="display:flex;gap:8px;"><input id="aus-api-key" type="password" placeholder="输入 DeepSeek API 密钥" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;outline:none;" /><button id="aus-save-key" class="ds-btn-pill" style="padding:8px 14px;">保存</button></div><div id="aus-key-status" style="font-size:11px;color:var(--ds-text-2);margin-top:6px;"></div></div>
 
       <!-- 余额 -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">自动校准余额</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-auto-balance" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-auto-balance-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">自动校准余额（全局开关）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-auto-balance" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-auto-balance-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
         <div id="aus-auto-balance-interval" style="display:${s.autoBalance ? "block" : "none"};margin-top:8px;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;color:var(--ds-text);">校准间隔（分钟）</span><input type="number" id="aus-balance-interval" min="1" max="1440" style="width:90px;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;text-align:center;" /></div></div>
-        <div style="margin-top:12px;display:flex;gap:8px;"><input id="aus-custom-balance" placeholder="自定义余额（覆盖 API 查询）" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><button id="aus-save-balance" class="ds-btn-pill" style="padding:8px 14px;">保存</button><button id="aus-clear-balance" style="padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">清除</button></div><div id="aus-balance-status" style="font-size:11px;color:var(--ds-text-2);margin-top:6px;"></div>
+        <div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;">仅钱包页中启用了自动校准且支持该能力的钱包会在间隔到期后查询。</div>
+        <div style="display:none;margin-top:12px;"><input id="aus-custom-balance" /><button id="aus-save-balance"></button><button id="aus-clear-balance"></button><div id="aus-balance-status"></div></div>
       </div>
 
       <!-- 新价格机制 -->
@@ -3056,15 +4553,15 @@ function renderSettings(doc) {
       </div>
 
       <!-- 高峰时段 -->
-      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">高峰时段</span><button id="aus-btn-add-peak-hour" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 添加</button></div><div id="aus-peak-hours-list" style="display:grid;gap:6px;margin-top:8px;"></div><div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;">支持跨天（如 22:00-02:00），周末自动低谷。</div></div>
+      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">新钱包默认峰谷时段</span><button id="aus-btn-add-peak-hour" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 添加</button></div><div id="aus-peak-hours-list" style="display:grid;gap:6px;margin-top:8px;"></div><div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;">支持跨天（如 22:00-02:00）；钱包页可分别覆盖时段和周末规则。</div></div>
 
       <!-- 模型与价格（可折叠，默认收起） -->
-      <div class="ds-card"><div id="aus-models-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型与价格（<span id="aus-model-price-unit">${getDisplayCurrency().code}/百万 tokens</span>）</span><div style="display:flex;align-items:center;gap:8px;"><button id="aus-btn-clear-custom-models" style="padding:6px 10px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:11px;cursor:pointer;">清空自定义模型</button><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 自定义模型</button><span id="aus-models-toggle" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;user-select:none;line-height:1;">▼ 展开</span></div></div><div id="aus-models-sync-note" style="display:none;margin-top:8px;padding:8px 10px;border:1px dashed var(--ds-border);border-radius:10px;background:var(--ds-sidebar-bg);font-size:11px;color:var(--ds-text-2);line-height:1.6;"></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
+      <div class="ds-card" style="display:none;"><div id="aus-models-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型与价格（<span id="aus-model-price-unit">${getDisplayCurrency().code}/百万 tokens</span>）</span><div style="display:flex;align-items:center;gap:8px;"><button id="aus-btn-clear-custom-models" style="padding:6px 10px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:11px;cursor:pointer;">清空自定义模型</button><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 自定义模型</button><span id="aus-models-toggle" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;user-select:none;line-height:1;">▼ 展开</span></div></div><div id="aus-models-sync-note" style="display:none;margin-top:8px;padding:8px 10px;border:1px dashed var(--ds-border);border-radius:10px;background:var(--ds-sidebar-bg);font-size:11px;color:var(--ds-text-2);line-height:1.6;"></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
 
       <!-- 模型价格自动同步（models.dev） -->
       <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型价格自动同步（models.dev）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-pricing-sync-enabled" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-pricing-sync-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
         <div id="aus-pricing-sync-panel" style="display:${s.pricingSync?.enabled ? "grid" : "none"};margin-top:10px;gap:10px;">
-          <div style="font-size:11px;color:var(--ds-text-2);line-height:1.6;">开启后所有价格、余额、图表将以 <b style="color:var(--ds-text);">美元 $/USD</b> 展示（按汇率动态换算），自动从 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 拉取全量模型价格，人民币时仍以 ¥/CNY 展示，数据源为 USD/百万 tokens，已按峰谷规则本地合成 DeepSeek 峰价（2×谷）。功能默认关闭。<br />同步来的模型价格<b style="color:var(--ds-text);">不会出现在上方“模型与价格”列表中</b>（仅参与计费，可在该卡片内展开查看）；<b style="color:var(--ds-text);">关闭本开关会自动移除这些同步价格</b>。</div>
+          <div style="font-size:11px;color:var(--ds-text-2);line-height:1.6;">开启后所有价格、余额、图表将以 <b style="color:var(--ds-text);">美元 $/USD</b> 展示（按汇率动态换算），自动从 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 拉取模型价格。各钱包在钱包页选择“价格来源供应商”，同步只写入对应钱包；DeepSeek 峰价按谷价 2× 合成。功能默认关闭。<br />钱包中锁定或手工维护的价格受同步模式保护；<b style="color:var(--ds-text);">关闭本开关会移除未锁定的同步价格</b>。</div>
           <div style="display:flex;align-items:center;justify-content:space-between;position:relative;"><span style="font-size:12px;color:var(--ds-text);">同步模式</span><div id="aus-pricing-sync-mode-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:12px;cursor:pointer;"><span id="aus-pricing-sync-mode-label" style="font-weight:600;color:var(--ds-text);">仅新增</span><span style="font-size:10px;">▼</span></div><div id="aus-pricing-sync-mode-dropdown" style="display:none;position:absolute;top:40px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
             <div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">汇率 USD→CNY</div><input id="aus-exchange-rate" type="number" step="0.0001" min="0" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div>
@@ -3996,7 +5493,7 @@ function getPricing(model) {
 function fillDebugModelSelect(doc) {
   const sel = doc.getElementById("aus-debug-model");
   if (!sel) return;
-  const models = Object.keys(PRICING).concat((state$2.settings.customModels || []).filter((c) => !isSyncedCustomModel(c)).map((c) => c.model).filter(Boolean)).filter((m) => HIDDEN_PRICING_MODELS.indexOf(m) === -1);
+  const models = Object.keys(PRICING).concat((state$2.settings.customModels || []).filter((c) => !isSyncedCustomModel(c)).map((c) => c.model).filter(Boolean)).concat(repository.getWallets().flatMap((wallet) => wallet.models.map((model) => model.model)).filter(Boolean)).filter((m) => HIDDEN_PRICING_MODELS.indexOf(m) === -1);
   const uniq = Array.from(new Set(models));
   sel.innerHTML = uniq.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
   const cur = state$2.settings.debugModel;
@@ -4015,7 +5512,7 @@ const settings = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProp
 }, Symbol.toStringTag, { value: "Module" }));
 let selOld = null;
 let selNew = null;
-function getDoc$7() {
+function getDoc$9() {
   return window.parent?.document ?? document;
 }
 function diffMessages(oldMsgs, newMsgs) {
@@ -4031,7 +5528,7 @@ function diffMessages(oldMsgs, newMsgs) {
   return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${aCtx}</div><div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${bCtx}</div></div><div style="font-size:11px;color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
 }
 function bindHistoryCompare() {
-  const doc = getDoc$7();
+  const doc = getDoc$9();
   doc.addEventListener("click", (e) => {
     const t = e.target;
     if (!t) return;
@@ -4048,7 +5545,7 @@ function bindHistoryCompare() {
   });
 }
 function renderDiff() {
-  const doc = getDoc$7();
+  const doc = getDoc$9();
   const host = doc.getElementById("aus-diff");
   if (!host) return;
   if (selOld == null || selNew == null) {
@@ -4064,16 +5561,115 @@ function renderDiff() {
   }
   host.innerHTML = diffMessages(oldEntry.messages || [], newEntry.messages || []);
 }
-function computeOverview() {
+const STATS_FILTER_ALL = "__all__";
+const STATS_FILTER_UNKNOWN = "__unknown__";
+const STATS_FILTER_NULL = "__null__";
+function filterStatsHistory(entries, filter = {}) {
+  return (entries || []).filter((entry) => {
+    if (!entry) return false;
+    if (filter.start || filter.end) {
+      const day = localDay$1(entry.timestamp);
+      if (filter.start && day < filter.start) return false;
+      if (filter.end && day > filter.end) return false;
+    }
+    if (filter.model && filter.model !== STATS_FILTER_ALL && entry.model !== filter.model) return false;
+    if (filter.chat && filter.chat !== STATS_FILTER_ALL) {
+      if (filter.chat === STATS_FILTER_NULL) {
+        if (entry.chatId) return false;
+      } else if ((entry.chatId ?? null) !== filter.chat) {
+        return false;
+      }
+    }
+    if (filter.endpoint && filter.endpoint !== STATS_FILTER_ALL) {
+      if (filter.endpoint === STATS_FILTER_UNKNOWN) {
+        if (entry.endpointId) return false;
+      } else if (entry.endpointId !== filter.endpoint) {
+        return false;
+      }
+    }
+    if (filter.credential && filter.credential !== STATS_FILTER_ALL) {
+      if (filter.credential === STATS_FILTER_UNKNOWN) {
+        if (entry.credentialId) return false;
+      } else if (entry.credentialId !== filter.credential) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+function addLabelCollisionSuffix(options) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const option of options) counts.set(option.label, (counts.get(option.label) || 0) + 1);
+  return options.map((option) => {
+    if (option.unknown || (counts.get(option.label) || 0) < 2) return option;
+    return { ...option, label: `${option.label} · ${option.id.slice(0, 4)}` };
+  });
+}
+function getEndpointFilterOptions(history) {
+  const map2 = /* @__PURE__ */ new Map();
+  for (const entry of history || []) {
+    const unknown = !entry?.endpointId;
+    const id = unknown ? STATS_FILTER_UNKNOWN : entry.endpointId;
+    const timestamp = Number(entry?.timestamp) || 0;
+    const label = unknown ? "未记录接入" : entry.endpointLabel || `接入 ${String(id).slice(0, 6)}`;
+    const current = map2.get(id);
+    if (!current) {
+      map2.set(id, { id, label, count: 1, unknown, lastSeen: timestamp });
+    } else {
+      current.count++;
+      if (timestamp >= current.lastSeen && label) {
+        current.label = label;
+        current.lastSeen = timestamp;
+      }
+    }
+  }
+  const options = Array.from(map2.values()).map(({ id, label, count, unknown }) => ({ id, label, count, unknown }));
+  options.sort((a, b) => Number(!!a.unknown) - Number(!!b.unknown) || a.label.localeCompare(b.label, "zh-CN"));
+  return addLabelCollisionSuffix(options);
+}
+function getCredentialFilterOptions(history, endpoint = STATS_FILTER_ALL) {
+  const map2 = /* @__PURE__ */ new Map();
+  for (const entry of history || []) {
+    if (endpoint === STATS_FILTER_UNKNOWN) {
+      if (entry?.endpointId) continue;
+    } else if (endpoint !== STATS_FILTER_ALL && entry?.endpointId !== endpoint) {
+      continue;
+    }
+    const unknown = !entry?.credentialId;
+    const id = unknown ? STATS_FILTER_UNKNOWN : entry.credentialId;
+    const timestamp = Number(entry?.timestamp) || 0;
+    const label = unknown ? "未识别密钥" : entry.credentialLabel || `密钥 ${String(id).slice(0, 6)}`;
+    const current = map2.get(id);
+    if (!current) {
+      map2.set(id, { id, label, count: 1, unknown, lastSeen: timestamp });
+    } else {
+      current.count++;
+      if (timestamp >= current.lastSeen && label) {
+        current.label = label;
+        current.lastSeen = timestamp;
+      }
+    }
+  }
+  const options = Array.from(map2.values()).map(({ id, label, count, unknown }) => ({ id, label, count, unknown }));
+  options.sort((a, b) => Number(!!a.unknown) - Number(!!b.unknown) || a.label.localeCompare(b.label, "zh-CN"));
+  return addLabelCollisionSuffix(options);
+}
+function computeOverview(balanceWalletId = "all") {
   const s = getSelectedSave();
-  if (!s) return { balanceText: "¥0.00 CNY", totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0, remainingRounds: null, avgInputCost: 0, avgInputTokens: 0, avgOutputCost: 0, avgOutputTokens: 0, avgThinkTime: 0, avgThinkTokens: 0, avgHitRate: 0, latestHitRate: null, maxOutput: 0, maxInput: 0, maxTotal: 0, avgThinkRatio: 0, truncationRate: 0 };
+  if (!s) return { balanceText: "¥0.00 CNY", hasBalance: false, walletBalanceCount: 0, totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0, remainingRounds: null, avgInputCost: 0, avgInputTokens: 0, avgOutputCost: 0, avgOutputTokens: 0, avgThinkTime: 0, avgThinkTokens: 0, avgHitRate: 0, latestHitRate: null, maxOutput: 0, maxInput: 0, maxTotal: 0, avgThinkRatio: 0, truncationRate: 0 };
   const totalCost = s.total_cost || 0;
   const totalTokens = s.total_tokens || 0;
   const hit = s.cache_hit_tokens || 0, miss = s.cache_miss_tokens || 0, output = s.output_tokens || 0;
   const hitRate = hit + miss > 0 ? hit / (hit + miss) * 100 : 0;
   let savings = 0;
   try {
-    for (const h of s.history || []) savings += calcSavings({ timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 }, state$2.settings);
+    for (const h of s.history || []) {
+      savings += calcSavings(
+        { timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 },
+        state$2.settings,
+        findWalletForHistory(state$2.wallets, h)
+      );
+    }
   } catch {
   }
   const rounds = s.rounds || 0;
@@ -4119,16 +5715,35 @@ function computeOverview() {
   const avgThinkRatio = sumOut > 0 ? sumThink / sumOut * 100 : 0;
   const truncCnt = hist.filter((h) => isTruncatedFinish(h.finishReason) || h.isTruncated).length;
   const truncationRate = hist.length ? truncCnt / hist.length * 100 : 0;
-  const bal = state$2.customBalance || state$2.balance?.balance;
+  const ignored = new Set(state$2.walletIgnored || []);
+  const activeWallets = (state$2.wallets || []).filter((wallet) => !ignored.has(wallet.id));
+  const selectedWallet = balanceWalletId !== "all" ? activeWallets.find((wallet) => wallet.id === balanceWalletId) || null : null;
+  const balanceWallets = selectedWallet ? [selectedWallet] : activeWallets;
+  let balanceCny = null;
+  let walletBalanceCount = 0;
+  for (const wallet of balanceWallets) {
+    const value = walletBalanceToCny(wallet, getWalletExchangeRate());
+    if (value == null) continue;
+    walletBalanceCount++;
+    balanceCny = (balanceCny ?? 0) + value;
+  }
+  if (balanceCny == null && !selectedWallet) {
+    const legacy = state$2.customBalance || state$2.balance?.balance;
+    const value = legacy != null && legacy !== "" ? parseFloat(String(legacy)) : NaN;
+    if (Number.isFinite(value)) {
+      balanceCny = value;
+      walletBalanceCount = 1;
+    }
+  }
   let remainingRounds2 = null;
   try {
-    const balNum = bal != null && bal !== "" ? parseFloat(String(bal)) : NaN;
+    const balNum = balanceCny == null ? NaN : balanceCny;
     if (!isNaN(balNum) && s.history?.length) {
-      const dsHist = (s.history || []).filter((h) => typeof h.model === "string" && h.model.toLowerCase().indexOf("deepseek") === 0);
-      if (dsHist.length) {
+      const scopedHist = (s.history || []).filter((h) => !selectedWallet || h.walletId === selectedWallet.id);
+      if (scopedHist.length) {
         const alpha = 0.3;
-        let ewma2 = dsHist[dsHist.length - 1].cost || 0;
-        for (let i = dsHist.length - 2; i >= 0; i--) ewma2 = alpha * (dsHist[i].cost || 0) + (1 - alpha) * ewma2;
+        let ewma2 = scopedHist[scopedHist.length - 1].cost || 0;
+        for (let i = scopedHist.length - 2; i >= 0; i--) ewma2 = alpha * (scopedHist[i].cost || 0) + (1 - alpha) * ewma2;
         if (ewma2 > 0) remainingRounds2 = Math.floor(balNum / ewma2);
       }
     }
@@ -4136,15 +5751,15 @@ function computeOverview() {
   }
   const balanceText = (() => {
     try {
-      const v = bal != null && bal !== "" ? parseFloat(String(bal)) : NaN;
-      if (!isNaN(v)) return formatMoney(v, 2);
-      return formatMoney(0, 2);
+      return formatMoney(balanceCny == null ? 0 : balanceCny, 2);
     } catch {
-      return bal ? "¥" + bal + " CNY" : "¥0.00 CNY";
+      return "¥" + (balanceCny || 0).toFixed(2) + " CNY";
     }
   })();
   return {
     balanceText,
+    hasBalance: balanceCny != null,
+    walletBalanceCount,
     totalCost,
     totalTokens,
     hit,
@@ -4272,12 +5887,24 @@ function computeStatsFour(filtered) {
     rounds
   };
 }
-function getDoc$6() {
+function computeWalletStats(walletId) {
+  let requests = 0;
+  let tokens = 0;
+  let cost = 0;
+  for (const entry of state$2.history || []) {
+    if (entry.walletId !== walletId) continue;
+    requests++;
+    tokens += entry.total_tokens || 0;
+    cost += entry.cost || 0;
+  }
+  return { requests, tokens, cost };
+}
+function getDoc$8() {
   return window.parent?.document ?? document;
 }
 function themeIsDark() {
   try {
-    const doc = getDoc$6();
+    const doc = getDoc$8();
     const p = doc.getElementById("aus-panel");
     return p?.getAttribute("data-ds-theme") === "dark";
   } catch {
@@ -4285,7 +5912,7 @@ function themeIsDark() {
   }
 }
 function renderHeatmap(filtered) {
-  const doc = getDoc$6();
+  const doc = getDoc$8();
   const container = doc.getElementById("aus-heatmap-container-overview") || doc.getElementById("aus-heatmap-container");
   const legendEl = doc.getElementById("aus-heatmap-legend-overview") || doc.getElementById("aus-heatmap-legend");
   const labelsEl = doc.getElementById("aus-heatmap-labels-overview") || doc.getElementById("aus-heatmap-labels");
@@ -4407,6 +6034,9 @@ function renderHeatmap(filtered) {
   setTimeout(() => {
     if (scrollEl) scrollEl.scrollLeft = scrollEl.scrollWidth;
   }, 50);
+}
+function getDoc$7() {
+  return window.parent?.document ?? document;
 }
 function fmt(n) {
   return n.toLocaleString("zh-CN");
@@ -4535,6 +6165,55 @@ function getFourDisplay(key, v) {
   }
 }
 let fourBound = false;
+let overviewWalletBound = false;
+let overviewWalletViewportBound = false;
+function closeOverviewWalletDropdown() {
+  const dropdown = getDoc$7().getElementById("aus-overview-wallet-dropdown");
+  if (dropdown) dropdown.style.display = "none";
+}
+function bindOverviewWalletViewport() {
+  if (overviewWalletViewportBound) return;
+  overviewWalletViewportBound = true;
+  try {
+    (window.parent || window).addEventListener("resize", closeOverviewWalletDropdown, { passive: true });
+  } catch {
+  }
+  try {
+    window.addEventListener("resize", closeOverviewWalletDropdown, { passive: true });
+  } catch {
+  }
+  try {
+    getDoc$7().getElementById("aus-main")?.addEventListener("scroll", closeOverviewWalletDropdown, { passive: true });
+  } catch {
+  }
+}
+function positionOverviewWalletDropdown(btn, dropdown) {
+  try {
+    const panel2 = getDoc$7().getElementById("aus-panel");
+    const panelRect = panel2?.getBoundingClientRect();
+    const btnRect = btn.getBoundingClientRect();
+    const viewportWidth = window.parent?.innerWidth ?? window.innerWidth;
+    const viewportHeight = window.parent?.innerHeight ?? window.innerHeight;
+    const available = Math.max(180, Math.min(280, viewportWidth - 16));
+    dropdown.style.position = "fixed";
+    dropdown.style.width = `${available}px`;
+    dropdown.style.minWidth = "0";
+    dropdown.style.maxWidth = `${viewportWidth - 16}px`;
+    dropdown.style.maxHeight = `${Math.max(120, viewportHeight - 24)}px`;
+    const left = Math.max(8, Math.min(btnRect.right - available, viewportWidth - available - 8));
+    const estimatedHeight = Math.min(dropdown.scrollHeight || 220, viewportHeight - 24);
+    const openUp = btnRect.bottom + 6 + estimatedHeight > viewportHeight - 8;
+    const top = openUp ? Math.max(8, btnRect.top - estimatedHeight - 6) : btnRect.bottom + 6;
+    dropdown.style.top = `${Math.round(top)}px`;
+    dropdown.style.left = `${Math.round(left)}px`;
+    dropdown.style.right = "auto";
+    dropdown.style.zIndex = "100500";
+    if (panelRect) {
+      dropdown.style.pointerEvents = "auto";
+    }
+  } catch {
+  }
+}
 function bindFour() {
   if (fourBound) return;
   fourBound = true;
@@ -4577,15 +6256,64 @@ function openFourDrop(idx, v) {
 }
 function renderOverview() {
   const doc = window.parent?.document ?? document;
-  const v = computeOverview();
+  const ignored = new Set(repository.getIgnoredWalletIds());
+  const wallets = repository.getWallets().filter((wallet) => !ignored.has(wallet.id));
+  const selectedWalletId = String(state$2.settings.overviewWalletId || "all");
+  const activeWalletId = selectedWalletId !== "all" && wallets.some((wallet) => wallet.id === selectedWalletId) ? selectedWalletId : "all";
+  const v = computeOverview(activeWalletId);
+  const walletBtn = doc.getElementById("aus-overview-wallet-btn");
+  const walletLabel = doc.getElementById("aus-overview-wallet-label");
+  const walletDrop = doc.getElementById("aus-overview-wallet-dropdown");
+  if (walletLabel) {
+    walletLabel.textContent = activeWalletId === "all" ? "全部钱包合计" : wallets.find((wallet) => wallet.id === activeWalletId)?.name || "全部钱包合计";
+  }
+  if (walletDrop) {
+    const item = (id, label) => {
+      const active = id === activeWalletId;
+      return `<div data-overview-wallet="${esc$1(id)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:11px;${active ? "background:var(--ds-card);font-weight:600;" : ""}">${esc$1(label)}</div>`;
+    };
+    walletDrop.innerHTML = item("all", "全部钱包合计") + wallets.map((wallet) => item(wallet.id, wallet.name)).join("");
+    walletDrop.querySelectorAll("[data-overview-wallet]").forEach((el) => {
+      el.onclick = () => {
+        state$2.settings.overviewWalletId = el.getAttribute("data-overview-wallet") || "all";
+        state$2.settings.overviewWalletManuallySet = true;
+        try {
+          saveHot({ settings: state$2.settings });
+        } catch {
+        }
+        walletDrop.style.display = "none";
+        renderOverview();
+      };
+    });
+  }
+  if (walletBtn && walletDrop) {
+    walletBtn.onclick = (event) => {
+      event.stopPropagation();
+      const open = walletDrop.style.display !== "block";
+      walletDrop.style.display = open ? "block" : "none";
+      if (open) {
+        bindOverviewWalletViewport();
+        positionOverviewWalletDropdown(walletBtn, walletDrop);
+      }
+    };
+  }
+  if (!overviewWalletBound) {
+    overviewWalletBound = true;
+    doc.addEventListener("click", (event) => {
+      const target = event.target;
+      const drop = doc.getElementById("aus-overview-wallet-dropdown");
+      if (drop && !target?.closest?.("#aus-overview-wallet-dropdown") && !target?.closest?.("#aus-overview-wallet-btn")) {
+        drop.style.display = "none";
+      }
+    });
+  }
   const balEl = doc.getElementById("aus-balance");
   if (balEl) balEl.textContent = v.balanceText;
   const remEl = doc.getElementById("aus-balance-remaining");
   if (remEl) {
-    if (v.remainingRounds != null) remEl.textContent = "预计还可进行 " + v.remainingRounds.toLocaleString("zh-CN") + " 轮对话（仅 DeepSeek 官方）";
+    if (v.remainingRounds != null) remEl.textContent = "预计还可进行 " + v.remainingRounds.toLocaleString("zh-CN") + " 轮对话";
     else {
-      const hasBal = !!(state$2.customBalance || state$2.balance?.balance);
-      remEl.textContent = hasBal ? "暂无 DeepSeek 对话数据，无法预测" : "查询余额后可预测剩余轮次";
+      remEl.textContent = v.hasBalance ? "暂无可用于预测的费用记录" : "设置钱包余额后可预测剩余轮次";
     }
   }
   const costEl = doc.getElementById("aus-total-cost");
@@ -4840,12 +6568,12 @@ const state$1 = {
   dur: { y: /* @__PURE__ */ new Set(["duration", "rate"]), x: "round", pieMode: "token" },
   pie: { y: /* @__PURE__ */ new Set([]), x: "day", pieMode: "token" }
 };
-function getDoc$5() {
+function getDoc$6() {
   return window.parent?.document ?? document;
 }
 function themeColor$2(name, fallback) {
   try {
-    const doc = getDoc$5();
+    const doc = getDoc$6();
     const el = doc.getElementById("aus-panel") || doc.documentElement;
     const v = getComputedStyle(el).getPropertyValue(name).trim();
     return v || fallback;
@@ -4928,7 +6656,7 @@ function renderExtraCharts(filtered) {
 }
 async function renderOne$1(id, filtered) {
   try {
-    const doc = getDoc$5();
+    const doc = getDoc$6();
     const el = doc.getElementById(`aus-chart-${id}`);
     if (!el) return;
     if (id === "pie") {
@@ -5029,7 +6757,7 @@ async function renderOne$1(id, filtered) {
     await drawBarLine(el, id, labels, series);
   } catch (e) {
     try {
-      const doc2 = getDoc$5();
+      const doc2 = getDoc$6();
       const el2 = doc2.getElementById(`aus-chart-${id}`);
       if (el2) el2.innerHTML = '<div style="text-align:center;padding:20px;color:#DC2626;font-size:11px;">图表加载失败: ' + (e?.message || e) + "</div>";
     } catch {
@@ -5130,7 +6858,7 @@ async function drawBarLine(el, id, labels, series) {
   }
 }
 function initExtraCharts() {
-  const doc = getDoc$5();
+  const doc = getDoc$6();
   for (const id of Object.keys(CHART_DEFS)) {
     if (!CHART_DEFS[id].hasX) continue;
     const yBtn = doc.getElementById(`aus-extra-y-${id}`);
@@ -5172,7 +6900,7 @@ function initExtraCharts() {
   });
 }
 function renderExtraY(id) {
-  const doc = getDoc$5();
+  const doc = getDoc$6();
   const drop = doc.getElementById(`aus-extra-y-drop-${id}`);
   const label = doc.getElementById(`aus-extra-y-label-${id}`);
   if (!drop) return;
@@ -5197,7 +6925,7 @@ function renderExtraY(id) {
   });
 }
 function renderExtraX(id) {
-  const doc = getDoc$5();
+  const doc = getDoc$6();
   const drop = doc.getElementById(`aus-extra-x-drop-${id}`);
   const label = doc.getElementById(`aus-extra-x-label-${id}`);
   if (!drop) return;
@@ -5239,12 +6967,12 @@ const state = {
   token: { x: "day" },
   req: { x: "day" }
 };
-function getDoc$4() {
+function getDoc$5() {
   return window.parent?.document ?? document;
 }
 function themeColor$1(name, fallback) {
   try {
-    const doc = getDoc$4();
+    const doc = getDoc$5();
     const el = doc.getElementById("aus-panel") || doc.documentElement;
     const v = getComputedStyle(el).getPropertyValue(name).trim();
     return v || fallback;
@@ -5291,7 +7019,7 @@ function renderModelTrends(filtered) {
 }
 async function renderOne(id, filtered) {
   try {
-    const doc = getDoc$4();
+    const doc = getDoc$5();
     const el = doc.getElementById(`aus-chart-model-${id}`);
     if (!el) return;
     const xKey = state[id].x;
@@ -5432,7 +7160,7 @@ async function renderOne(id, filtered) {
     }, 60);
   } catch (e) {
     try {
-      const doc2 = getDoc$4();
+      const doc2 = getDoc$5();
       const el2 = doc2.getElementById(`aus-chart-model-${id}`);
       if (el2) el2.innerHTML = '<div style="text-align:center;padding:20px;color:#DC2626;font-size:11px;">图表加载失败</div>';
     } catch {
@@ -5444,7 +7172,7 @@ async function renderOne(id, filtered) {
   }
 }
 function initModelTrends() {
-  const doc = getDoc$4();
+  const doc = getDoc$5();
   for (const id of ["token", "req"]) {
     const btn = doc.getElementById(`aus-modeltrends-x-${id}`);
     const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
@@ -5465,7 +7193,7 @@ function initModelTrends() {
   });
 }
 function renderXDrop(id) {
-  const doc = getDoc$4();
+  const doc = getDoc$5();
   const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
   const label = doc.getElementById(`aus-modeltrends-x-label-${id}`);
   if (!drop) return;
@@ -5489,15 +7217,20 @@ let currentRange = "30d";
 let customStart = "";
 let customEnd = "";
 let pickerOpen = false;
-let selectedModel = "__all__";
+let selectedModel = STATS_FILTER_ALL;
 let modelPickerOpen = false;
-let selectedChat = "__all__";
+let selectedChat = STATS_FILTER_ALL;
 let chatPickerOpen = false;
+let selectedEndpoint = STATS_FILTER_ALL;
+let endpointPickerOpen = false;
+let selectedCredential = STATS_FILTER_ALL;
+let credentialPickerOpen = false;
+let lastStatsHistory = [];
 let summarySortKey = null;
 let summarySortDir = "desc";
 let lastSummaryFiltered = null;
 function updateSummarySortHeader() {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   const ths = doc.querySelectorAll("#aus-model-summary thead th[data-sort-key]");
   ths.forEach((th) => {
     th.style.color = "";
@@ -5516,7 +7249,7 @@ function updateSummarySortHeader() {
   }
 }
 function bindSummarySort() {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   const ths = doc.querySelectorAll("#aus-model-summary thead th[data-sort-key]");
   if (!ths.length) return;
   if (bindSummarySort._bound) return;
@@ -5544,12 +7277,12 @@ function bindSummarySort() {
     });
   });
 }
-function getDoc$3() {
+function getDoc$4() {
   return window.parent?.document ?? document;
 }
 function themeColor(name, fallback) {
   try {
-    const doc = getDoc$3();
+    const doc = getDoc$4();
     const el = doc.getElementById("aus-panel") || doc.documentElement;
     const v = getComputedStyle(el).getPropertyValue(name).trim();
     return v || fallback;
@@ -5596,22 +7329,10 @@ function getRangeDates() {
   }
   return { start: today, end: today };
 }
-function filterByRange(entries) {
-  const { start, end } = getRangeDates();
-  return entries.filter((e) => {
-    const k = localDay$1(e.timestamp);
-    return k >= start && k <= end;
-  });
-}
-function getRecordedModels() {
-  const s = getSelectedSave();
+function getRecordedModels(history) {
   const set = /* @__PURE__ */ new Set();
-  for (const h of s?.history || []) if (h?.model) set.add(h.model);
+  for (const h of history || []) if (h?.model) set.add(h.model);
   return Array.from(set).sort();
-}
-function filterByModel(entries) {
-  if (selectedModel === "__all__") return entries;
-  return entries.filter((e) => e.model === selectedModel);
 }
 function getRecordedChatsFrom(list) {
   const map2 = /* @__PURE__ */ new Map();
@@ -5631,13 +7352,19 @@ function getRecordedChatsFrom(list) {
     return { chatId: v.chatId, chatName: v.chatName, displayName: display };
   }).sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""));
 }
-function filterByChat(entries) {
-  if (selectedChat === "__all__") return entries;
-  if (selectedChat === "__null__") return entries.filter((e) => !e.chatId);
-  return entries.filter((e) => (e.chatId ?? null) === selectedChat);
+function currentStatsFilter() {
+  const { start, end } = getRangeDates();
+  return {
+    start,
+    end,
+    model: selectedModel,
+    chat: selectedChat,
+    endpoint: selectedEndpoint,
+    credential: selectedCredential
+  };
 }
 function updateRangeHighlight() {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   doc.querySelectorAll("[data-range]").forEach((el) => {
     const r = el.getAttribute("data-range");
     if (r === currentRange) {
@@ -5652,7 +7379,7 @@ function updateRangeHighlight() {
   if (calWrap) calWrap.style.display = currentRange === "custom" ? "block" : "none";
 }
 function renderCalendar() {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   const cal = doc.getElementById("aus-date-calendar");
   if (!cal) return;
   updateRangeHighlight();
@@ -5687,7 +7414,7 @@ function renderCalendar() {
   if (applyBtn) applyBtn.onclick = apply;
 }
 function updatePickerLabel() {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   const label = doc.getElementById("aus-range-label");
   if (!label) return;
   const map2 = { all: "全部", today: "今天", yesterday: "昨天", "7d": "近 7 天", "30d": "近 30 天", month: "本月", lastMonth: "上月", custom: "自定义" };
@@ -5696,12 +7423,12 @@ function updatePickerLabel() {
   } else label.textContent = map2[currentRange] || "近 30 天";
   updateRangeHighlight();
 }
-function renderModelPicker() {
-  const doc = getDoc$3();
+function renderModelPicker(modelsHist) {
+  const doc = getDoc$4();
   const dropdown = doc.getElementById("aus-model-dropdown");
   const label = doc.getElementById("aus-model-label");
   if (!dropdown || !label) return;
-  const models = getRecordedModels();
+  const models = getRecordedModels(modelsHist);
   label.textContent = selectedModel === "__all__" ? "全部" : selectedModel;
   let html = `<div data-model="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${selectedModel === "__all__" ? "background:var(--ds-card);font-weight:600;" : ""}">全部</div>`;
   for (const m of models) {
@@ -5715,13 +7442,12 @@ function renderModelPicker() {
       selectedModel = el.getAttribute("data-model") || "__all__";
       modelPickerOpen = false;
       dropdown.style.display = "none";
-      renderModelPicker();
       renderStatsView();
     };
   });
 }
 function renderChatPicker(chatHist) {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   const dropdown = doc.getElementById("aus-chat-dropdown");
   const label = doc.getElementById("aus-chat-label");
   if (!dropdown || !label) return;
@@ -5747,25 +7473,118 @@ function renderChatPicker(chatHist) {
     };
   });
 }
+function renderEndpointPicker(history) {
+  const doc = getDoc$4();
+  const dropdown = doc.getElementById("aus-endpoint-dropdown");
+  const label = doc.getElementById("aus-endpoint-label");
+  if (!dropdown || !label) return;
+  const options = getEndpointFilterOptions(history || []);
+  const current = options.find((option) => option.id === selectedEndpoint);
+  label.textContent = selectedEndpoint === STATS_FILTER_ALL ? "全部" : selectedEndpoint === STATS_FILTER_UNKNOWN ? "未记录接入" : current?.label || selectedEndpoint;
+  label.title = label.textContent;
+  const optionHtml = (id, text, title) => {
+    const active = id === selectedEndpoint ? "background:var(--ds-card);font-weight:600;" : "";
+    return `<div data-endpoint="${esc$1(id)}" title="${esc$1(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${esc$1(text)}</div>`;
+  };
+  let html = optionHtml(STATS_FILTER_ALL, "全部", "全部");
+  for (const option of options) html += optionHtml(option.id, option.label, option.label);
+  if (!options.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">暂无接入记录</div>';
+  dropdown.innerHTML = html;
+  dropdown.querySelectorAll("[data-endpoint]").forEach((el) => {
+    el.onclick = () => {
+      selectedEndpoint = el.getAttribute("data-endpoint") || STATS_FILTER_ALL;
+      selectedCredential = STATS_FILTER_ALL;
+      endpointPickerOpen = false;
+      dropdown.style.display = "none";
+      renderStatsView();
+    };
+  });
+}
+function renderCredentialPicker$1(history, endpoint = selectedEndpoint) {
+  const doc = getDoc$4();
+  const dropdown = doc.getElementById("aus-credential-dropdown");
+  const label = doc.getElementById("aus-credential-label");
+  if (!dropdown || !label) return;
+  const options = getCredentialFilterOptions(history || [], endpoint);
+  const current = options.find((option) => option.id === selectedCredential);
+  label.textContent = selectedCredential === STATS_FILTER_ALL ? "全部" : selectedCredential === STATS_FILTER_UNKNOWN ? "未识别密钥" : current?.label || selectedCredential;
+  label.title = label.textContent;
+  const optionHtml = (id, text, title) => {
+    const active = id === selectedCredential ? "background:var(--ds-card);font-weight:600;" : "";
+    return `<div data-credential="${esc$1(id)}" title="${esc$1(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${esc$1(text)}</div>`;
+  };
+  let html = optionHtml(STATS_FILTER_ALL, "全部", "全部");
+  for (const option of options) html += optionHtml(option.id, option.label, option.label);
+  if (!options.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">暂无密钥记录</div>';
+  dropdown.innerHTML = html;
+  dropdown.querySelectorAll("[data-credential]").forEach((el) => {
+    el.onclick = () => {
+      selectedCredential = el.getAttribute("data-credential") || STATS_FILTER_ALL;
+      credentialPickerOpen = false;
+      dropdown.style.display = "none";
+      renderStatsView();
+    };
+  });
+}
+function positionFilterDropdown(btn, dropdown) {
+  try {
+    const doc = getDoc$4();
+    const panel2 = doc.getElementById("aus-panel");
+    if (!panel2) return;
+    const panelRect = panel2.getBoundingClientRect();
+    const btnRect = btn.getBoundingClientRect();
+    const available = Math.max(160, panelRect.width - 16);
+    dropdown.style.maxWidth = `${available}px`;
+    dropdown.style.boxSizing = "border-box";
+    const width = Math.min(dropdown.offsetWidth || 220, available);
+    const buttonLeft = btnRect.left - panelRect.left;
+    const desiredLeft = Math.max(8, Math.min(buttonLeft, panelRect.width - width - 8));
+    dropdown.style.left = `${desiredLeft - buttonLeft}px`;
+    dropdown.style.right = "auto";
+  } catch {
+  }
+}
+function closeFilterDropdowns(except) {
+  const doc = getDoc$4();
+  if (except !== "range") {
+    pickerOpen = false;
+    const el = doc.getElementById("aus-range-dropdown");
+    if (el) el.style.display = "none";
+  }
+  if (except !== "model") {
+    modelPickerOpen = false;
+    const el = doc.getElementById("aus-model-dropdown");
+    if (el) el.style.display = "none";
+  }
+  if (except !== "chat") {
+    chatPickerOpen = false;
+    const el = doc.getElementById("aus-chat-dropdown");
+    if (el) el.style.display = "none";
+  }
+  if (except !== "endpoint") {
+    endpointPickerOpen = false;
+    const el = doc.getElementById("aus-endpoint-dropdown");
+    if (el) el.style.display = "none";
+  }
+  if (except !== "credential") {
+    credentialPickerOpen = false;
+    const el = doc.getElementById("aus-credential-dropdown");
+    if (el) el.style.display = "none";
+  }
+}
 function bindPicker() {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   const btn = doc.getElementById("aus-range-btn");
   const dropdown = doc.getElementById("aus-range-dropdown");
   if (btn && dropdown) {
     btn.onclick = () => {
       pickerOpen = !pickerOpen;
+      closeFilterDropdowns("range");
       dropdown.style.display = pickerOpen ? "flex" : "none";
-      const md = doc.getElementById("aus-model-dropdown");
-      if (md) {
-        md.style.display = "none";
-        modelPickerOpen = false;
+      if (pickerOpen) {
+        renderCalendar();
+        positionFilterDropdown(btn, dropdown);
       }
-      const cd = doc.getElementById("aus-chat-dropdown");
-      if (cd) {
-        cd.style.display = "none";
-        chatPickerOpen = false;
-      }
-      if (pickerOpen) renderCalendar();
     };
     doc.querySelectorAll("[data-range]").forEach((el) => {
       el.onclick = () => {
@@ -5787,18 +7606,12 @@ function bindPicker() {
   if (mBtn && mDropdown) {
     mBtn.onclick = () => {
       modelPickerOpen = !modelPickerOpen;
+      closeFilterDropdowns("model");
       mDropdown.style.display = modelPickerOpen ? "block" : "none";
-      const rDrop = doc.getElementById("aus-range-dropdown");
-      if (rDrop) {
-        rDrop.style.display = "none";
-        pickerOpen = false;
+      if (modelPickerOpen) {
+        renderModelPicker(lastStatsHistory);
+        positionFilterDropdown(mBtn, mDropdown);
       }
-      const cDrop = doc.getElementById("aus-chat-dropdown");
-      if (cDrop) {
-        cDrop.style.display = "none";
-        chatPickerOpen = false;
-      }
-      if (modelPickerOpen) renderModelPicker();
     };
   }
   const cBtn = doc.getElementById("aus-chat-btn");
@@ -5806,17 +7619,8 @@ function bindPicker() {
   if (cBtn && cDropdown) {
     cBtn.onclick = () => {
       chatPickerOpen = !chatPickerOpen;
+      closeFilterDropdowns("chat");
       cDropdown.style.display = chatPickerOpen ? "block" : "none";
-      const rDrop = doc.getElementById("aus-range-dropdown");
-      if (rDrop) {
-        rDrop.style.display = "none";
-        pickerOpen = false;
-      }
-      const mDrop = doc.getElementById("aus-model-dropdown");
-      if (mDrop) {
-        mDrop.style.display = "none";
-        modelPickerOpen = false;
-      }
       if (chatPickerOpen) {
         (async () => {
           try {
@@ -5825,7 +7629,34 @@ function bindPicker() {
           } catch {
             renderChatPicker();
           }
+          positionFilterDropdown(cBtn, cDropdown);
         })();
+      }
+    };
+  }
+  const eBtn = doc.getElementById("aus-endpoint-btn");
+  const eDropdown = doc.getElementById("aus-endpoint-dropdown");
+  if (eBtn && eDropdown) {
+    eBtn.onclick = () => {
+      endpointPickerOpen = !endpointPickerOpen;
+      closeFilterDropdowns("endpoint");
+      eDropdown.style.display = endpointPickerOpen ? "block" : "none";
+      if (endpointPickerOpen) {
+        renderEndpointPicker(lastStatsHistory);
+        positionFilterDropdown(eBtn, eDropdown);
+      }
+    };
+  }
+  const kBtn = doc.getElementById("aus-credential-btn");
+  const kDropdown = doc.getElementById("aus-credential-dropdown");
+  if (kBtn && kDropdown) {
+    kBtn.onclick = () => {
+      credentialPickerOpen = !credentialPickerOpen;
+      closeFilterDropdowns("credential");
+      kDropdown.style.display = credentialPickerOpen ? "block" : "none";
+      if (credentialPickerOpen) {
+        renderCredentialPicker$1(lastStatsHistory);
+        positionFilterDropdown(kBtn, kDropdown);
       }
     };
   }
@@ -5846,12 +7677,22 @@ function bindPicker() {
       const d = doc.getElementById("aus-chat-dropdown");
       if (d) d.style.display = "none";
     }
+    if (endpointPickerOpen && !t.closest("#aus-endpoint-dropdown") && !t.closest("#aus-endpoint-btn")) {
+      endpointPickerOpen = false;
+      const d = doc.getElementById("aus-endpoint-dropdown");
+      if (d) d.style.display = "none";
+    }
+    if (credentialPickerOpen && !t.closest("#aus-credential-dropdown") && !t.closest("#aus-credential-btn")) {
+      credentialPickerOpen = false;
+      const d = doc.getElementById("aus-credential-dropdown");
+      if (d) d.style.display = "none";
+    }
   });
 }
 let chartYOpen = false;
 let chartXOpen = false;
 function renderChartSelectors() {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   const yBtn = doc.getElementById("aus-chart-y-btn");
   const xBtn = doc.getElementById("aus-chart-x-btn");
   const yDrop = doc.getElementById("aus-chart-y-dropdown");
@@ -5871,9 +7712,7 @@ function renderChartSelectors() {
     el.onchange = () => {
       toggleY(el.getAttribute("data-ykey"));
       renderChartSelectors();
-      const s = getSelectedSave();
-      const filtered = filterByChat(filterByModel(filterByRange(s.history || [])));
-      renderChart(filtered);
+      renderStatsView();
     };
   });
   const xSel = getXSelected();
@@ -5891,14 +7730,12 @@ function renderChartSelectors() {
       chartXOpen = false;
       xDrop.style.display = "none";
       renderChartSelectors();
-      const s = getSelectedSave();
-      const filtered = filterByChat(filterByModel(filterByRange(s.history || [])));
-      renderChart(filtered);
+      renderStatsView();
     };
   });
 }
 function bindChartSelectors() {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   const yBtn = doc.getElementById("aus-chart-y-btn");
   const yDrop = doc.getElementById("aus-chart-y-dropdown");
   const xBtn = doc.getElementById("aus-chart-x-btn");
@@ -5947,7 +7784,7 @@ function bindChartSelectors() {
 }
 let chart = null;
 async function renderChart(filteredRaw) {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   const el = doc.getElementById("aus-stats-chart");
   if (!el) return;
   const yKeys = getYSelected();
@@ -6093,7 +7930,7 @@ async function renderChart(filteredRaw) {
   }, 60);
 }
 function renderModelSummary(filtered) {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   const tbody = doc.getElementById("aus-summary-tbody");
   if (!tbody) return;
   lastSummaryFiltered = filtered;
@@ -6194,41 +8031,47 @@ try {
 async function getHistoryForStats() {
   const s = getSelectedSave();
   const hot = s?.history || [];
-  if (hot.length >= 400 || cachedAllHistory) {
-    if (cachedAllHistory) {
-      const keyOf = (h) => `${h.timestamp}|${h.model || ""}|${h.total_tokens || 0}`;
-      const seen = new Set(cachedAllHistory.map(keyOf));
-      const fresh = hot.filter((h) => !seen.has(keyOf(h)));
-      if (fresh.length) cachedAllHistory = [...fresh, ...cachedAllHistory].sort((a, b) => b.timestamp - a.timestamp);
-      return cachedAllHistory;
-    }
-    if (allHistoryLoading) return hot;
-    allHistoryLoading = true;
-    try {
-      const mod = await Promise.resolve().then(() => persistence);
-      if (mod.getAllHistory) {
-        const all = await mod.getAllHistory();
-        if (all && all.length > hot.length) {
-          cachedAllHistory = all;
-          return all;
-        }
-      }
-    } catch {
-    } finally {
-      allHistoryLoading = false;
-    }
+  if (cachedAllHistory) {
+    const keyOf = (h) => `${h.timestamp}|${h.model || ""}|${h.total_tokens || 0}`;
+    const seen = new Set(cachedAllHistory.map(keyOf));
+    const fresh = hot.filter((h) => !seen.has(keyOf(h)));
+    if (fresh.length) cachedAllHistory = [...fresh, ...cachedAllHistory].sort((a, b) => b.timestamp - a.timestamp);
+    return cachedAllHistory;
   }
+  if (allHistoryLoading) return hot;
+  allHistoryLoading = true;
+  try {
+    const mod = await Promise.resolve().then(() => persistence);
+    if (mod.getAllHistory) {
+      const all = await mod.getAllHistory();
+      const result = all || hot;
+      cachedAllHistory = result;
+      return result;
+    }
+  } catch {
+  } finally {
+    allHistoryLoading = false;
+  }
+  cachedAllHistory = hot;
   return hot;
 }
 async function renderStatsView() {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   const s = getSelectedSave();
   if (!s) return;
   const allHistory = await getHistoryForStats();
-  const timeFiltered = filterByRange(allHistory);
-  const modelFiltered = filterByModel(timeFiltered);
-  const summaryFiltered = filterByChat(modelFiltered);
-  const chartFiltered = filterByChat(modelFiltered);
+  lastStatsHistory = allHistory;
+  const endpointOptions = getEndpointFilterOptions(allHistory);
+  const validEndpoints = /* @__PURE__ */ new Set([STATS_FILTER_ALL, ...endpointOptions.map((option) => option.id)]);
+  if (!validEndpoints.has(selectedEndpoint)) {
+    selectedEndpoint = STATS_FILTER_ALL;
+    selectedCredential = STATS_FILTER_ALL;
+  }
+  const credentialOptions = getCredentialFilterOptions(allHistory, selectedEndpoint);
+  const validCredentials = /* @__PURE__ */ new Set([STATS_FILTER_ALL, ...credentialOptions.map((option) => option.id)]);
+  if (!validCredentials.has(selectedCredential)) selectedCredential = STATS_FILTER_ALL;
+  const summaryFiltered = filterStatsHistory(allHistory, currentStatsFilter());
+  const chartFiltered = summaryFiltered;
   let totalCost = 0, totalReq = summaryFiltered.length, totalTok = 0;
   for (const e of summaryFiltered) {
     totalCost += e.cost || 0;
@@ -6248,8 +8091,10 @@ async function renderStatsView() {
   if (tokEl) tokEl.textContent = totalTok.toLocaleString("zh-CN");
   renderStatsFour(summaryFiltered);
   renderModelSummary(summaryFiltered);
-  renderModelPicker();
+  renderModelPicker(allHistory);
   renderChatPicker(allHistory);
+  renderEndpointPicker(allHistory);
+  renderCredentialPicker$1(allHistory);
   renderChartSelectors();
   const statsViewEl = doc.querySelector('[data-view="stats"]');
   const isStatsHidden = statsViewEl ? statsViewEl.style.display === "none" || statsViewEl.offsetParent === null : false;
@@ -6284,7 +8129,7 @@ let statsFourBound = false;
 function bindStatsFour() {
   if (statsFourBound) return;
   statsFourBound = true;
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   doc.addEventListener("click", (e) => {
     const t = e.target;
     for (let i = 0; i < 4; i++) {
@@ -6295,7 +8140,7 @@ function bindStatsFour() {
   });
 }
 function openStatsFourDrop(idx, v) {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   const drop = doc.getElementById(`aus-stats-four-drop-${idx}`);
   if (!drop) return;
   const curKeys = ensureStatsFour();
@@ -6316,23 +8161,13 @@ function openStatsFourDrop(idx, v) {
       } catch {
       }
       drop.style.display = "none";
-      const curFiltered = (() => {
-        try {
-          const s = getSelectedSave();
-          const all = s?.history || [];
-          const tf = filterByRange(all);
-          return filterByChat(filterByModel(tf));
-        } catch {
-          return [];
-        }
-      })();
-      renderStatsFour(curFiltered);
+      renderStatsView();
     };
   });
   drop.style.display = drop.style.display === "block" ? "none" : "block";
 }
 function renderStatsFour(filtered) {
-  const doc = getDoc$3();
+  const doc = getDoc$4();
   const host = doc.getElementById("aus-stats-four");
   if (!host) return;
   const v = computeStatsFour(filtered || []);
@@ -6612,7 +8447,7 @@ function topPowerChats(history, limit = 10) {
   list.sort((a, b) => b.delta - a.delta);
   return list.slice(0, limit);
 }
-function getDoc$2() {
+function getDoc$3() {
   return window.parent?.document ?? document;
 }
 function currentChatId() {
@@ -6624,10 +8459,23 @@ function currentChatId() {
   }
 }
 function balanceNum() {
-  const b = state$2.customBalance || state$2.balance?.balance;
-  if (b == null || b === "") return null;
-  const n = parseFloat(String(b));
-  return isNaN(n) ? null : n;
+  const ignored = new Set(state$2.walletIgnored || []);
+  const selected = String(state$2.settings.overviewWalletId || "all");
+  const wallets = (state$2.wallets || []).filter((wallet) => !ignored.has(wallet.id));
+  const target = selected === "all" ? wallets : wallets.filter((wallet) => wallet.id === selected);
+  let total = null;
+  for (const wallet of target) {
+    const value = walletBalanceToCny(wallet, getWalletExchangeRate());
+    if (value == null) continue;
+    total = (total ?? 0) + value;
+  }
+  if (total == null) {
+    const fallback = state$2.customBalance || state$2.balance?.balance;
+    if (fallback == null || fallback === "") return null;
+    const value = parseFloat(String(fallback));
+    if (Number.isFinite(value)) total = value;
+  }
+  return total;
 }
 let selectedForecastKey = "__current__";
 let forecastChatPickerOpen = false;
@@ -6667,7 +8515,7 @@ function getForecastLabel(fullHist) {
   return found?.displayName || selectedForecastKey;
 }
 function renderForecastChatPicker(fullHist) {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   const btn = doc.getElementById("aus-forecast-chat-btn");
   const dropdown = doc.getElementById("aus-forecast-chat-dropdown");
   const label = doc.getElementById("aus-forecast-chat-label");
@@ -6696,7 +8544,7 @@ function renderForecastChatPicker(fullHist) {
   });
 }
 function bindForecastChatPicker() {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   const btn = doc.getElementById("aus-forecast-chat-btn");
   const dropdown = doc.getElementById("aus-forecast-chat-dropdown");
   if (!btn || !dropdown) return;
@@ -6720,7 +8568,7 @@ function bindForecastChatPicker() {
   });
 }
 function renderForecastView() {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   const hist = state$2.history || [];
   try {
     renderForecastChatPicker(hist);
@@ -6743,8 +8591,9 @@ function renderForecastView() {
       return;
     }
     const bal = balanceNum();
-    const model = effectiveHist[effectiveHist.length - 1]?.model || "deepseek-v4-flash";
-    const pricing = getPricing$1(model, state$2.settings);
+    const latestEntry = effectiveHist[effectiveHist.length - 1];
+    const model = latestEntry?.model || "deepseek-v4-flash";
+    const pricing = getPricing$1(model, state$2.settings, findWalletForHistory(state$2.wallets, latestEntry || {}));
     const p = pricing.offpeak;
     const R = bal != null ? remainingRounds(bal, fit, p) : { R: 0, R_low: 0, R_high: 0 };
     const ctxLim = ctxLimitForModel(model);
@@ -6797,7 +8646,7 @@ function renderForecastView() {
 }
 let forecastChart = null;
 async function renderForecastChart(history, chatId) {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   const el = doc.getElementById("aus-forecast-chart");
   if (!el) return;
   if (!history.length) {
@@ -6858,7 +8707,7 @@ async function renderForecastChart(history, chatId) {
   }, true);
 }
 function renderSensitivity(history, chatId) {
-  const host = getDoc$2().getElementById("aus-forecast-sensitivity");
+  const host = getDoc$3().getElementById("aus-forecast-sensitivity");
   if (!host) return;
   const hitInit = (() => {
     const fit = fitSegments(history, chatId);
@@ -6882,8 +8731,9 @@ function renderSensitivity(history, chatId) {
       return;
     }
     const tmp = { ...fit, hitEwma: h };
-    const model = history.slice(-1)[0]?.model || "deepseek-v4-flash";
-    const pricing = getPricing$1(model, state$2.settings);
+    const latestEntry = history.slice(-1)[0];
+    const model = latestEntry?.model || "deepseek-v4-flash";
+    const pricing = getPricing$1(model, state$2.settings, findWalletForHistory(state$2.wallets, latestEntry || {}));
     const R = remainingRounds(bal, tmp, pricing.offpeak);
     if (resEl) resEl.textContent = `命中 ${slider.value}% 时预计剩余 ${R.R} 轮（±${Math.abs(R.R_high - R.R_low) / 2 | 0}），降 10% 约少 ${Math.abs(R.R - remainingRounds(bal, { ...fit, hitEwma: Math.max(0, h - 0.1) }, pricing.offpeak).R)} 轮`;
   };
@@ -6891,7 +8741,7 @@ function renderSensitivity(history, chatId) {
   update();
 }
 function renderCompare(history) {
-  const host = getDoc$2().getElementById("aus-forecast-compare");
+  const host = getDoc$3().getElementById("aus-forecast-compare");
   if (!host) return;
   const list = topPowerChats(history, 8);
   if (!list.length) {
@@ -6914,9 +8764,614 @@ function renderCompare(history) {
   }
 }
 function initForecastView() {
-  const doc = getDoc$2();
+  const doc = getDoc$3();
   doc.addEventListener("click", (e) => {
   });
+}
+function getDoc$2() {
+  return window.parent?.document ?? document;
+}
+function money(cny, digits = 4) {
+  try {
+    return formatMoney(cny, digits);
+  } catch {
+    return `¥${cny.toFixed(digits)} CNY`;
+  }
+}
+function walletBalanceText(wallet) {
+  const amount = wallet.balance.amount == null || wallet.balance.amount === "" ? NaN : parseFloat(String(wallet.balance.amount));
+  if (!Number.isFinite(amount)) return "未设置";
+  return `${wallet.balance.currency === "USD" ? "$" : "¥"}${amount.toFixed(4)} ${wallet.balance.currency}`;
+}
+function displayToCny(value) {
+  const number = typeof value === "number" ? value : parseFloat(String(value));
+  if (!Number.isFinite(number)) return 0;
+  const currency2 = getDisplayCurrency();
+  return currency2.code === "USD" ? number * currency2.rate : number;
+}
+function cnyToDisplay(value) {
+  const number = typeof value === "number" ? value : parseFloat(String(value));
+  if (!Number.isFinite(number)) return "0";
+  const currency2 = getDisplayCurrency();
+  const result = currency2.code === "USD" ? number / currency2.rate : number;
+  return String(Math.round(result * 1e6) / 1e6);
+}
+function closeDropdowns() {
+  const doc = getDoc$2();
+  doc.querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
+    el.style.display = "none";
+  });
+}
+function closeOtherDropdowns(id) {
+  const doc = getDoc$2();
+  doc.querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
+    if (el.id !== id) el.style.display = "none";
+  });
+}
+function dropdownHtml(walletId, kind, options) {
+  return options.map((option) => `
+    <div data-wallet-select="${esc$1(kind)}" data-wallet-id="${esc$1(walletId)}" data-value="${esc$1(option.id)}"
+      style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:11px;${option.active ? "background:var(--ds-card);font-weight:600;" : ""}">
+      ${esc$1(option.label)}
+    </div>
+  `).join("");
+}
+function sourceLabel(model) {
+  if (model.source === "builtin") return "内置";
+  if (model.source === "sync") return "同步";
+  if (model.source === "manual") return "自定义";
+  return "待定价";
+}
+function priceField(walletId, modelId, tier, key, value) {
+  return `<input type="number" step="0.000001" min="0" data-wallet-price="1" data-wallet-id="${esc$1(walletId)}"
+    data-model-id="${esc$1(modelId)}" data-tier="${tier}" data-key="${key}" value="${esc$1(cnyToDisplay(value))}"
+    style="width:100%;min-width:72px;padding:5px 6px;border:1px solid var(--ds-border);border-radius:7px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;" />`;
+}
+function renderModelRows(wallet) {
+  const models = [...wallet.models].sort((a, b) => {
+    const pending = Number(!a.price.priceConfigured) - Number(!b.price.priceConfigured);
+    return pending || a.model.localeCompare(b.model, "zh-CN");
+  });
+  if (!models.length) {
+    return '<tr><td colspan="7" style="padding:14px;text-align:center;color:var(--ds-text-3);">尚未识别到模型，可手动添加或等待请求接入</td></tr>';
+  }
+  return models.map((model) => {
+    const pending = !model.price.priceConfigured;
+    const canDelete = model.source !== "builtin";
+    return `
+      <tr data-wallet-model-row="${esc$1(model.id)}" style="border-top:1px solid var(--ds-border);">
+        <td style="padding:8px 6px;min-width:180px;">
+          <input data-wallet-model-name="1" data-wallet-id="${esc$1(wallet.id)}" data-model-id="${esc$1(model.id)}"
+            value="${esc$1(model.model)}"
+            style="width:100%;padding:6px 7px;border:1px solid var(--ds-border);border-radius:7px;background:${model.source === "builtin" ? "var(--ds-sidebar-bg)" : "var(--ds-card-inner)"};color:var(--ds-text);font-size:11px;" />
+          <div style="font-size:10px;color:var(--ds-text-3);margin-top:3px;">${esc$1(model.sourceModel)}${model.aliases.length ? ` · 别名 ${esc$1(model.aliases.join("、"))}` : ""}</div>
+        </td>
+        <td style="padding:8px 6px;white-space:nowrap;">
+          <span style="padding:2px 7px;border-radius:999px;background:${pending ? "var(--ds-red-bg)" : model.source === "sync" ? "var(--ds-green-bg)" : "var(--ds-card)"};color:${pending ? "var(--ds-red)" : model.source === "sync" ? "var(--ds-green)" : "var(--ds-text-2)"};font-size:10px;">${sourceLabel(model)}</span>
+        </td>
+        <td style="padding:8px 6px;min-width:224px;">
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(68px,1fr));gap:4px;">${priceField(wallet.id, model.id, "offpeak", "hit", model.price.offpeak.hit)}${priceField(wallet.id, model.id, "offpeak", "miss", model.price.offpeak.miss)}${priceField(wallet.id, model.id, "offpeak", "output", model.price.offpeak.output)}</div>
+        </td>
+        <td style="padding:8px 6px;min-width:224px;opacity:${model.price.usePeakPricing ? "1" : "0.45"};">
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(68px,1fr));gap:4px;">${priceField(wallet.id, model.id, "peak", "hit", model.price.peak.hit)}${priceField(wallet.id, model.id, "peak", "miss", model.price.peak.miss)}${priceField(wallet.id, model.id, "peak", "output", model.price.peak.output)}</div>
+        </td>
+        <td style="padding:8px 6px;text-align:center;"><input type="checkbox" data-wallet-model-peak="1" data-wallet-id="${esc$1(wallet.id)}" data-model-id="${esc$1(model.id)}" ${model.price.usePeakPricing ? "checked" : ""} /></td>
+        <td style="padding:8px 6px;text-align:center;"><input type="checkbox" data-wallet-model-lock="1" data-wallet-id="${esc$1(wallet.id)}" data-model-id="${esc$1(model.id)}" ${model.locked ? "checked" : ""} /></td>
+        <td style="padding:8px 6px;text-align:center;">${canDelete ? `<button data-wallet-model-delete="1" data-wallet-id="${esc$1(wallet.id)}" data-model-id="${esc$1(model.id)}" style="padding:4px 8px;border:1px solid var(--ds-red-border);border-radius:7px;background:var(--ds-red-bg);color:var(--ds-red);font-size:10px;cursor:pointer;">删除</button>` : "—"}</td>
+      </tr>`;
+  }).join("");
+}
+function renderPeakRows(wallet) {
+  if (!wallet.peakHours.length) return '<div style="font-size:11px;color:var(--ds-text-3);">暂无高峰时段</div>';
+  return wallet.peakHours.map((item, index2) => `
+    <div style="display:flex;align-items:center;gap:6px;">
+      <input type="time" data-wallet-peak="1" data-wallet-id="${esc$1(wallet.id)}" data-peak-index="${index2}" data-peak-field="start" value="${esc$1(item.start)}" style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:7px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;" />
+      <span style="font-size:10px;color:var(--ds-text-3);">至</span>
+      <input type="time" data-wallet-peak="1" data-wallet-id="${esc$1(wallet.id)}" data-peak-index="${index2}" data-peak-field="end" value="${esc$1(item.end)}" style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:7px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;" />
+      <button data-wallet-peak-delete="1" data-wallet-id="${esc$1(wallet.id)}" data-peak-index="${index2}" style="padding:5px 8px;border:1px solid var(--ds-red-border);border-radius:7px;background:var(--ds-red-bg);color:var(--ds-red);font-size:10px;cursor:pointer;">删除</button>
+    </div>
+  `).join("");
+}
+function renderCredentialPicker(wallet) {
+  const current = wallet.credentials.find((item) => item.id === wallet.balance.primaryCredentialId);
+  return `
+    <button data-wallet-credential-btn="1" data-wallet-id="${esc$1(wallet.id)}" style="display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;max-width:100%;">
+      <span style="color:var(--ds-text-2);">主密钥</span>
+      <span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;">${esc$1(current?.label || "未指定")}</span>
+      <span>▼</span>
+    </button>
+    <div id="aus-wallet-credential-drop-${esc$1(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;left:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-width:320px;">
+      ${dropdownHtml(wallet.id, "credential", [
+    { id: "", label: "无（使用钱包内校准密钥）", active: !wallet.balance.primaryCredentialId },
+    ...wallet.credentials.map((item) => ({ id: item.id, label: item.label, active: item.id === wallet.balance.primaryCredentialId }))
+  ])}
+    </div>`;
+}
+function renderCatalogPicker(wallet) {
+  const current = WALLET_CATALOG_PROVIDERS.find((item) => item.id === wallet.catalogProvider);
+  return `
+    <button data-wallet-catalog-btn="1" data-wallet-id="${esc$1(wallet.id)}" style="display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">
+      <span style="color:var(--ds-text-2);">价格来源</span>
+      <span style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$1(current?.label || "不自动同步")}</span>
+      <span>▼</span>
+    </button>
+    <div id="aus-wallet-catalog-drop-${esc$1(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;right:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:180px;max-height:260px;overflow:auto;">
+      ${dropdownHtml(wallet.id, "catalog", [
+    { id: "", label: "不自动同步", active: !wallet.catalogProvider },
+    ...WALLET_CATALOG_PROVIDERS.map((item) => ({ id: item.id, label: item.label, active: item.id === wallet.catalogProvider }))
+  ])}
+    </div>`;
+}
+function renderWalletCard(wallet) {
+  const stats = computeWalletStats(wallet.id);
+  const pending = walletPendingModelCount(wallet);
+  const isOfficial = wallet.id === DEEPSEEK_WALLET_ID;
+  const selectedCredential2 = wallet.credentials.find((item) => item.id === wallet.balance.primaryCredentialId);
+  const collapsed2 = wallet.collapsed !== false;
+  const metrics = [
+    { label: "余额", value: walletBalanceText(wallet), title: walletBalanceText(wallet) },
+    { label: "密钥", value: `${wallet.credentials.length} 个`, title: "已识别密钥数量" },
+    { label: "模型", value: `${wallet.models.length} 个`, title: "已识别模型数量" },
+    { label: "请求", value: stats.requests.toLocaleString("zh-CN"), title: "已记录请求次数" },
+    { label: "费用", value: money(stats.cost), title: "该钱包累计费用" }
+  ];
+  return `
+    <section class="ds-card" data-wallet-card="${esc$1(wallet.id)}" style="display:grid;gap:12px;">
+      <div class="aus-wallet-header">
+        <div class="aus-wallet-identity" style="display:grid;gap:5px;min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <input data-wallet-name="1" data-wallet-id="${esc$1(wallet.id)}" value="${esc$1(wallet.name)}" style="min-width:160px;max-width:100%;flex:1;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:13px;font-weight:600;" />
+            <span style="padding:3px 8px;border-radius:999px;background:${isOfficial ? "var(--ds-green-bg)" : "var(--ds-card-inner)"};color:${isOfficial ? "var(--ds-green)" : "var(--ds-text-2)"};font-size:10px;">${isOfficial ? "DeepSeek 官方" : "中转/自定义"}</span>
+            ${pending ? `<span style="padding:3px 8px;border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:10px;">${pending} 个待定价</span>` : ""}
+          </div>
+          <div style="font-size:10px;color:var(--ds-text-3);word-break:break-all;">${esc$1(wallet.endpointDisplay || wallet.endpointLabel || "本机官方接口")} · ${esc$1(wallet.sourceType || "未识别")}</div>
+        </div>
+        <div class="aus-wallet-metrics">
+          ${metrics.map((item) => `<div class="aus-wallet-metric" title="${esc$1(item.title)}"><div class="aus-wallet-metric-label">${esc$1(item.label)}</div><div class="aus-wallet-metric-value">${esc$1(item.value)}</div></div>`).join("")}
+        </div>
+        <div class="aus-wallet-actions">
+          <button data-wallet-toggle="1" data-wallet-id="${esc$1(wallet.id)}" style="padding:7px 11px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">${collapsed2 ? "展开 ▼" : "收起 ▲"}</button>
+          ${wallet.catalogProvider ? '<button data-wallet-sync="1" data-wallet-id="' + esc$1(wallet.id) + '" style="padding:7px 11px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">同步价格</button>' : ""}
+          ${isOfficial ? "" : '<button data-wallet-ignore="1" data-wallet-id="' + esc$1(wallet.id) + '" style="padding:7px 11px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:11px;cursor:pointer;">忽略钱包</button>'}
+        </div>
+      </div>
+
+      <div data-wallet-body="1" style="display:${collapsed2 ? "none" : "grid"};gap:12px;">
+      <div class="aus-wallet-two-col" style="display:grid;grid-template-columns:minmax(250px,1fr) minmax(260px,1fr);gap:10px;">
+        <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <div><div style="font-size:11px;color:var(--ds-text-2);">钱包余额</div><div style="font-size:17px;font-weight:700;color:var(--ds-text);">${esc$1(walletBalanceText(wallet))}</div></div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ds-text-2);cursor:${isOfficial ? "pointer" : "not-allowed"};">
+              <input type="checkbox" data-wallet-auto-balance="1" data-wallet-id="${esc$1(wallet.id)}" ${wallet.balance.mode === "auto" ? "checked" : ""} ${isOfficial ? "" : "disabled"} /> 自动校准
+            </label>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;position:relative;">
+            <input data-wallet-balance-amount="1" data-wallet-id="${esc$1(wallet.id)}" value="${esc$1(wallet.balance.amount ?? "")}" placeholder="手工余额" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;" />
+            <button data-wallet-currency-btn="1" data-wallet-id="${esc$1(wallet.id)}" style="padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">${wallet.balance.currency} ▼</button>
+            <div id="aus-wallet-currency-drop-${esc$1(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;right:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:6px;min-width:110px;">
+              ${dropdownHtml(wallet.id, "currency", [{ id: "CNY", label: "CNY", active: wallet.balance.currency === "CNY" }, { id: "USD", label: "USD", active: wallet.balance.currency === "USD" }])}
+            </div>
+          </div>
+          ${isOfficial ? `
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;position:relative;">
+              ${renderCredentialPicker(wallet)}
+              <button data-wallet-calibrate="1" data-wallet-id="${esc$1(wallet.id)}" style="padding:7px 11px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:11px;cursor:pointer;">立即校准</button>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <input type="password" data-wallet-api-key="1" data-wallet-id="${esc$1(wallet.id)}" value="" placeholder="${getWalletApiKey(wallet.id) ? "已保存钱包校准密钥（留空不修改）" : "填写钱包校准密钥"}" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;" />
+              <button data-wallet-save-key="1" data-wallet-id="${esc$1(wallet.id)}" style="padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">保存密钥</button>
+            </div>
+            <div style="font-size:10px;color:var(--ds-text-3);">自动校准仅支持 DeepSeek 官方直连，并需在设置开启自动校准总开关；主密钥：${esc$1(selectedCredential2?.label || "未指定")}</div>
+            <div style="font-size:10px;color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc$1(item.label)).join("、") : "未识别"}</div>
+          ` : `<div style="font-size:10px;color:var(--ds-text-3);">该接入暂不支持自动余额校准，请手工维护余额。</div><div style="font-size:10px;color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc$1(item.label)).join("、") : "未识别"}</div>`}
+        </div>
+
+        <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;position:relative;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <div style="font-size:11px;font-weight:600;color:var(--ds-text);">峰谷规则</div>
+            ${renderCatalogPicker(wallet)}
+          </div>
+          <div style="display:grid;gap:6px;">${renderPeakRows(wallet)}</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" data-wallet-weekend="1" data-wallet-id="${esc$1(wallet.id)}" ${wallet.weekendOffpeak ? "checked" : ""} /> 周末全天按低谷</label>
+            <button data-wallet-add-peak="1" data-wallet-id="${esc$1(wallet.id)}" style="padding:6px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;">+ 添加时段</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;overflow:hidden;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+          <div><div style="font-size:11px;font-weight:600;color:var(--ds-text);">模型与价格</div><div style="font-size:10px;color:var(--ds-text-3);">单位 ${getDisplayCurrency().code}/百万 tokens；模型改名会保留旧名别名</div></div>
+          <button data-wallet-add-model="1" data-wallet-id="${esc$1(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;">+ 添加模型</button>
+        </div>
+        <div style="width:100%;overflow-x:auto;">
+          <table style="width:100%;min-width:900px;border-collapse:collapse;font-size:10px;">
+            <thead><tr style="text-align:center;color:var(--ds-text-2);"><th style="text-align:left;padding:5px 6px;">模型</th><th style="padding:5px 6px;">来源</th><th style="padding:5px 6px;">非峰（命中/未命中/输出）</th><th style="padding:5px 6px;">高峰（命中/未命中/输出）</th><th style="padding:5px 6px;">峰谷</th><th style="padding:5px 6px;">锁定</th><th style="padding:5px 6px;">操作</th></tr></thead>
+            <tbody>${renderModelRows(wallet)}</tbody>
+          </table>
+        </div>
+      </div>
+      </div>
+    </section>`;
+}
+function renderIgnoredWallets(ignored, wallets) {
+  const rows = ignored.map((id) => {
+    const wallet = wallets.find((item) => item.id === id);
+    if (!wallet) return "";
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--ds-border);">
+      <div><div style="font-size:11px;font-weight:600;color:var(--ds-text);">${esc$1(wallet.name)}</div><div style="font-size:10px;color:var(--ds-text-3);">${esc$1(wallet.endpointDisplay || wallet.endpointLabel || "")}</div></div>
+      <button data-wallet-restore="1" data-wallet-id="${esc$1(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;">恢复显示</button>
+    </div>`;
+  }).filter(Boolean).join("");
+  return rows || '<div style="font-size:10px;color:var(--ds-text-3);">暂无已忽略接入</div>';
+}
+function renderWalletView() {
+  const doc = getDoc$2();
+  const host = doc.getElementById("aus-wallet");
+  if (!host) return;
+  const wallets = repository.getWallets();
+  const ignored = repository.getIgnoredWalletIds();
+  const ignoredSet = new Set(ignored);
+  const active = wallets.filter((wallet) => !ignoredSet.has(wallet.id));
+  let balanceCny = 0;
+  let balanceCount = 0;
+  let pending = 0;
+  for (const wallet of active) {
+    const value = walletBalanceToCny(wallet, getWalletExchangeRate());
+    if (value != null) {
+      balanceCny += value;
+      balanceCount++;
+    }
+    pending += walletPendingModelCount(wallet);
+  }
+  host.innerHTML = `
+    <div style="display:grid;gap:12px;">
+      <div class="ds-card aus-wallet-summary" id="aus-wallet-summary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+        <div><div style="font-size:11px;color:var(--ds-text-2);">钱包余额合计</div><div style="font-size:20px;font-weight:700;color:var(--ds-text);margin-top:4px;">${money(balanceCny, 2)}</div><div style="font-size:10px;color:var(--ds-text-3);margin-top:2px;">${balanceCount} 个钱包已设置余额</div></div>
+        <div><div style="font-size:11px;color:var(--ds-text-2);">钱包数量</div><div style="font-size:20px;font-weight:700;color:var(--ds-text);margin-top:4px;">${active.length}</div><div style="font-size:10px;color:var(--ds-text-3);margin-top:2px;">已忽略 ${ignored.length} 个</div></div>
+        <div><div style="font-size:11px;color:var(--ds-text-2);">待定价模型</div><div style="font-size:20px;font-weight:700;color:${pending ? "var(--ds-red)" : "var(--ds-green)"};margin-top:4px;">${pending}</div><div style="font-size:10px;color:var(--ds-text-3);margin-top:2px;">保存价格后自动重算</div></div>
+      </div>
+      ${active.map(renderWalletCard).join("")}
+      <div class="ds-card">
+        <div style="font-size:11px;font-weight:600;color:var(--ds-text);margin-bottom:2px;">已忽略接入</div>
+        ${renderIgnoredWallets(ignored, wallets)}
+      </div>
+    </div>`;
+  bindWalletView(doc);
+}
+function readModelPrices(row) {
+  const result = {
+    offpeak: { hit: 0, miss: 0, output: 0 },
+    peak: { hit: 0, miss: 0, output: 0 }
+  };
+  row.querySelectorAll("input[data-wallet-price]").forEach((input) => {
+    const tier = input.getAttribute("data-tier");
+    const key = input.getAttribute("data-key");
+    if ((tier === "offpeak" || tier === "peak") && (key === "hit" || key === "miss" || key === "output")) {
+      result[tier][key] = displayToCny(input.value);
+    }
+  });
+  return result;
+}
+function bindWalletView(doc) {
+  doc.querySelectorAll("[data-wallet-toggle]").forEach((button) => {
+    button.onclick = () => {
+      const walletId = button.getAttribute("data-wallet-id");
+      if (!walletId) return;
+      repository.updateWallet(walletId, (wallet) => {
+        wallet.collapsed = wallet.collapsed === false;
+      });
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("[data-wallet-name]").forEach((input) => {
+    input.onchange = () => {
+      const walletId = input.getAttribute("data-wallet-id");
+      const name = String(input.value || "").trim();
+      if (!walletId || !name) return renderWalletView();
+      repository.updateWallet(walletId, (wallet) => {
+        wallet.name = name;
+      });
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("[data-wallet-balance-amount]").forEach((input) => {
+    input.onchange = () => {
+      const walletId = input.getAttribute("data-wallet-id");
+      if (!walletId) return;
+      repository.updateWallet(walletId, (wallet) => {
+        wallet.balance.amount = String(input.value || "").trim() || null;
+        wallet.balance.mode = wallet.balance.mode === "auto" ? "auto" : "manual";
+      });
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("[data-wallet-auto-balance]").forEach((input) => {
+    input.onchange = () => {
+      const walletId = input.getAttribute("data-wallet-id");
+      if (!walletId) return;
+      repository.updateWallet(walletId, (wallet) => {
+        wallet.balance.mode = input.checked ? "auto" : "manual";
+      });
+      try {
+        Promise.resolve().then(() => balance).then((mod) => mod.restartBalanceTimer?.());
+      } catch {
+      }
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("[data-wallet-weekend]").forEach((input) => {
+    input.onchange = () => {
+      const walletId = input.getAttribute("data-wallet-id");
+      if (!walletId) return;
+      repository.updateWallet(walletId, (wallet) => {
+        wallet.weekendOffpeak = !!input.checked;
+      });
+      repository.recalcWallet(walletId).catch(() => {
+      });
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("[data-wallet-save-key]").forEach((button) => {
+    button.onclick = () => {
+      const walletId = button.getAttribute("data-wallet-id");
+      const input = doc.querySelector(`[data-wallet-api-key][data-wallet-id="${walletId}"]`);
+      if (!walletId || !input) return;
+      saveWalletApiKey(walletId, input.value.trim());
+      toast("success", input.value.trim() ? "钱包校准密钥已保存" : "钱包校准密钥已清除");
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("[data-wallet-calibrate]").forEach((button) => {
+    button.onclick = async () => {
+      const walletId = button.getAttribute("data-wallet-id");
+      if (!walletId) return;
+      button.textContent = "校准中…";
+      await queryWalletBalance(walletId, false);
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("[data-wallet-sync]").forEach((button) => {
+    button.onclick = async () => {
+      button.textContent = "同步中…";
+      await syncPricingFromModelsDev({ silent: false });
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("[data-wallet-ignore]").forEach((button) => {
+    button.onclick = () => {
+      const walletId = button.getAttribute("data-wallet-id");
+      if (!walletId) return;
+      repository.setWalletIgnored(walletId, true);
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("[data-wallet-restore]").forEach((button) => {
+    button.onclick = () => {
+      const walletId = button.getAttribute("data-wallet-id");
+      if (!walletId) return;
+      repository.setWalletIgnored(walletId, false);
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("[data-wallet-add-peak]").forEach((button) => {
+    button.onclick = () => {
+      const walletId = button.getAttribute("data-wallet-id");
+      if (!walletId) return;
+      repository.updateWallet(walletId, (wallet) => {
+        wallet.peakHours.push({ start: "09:00", end: "12:00" });
+      });
+      repository.recalcWallet(walletId).catch(() => {
+      });
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("[data-wallet-peak]").forEach((input) => {
+    input.onchange = () => {
+      const walletId = input.getAttribute("data-wallet-id");
+      const index2 = parseInt(input.getAttribute("data-peak-index") || "-1", 10);
+      const field2 = input.getAttribute("data-peak-field");
+      if (!walletId || index2 < 0 || field2 !== "start" && field2 !== "end") return;
+      repository.updateWallet(walletId, (wallet) => {
+        const item = wallet.peakHours[index2];
+        if (!item) return;
+        if (field2 === "start") item.start = input.value;
+        else item.end = input.value;
+      });
+      repository.recalcWallet(walletId).catch(() => {
+      });
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("[data-wallet-peak-delete]").forEach((button) => {
+    button.onclick = () => {
+      const walletId = button.getAttribute("data-wallet-id");
+      const index2 = parseInt(button.getAttribute("data-peak-index") || "-1", 10);
+      if (!walletId || index2 < 0) return;
+      repository.updateWallet(walletId, (wallet) => {
+        if (wallet.peakHours.length <= 1) return;
+        wallet.peakHours.splice(index2, 1);
+      });
+      repository.recalcWallet(walletId).catch(() => {
+      });
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("[data-wallet-add-model]").forEach((button) => {
+    button.onclick = () => {
+      const walletId = button.getAttribute("data-wallet-id");
+      if (!walletId) return;
+      const modelName = window.prompt("输入模型名");
+      if (!modelName || !modelName.trim()) return;
+      const name = modelName.trim();
+      repository.updateWallet(walletId, (wallet) => {
+        if (wallet.models.some((item) => item.model === name)) return;
+        const now = Date.now();
+        wallet.models.push({
+          id: `manual:${now}:${Math.random().toString(36).slice(2, 8)}`,
+          sourceModel: name,
+          model: name,
+          aliases: [],
+          price: {
+            usePeakPricing: true,
+            offpeak: { hit: 0, miss: 0, output: 0 },
+            peak: { hit: 0, miss: 0, output: 0 },
+            priceConfigured: false
+          },
+          source: "discovered",
+          locked: false,
+          discoveredAt: now,
+          lastSeen: now,
+          updatedAt: now
+        });
+      });
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("[data-wallet-model-name]").forEach((input) => {
+    input.onchange = () => {
+      const walletId = input.getAttribute("data-wallet-id");
+      const modelId = input.getAttribute("data-model-id");
+      const nextName = String(input.value || "").trim();
+      if (!walletId || !modelId || !nextName) return renderWalletView();
+      repository.updateWallet(walletId, (wallet) => {
+        const model = wallet.models.find((item) => item.id === modelId);
+        if (!model || model.model === nextName) return;
+        if (model.model && !model.aliases.includes(model.model)) model.aliases.push(model.model);
+        model.model = nextName;
+        model.source = model.source === "builtin" ? "manual" : model.source;
+        model.updatedAt = Date.now();
+      });
+      repository.recalcWallet(walletId).catch(() => {
+      });
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("input[data-wallet-price]").forEach((input) => {
+    input.onchange = () => {
+      const row = input.closest("[data-wallet-model-row]");
+      const walletId = input.getAttribute("data-wallet-id");
+      const modelId = input.getAttribute("data-model-id");
+      if (!row || !walletId || !modelId) return;
+      const prices = readModelPrices(row);
+      repository.updateWallet(walletId, (wallet) => {
+        const model = wallet.models.find((item) => item.id === modelId);
+        if (!model) return;
+        model.price.offpeak = prices.offpeak;
+        model.price.peak = prices.peak;
+        model.price.priceConfigured = true;
+        model.source = "manual";
+        model.updatedAt = Date.now();
+      });
+      repository.recalcWallet(walletId).catch(() => {
+      });
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("[data-wallet-model-peak]").forEach((input) => {
+    input.onchange = () => {
+      const walletId = input.getAttribute("data-wallet-id");
+      const modelId = input.getAttribute("data-model-id");
+      if (!walletId || !modelId) return;
+      repository.updateWallet(walletId, (wallet) => {
+        const model = wallet.models.find((item) => item.id === modelId);
+        if (!model) return;
+        model.price.usePeakPricing = !!input.checked;
+        model.updatedAt = Date.now();
+      });
+      repository.recalcWallet(walletId).catch(() => {
+      });
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("[data-wallet-model-lock]").forEach((input) => {
+    input.onchange = () => {
+      const walletId = input.getAttribute("data-wallet-id");
+      const modelId = input.getAttribute("data-model-id");
+      if (!walletId || !modelId) return;
+      repository.updateWallet(walletId, (wallet) => {
+        const model = wallet.models.find((item) => item.id === modelId);
+        if (model) model.locked = !!input.checked;
+      });
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("[data-wallet-model-delete]").forEach((button) => {
+    button.onclick = () => {
+      const walletId = button.getAttribute("data-wallet-id");
+      const modelId = button.getAttribute("data-model-id");
+      if (!walletId || !modelId) return;
+      repository.updateWallet(walletId, (wallet) => {
+        wallet.models = wallet.models.filter((item) => item.id !== modelId || item.source === "builtin");
+      });
+      repository.recalcWallet(walletId).catch(() => {
+      });
+      renderWalletView();
+    };
+  });
+  doc.querySelectorAll("[data-wallet-currency-btn]").forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      const walletId = button.getAttribute("data-wallet-id");
+      const dropdown = doc.getElementById(`aus-wallet-currency-drop-${walletId}`);
+      if (!dropdown) return;
+      closeOtherDropdowns(dropdown.id);
+      dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
+    };
+  });
+  doc.querySelectorAll("[data-wallet-catalog-btn]").forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      const walletId = button.getAttribute("data-wallet-id");
+      const dropdown = doc.getElementById(`aus-wallet-catalog-drop-${walletId}`);
+      if (!dropdown) return;
+      closeOtherDropdowns(dropdown.id);
+      dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
+    };
+  });
+  doc.querySelectorAll("[data-wallet-credential-btn]").forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      const walletId = button.getAttribute("data-wallet-id");
+      const dropdown = doc.getElementById(`aus-wallet-credential-drop-${walletId}`);
+      if (!dropdown) return;
+      closeOtherDropdowns(dropdown.id);
+      dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
+    };
+  });
+  doc.querySelectorAll("[data-wallet-select]").forEach((item) => {
+    item.onclick = (event) => {
+      event.stopPropagation();
+      const walletId = item.getAttribute("data-wallet-id");
+      const kind = item.getAttribute("data-wallet-select");
+      const value = item.getAttribute("data-value") || "";
+      if (!walletId) return;
+      if (kind === "currency") {
+        repository.updateWallet(walletId, (wallet) => {
+          wallet.balance.currency = value;
+        });
+      } else if (kind === "catalog") {
+        repository.updateWallet(walletId, (wallet) => {
+          wallet.catalogProvider = value || null;
+        });
+      } else if (kind === "credential") {
+        repository.updateWallet(walletId, (wallet) => {
+          wallet.balance.primaryCredentialId = value || null;
+        });
+      }
+      closeDropdowns();
+      renderWalletView();
+    };
+  });
+  if (!bindWalletView._outsideBound) {
+    bindWalletView._outsideBound = true;
+    doc.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!target?.closest?.("[data-wallet-dropdown]") && !target?.closest?.("[data-wallet-currency-btn]") && !target?.closest?.("[data-wallet-catalog-btn]") && !target?.closest?.("[data-wallet-credential-btn]")) {
+        closeDropdowns();
+      }
+    });
+  }
 }
 function getDoc$1() {
   return window.parent?.document ?? document;
@@ -7017,6 +9472,10 @@ function refreshUI() {
       renderForecastView();
     } catch {
     }
+    try {
+      renderWalletView();
+    } catch {
+    }
   } catch {
   }
 }
@@ -7025,16 +9484,172 @@ const HISTORY_PAGE_SIZE = 30;
 let historyFullCache = null;
 let historyCacheScope = "";
 let historyLoading = false;
+const historyFilters = {
+  model: STATS_FILTER_ALL,
+  chat: STATS_FILTER_ALL,
+  endpoint: STATS_FILTER_ALL,
+  credential: STATS_FILTER_ALL
+};
+let historyFilterBase = [];
 try {
   on(DataEvents.HISTORY_ADDED, () => {
     historyFullCache = null;
   });
 } catch {
 }
+function resetHistoryFilters() {
+  historyFilters.model = STATS_FILTER_ALL;
+  historyFilters.chat = STATS_FILTER_ALL;
+  historyFilters.endpoint = STATS_FILTER_ALL;
+  historyFilters.credential = STATS_FILTER_ALL;
+  historyPage = 1;
+}
+function getHistoryChatOptions(history) {
+  const map2 = /* @__PURE__ */ new Map();
+  for (const entry of history || []) {
+    const chatId = entry?.chatId ?? null;
+    const id = chatId ?? "__null__";
+    const chatName = String(entry?.chatName || "").trim();
+    const label = chatName || (chatId ? String(chatId).length > 18 ? `${String(chatId).slice(0, 8)}…${String(chatId).slice(-4)}` : String(chatId) : "未分组/旧数据");
+    const current = map2.get(id);
+    if (!current) {
+      map2.set(id, { id, label, title: String(chatId || label) });
+    } else if (chatName && current.label !== chatName) {
+      current.label = chatName;
+      current.title = String(chatId || chatName);
+    }
+  }
+  return Array.from(map2.values()).sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
+}
+function closeHistoryFilterDropdowns() {
+  const doc = getDoc$1();
+  for (const kind of ["model", "chat", "endpoint", "credential"]) {
+    const dropdown = doc.getElementById(`aus-history-${kind}-dropdown`);
+    if (dropdown) dropdown.style.display = "none";
+  }
+}
+function renderHistoryFilterDropdown(kind, selected, options, emptyText, onSelect) {
+  const doc = getDoc$1();
+  const dropdown = doc.getElementById(`aus-history-${kind}-dropdown`);
+  if (!dropdown) return;
+  const item = (id, label, title = label) => {
+    const active = id === selected ? "background:var(--ds-card);font-weight:600;" : "";
+    return `<div data-history-value="${esc$1(id)}" title="${esc$1(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${esc$1(label)}</div>`;
+  };
+  let html = item(STATS_FILTER_ALL, "全部");
+  for (const option of options) html += item(option.id, option.label, option.title || option.label);
+  if (!options.length) html += `<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">${esc$1(emptyText)}</div>`;
+  dropdown.innerHTML = html;
+  dropdown.querySelectorAll("[data-history-value]").forEach((element) => {
+    element.onclick = () => onSelect(element.getAttribute("data-history-value") || STATS_FILTER_ALL);
+  });
+}
+function renderHistoryFilters(history) {
+  historyFilterBase = history || [];
+  const doc = getDoc$1();
+  const models = Array.from(new Set(historyFilterBase.map((entry) => String(entry?.model || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "zh-CN")).map((id) => ({ id, label: id }));
+  if (historyFilters.model !== STATS_FILTER_ALL && !models.some((option) => option.id === historyFilters.model)) {
+    historyFilters.model = STATS_FILTER_ALL;
+  }
+  const chats = getHistoryChatOptions(historyFilterBase);
+  if (historyFilters.chat !== STATS_FILTER_ALL && !chats.some((option) => option.id === historyFilters.chat)) {
+    historyFilters.chat = STATS_FILTER_ALL;
+  }
+  const endpoints = getEndpointFilterOptions(historyFilterBase);
+  if (historyFilters.endpoint !== STATS_FILTER_ALL && !endpoints.some((option) => option.id === historyFilters.endpoint)) {
+    historyFilters.endpoint = STATS_FILTER_ALL;
+    historyFilters.credential = STATS_FILTER_ALL;
+  }
+  const credentials = getCredentialFilterOptions(historyFilterBase, historyFilters.endpoint);
+  if (historyFilters.credential !== STATS_FILTER_ALL && !credentials.some((option) => option.id === historyFilters.credential)) {
+    historyFilters.credential = STATS_FILTER_ALL;
+  }
+  const labelMap = {
+    model: historyFilters.model === STATS_FILTER_ALL ? "全部" : historyFilters.model,
+    chat: historyFilters.chat === STATS_FILTER_ALL ? "全部" : chats.find((option) => option.id === historyFilters.chat)?.label || historyFilters.chat,
+    endpoint: historyFilters.endpoint === STATS_FILTER_ALL ? "全部" : historyFilters.endpoint === STATS_FILTER_UNKNOWN ? "未记录接入" : endpoints.find((option) => option.id === historyFilters.endpoint)?.label || historyFilters.endpoint,
+    credential: historyFilters.credential === STATS_FILTER_ALL ? "全部" : historyFilters.credential === STATS_FILTER_UNKNOWN ? "未识别密钥" : credentials.find((option) => option.id === historyFilters.credential)?.label || historyFilters.credential
+  };
+  for (const kind of ["model", "chat", "endpoint", "credential"]) {
+    const label = doc.getElementById(`aus-history-${kind}-label`);
+    if (label) {
+      label.textContent = labelMap[kind];
+      label.title = labelMap[kind];
+    }
+  }
+  renderHistoryFilterDropdown("model", historyFilters.model, models, "暂无模型", (value) => {
+    historyFilters.model = value;
+    historyPage = 1;
+    closeHistoryFilterDropdowns();
+    renderHistory(doc, getSelectedSave());
+  });
+  renderHistoryFilterDropdown("chat", historyFilters.chat, chats, "暂无对话", (value) => {
+    historyFilters.chat = value;
+    historyPage = 1;
+    closeHistoryFilterDropdowns();
+    renderHistory(doc, getSelectedSave());
+  });
+  renderHistoryFilterDropdown("endpoint", historyFilters.endpoint, endpoints, "暂无接入记录", (value) => {
+    historyFilters.endpoint = value;
+    historyFilters.credential = STATS_FILTER_ALL;
+    historyPage = 1;
+    closeHistoryFilterDropdowns();
+    renderHistory(doc, getSelectedSave());
+  });
+  renderHistoryFilterDropdown("credential", historyFilters.credential, credentials, "暂无密钥记录", (value) => {
+    historyFilters.credential = value;
+    historyPage = 1;
+    closeHistoryFilterDropdowns();
+    renderHistory(doc, getSelectedSave());
+  });
+}
+function filteredHistoryForDisplay(history) {
+  return filterStatsHistory(history, {
+    model: historyFilters.model,
+    chat: historyFilters.chat,
+    endpoint: historyFilters.endpoint,
+    credential: historyFilters.credential
+  });
+}
+function bindHistoryFilters(doc) {
+  const controls = [
+    ["model", "#aus-history-model-btn"],
+    ["chat", "#aus-history-chat-btn"],
+    ["endpoint", "#aus-history-endpoint-btn"],
+    ["credential", "#aus-history-credential-btn"]
+  ];
+  for (const [kind, selector] of controls) {
+    const button = doc.querySelector(selector);
+    const dropdown = doc.getElementById(`aus-history-${kind}-dropdown`);
+    if (!button || !dropdown) continue;
+    button.onclick = () => {
+      const willOpen = dropdown.style.display !== "block";
+      closeHistoryFilterDropdowns();
+      if (!willOpen) return;
+      renderHistoryFilters(historyFilterBase);
+      dropdown.style.display = "block";
+      positionFilterDropdown(button, dropdown);
+    };
+  }
+  doc.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!target.closest("#aus-history-filter-host")) closeHistoryFilterDropdowns();
+  });
+}
 function renderHistoryInner(doc, fullHist) {
   const host = doc.getElementById("aus-history");
   if (!host) return;
   const total = fullHist.length;
+  if (!total) {
+    host.innerHTML = `<div style="text-align:center;padding:24px;color:var(--ds-text-3);font-size:12px;line-height:1.8;">当前筛选无记录<br/><button id="aus-history-filter-reset" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">清除筛选</button></div>`;
+    const reset = doc.getElementById("aus-history-filter-reset");
+    if (reset) reset.onclick = () => {
+      resetHistoryFilters();
+      closeHistoryFilterDropdowns();
+      renderHistory(doc, getSelectedSave());
+    };
+    return;
+  }
   const totalPages = Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE));
   if (historyPage > totalPages) historyPage = totalPages;
   if (historyPage < 1) historyPage = 1;
@@ -7102,7 +9717,9 @@ function renderHistoryInner(doc, fullHist) {
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">基础信息</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;font-size:11px;">
               <div><div style="color:var(--ds-text-2);font-size:10px;">模型</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${esc$1(h.model || "—")}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">时段</div><div style="font-weight:600;margin-top:2px;color:var(--ds-text);">${h.priceType === "new-peak" ? "高峰" : h.priceType === "new-offpeak" ? "非高峰" : "旧价格"}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">时段</div><div style="font-weight:600;margin-top:2px;color:var(--ds-text);">${h.priceType === "new-peak" || h.priceType === "wallet-peak" ? "高峰" : h.priceType === "new-offpeak" || h.priceType === "wallet-offpeak" ? "非高峰" : h.priceType === "unpriced" ? "待定价" : "旧价格"}</div></div>
+              <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">钱包</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${esc$1(repository.getWallet(String(h.walletId || ""))?.name || h.endpointLabel || "未归属钱包")}</div></div>
+              <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">计价来源</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${h.pricingSource === "wallet" ? "钱包规则" : h.pricingSource === "builtin" ? "DeepSeek 内置" : h.pricingSource === "unpriced" ? "待定价" : h.pricingSource === "legacy-match" ? "旧数据同名价" : h.pricingSource === "legacy" ? "旧全局规则" : "旧记录兜底"}</div></div>
               <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">时间</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${new Date(h.timestamp).toLocaleString("zh-CN")}</div></div>
             </div>
           </div>
@@ -7290,7 +9907,8 @@ function renderHistory(doc, s) {
   }
   let fullForRender = hist;
   if (historyFullCache && historyFullCache.length > hist.length) fullForRender = historyFullCache;
-  renderHistoryInner(doc, fullForRender);
+  renderHistoryFilters(fullForRender);
+  renderHistoryInner(doc, filteredHistoryForDisplay(fullForRender));
   if (historyLoading) return;
   const needFull = hist.length >= HISTORY_PAGE_SIZE || historyFullCache !== null || fullForRender.length >= HISTORY_PAGE_SIZE;
   if (!needFull && hist.length < HISTORY_PAGE_SIZE) return;
@@ -7310,7 +9928,8 @@ function renderHistory(doc, s) {
       }
       if (full.length <= hist.length) return;
       historyFullCache = full;
-      renderHistoryInner(doc, full);
+      renderHistoryFilters(full);
+      renderHistoryInner(doc, filteredHistoryForDisplay(full));
     } catch {
     } finally {
       historyLoading = false;
@@ -7339,7 +9958,7 @@ function switchView(view) {
     if (v === view) el.classList.add("active");
     else el.classList.remove("active");
   });
-  const titles = { overview: "用量概览", stats: "用量统计", history: "历史记录", forecast: "趋势预测（Beta）", settings: "设置", help: "使用说明", about: "关于" };
+  const titles = { overview: "用量概览", stats: "用量统计", history: "历史记录", forecast: "趋势预测（Beta）", wallet: "钱包", settings: "设置", help: "使用说明", about: "关于" };
   const titleEl = doc.getElementById("aus-page-title");
   if (titleEl) titleEl.textContent = titles[view] || "";
   refreshUI();
@@ -7366,6 +9985,14 @@ function switchView(view) {
     setTimeout(() => {
       try {
         renderForecastView();
+      } catch {
+      }
+    }, 60);
+  }
+  if (view === "wallet") {
+    setTimeout(() => {
+      try {
+        renderWalletView();
       } catch {
       }
     }, 60);
@@ -7417,7 +10044,7 @@ function createPanel() {
       <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;">
         <div style="display:flex;flex-direction:column;min-width:0;" id="aus-brand">
           <span style="font-size:13px;font-weight:700;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
-          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v${"3.0.7"}</span>
+          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v${"3.0.8"}</span>
         </div>
         <button id="aus-sidebar-toggle" style="width:28px;height:28px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;">‹</button>
       </div>
@@ -7427,6 +10054,7 @@ function createPanel() {
           <div class="aus-nav-item" data-nav="stats" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">▦</span><span class="aus-nav-label">用量统计</span></div>
           <div class="aus-nav-item" data-nav="history" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">≡</span><span class="aus-nav-label">历史记录</span></div>
           <div class="aus-nav-item" data-nav="forecast" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">⬈</span><span class="aus-nav-label">趋势预测（Beta）</span></div>
+          <div class="aus-nav-item" data-nav="wallet" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">▣</span><span class="aus-nav-label">钱包</span></div>
         </div>
         <div style="flex:1;"></div>
         <div class="aus-nav-group" style="display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--ds-border);padding-top:8px;">
@@ -7445,7 +10073,7 @@ function createPanel() {
         <div style="max-width:1100px;margin:0 auto;display:grid;gap:16px;">
           <div data-view="overview">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div class="ds-card"><div class="ds-card-title">充值余额</div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div id="aus-balance-remaining" style="font-size:11px;color:var(--ds-text-2);margin-top:6px;min-height:16px;"></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:11px;">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导出</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导入</button></div></div>
+              <div class="ds-card aus-overview-balance-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div class="ds-card-title">充值余额</div><div id="aus-overview-wallet-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;"><span style="color:var(--ds-text-2);">余额口径</span><span id="aus-overview-wallet-label" style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部钱包合计</span><span>▼</span></div><div id="aus-overview-wallet-dropdown" style="display:none;position:absolute;top:44px;right:10px;z-index:20;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:190px;max-height:260px;overflow:auto;"></div></div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div id="aus-balance-remaining" style="font-size:11px;color:var(--ds-text-2);margin-top:6px;min-height:16px;"></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:11px;">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导出</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导入</button></div></div>
               <div class="ds-card"><div class="ds-card-title">累计消费</div><div class="ds-card-val" id="aus-total-cost">¥0.0000<small>CNY</small></div><div style="font-size:11px;color:var(--ds-text-3);margin-top:2px;" id="aus-total-tokens">0 tokens</div></div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
@@ -7480,24 +10108,38 @@ function createPanel() {
             </div>
            <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
-              <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span><span style="font-size:10px;">▼</span></div>
-              <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);">全部</span><span style="font-size:10px;">▼</span></div>
-              <div id="aus-chat-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">对话</span><span id="aus-chat-label" style="font-weight:600;color:var(--ds-text);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
-              <div id="aus-range-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);overflow:hidden;flex-direction:row;">
-                <div style="min-width:120px;border-right:1px solid var(--ds-card);padding:8px;display:grid;gap:2px;">
-                  <div data-range="all" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">全部</div>
-                  <div data-range="today" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">今天</div>
-                  <div data-range="yesterday" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">昨天</div>
-                  <div data-range="7d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">近 7 天</div>
-                  <div data-range="30d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">近 30 天</div>
-                  <div data-range="month" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">本月</div>
-                  <div data-range="lastMonth" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">上月</div>
-                  <div data-range="custom" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">自定义</div>
+              <div class="aus-stats-filter">
+                <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-range-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);overflow:hidden;flex-direction:row;">
+                  <div style="min-width:120px;border-right:1px solid var(--ds-card);padding:8px;display:grid;gap:2px;">
+                    <div data-range="all" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">全部</div>
+                    <div data-range="today" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">今天</div>
+                    <div data-range="yesterday" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">昨天</div>
+                    <div data-range="7d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">近 7 天</div>
+                    <div data-range="30d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">近 30 天</div>
+                    <div data-range="month" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">本月</div>
+                    <div data-range="lastMonth" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">上月</div>
+                    <div data-range="custom" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">自定义</div>
+                  </div>
+                  <div id="aus-date-calendar" style="padding:12px;display:none;"></div>
                 </div>
-                <div id="aus-date-calendar" style="padding:12px;display:none;"></div>
               </div>
-              <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:160px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
-              <div id="aus-chat-dropdown" style="display:none;position:absolute;top:40px;left:320px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-height:260px;overflow:auto;padding:8px;"></div>
+              <div class="aus-stats-filter">
+                <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
+                <div id="aus-chat-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">对话</span><span id="aus-chat-label" style="font-weight:600;color:var(--ds-text);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-chat-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
+                <div id="aus-endpoint-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">接入类型</span><span id="aus-endpoint-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-endpoint-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
+                <div id="aus-credential-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
             </div>
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
               <div class="ds-card"><div style="font-size:11px;color:var(--ds-text-2);">消费金额</div><div id="aus-stats-cost" style="font-size:22px;font-weight:700;color:var(--ds-text);margin-top:6px;">¥0.00 CNY</div></div>
@@ -7540,7 +10182,28 @@ function createPanel() {
               <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">对比 · 最耗对话 Top</div><div id="aus-forecast-compare"></div></div>
             </div>
           </div>
+          <div data-view="wallet" style="display:none;">
+            <div id="aus-wallet"></div>
+          </div>
           <div data-view="history" style="display:none;">
+            <div id="aus-history-filter-host" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
+              <div class="aus-stats-filter">
+                <div id="aus-history-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-history-model-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-history-model-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
+                <div id="aus-history-chat-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">对话</span><span id="aus-history-chat-label" style="font-weight:600;color:var(--ds-text);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-history-chat-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
+                <div id="aus-history-endpoint-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">接入类型</span><span id="aus-history-endpoint-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-history-endpoint-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
+                <div id="aus-history-credential-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-history-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-history-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+            </div>
             <div id="aus-diff" class="ds-card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">缓存断点</span><button id="aus-diff-fullscreen" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">全屏</button></div><div style="font-size:11px;color:var(--ds-text-3);">在历史中各选一条 旧/新 对比，橙/绿高亮即发散点</div></div>
             <div id="aus-history"></div>
           </div>
@@ -7549,11 +10212,12 @@ function createPanel() {
           </div>
           <div data-view="help" style="display:none;">
             <div style="display:grid;gap:12px;">
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DC2626;font-weight:600;margin-bottom:6px;">⚠️ 安全提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>在本扩展中填入 API 密钥存在安全风险。密钥仅经 XOR 混淆后存储于 SillyTavern 设置中，建议使用权限受限的 API 密钥。</div><div>使用模型价格自动同步时将从 models.dev 下载相关数据，不对数据准确和安全做保障；不对使用自定义的 WebDAV 服务导致的安全问题做保障。</div><div>余额查询通过 <a href="https://api.deepseek.com/user/balance" target="_blank" style="color:var(--ds-text);text-decoration:underline;">https://api.deepseek.com/user/balance</a> 官方 API 实现，将会发送你填写的 API 密钥。</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DC2626;font-weight:600;margin-bottom:6px;">隐私声明</div><div style="color:var(--ds-text-2);display:grid;gap:6px;"><div>本扩展有且只能获得用户在酒馆本身中填写的：密钥条目的编号、用户备注和掩码末三位，仅用于独立区分请求来源，不会且无法读取、保存或上传完整明文密钥。</div><div>用户储存在酒馆本身的密钥是安全的，扩展无法获取真实密钥。</div><div>用户主动填入扩展的校准密钥是实际可用的密钥，且仅会被用于查询 DeepSeek 官方余额；它仅经 XOR 混淆后存放于 SillyTavern，不进入历史记录、统计、日志、导入导出或 WebDAV。自动校准时仅由浏览器直接发送至 <a href="https://api.deepseek.com/user/balance" target="_blank" style="color:var(--ds-text);text-decoration:underline;">https://api.deepseek.com/user/balance</a> API。</div><div>XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。</div><div>模型价格同步会访问 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a>；自定义 WebDAV 的数据安全由用户选择的存储服务与网络环境决定。</div><div style="margin-top:2px;padding-top:6px;border-top:1px solid var(--ds-border);font-weight:600;color:#DC2626;">免责声明</div><div>本扩展不对功能“价格来源”、“自动同步”等利用 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 获取的数据中出现或可能出现的商业化中转站负责；我们不建议使用任何商业化中转站，尽管我们已经尽力筛选数据，但由于对大量数据进行完全筛选难以实现，因此我们不对可能出现的任何商业化中转站名称负责，不构成推荐，和 models.dev 或任何中转站没有商业往来，坚定不移反对商业化。</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0BA25E;font-weight:600;margin-bottom:6px;">钱包</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 扩展按识别到的接入链接自动创建和汇总钱包，默认始终保留 DeepSeek 官方钱包；同名链接下识别的密钥和模型会归入同一钱包。</div><div>2. 每个钱包可独立维护名称、余额、模型价格、峰谷规则和价格来源；钱包默认收起，展开状态按钱包记忆。价格来源仅展示第一方模型厂商，不展示中转站或聚合平台。</div><div>3. 请求进入后会先匹配所属钱包，再使用该钱包的模型价格和峰谷规则计费，并从对应钱包余额预扣；未配置价格的模型先记零费用，保存或同步价格后自动重算冷热历史。</div><div>4. 自动余额校准仅支持 DeepSeek 官方直连，校准密钥需在钱包内单独填写；其他接入可使用手工余额，多个密钥不会自动相加。</div><div>5. 删除钱包会进入“已忽略接入”，后续请求不会自动重建、不参与余额合计，历史记录仍保留归属，需要时可恢复显示。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（余额查询仅支持 DeepSeek 官方）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前（DeepSeek）高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DB2777;font-weight:600;margin-bottom:6px;">🔄 消息对比</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中找到想对比的两条消息，前者点“旧”，后者点“新”</div><div>2. 系统并排显示请求消息的文字差异</div><div>3. 差异点即缓存发散起始位置（前 N 条相同为缓存命中段）</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 切换时间维度、模型和对话查看不同范围的统计</div><div>2. 多图表展示多模请求参数，悬浮查看分模型明细</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 切换时间、模型、对话、接入类型和 API 密钥查看不同范围的统计</div><div>2. 多图表展示多模请求参数，悬浮查看分模型明细</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”展开固定区域</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 等详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0891B2;font-weight:600;margin-bottom:6px;">🧡 模型兼容</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 完全兼容 DeepSeek 官方 API</div><div>2. 尽量兼容不同厂商/渠道的请求格式，部分模型可能无缓存命中</div><div>3. 如数据异常，请携带完整请求与响应反馈</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-text-3);font-weight:600;margin-bottom:6px;">✨ 关于</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>本扩展由原脚本（<a href="https://github.com/janmk1453/deepseek-tavern-script" target="_blank" style="color:var(--ds-text);text-decoration:underline;">deepseek-tavern-script</a>）迁移重构。</div><div><span style="color:var(--ds-text);">@janmk</span> · 仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);text-decoration:underline;">janmk1453/Api-Usage</a></div></div></div>
@@ -7562,7 +10226,7 @@ function createPanel() {
           <div data-view="about" style="display:none;">
             <div style="display:grid;gap:12px;">
               <div class="ds-card" style="line-height:1.7;font-size:12px;color:var(--ds-text);">
-                <div style="font-size:14px;font-weight:600;">关于<br/><br/>API用量统计 · SillyTavern 扩展</div>
+                <div style="font-size:14px;font-weight:600;">关于<br/>API用量统计 · SillyTavern 扩展</div>
                 <div style="margin-top:8px;color:var(--ds-text-2);">迁移至原 DeepSeek使用预测 脚本<br/>致力于实现最全面的用量可视化统计<br/><br/>仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);">janmk1453/Api-Usage</a></div>
               </div>
               <div class="ds-card" style="display:grid;gap:8px;">
@@ -7570,7 +10234,7 @@ function createPanel() {
                 <div id="aus-update-banner" style="display:none;padding:8px 10px;border-radius:8px;background:var(--ds-yellow-bg);border:1px solid var(--ds-yellow-border);font-size:11px;color:var(--ds-text);"></div>
                 <div style="display:flex;gap:8px;align-items:center;">
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:11px;">检查更新</button>
-                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v${"3.0.7"} · 每 6 小时自动检查</span>
+                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v${"3.0.8"} · 每 6 小时自动检查</span>
                 </div>
               </div>
             </div>
@@ -7718,6 +10382,7 @@ function createPanel() {
   } catch {
   }
   bindPanel(doc);
+  bindHistoryFilters(doc);
   bindImportExport(doc);
   renderSettings(doc);
   bindHistoryCompare();
@@ -7733,7 +10398,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-M1FUYjSu.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-BhmJdj3-.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -7786,7 +10451,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-M1FUYjSu.js").then((m) => m.maybeAutoCheck());
+    import("./update-BhmJdj3-.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

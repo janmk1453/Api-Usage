@@ -4,8 +4,9 @@
  */
 import type { HistoryEntry, Save } from '../types/save';
 import type { Settings, Balance } from '../types/settings';
+import type { WalletConfig } from '../types/wallet';
 
-export type { HistoryEntry, Save, Settings, Balance };
+export type { HistoryEntry, Save, Settings, Balance, WalletConfig };
 
 // 聚合视图（用量概览/统计的统一输入）
 export type Aggregated = {
@@ -37,6 +38,8 @@ export type Snapshot = {
   settings: Settings;
   balance: Balance | null;
   customBalance: string | null;
+  wallets: WalletConfig[];
+  walletIgnored: string[];
   messageCount: number;
   lastUsage: HistoryEntry | null;
 };
@@ -46,6 +49,8 @@ export type Snapshot = {
 // - stats: 按 TimeRange 过滤后的聚合
 export type OverviewView = {
   balanceText: string;
+  hasBalance: boolean;
+  walletBalanceCount: number;
   totalCost: number;
   totalTokens: number;
   hit: number; miss: number; output: number;

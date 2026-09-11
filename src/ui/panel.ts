@@ -7,12 +7,21 @@ import { bindImportExport } from '../services/import-export';
 import { renderSettings } from './settings';
 import { bindHistoryCompare, renderUsageDetail } from './compare';
 import { renderOverview } from './overview';
-import { initStatsView, renderStatsView } from './stats-view';
+import { initStatsView, positionFilterDropdown, renderStatsView } from './stats-view';
 import { initExtraCharts, renderExtraCharts } from './extra-charts';
 import { renderForecastView, initForecastView } from './forecast-view';
+import { renderWalletView } from './wallet-view';
 import { applyTheme } from '../services/theme';
 import { DataEvents, on as onDataEvent } from '../data/events';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
+import { repository } from '../data/repository';
+import {
+  STATS_FILTER_ALL,
+  STATS_FILTER_UNKNOWN,
+  filterStatsHistory,
+  getCredentialFilterOptions,
+  getEndpointFilterOptions,
+} from '../data/computed';
 
 declare const __APP_VERSION__: string;
 
@@ -64,7 +73,7 @@ function prettyFullResponse(resp: any): string {
 
 let panelCreated = false;
 let panelOpen = false;
-let currentView: 'overview' | 'stats' | 'history' | 'forecast' | 'settings' | 'help' | 'about' = 'overview';
+let currentView: 'overview' | 'stats' | 'history' | 'forecast' | 'wallet' | 'settings' | 'help' | 'about' = 'overview';
 let collapsed = false;
 
 export function refreshUI() {
@@ -88,6 +97,7 @@ export function refreshUI() {
     renderOverview();
     renderStatsView();
     try { renderForecastView(); } catch {}
+    try { renderWalletView(); } catch {}
   } catch {}
 }
 
@@ -96,12 +106,203 @@ const HISTORY_PAGE_SIZE = 30;
 let historyFullCache: any[] | null = null;
 let historyCacheScope = '';
 let historyLoading = false;
+const historyFilters = {
+  model: STATS_FILTER_ALL,
+  chat: STATS_FILTER_ALL,
+  endpoint: STATS_FILTER_ALL,
+  credential: STATS_FILTER_ALL,
+};
+let historyFilterBase: any[] = [];
 try { onDataEvent(DataEvents.HISTORY_ADDED, () => { historyFullCache = null; }); } catch {}
+
+type HistoryFilterKind = keyof typeof historyFilters;
+type HistoryFilterOption = { id: string; label: string; title?: string; unknown?: boolean };
+
+function historyFiltersActive(): boolean {
+  return Object.values(historyFilters).some((value) => value !== STATS_FILTER_ALL);
+}
+
+function resetHistoryFilters() {
+  historyFilters.model = STATS_FILTER_ALL;
+  historyFilters.chat = STATS_FILTER_ALL;
+  historyFilters.endpoint = STATS_FILTER_ALL;
+  historyFilters.credential = STATS_FILTER_ALL;
+  historyPage = 1;
+}
+
+function getHistoryChatOptions(history: any[]): HistoryFilterOption[] {
+  const map = new Map<string, { id: string; label: string; title: string }>();
+  for (const entry of history || []) {
+    const chatId = entry?.chatId ?? null;
+    const id = chatId ?? '__null__';
+    const chatName = String(entry?.chatName || '').trim();
+    const label = chatName || (chatId
+      ? (String(chatId).length > 18 ? `${String(chatId).slice(0, 8)}…${String(chatId).slice(-4)}` : String(chatId))
+      : '未分组/旧数据');
+    const current = map.get(id);
+    if (!current) {
+      map.set(id, { id, label, title: String(chatId || label) });
+    } else if (chatName && current.label !== chatName) {
+      current.label = chatName;
+      current.title = String(chatId || chatName);
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'));
+}
+
+function closeHistoryFilterDropdowns() {
+  const doc = getDoc();
+  for (const kind of ['model', 'chat', 'endpoint', 'credential'] as HistoryFilterKind[]) {
+    const dropdown = doc.getElementById(`aus-history-${kind}-dropdown`);
+    if (dropdown) (dropdown as HTMLElement).style.display = 'none';
+  }
+}
+
+function renderHistoryFilterDropdown(
+  kind: HistoryFilterKind,
+  selected: string,
+  options: HistoryFilterOption[],
+  emptyText: string,
+  onSelect: (value: string) => void,
+) {
+  const doc = getDoc();
+  const dropdown = doc.getElementById(`aus-history-${kind}-dropdown`);
+  if (!dropdown) return;
+  const item = (id: string, label: string, title = label) => {
+    const active = id === selected ? 'background:var(--ds-card);font-weight:600;' : '';
+    return `<div data-history-value="${esc(id)}" title="${esc(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${esc(label)}</div>`;
+  };
+  let html = item(STATS_FILTER_ALL, '全部');
+  for (const option of options) html += item(option.id, option.label, option.title || option.label);
+  if (!options.length) html += `<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">${esc(emptyText)}</div>`;
+  dropdown.innerHTML = html;
+  dropdown.querySelectorAll('[data-history-value]').forEach((element: any) => {
+    element.onclick = () => onSelect(element.getAttribute('data-history-value') || STATS_FILTER_ALL);
+  });
+}
+
+function renderHistoryFilters(history: any[]) {
+  historyFilterBase = history || [];
+  const doc = getDoc();
+  const models = Array.from(new Set(historyFilterBase.map((entry) => String(entry?.model || '').trim()).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b, 'zh-CN'))
+    .map((id) => ({ id, label: id }));
+  if (historyFilters.model !== STATS_FILTER_ALL && !models.some((option) => option.id === historyFilters.model)) {
+    historyFilters.model = STATS_FILTER_ALL;
+  }
+  const chats = getHistoryChatOptions(historyFilterBase);
+  if (historyFilters.chat !== STATS_FILTER_ALL && !chats.some((option) => option.id === historyFilters.chat)) {
+    historyFilters.chat = STATS_FILTER_ALL;
+  }
+  const endpoints = getEndpointFilterOptions(historyFilterBase);
+  if (historyFilters.endpoint !== STATS_FILTER_ALL && !endpoints.some((option) => option.id === historyFilters.endpoint)) {
+    historyFilters.endpoint = STATS_FILTER_ALL;
+    historyFilters.credential = STATS_FILTER_ALL;
+  }
+  const credentials = getCredentialFilterOptions(historyFilterBase, historyFilters.endpoint);
+  if (historyFilters.credential !== STATS_FILTER_ALL && !credentials.some((option) => option.id === historyFilters.credential)) {
+    historyFilters.credential = STATS_FILTER_ALL;
+  }
+
+  const labelMap: Record<HistoryFilterKind, string> = {
+    model: historyFilters.model === STATS_FILTER_ALL ? '全部' : historyFilters.model,
+    chat: historyFilters.chat === STATS_FILTER_ALL
+      ? '全部'
+      : chats.find((option) => option.id === historyFilters.chat)?.label || historyFilters.chat,
+    endpoint: historyFilters.endpoint === STATS_FILTER_ALL
+      ? '全部'
+      : historyFilters.endpoint === STATS_FILTER_UNKNOWN
+        ? '未记录接入'
+        : endpoints.find((option) => option.id === historyFilters.endpoint)?.label || historyFilters.endpoint,
+    credential: historyFilters.credential === STATS_FILTER_ALL
+      ? '全部'
+      : historyFilters.credential === STATS_FILTER_UNKNOWN
+        ? '未识别密钥'
+        : credentials.find((option) => option.id === historyFilters.credential)?.label || historyFilters.credential,
+  };
+  for (const kind of ['model', 'chat', 'endpoint', 'credential'] as HistoryFilterKind[]) {
+    const label = doc.getElementById(`aus-history-${kind}-label`);
+    if (label) {
+      label.textContent = labelMap[kind];
+      label.title = labelMap[kind];
+    }
+  }
+  renderHistoryFilterDropdown('model', historyFilters.model, models, '暂无模型', (value) => {
+    historyFilters.model = value;
+    historyPage = 1;
+    closeHistoryFilterDropdowns();
+    renderHistory(doc, getSelectedSave());
+  });
+  renderHistoryFilterDropdown('chat', historyFilters.chat, chats, '暂无对话', (value) => {
+    historyFilters.chat = value;
+    historyPage = 1;
+    closeHistoryFilterDropdowns();
+    renderHistory(doc, getSelectedSave());
+  });
+  renderHistoryFilterDropdown('endpoint', historyFilters.endpoint, endpoints, '暂无接入记录', (value) => {
+    historyFilters.endpoint = value;
+    historyFilters.credential = STATS_FILTER_ALL;
+    historyPage = 1;
+    closeHistoryFilterDropdowns();
+    renderHistory(doc, getSelectedSave());
+  });
+  renderHistoryFilterDropdown('credential', historyFilters.credential, credentials, '暂无密钥记录', (value) => {
+    historyFilters.credential = value;
+    historyPage = 1;
+    closeHistoryFilterDropdowns();
+    renderHistory(doc, getSelectedSave());
+  });
+}
+
+function filteredHistoryForDisplay(history: any[]): any[] {
+  return filterStatsHistory(history, {
+    model: historyFilters.model,
+    chat: historyFilters.chat,
+    endpoint: historyFilters.endpoint,
+    credential: historyFilters.credential,
+  });
+}
+
+function bindHistoryFilters(doc: Document) {
+  const controls: Array<[HistoryFilterKind, string]> = [
+    ['model', '#aus-history-model-btn'],
+    ['chat', '#aus-history-chat-btn'],
+    ['endpoint', '#aus-history-endpoint-btn'],
+    ['credential', '#aus-history-credential-btn'],
+  ];
+  for (const [kind, selector] of controls) {
+    const button = doc.querySelector(selector) as HTMLElement | null;
+    const dropdown = doc.getElementById(`aus-history-${kind}-dropdown`) as HTMLElement | null;
+    if (!button || !dropdown) continue;
+    button.onclick = () => {
+      const willOpen = dropdown.style.display !== 'block';
+      closeHistoryFilterDropdowns();
+      if (!willOpen) return;
+      renderHistoryFilters(historyFilterBase);
+      dropdown.style.display = 'block';
+      positionFilterDropdown(button, dropdown);
+    };
+  }
+  doc.addEventListener('click', (event: any) => {
+    const target = event.target as HTMLElement;
+    if (!target.closest('#aus-history-filter-host')) closeHistoryFilterDropdowns();
+  });
+}
 
 function renderHistoryInner(doc: Document, fullHist: any[]) {
   const host = doc.getElementById('aus-history');
   if (!host) return;
   const total = fullHist.length;
+  if (!total) {
+    host.innerHTML = `<div style="text-align:center;padding:24px;color:var(--ds-text-3);font-size:12px;line-height:1.8;">当前筛选无记录<br/><button id="aus-history-filter-reset" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">清除筛选</button></div>`;
+    const reset = doc.getElementById('aus-history-filter-reset') as HTMLButtonElement | null;
+    if (reset) reset.onclick = () => {
+      resetHistoryFilters();
+      closeHistoryFilterDropdowns();
+      renderHistory(doc, getSelectedSave());
+    };
+    return;
+  }
   const totalPages = Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE));
   if (historyPage > totalPages) historyPage = totalPages;
   if (historyPage < 1) historyPage = 1;
@@ -160,7 +361,9 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">基础信息</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;font-size:11px;">
               <div><div style="color:var(--ds-text-2);font-size:10px;">模型</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${esc(h.model||'—')}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">时段</div><div style="font-weight:600;margin-top:2px;color:var(--ds-text);">${h.priceType==='new-peak'?'高峰':h.priceType==='new-offpeak'?'非高峰':'旧价格'}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">时段</div><div style="font-weight:600;margin-top:2px;color:var(--ds-text);">${h.priceType==='new-peak'||h.priceType==='wallet-peak'?'高峰':h.priceType==='new-offpeak'||h.priceType==='wallet-offpeak'?'非高峰':h.priceType==='unpriced'?'待定价':'旧价格'}</div></div>
+              <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">钱包</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${esc(repository.getWallet(String(h.walletId||''))?.name || h.endpointLabel || '未归属钱包')}</div></div>
+              <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">计价来源</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${h.pricingSource==='wallet'?'钱包规则':h.pricingSource==='builtin'?'DeepSeek 内置':h.pricingSource==='unpriced'?'待定价':h.pricingSource==='legacy-match'?'旧数据同名价':h.pricingSource==='legacy'?'旧全局规则':'旧记录兜底'}</div></div>
               <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">时间</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${new Date(h.timestamp).toLocaleString('zh-CN')}</div></div>
             </div>
           </div>
@@ -292,7 +495,8 @@ function renderHistory(doc: Document, s: any) {
   // 同步先渲染：若已有全量缓存则直接用缓存分页，否则用热数据分页（30条），避免一次渲染2000条
   let fullForRender: any[] = hist;
   if (historyFullCache && historyFullCache.length > hist.length) fullForRender = historyFullCache;
-  renderHistoryInner(doc, fullForRender);
+  renderHistoryFilters(fullForRender);
+  renderHistoryInner(doc, filteredHistoryForDisplay(fullForRender));
   // 异步加载全量（热+冷）以支持 2000 条翻页，加载后若更多数据则二次渲染；统计已用聚合 totals，不受此展示分页影响
   if (historyLoading) return;
   const needFull = hist.length >= HISTORY_PAGE_SIZE || historyFullCache !== null || fullForRender.length >= HISTORY_PAGE_SIZE;
@@ -313,7 +517,8 @@ function renderHistory(doc: Document, s: any) {
       if (full.length <= hist.length) return;
       historyFullCache = full;
       // 若当前页仍指向热数据页，需保持页码但更新总数
-      renderHistoryInner(doc, full);
+      renderHistoryFilters(full);
+      renderHistoryInner(doc, filteredHistoryForDisplay(full));
     } catch {} finally { historyLoading = false; }
   })();
 }
@@ -336,7 +541,7 @@ function switchView(view: typeof currentView) {
     if (v === view) el.classList.add('active');
     else el.classList.remove('active');
   });
-  const titles: any = { overview: '用量概览', stats: '用量统计', history: '历史记录', forecast: '趋势预测（Beta）', settings: '设置', help: '使用说明', about: '关于' };
+  const titles: any = { overview: '用量概览', stats: '用量统计', history: '历史记录', forecast: '趋势预测（Beta）', wallet: '钱包', settings: '设置', help: '使用说明', about: '关于' };
   const titleEl = doc.getElementById('aus-page-title');
   if (titleEl) titleEl.textContent = titles[view] || '';
   refreshUI();
@@ -355,6 +560,9 @@ function switchView(view: typeof currentView) {
   }
   if (view === 'forecast') {
     setTimeout(() => { try { renderForecastView(); } catch {} }, 60);
+  }
+  if (view === 'wallet') {
+    setTimeout(() => { try { renderWalletView(); } catch {} }, 60);
   }
 }
 
@@ -408,6 +616,7 @@ export function createPanel() {
           <div class="aus-nav-item" data-nav="stats" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">▦</span><span class="aus-nav-label">用量统计</span></div>
           <div class="aus-nav-item" data-nav="history" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">≡</span><span class="aus-nav-label">历史记录</span></div>
           <div class="aus-nav-item" data-nav="forecast" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">⬈</span><span class="aus-nav-label">趋势预测（Beta）</span></div>
+          <div class="aus-nav-item" data-nav="wallet" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;"><span style="width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">▣</span><span class="aus-nav-label">钱包</span></div>
         </div>
         <div style="flex:1;"></div>
         <div class="aus-nav-group" style="display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--ds-border);padding-top:8px;">
@@ -426,7 +635,7 @@ export function createPanel() {
         <div style="max-width:1100px;margin:0 auto;display:grid;gap:16px;">
           <div data-view="overview">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div class="ds-card"><div class="ds-card-title">充值余额</div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div id="aus-balance-remaining" style="font-size:11px;color:var(--ds-text-2);margin-top:6px;min-height:16px;"></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:11px;">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导出</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导入</button></div></div>
+              <div class="ds-card aus-overview-balance-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div class="ds-card-title">充值余额</div><div id="aus-overview-wallet-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;"><span style="color:var(--ds-text-2);">余额口径</span><span id="aus-overview-wallet-label" style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部钱包合计</span><span>▼</span></div><div id="aus-overview-wallet-dropdown" style="display:none;position:absolute;top:44px;right:10px;z-index:20;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:190px;max-height:260px;overflow:auto;"></div></div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div id="aus-balance-remaining" style="font-size:11px;color:var(--ds-text-2);margin-top:6px;min-height:16px;"></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:11px;">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导出</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导入</button></div></div>
               <div class="ds-card"><div class="ds-card-title">累计消费</div><div class="ds-card-val" id="aus-total-cost">¥0.0000<small>CNY</small></div><div style="font-size:11px;color:var(--ds-text-3);margin-top:2px;" id="aus-total-tokens">0 tokens</div></div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
@@ -461,24 +670,38 @@ export function createPanel() {
             </div>
            <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
-              <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span><span style="font-size:10px;">▼</span></div>
-              <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);">全部</span><span style="font-size:10px;">▼</span></div>
-              <div id="aus-chat-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">对话</span><span id="aus-chat-label" style="font-weight:600;color:var(--ds-text);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
-              <div id="aus-range-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);overflow:hidden;flex-direction:row;">
-                <div style="min-width:120px;border-right:1px solid var(--ds-card);padding:8px;display:grid;gap:2px;">
-                  <div data-range="all" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">全部</div>
-                  <div data-range="today" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">今天</div>
-                  <div data-range="yesterday" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">昨天</div>
-                  <div data-range="7d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">近 7 天</div>
-                  <div data-range="30d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">近 30 天</div>
-                  <div data-range="month" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">本月</div>
-                  <div data-range="lastMonth" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">上月</div>
-                  <div data-range="custom" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">自定义</div>
+              <div class="aus-stats-filter">
+                <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-range-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);overflow:hidden;flex-direction:row;">
+                  <div style="min-width:120px;border-right:1px solid var(--ds-card);padding:8px;display:grid;gap:2px;">
+                    <div data-range="all" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">全部</div>
+                    <div data-range="today" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">今天</div>
+                    <div data-range="yesterday" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">昨天</div>
+                    <div data-range="7d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">近 7 天</div>
+                    <div data-range="30d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">近 30 天</div>
+                    <div data-range="month" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">本月</div>
+                    <div data-range="lastMonth" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">上月</div>
+                    <div data-range="custom" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">自定义</div>
+                  </div>
+                  <div id="aus-date-calendar" style="padding:12px;display:none;"></div>
                 </div>
-                <div id="aus-date-calendar" style="padding:12px;display:none;"></div>
               </div>
-              <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:160px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
-              <div id="aus-chat-dropdown" style="display:none;position:absolute;top:40px;left:320px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-height:260px;overflow:auto;padding:8px;"></div>
+              <div class="aus-stats-filter">
+                <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
+                <div id="aus-chat-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">对话</span><span id="aus-chat-label" style="font-weight:600;color:var(--ds-text);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-chat-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
+                <div id="aus-endpoint-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">接入类型</span><span id="aus-endpoint-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-endpoint-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
+                <div id="aus-credential-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
             </div>
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
               <div class="ds-card"><div style="font-size:11px;color:var(--ds-text-2);">消费金额</div><div id="aus-stats-cost" style="font-size:22px;font-weight:700;color:var(--ds-text);margin-top:6px;">¥0.00 CNY</div></div>
@@ -521,7 +744,28 @@ export function createPanel() {
               <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:8px;">对比 · 最耗对话 Top</div><div id="aus-forecast-compare"></div></div>
             </div>
           </div>
+          <div data-view="wallet" style="display:none;">
+            <div id="aus-wallet"></div>
+          </div>
           <div data-view="history" style="display:none;">
+            <div id="aus-history-filter-host" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
+              <div class="aus-stats-filter">
+                <div id="aus-history-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-history-model-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-history-model-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
+                <div id="aus-history-chat-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">对话</span><span id="aus-history-chat-label" style="font-weight:600;color:var(--ds-text);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-history-chat-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
+                <div id="aus-history-endpoint-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">接入类型</span><span id="aus-history-endpoint-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-history-endpoint-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
+                <div id="aus-history-credential-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-history-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-history-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+            </div>
             <div id="aus-diff" class="ds-card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">缓存断点</span><button id="aus-diff-fullscreen" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">全屏</button></div><div style="font-size:11px;color:var(--ds-text-3);">在历史中各选一条 旧/新 对比，橙/绿高亮即发散点</div></div>
             <div id="aus-history"></div>
           </div>
@@ -530,11 +774,12 @@ export function createPanel() {
           </div>
           <div data-view="help" style="display:none;">
             <div style="display:grid;gap:12px;">
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DC2626;font-weight:600;margin-bottom:6px;">⚠️ 安全提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>在本扩展中填入 API 密钥存在安全风险。密钥仅经 XOR 混淆后存储于 SillyTavern 设置中，建议使用权限受限的 API 密钥。</div><div>使用模型价格自动同步时将从 models.dev 下载相关数据，不对数据准确和安全做保障；不对使用自定义的 WebDAV 服务导致的安全问题做保障。</div><div>余额查询通过 <a href="https://api.deepseek.com/user/balance" target="_blank" style="color:var(--ds-text);text-decoration:underline;">https://api.deepseek.com/user/balance</a> 官方 API 实现，将会发送你填写的 API 密钥。</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DC2626;font-weight:600;margin-bottom:6px;">隐私声明</div><div style="color:var(--ds-text-2);display:grid;gap:6px;"><div>本扩展有且只能获得用户在酒馆本身中填写的：密钥条目的编号、用户备注和掩码末三位，仅用于独立区分请求来源，不会且无法读取、保存或上传完整明文密钥。</div><div>用户储存在酒馆本身的密钥是安全的，扩展无法获取真实密钥。</div><div>用户主动填入扩展的校准密钥是实际可用的密钥，且仅会被用于查询 DeepSeek 官方余额；它仅经 XOR 混淆后存放于 SillyTavern，不进入历史记录、统计、日志、导入导出或 WebDAV。自动校准时仅由浏览器直接发送至 <a href="https://api.deepseek.com/user/balance" target="_blank" style="color:var(--ds-text);text-decoration:underline;">https://api.deepseek.com/user/balance</a> API。</div><div>XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。</div><div>模型价格同步会访问 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a>；自定义 WebDAV 的数据安全由用户选择的存储服务与网络环境决定。</div><div style="margin-top:2px;padding-top:6px;border-top:1px solid var(--ds-border);font-weight:600;color:#DC2626;">免责声明</div><div>本扩展不对功能“价格来源”、“自动同步”等利用 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 获取的数据中出现或可能出现的商业化中转站负责；我们不建议使用任何商业化中转站，尽管我们已经尽力筛选数据，但由于对大量数据进行完全筛选难以实现，因此我们不对可能出现的任何商业化中转站名称负责，不构成推荐，和 models.dev 或任何中转站没有商业往来，坚定不移反对商业化。</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0BA25E;font-weight:600;margin-bottom:6px;">钱包</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 扩展按识别到的接入链接自动创建和汇总钱包，默认始终保留 DeepSeek 官方钱包；同名链接下识别的密钥和模型会归入同一钱包。</div><div>2. 每个钱包可独立维护名称、余额、模型价格、峰谷规则和价格来源；钱包默认收起，展开状态按钱包记忆。价格来源仅展示第一方模型厂商，不展示中转站或聚合平台。</div><div>3. 请求进入后会先匹配所属钱包，再使用该钱包的模型价格和峰谷规则计费，并从对应钱包余额预扣；未配置价格的模型先记零费用，保存或同步价格后自动重算冷热历史。</div><div>4. 自动余额校准仅支持 DeepSeek 官方直连，校准密钥需在钱包内单独填写；其他接入可使用手工余额，多个密钥不会自动相加。</div><div>5. 删除钱包会进入“已忽略接入”，后续请求不会自动重建、不参与余额合计，历史记录仍保留归属，需要时可恢复显示。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（余额查询仅支持 DeepSeek 官方）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前（DeepSeek）高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DB2777;font-weight:600;margin-bottom:6px;">🔄 消息对比</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中找到想对比的两条消息，前者点“旧”，后者点“新”</div><div>2. 系统并排显示请求消息的文字差异</div><div>3. 差异点即缓存发散起始位置（前 N 条相同为缓存命中段）</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 切换时间维度、模型和对话查看不同范围的统计</div><div>2. 多图表展示多模请求参数，悬浮查看分模型明细</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 切换时间、模型、对话、接入类型和 API 密钥查看不同范围的统计</div><div>2. 多图表展示多模请求参数，悬浮查看分模型明细</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”展开固定区域</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 等详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0891B2;font-weight:600;margin-bottom:6px;">🧡 模型兼容</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 完全兼容 DeepSeek 官方 API</div><div>2. 尽量兼容不同厂商/渠道的请求格式，部分模型可能无缓存命中</div><div>3. 如数据异常，请携带完整请求与响应反馈</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-text-3);font-weight:600;margin-bottom:6px;">✨ 关于</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>本扩展由原脚本（<a href="https://github.com/janmk1453/deepseek-tavern-script" target="_blank" style="color:var(--ds-text);text-decoration:underline;">deepseek-tavern-script</a>）迁移重构。</div><div><span style="color:var(--ds-text);">@janmk</span> · 仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);text-decoration:underline;">janmk1453/Api-Usage</a></div></div></div>
@@ -543,7 +788,7 @@ export function createPanel() {
           <div data-view="about" style="display:none;">
             <div style="display:grid;gap:12px;">
               <div class="ds-card" style="line-height:1.7;font-size:12px;color:var(--ds-text);">
-                <div style="font-size:14px;font-weight:600;">关于<br/><br/>API用量统计 · SillyTavern 扩展</div>
+                <div style="font-size:14px;font-weight:600;">关于<br/>API用量统计 · SillyTavern 扩展</div>
                 <div style="margin-top:8px;color:var(--ds-text-2);">迁移至原 DeepSeek使用预测 脚本<br/>致力于实现最全面的用量可视化统计<br/><br/>仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);">janmk1453/Api-Usage</a></div>
               </div>
               <div class="ds-card" style="display:grid;gap:8px;">
@@ -676,6 +921,7 @@ export function createPanel() {
     window.addEventListener('resize', onResize);
   } catch {}
   bindPanel(doc);
+  bindHistoryFilters(doc);
   bindImportExport(doc);
   renderSettings(doc);
   bindHistoryCompare();
