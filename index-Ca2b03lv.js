@@ -581,17 +581,17 @@ const WALLET_CATALOG_PROVIDERS = [
   { id: "openai", label: "OpenAI" },
   { id: "anthropic", label: "Anthropic" },
   { id: "google", label: "Google" },
-  { id: "openrouter", label: "OpenRouter" },
-  { id: "groq", label: "Groq" },
   { id: "mistral", label: "Mistral" },
   { id: "xai", label: "xAI" },
   { id: "moonshotai", label: "Moonshot AI" },
   { id: "zai", label: "Z.AI" },
-  { id: "siliconflow", label: "SiliconFlow" },
-  { id: "fireworks-ai", label: "Fireworks AI" },
   { id: "minimax", label: "MiniMax" },
   { id: "cohere", label: "Cohere" }
 ];
+function isFirstPartyCatalogProvider(value) {
+  const id = String(value || "").trim().toLowerCase();
+  return WALLET_CATALOG_PROVIDERS.some((provider) => provider.id === id);
+}
 function defaultCatalogProvider(sourceType) {
   const key = String(sourceType || "").trim().toLowerCase();
   const map2 = {
@@ -600,14 +600,10 @@ function defaultCatalogProvider(sourceType) {
     claude: "anthropic",
     makersuite: "google",
     vertexai: "google",
-    openrouter: "openrouter",
-    groq: "groq",
     mistralai: "mistral",
     xai: "xai",
     moonshot: "moonshotai",
     zai: "zai",
-    siliconflow: "siliconflow",
-    fireworks: "fireworks-ai",
     minimax: "minimax",
     cohere: "cohere"
   };
@@ -1017,6 +1013,7 @@ function normalizeWallet(raw, settings2, now = Date.now()) {
   const credentialMap = /* @__PURE__ */ new Map();
   for (const credential of credentials) credentialMap.set(credential.id, credential);
   const createdAt = finiteNumber(raw.createdAt, now);
+  const rawCatalogProvider = cleanText(raw.catalogProvider) || defaultCatalogProvider(sourceType);
   return {
     id,
     name,
@@ -1025,7 +1022,7 @@ function normalizeWallet(raw, settings2, now = Date.now()) {
     endpointId,
     endpointLabel: cleanText(raw.endpointLabel) || null,
     endpointDisplay: cleanText(raw.endpointDisplay || raw.endpointLabel) || null,
-    catalogProvider: cleanText(raw.catalogProvider) || defaultCatalogProvider(sourceType),
+    catalogProvider: isFirstPartyCatalogProvider(rawCatalogProvider) ? rawCatalogProvider : null,
     balance: {
       mode: balanceRaw.mode === "auto" ? "auto" : "manual",
       amount: balanceRaw.amount == null || balanceRaw.amount === "" ? null : String(balanceRaw.amount),
@@ -10374,7 +10371,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-BbkYGp4f.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-BGey-7-c.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -10427,7 +10424,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-BbkYGp4f.js").then((m) => m.maybeAutoCheck());
+    import("./update-BGey-7-c.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

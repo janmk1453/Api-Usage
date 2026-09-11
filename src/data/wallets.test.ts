@@ -12,7 +12,7 @@ import {
   walletBalanceToCny,
   walletModelMatches,
 } from './wallets';
-import { DEEPSEEK_WALLET_ID } from '../types/wallet';
+import { DEEPSEEK_WALLET_ID, defaultCatalogProvider, isFirstPartyCatalogProvider } from '../types/wallet';
 
 describe('钱包数据', () => {
   it('始终保留 DeepSeek 官方钱包并预置现役模型', () => {
@@ -40,6 +40,31 @@ describe('钱包数据', () => {
     const normalized = normalizeWallets([wallet], settings, 1000)
       .find((item) => item.id === wallet.id)!;
     expect(normalized.collapsed).toBe(false);
+  });
+
+  it('价格来源只保留第一方模型厂商', () => {
+    expect(defaultCatalogProvider('deepseek')).toBe('deepseek');
+    expect(defaultCatalogProvider('openai')).toBe('openai');
+    expect(defaultCatalogProvider('openrouter')).toBeNull();
+    expect(defaultCatalogProvider('groq')).toBeNull();
+    expect(defaultCatalogProvider('siliconflow')).toBeNull();
+    expect(defaultCatalogProvider('fireworks')).toBeNull();
+    expect(isFirstPartyCatalogProvider('openrouter')).toBe(false);
+    expect(isFirstPartyCatalogProvider('fireworks-ai')).toBe(false);
+    expect(isFirstPartyCatalogProvider('anthropic')).toBe(true);
+
+    const settings = defaultSettings();
+    const wallet = createWalletFromConnection({
+      sourceType: 'custom',
+      endpointId: 'third-party-catalog',
+      endpointLabel: 'relay.third/v1',
+      credentialId: null,
+      credentialLabel: null,
+    }, settings, 1000)!;
+    wallet.catalogProvider = 'openrouter';
+    const normalized = normalizeWallets([wallet], settings, 1000)
+      .find((item) => item.id === wallet.id)!;
+    expect(normalized.catalogProvider).toBeNull();
   });
 
   it('按接入链接创建钱包并记录密钥与模型观测项', () => {

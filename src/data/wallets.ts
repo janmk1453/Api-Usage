@@ -5,6 +5,7 @@ import {
   DEEPSEEK_WALLET_ID,
   defaultCatalogProvider,
   emptyWalletPriceRule,
+  isFirstPartyCatalogProvider,
   walletCurrencyOrDefault,
   type WalletConfig,
   type WalletCredentialObservation,
@@ -202,6 +203,7 @@ export function normalizeWallet(raw: any, settings: Settings, now = Date.now()):
   const credentialMap = new Map<string, WalletCredentialObservation>();
   for (const credential of credentials) credentialMap.set(credential.id, credential);
   const createdAt = finiteNumber(raw.createdAt, now);
+  const rawCatalogProvider = cleanText(raw.catalogProvider) || defaultCatalogProvider(sourceType);
   return {
     id,
     name,
@@ -210,7 +212,7 @@ export function normalizeWallet(raw: any, settings: Settings, now = Date.now()):
     endpointId,
     endpointLabel: cleanText(raw.endpointLabel) || null,
     endpointDisplay: cleanText(raw.endpointDisplay || raw.endpointLabel) || null,
-    catalogProvider: cleanText(raw.catalogProvider) || defaultCatalogProvider(sourceType),
+    catalogProvider: isFirstPartyCatalogProvider(rawCatalogProvider) ? rawCatalogProvider : null,
     balance: {
       mode: balanceRaw.mode === 'auto' ? 'auto' : 'manual',
       amount: balanceRaw.amount == null || balanceRaw.amount === '' ? null : String(balanceRaw.amount),

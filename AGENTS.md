@@ -115,7 +115,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **计价优先级**：钱包规则优先；DeepSeek 官方钱包无覆盖时使用内置 `PRICE_HISTORY` 多段价格；其他钱包无价格时标记待定价并计零费用。旧全局 `customModels` 复制到官方钱包并继续作为旧记录/未映射记录只读兜底
 - **旧数据同名校验价**：一次迁移中，若旧热/冷记录按当前钱包规则为 `unpriced`，且任意未忽略钱包存在模型名与记录完全相同的已配置价格，则给该历史条目写入 `legacyPricingWalletId/legacyPricingModel` 并以该钱包价格重算，`pricingSource=legacy-match`。新版本之后产生的请求不带该标记，仍按所属钱包原规则保持待定价
 - **待定价重算**：保存模型价格、修改峰谷、修改周末规则或同步价格后调用 `repository.recalcWallet(walletId)`，同时处理热历史和 IndexedDB 冷历史，并修正累计费用
-- **models.dev**：每个钱包配置 `catalogProvider`。开启同步后，官方接入自动映射来源，中转站由用户选择；支持 `add-missing/overwrite-unlocked/overwrite-all`，锁定规则仅允许全部覆盖模式修改。关闭同步会移除未锁定的同步价格并重算
+- **models.dev**：每个钱包配置 `catalogProvider`。价格来源胶囊只展示第一方模型厂商（DeepSeek/OpenAI/Anthropic/Google/Mistral/xAI/Moonshot AI/Z.AI/MiniMax/Cohere），不展示 OpenRouter、Groq、SiliconFlow、Fireworks 等聚合或托管渠道；旧第三方来源在标准化时归为 `null`（不自动同步）。开启同步后支持 `add-missing/overwrite-unlocked/overwrite-all`，锁定规则仅允许全部覆盖模式修改。关闭同步会移除未锁定的同步价格并重算
 - **忽略与恢复**：删除钱包改为加入 `walletIgnored`，后续请求不自动重建、不参与余额合计，历史仍保留 `walletId`；钱包页可恢复显示。DeepSeek 官方钱包不可忽略
 - **响应式**：钱包汇总卡在所有宽度保持一行三列，仅压缩字号和间距；`≤760px` 时钱包 header 改为单列顺序，五项指标用三列网格自动换行，展开/同步/忽略按钮落到指标下方并完整显示；钱包双栏区域改为单列。钱包卡内容使用边框面板，不嵌套 `.ds-card`
 

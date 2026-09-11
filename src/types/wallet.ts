@@ -67,17 +67,18 @@ export const WALLET_CATALOG_PROVIDERS: Array<{ id: string; label: string }> = [
   { id: 'openai', label: 'OpenAI' },
   { id: 'anthropic', label: 'Anthropic' },
   { id: 'google', label: 'Google' },
-  { id: 'openrouter', label: 'OpenRouter' },
-  { id: 'groq', label: 'Groq' },
   { id: 'mistral', label: 'Mistral' },
   { id: 'xai', label: 'xAI' },
   { id: 'moonshotai', label: 'Moonshot AI' },
   { id: 'zai', label: 'Z.AI' },
-  { id: 'siliconflow', label: 'SiliconFlow' },
-  { id: 'fireworks-ai', label: 'Fireworks AI' },
   { id: 'minimax', label: 'MiniMax' },
   { id: 'cohere', label: 'Cohere' },
 ];
+
+export function isFirstPartyCatalogProvider(value: unknown): boolean {
+  const id = String(value || '').trim().toLowerCase();
+  return WALLET_CATALOG_PROVIDERS.some((provider) => provider.id === id);
+}
 
 export function defaultCatalogProvider(sourceType: string | null | undefined): string | null {
   const key = String(sourceType || '').trim().toLowerCase();
@@ -87,14 +88,10 @@ export function defaultCatalogProvider(sourceType: string | null | undefined): s
     claude: 'anthropic',
     makersuite: 'google',
     vertexai: 'google',
-    openrouter: 'openrouter',
-    groq: 'groq',
     mistralai: 'mistral',
     xai: 'xai',
     moonshot: 'moonshotai',
     zai: 'zai',
-    siliconflow: 'siliconflow',
-    fireworks: 'fireworks-ai',
     minimax: 'minimax',
     cohere: 'cohere',
   };
