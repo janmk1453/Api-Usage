@@ -1,67 +1,54 @@
 # API用量统计 — SillyTavern 扩展
 
-实时统计与可视化 DeepSeek 及兼容 API 的调用成本，按官方用量页的极简浅色重塑交互（`v3.0.1`，详见更新）。
+实时统计与可视化 DeepSeek 及兼容 API 的调用成本，提供用量概览、统计筛选、历史详情、趋势预测、模型价格同步与云同步。
 
-## 预览
-
-> 扩展主面板为全屏独立页（`#aus-panel`，`position: fixed` 全屏，`container-query` 驱动），左侧可收起导航（`220px ↔ 60px` / `≤760px` 汉堡覆盖式抽屉），右侧多视图切换，样式对齐 DeepSeek（`#F6F7F8` 卡片 / 黑色 `pill` / 橙色柱状图，双主题 `light/dark`）。
-
-## 功能（v3.0.1）
+## 功能
 
 - **实时统计**：自动记录每次调用的 `token / 费用 / 命中率 / 时长 / 首字延迟 / 速率 / 思维链 / 截断` 等全量数据（`finish_reason === 'length'` 判截断，`reasoning_tokens/completion_tokens` 算思维链占比）
 - **峰谷计费**：按北京时区区分高/低峰（多时段、支持跨天，周末全天低谷），仅对 `deepseek*` 模型生效，改后 `recalcAll`
 - **余额**：同步官方余额或自定义余额，自动校准间隔可配（成功静默），`XOR` 混淆存储
-- **可视化**：`7` 图（`Token/费用/命中率/请求数/耗时速率/模型占比` 等）+ 热力图 + 主图标（`Y` 8 选 × `X` 5 维度，双轴可读，统计页隐藏时跳过初始化）
+- **可视化**：可配置主图（`Y` 8 选 × `X` 5 维度）+ 6 张扩展图 + Token 热力图，统计页隐藏时跳过初始化
 - **历史**：倒序分页（`30/页`）+ `6px` 三色占比条 + 内联详情（`max 520px` 可内部滚动，`基础/性能/Token/费用` 四块 + `4 Tab` 原始数据，去重耗时/去 Emoji + 思维链占比/是否截断）+ 缓存断点对比（`旧/新` 并排 `diff`）
 - **趋势预测（Beta）**：独立页，分段线性回归 `prompt(n)=C₀+n·Δ`（回落 `≥30%` 分段，仅末段，`R²` 择优 `linear/log/recent-mean`），`remainingRounds` 解二次方程得剩余轮数（`Δ±σ` 区间）与上下文上限 `R_ctx`，预测卡（余额/上下文双条）、预测图（拟合虚线+预测延伸+置信带+上限参考线）、敏感度滑块（假设命中率）、对比视图（最耗对话 Top）+ 能耗评分 `A-G`（`Δ 25%/out 20%/效率20%/命中15%/截断10%/思维链10%`）
-- **设置**：`颜色模式（胶囊下拉）/ API 密钥（不回显）/ 余额 / 峰谷时段 / 模型与价格（内置可覆写+自定义增删，三价 ¥/百万）/ 调试（批量模拟，8% 截断）/ 峰值圆点 / WebDAV`，全部受 `recalcAll` 联动
+- **设置**：`颜色模式 / API 密钥（不回显）/ 余额 / 峰谷时段 / 模型与价格（内置可覆写、自定义增删、CNY/USD 换算、自动同步）/ 调试 / 峰值圆点 / WebDAV`，全部受 `recalcAll` 联动
 - **导入导出**：白名单 `deepseek-stat-export v1`，`覆盖/合并`（按 `timestamp` 去重），`history` 中 `messages/fullRequest/fullResponse/raw_usage` 仅保留统计字段
 - **云同步**：`WebDAV` `pull-merge-push` 双向合并（`history` 去重，`_debug` 已隔离），不含密钥与聊天内容，`https` 强制，支持 `CORS` 代理
 - **检查更新**：关于页按钮 + 打开扩展自动检查（`1h` 节流，有更新 `toast+横幅`，已是最新/失败也提示）；扩展内版本号由 `manifest.json` 单源注入（`vite.define __APP_VERSION__`），侧边栏/关于/导出同步
+
 ## 安装
 
 1. `SillyTavern → 扩展程序 → 安装扩展程序 → 输入`https://github.com/janmk1453/Api-Usage`（稳定 `main`）
-2. 测试通道：`管理扩展程序 → 更新源分支` 填 `dev` 可抢先体验（`dev` 的 `v3.0.1-dev.*` 不推送给 `main` 用户）
+2. 测试通道：`管理扩展程序 → 更新源分支` 填 `dev` 可抢先体验
 3. 启用后刷新网页，左下角魔法棒出现 `API用量统计` 入口
 
-## 预览版下载
-
-`main` 分支每次通过完整 CI 后会自动生成 `preview-<提交哈希>` 预发布包，包含清单、入口、全部分包、样式、国际化、模板、说明与许可证，并附带 `.sha256` 校验文件。
-
-预发布说明按提交列出更新日志：优先列出上一个 `preview-*` 到当前提交之间的全部提交，首次预览回退到最近的正式版本标签，仍无可用标签时只列当前提交；每条包含短哈希、提交说明与 GitHub 链接。
-
-[浏览并下载 `preview-*` 预发布构建](https://github.com/janmk1453/Api-Usage/releases?q=preview-&expanded=true)
-
-`dev` 分支只执行 CI，不创建标签或 Release。预览身份由提交哈希区分，不修改 `manifest.json`、`package.json` 与锁文件中的版本号。
-
-## 更新
+## 更新扩展
 
 1. `SillyTavern → 扩展程序 → 管理扩展程序 → 在下方找到`API用量统计`，等待一会右侧会出现更新按钮同时文字变绿
 2. 或进入扩展 `关于` 页点击 `检查更新`（自动检查 `1h` 节流，有更新 `toast+横幅`）
-3. 更新后刷新网页（`Ctrl+Shift+R` 若遇 `404 index-*.js` 需清缓存）
+3. 更新后刷新网页
 
 ## 快速开始
 
 1. **设置 → API 密钥** 输入并保存（不回显）
 2. **设置 → 查询余额** 或开启自动校准（成功静默，失败 `toast`）
-3. 正常对话，扩展自动记录（`fetch` 流式透传测 `TTFT/思维链`，`GENERATION_ENDED` 合并，`5s` 指纹去重）
+3. 正常对话，扩展自动记录调用数据
 4. **魔法棒 → API用量统计** 查看：用量概览为日报，用量统计按维度筛选，历史记录对比缓存，趋势预测（Beta）看剩余轮数
 
 ## 详细说明
 
 ### 用量概览
 
-- **双余额卡**：充值余额（`CNY`）与累计消费（`CNY + tokens`）
+- **双余额卡**：充值余额与累计消费，金额按当前显示币种换算，并展示累计 `tokens`
 - **双明细**：历史消耗（`总/命中/未命中/输出`）与支出明细（预计节省/支出输入/输出，分两行，`token` 灰色）
-- **八小块**（`repeat(4,1fr)`，`≤760px` `repeat(2,1fr)`）：`overviewFour` 自定义 `16` 指标（`computeOverview` 单源，含新增 `avg_think_ratio/truncation_rate`），竖屏两列
-- **热力图**：`Token 使用量热力图`（近 2 年按日聚合，卡内横向滑动，悬停日期+Token）
+- **八小块**（`repeat(4,1fr)`，`≤760px` `repeat(2,1fr)`）：`overviewFour` 支持自定义 `14` 个指标，竖屏两列
+- **热力图与对话统计**：近 2 年 Token 按日聚合，卡内横向滑动；下方按对话汇总轮次、Token、费用与平均命中率
 
 ### 用量统计
 
-- **双维度**：时间维度（`全部/今天/昨天/近 7 天/近 30 天/本月/上月/自定义`，自定义为直输日期两框 + 应用按钮，仅 `自定义` 时显示）仅影响 `三块+模型汇总`；模型维度（全部 + 已记录模型）影响本页所有内容；二者取交集
-- **三块**：消费金额 `CNY` / `API 请求次数` / `Tokens`（`≤760px` 单列三行，满足一行一列）
-- **四小块**：模型汇总表上方 `repeat(4,1fr)`（`≤760px` `repeat(2,1fr)` 两行两列），`statsFour` 自定义，与概览同体系，响应双维度（`computeStatsFour`）
-- **模型汇总表**：`10` 列（模型/调用/命中/未命中/输出/总/总成本/平均成本/平均耗时/平均速率），横向可滚动，随双维度联动
+- **三维度**：时间（`全部/今天/昨天/近 7 天/近 30 天/本月/上月/自定义`）、模型与对话三类筛选取交集，支持胶囊下拉与自定义日期
+- **三块**：消费金额（按当前币种）/API 请求次数/Tokens（`≤760px` 单列三行）
+- **四小块**：模型汇总表上方 `repeat(4,1fr)`（`≤760px` `repeat(2,1fr)`），`statsFour` 自定义，响应三维度筛选
+- **模型汇总表**：模型、调用、Token、总成本、平均成本、平均耗时与平均速率等 `10` 列，横向可滚动，随三维度联动
 - **图表**：主图 `Y` 8 选（`命中/未命中/输出/总 Token/命中/未命中/输出/总费用`）× `X` 5 选（轮次/每小时/每日/每周/每月，默认总 Token）双轴堆叠/曲线，悬浮分 `¥/tokens` 明细；下方 `6` 图 `2×3` 网格（`Token/费用` 堆叠同柱 + 曲线、`命中` 面积、`请求` 柱、`耗时/速率` 双轴、`模型` 环 `Token/次数` 切换），均支持独立 `Y/X` 配置，隐藏时跳过初始化
 
 ### 历史记录
@@ -98,17 +85,9 @@ node --check index.js
 npm run verify:ci
 ```
 
-产物为 `index.js（入口 re-export） + hash 分包`，**必须**与 `style.css` 一并提交，缺一则 `404` 导致 `[object Event]` 加载失败。
+产物为 `index.js（入口 re-export） + hash 分包`，必须与 `style.css` 一并提交，确保扩展可完整加载。
 
 推送 `dev/main` 或创建目标为 `dev/main` 的合并请求时，GitHub Actions 会执行严格类型检查、Vitest 核心单测、完整构建、全部分包语法检查、版本与引用链校验，并要求构建后的工作区与提交内容零差异。
-
-`main` 分支完整 CI 通过后，工作流还会使用 `git archive` 打包当前提交、复算 SHA-256 并校验压缩包文件清单，最后创建或更新 `preview-<12位提交哈希>` 预发布。`dev` 与合并请求不会进入发布作业。
-
-## 数据
-
-- 存储于 `extensionSettings[api_usage_stat]`（热 `50`）+ `IndexedDB api_usage_stat_db`（冷 `cold_history`），旧 `ds_saves` 自动合并为单一历史并备份 `migration_backup_*`
-- 导出 `deepseek-stat-export v1`，`_debug` 已隔离，不含密钥，`history` 中 `messages/fullRequest/fullResponse` 仅保留统计字段
-- 计算：`src/data/computed.ts` 单源（`computeOverview/computeStatsFour`），`recalcAll` 按归一化模型重算
 
 ## 版本与分支
 
@@ -117,20 +96,12 @@ npm run verify:ci
 
 ## 常见问题
 
-- **扩展加载失败 [object Event]**：`GET .../index-*.js 404` 导致，属分包漏提交，重新 `build` 并提交全部 `index-*.js` 即可
-- **TTFT/思维链为 0**：已修复为流式透传测量，`GENERATION_ENDED` 合并 `lastFetchUsage`，旧数据仍为 0 正常
-- **颜色模式重置为深色**：已修复，默认 `light` 与隔离样式一致，旧用户迁移保留 `light`
 - **WebDAV CORS**：坚果云等不返回 `CORS` 头，需配置代理
-
-## 更新
-
-- `3.0.1`：版本单源化、分支隔离（`main/dev`）、检查更新（关于页按钮 + `6h` 自动节流）、趋势预测（Beta）+ 能耗评分、统计 4 小块、思维链占比/截断率、直输日期、三块竖屏单列、详情滚动与去重等
-- `3.0.0`：`Tavern Helper` 脚本迁移至原生扩展，重塑为官方浅色，`Vite` 构建，单一历史，`Y/X` 可配置图表等
 
 ## 技术说明
 
 - 统一数据框架 `src/data/`：`repository` 唯一写（`addEntry/recalcAll/replaceAll/hydrate` 含 `finishReason/isTruncated`）、`computed` 唯一算（`computeOverview/computeStatsFour`）、`events` 订阅刷新，禁止在 `UI` 直写 `state`
-- 拦截：`GENERATION_ENDED → extra.api_usage` 主路径，`fetch` 辅路径流式测 `TTFT/思维链/截断`，`process` 合规
+- 拦截：`GENERATION_ENDED → extra.api_usage` 主路径，`fetch` 辅路径测量 `TTFT/思维链/截断`
 - 预测：`src/stats/forecast.ts` 分段回归 + 二次方程求 `R`，`energyScore.ts` 加权 `A-G`
 
 ## 致谢
