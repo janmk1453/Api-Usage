@@ -12,6 +12,8 @@ import { defaultSettings } from '../types/settings';
 import { isUnsafeKey } from '../utils/date';
 import { isTruncatedFinish } from '../utils/finish';
 import { log } from '../utils/logger';
+import { usageFingerprint } from './fingerprint';
+import type { HistoryConnection } from '../services/connection-identity';
 
 function getCurrentChatId(): string | null {
   try {
@@ -81,10 +83,11 @@ function normalizeSettings(incoming: any): any {
 function sanitizeFullRequest(fr: any): any {
   if (!fr || typeof fr !== 'object') return fr;
   const keep: any = {};
-  for (const k of ['model','stream','temperature','max_tokens','top_p','stream_options']) {
+  for (const k of ['model','stream','temperature','max_tokens','top_p','stream_options','chat_completion_source','endpoint']) {
     if (fr[k] !== undefined) keep[k] = fr[k];
   }
   if (Array.isArray(fr.messages)) keep.messages_length = fr.messages.length;
+  else if (typeof fr.messages_length === 'number') keep.messages_length = fr.messages_length;
   else if (typeof fr.messages === 'number') keep.messages_length = fr.messages;
   return keep;
 }
@@ -196,7 +199,18 @@ export const repository = {
 
   async getAllHistory() { return getAllHistory(); },
 
-  addEntry(usage: any, model: string, messages: any[], startTime: number, fullRequest?: any, fullResponse?: any, ttft = 0, thinkTime = 0, finishReason: string | null = null) {
+  addEntry(
+    usage: any,
+    model: string,
+    messages: any[],
+    startTime: number,
+    fullRequest?: any,
+    fullResponse?: any,
+    ttft = 0,
+    thinkTime = 0,
+    finishReason: string | null = null,
+    connection: HistoryConnection | null = null,
+  ) {
     messages = messages || [];
     if (!model) try { model = (globalThis as any).SillyTavern?.getContext?.().model || 'deepseek-v4-flash'; } catch { model = 'deepseek-v4-flash'; }
     log.debug('addEntry 收到', { model, hasMessages: !!messages?.length });
@@ -233,7 +247,7 @@ export const repository = {
     // 指纹去重：5秒内同 model+total 防双记账（fetch 与 GENERATION_ENDED 并发）
     try {
       const now = Date.now();
-      const fp = `${model}|${total}|${hit}|${miss}|${comp}`;
+      const fp = usageFingerprint(model, total, hit, miss, comp, connection);
       const lastFp = (state as any)._lastFp as string | undefined;
       const lastFpTime = (state as any)._lastFpTime as number | undefined;
       if (lastFp === fp && lastFpTime && now - lastFpTime < 5000) {
@@ -253,6 +267,11 @@ export const repository = {
               changed = true;
             }
             if (thinkTime && !head.thinkTime) { head.thinkTime = thinkTime; changed = true; }
+            if (connection) {
+              for (const key of ['sourceType', 'endpointId', 'endpointLabel', 'credentialId', 'credentialLabel'] as const) {
+                if (!head[key] && connection[key]) { head[key] = connection[key]; changed = true; }
+              }
+            }
             if (changed) {
               if ((state.lastUsage as any)?.timestamp === head.timestamp) {
                 if (head.fullResponse) (state.lastUsage as any).fullResponse = head.fullResponse;
@@ -260,6 +279,11 @@ export const repository = {
                 if (head.ttft) { (state.lastUsage as any).ttft = head.ttft; (state.lastUsage as any).tokenRate = head.tokenRate; }
                 if (head.thinkTime) (state.lastUsage as any).thinkTime = head.thinkTime;
                 if (head.thinkTokens) (state.lastUsage as any).thinkTokens = head.thinkTokens;
+                if (head.sourceType) (state.lastUsage as any).sourceType = head.sourceType;
+                if (head.endpointId) (state.lastUsage as any).endpointId = head.endpointId;
+                if (head.endpointLabel) (state.lastUsage as any).endpointLabel = head.endpointLabel;
+                if (head.credentialId) (state.lastUsage as any).credentialId = head.credentialId;
+                if (head.credentialLabel) (state.lastUsage as any).credentialLabel = head.credentialLabel;
               }
               persist();
             }
@@ -288,6 +312,13 @@ export const repository = {
     const chatId = getCurrentChatId();
     const chatName = getCurrentChatName();
     (lu as any).chatId = chatId; (lu as any).chatName = chatName;
+    if (connection) {
+      lu.sourceType = connection.sourceType;
+      lu.endpointId = connection.endpointId;
+      lu.endpointLabel = connection.endpointLabel;
+      lu.credentialId = connection.credentialId;
+      lu.credentialLabel = connection.credentialLabel;
+    }
     state.lastUsage = lu;
 
     const fr2 = fr;
@@ -298,6 +329,11 @@ export const repository = {
       raw_usage: usage, messages: (messages || []).map(clampMessage), duration, ttft, thinkTime, thinkTokens, tokenRate: lu.tokenRate, fullRequest, fullResponse: safeResponse,
       finishReason: fr2, isTruncated: isTruncatedFinish(fr2),
       chatId, chatName,
+      sourceType: connection?.sourceType ?? null,
+      endpointId: connection?.endpointId ?? null,
+      endpointLabel: connection?.endpointLabel ?? null,
+      credentialId: connection?.credentialId ?? null,
+      credentialLabel: connection?.credentialLabel ?? null,
     };
     log.debug('addEntry 即将写入', { model: entry.model, total: entry.total_tokens });
     state.history.unshift(entry);

@@ -25,6 +25,16 @@ export type HistoryEntry = {
   isTruncated?: boolean;
   chatId?: string | null;
   chatName?: string | null;
+  /** 酒馆接入类型，对应 chat_completion_source */
+  sourceType?: string | null;
+  /** 接入地址的本地短哈希；旧记录为空 */
+  endpointId?: string | null;
+  /** 规范化后的接入地址；官方接口使用明确名称 */
+  endpointLabel?: string | null;
+  /** 酒馆密钥条目的本地稳定标识；未识别时为空 */
+  credentialId?: string | null;
+  /** 不包含明文密钥的展示名称 */
+  credentialLabel?: string | null;
 };
 
 export type Save = {

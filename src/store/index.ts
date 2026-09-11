@@ -101,8 +101,8 @@ export function pruneHistoryDetails() {
       delete e.fullResponse;
     } else if (e.fullRequest && typeof e.fullRequest === 'object' && Array.isArray(e.fullRequest.messages)) {
       const keep: any = {};
-      for (const k of ['model','stream','temperature','max_tokens','top_p','stream_options']) if (e.fullRequest[k] !== undefined) keep[k]=e.fullRequest[k];
-      keep.messages_length = e.fullRequest.messages.length;
+      for (const k of ['model','stream','temperature','max_tokens','top_p','stream_options','chat_completion_source','endpoint']) if (e.fullRequest[k] !== undefined) keep[k]=e.fullRequest[k];
+      keep.messages_length = Array.isArray(e.fullRequest.messages) ? e.fullRequest.messages.length : e.fullRequest.messages_length;
       e.fullRequest = keep;
     }
   }

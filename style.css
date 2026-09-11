@@ -183,6 +183,7 @@
 #aus-sidebar { background: var(--ds-sidebar-bg) !important; border-right: 1px solid var(--ds-border) !important; }
 #aus-panel { position: fixed; } /* 使 absolute 侧栏以面板为 containing block，覆盖含 mobile-header 的全高度 */
 #aus-panel-body { display:flex; flex-direction:row; flex:1; min-height:0; overflow:hidden; container-type: inline-size; container-name: ausbody; /* 去 relative：让移动端抽屉覆盖 header，避免顶部缺口 */ }
+.aus-stats-filter { position: relative; min-width: 0; }
 /* 覆盖式抽屉遮罩（移动端/窄容器） */
 #aus-sidebar-overlay { display: none; }
 #aus-sidebar-overlay.is-open {
@@ -238,7 +239,7 @@
   #aus-panel .aus-tab-btn, #aus-panel .ds-btn-pill { min-height: 40px; }
 }
 /* 下拉弹层统一：窄屏不贴边溢出 */
-.ds-popover, #aus-range-dropdown, #aus-model-dropdown {
+.ds-popover, #aus-range-dropdown, #aus-model-dropdown, #aus-chat-dropdown, #aus-endpoint-dropdown, #aus-credential-dropdown {
   max-width: min(320px, calc(100vw - 24px));
 }
 #aus-mobile-header { display:none; height:56px; align-items:center; padding:0 16px; flex-shrink:0; border-bottom:1px solid var(--ds-border); background:var(--ds-card-inner); }
@@ -258,6 +259,9 @@
 /* 胶囊下拉层级（全局，避免仅移动端生效） */
 #aus-range-dropdown,
 #aus-model-dropdown,
+#aus-chat-dropdown,
+#aus-endpoint-dropdown,
+#aus-credential-dropdown,
 #aus-chart-y-dropdown,
 #aus-chart-x-dropdown,
 [id^="aus-four-drop-"],
@@ -339,6 +343,9 @@
   /* 所有胶囊下拉统一提升层级，避免被相邻卡片覆盖 */
   #aus-range-dropdown,
   #aus-model-dropdown,
+  #aus-chat-dropdown,
+  #aus-endpoint-dropdown,
+  #aus-credential-dropdown,
   #aus-chart-y-dropdown,
   #aus-chart-x-dropdown,
   [id^="aus-four-drop-"],

@@ -226,8 +226,8 @@ function pruneHistoryDetails() {
       delete e.fullResponse;
     } else if (e.fullRequest && typeof e.fullRequest === "object" && Array.isArray(e.fullRequest.messages)) {
       const keep = {};
-      for (const k of ["model", "stream", "temperature", "max_tokens", "top_p", "stream_options"]) if (e.fullRequest[k] !== void 0) keep[k] = e.fullRequest[k];
-      keep.messages_length = e.fullRequest.messages.length;
+      for (const k of ["model", "stream", "temperature", "max_tokens", "top_p", "stream_options", "chat_completion_source", "endpoint"]) if (e.fullRequest[k] !== void 0) keep[k] = e.fullRequest[k];
+      keep.messages_length = Array.isArray(e.fullRequest.messages) ? e.fullRequest.messages.length : e.fullRequest.messages_length;
       e.fullRequest = keep;
     }
   }
@@ -925,6 +925,17 @@ const logger = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProper
   log,
   toast
 }, Symbol.toStringTag, { value: "Module" }));
+function usageFingerprint(model, total, hit, miss, completion, connection) {
+  return [
+    model,
+    total,
+    hit,
+    miss,
+    completion,
+    connection?.endpointId || "",
+    connection?.credentialId || ""
+  ].join("|");
+}
 function getCurrentChatId() {
   try {
     const ctx = globalThis.SillyTavern?.getContext?.();
@@ -989,10 +1000,11 @@ function normalizeSettings(incoming) {
 function sanitizeFullRequest(fr) {
   if (!fr || typeof fr !== "object") return fr;
   const keep = {};
-  for (const k of ["model", "stream", "temperature", "max_tokens", "top_p", "stream_options"]) {
+  for (const k of ["model", "stream", "temperature", "max_tokens", "top_p", "stream_options", "chat_completion_source", "endpoint"]) {
     if (fr[k] !== void 0) keep[k] = fr[k];
   }
   if (Array.isArray(fr.messages)) keep.messages_length = fr.messages.length;
+  else if (typeof fr.messages_length === "number") keep.messages_length = fr.messages_length;
   else if (typeof fr.messages === "number") keep.messages_length = fr.messages;
   return keep;
 }
@@ -1100,7 +1112,7 @@ const repository = {
   async getAllHistory() {
     return getAllHistory();
   },
-  addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft = 0, thinkTime = 0, finishReason = null) {
+  addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft = 0, thinkTime = 0, finishReason = null, connection = null) {
     messages = messages || [];
     if (!model) try {
       model = globalThis.SillyTavern?.getContext?.().model || "deepseek-v4-flash";
@@ -1134,7 +1146,7 @@ const repository = {
     const fr = finishReason ?? usage?.__finish_reason ?? usage?.finish_reason ?? null;
     try {
       const now = Date.now();
-      const fp = `${model}|${total}|${hit}|${miss}|${comp}`;
+      const fp = usageFingerprint(model, total, hit, miss, comp, connection);
       const lastFp = state$2._lastFp;
       const lastFpTime = state$2._lastFpTime;
       if (lastFp === fp && lastFpTime && now - lastFpTime < 5e3) {
@@ -1166,6 +1178,14 @@ const repository = {
               head.thinkTime = thinkTime;
               changed = true;
             }
+            if (connection) {
+              for (const key of ["sourceType", "endpointId", "endpointLabel", "credentialId", "credentialLabel"]) {
+                if (!head[key] && connection[key]) {
+                  head[key] = connection[key];
+                  changed = true;
+                }
+              }
+            }
             if (changed) {
               if (state$2.lastUsage?.timestamp === head.timestamp) {
                 if (head.fullResponse) state$2.lastUsage.fullResponse = head.fullResponse;
@@ -1179,6 +1199,11 @@ const repository = {
                 }
                 if (head.thinkTime) state$2.lastUsage.thinkTime = head.thinkTime;
                 if (head.thinkTokens) state$2.lastUsage.thinkTokens = head.thinkTokens;
+                if (head.sourceType) state$2.lastUsage.sourceType = head.sourceType;
+                if (head.endpointId) state$2.lastUsage.endpointId = head.endpointId;
+                if (head.endpointLabel) state$2.lastUsage.endpointLabel = head.endpointLabel;
+                if (head.credentialId) state$2.lastUsage.credentialId = head.credentialId;
+                if (head.credentialLabel) state$2.lastUsage.credentialLabel = head.credentialLabel;
               }
               persist();
             }
@@ -1216,6 +1241,13 @@ const repository = {
     const chatName = getCurrentChatName();
     lu.chatId = chatId;
     lu.chatName = chatName;
+    if (connection) {
+      lu.sourceType = connection.sourceType;
+      lu.endpointId = connection.endpointId;
+      lu.endpointLabel = connection.endpointLabel;
+      lu.credentialId = connection.credentialId;
+      lu.credentialLabel = connection.credentialLabel;
+    }
     state$2.lastUsage = lu;
     const fr2 = fr;
     const entry = {
@@ -1243,7 +1275,12 @@ const repository = {
       finishReason: fr2,
       isTruncated: isTruncatedFinish(fr2),
       chatId,
-      chatName
+      chatName,
+      sourceType: connection?.sourceType ?? null,
+      endpointId: connection?.endpointId ?? null,
+      endpointLabel: connection?.endpointLabel ?? null,
+      credentialId: connection?.credentialId ?? null,
+      credentialLabel: connection?.credentialLabel ?? null
     };
     log.debug("addEntry 即将写入", { model: entry.model, total: entry.total_tokens });
     state$2.history.unshift(entry);
@@ -1564,16 +1601,237 @@ const repository$1 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.define
   getFilteredHistoryForScope,
   repository
 }, Symbol.toStringTag, { value: "Module" }));
+const FALLBACK_SECRET_KEYS = {
+  OPENAI: "api_key_openai",
+  CLAUDE: "api_key_claude",
+  OPENROUTER: "api_key_openrouter",
+  AI21: "api_key_ai21",
+  MAKERSUITE: "api_key_makersuite",
+  VERTEXAI: "api_key_vertexai",
+  MISTRALAI: "api_key_mistralai",
+  CUSTOM: "api_key_custom",
+  COHERE: "api_key_cohere",
+  PERPLEXITY: "api_key_perplexity",
+  GROQ: "api_key_groq",
+  ELECTRONHUB: "api_key_electronhub",
+  NANOGPT: "api_key_nanogpt",
+  DEEPSEEK: "api_key_deepseek",
+  AIMLAPI: "api_key_aimlapi",
+  XAI: "api_key_xai",
+  MOONSHOT: "api_key_moonshot",
+  FIREWORKS: "api_key_fireworks",
+  COMETAPI: "api_key_cometapi",
+  AZURE_OPENAI: "api_key_azure_openai",
+  ZAI: "api_key_zai",
+  SILICONFLOW: "api_key_siliconflow",
+  CHUTES: "api_key_chutes",
+  POLLINATIONS: "api_key_pollinations",
+  WORKERS_AI: "api_key_workers_ai",
+  MINIMAX: "api_key_minimax"
+};
+const SOURCE_SECRET_KEYS = {
+  openai: "OPENAI",
+  claude: "CLAUDE",
+  openrouter: "OPENROUTER",
+  ai21: "AI21",
+  makersuite: "MAKERSUITE",
+  vertexai: "VERTEXAI",
+  mistralai: "MISTRALAI",
+  custom: "CUSTOM",
+  cohere: "COHERE",
+  perplexity: "PERPLEXITY",
+  groq: "GROQ",
+  electronhub: "ELECTRONHUB",
+  nanogpt: "NANOGPT",
+  deepseek: "DEEPSEEK",
+  aimlapi: "AIMLAPI",
+  xai: "XAI",
+  moonshot: "MOONSHOT",
+  fireworks: "FIREWORKS",
+  cometapi: "COMETAPI",
+  azure_openai: "AZURE_OPENAI",
+  zai: "ZAI",
+  siliconflow: "SILICONFLOW",
+  chutes: "CHUTES",
+  pollinations: "POLLINATIONS",
+  workers_ai: "WORKERS_AI",
+  minimax: "MINIMAX"
+};
+const OFFICIAL_LABELS = {
+  deepseek: "DeepSeek 官方",
+  openai: "OpenAI 官方",
+  claude: "Claude 官方",
+  openrouter: "OpenRouter 官方",
+  groq: "Groq 官方",
+  mistralai: "Mistral 官方",
+  makersuite: "Google AI Studio 官方",
+  vertexai: "Vertex AI 官方",
+  cohere: "Cohere 官方",
+  siliconflow: "SiliconFlow 官方",
+  fireworks: "Fireworks 官方",
+  chutes: "Chutes 官方",
+  minimax: "MiniMax 官方",
+  xai: "xAI 官方",
+  zai: "Z.AI 官方",
+  moonshot: "Moonshot 官方",
+  custom: "自定义接口"
+};
+let secretsModulePromise = null;
+let secretsModule = null;
+function initConnectionIdentity() {
+  if (!secretsModulePromise) {
+    const modulePath = "/scripts/secrets.js";
+    secretsModulePromise = import(
+      /* @vite-ignore */
+      modulePath
+    ).then((mod) => {
+      secretsModule = mod;
+      try {
+        const task = mod.readSecretState?.();
+        task?.catch?.(() => {
+        });
+      } catch {
+      }
+      return mod;
+    }).catch(() => null);
+  }
+  return secretsModulePromise.then(() => void 0);
+}
+function hash32(text, seed) {
+  let h = seed >>> 0;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 1540483477);
+    h ^= h >>> 15;
+  }
+  h = Math.imul(h ^ h >>> 16, 2246822507);
+  h = Math.imul(h ^ h >>> 13, 3266489909);
+  return (h ^ h >>> 16) >>> 0;
+}
+function shortHash(text) {
+  const h1 = hash32(text, 2166136261).toString(16).padStart(8, "0");
+  const h2 = hash32(text, 2654435769).toString(16).padStart(8, "0");
+  return h1 + h2;
+}
+function normalizeEndpoint(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return null;
+  const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : "https://" + value;
+  try {
+    const url = new URL(candidate);
+    const path = url.pathname.replace(/\/+$/, "");
+    const host = url.hostname + (url.port ? ":" + url.port : "");
+    const queryPairs = [];
+    url.searchParams.forEach((value2, key) => queryPairs.push([key, value2]));
+    const query = queryPairs.sort(([ak, av], [bk, bv]) => ak.localeCompare(bk) || av.localeCompare(bv)).map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v)).join("&");
+    const base = `${url.protocol}//${host}${path}`;
+    return {
+      canonical: base + (query ? "?" + query : ""),
+      label: host + path
+    };
+  } catch {
+    const fallback = value.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/\/+$/, "");
+    return fallback ? { canonical: fallback, label: fallback } : null;
+  }
+}
+function resolveSecretKey(sourceType, secretKeys) {
+  if (!sourceType) return null;
+  const keyName = SOURCE_SECRET_KEYS[sourceType];
+  if (!keyName) return null;
+  return secretKeys?.[keyName] || FALLBACK_SECRET_KEYS[keyName] || null;
+}
+function findSecret(state2, preferredKey, id) {
+  if (!state2 || typeof state2 !== "object") return null;
+  const search = (key) => {
+    const list = state2[key];
+    if (!Array.isArray(list)) return null;
+    const entry = id ? list.find((item) => item?.id === id) : list.find((item) => item?.active);
+    return entry?.id ? { ownerKey: key, entry } : null;
+  };
+  if (preferredKey) {
+    const found = search(preferredKey);
+    if (found) return found;
+  }
+  if (id) {
+    for (const key of Object.keys(state2)) {
+      const found = search(key);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+function credentialLabel(entry) {
+  const id = String(entry.id || "");
+  const base = String(entry.label || "").trim() || `密钥 ${id.slice(0, 6).toUpperCase()}`;
+  const tail = String(entry.value || "").replace(/[^a-zA-Z0-9]/g, "").slice(-3);
+  return tail ? `${base} •••${tail}` : base;
+}
+function buildEndpointContext(body) {
+  const sourceType = typeof body?.chat_completion_source === "string" && body.chat_completion_source.trim() ? body.chat_completion_source.trim() : null;
+  const rawEndpoint = typeof body?.custom_url === "string" && body.custom_url.trim() ? body.custom_url.trim() : typeof body?.reverse_proxy === "string" ? body.reverse_proxy.trim() : "";
+  const endpoint = rawEndpoint ? normalizeEndpoint(rawEndpoint) : null;
+  const endpointId = sourceType || endpoint ? shortHash(`${sourceType || "unknown"}|${endpoint?.canonical || "official:" + (sourceType || "unknown")}`) : null;
+  const endpointLabel = endpoint?.label || (sourceType ? OFFICIAL_LABELS[sourceType] || `${sourceType} 接口` : null);
+  return { sourceType, endpointId, endpointLabel };
+}
+function buildConnectionContext(body, secretState, secretKeys) {
+  const endpoint = buildEndpointContext(body);
+  const reverseProxy = typeof body?.reverse_proxy === "string" ? body.reverse_proxy.trim() : "";
+  if (reverseProxy) {
+    return { ...endpoint, credentialId: null, credentialLabel: null };
+  }
+  const secretId = typeof body?.secret_id === "string" && body.secret_id.trim() ? body.secret_id.trim() : null;
+  const preferredKey = resolveSecretKey(endpoint.sourceType, secretKeys);
+  const found = findSecret(secretState || {}, preferredKey, secretId);
+  if (!found) {
+    return { ...endpoint, credentialId: null, credentialLabel: null };
+  }
+  return {
+    ...endpoint,
+    credentialId: `secret:${found.ownerKey}:${found.entry.id}`,
+    credentialLabel: credentialLabel(found.entry)
+  };
+}
+function resolveRuntimeConnectionContext(body) {
+  initConnectionIdentity();
+  return buildConnectionContext(
+    body,
+    secretsModule?.secret_state || null,
+    secretsModule?.SECRET_KEYS
+  );
+}
 let lastMessages = [];
 let lastStart = 0;
 let lastFetchUsage = null;
 let lastFetchModel = null;
 let lastFetchTime = 0;
+let lastFetchConnection = null;
+let lastFetchConnectionTime = 0;
 function setLastRequest(messages, start) {
   lastMessages = messages || [];
   lastStart = start || Date.now();
 }
 const TARGET_API = "/api/backends/chat-completions/generate";
+function safeRequestSnapshot(body, connection) {
+  if (!body || typeof body !== "object") return null;
+  const keep = {};
+  for (const key of ["model", "stream", "temperature", "max_tokens", "top_p", "stream_options", "chat_completion_source"]) {
+    if (body[key] !== void 0) keep[key] = body[key];
+  }
+  if (connection?.endpointLabel) keep.endpoint = connection.endpointLabel;
+  if (Array.isArray(body.messages)) keep.messages_length = body.messages.length;
+  return keep;
+}
+function recentConnection(maxAge = 12e4) {
+  try {
+    if (lastFetchConnection && Date.now() - lastFetchConnectionTime < maxAge && lastFetchConnectionTime >= lastFetchTime) {
+      return lastFetchConnection;
+    }
+    if (lastFetchUsage?.connection && Date.now() - lastFetchTime < maxAge) return lastFetchUsage.connection;
+  } catch {
+  }
+  return null;
+}
 function estimateThinkTokens(text, usage) {
   if (!usage || typeof usage !== "object") return;
   const detail = usage.completion_tokens_details;
@@ -1618,7 +1876,13 @@ function installFetchCapture() {
           reqBody = JSON.parse(args[1]?.body || "null");
         } catch {
         }
-        const fullReq = reqBody ? JSON.parse(JSON.stringify(reqBody)) : null;
+        const requestConnection = resolveRuntimeConnectionContext(reqBody || {});
+        const fullReq = safeRequestSnapshot(reqBody, requestConnection);
+        try {
+          lastFetchConnection = requestConnection;
+          lastFetchConnectionTime = Date.now();
+        } catch {
+        }
         let msgs = [];
         try {
           if (reqBody?.messages?.length) msgs = reqBody.messages.slice(-10);
@@ -1683,12 +1947,12 @@ function installFetchCapture() {
                   estimateThinkTokens(text, usage);
                 } catch {
                 }
-                lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: text, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason };
+                lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: text, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason, connection: requestConnection };
                 lastFetchModel = typeof model === "string" ? model : null;
                 lastFetchTime = Date.now();
                 log.debug("fetch 捕获 usage", { model, hasUsage: !!usage, finishReason });
                 try {
-                  processUsage(usage, model, msgs, startTime, fullReq, text, ttftVal, thinkTimeVal, finishReason);
+                  processUsage(usage, model, msgs, startTime, fullReq, text, ttftVal, thinkTimeVal, finishReason, requestConnection);
                 } catch (e) {
                   log.error("fetch 用量记录失败 " + (e?.message || e));
                 }
@@ -1783,6 +2047,10 @@ let rawFetchRef = null;
 let messageReceivedHandler = null;
 function installInterception() {
   try {
+    try {
+      initConnectionIdentity();
+    } catch {
+    }
     const ctx = globalThis.SillyTavern?.getContext?.();
     const es = ctx?.eventSource;
     const et = ctx?.event_types;
@@ -1893,7 +2161,7 @@ function onGenerationEnded(...args) {
         }
       } catch {
       }
-      processUsage(usage, model, lastMessages, lastStart, null, null, ttft, think, fr);
+      processUsage(usage, model, lastMessages, lastStart, null, null, ttft, think, fr, recentConnection(5e3));
       return;
     }
     if (tail?.swipe_info && typeof tail.swipe_info === "object") {
@@ -1914,7 +2182,7 @@ function onGenerationEnded(...args) {
             }
           } catch {
           }
-          processUsage(usage, model, lastMessages, lastStart, null, null, ttft, think, fr);
+          processUsage(usage, model, lastMessages, lastStart, null, null, ttft, think, fr, recentConnection(5e3));
           return;
         }
       }
@@ -1935,7 +2203,7 @@ function onGenerationEnded(...args) {
         }
       } catch {
       }
-      processUsage(maybeUsage, m, lastMessages, lastStart, null, null, ttft, think, fr);
+      processUsage(maybeUsage, m, lastMessages, lastStart, null, null, ttft, think, fr, recentConnection(5e3));
       return;
     }
     {
@@ -1952,7 +2220,7 @@ function onGenerationEnded(...args) {
         const fFr = fetchPack && fetchPack.finishReason || fetchUsage?.__finish_reason || null;
         log.debug("fetch 兜底命中", { model: fetchedModel });
         lastFetchUsage = null;
-        processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink, fFr);
+        processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink, fFr, fetchPack?.connection || recentConnection());
         return;
       } else if (lastFetchUsage) {
         const fu = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
@@ -1974,7 +2242,7 @@ function refresh() {
   } catch {
   }
 }
-function processUsage(usage, model, messages, startTime, fullRequest = null, fullResponse = null, ttft = 0, thinkTime = 0, finishReason = null) {
+function processUsage(usage, model, messages, startTime, fullRequest = null, fullResponse = null, ttft = 0, thinkTime = 0, finishReason = null, connection = null) {
   try {
     const fp = lastFetchUsage;
     if (fp?.usage && Date.now() - lastFetchTime < 5e3) {
@@ -1984,7 +2252,7 @@ function processUsage(usage, model, messages, startTime, fullRequest = null, ful
     }
   } catch {
   }
-  repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason);
+  repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason, connection);
   refresh();
 }
 function recalcAllCosts() {
@@ -4064,6 +4332,99 @@ function renderDiff() {
   }
   host.innerHTML = diffMessages(oldEntry.messages || [], newEntry.messages || []);
 }
+const STATS_FILTER_ALL = "__all__";
+const STATS_FILTER_UNKNOWN = "__unknown__";
+const STATS_FILTER_NULL = "__null__";
+function filterStatsHistory(entries, filter = {}) {
+  return (entries || []).filter((entry) => {
+    if (!entry) return false;
+    if (filter.start || filter.end) {
+      const day = localDay$1(entry.timestamp);
+      if (filter.start && day < filter.start) return false;
+      if (filter.end && day > filter.end) return false;
+    }
+    if (filter.model && filter.model !== STATS_FILTER_ALL && entry.model !== filter.model) return false;
+    if (filter.chat && filter.chat !== STATS_FILTER_ALL) {
+      if (filter.chat === STATS_FILTER_NULL) {
+        if (entry.chatId) return false;
+      } else if ((entry.chatId ?? null) !== filter.chat) {
+        return false;
+      }
+    }
+    if (filter.endpoint && filter.endpoint !== STATS_FILTER_ALL) {
+      if (filter.endpoint === STATS_FILTER_UNKNOWN) {
+        if (entry.endpointId) return false;
+      } else if (entry.endpointId !== filter.endpoint) {
+        return false;
+      }
+    }
+    if (filter.credential && filter.credential !== STATS_FILTER_ALL) {
+      if (filter.credential === STATS_FILTER_UNKNOWN) {
+        if (entry.credentialId) return false;
+      } else if (entry.credentialId !== filter.credential) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+function addLabelCollisionSuffix(options) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const option of options) counts.set(option.label, (counts.get(option.label) || 0) + 1);
+  return options.map((option) => {
+    if (option.unknown || (counts.get(option.label) || 0) < 2) return option;
+    return { ...option, label: `${option.label} · ${option.id.slice(0, 4)}` };
+  });
+}
+function getEndpointFilterOptions(history) {
+  const map2 = /* @__PURE__ */ new Map();
+  for (const entry of history || []) {
+    const unknown = !entry?.endpointId;
+    const id = unknown ? STATS_FILTER_UNKNOWN : entry.endpointId;
+    const timestamp = Number(entry?.timestamp) || 0;
+    const label = unknown ? "未记录接入" : entry.endpointLabel || `接入 ${String(id).slice(0, 6)}`;
+    const current = map2.get(id);
+    if (!current) {
+      map2.set(id, { id, label, count: 1, unknown, lastSeen: timestamp });
+    } else {
+      current.count++;
+      if (timestamp >= current.lastSeen && label) {
+        current.label = label;
+        current.lastSeen = timestamp;
+      }
+    }
+  }
+  const options = Array.from(map2.values()).map(({ id, label, count, unknown }) => ({ id, label, count, unknown }));
+  options.sort((a, b) => Number(!!a.unknown) - Number(!!b.unknown) || a.label.localeCompare(b.label, "zh-CN"));
+  return addLabelCollisionSuffix(options);
+}
+function getCredentialFilterOptions(history, endpoint = STATS_FILTER_ALL) {
+  const map2 = /* @__PURE__ */ new Map();
+  for (const entry of history || []) {
+    if (endpoint === STATS_FILTER_UNKNOWN) {
+      if (entry?.endpointId) continue;
+    } else if (endpoint !== STATS_FILTER_ALL && entry?.endpointId !== endpoint) {
+      continue;
+    }
+    const unknown = !entry?.credentialId;
+    const id = unknown ? STATS_FILTER_UNKNOWN : entry.credentialId;
+    const timestamp = Number(entry?.timestamp) || 0;
+    const label = unknown ? "未识别密钥" : entry.credentialLabel || `密钥 ${String(id).slice(0, 6)}`;
+    const current = map2.get(id);
+    if (!current) {
+      map2.set(id, { id, label, count: 1, unknown, lastSeen: timestamp });
+    } else {
+      current.count++;
+      if (timestamp >= current.lastSeen && label) {
+        current.label = label;
+        current.lastSeen = timestamp;
+      }
+    }
+  }
+  const options = Array.from(map2.values()).map(({ id, label, count, unknown }) => ({ id, label, count, unknown }));
+  options.sort((a, b) => Number(!!a.unknown) - Number(!!b.unknown) || a.label.localeCompare(b.label, "zh-CN"));
+  return addLabelCollisionSuffix(options);
+}
 function computeOverview() {
   const s = getSelectedSave();
   if (!s) return { balanceText: "¥0.00 CNY", totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0, remainingRounds: null, avgInputCost: 0, avgInputTokens: 0, avgOutputCost: 0, avgOutputTokens: 0, avgThinkTime: 0, avgThinkTokens: 0, avgHitRate: 0, latestHitRate: null, maxOutput: 0, maxInput: 0, maxTotal: 0, avgThinkRatio: 0, truncationRate: 0 };
@@ -5489,10 +5850,15 @@ let currentRange = "30d";
 let customStart = "";
 let customEnd = "";
 let pickerOpen = false;
-let selectedModel = "__all__";
+let selectedModel = STATS_FILTER_ALL;
 let modelPickerOpen = false;
-let selectedChat = "__all__";
+let selectedChat = STATS_FILTER_ALL;
 let chatPickerOpen = false;
+let selectedEndpoint = STATS_FILTER_ALL;
+let endpointPickerOpen = false;
+let selectedCredential = STATS_FILTER_ALL;
+let credentialPickerOpen = false;
+let lastStatsHistory = [];
 let summarySortKey = null;
 let summarySortDir = "desc";
 let lastSummaryFiltered = null;
@@ -5596,22 +5962,10 @@ function getRangeDates() {
   }
   return { start: today, end: today };
 }
-function filterByRange(entries) {
-  const { start, end } = getRangeDates();
-  return entries.filter((e) => {
-    const k = localDay$1(e.timestamp);
-    return k >= start && k <= end;
-  });
-}
-function getRecordedModels() {
-  const s = getSelectedSave();
+function getRecordedModels(history) {
   const set = /* @__PURE__ */ new Set();
-  for (const h of s?.history || []) if (h?.model) set.add(h.model);
+  for (const h of history || []) if (h?.model) set.add(h.model);
   return Array.from(set).sort();
-}
-function filterByModel(entries) {
-  if (selectedModel === "__all__") return entries;
-  return entries.filter((e) => e.model === selectedModel);
 }
 function getRecordedChatsFrom(list) {
   const map2 = /* @__PURE__ */ new Map();
@@ -5631,10 +5985,16 @@ function getRecordedChatsFrom(list) {
     return { chatId: v.chatId, chatName: v.chatName, displayName: display };
   }).sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""));
 }
-function filterByChat(entries) {
-  if (selectedChat === "__all__") return entries;
-  if (selectedChat === "__null__") return entries.filter((e) => !e.chatId);
-  return entries.filter((e) => (e.chatId ?? null) === selectedChat);
+function currentStatsFilter() {
+  const { start, end } = getRangeDates();
+  return {
+    start,
+    end,
+    model: selectedModel,
+    chat: selectedChat,
+    endpoint: selectedEndpoint,
+    credential: selectedCredential
+  };
 }
 function updateRangeHighlight() {
   const doc = getDoc$3();
@@ -5696,12 +6056,12 @@ function updatePickerLabel() {
   } else label.textContent = map2[currentRange] || "近 30 天";
   updateRangeHighlight();
 }
-function renderModelPicker() {
+function renderModelPicker(modelsHist) {
   const doc = getDoc$3();
   const dropdown = doc.getElementById("aus-model-dropdown");
   const label = doc.getElementById("aus-model-label");
   if (!dropdown || !label) return;
-  const models = getRecordedModels();
+  const models = getRecordedModels(modelsHist);
   label.textContent = selectedModel === "__all__" ? "全部" : selectedModel;
   let html = `<div data-model="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${selectedModel === "__all__" ? "background:var(--ds-card);font-weight:600;" : ""}">全部</div>`;
   for (const m of models) {
@@ -5715,7 +6075,6 @@ function renderModelPicker() {
       selectedModel = el.getAttribute("data-model") || "__all__";
       modelPickerOpen = false;
       dropdown.style.display = "none";
-      renderModelPicker();
       renderStatsView();
     };
   });
@@ -5747,6 +6106,105 @@ function renderChatPicker(chatHist) {
     };
   });
 }
+function renderEndpointPicker(history) {
+  const doc = getDoc$3();
+  const dropdown = doc.getElementById("aus-endpoint-dropdown");
+  const label = doc.getElementById("aus-endpoint-label");
+  if (!dropdown || !label) return;
+  const options = getEndpointFilterOptions(history || []);
+  const current = options.find((option) => option.id === selectedEndpoint);
+  label.textContent = selectedEndpoint === STATS_FILTER_ALL ? "全部" : selectedEndpoint === STATS_FILTER_UNKNOWN ? "未记录接入" : current?.label || selectedEndpoint;
+  label.title = label.textContent;
+  const optionHtml = (id, text, title) => {
+    const active = id === selectedEndpoint ? "background:var(--ds-card);font-weight:600;" : "";
+    return `<div data-endpoint="${esc$1(id)}" title="${esc$1(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${esc$1(text)}</div>`;
+  };
+  let html = optionHtml(STATS_FILTER_ALL, "全部", "全部");
+  for (const option of options) html += optionHtml(option.id, option.label, option.label);
+  if (!options.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">暂无接入记录</div>';
+  dropdown.innerHTML = html;
+  dropdown.querySelectorAll("[data-endpoint]").forEach((el) => {
+    el.onclick = () => {
+      selectedEndpoint = el.getAttribute("data-endpoint") || STATS_FILTER_ALL;
+      selectedCredential = STATS_FILTER_ALL;
+      endpointPickerOpen = false;
+      dropdown.style.display = "none";
+      renderStatsView();
+    };
+  });
+}
+function renderCredentialPicker(history, endpoint = selectedEndpoint) {
+  const doc = getDoc$3();
+  const dropdown = doc.getElementById("aus-credential-dropdown");
+  const label = doc.getElementById("aus-credential-label");
+  if (!dropdown || !label) return;
+  const options = getCredentialFilterOptions(history || [], endpoint);
+  const current = options.find((option) => option.id === selectedCredential);
+  label.textContent = selectedCredential === STATS_FILTER_ALL ? "全部" : selectedCredential === STATS_FILTER_UNKNOWN ? "未识别密钥" : current?.label || selectedCredential;
+  label.title = label.textContent;
+  const optionHtml = (id, text, title) => {
+    const active = id === selectedCredential ? "background:var(--ds-card);font-weight:600;" : "";
+    return `<div data-credential="${esc$1(id)}" title="${esc$1(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${esc$1(text)}</div>`;
+  };
+  let html = optionHtml(STATS_FILTER_ALL, "全部", "全部");
+  for (const option of options) html += optionHtml(option.id, option.label, option.label);
+  if (!options.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">暂无密钥记录</div>';
+  dropdown.innerHTML = html;
+  dropdown.querySelectorAll("[data-credential]").forEach((el) => {
+    el.onclick = () => {
+      selectedCredential = el.getAttribute("data-credential") || STATS_FILTER_ALL;
+      credentialPickerOpen = false;
+      dropdown.style.display = "none";
+      renderStatsView();
+    };
+  });
+}
+function positionStatsDropdown(btn, dropdown) {
+  try {
+    const doc = getDoc$3();
+    const panel2 = doc.getElementById("aus-panel");
+    if (!panel2) return;
+    const panelRect = panel2.getBoundingClientRect();
+    const btnRect = btn.getBoundingClientRect();
+    const available = Math.max(160, panelRect.width - 16);
+    dropdown.style.maxWidth = `${available}px`;
+    dropdown.style.boxSizing = "border-box";
+    const width = Math.min(dropdown.offsetWidth || 220, available);
+    const buttonLeft = btnRect.left - panelRect.left;
+    const desiredLeft = Math.max(8, Math.min(buttonLeft, panelRect.width - width - 8));
+    dropdown.style.left = `${desiredLeft - buttonLeft}px`;
+    dropdown.style.right = "auto";
+  } catch {
+  }
+}
+function closeFilterDropdowns(except) {
+  const doc = getDoc$3();
+  if (except !== "range") {
+    pickerOpen = false;
+    const el = doc.getElementById("aus-range-dropdown");
+    if (el) el.style.display = "none";
+  }
+  if (except !== "model") {
+    modelPickerOpen = false;
+    const el = doc.getElementById("aus-model-dropdown");
+    if (el) el.style.display = "none";
+  }
+  if (except !== "chat") {
+    chatPickerOpen = false;
+    const el = doc.getElementById("aus-chat-dropdown");
+    if (el) el.style.display = "none";
+  }
+  if (except !== "endpoint") {
+    endpointPickerOpen = false;
+    const el = doc.getElementById("aus-endpoint-dropdown");
+    if (el) el.style.display = "none";
+  }
+  if (except !== "credential") {
+    credentialPickerOpen = false;
+    const el = doc.getElementById("aus-credential-dropdown");
+    if (el) el.style.display = "none";
+  }
+}
 function bindPicker() {
   const doc = getDoc$3();
   const btn = doc.getElementById("aus-range-btn");
@@ -5754,18 +6212,12 @@ function bindPicker() {
   if (btn && dropdown) {
     btn.onclick = () => {
       pickerOpen = !pickerOpen;
+      closeFilterDropdowns("range");
       dropdown.style.display = pickerOpen ? "flex" : "none";
-      const md = doc.getElementById("aus-model-dropdown");
-      if (md) {
-        md.style.display = "none";
-        modelPickerOpen = false;
+      if (pickerOpen) {
+        renderCalendar();
+        positionStatsDropdown(btn, dropdown);
       }
-      const cd = doc.getElementById("aus-chat-dropdown");
-      if (cd) {
-        cd.style.display = "none";
-        chatPickerOpen = false;
-      }
-      if (pickerOpen) renderCalendar();
     };
     doc.querySelectorAll("[data-range]").forEach((el) => {
       el.onclick = () => {
@@ -5787,18 +6239,12 @@ function bindPicker() {
   if (mBtn && mDropdown) {
     mBtn.onclick = () => {
       modelPickerOpen = !modelPickerOpen;
+      closeFilterDropdowns("model");
       mDropdown.style.display = modelPickerOpen ? "block" : "none";
-      const rDrop = doc.getElementById("aus-range-dropdown");
-      if (rDrop) {
-        rDrop.style.display = "none";
-        pickerOpen = false;
+      if (modelPickerOpen) {
+        renderModelPicker(lastStatsHistory);
+        positionStatsDropdown(mBtn, mDropdown);
       }
-      const cDrop = doc.getElementById("aus-chat-dropdown");
-      if (cDrop) {
-        cDrop.style.display = "none";
-        chatPickerOpen = false;
-      }
-      if (modelPickerOpen) renderModelPicker();
     };
   }
   const cBtn = doc.getElementById("aus-chat-btn");
@@ -5806,17 +6252,8 @@ function bindPicker() {
   if (cBtn && cDropdown) {
     cBtn.onclick = () => {
       chatPickerOpen = !chatPickerOpen;
+      closeFilterDropdowns("chat");
       cDropdown.style.display = chatPickerOpen ? "block" : "none";
-      const rDrop = doc.getElementById("aus-range-dropdown");
-      if (rDrop) {
-        rDrop.style.display = "none";
-        pickerOpen = false;
-      }
-      const mDrop = doc.getElementById("aus-model-dropdown");
-      if (mDrop) {
-        mDrop.style.display = "none";
-        modelPickerOpen = false;
-      }
       if (chatPickerOpen) {
         (async () => {
           try {
@@ -5825,7 +6262,34 @@ function bindPicker() {
           } catch {
             renderChatPicker();
           }
+          positionStatsDropdown(cBtn, cDropdown);
         })();
+      }
+    };
+  }
+  const eBtn = doc.getElementById("aus-endpoint-btn");
+  const eDropdown = doc.getElementById("aus-endpoint-dropdown");
+  if (eBtn && eDropdown) {
+    eBtn.onclick = () => {
+      endpointPickerOpen = !endpointPickerOpen;
+      closeFilterDropdowns("endpoint");
+      eDropdown.style.display = endpointPickerOpen ? "block" : "none";
+      if (endpointPickerOpen) {
+        renderEndpointPicker(lastStatsHistory);
+        positionStatsDropdown(eBtn, eDropdown);
+      }
+    };
+  }
+  const kBtn = doc.getElementById("aus-credential-btn");
+  const kDropdown = doc.getElementById("aus-credential-dropdown");
+  if (kBtn && kDropdown) {
+    kBtn.onclick = () => {
+      credentialPickerOpen = !credentialPickerOpen;
+      closeFilterDropdowns("credential");
+      kDropdown.style.display = credentialPickerOpen ? "block" : "none";
+      if (credentialPickerOpen) {
+        renderCredentialPicker(lastStatsHistory);
+        positionStatsDropdown(kBtn, kDropdown);
       }
     };
   }
@@ -5844,6 +6308,16 @@ function bindPicker() {
     if (chatPickerOpen && !t.closest("#aus-chat-dropdown") && !t.closest("#aus-chat-btn")) {
       chatPickerOpen = false;
       const d = doc.getElementById("aus-chat-dropdown");
+      if (d) d.style.display = "none";
+    }
+    if (endpointPickerOpen && !t.closest("#aus-endpoint-dropdown") && !t.closest("#aus-endpoint-btn")) {
+      endpointPickerOpen = false;
+      const d = doc.getElementById("aus-endpoint-dropdown");
+      if (d) d.style.display = "none";
+    }
+    if (credentialPickerOpen && !t.closest("#aus-credential-dropdown") && !t.closest("#aus-credential-btn")) {
+      credentialPickerOpen = false;
+      const d = doc.getElementById("aus-credential-dropdown");
       if (d) d.style.display = "none";
     }
   });
@@ -5871,9 +6345,7 @@ function renderChartSelectors() {
     el.onchange = () => {
       toggleY(el.getAttribute("data-ykey"));
       renderChartSelectors();
-      const s = getSelectedSave();
-      const filtered = filterByChat(filterByModel(filterByRange(s.history || [])));
-      renderChart(filtered);
+      renderStatsView();
     };
   });
   const xSel = getXSelected();
@@ -5891,9 +6363,7 @@ function renderChartSelectors() {
       chartXOpen = false;
       xDrop.style.display = "none";
       renderChartSelectors();
-      const s = getSelectedSave();
-      const filtered = filterByChat(filterByModel(filterByRange(s.history || [])));
-      renderChart(filtered);
+      renderStatsView();
     };
   });
 }
@@ -6194,30 +6664,28 @@ try {
 async function getHistoryForStats() {
   const s = getSelectedSave();
   const hot = s?.history || [];
-  if (hot.length >= 400 || cachedAllHistory) {
-    if (cachedAllHistory) {
-      const keyOf = (h) => `${h.timestamp}|${h.model || ""}|${h.total_tokens || 0}`;
-      const seen = new Set(cachedAllHistory.map(keyOf));
-      const fresh = hot.filter((h) => !seen.has(keyOf(h)));
-      if (fresh.length) cachedAllHistory = [...fresh, ...cachedAllHistory].sort((a, b) => b.timestamp - a.timestamp);
-      return cachedAllHistory;
-    }
-    if (allHistoryLoading) return hot;
-    allHistoryLoading = true;
-    try {
-      const mod = await Promise.resolve().then(() => persistence);
-      if (mod.getAllHistory) {
-        const all = await mod.getAllHistory();
-        if (all && all.length > hot.length) {
-          cachedAllHistory = all;
-          return all;
-        }
-      }
-    } catch {
-    } finally {
-      allHistoryLoading = false;
-    }
+  if (cachedAllHistory) {
+    const keyOf = (h) => `${h.timestamp}|${h.model || ""}|${h.total_tokens || 0}`;
+    const seen = new Set(cachedAllHistory.map(keyOf));
+    const fresh = hot.filter((h) => !seen.has(keyOf(h)));
+    if (fresh.length) cachedAllHistory = [...fresh, ...cachedAllHistory].sort((a, b) => b.timestamp - a.timestamp);
+    return cachedAllHistory;
   }
+  if (allHistoryLoading) return hot;
+  allHistoryLoading = true;
+  try {
+    const mod = await Promise.resolve().then(() => persistence);
+    if (mod.getAllHistory) {
+      const all = await mod.getAllHistory();
+      const result = all || hot;
+      cachedAllHistory = result;
+      return result;
+    }
+  } catch {
+  } finally {
+    allHistoryLoading = false;
+  }
+  cachedAllHistory = hot;
   return hot;
 }
 async function renderStatsView() {
@@ -6225,10 +6693,18 @@ async function renderStatsView() {
   const s = getSelectedSave();
   if (!s) return;
   const allHistory = await getHistoryForStats();
-  const timeFiltered = filterByRange(allHistory);
-  const modelFiltered = filterByModel(timeFiltered);
-  const summaryFiltered = filterByChat(modelFiltered);
-  const chartFiltered = filterByChat(modelFiltered);
+  lastStatsHistory = allHistory;
+  const endpointOptions = getEndpointFilterOptions(allHistory);
+  const validEndpoints = /* @__PURE__ */ new Set([STATS_FILTER_ALL, ...endpointOptions.map((option) => option.id)]);
+  if (!validEndpoints.has(selectedEndpoint)) {
+    selectedEndpoint = STATS_FILTER_ALL;
+    selectedCredential = STATS_FILTER_ALL;
+  }
+  const credentialOptions = getCredentialFilterOptions(allHistory, selectedEndpoint);
+  const validCredentials = /* @__PURE__ */ new Set([STATS_FILTER_ALL, ...credentialOptions.map((option) => option.id)]);
+  if (!validCredentials.has(selectedCredential)) selectedCredential = STATS_FILTER_ALL;
+  const summaryFiltered = filterStatsHistory(allHistory, currentStatsFilter());
+  const chartFiltered = summaryFiltered;
   let totalCost = 0, totalReq = summaryFiltered.length, totalTok = 0;
   for (const e of summaryFiltered) {
     totalCost += e.cost || 0;
@@ -6248,8 +6724,10 @@ async function renderStatsView() {
   if (tokEl) tokEl.textContent = totalTok.toLocaleString("zh-CN");
   renderStatsFour(summaryFiltered);
   renderModelSummary(summaryFiltered);
-  renderModelPicker();
+  renderModelPicker(allHistory);
   renderChatPicker(allHistory);
+  renderEndpointPicker(allHistory);
+  renderCredentialPicker(allHistory);
   renderChartSelectors();
   const statsViewEl = doc.querySelector('[data-view="stats"]');
   const isStatsHidden = statsViewEl ? statsViewEl.style.display === "none" || statsViewEl.offsetParent === null : false;
@@ -6316,17 +6794,7 @@ function openStatsFourDrop(idx, v) {
       } catch {
       }
       drop.style.display = "none";
-      const curFiltered = (() => {
-        try {
-          const s = getSelectedSave();
-          const all = s?.history || [];
-          const tf = filterByRange(all);
-          return filterByChat(filterByModel(tf));
-        } catch {
-          return [];
-        }
-      })();
-      renderStatsFour(curFiltered);
+      renderStatsView();
     };
   });
   drop.style.display = drop.style.display === "block" ? "none" : "block";
@@ -7480,24 +7948,38 @@ function createPanel() {
             </div>
            <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
-              <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span><span style="font-size:10px;">▼</span></div>
-              <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);">全部</span><span style="font-size:10px;">▼</span></div>
-              <div id="aus-chat-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">对话</span><span id="aus-chat-label" style="font-weight:600;color:var(--ds-text);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
-              <div id="aus-range-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);overflow:hidden;flex-direction:row;">
-                <div style="min-width:120px;border-right:1px solid var(--ds-card);padding:8px;display:grid;gap:2px;">
-                  <div data-range="all" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">全部</div>
-                  <div data-range="today" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">今天</div>
-                  <div data-range="yesterday" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">昨天</div>
-                  <div data-range="7d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">近 7 天</div>
-                  <div data-range="30d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">近 30 天</div>
-                  <div data-range="month" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">本月</div>
-                  <div data-range="lastMonth" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">上月</div>
-                  <div data-range="custom" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">自定义</div>
+              <div class="aus-stats-filter">
+                <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-range-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);overflow:hidden;flex-direction:row;">
+                  <div style="min-width:120px;border-right:1px solid var(--ds-card);padding:8px;display:grid;gap:2px;">
+                    <div data-range="all" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">全部</div>
+                    <div data-range="today" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">今天</div>
+                    <div data-range="yesterday" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">昨天</div>
+                    <div data-range="7d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">近 7 天</div>
+                    <div data-range="30d" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">近 30 天</div>
+                    <div data-range="month" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">本月</div>
+                    <div data-range="lastMonth" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">上月</div>
+                    <div data-range="custom" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--ds-text);">自定义</div>
+                  </div>
+                  <div id="aus-date-calendar" style="padding:12px;display:none;"></div>
                 </div>
-                <div id="aus-date-calendar" style="padding:12px;display:none;"></div>
               </div>
-              <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:160px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
-              <div id="aus-chat-dropdown" style="display:none;position:absolute;top:40px;left:320px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-height:260px;overflow:auto;padding:8px;"></div>
+              <div class="aus-stats-filter">
+                <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
+                <div id="aus-chat-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">对话</span><span id="aus-chat-label" style="font-weight:600;color:var(--ds-text);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-chat-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
+                <div id="aus-endpoint-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">接入类型</span><span id="aus-endpoint-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-endpoint-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
+                <div id="aus-credential-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
             </div>
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
               <div class="ds-card"><div style="font-size:11px;color:var(--ds-text-2);">消费金额</div><div id="aus-stats-cost" style="font-size:22px;font-weight:700;color:var(--ds-text);margin-top:6px;">¥0.00 CNY</div></div>
@@ -7553,7 +8035,7 @@ function createPanel() {
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（余额查询仅支持 DeepSeek 官方）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前（DeepSeek）高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DB2777;font-weight:600;margin-bottom:6px;">🔄 消息对比</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中找到想对比的两条消息，前者点“旧”，后者点“新”</div><div>2. 系统并排显示请求消息的文字差异</div><div>3. 差异点即缓存发散起始位置（前 N 条相同为缓存命中段）</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 切换时间维度、模型和对话查看不同范围的统计</div><div>2. 多图表展示多模请求参数，悬浮查看分模型明细</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 切换时间、模型、对话、接入类型和 API 密钥查看不同范围的统计</div><div>2. 多图表展示多模请求参数，悬浮查看分模型明细</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”展开固定区域</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 等详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0891B2;font-weight:600;margin-bottom:6px;">🧡 模型兼容</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 完全兼容 DeepSeek 官方 API</div><div>2. 尽量兼容不同厂商/渠道的请求格式，部分模型可能无缓存命中</div><div>3. 如数据异常，请携带完整请求与响应反馈</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-text-3);font-weight:600;margin-bottom:6px;">✨ 关于</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>本扩展由原脚本（<a href="https://github.com/janmk1453/deepseek-tavern-script" target="_blank" style="color:var(--ds-text);text-decoration:underline;">deepseek-tavern-script</a>）迁移重构。</div><div><span style="color:var(--ds-text);">@janmk</span> · 仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);text-decoration:underline;">janmk1453/Api-Usage</a></div></div></div>
@@ -7733,7 +8215,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-D-pOhaaJ.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-BWs5vOLJ.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -7786,7 +8268,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-D-pOhaaJ.js").then((m) => m.maybeAutoCheck());
+    import("./update-BWs5vOLJ.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

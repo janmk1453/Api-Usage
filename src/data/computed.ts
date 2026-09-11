@@ -9,6 +9,124 @@ import { isTruncatedFinish } from '../utils/finish';
 import type { OverviewView, StatsView, TimeRange } from './types';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 
+export const STATS_FILTER_ALL = '__all__';
+export const STATS_FILTER_UNKNOWN = '__unknown__';
+export const STATS_FILTER_NULL = '__null__';
+
+export type StatsHistoryFilter = {
+  start?: string;
+  end?: string;
+  model?: string;
+  chat?: string;
+  endpoint?: string;
+  credential?: string;
+};
+
+export type StatsConnectionOption = {
+  id: string;
+  label: string;
+  count: number;
+  unknown?: boolean;
+};
+
+export function filterStatsHistory(entries: any[], filter: StatsHistoryFilter = {}): any[] {
+  return (entries || []).filter((entry: any) => {
+    if (!entry) return false;
+    if (filter.start || filter.end) {
+      const day = localDay(entry.timestamp);
+      if (filter.start && day < filter.start) return false;
+      if (filter.end && day > filter.end) return false;
+    }
+    if (filter.model && filter.model !== STATS_FILTER_ALL && entry.model !== filter.model) return false;
+    if (filter.chat && filter.chat !== STATS_FILTER_ALL) {
+      if (filter.chat === STATS_FILTER_NULL) {
+        if (entry.chatId) return false;
+      } else if ((entry.chatId ?? null) !== filter.chat) {
+        return false;
+      }
+    }
+    if (filter.endpoint && filter.endpoint !== STATS_FILTER_ALL) {
+      if (filter.endpoint === STATS_FILTER_UNKNOWN) {
+        if (entry.endpointId) return false;
+      } else if (entry.endpointId !== filter.endpoint) {
+        return false;
+      }
+    }
+    if (filter.credential && filter.credential !== STATS_FILTER_ALL) {
+      if (filter.credential === STATS_FILTER_UNKNOWN) {
+        if (entry.credentialId) return false;
+      } else if (entry.credentialId !== filter.credential) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
+function addLabelCollisionSuffix(options: StatsConnectionOption[]): StatsConnectionOption[] {
+  const counts = new Map<string, number>();
+  for (const option of options) counts.set(option.label, (counts.get(option.label) || 0) + 1);
+  return options.map((option) => {
+    if (option.unknown || (counts.get(option.label) || 0) < 2) return option;
+    return { ...option, label: `${option.label} · ${option.id.slice(0, 4)}` };
+  });
+}
+
+export function getEndpointFilterOptions(history: any[]): StatsConnectionOption[] {
+  const map = new Map<string, StatsConnectionOption & { lastSeen: number }>();
+  for (const entry of history || []) {
+    const unknown = !entry?.endpointId;
+    const id = unknown ? STATS_FILTER_UNKNOWN : entry.endpointId;
+    const timestamp = Number(entry?.timestamp) || 0;
+    const label = unknown
+      ? '未记录接入'
+      : (entry.endpointLabel || `接入 ${String(id).slice(0, 6)}`);
+    const current = map.get(id);
+    if (!current) {
+      map.set(id, { id, label, count: 1, unknown, lastSeen: timestamp });
+    } else {
+      current.count++;
+      if (timestamp >= current.lastSeen && label) {
+        current.label = label;
+        current.lastSeen = timestamp;
+      }
+    }
+  }
+  const options = Array.from(map.values()).map(({ id, label, count, unknown }) => ({ id, label, count, unknown }));
+  options.sort((a, b) => Number(!!a.unknown) - Number(!!b.unknown) || a.label.localeCompare(b.label, 'zh-CN'));
+  return addLabelCollisionSuffix(options);
+}
+
+export function getCredentialFilterOptions(history: any[], endpoint = STATS_FILTER_ALL): StatsConnectionOption[] {
+  const map = new Map<string, StatsConnectionOption & { lastSeen: number }>();
+  for (const entry of history || []) {
+    if (endpoint === STATS_FILTER_UNKNOWN) {
+      if (entry?.endpointId) continue;
+    } else if (endpoint !== STATS_FILTER_ALL && entry?.endpointId !== endpoint) {
+      continue;
+    }
+    const unknown = !entry?.credentialId;
+    const id = unknown ? STATS_FILTER_UNKNOWN : entry.credentialId;
+    const timestamp = Number(entry?.timestamp) || 0;
+    const label = unknown
+      ? '未识别密钥'
+      : (entry.credentialLabel || `密钥 ${String(id).slice(0, 6)}`);
+    const current = map.get(id);
+    if (!current) {
+      map.set(id, { id, label, count: 1, unknown, lastSeen: timestamp });
+    } else {
+      current.count++;
+      if (timestamp >= current.lastSeen && label) {
+        current.label = label;
+        current.lastSeen = timestamp;
+      }
+    }
+  }
+  const options = Array.from(map.values()).map(({ id, label, count, unknown }) => ({ id, label, count, unknown }));
+  options.sort((a, b) => Number(!!a.unknown) - Number(!!b.unknown) || a.label.localeCompare(b.label, 'zh-CN'));
+  return addLabelCollisionSuffix(options);
+}
+
 export function getFilteredHistory(range?: TimeRange): any[] {
   const s: any = getSelectedSave();
   const hist: any[] = s?.history || [];
