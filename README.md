@@ -28,6 +28,8 @@
 
 `main` 分支每次通过完整 CI 后会自动生成 `preview-<提交哈希>` 预发布包，包含清单、入口、全部分包、样式、国际化、模板、说明与许可证，并附带 `.sha256` 校验文件。
 
+预发布说明按提交列出更新日志：优先列出上一个 `preview-*` 到当前提交之间的全部提交，首次预览回退到最近的正式版本标签，仍无可用标签时只列当前提交；每条包含短哈希、提交说明与 GitHub 链接。
+
 [浏览并下载 `preview-*` 预发布构建](https://github.com/janmk1453/Api-Usage/releases?q=preview-&expanded=true)
 
 `dev` 分支只执行 CI，不创建标签或 Release。预览身份由提交哈希区分，不修改 `manifest.json`、`package.json` 与锁文件中的版本号。

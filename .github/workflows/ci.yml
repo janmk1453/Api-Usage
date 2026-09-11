@@ -75,6 +75,8 @@ jobs:
       - name: 检出仓库
         uses: actions/checkout@v5
         with:
+          fetch-depth: 0
+          fetch-tags: true
           persist-credentials: false
 
       - name: 配置 Node.js
@@ -87,19 +89,7 @@ jobs:
         run: node scripts/preview-package.mjs "$RUNNER_TEMP/preview" "$GITHUB_SHA"
 
       - name: 生成预发布说明
-        env:
-          VERSION: ${{ steps.package.outputs.version }}
-        run: |
-          printf '%s\n' \
-            '## 预览构建' \
-            '' \
-            "- 提交：${GITHUB_SHA}" \
-            '- 分支：main' \
-            "- 清单版本：${VERSION}" \
-            "- 工作流：[查看 Actions 运行](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})" \
-            '' \
-            '此预发布由 main 分支完整 CI 成功后自动生成，标签与资产均绑定当前提交。' \
-            > "$RUNNER_TEMP/preview/release-notes.md"
+        run: node scripts/preview-notes.mjs "$RUNNER_TEMP/preview/release-notes.md" "$GITHUB_SHA"
 
       - name: 创建或更新预发布
         env:
