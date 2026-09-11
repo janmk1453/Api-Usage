@@ -271,6 +271,27 @@
   gap: 6px;
   flex-wrap: wrap;
 }
+.aus-overview-balance-card {
+  z-index: 40 !important;
+  overflow: visible !important;
+}
+.aus-overview-balance-card:focus-within {
+  z-index: 80 !important;
+}
+#aus-overview-wallet-dropdown {
+  z-index: 100 !important;
+}
+[data-wallet-card] {
+  position: relative;
+  z-index: 1;
+  overflow: visible !important;
+}
+[data-wallet-card]:focus-within {
+  z-index: 50;
+}
+#aus-wallet [data-wallet-dropdown] {
+  z-index: 120 !important;
+}
 /* 表格：全宽横向滚动，不做首列粘性（避免与 ds-card 灰底形成白/灰切割，图1底色问题） */
 #aus-model-summary { background: transparent; }
 #aus-model-summary table { background: transparent; }
