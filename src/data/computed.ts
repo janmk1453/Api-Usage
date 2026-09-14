@@ -17,7 +17,7 @@ export const STATS_FILTER_NULL = '__null__';
 export type StatsHistoryFilter = {
   start?: string;
   end?: string;
-  model?: string;
+  model?: string | string[];
   chat?: string;
   endpoint?: string;
   credential?: string;
@@ -38,7 +38,10 @@ export function filterStatsHistory(entries: any[], filter: StatsHistoryFilter = 
       if (filter.start && day < filter.start) return false;
       if (filter.end && day > filter.end) return false;
     }
-    if (filter.model && filter.model !== STATS_FILTER_ALL && entry.model !== filter.model) return false;
+    if (filter.model && filter.model !== STATS_FILTER_ALL) {
+      const models = Array.isArray(filter.model) ? filter.model : [filter.model];
+      if (!models.length || !models.includes(entry.model)) return false;
+    }
     if (filter.chat && filter.chat !== STATS_FILTER_ALL) {
       if (filter.chat === STATS_FILTER_NULL) {
         if (entry.chatId) return false;

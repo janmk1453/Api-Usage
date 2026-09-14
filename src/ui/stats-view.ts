@@ -20,7 +20,7 @@ let currentRange: RangeKey = '30d';
 let customStart = '';
 let customEnd = '';
 let pickerOpen = false;
-let selectedModel: string = STATS_FILTER_ALL;
+let selectedModels: string[] = [];
 let modelPickerOpen = false;
 let selectedChat: string = STATS_FILTER_ALL;
 let chatPickerOpen = false;
@@ -145,7 +145,7 @@ function currentStatsFilter(): StatsHistoryFilter {
   return {
     start,
     end,
-    model: selectedModel,
+    model: selectedModels.length ? selectedModels : STATS_FILTER_ALL,
     chat: selectedChat,
     endpoint: selectedEndpoint,
     credential: selectedCredential,
@@ -211,19 +211,35 @@ function renderModelPicker(modelsHist?: any[]) {
   const label = doc.getElementById('aus-model-label');
   if (!dropdown || !label) return;
   const models = getRecordedModels(modelsHist);
-  label.textContent = selectedModel === '__all__' ? '全部' : selectedModel;
-  let html = `<div data-model="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${selectedModel==='__all__'?'background:var(--ds-card);font-weight:600;':''}">全部</div>`;
+  const validModels = new Set(models);
+  selectedModels = selectedModels.filter((model) => validModels.has(model));
+  const allSelected = selectedModels.length === 0;
+  label.textContent = allSelected ? '全部' : selectedModels.length === 1 ? selectedModels[0] : `已选 ${selectedModels.length} 项`;
+  label.title = allSelected ? '全部模型' : selectedModels.join('、');
+  let html = `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${allSelected?'background:var(--ds-card);font-weight:600;':''}"><input type="checkbox" data-model-all ${allSelected?'checked':''} style="accent-color:var(--ds-text);" /><span>全部模型</span></label>`;
   for (const m of models) {
-    const active = m === selectedModel ? 'background:var(--ds-card);font-weight:600;' : '';
-    html += `<div data-model="${esc(m)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${esc(m)}</div>`;
+    const checked = selectedModels.includes(m);
+    const active = checked ? 'background:var(--ds-card);font-weight:600;' : '';
+    html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}"><input type="checkbox" data-model="${esc(m)}" ${checked?'checked':''} style="accent-color:var(--ds-text);" /><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m)}</span></label>`;
   }
   if (!models.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">暂无模型</div>';
   dropdown.innerHTML = html;
-  dropdown.querySelectorAll('[data-model]').forEach((el: any) => {
-    el.onclick = () => {
-      selectedModel = el.getAttribute('data-model') || '__all__';
-      modelPickerOpen = false;
-      dropdown.style.display = 'none';
+  const allInput = dropdown.querySelector('[data-model-all]') as HTMLInputElement | null;
+  if (allInput) {
+    allInput.onchange = () => {
+      selectedModels = [];
+      renderStatsView();
+    };
+  }
+  dropdown.querySelectorAll('input[data-model]').forEach((el: any) => {
+    el.onchange = () => {
+      const model = el.getAttribute('data-model') || '';
+      if (!model) return;
+      if (el.checked) {
+        if (!selectedModels.includes(model)) selectedModels.push(model);
+      } else {
+        selectedModels = selectedModels.filter((item) => item !== model);
+      }
       renderStatsView();
     };
   });
