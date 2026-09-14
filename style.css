@@ -205,6 +205,7 @@
     box-shadow: 8px 0 24px rgba(0,0,0,0.18) !important;
   }
   #aus-sidebar-toggle { display: none !important; }
+  #aus-page-header { display: none !important; }
   #aus-main { padding: 12px !important; overflow-x: hidden !important; }
   #aus-overview-four { grid-template-columns: repeat(2, 1fr) !important; gap: clamp(8px, 1.5cqi, 10px) !important; }
   #aus-stats-four { grid-template-columns: repeat(2, 1fr) !important; gap: clamp(8px, 1.5cqi, 10px) !important; }
@@ -365,6 +366,7 @@
   #aus-sidebar-overlay { display:none !important; }
   #aus-sidebar-overlay.is-open { display:block !important; position:absolute !important; inset:0 !important; z-index:20 !important; background:var(--ds-overlay) !important; }
   #aus-sidebar-toggle { display:none !important; }
+  #aus-page-header { display:none !important; }
   /* 窄屏呼出时强制还原完整导航样式，避免宽屏折叠残留导致间距/动画异常 */
   #aus-sidebar #aus-brand { display:flex !important; }
   #aus-sidebar .aus-nav-label { display:inline !important; }
@@ -459,8 +461,12 @@
   #aus-chart-pie,
   #aus-chart-model-token,
   #aus-chart-model-req { width: 100% !important; max-width: 100% !important; min-width: 0 !important; }
-  /* flex 行在窄屏下可换行或竖排，避免挤压 */
-  #aus-history > div > div:first-child { flex-wrap: wrap !important; gap: 8px !important; }
+  /* 历史卡在窄屏下让标题独占一行，避免右侧费用和操作按钮挤压模型名 */
+  .aus-history-card-head { flex-wrap: wrap !important; gap: 8px !important; align-items: flex-start !important; }
+  .aus-history-card-main { flex: 1 1 100% !important; width: 100% !important; }
+  .aus-history-card-title { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; overflow-wrap: anywhere !important; }
+  .aus-history-card-actions { flex: 1 1 100% !important; width: 100% !important; margin-left: 0 !important; justify-content: space-between !important; }
+  .aus-history-card-cost { min-width: 0 !important; text-align: left !important; }
   /* 卡片内子容器不撑开卡片 */
   [data-extension="api-usage-stat"] .ds-card > div { min-width: 0 !important; max-width: 100% !important; }
   /* 历史详情：竖屏展开后内部可滚动，避免内容被截断（图1） */
@@ -481,6 +487,9 @@
   [data-view="forecast"] [style*="display:flex"] { flex-wrap: wrap !important; min-width:0 !important; max-width:100% !important; }
   [data-view="forecast"] #aus-forecast-chart,
   [data-view="forecast"] [id^="aus-forecast-"] { width:100% !important; max-width:100% !important; min-width:0 !important; box-sizing:border-box !important; }
+  [data-view="forecast"] #aus-forecast-chat-btn { width:auto !important; max-width:100% !important; flex-wrap:nowrap !important; align-items:center !important; }
+  [data-view="forecast"] #aus-forecast-chat-btn > span { white-space:nowrap !important; }
+  [data-view="forecast"] #aus-forecast-chat-label { min-width:0 !important; }
   /* 设置页输入区不超出 */
   #aus-settings input,
   #aus-settings select,
