@@ -330,13 +330,13 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
     const c4 = fmtMoney(h.cost||0,4); const c6 = fmtMoney(h.cost||0,6); const in6 = fmtMoney(h.input_cost||0,6); const out6 = fmtMoney(h.output_cost||0,6);
     return `
     <div style="padding:10px 12px;background:var(--ds-card);border-radius:10px;margin-bottom:8px;font-size:12px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div style="min-width:0;flex:1;">
-          <div style="font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(h.model)} · ${esc(localTimeHM(h.timestamp))}</div>
+      <div class="aus-history-card-head" style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="aus-history-card-main" style="min-width:0;flex:1;">
+          <div class="aus-history-card-title" style="font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(h.model)} · ${esc(localTimeHM(h.timestamp))}</div>
           <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · ${h.duration || 0}ms · ${h.tokenRate || 0} t/s</div>
         </div>
-        <div style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
-          <div>
+        <div class="aus-history-card-actions" style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
+          <div class="aus-history-card-cost">
             <div style="font-weight:700;color:var(--ds-text);">${c4}</div>
           </div>
           <div style="display:flex;gap:4px;">

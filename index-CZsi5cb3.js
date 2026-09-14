@@ -3538,7 +3538,7 @@ async function exportHistory() {
   const pad = (n) => n < 10 ? "0" + n : "" + n;
   const safeSettings = JSON.parse(JSON.stringify(state$2.settings || {}));
   if (safeSettings.webdav) safeSettings.webdav = { url: "", username: "", path: "", proxy: "" };
-  const _appVer = "3.0.8";
+  const _appVer = "3.0.9";
   let fullHist = [];
   try {
     fullHist = await repository.getAllHistory();
@@ -9678,13 +9678,13 @@ function renderHistoryInner(doc, fullHist) {
     const out6 = fmtMoney(h.output_cost || 0, 6);
     return `
     <div style="padding:10px 12px;background:var(--ds-card);border-radius:10px;margin-bottom:8px;font-size:12px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div style="min-width:0;flex:1;">
-          <div style="font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc$1(h.model)} · ${esc$1(localTimeHM(h.timestamp))}</div>
+      <div class="aus-history-card-head" style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="aus-history-card-main" style="min-width:0;flex:1;">
+          <div class="aus-history-card-title" style="font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc$1(h.model)} · ${esc$1(localTimeHM(h.timestamp))}</div>
           <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · ${h.duration || 0}ms · ${h.tokenRate || 0} t/s</div>
         </div>
-        <div style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
-          <div>
+        <div class="aus-history-card-actions" style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
+          <div class="aus-history-card-cost">
             <div style="font-weight:700;color:var(--ds-text);">${c4}</div>
           </div>
           <div style="display:flex;gap:4px;">
@@ -10036,7 +10036,7 @@ function createPanel() {
       <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;">
         <div style="display:flex;flex-direction:column;min-width:0;" id="aus-brand">
           <span style="font-size:13px;font-weight:700;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
-          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v${"3.0.8"}</span>
+          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v${"3.0.9"}</span>
         </div>
         <button id="aus-sidebar-toggle" style="width:28px;height:28px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;">‹</button>
       </div>
@@ -10226,7 +10226,7 @@ function createPanel() {
                 <div id="aus-update-banner" style="display:none;padding:8px 10px;border-radius:8px;background:var(--ds-yellow-bg);border:1px solid var(--ds-yellow-border);font-size:11px;color:var(--ds-text);"></div>
                 <div style="display:flex;gap:8px;align-items:center;">
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:11px;">检查更新</button>
-                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v${"3.0.8"} · 每 6 小时自动检查</span>
+                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v${"3.0.9"} · 每 6 小时自动检查</span>
                 </div>
               </div>
             </div>
@@ -10390,7 +10390,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-DHWbR_AB.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-BbhYg1_W.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -10443,7 +10443,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-DHWbR_AB.js").then((m) => m.maybeAutoCheck());
+    import("./update-BbhYg1_W.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

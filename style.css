@@ -459,8 +459,12 @@
   #aus-chart-pie,
   #aus-chart-model-token,
   #aus-chart-model-req { width: 100% !important; max-width: 100% !important; min-width: 0 !important; }
-  /* flex 行在窄屏下可换行或竖排，避免挤压 */
-  #aus-history > div > div:first-child { flex-wrap: wrap !important; gap: 8px !important; }
+  /* 历史卡在窄屏下让标题独占一行，避免右侧费用和操作按钮挤压模型名 */
+  .aus-history-card-head { flex-wrap: wrap !important; gap: 8px !important; align-items: flex-start !important; }
+  .aus-history-card-main { flex: 1 1 100% !important; width: 100% !important; }
+  .aus-history-card-title { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; overflow-wrap: anywhere !important; }
+  .aus-history-card-actions { flex: 1 1 100% !important; width: 100% !important; margin-left: 0 !important; justify-content: space-between !important; }
+  .aus-history-card-cost { min-width: 0 !important; text-align: left !important; }
   /* 卡片内子容器不撑开卡片 */
   [data-extension="api-usage-stat"] .ds-card > div { min-width: 0 !important; max-width: 100% !important; }
   /* 历史详情：竖屏展开后内部可滚动，避免内容被截断（图1） */
