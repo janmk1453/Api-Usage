@@ -1,0 +1,2072 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>API用量统计使用文档</title>
+  <script>
+    (() => {
+      try {
+        const saved = localStorage.getItem('api-usage-docs-theme');
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.dataset.theme = saved === 'dark' || saved === 'light'
+          ? saved
+          : (prefersDark ? 'dark' : 'light');
+      } catch {
+        document.documentElement.dataset.theme = 'light';
+      }
+    })();
+  </script>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --panel: #f9fafb;
+      --card: #f6f7f8;
+      --card-strong: #eef0f2;
+      --text: #111827;
+      --text-2: #6b7280;
+      --text-3: #9ca3af;
+      --border: #e5e7eb;
+      --border-strong: #d1d5db;
+      --accent: #ff6a00;
+      --accent-soft: #fff3e8;
+      --green: #0ba25e;
+      --green-soft: #e6f8ec;
+      --red: #dc2626;
+      --red-soft: #fef2f2;
+      --purple: #6366f1;
+      --purple-soft: #eef0ff;
+      --yellow: #b45309;
+      --yellow-soft: #fffbeb;
+      --code: #f3f4f6;
+      --header: rgba(255, 255, 255, 0.96);
+      --overlay: rgba(17, 24, 39, 0.42);
+      --radius: 14px;
+      --pill: 999px;
+      --content-width: 920px;
+      color-scheme: light;
+    }
+
+    html[data-theme="dark"] {
+      --bg: #0f1419;
+      --panel: #111827;
+      --card: #1e242e;
+      --card-strong: #252d3a;
+      --text: #e5e7eb;
+      --text-2: #9ca3af;
+      --text-3: #6b7280;
+      --border: #2a3342;
+      --border-strong: #334155;
+      --accent: #ff7a3d;
+      --accent-soft: #2b1b12;
+      --green: #34d399;
+      --green-soft: #0a2e1f;
+      --red: #f87171;
+      --red-soft: #2a1515;
+      --purple: #818cf8;
+      --purple-soft: #1f2340;
+      --yellow: #fbbf24;
+      --yellow-soft: #2b2411;
+      --code: #242b36;
+      --header: rgba(15, 20, 25, 0.96);
+      --overlay: rgba(0, 0, 0, 0.66);
+      color-scheme: dark;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 82px;
+      background: var(--bg);
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Microsoft YaHei", "微软雅黑", system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.75;
+      text-rendering: optimizeLegibility;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    .skip-link {
+      position: fixed;
+      top: 8px;
+      left: 8px;
+      z-index: 1000;
+      transform: translateY(-160%);
+      padding: 8px 12px;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .skip-link:focus {
+      transform: translateY(0);
+    }
+
+    .topbar {
+      position: fixed;
+      inset: 0 0 auto 0;
+      z-index: 100;
+      border-bottom: 1px solid var(--border);
+      background: var(--header);
+    }
+
+    .topbar-inner {
+      display: grid;
+      grid-template-columns: minmax(220px, auto) minmax(220px, 520px) auto;
+      align-items: center;
+      gap: 16px;
+      width: min(1600px, 100%);
+      height: 64px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      color: var(--text);
+      font-weight: 700;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .brand-mark {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 42px;
+      height: 26px;
+      padding: 0 8px;
+      border-radius: 8px;
+      background: var(--text);
+      color: var(--bg);
+      font-size: 11px;
+      letter-spacing: 0.2px;
+    }
+
+    .brand-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .search-wrap {
+      position: relative;
+      min-width: 0;
+    }
+
+    .search-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      height: 38px;
+      padding: 0 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--pill);
+      background: var(--card);
+    }
+
+    .search-box:focus-within {
+      border-color: var(--border-strong);
+      background: var(--bg);
+    }
+
+    .search-icon {
+      flex-shrink: 0;
+      color: var(--text-3);
+      font-size: 14px;
+    }
+
+    #doc-search {
+      width: 100%;
+      min-width: 0;
+      padding: 0;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text);
+    }
+
+    #doc-search::placeholder {
+      color: var(--text-3);
+    }
+
+    .search-shortcut {
+      flex-shrink: 0;
+      padding: 2px 6px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-3);
+      font-size: 10px;
+    }
+
+    .search-results {
+      position: absolute;
+      top: 46px;
+      left: 0;
+      right: 0;
+      z-index: 130;
+      display: none;
+      max-height: min(420px, 70vh);
+      overflow: auto;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--bg);
+    }
+
+    .search-results.is-open {
+      display: block;
+    }
+
+    .search-result {
+      display: block;
+      width: 100%;
+      padding: 9px 10px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .search-result:hover,
+    .search-result:focus-visible {
+      background: var(--card);
+      outline: none;
+    }
+
+    .search-result-title {
+      font-weight: 600;
+    }
+
+    .search-result-meta {
+      margin-top: 2px;
+      color: var(--text-3);
+      font-size: 11px;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .theme-switch {
+      display: inline-flex;
+      padding: 3px;
+      border: 1px solid var(--border);
+      border-radius: var(--pill);
+      background: var(--card);
+    }
+
+    .theme-choice,
+    .tool-button,
+    .mobile-menu {
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .theme-choice {
+      padding: 5px 9px;
+      border-radius: var(--pill);
+      color: var(--text-2);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .theme-choice[aria-pressed="true"] {
+      background: var(--bg);
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .tool-button {
+      min-height: 34px;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--pill);
+      background: var(--card);
+      color: var(--text-2);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .tool-button:hover,
+    .theme-choice:hover {
+      background: var(--card-strong);
+    }
+
+    .mobile-menu {
+      display: none;
+      width: 36px;
+      height: 36px;
+      flex-shrink: 0;
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 18px;
+    }
+
+    #reading-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: 150;
+      width: 0;
+      height: 3px;
+      background: var(--accent);
+    }
+
+    .docs-layout {
+      display: grid;
+      grid-template-columns: 250px minmax(0, 1fr) 230px;
+      gap: 28px;
+      width: min(1600px, 100%);
+      margin: 0 auto;
+      padding: 88px 24px 64px;
+    }
+
+    .docs-sidebar,
+    .page-outline {
+      position: sticky;
+      top: 82px;
+      align-self: start;
+      max-height: calc(100vh - 100px);
+      overflow: auto;
+      scrollbar-width: thin;
+    }
+
+    .sidebar-label,
+    .outline-title {
+      margin: 0 0 8px;
+      padding: 0 10px;
+      color: var(--text-3);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .toc-list,
+    .page-toc-list {
+      display: grid;
+      gap: 2px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .toc-link,
+    .page-toc-link {
+      display: block;
+      padding: 7px 10px;
+      border-radius: 8px;
+      color: var(--text-2);
+      font-size: 12px;
+      line-height: 1.45;
+      text-decoration: none;
+    }
+
+    .toc-link:hover,
+    .page-toc-link:hover {
+      background: var(--card);
+      color: var(--text);
+    }
+
+    .toc-link[aria-current="location"] {
+      background: var(--card);
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .page-outline {
+      padding-top: 24px;
+    }
+
+    .page-toc-link {
+      padding: 5px 9px;
+      font-size: 11px;
+    }
+
+    .chapter-nav {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .chapter-nav button {
+      min-width: 0;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+      color: var(--text-2);
+      cursor: pointer;
+      font-size: 11px;
+    }
+
+    .chapter-nav button:hover:not(:disabled) {
+      background: var(--card-strong);
+      color: var(--text);
+    }
+
+    .chapter-nav button:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    main {
+      width: 100%;
+      max-width: var(--content-width);
+      min-width: 0;
+      margin: 0 auto;
+    }
+
+    .doc-section {
+      padding: 24px 26px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+      scroll-margin-top: 82px;
+    }
+
+    .doc-section + .doc-section {
+      margin-top: 18px;
+    }
+
+    .section-kicker {
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .doc-section h2 {
+      margin: 3px 0 10px;
+      color: var(--text);
+      font-size: clamp(23px, 3vw, 30px);
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .doc-section h3 {
+      position: relative;
+      margin: 26px 0 8px;
+      padding-left: 12px;
+      color: var(--text);
+      font-size: 17px;
+      line-height: 1.4;
+      scroll-margin-top: 82px;
+    }
+
+    .doc-section h3::before {
+      position: absolute;
+      top: 0.38em;
+      left: 0;
+      width: 4px;
+      height: 0.88em;
+      border-radius: 999px;
+      background: var(--accent);
+      content: "";
+    }
+
+    .doc-section h4 {
+      margin: 18px 0 6px;
+      font-size: 14px;
+    }
+
+    .lead {
+      margin: 0 0 16px;
+      color: var(--text-2);
+      font-size: 14px;
+    }
+
+    .doc-section p {
+      margin: 10px 0;
+    }
+
+    .doc-section ul,
+    .doc-section ol {
+      margin: 8px 0 12px;
+      padding-left: 22px;
+    }
+
+    .doc-section li + li {
+      margin-top: 4px;
+    }
+
+    .muted {
+      color: var(--text-2);
+    }
+
+    .small {
+      font-size: 12px;
+    }
+
+    .code,
+    code {
+      padding: 2px 5px;
+      border-radius: 5px;
+      background: var(--code);
+      color: var(--text);
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.92em;
+      word-break: break-word;
+    }
+
+    .info-grid,
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin: 14px 0;
+    }
+
+    .card-grid.three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .info-card,
+    .metric-card {
+      min-width: 0;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--card);
+    }
+
+    .info-card strong,
+    .metric-card strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+
+    .metric-card span {
+      color: var(--text-2);
+      font-size: 12px;
+    }
+
+    .callout {
+      margin: 14px 0;
+      padding: 11px 12px;
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent);
+      border-radius: 8px;
+      background: var(--accent-soft);
+      color: var(--text-2);
+      font-size: 12px;
+    }
+
+    .callout.tip {
+      border-left-color: var(--green);
+      background: var(--green-soft);
+    }
+
+    .callout.warning {
+      border-left-color: var(--red);
+      background: var(--red-soft);
+    }
+
+    .callout strong {
+      color: var(--text);
+    }
+
+    .table-wrap {
+      width: 100%;
+      margin: 12px 0;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    table {
+      width: 100%;
+      min-width: 620px;
+      border-collapse: collapse;
+      background: var(--bg);
+      font-size: 12px;
+    }
+
+    th,
+    td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--card);
+      color: var(--text-2);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .steps {
+      counter-reset: doc-step;
+      display: grid;
+      gap: 8px;
+      margin: 14px 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .steps li {
+      position: relative;
+      min-height: 34px;
+      padding: 7px 10px 7px 44px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--card);
+      color: var(--text-2);
+    }
+
+    .steps li::before {
+      counter-increment: doc-step;
+      position: absolute;
+      top: 7px;
+      left: 10px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--text);
+      color: var(--bg);
+      font-size: 11px;
+      font-weight: 700;
+      content: counter(doc-step);
+    }
+
+    .heading-anchor {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 23px;
+      height: 23px;
+      margin-left: 6px;
+      border-radius: 6px;
+      color: var(--text-3);
+      font-size: 13px;
+      text-decoration: none;
+      vertical-align: middle;
+      opacity: 0;
+    }
+
+    .doc-section h2:hover .heading-anchor,
+    .doc-section h3:hover .heading-anchor,
+    .heading-anchor:focus-visible {
+      opacity: 1;
+    }
+
+    .heading-anchor:hover {
+      background: var(--card);
+      color: var(--accent);
+    }
+
+    .back-to-top {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      z-index: 90;
+      display: none;
+      width: 42px;
+      height: 42px;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      background: var(--bg);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    .back-to-top.is-visible {
+      display: block;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      z-index: 200;
+      transform: translate(-50%, 16px);
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--pill);
+      background: var(--text);
+      color: var(--bg);
+      font-size: 12px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.16s ease, transform 0.16s ease;
+    }
+
+    .toast.is-visible {
+      transform: translate(-50%, 0);
+      opacity: 1;
+    }
+
+    .drawer-overlay {
+      position: fixed;
+      inset: 64px 0 0;
+      z-index: 80;
+      display: none;
+      background: var(--overlay);
+    }
+
+    .drawer-overlay.is-open {
+      display: block;
+    }
+
+    .page-footer {
+      margin: 18px 0 0;
+      padding: 18px 4px;
+      color: var(--text-3);
+      font-size: 11px;
+      text-align: center;
+    }
+
+    @media (max-width: 1180px) {
+      .docs-layout {
+        grid-template-columns: 230px minmax(0, 1fr);
+      }
+
+      .page-outline {
+        display: none;
+      }
+    }
+
+    @media (max-width: 820px) {
+      html {
+        scroll-padding-top: 126px;
+      }
+
+      .topbar-inner {
+        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-areas:
+          "menu brand"
+          "search search";
+        height: 112px;
+        gap: 8px 10px;
+        padding: 9px 12px;
+      }
+
+      .mobile-menu {
+        grid-area: menu;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .brand {
+        grid-area: brand;
+      }
+
+      .search-wrap {
+        grid-area: search;
+      }
+
+      .toolbar-actions {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+      }
+
+      .tool-button.print-button {
+        display: none;
+      }
+
+      .docs-layout {
+        display: block;
+        padding: 136px 12px 48px;
+      }
+
+      .docs-sidebar {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 90;
+        width: min(310px, 86vw);
+        max-height: none;
+        padding: 124px 12px 20px;
+        border-right: 1px solid var(--border);
+        background: var(--panel);
+        transform: translateX(-105%);
+        transition: transform 0.18s ease;
+      }
+
+      .docs-sidebar.is-open {
+        transform: translateX(0);
+      }
+
+      .drawer-overlay {
+        inset: 112px 0 0;
+      }
+
+      main {
+        max-width: 100%;
+      }
+
+      .doc-section {
+        padding: 20px 16px;
+      }
+
+      .info-grid,
+      .card-grid,
+      .card-grid.three {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .brand-text {
+        font-size: 13px;
+      }
+
+      .brand-mark {
+        min-width: 38px;
+        padding: 0 6px;
+      }
+
+      .theme-choice {
+        padding: 5px 7px;
+      }
+
+      .search-shortcut {
+        display: none;
+      }
+
+      .doc-section h2 {
+        font-size: 23px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+      }
+    }
+
+    @media print {
+      :root {
+        --bg: #ffffff;
+        --panel: #ffffff;
+        --card: #f6f7f8;
+        --text: #111111;
+        --text-2: #444444;
+        --text-3: #666666;
+        --border: #dddddd;
+      }
+
+      body {
+        background: #ffffff;
+        color: #111111;
+      }
+
+      .topbar,
+      .docs-sidebar,
+      .page-outline,
+      .back-to-top,
+      .drawer-overlay,
+      #reading-progress,
+      .heading-anchor,
+      .toast {
+        display: none !important;
+      }
+
+      .docs-layout {
+        display: block;
+        width: 100%;
+        padding: 0;
+      }
+
+      main {
+        max-width: none;
+      }
+
+      .doc-section {
+        break-inside: avoid;
+        padding: 0 0 20px;
+        border: 0;
+      }
+
+      .doc-section + .doc-section {
+        margin-top: 28px;
+        padding-top: 24px;
+        border-top: 1px solid #cccccc;
+      }
+
+      .table-wrap {
+        overflow: visible;
+      }
+
+      table {
+        min-width: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#doc-content">跳到正文</a>
+  <div id="reading-progress" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <button class="mobile-menu" id="mobile-menu" type="button" aria-label="打开文档目录" aria-expanded="false">☰</button>
+      <a class="brand" href="#doc-intro">
+        <span class="brand-mark">API</span>
+        <span class="brand-text">用量统计 · 使用文档</span>
+      </a>
+      <div class="search-wrap">
+        <label class="search-box" for="doc-search">
+          <span class="search-icon" aria-hidden="true">⌕</span>
+          <input id="doc-search" type="search" autocomplete="off" placeholder="搜索功能、字段或设置" aria-label="搜索使用文档">
+          <span class="search-shortcut">/</span>
+        </label>
+        <div class="search-results" id="search-results" aria-live="polite"></div>
+      </div>
+      <div class="toolbar-actions">
+        <div class="theme-switch" role="group" aria-label="文档主题">
+          <button class="theme-choice" type="button" data-theme-choice="light" aria-pressed="false">浅色</button>
+          <button class="theme-choice" type="button" data-theme-choice="dark" aria-pressed="false">深色</button>
+        </div>
+        <button class="tool-button print-button" id="print-doc" type="button">打印</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="drawer-overlay" id="drawer-overlay"></div>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" id="docs-sidebar">
+      <p class="sidebar-label">文档目录</p>
+      <nav aria-label="文档目录">
+        <ul class="toc-list">
+          <li><a class="toc-link" href="#doc-intro">1. 文档说明</a></li>
+          <li><a class="toc-link" href="#quick-start">2. 快速开始</a></li>
+          <li><a class="toc-link" href="#install-update">3. 安装与更新</a></li>
+          <li><a class="toc-link" href="#ui-navigation">4. 界面与导航</a></li>
+          <li><a class="toc-link" href="#overview">5. 用量概览</a></li>
+          <li><a class="toc-link" href="#stats">6. 用量统计</a></li>
+          <li><a class="toc-link" href="#history">7. 历史记录</a></li>
+          <li><a class="toc-link" href="#forecast">8. 趋势预测</a></li>
+          <li><a class="toc-link" href="#wallet">9. 钱包</a></li>
+          <li><a class="toc-link" href="#settings">10. 设置</a></li>
+          <li><a class="toc-link" href="#data-transfer">11. 导入、导出与 WebDAV</a></li>
+          <li><a class="toc-link" href="#update-about">12. 检查更新与关于</a></li>
+          <li><a class="toc-link" href="#faq">13. 常见问题</a></li>
+          <li><a class="toc-link" href="#glossary">14. 数据口径与术语</a></li>
+          <li><a class="toc-link" href="#privacy">15. 隐私声明</a></li>
+          <li><a class="toc-link" href="#disclaimer">16. 免责声明</a></li>
+          <li><a class="toc-link" href="#credits">17. 致谢与许可</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="doc-content">
+      <section class="doc-section" id="doc-intro" data-keywords="文档说明 阅读方式 主题 搜索 目录 术语 版本">
+        <div class="section-kicker">文档说明</div>
+        <h2 id="doc-intro-title">API用量统计使用文档</h2>
+        <p class="lead">本页是 SillyTavern 扩展“API用量统计”的功能参考与使用文档，覆盖各页面能查看的数据、常用操作、字段口径、隐私边界和常见问题。</p>
+
+        <h3 id="doc-purpose">文档定位</h3>
+        <p>文档以当前扩展界面为准，重点回答三个问题：页面上有什么、这些数据代表什么、遇到问题时应该检查哪里。操作步骤只保留在完成配置所必需的位置，不展开实现原理。</p>
+        <div class="info-grid">
+          <div class="info-card"><strong>适合谁看</strong><span>首次安装用户、需要核对费用与 Token 的用户，以及维护多钱包和云同步的用户。</span></div>
+          <div class="info-card"><strong>需要什么条件</strong><span>SillyTavern 已安装并启用扩展，且实际发起过至少一次可被记录的模型请求。</span></div>
+          <div class="info-card"><strong>数据从哪里来</strong><span>扩展记录实际请求产生的 Token、费用、时间、模型和连接信息，并以页面汇总展示。</span></div>
+          <div class="info-card"><strong>版本说明</strong><span>本文不写死版本号，请以扩展侧边栏、关于页或扩展清单显示为准。</span></div>
+        </div>
+
+        <h3 id="doc-reading">阅读方式</h3>
+        <ul>
+          <li>左侧目录用于在主要章节之间跳转，右侧“当前章节”用于在同一章节内定位。</li>
+          <li>顶部搜索支持按页面名称、功能名称和关键词筛选；按 <span class="code">/</span> 可快速聚焦搜索框。</li>
+          <li>标题右侧的井号按钮用于复制当前章节的直达链接。</li>
+          <li>底部或右上角提供上一章、下一章和回到顶部入口。</li>
+        </ul>
+
+        <h3 id="doc-theme-navigation">主题、目录与跳转</h3>
+        <p>顶部主题切换提供“浅色”和“深色”两个明确选项，点击后立即生效，并记住本次选择。首次打开时如果没有历史选择，会先参考操作系统的颜色偏好。</p>
+        <div class="callout tip"><strong>移动端说明：</strong>顶部菜单按钮打开完整目录；选择章节、点击遮罩或按 Esc 均会关闭目录。</div>
+
+        <h3 id="doc-fields">页面中的通用交互</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>控件</th><th>含义</th><th>使用方式</th></tr></thead>
+            <tbody>
+              <tr><td>胶囊下拉</td><td>用于选择时间、模型、对话、接入、密钥、钱包或显示模式。</td><td>点击展开，选择后自动刷新当前页数据；部分下拉支持多选。</td></tr>
+              <tr><td>复选框</td><td>用于多选筛选或开关设置。</td><td>选中或取消后立即应用，部分多选下拉会保持展开以便连续选择。</td></tr>
+              <tr><td>数字输入框</td><td>用于金额、间隔、汇率或调试样本数量。</td><td>输入后按页面提示保存或触发重算。</td></tr>
+              <tr><td>日期输入框</td><td>用于自定义统计范围和价格生效日期。</td><td>范围页开始日期晚于结束日期时，扩展会自动交换。</td></tr>
+              <tr><td>卡片操作按钮</td><td>用于查询、导入、导出、同步、展开、忽略或重置。</td><td>按钮以页面实际状态启用或禁用，操作结果会通过提示文字反馈。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="doc-section" id="quick-start" data-keywords="快速开始 第一次使用 数据记录 查询余额 模型价格 筛选">
+        <div class="section-kicker">快速开始</div>
+        <h2 id="quick-start-title">快速开始</h2>
+        <p class="lead">完成安装后，最少只需要进行一次真实对话，就能在概览和历史记录中看到数据。余额、模型价格和多钱包属于可选配置。</p>
+
+        <ol class="steps">
+          <li>在 SillyTavern 中安装并启用“API用量统计”扩展，刷新网页。</li>
+          <li>打开右下角魔法棒菜单，点击“API用量统计”进入主面板。</li>
+          <li>正常发起一次模型对话。扩展会在请求过程中记录用量，在生成结束后写入历史。</li>
+          <li>进入“用量概览”或“历史记录”，确认已经出现模型、Token、费用或耗时记录。</li>
+        </ol>
+
+        <h3 id="quick-start-balance">配置余额与费用</h3>
+        <ul>
+          <li>需要查看余额或剩余轮数预测时，进入“钱包”设置手工余额，或为 DeepSeek 官方直连钱包填写校准密钥。</li>
+          <li>需要准确计算非内置模型费用时，在对应钱包中添加模型价格，或配置价格来源后同步价格。</li>
+          <li>概览页的余额口径只影响余额和剩余轮数预测，不改变其他统计快照的范围。</li>
+        </ul>
+
+        <h3 id="quick-start-filters">从筛选开始查看</h3>
+        <p>“用量统计”支持时间、模型、对话、接入类型和 API 密钥五个维度。第一次使用建议先保持“全部”，确认总数据存在后，再逐步增加筛选条件。模型支持多选，适合对比多个模型或渠道。</p>
+
+        <h3 id="quick-start-empty">第一次看不到数据时</h3>
+        <ul>
+          <li>确认请求确实由 SillyTavern 发出，并且不是取消的请求或密钥错误导致的空请求。</li>
+          <li>确认当前聊天范围没有把旧记录过滤掉；“全部历史”会显示所有已记录对话。</li>
+          <li>进入历史记录检查是否存在条目；如果历史有条目而统计为空，通常是统计页筛选条件过窄。</li>
+          <li>没有模型价格时费用可以为零，但 Token 和请求次数仍应正常记录。</li>
+        </ul>
+      </section>
+
+      <section class="doc-section" id="install-update" data-keywords="安装 更新 扩展程序 刷新 旧版数据 导入">
+        <div class="section-kicker">安装与更新</div>
+        <h2 id="install-update-title">安装与更新</h2>
+        <p class="lead">标准安装流程与扩展管理流程完全一致，更新后需要刷新网页，使新的入口脚本和样式生效。</p>
+
+        <h3 id="install-steps">安装</h3>
+        <ol class="steps">
+          <li>点击“安装扩展程序”，输入 <span class="code">https://github.com/janmk1453/Api-Usage</span>。</li>
+          <li>刷新网页，在右下角魔法棒中确认出现“API用量统计”入口。</li>
+          <li>扩展支持导入旧版数据，已存在的历史可以在“导入、导出”入口中恢复。</li>
+        </ol>
+
+        <h3 id="update-steps">更新</h3>
+        <p>在管理扩展程序中点击更新，完成后刷新网页。关于页也提供检查更新功能，用于查看当前状态和可用更新。</p>
+
+        <h3 id="install-data-compat">旧数据兼容</h3>
+        <p>旧版导出数据可以通过导入功能进入当前版本。导入后，扩展会按记录时间、模型、Token、钱包、接入和密钥信息进行去重；钱包配置也会随兼容格式一并恢复。</p>
+        <div class="callout"><strong>更新前建议：</strong>重要历史和多钱包配置可以先导出备份。更新不会自动删除浏览器中的历史数据。</div>
+      </section>
+
+      <section class="doc-section" id="ui-navigation" data-keywords="界面 导航 魔法棒 侧边栏 移动端 汉堡菜单 页面">
+        <div class="section-kicker">界面与导航</div>
+        <h2 id="ui-navigation-title">界面与导航</h2>
+        <p class="lead">扩展以全屏面板打开，导航分为用量、分析和配置三类页面。桌面端使用可折叠侧边栏，窄屏使用抽屉目录。</p>
+
+        <h3 id="ui-entry">入口与面板</h3>
+        <ul>
+          <li>点击 SillyTavern 右下角魔法棒中的“API用量统计”打开面板。</li>
+          <li>点击右上角关闭按钮退出面板；点击遮罩区域也可能关闭面板，具体取决于当前面板状态。</li>
+          <li>主题设置会影响整个扩展；颜色模式可以在“设置”中调整。</li>
+        </ul>
+
+        <h3 id="ui-desktop-mobile">桌面端与移动端</h3>
+        <div class="info-grid">
+          <div class="info-card"><strong>桌面端</strong><span>侧边栏常驻显示，可切换展开和折叠。主内容区域保持固定最大宽度，表格和图表在内容区内滚动。</span></div>
+          <div class="info-card"><strong>移动端</strong><span>顶部显示汉堡按钮和当前页面名称，点击汉堡打开导航。选择页面后抽屉会自动收起。</span></div>
+        </div>
+
+        <h3 id="ui-pages">页面职责</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>页面</th><th>主要用途</th><th>主要数据</th></tr></thead>
+            <tbody>
+              <tr><td>用量概览</td><td>快速查看余额、总消费和整体用量。</td><td>余额、累计费用、Token、明细、热力图、按对话统计。</td></tr>
+              <tr><td>用量统计</td><td>按多个维度分析和比较用量。</td><td>筛选汇总、模型表、指标卡、主图、扩展图表、趋势。</td></tr>
+              <tr><td>历史记录</td><td>逐条检查调用记录和原始详情。</td><td>模型、时间、Token、费用、耗时、速率、请求与响应详情。</td></tr>
+              <tr><td>趋势预测</td><td>估算后续轮数、成本与上下文压力。</td><td>预测轮数、下一轮成本、置信区间、能耗等级、最耗对话。</td></tr>
+              <tr><td>钱包</td><td>按接入地址管理余额和模型价格。</td><td>钱包汇总、余额、密钥、模型、峰谷、价格来源、忽略状态。</td></tr>
+              <tr><td>设置</td><td>控制全局显示、余额、价格同步和调试。</td><td>主题、历史范围、自动校准、峰谷、汇率、WebDAV。</td></tr>
+              <tr><td>使用说明</td><td>查看扩展内快速说明与隐私信息。</td><td>基础使用、隐私、免责声明和钱包说明。</td></tr>
+              <tr><td>关于</td><td>查看版本信息和检查更新。</td><td>当前版本、仓库地址、更新状态。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="ui-common-rules">通用规则</h3>
+        <ul>
+          <li>所有选择类控件使用胶囊下拉，选择后会立即刷新当前页面的数据和图表。</li>
+          <li>多个筛选条件按交集生效，不是分别相加。</li>
+          <li>统计页和趋势预测页的部分选择只影响当前页，不会修改历史原始数据。</li>
+          <li>隐藏页面中的图表会延迟初始化，切换到对应页面后再渲染。</li>
+        </ul>
+      </section>
+
+      <section class="doc-section" id="overview" data-keywords="用量概览 余额 消费 Token 热力图 对话统计 指标卡 余额口径">
+        <div class="section-kicker">用量概览</div>
+        <h2 id="overview-title">用量概览</h2>
+        <p class="lead">概览页用于快速判断当前还有多少余额、总共花了多少，以及最近主要消耗在哪些日期、模型和对话上。</p>
+
+        <h3 id="overview-balance">充值余额与余额口径</h3>
+        <p>“充值余额”卡显示当前选择的钱包余额。右上角“余额口径”可以切换 DeepSeek 官方钱包、全部钱包合计或其他钱包。</p>
+        <ul>
+          <li>余额口径只影响余额显示和剩余轮数预测，不改变概览、统计和历史中的其他全量指标。</li>
+          <li>手工余额直接使用填写值；自动校准仅支持支持该能力的官方直连钱包。</li>
+          <li>多个钱包不会自动把某个密钥余额相加，只有选择“全部钱包合计”时才汇总各钱包已设置余额。</li>
+        </ul>
+
+        <h3 id="overview-total">累计消费与总 Token</h3>
+        <p>“累计消费”显示已记录请求的总费用，并按当前显示币种换算；“总 Token”显示输入、输出和缓存相关 Token 的合计。</p>
+        <div class="callout"><strong>费用为零不一定代表没有用量：</strong>如果模型没有价格规则，Token 和请求次数仍会记录，但费用列可能显示为零或待定价。</div>
+
+        <h3 id="overview-details">历史消耗与支出明细</h3>
+        <p>两组明细用于拆解总量：</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>区域</th><th>包含指标</th><th>说明</th></tr></thead>
+            <tbody>
+              <tr><td>历史消耗</td><td>Token 历史、命中、未命中、输出</td><td>描述请求使用的 Token 结构，帮助判断上下文和缓存效果。</td></tr>
+              <tr><td>支出明细</td><td>预计节省、输入支出、输出支出</td><td>展示费用主要来自输入还是输出，并估算缓存命中带来的节省。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="overview-metrics">八块指标卡</h3>
+        <p>指标卡展示每轮费用、每轮 Token、平均耗时、输出速率等常用指标。每块卡右上角可以切换该卡显示的具体指标，方便按自己的习惯组合概览。</p>
+        <div class="card-grid three">
+          <div class="metric-card"><strong>每轮费用</strong><span>平均每次调用产生的费用。</span></div>
+          <div class="metric-card"><strong>每轮 Token</strong><span>平均每次调用使用的 Token。</span></div>
+          <div class="metric-card"><strong>平均耗时</strong><span>请求从开始到结束的平均时间。</span></div>
+          <div class="metric-card"><strong>输出速率</strong><span>生成阶段每秒输出的 Token 数。</span></div>
+          <div class="metric-card"><strong>思维链占比</strong><span>思维链 Token 在输出中的比例。</span></div>
+          <div class="metric-card"><strong>截断率</strong><span>因输出长度结束的请求比例。</span></div>
+        </div>
+
+        <h3 id="overview-heatmap">Token 热力图</h3>
+        <p>热力图按日期汇总近两年的 Token 使用量，颜色越深表示当日使用量越高。悬停或点击主要日期格可以查看日期和 Token 数值；窄屏下可在卡片内部横向滑动。</p>
+
+        <h3 id="overview-chat-summary">按对话统计</h3>
+        <p>按对话汇总轮次、缓存命中、未命中、输出、总 Token、总费用、平均 Token 和平均命中率，并按总 Token 从高到低排列。</p>
+        <ul>
+          <li>对话名称优先使用聊天名称；没有名称时使用聊天标识或“未分组/旧数据”。</li>
+          <li>该表使用完整热冷历史，不受统计页当前筛选条件影响。</li>
+          <li>全量历史需要读取冷库时会异步补充，首次打开可能短暂显示热历史范围。</li>
+        </ul>
+      </section>
+
+      <section class="doc-section" id="stats" data-keywords="用量统计 时间 模型 多选 对话 接入类型 API密钥 模型汇总 图表 四小块">
+        <div class="section-kicker">用量统计</div>
+        <h2 id="stats-title">用量统计</h2>
+        <p class="lead">统计页用于按时间、模型、对话、接入和密钥分析费用、Token、请求表现和趋势。所有筛选条件会共同作用于本页汇总、表格和图表。</p>
+
+        <h3 id="stats-filters">五维筛选</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>筛选</th><th>可选内容</th><th>使用说明</th></tr></thead>
+            <tbody>
+              <tr><td>时间维度</td><td>全部、今天、昨天、近 7 天、近 30 天、本月、上月、自定义日期</td><td>自定义范围支持直接输入开始和结束日期；全部范围从已有记录的起始时间开始。</td></tr>
+              <tr><td>模型</td><td>全部模型或一个、多个模型</td><td>支持复选多选；未选择时表示“全部”，单选显示模型名，多选显示已选数量。</td></tr>
+              <tr><td>对话</td><td>全部、当前对话、指定聊天或未分组</td><td>用于把统计限定到某个聊天上下文。</td></tr>
+              <tr><td>接入类型</td><td>全部、已识别接入、未记录接入</td><td>按接入地址区分官方接口、代理和其他连接。</td></tr>
+              <tr><td>API 密钥</td><td>全部、已识别密钥、未识别密钥</td><td>密钥选项会随接入类型联动；切换接入后密钥筛选重置为全部。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout tip"><strong>模型多选：</strong>在模型下拉中勾选多个项目可以同时比较。点击“全部模型”会清空选择，恢复全量统计。</div>
+
+        <h3 id="stats-summary">汇总与指标卡</h3>
+        <p>页面上方三块显示消费金额、API 请求次数和总 Token；下方四块显示可配置指标，例如每轮费用、每轮 Token、思维链占比和截断率。</p>
+        <ul>
+          <li>费用会自动按当前显示币种换算。</li>
+          <li>指标卡使用同一筛选结果，改变任何筛选条件都会同步刷新。</li>
+          <li>窄屏下汇总卡和四小块会使用两列或单列布局，内容不会横向溢出屏幕。</li>
+        </ul>
+
+        <h3 id="stats-model-summary">模型汇总表</h3>
+        <p>模型汇总表按模型展示调用次数、缓存命中、缓存未命中、输出、总 Token、总成本、平均成本、平均耗时和平均速率。除模型列外的表头可以点击排序，再次点击可切换升降序。</p>
+
+        <h3 id="stats-custom-chart">自定义图表</h3>
+        <p>“自定义图表”允许分别选择纵轴和横轴：</p>
+        <ul>
+          <li>纵轴支持多项指标，可以同时显示 Token、费用、请求量或性能数据。</li>
+          <li>横轴支持轮次、每小时、每日、每周、每月等时间粒度。</li>
+          <li>费用类轴会按当前币种换算，悬浮提示显示对应单位和值。</li>
+        </ul>
+
+        <h3 id="stats-extra-charts">扩展图表与模型趋势</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>图表</th><th>主要观察内容</th></tr></thead>
+            <tbody>
+              <tr><td>Token 趋势</td><td>Token 结构、使用量变化和堆叠走势。</td></tr>
+              <tr><td>费用趋势</td><td>费用随时间的变化及输入、输出成本构成。</td></tr>
+              <tr><td>缓存命中趋势</td><td>缓存命中率变化和面积走势。</td></tr>
+              <tr><td>请求数趋势</td><td>调用频率和请求数量变化。</td></tr>
+              <tr><td>耗时与速率趋势</td><td>响应时间和吞吐表现是否波动。</td></tr>
+              <tr><td>模型用量占比</td><td>各模型在 Token 或请求次数中的占比。</td></tr>
+              <tr><td>模型 Token 趋势</td><td>不同模型随时间变化的 Token 使用量。</td></tr>
+              <tr><td>模型调用次数趋势</td><td>不同模型的调用频率变化。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="stats-empty">筛选或无数据状态</h3>
+        <ul>
+          <li>统计为空时先检查时间范围、模型多选、对话、接入和密钥是否组合过窄。</li>
+          <li>图表显示“该筛选无数据”表示历史中存在记录，但当前条件没有交集。</li>
+          <li>如果历史页也没有记录，应先确认请求已经完成并产生了 API 用量数据。</li>
+        </ul>
+      </section>
+
+      <section class="doc-section" id="history" data-keywords="历史记录 分页 筛选 详情 请求参数 完整响应 原始用量 消息内容 缓存断点 对比">
+        <div class="section-kicker">历史记录</div>
+        <h2 id="history-title">历史记录</h2>
+        <p class="lead">历史页按时间倒序展示每一次已记录的调用，用于核对单次请求的费用、Token、性能、缓存和原始返回信息。</p>
+
+        <h3 id="history-scope">历史范围</h3>
+        <p>“全部历史”显示所有对话记录；“当前对话”只显示与当前聊天文件关联的记录。旧记录没有关联对话时，只在全部历史中可见。</p>
+
+        <h3 id="history-filters">四维筛选与分页</h3>
+        <ul>
+          <li>支持模型、对话、接入类型和 API 密钥筛选，条件按交集生效。</li>
+          <li>接入类型与密钥联动；切换接入后，密钥筛选会回到全部。</li>
+          <li>筛选先作用于热历史和冷库全量历史，再进行分页，每页显示一定数量的记录。</li>
+          <li>没有结果时可以点击清除筛选恢复，不必逐项重置。</li>
+        </ul>
+
+        <h3 id="history-card">单条记录</h3>
+        <p>每条记录包含模型和时间、输入与输出 Token、耗时、速率、费用，以及缓存命中、未命中和输出的三色占比条。点击“详情”会向下展开对应内容。</p>
+
+        <h3 id="history-detail">详情内容</h3>
+        <div class="info-grid">
+          <div class="info-card"><strong>基础信息</strong><span>模型、时段、钱包、计价来源、日期和时间。</span></div>
+          <div class="info-card"><strong>性能</strong><span>耗时、首字延迟、速率、思维链耗时、思维链占比和是否截断。</span></div>
+          <div class="info-card"><strong>Token 消耗</strong><span>缓存命中、缓存未命中、输出、总 Token 和思维链 Token。</span></div>
+          <div class="info-card"><strong>费用明细</strong><span>输入费用、输出费用和总费用。</span></div>
+        </div>
+        <p>详情底部提供四个数据页签：请求参数、完整响应、原始 Token 用量和消息内容。长文本会在固定高度区域内滚动，避免破坏列表布局。</p>
+        <div class="callout warning"><strong>隐私字段说明：</strong>历史详情可能显示请求和响应信息，但这些信息只按扩展的数据清理规则保存。不要在公开环境中直接分享包含个人内容的详情。</div>
+
+        <h3 id="history-cache-compare">新旧缓存断点对比</h3>
+        <p>在两条记录上分别点击“旧”和“新”，页面会并排显示两条内容并高亮差异。缓存断点对比适合观察同一对话在不同时间点的上下文、缓存命中或请求参数变化。</p>
+        <ul>
+          <li>先选择较早的记录为“旧”，再选择较晚的记录为“新”。</li>
+          <li>差异高亮用于辅助定位变化，不会修改原始历史数据。</li>
+          <li>记录数量较多时，先使用筛选和分页缩小范围，再进行对比。</li>
+        </ul>
+      </section>
+
+      <section class="doc-section" id="forecast" data-keywords="趋势预测 Beta 对话选择 剩余轮数 余额 上下文上限 置信区间 敏感度 能耗 A-G 最耗对话">
+        <div class="section-kicker">趋势预测</div>
+        <h2 id="forecast-title">趋势预测</h2>
+        <p class="lead">预测页根据历史轮次估算后续 Token、费用、可继续轮数和上下文压力。结果用于辅助判断趋势，不是精确承诺。</p>
+
+        <h3 id="forecast-chat">选择对话</h3>
+        <ul>
+          <li>“当前对话”优先跟随正在使用的聊天，适合直接查看当前上下文的压力。</li>
+          <li>“全部”会把所有记录合并估算，适合查看整体平均趋势。</li>
+          <li>选择具体对话时，只使用该对话的历史轮次。</li>
+          <li>未分组或旧数据没有聊天标识，可在对应选项下查看。</li>
+        </ul>
+
+        <h3 id="forecast-card">预测卡</h3>
+        <p>预测卡展示预计还可继续的轮数、余额口径与上下文口径、下一轮成本、下一轮输入 Token 和近期命中率。</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>指标</th><th>含义</th></tr></thead>
+            <tbody>
+              <tr><td>预计轮数</td><td>按当前余额和用量趋势估算还能支持多少轮；存在区间范围。</td></tr>
+              <tr><td>余额口径</td><td>受概览页选择的钱包余额影响。</td></tr>
+              <tr><td>上下文口径</td><td>按模型上下文上限估算，可能早于余额达到限制。</td></tr>
+              <tr><td>下一轮成本</td><td>根据当前趋势估算的下一次调用费用。</td></tr>
+              <tr><td>下一轮输入 Token</td><td>预计下一轮请求规模，可用于判断是否需要压缩上下文。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="forecast-chart">预测趋势图</h3>
+        <p>图表显示历史输入 Token 散点、拟合线、未来若干轮的预测延伸、置信区间和上下文上限参考线。虚线表示拟合或预测，不等于真实请求结果。</p>
+
+        <h3 id="forecast-sensitivity">敏感度分析</h3>
+        <p>敏感度滑块用于假设不同的缓存命中率。拖动后，页面会重新估算剩余轮数和命中率下降对轮数的影响，适合评估提高缓存命中或压缩上下文的收益。</p>
+
+        <h3 id="forecast-energy">能耗等级与最耗对话</h3>
+        <ul>
+          <li>能耗等级从 A 到 G 展示，综合增量、输出、效率、命中、截断和思维链占比。</li>
+          <li>等级越低通常表示上下文增长更快、输出或思维链比例更高，继续对话的成本压力更大。</li>
+          <li>“最耗对话 Top”保持全局对比，用于定位长期消耗较高的聊天。</li>
+        </ul>
+
+        <h3 id="forecast-limits">使用前注意</h3>
+        <ul>
+          <li>样本过少时无法可靠预测，页面会提示至少需要若干轮历史。</li>
+          <li>没有设置余额时，只能查看部分趋势，不能得到可靠的余额剩余轮数。</li>
+          <li>模型价格、缓存命中率和上下文长度发生变化时，预测结果会随历史数据重新调整。</li>
+        </ul>
+      </section>
+
+      <section class="doc-section" id="wallet" data-keywords="钱包 接入 余额 校准密钥 主密钥 峰谷 模型价格 锁定 价格来源 models.dev 忽略恢复">
+        <div class="section-kicker">钱包</div>
+        <h2 id="wallet-title">钱包</h2>
+        <p class="lead">钱包页按接入地址组织余额、密钥、模型和价格。它解决的是“同一接入下的请求花在哪里、余额还有多少、模型费用怎么计算”这几个问题。</p>
+
+        <h3 id="wallet-summary">钱包汇总</h3>
+        <p>页面顶部显示钱包余额合计、钱包数量和待定价模型数量。余额合计会使用统一汇率换算，列表中的已忽略钱包不参与合计。</p>
+
+        <h3 id="wallet-create">钱包创建与忽略</h3>
+        <ul>
+          <li>一个接入地址对应一个钱包，同一地址下的多个 API 密钥归入同一钱包。</li>
+          <li>新请求首次出现未忽略的接入地址时，扩展会自动创建钱包。</li>
+          <li>DeepSeek 官方钱包始终保留，不能忽略。</li>
+          <li>删除钱包实际上是加入“已忽略接入”；后续请求不会自动重建，历史记录仍保留原来的钱包归属。</li>
+          <li>已忽略接入可以在钱包页恢复显示，恢复后再次参与余额统计和新请求归属。</li>
+        </ul>
+
+        <h3 id="wallet-collapse">收起与展开</h3>
+        <p>钱包默认收起，收起状态显示钱包名称、接入地址、余额、密钥数量、模型数量、请求数和费用摘要。点击“展开”后显示余额、峰谷、模型价格和价格来源等详细设置。展开状态会按钱包独立记忆。</p>
+
+        <h3 id="wallet-balance">余额与自动校准</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>余额方式</th><th>适用情况</th><th>说明</th></tr></thead>
+            <tbody>
+              <tr><td>手工余额</td><td>所有钱包</td><td>直接填写当前可用余额，适合代理、兼容接口或不提供余额查询的接入。</td></tr>
+              <tr><td>自动校准</td><td>DeepSeek 官方直连钱包</td><td>需要钱包内校准密钥和全局自动校准开关；查询成功后覆盖钱包余额。</td></tr>
+              <tr><td>钱包币种</td><td>所有钱包</td><td>用于显示和换算；概览显示会按统一汇率折算。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warning"><strong>密钥区别：</strong>酒馆中的普通密钥条目只用于识别请求来源；钱包校准密钥是用户主动填写的实际密钥，只用于查询 DeepSeek 官方余额。扩展不会把多个密钥的余额自动相加。</div>
+
+        <h3 id="wallet-credentials">密钥身份与主密钥</h3>
+        <ul>
+          <li>扩展可以识别酒馆密钥条目的编号、备注和掩码末三位，用于区分不同请求。</li>
+          <li>普通反向代理的密码和自定义请求头不会读取、比较或持久化，因此会归入未识别密钥。</li>
+          <li>DeepSeek 官方钱包可以选择一个已识别密钥作为账号身份；未指定时使用钱包内单独保存的校准密钥。</li>
+          <li>校准密钥不会进入历史、统计、导出或云同步。</li>
+        </ul>
+
+        <h3 id="wallet-peak">峰谷规则</h3>
+        <p>每个钱包可以维护高峰时段，并选择周末是否全天使用低谷价格。峰谷支持跨天规则，例如从晚间开始到次日凌晨结束。</p>
+        <ul>
+          <li>修改峰谷规则后，扩展会重算该钱包可匹配的冷热历史费用。</li>
+          <li>关闭模型条目的峰谷选项后，该模型始终使用非峰价格。</li>
+          <li>新钱包会继承设置页配置的默认峰谷时段。</li>
+        </ul>
+
+        <h3 id="wallet-models">模型与价格</h3>
+        <p>每个钱包维护自己的模型规则。模型条目包含模型名、别名、非峰价格、高峰价格、价格来源、同步状态和锁定状态。</p>
+        <div class="info-grid">
+          <div class="info-card"><strong>模型名与别名</strong><span>修改模型名时会保留旧名别名，使已经记录的历史仍能匹配价格。</span></div>
+          <div class="info-card"><strong>价格来源</strong><span>显示价格是手工、钱包规则、同步规则还是待定价。</span></div>
+          <div class="info-card"><strong>锁定</strong><span>锁定的价格在普通同步模式下不会被覆盖；只有明确选择全部覆盖时才可能更新。</span></div>
+          <div class="info-card"><strong>待定价</strong><span>没有匹配价格的模型仍会记录 Token 和请求次数，但费用为零，配置价格后自动重算。</span></div>
+        </div>
+        <p>计价优先级为：钱包当前规则优先；DeepSeek 官方钱包没有覆盖时使用内置价格；其他钱包没有价格时标记为待定价。</p>
+
+        <h3 id="wallet-catalog-sync">价格来源与同步价格</h3>
+        <ul>
+          <li>每个钱包可以选择一个第一方模型厂商作为价格来源，例如 DeepSeek、OpenAI、Anthropic、Google、Mistral、xAI 等。</li>
+          <li>可选来源只展示第一方厂商，不展示聚合平台或商业化中转渠道。</li>
+          <li>开启自动同步后，可以从 models.dev 获取模型价格，并按当前钱包的供应商匹配。</li>
+          <li>同步模式包括仅新增、覆盖未锁定和全部覆盖；关闭同步时会移除未锁定的同步价格并重算历史。</li>
+        </ul>
+
+        <h3 id="wallet-overview-link">与概览余额口径的关系</h3>
+        <p>概览页选择的余额口径来自钱包列表。选择某个钱包时，余额和基于余额的剩余轮数会使用该钱包；选择全部钱包合计时，会汇总所有未忽略且已设置余额的钱包。统计、历史和趋势中的其他指标仍使用自己的筛选范围。</p>
+      </section>
+
+      <section class="doc-section" id="settings" data-keywords="设置 主题 历史范围 自动校准 新价格机制 峰谷 汇率 models.dev 调试 峰值圆点">
+        <div class="section-kicker">设置</div>
+        <h2 id="settings-title">设置</h2>
+        <p class="lead">设置页集中控制全局显示、余额校准、价格机制、价格同步和调试选项。钱包级别的余额与模型价格在钱包页维护。</p>
+
+        <h3 id="settings-theme">颜色模式与历史范围</h3>
+        <ul>
+          <li>颜色模式提供浅色和深色主题，切换后整个扩展立即生效。</li>
+          <li>历史显示范围可以选择全部历史或当前对话，主要用于历史记录页的默认范围。</li>
+        </ul>
+
+        <h3 id="settings-balance">自动校准余额</h3>
+        <p>全局开关决定是否允许钱包按间隔自动查询余额。开启后可以设置校准间隔，单位为分钟。只有钱包页中启用了自动校准且支持官方查询的钱包会执行。</p>
+        <div class="callout"><strong>优先级：</strong>全局开关关闭时，钱包内即使开启自动校准也不会定时查询；手工余额仍可正常使用。</div>
+
+        <h3 id="settings-pricing">新价格机制与默认峰谷</h3>
+        <ul>
+          <li>开启新价格机制后，可以设置价格生效日期。生效日期前使用旧价格，之后使用峰谷价格。</li>
+          <li>内置峰谷机制主要面向 DeepSeek 模型，周末可以设置为全天低谷。</li>
+          <li>“新钱包默认峰谷时段”用于新建钱包的默认规则，单个钱包可以覆盖。</li>
+          <li>修改价格或峰谷规则后，相关钱包的冷热历史会重新计算费用。</li>
+        </ul>
+
+        <h3 id="settings-modelsdev">模型价格自动同步</h3>
+        <p>开启后，扩展可以从 models.dev 获取模型价格，并把同步结果写入各钱包的价格规则。同步页还提供同步模式、汇率、自动同步间隔、实时汇率和同步后重算历史费用等选项。</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>选项</th><th>作用</th></tr></thead>
+            <tbody>
+              <tr><td>同步模式</td><td>决定只补充缺失价格、覆盖未锁定价格，还是覆盖全部可同步价格。</td></tr>
+              <tr><td>汇率</td><td>用于把美元价格和其他币种统一换算为显示币种。</td></tr>
+              <tr><td>自动同步间隔</td><td>可以选择仅手动或按设定周期自动更新。</td></tr>
+              <tr><td>同步后重算</td><td>开启后，价格同步会更新已有历史费用；关闭后主要影响后续请求。</td></tr>
+              <tr><td>预览</td><td>在正式同步前查看新增、更新、跳过和待定价数量。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="settings-peak-dot">峰值提示圆点</h3>
+        <p>峰值提示圆点用于在扩展入口附近提示当前是否处于高峰时段。可以关闭提示，也可以重置圆点位置。</p>
+
+        <h3 id="settings-debug">调试模式</h3>
+        <ul>
+          <li>调试模式可以让下一次请求使用模拟 Token 参数，且这些模拟数据不计费。</li>
+          <li>调试面板可以设置命中、未命中、输出、模型、日期范围和批量条数。</li>
+          <li>批量生成适合压测图表和表格，但可能重用相同时间戳；它们不会参与真实费用。</li>
+          <li>使用完模拟数据后，可以在调试面板中清除。</li>
+        </ul>
+      </section>
+
+      <section class="doc-section" id="data-transfer" data-keywords="导入 导出 WebDAV 云同步 备份 恢复 合并 覆盖 去重">
+        <div class="section-kicker">数据管理</div>
+        <h2 id="data-transfer-title">导入、导出与 WebDAV</h2>
+        <p class="lead">数据管理用于备份历史与钱包配置、恢复旧版数据，以及在多台设备之间保持统计一致。导入和同步都不会包含钱包校准密钥与聊天正文。</p>
+
+        <h3 id="data-transfer-export">导出</h3>
+        <p>导出会包含可用于恢复的历史记录、钱包配置、忽略状态、余额口径和统计设置。导出的历史会清理隐私字段，不包含完整聊天内容或钱包校准密钥。</p>
+
+        <h3 id="data-transfer-import">导入</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>方式</th><th>行为</th><th>适合场景</th></tr></thead>
+            <tbody>
+              <tr><td>合并</td><td>保留现有数据，并导入不重复的记录和配置。</td><td>从其他设备补齐历史，或恢复部分数据。</td></tr>
+              <tr><td>覆盖</td><td>用导入文件替换当前可导入的数据范围。</td><td>恢复完整备份，或清理当前统计后重新导入。</td></tr>
+              <tr><td>旧版数据</td><td>兼容旧版导出格式，并迁移到当前历史结构。</td><td>从早期脚本或旧版本扩展迁移。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warning"><strong>导入前建议：</strong>先导出当前数据。覆盖操作不可通过简单的页面撤销恢复。</div>
+
+        <h3 id="data-transfer-dedupe">重复记录处理</h3>
+        <p>历史记录会按时间、模型、Token、接入、钱包和密钥身份进行综合判断。完全重复的记录不会重复累加；同一请求在不同设备上的合并会尽量保留统计一致性。</p>
+
+        <h3 id="data-transfer-webdav">WebDAV 云同步</h3>
+        <ol class="steps">
+          <li>填写 WebDAV 地址、用户名和应用密码。</li>
+          <li>按需填写远程子路径；如果服务不允许浏览器直接跨域访问，再填写可用的 CORS 代理地址。</li>
+          <li>点击“立即同步”，扩展会执行拉取、合并和推送。</li>
+        </ol>
+        <ul>
+          <li>同步内容包括历史、统计设置和钱包配置，不包含聊天正文和校准密钥。</li>
+          <li>同步使用单向请求完成双向合并，冲突时以记录身份和较新的配置状态处理。</li>
+          <li>WebDAV 地址强制使用 HTTPS，除非由用户自己的代理转发。</li>
+        </ul>
+
+        <h3 id="data-transfer-webdav-fail">同步失败</h3>
+        <ul>
+          <li>部分网盘不返回跨域响应头，需要在扩展中填写本地或自建代理。</li>
+          <li>应用密码和登录密码可能不同，应优先使用服务商提供的应用密码。</li>
+          <li>远程子路径不存在时，需要先在网盘中创建目录。</li>
+          <li>同步失败不会清空本地历史；可以继续使用并稍后重试。</li>
+        </ul>
+      </section>
+
+      <section class="doc-section" id="update-about" data-keywords="检查更新 关于 版本 仓库 更新状态">
+        <div class="section-kicker">更新与关于</div>
+        <h2 id="update-about-title">检查更新与关于</h2>
+        <p class="lead">关于页用于查看扩展信息、仓库地址和更新状态。当前版本以扩展显示为准，本文不固定具体版本号。</p>
+
+        <h3 id="update-check">检查更新</h3>
+        <ul>
+          <li>进入“关于”页，点击“检查更新”可以主动查询新版本。</li>
+          <li>扩展打开后也会按节流策略进行自动检查；发现更新时会显示提示。</li>
+          <li>检查失败不等于扩展失效，可以稍后重试或通过管理扩展程序更新。</li>
+          <li>更新完成后刷新网页，确保脚本和样式同步生效。</li>
+        </ul>
+
+        <h3 id="about-info">关于页信息</h3>
+        <p>关于页显示扩展名称、当前版本、仓库入口和项目说明。需要报告问题或查看变更时，应优先确认当前版本和复现步骤。</p>
+      </section>
+
+      <section class="doc-section" id="faq" data-keywords="常见问题 没有记录 0 Token 费用为零 钱包 图表 WebDAV 窄屏 下拉">
+        <div class="section-kicker">常见问题</div>
+        <h2 id="faq-title">常见问题</h2>
+        <p class="lead">以下问题优先从数据来源、筛选条件、钱包价格和浏览器显示环境四个方面检查。</p>
+
+        <h3 id="faq-no-record">没有记录、请求数不增加或 Token 为零</h3>
+        <ul>
+          <li>确认本次操作确实向模型发起请求，而不是只打开网页、发送空消息或取消请求。</li>
+          <li>检查 SillyTavern 的 API 密钥、连接状态和请求地址是否可用。密钥错误或请求中止时，扩展可能没有可记录的用量。</li>
+          <li>确认当前历史范围没有过滤掉旧记录；需要时切换为“全部历史”。</li>
+          <li>如果历史记录出现条目但 Token 为零，应检查上游是否返回了标准用量数据。</li>
+        </ul>
+
+        <h3 id="faq-empty-filter">筛选结果为空</h3>
+        <ul>
+          <li>时间、模型、对话、接入和密钥会按交集过滤，任一条件过窄都可能清空结果。</li>
+          <li>先点击“清除筛选”或恢复“全部”，再逐项增加条件。</li>
+          <li>切换接入类型后，密钥筛选会自动重置，以避免出现没有交集的旧密钥条件。</li>
+        </ul>
+
+        <h3 id="faq-zero-cost">模型费用为零</h3>
+        <ul>
+          <li>进入钱包页，确认对应模型已经配置价格，且价格来源不是待定价。</li>
+          <li>确认请求归属的钱包与配置价格的钱包一致。不同接入地址使用各自的钱包规则。</li>
+          <li>保存价格、修改峰谷或执行价格同步后，检查历史费用是否已经重算。</li>
+          <li>如果模型名称没有匹配到规则，可以在钱包中增加模型或别名。</li>
+        </ul>
+
+        <h3 id="faq-wallet-missing">钱包没有自动创建</h3>
+        <ul>
+          <li>确认请求包含可识别的接入身份，而不是完全未知或已忽略的接入。</li>
+          <li>检查“已忽略接入”区域；被忽略的地址不会因为新请求自动恢复。</li>
+          <li>同一接入地址下的多个密钥属于同一钱包，不会按密钥拆分钱包。</li>
+        </ul>
+
+        <h3 id="faq-chart">图表未显示或显示未就绪</h3>
+        <ul>
+          <li>先切换到有数据的统计页面，再等待图表完成初始化。</li>
+          <li>筛选条件无交集时，图表会显示无数据提示，这是正常状态。</li>
+          <li>如果页面刚完成更新或窗口大小发生变化，切换一次视图或刷新页面可重新计算尺寸。</li>
+        </ul>
+
+        <h3 id="faq-webdav">WebDAV 无法连接</h3>
+        <ul>
+          <li>确认地址以 HTTPS 开头，账号和密码正确。</li>
+          <li>部分网盘不提供浏览器跨域响应，需要填写可用的 CORS 代理。</li>
+          <li>确认远程目录存在，并检查应用密码是否具有读写权限。</li>
+          <li>同步失败不会清空本地数据，可以修复连接后再次同步。</li>
+        </ul>
+
+        <h3 id="faq-mobile">窄屏显示或下拉菜单异常</h3>
+        <ul>
+          <li>窄屏下侧边栏会变为抽屉，点击汉堡按钮打开，选择页面后自动收起。</li>
+          <li>表格、热力图和详情数据使用卡片内部滚动，不应把整个页面撑宽。</li>
+          <li>如果下拉菜单被相邻卡片遮挡，刷新页面后重试；仍异常时应记录卡片位置和页面宽度。</li>
+        </ul>
+      </section>
+
+      <section class="doc-section" id="glossary" data-keywords="术语 数据口径 Token 命中 未命中 费用 高峰 非高峰 接入 钱包 计价来源 能耗">
+        <div class="section-kicker">数据口径与术语</div>
+        <h2 id="glossary-title">数据口径与术语</h2>
+        <p class="lead">同样的数字在不同页面出现时使用同一套含义。以下术语用于理解统计表、历史详情和预测结果。</p>
+
+        <h3 id="glossary-token">Token 相关</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>术语</th><th>含义</th></tr></thead>
+            <tbody>
+              <tr><td>输入 Token</td><td>请求发送给模型的上下文和提示内容总计。</td></tr>
+              <tr><td>缓存命中</td><td>输入中命中服务端缓存的 Token，通常费用低于未命中部分。</td></tr>
+              <tr><td>缓存未命中</td><td>输入中未命中缓存、需要按普通输入价格计算的 Token。</td></tr>
+              <tr><td>输出 Token</td><td>模型生成内容使用的 Token。</td></tr>
+              <tr><td>思维链 Token</td><td>模型推理或思考过程中产生的 Token；是否返回取决于上游接口。</td></tr>
+              <tr><td>总 Token</td><td>当前页面定义使用的 Token 汇总，通常是缓存命中、未命中和输出之和。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="glossary-cost">费用与性能</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>术语</th><th>含义</th></tr></thead>
+            <tbody>
+              <tr><td>总成本</td><td>按模型价格、Token 数量和峰谷规则计算出的费用。</td></tr>
+              <tr><td>平均成本</td><td>筛选范围内总成本除以请求次数或轮次。</td></tr>
+              <tr><td>预计节省</td><td>缓存命中相对未命中价格估算出的节省金额。</td></tr>
+              <tr><td>耗时</td><td>一次请求从开始到结束的时间。</td></tr>
+              <tr><td>首字延迟</td><td>从请求开始到收到第一个有效内容的时间。</td></tr>
+              <tr><td>输出速率</td><td>生成阶段每秒输出的 Token 数。</td></tr>
+              <tr><td>截断率</td><td>因为达到输出上限而结束的请求比例。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="glossary-identity">接入、密钥与钱包</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>术语</th><th>含义</th></tr></thead>
+            <tbody>
+              <tr><td>接入类型</td><td>请求使用的接口来源或连接地址类别。</td></tr>
+              <tr><td>API 密钥</td><td>用于区分请求来源的密钥身份。扩展只记录可识别的条目信息，不读取明文。</td></tr>
+              <tr><td>钱包</td><td>一个接入地址下的余额、模型价格和峰谷规则集合。</td></tr>
+              <tr><td>计价来源</td><td>当前历史记录使用的价格规则来源，例如钱包手工规则、同步规则或内置价格。</td></tr>
+              <tr><td>待定价</td><td>没有匹配价格规则的模型或记录，费用不会计入真实金额。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="glossary-forecast">峰谷、上下文与能耗</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>术语</th><th>含义</th></tr></thead>
+            <tbody>
+              <tr><td>高峰</td><td>按钱包规则或内置规则处于较高单价的时段。</td></tr>
+              <tr><td>非高峰</td><td>处于较低单价的普通时段。</td></tr>
+              <tr><td>周末低谷</td><td>周末全天按非高峰价格计算的可选规则。</td></tr>
+              <tr><td>上下文上限</td><td>模型允许的最大上下文长度，超过后需要压缩或开始新对话。</td></tr>
+              <tr><td>置信区间</td><td>预测结果可能出现的范围，不是保证值。</td></tr>
+              <tr><td>能耗等级</td><td>综合增长、输出、效率、命中、截断和思维链占比后的 A-G 等级。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="doc-section" id="privacy" data-keywords="隐私 密钥 校准密钥 XOR WebDAV models.dev 数据上传 聊天内容">
+        <div class="section-kicker">隐私声明</div>
+        <h2 id="privacy-title">隐私声明</h2>
+        <p class="lead">扩展不会获取酒馆内保存的明文密钥。历史详情可能按保留规则保存少量请求或消息字段，导入导出和 WebDAV 同步会清理聊天正文。</p>
+
+        <h3 id="privacy-sillytavern-key">酒馆密钥信息</h3>
+        <p>扩展只能读取酒馆密钥条目的编号、用户备注和掩码末三位，用于区分请求来源。扩展无法读取用户的完整明文密钥，也不会把完整密钥写入历史、统计、日志、导出文件或云同步。</p>
+
+        <h3 id="privacy-calibration-key">钱包校准密钥</h3>
+        <p>钱包校准密钥是用户主动填写的实际密钥，仅用于查询 DeepSeek 官方余额。它以 XOR 混淆方式存放在 SillyTavern 设置中，不进入历史、统计、日志、导入导出或 WebDAV。</p>
+        <div class="callout warning"><strong>安全提示：</strong>XOR 不是安全加密。请尽量使用权限受限、可单独撤销的密钥，并自行评估存储环境风险。</div>
+
+        <h3 id="privacy-external">外部服务</h3>
+        <ul>
+          <li>余额自动校准会把校准密钥发送到 DeepSeek 官方余额接口。</li>
+          <li>模型价格同步会访问 models.dev，用于获取公开的模型价格信息。</li>
+          <li>WebDAV 同步会把统计和配置发送到用户指定的远程存储服务，数据安全取决于该服务与网络环境。</li>
+        </ul>
+
+        <h3 id="privacy-export">导入、导出与同步范围</h3>
+        <p>导出的历史会清理请求体、响应体、消息内容和原始用量中的隐私字段，只保留统计所需数据。WebDAV 使用同类清洗规则，不包含聊天正文和校准密钥。</p>
+      </section>
+
+      <section class="doc-section" id="disclaimer" data-keywords="免责声明 第三方价格 models.dev 中转站 推荐 统计参考">
+        <div class="section-kicker">免责声明</div>
+        <h2 id="disclaimer-title">免责声明</h2>
+        <p class="lead">扩展提供的是本地统计和估算工具。费用、余额、价格和预测结果受到上游接口、模型价格、汇率和数据完整性影响，仅供个人参考。</p>
+
+        <h3 id="disclaimer-pricing">第三方价格数据</h3>
+        <ul>
+          <li>models.dev 的数据由第三方维护，扩展不保证价格完整、及时或完全准确。</li>
+          <li>价格来源同步只用于辅助计费，最终费用应以服务商实际账单为准。</li>
+          <li>扩展不会因为展示某个模型、厂商、渠道或价格的名称而构成推荐或合作关系。</li>
+        </ul>
+
+        <h3 id="disclaimer-relays">商业化中转站</h3>
+        <p>扩展不对 models.dev 或其他外部数据中出现、遗漏或可能出现的商业化中转站名称负责，也不保证已经完全筛选所有数据。文档中的任何名称都不构成推荐。扩展不鼓励使用商业化中转站，并明确反对相关商业化行为。</p>
+
+        <h3 id="disclaimer-statistics">统计与预测</h3>
+        <ul>
+          <li>余额、费用、缓存、Token 和剩余轮数取决于上游返回的数据，可能因服务商策略或接口变化而出现偏差。</li>
+          <li>趋势预测使用历史数据估算，不是对后续服务质量、费用或上下文长度的保证。</li>
+          <li>用户应自行备份重要历史与钱包配置，并在使用自动校准、价格同步和云同步前确认风险。</li>
+        </ul>
+      </section>
+
+      <section class="doc-section" id="credits" data-keywords="致谢 许可 MIT 开源 作者">
+        <div class="section-kicker">致谢与许可</div>
+        <h2 id="credits-title">致谢与许可</h2>
+        <p class="lead">感谢相关开源项目和社区实现为本扩展提供参考。</p>
+
+        <h3 id="credits-thanks">致谢</h3>
+        <p>部分实现参考了 <a href="https://github.com/cone97218-alt/ds" target="_blank" rel="noreferrer">cone97218-alt/ds</a>，在此致谢。</p>
+
+        <h3 id="credits-license">许可证</h3>
+        <p>本项目使用 MIT 许可证。许可证全文以仓库中的 <span class="code">LICENSE</span> 文件为准。</p>
+
+        <div class="callout tip"><strong>文档使用：</strong>本页可直接离线打开，也可以随扩展仓库一起托管。文档本身不记录用户数据，不加载远程字体、图片或脚本。</div>
+      </section>
+      <footer class="page-footer">API用量统计使用文档</footer>
+    </main>
+
+    <aside class="page-outline">
+      <p class="outline-title">当前章节</p>
+      <nav id="page-toc" class="page-toc-list" aria-label="当前章节目录"></nav>
+      <div class="chapter-nav">
+        <button id="prev-chapter" type="button">上一章</button>
+        <button id="next-chapter" type="button">下一章</button>
+      </div>
+    </aside>
+  </div>
+
+  <button class="back-to-top" id="back-to-top" type="button" aria-label="回到顶部">↑</button>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const sections = Array.from(document.querySelectorAll('.doc-section'));
+      const tocLinks = Array.from(document.querySelectorAll('.toc-link'));
+      const searchInput = document.getElementById('doc-search');
+      const searchResults = document.getElementById('search-results');
+      const pageToc = document.getElementById('page-toc');
+      const prevButton = document.getElementById('prev-chapter');
+      const nextButton = document.getElementById('next-chapter');
+      const sidebar = document.getElementById('docs-sidebar');
+      const drawerOverlay = document.getElementById('drawer-overlay');
+      const mobileMenu = document.getElementById('mobile-menu');
+      const backToTop = document.getElementById('back-to-top');
+      const progress = document.getElementById('reading-progress');
+      const toast = document.getElementById('toast');
+      let activeSectionId = sections[0]?.id || '';
+      let toastTimer = 0;
+
+      const prefersReducedMotion = () =>
+        window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      function summaryOf(section) {
+        const lead = section.querySelector('.lead');
+        return lead ? lead.textContent.trim() : '';
+      }
+
+      function titleOf(section) {
+        const title = section.querySelector('h2');
+        return title ? title.textContent.replace(/#$/, '').trim() : section.id;
+      }
+
+      function closeMobileDrawer() {
+        sidebar?.classList.remove('is-open');
+        drawerOverlay?.classList.remove('is-open');
+        mobileMenu?.setAttribute('aria-expanded', 'false');
+      }
+
+      function openMobileDrawer() {
+        sidebar?.classList.add('is-open');
+        drawerOverlay?.classList.add('is-open');
+        mobileMenu?.setAttribute('aria-expanded', 'true');
+      }
+
+      function closeSearch() {
+        searchResults?.classList.remove('is-open');
+      }
+
+      function showToast(message) {
+        if (!toast) return;
+        toast.textContent = message;
+        toast.classList.add('is-visible');
+        clearTimeout(toastTimer);
+        toastTimer = window.setTimeout(() => toast.classList.remove('is-visible'), 1400);
+      }
+
+      function scrollToTarget(id) {
+        const target = document.getElementById(id);
+        if (!target) return false;
+        target.scrollIntoView({
+          behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+          block: 'start'
+        });
+        return true;
+      }
+
+      function goTo(id, updateHash = true) {
+        if (!document.getElementById(id)) return;
+        if (updateHash) history.pushState(null, '', '#' + id);
+        scrollToTarget(id);
+        closeSearch();
+        closeMobileDrawer();
+      }
+
+      function renderPageToc(section) {
+        if (!pageToc || !section) return;
+        const headings = Array.from(section.querySelectorAll('h3[id]'));
+        pageToc.innerHTML = headings.map((heading) => {
+          const text = heading.childNodes[0]?.textContent?.trim() || heading.textContent.trim();
+          return '<a class="page-toc-link" href="#' + heading.id + '">' + text + '</a>';
+        }).join('');
+        pageToc.querySelectorAll('.page-toc-link').forEach((link) => {
+          link.addEventListener('click', (event) => {
+            event.preventDefault();
+            goTo(link.getAttribute('href').slice(1));
+          });
+        });
+      }
+
+      function updateChapterNav(index) {
+        if (!prevButton || !nextButton) return;
+        const prev = sections[index - 1];
+        const next = sections[index + 1];
+        prevButton.disabled = !prev;
+        nextButton.disabled = !next;
+        prevButton.textContent = prev ? '上一章 · ' + titleOf(prev) : '上一章';
+        nextButton.textContent = next ? '下一章 · ' + titleOf(next) : '下一章';
+        prevButton.title = prev ? titleOf(prev) : '';
+        nextButton.title = next ? titleOf(next) : '';
+      }
+
+      function setActiveSection(id) {
+        if (!id || id === activeSectionId) {
+          if (activeSectionId) renderPageToc(document.getElementById(activeSectionId));
+          return;
+        }
+        activeSectionId = id;
+        tocLinks.forEach((link) => {
+          if (link.getAttribute('href') === '#' + id) link.setAttribute('aria-current', 'location');
+          else link.removeAttribute('aria-current');
+        });
+        const index = sections.findIndex((section) => section.id === id);
+        renderPageToc(sections[index]);
+        updateChapterNav(index);
+      }
+
+      function syncActiveFromScroll() {
+        let current = sections[0];
+        for (const section of sections) {
+          if (section.getBoundingClientRect().top <= 160) current = section;
+          else break;
+        }
+        if (current) setActiveSection(current.id);
+      }
+
+      function buildSearchIndex() {
+        return sections.map((section) => {
+          const headings = Array.from(section.querySelectorAll('h2, h3')).map((heading) =>
+            heading.childNodes[0]?.textContent?.trim() || heading.textContent.trim()
+          );
+          return {
+            id: section.id,
+            title: titleOf(section),
+            keywords: section.dataset.keywords || '',
+            summary: summaryOf(section),
+            headings,
+            text: section.textContent.toLowerCase()
+          };
+        });
+      }
+
+      const searchIndex = buildSearchIndex();
+
+      function runSearch() {
+        if (!searchInput || !searchResults) return;
+        const query = searchInput.value.trim().toLowerCase();
+        if (!query) {
+          searchResults.innerHTML = '';
+          closeSearch();
+          return;
+        }
+        const scored = searchIndex.map((item) => {
+          const title = item.title.toLowerCase();
+          const keywords = item.keywords.toLowerCase();
+          const headings = item.headings.join(' ').toLowerCase();
+          let score = 0;
+          if (title.includes(query)) score += 12;
+          if (keywords.includes(query)) score += 8;
+          if (headings.includes(query)) score += 5;
+          if (item.text.includes(query)) score += 1;
+          return { ...item, score };
+        }).filter((item) => item.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 12);
+
+        searchResults.innerHTML = scored.length
+          ? scored.map((item) =>
+            '<button class="search-result" type="button" data-target="' + item.id + '">' +
+              '<span class="search-result-title">' + item.title + '</span>' +
+              '<span class="search-result-meta">' + item.summary.slice(0, 72) + '</span>' +
+            '</button>'
+          ).join('')
+          : '<div class="search-result-meta" style="padding:8px 10px;">没有找到匹配内容</div>';
+        searchResults.classList.add('is-open');
+        searchResults.querySelectorAll('[data-target]').forEach((button) => {
+          button.addEventListener('click', () => goTo(button.getAttribute('data-target')));
+        });
+      }
+
+      async function copyText(text) {
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            const input = document.createElement('textarea');
+            input.value = text;
+            input.style.position = 'fixed';
+            input.style.opacity = '0';
+            document.body.appendChild(input);
+            input.select();
+            document.execCommand('copy');
+            input.remove();
+          }
+          showToast('链接已复制');
+        } catch {
+          showToast('复制失败，请手动复制地址');
+        }
+      }
+
+      function bindHeadingAnchors() {
+        document.querySelectorAll('.doc-section h2[id], .doc-section h3[id]').forEach((heading) => {
+          const anchor = document.createElement('a');
+          anchor.className = 'heading-anchor';
+          anchor.href = '#' + heading.id;
+          anchor.title = '复制此章节链接';
+          anchor.setAttribute('aria-label', '复制“' + heading.childNodes[0].textContent.trim() + '”的链接');
+          anchor.textContent = '#';
+          anchor.addEventListener('click', (event) => {
+            event.preventDefault();
+            goTo(heading.id);
+            copyText(location.href);
+          });
+          heading.appendChild(anchor);
+        });
+      }
+
+      function updateThemeButtons(theme) {
+        document.querySelectorAll('[data-theme-choice]').forEach((button) => {
+          button.setAttribute('aria-pressed', String(button.dataset.themeChoice === theme));
+        });
+      }
+
+      function setTheme(theme, persist = true) {
+        root.dataset.theme = theme;
+        updateThemeButtons(theme);
+        if (persist) {
+          try { localStorage.setItem('api-usage-docs-theme', theme); } catch {}
+        }
+      }
+
+      document.querySelectorAll('[data-theme-choice]').forEach((button) => {
+        button.addEventListener('click', () => setTheme(button.dataset.themeChoice));
+      });
+
+      mobileMenu?.addEventListener('click', () => {
+        if (sidebar?.classList.contains('is-open')) closeMobileDrawer();
+        else openMobileDrawer();
+      });
+
+      drawerOverlay?.addEventListener('click', closeMobileDrawer);
+
+      tocLinks.forEach((link) => {
+        link.addEventListener('click', (event) => {
+          event.preventDefault();
+          goTo(link.getAttribute('href').slice(1));
+        });
+      });
+
+      prevButton?.addEventListener('click', () => {
+        const index = sections.findIndex((section) => section.id === activeSectionId);
+        if (index > 0) goTo(sections[index - 1].id);
+      });
+
+      nextButton?.addEventListener('click', () => {
+        const index = sections.findIndex((section) => section.id === activeSectionId);
+        if (index >= 0 && index < sections.length - 1) goTo(sections[index + 1].id);
+      });
+
+      searchInput?.addEventListener('input', runSearch);
+      searchInput?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          const first = searchResults?.querySelector('[data-target]');
+          if (first) goTo(first.getAttribute('data-target'));
+        }
+        if (event.key === 'Escape') {
+          searchInput.value = '';
+          runSearch();
+          searchInput.blur();
+        }
+      });
+
+      document.addEventListener('click', (event) => {
+        if (!event.target.closest('.search-wrap')) closeSearch();
+      });
+
+      document.addEventListener('keydown', (event) => {
+        const target = event.target;
+        const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+        if (event.key === '/' && !typing) {
+          event.preventDefault();
+          searchInput?.focus();
+        }
+        if (event.key === 'Escape') closeMobileDrawer();
+      });
+
+      document.getElementById('print-doc')?.addEventListener('click', () => window.print());
+      backToTop?.addEventListener('click', () => window.scrollTo({
+        top: 0,
+        behavior: prefersReducedMotion() ? 'auto' : 'smooth'
+      }));
+
+      window.addEventListener('scroll', () => {
+        const max = document.documentElement.scrollHeight - window.innerHeight;
+        const ratio = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+        if (progress) progress.style.width = (ratio * 100).toFixed(2) + '%';
+        backToTop?.classList.toggle('is-visible', window.scrollY > 420);
+        syncActiveFromScroll();
+      }, { passive: true });
+
+      window.addEventListener('hashchange', () => {
+        const id = location.hash.slice(1);
+        if (id) setActiveSection(id);
+      });
+
+      window.addEventListener('popstate', () => {
+        const id = location.hash.slice(1);
+        if (!id) return;
+        setActiveSection(id);
+        scrollToTarget(id);
+      });
+
+      window.addEventListener('resize', () => {
+        if (window.innerWidth > 820) closeMobileDrawer();
+      });
+
+      bindHeadingAnchors();
+      updateThemeButtons(root.dataset.theme || 'light');
+      setActiveSection(sections[0]?.id || '');
+      syncActiveFromScroll();
+
+      if (location.hash) {
+        const id = location.hash.slice(1);
+        window.setTimeout(() => {
+          setActiveSection(id);
+          scrollToTarget(id);
+        }, 0);
+      }
+
+      const observer = 'IntersectionObserver' in window
+        ? new IntersectionObserver((entries) => {
+          const visible = entries
+            .filter((entry) => entry.isIntersecting)
+            .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+          if (visible[0]) setActiveSection(visible[0].target.id);
+        }, { rootMargin: '-90px 0px -68% 0px', threshold: [0, 0.1] })
+        : null;
+
+      if (observer) sections.forEach((section) => observer.observe(section));
+    })();
+  </script>
+</body>
+</html>
