@@ -1748,7 +1748,6 @@
       <section class="doc-section" id="disclaimer" data-keywords="免责声明 第三方价格 models.dev 中转站 推荐 统计参考">
         <div class="section-kicker">免责声明</div>
         <h2 id="disclaimer-title">免责声明</h2>
-        <p class="lead">扩展提供本地统计、计费估算和数据管理能力，不提供财务、法律、税务或投资建议。使用扩展产生的判断和操作由用户自行负责。</p>
 
         <h3 id="disclaimer-billing">费用与余额不替代服务商账单</h3>
         <ul>
@@ -1759,34 +1758,23 @@
           <li>计费争议、退款、账户扣除和合同义务应以模型服务商的正式账单、协议和客服结论为准。</li>
         </ul>
 
-        <h3 id="disclaimer-forecast">统计与预测存在误差</h3>
-        <ul>
-          <li>Token、缓存命中、响应时间、思维链和结束原因依赖上游返回；上游缺失、改变字段或返回异常值时，统计可能不完整。</li>
-          <li>趋势预测基于历史样本和统计拟合，不能预测服务商策略、模型更新、提示变化、缓存状态或上下文压缩造成的突变。</li>
-          <li>能耗等级、命中率和剩余轮数只用于辅助比较，不应作为付费、容量规划或业务承诺的依据。</li>
-          <li>记录数量过少、模型混用、对话不连续或价格不完整时，结果可能明显偏离实际。</li>
-        </ul>
+        <h3 id="disclaimer-data-accuracy">1. 数据来源与准确性</h3>
+        <p>本扩展中“价格来源”“自动同步”等功能可能使用 <a href="https://models.dev/" target="_blank" rel="noreferrer">models.dev</a> 或其他第三方公开数据。此类数据可能不准确、不完整、过时或发生变更，仅供辅助参考，不构成任何承诺或保证。模型价格、计费、额度、上下文长度、可用性、服务条款等，均以对应服务商官方页面和实际账单为准。用户应自行核验并承担使用决策风险。</p>
 
-        <h3 id="disclaimer-data">数据与同步风险</h3>
-        <ul>
-          <li>覆盖导入会替换现有数据，用户应在执行前自行备份。</li>
-          <li>清除浏览器数据、卸载扩展、WebDAV 服务故障或网络中断可能导致本地或远程数据丢失。</li>
-          <li>WebDAV、CORS 代理、外部价格源和更新接口属于第三方环境，其可用性、安全性和合规性不由扩展保证。</li>
-          <li>用户需要自行确认上传到 WebDAV 的数据符合所在环境、服务条款和隐私要求。</li>
-        </ul>
+        <h3 id="disclaimer-commercial-relay">2. 商业化中转站</h3>
+        <p>本扩展不对“价格来源”“自动同步”等利用 <a href="https://models.dev/" target="_blank" rel="noreferrer">models.dev</a> 获取的数据中出现或可能出现的商业化中转站负责。尽管我们已尽力筛选数据，但由于数据量大、来源动态变化，对大量数据进行完全筛选难以实现，因此本扩展不对可能出现的任何商业化中转站名称负责，不构成推荐、背书或保证。我们不建议使用任何商业化中转站，并坚定不移地反对商业化。本扩展与 <a href="https://models.dev/" target="_blank" rel="noreferrer">models.dev</a> 或任何中转站均无商业往来。</p>
 
-        <h3 id="disclaimer-third-party">第三方数据与服务</h3>
-        <ul>
-          <li>models.dev、汇率服务、GitHub 和模型服务商的数据及接口由各自提供方维护，扩展不保证其完整、及时或持续可用。</li>
-          <li>展示模型、厂商、渠道或价格名称不代表推荐、担保或合作关系。</li>
-          <li>外部数据可能包含遗漏、测试项、商业化中转站名称或不适合当前地区或使用场景的内容，扩展不对其后果负责。</li>
-        </ul>
+        <h3 id="disclaimer-third-parties">3. 第三方服务</h3>
+        <p>DeepSeek、<a href="https://models.dev/" target="_blank" rel="noreferrer">models.dev</a>、SillyTavern、各模型服务商及任何中转站均为独立第三方，其服务、数据、计费、隐私、安全、可用性和合法性由其自行负责。使用前请阅读并遵守其条款与政策。</p>
 
-        <h3 id="disclaimer-relays">商业化中转站</h3>
-        <p>扩展不对 models.dev 或其他外部数据中出现、遗漏或可能出现的商业化中转站名称负责，也不保证已经完全筛选所有数据。文档和界面中的任何名称都不构成推荐。扩展不鼓励使用商业化中转站，并明确反对相关商业化行为。</p>
+        <h3 id="disclaimer-warranty">4. 无担保与责任限制</h3>
+        <p>在适用法律允许的最大范围内，本扩展按“现状”和“可用”状态提供，作者不对其准确性、可靠性、安全性、兼容性、无中断或无错误作出明示或默示担保。因使用或无法使用本扩展、依赖其数据或第三方服务导致的任何直接或间接损失、费用、数据丢失或服务中断，作者不承担责任。用户应自行备份并评估风险。</p>
 
-        <h3 id="disclaimer-liability">责任限制</h3>
-        <p>在法律允许的最大范围内，扩展作者和贡献者不对因使用或无法使用扩展产生的直接或间接损失、数据丢失、费用偏差、账户问题、服务中断或第三方索赔承担责任。扩展按“现状”提供，不附带任何明示或默示担保；具体许可和责任范围以仓库中的 MIT 许可证为准。</p>
+        <h3 id="disclaimer-changes">5. 声明变更</h3>
+        <p>本隐私声明与免责声明可能随项目更新而调整，最新版本以仓库中发布的内容为准。继续使用即表示知悉并接受更新后的声明；若不同意，请停止使用并删除本扩展。</p>
+
+        <h3 id="disclaimer-contact">6. 联系方式</h3>
+        <p>如有疑问，请通过项目仓库 Issue 联系：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">https://github.com/janmk1453/Api-Usage</a></p>
       </section>
 
       <section class="doc-section" id="credits" data-keywords="致谢 许可 MIT 开源 作者">
@@ -1845,8 +1833,8 @@
         window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
       function summaryOf(section) {
-        const lead = section.querySelector('.lead');
-        return lead ? lead.textContent.trim() : '';
+        const summary = section.querySelector('.lead') || section.querySelector('p');
+        return summary ? summary.textContent.trim() : '';
       }
 
       function titleOf(section) {
