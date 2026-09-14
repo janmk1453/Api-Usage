@@ -9676,6 +9676,9 @@ function renderHistoryInner(doc, fullHist) {
     const c6 = fmtMoney(h.cost || 0, 6);
     const in6 = fmtMoney(h.input_cost || 0, 6);
     const out6 = fmtMoney(h.output_cost || 0, 6);
+    const recordDate = new Date(h.timestamp);
+    const recordDateText = recordDate.toLocaleDateString("zh-CN");
+    const recordTimeText = recordDate.toLocaleTimeString("zh-CN", { hour12: false });
     return `
     <div style="padding:10px 12px;background:var(--ds-card);border-radius:10px;margin-bottom:8px;font-size:12px;">
       <div class="aus-history-card-head" style="display:flex;justify-content:space-between;align-items:center;">
@@ -9707,12 +9710,13 @@ function renderHistoryInner(doc, fullHist) {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">基础信息</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;font-size:11px;">
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:6px;font-size:11px;">
               <div><div style="color:var(--ds-text-2);font-size:10px;">模型</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${esc$1(h.model || "—")}</div></div>
               <div><div style="color:var(--ds-text-2);font-size:10px;">时段</div><div style="font-weight:600;margin-top:2px;color:var(--ds-text);">${h.priceType === "new-peak" || h.priceType === "wallet-peak" ? "高峰" : h.priceType === "new-offpeak" || h.priceType === "wallet-offpeak" ? "非高峰" : h.priceType === "unpriced" ? "待定价" : "旧价格"}</div></div>
-              <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">钱包</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${esc$1(repository.getWallet(String(h.walletId || ""))?.name || h.endpointLabel || "未归属钱包")}</div></div>
-              <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">计价来源</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${h.pricingSource === "wallet" ? "钱包规则" : h.pricingSource === "builtin" ? "DeepSeek 内置" : h.pricingSource === "unpriced" ? "待定价" : h.pricingSource === "legacy-match" ? "旧数据同名价" : h.pricingSource === "legacy" ? "旧全局规则" : "旧记录兜底"}</div></div>
-              <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">时间</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${new Date(h.timestamp).toLocaleString("zh-CN")}</div></div>
+              <div style="min-width:0;"><div style="color:var(--ds-text-2);font-size:10px;">钱包</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${esc$1(repository.getWallet(String(h.walletId || ""))?.name || h.endpointLabel || "未归属钱包")}</div></div>
+              <div style="min-width:0;"><div style="color:var(--ds-text-2);font-size:10px;">计价来源</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${h.pricingSource === "wallet" ? "钱包规则" : h.pricingSource === "builtin" ? "DeepSeek 内置" : h.pricingSource === "unpriced" ? "待定价" : h.pricingSource === "legacy-match" ? "旧数据同名价" : h.pricingSource === "legacy" ? "旧全局规则" : "旧记录兜底"}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">日期</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${esc$1(recordDateText)}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">时间</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${esc$1(recordTimeText)}</div></div>
             </div>
           </div>
             <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
@@ -9951,8 +9955,11 @@ function switchView(view) {
     else el.classList.remove("active");
   });
   const titles = { overview: "用量概览", stats: "用量统计", history: "历史记录", forecast: "趋势预测（Beta）", wallet: "钱包", settings: "设置", help: "使用说明", about: "关于" };
+  const titleText = titles[view] || "";
   const titleEl = doc.getElementById("aus-page-title");
-  if (titleEl) titleEl.textContent = titles[view] || "";
+  const mobileTitleEl = doc.getElementById("aus-mobile-page-title");
+  if (titleEl) titleEl.textContent = titleText;
+  if (mobileTitleEl) mobileTitleEl.textContent = titleText;
   refreshUI();
   if (view === "stats") {
     setTimeout(() => {
@@ -10029,7 +10036,9 @@ function createPanel() {
   panel2.innerHTML = `
     <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;border-bottom:1px solid var(--ds-border);background:var(--ds-card-inner);">
       <button id="aus-hamburger-btn" title="菜单" style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);font-size:18px;line-height:1;padding:0;">☰</button>
-      <span style="margin-left:12px;font-size:13px;font-weight:700;color:var(--ds-text);">API用量统计</span>
+      <span style="margin-left:12px;font-size:13px;font-weight:700;color:var(--ds-text);white-space:nowrap;flex-shrink:0;">API用量统计</span>
+      <span id="aus-mobile-page-title" style="margin-left:10px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:600;color:var(--ds-text-2);">用量概览</span>
+      <button id="aus-mobile-panel-close" title="关闭" style="margin-left:auto;width:32px;height:32px;flex-shrink:0;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:14px;">✕</button>
     </div>
     <div id="aus-panel-body" style="flex:1;display:flex;flex-direction:row;overflow:hidden;min-height:0;">
     <div id="aus-sidebar" style="width:220px;flex-shrink:0;background:var(--ds-sidebar-bg);border-right:1px solid var(--ds-border);display:flex;flex-direction:column;overflow:hidden;">
@@ -10057,7 +10066,7 @@ function createPanel() {
       </div>
     </div>
     <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--ds-panel-bg);">
-      <div style="flex-shrink:0;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--ds-border);background:var(--ds-card-inner);">
+      <div id="aus-page-header" style="flex-shrink:0;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--ds-border);background:var(--ds-card-inner);">
         <span id="aus-page-title" style="font-size:14px;font-weight:600;color:var(--ds-text);">用量概览</span>
         <button id="aus-panel-close" style="width:32px;height:32px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:14px;">✕</button>
       </div>
@@ -10252,6 +10261,7 @@ function createPanel() {
   } catch {
   }
   doc.getElementById("aus-panel-close")?.addEventListener("click", closePanel);
+  doc.getElementById("aus-mobile-panel-close")?.addEventListener("click", closePanel);
   doc.querySelectorAll(".aus-nav-item").forEach((el) => {
     el.addEventListener("click", () => {
       const v = el.getAttribute("data-nav");
@@ -10390,7 +10400,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-BbhYg1_W.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-BmJoSlIP.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -10443,7 +10453,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-BbhYg1_W.js").then((m) => m.maybeAutoCheck());
+    import("./update-BmJoSlIP.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

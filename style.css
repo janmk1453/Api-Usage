@@ -205,6 +205,7 @@
     box-shadow: 8px 0 24px rgba(0,0,0,0.18) !important;
   }
   #aus-sidebar-toggle { display: none !important; }
+  #aus-page-header { display: none !important; }
   #aus-main { padding: 12px !important; overflow-x: hidden !important; }
   #aus-overview-four { grid-template-columns: repeat(2, 1fr) !important; gap: clamp(8px, 1.5cqi, 10px) !important; }
   #aus-stats-four { grid-template-columns: repeat(2, 1fr) !important; gap: clamp(8px, 1.5cqi, 10px) !important; }
@@ -365,6 +366,7 @@
   #aus-sidebar-overlay { display:none !important; }
   #aus-sidebar-overlay.is-open { display:block !important; position:absolute !important; inset:0 !important; z-index:20 !important; background:var(--ds-overlay) !important; }
   #aus-sidebar-toggle { display:none !important; }
+  #aus-page-header { display:none !important; }
   /* 窄屏呼出时强制还原完整导航样式，避免宽屏折叠残留导致间距/动画异常 */
   #aus-sidebar #aus-brand { display:flex !important; }
   #aus-sidebar .aus-nav-label { display:inline !important; }
@@ -485,6 +487,9 @@
   [data-view="forecast"] [style*="display:flex"] { flex-wrap: wrap !important; min-width:0 !important; max-width:100% !important; }
   [data-view="forecast"] #aus-forecast-chart,
   [data-view="forecast"] [id^="aus-forecast-"] { width:100% !important; max-width:100% !important; min-width:0 !important; box-sizing:border-box !important; }
+  [data-view="forecast"] #aus-forecast-chat-btn { width:auto !important; max-width:100% !important; flex-wrap:nowrap !important; align-items:center !important; }
+  [data-view="forecast"] #aus-forecast-chat-btn > span { white-space:nowrap !important; }
+  [data-view="forecast"] #aus-forecast-chat-label { min-width:0 !important; }
   /* 设置页输入区不超出 */
   #aus-settings input,
   #aus-settings select,
