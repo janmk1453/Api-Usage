@@ -5564,7 +5564,10 @@ function filterStatsHistory(entries, filter = {}) {
       if (filter.start && day < filter.start) return false;
       if (filter.end && day > filter.end) return false;
     }
-    if (filter.model && filter.model !== STATS_FILTER_ALL && entry.model !== filter.model) return false;
+    if (filter.model && filter.model !== STATS_FILTER_ALL) {
+      const models = Array.isArray(filter.model) ? filter.model : [filter.model];
+      if (!models.length || !models.includes(entry.model)) return false;
+    }
     if (filter.chat && filter.chat !== STATS_FILTER_ALL) {
       if (filter.chat === STATS_FILTER_NULL) {
         if (entry.chatId) return false;
@@ -7209,7 +7212,7 @@ let currentRange = "30d";
 let customStart = "";
 let customEnd = "";
 let pickerOpen = false;
-let selectedModel = STATS_FILTER_ALL;
+let selectedModels = [];
 let modelPickerOpen = false;
 let selectedChat = STATS_FILTER_ALL;
 let chatPickerOpen = false;
@@ -7349,7 +7352,7 @@ function currentStatsFilter() {
   return {
     start,
     end,
-    model: selectedModel,
+    model: selectedModels.length ? selectedModels : STATS_FILTER_ALL,
     chat: selectedChat,
     endpoint: selectedEndpoint,
     credential: selectedCredential
@@ -7421,19 +7424,35 @@ function renderModelPicker(modelsHist) {
   const label = doc.getElementById("aus-model-label");
   if (!dropdown || !label) return;
   const models = getRecordedModels(modelsHist);
-  label.textContent = selectedModel === "__all__" ? "全部" : selectedModel;
-  let html = `<div data-model="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${selectedModel === "__all__" ? "background:var(--ds-card);font-weight:600;" : ""}">全部</div>`;
+  const validModels = new Set(models);
+  selectedModels = selectedModels.filter((model) => validModels.has(model));
+  const allSelected = selectedModels.length === 0;
+  label.textContent = allSelected ? "全部" : selectedModels.length === 1 ? selectedModels[0] : `已选 ${selectedModels.length} 项`;
+  label.title = allSelected ? "全部模型" : selectedModels.join("、");
+  let html = `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${allSelected ? "background:var(--ds-card);font-weight:600;" : ""}"><input type="checkbox" data-model-all ${allSelected ? "checked" : ""} style="accent-color:var(--ds-text);" /><span>全部模型</span></label>`;
   for (const m of models) {
-    const active = m === selectedModel ? "background:var(--ds-card);font-weight:600;" : "";
-    html += `<div data-model="${esc$1(m)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}">${esc$1(m)}</div>`;
+    const checked = selectedModels.includes(m);
+    const active = checked ? "background:var(--ds-card);font-weight:600;" : "";
+    html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active}"><input type="checkbox" data-model="${esc$1(m)}" ${checked ? "checked" : ""} style="accent-color:var(--ds-text);" /><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$1(m)}</span></label>`;
   }
   if (!models.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:12px;">暂无模型</div>';
   dropdown.innerHTML = html;
-  dropdown.querySelectorAll("[data-model]").forEach((el) => {
-    el.onclick = () => {
-      selectedModel = el.getAttribute("data-model") || "__all__";
-      modelPickerOpen = false;
-      dropdown.style.display = "none";
+  const allInput = dropdown.querySelector("[data-model-all]");
+  if (allInput) {
+    allInput.onchange = () => {
+      selectedModels = [];
+      renderStatsView();
+    };
+  }
+  dropdown.querySelectorAll("input[data-model]").forEach((el) => {
+    el.onchange = () => {
+      const model = el.getAttribute("data-model") || "";
+      if (!model) return;
+      if (el.checked) {
+        if (!selectedModels.includes(model)) selectedModels.push(model);
+      } else {
+        selectedModels = selectedModels.filter((item) => item !== model);
+      }
       renderStatsView();
     };
   });
@@ -10126,7 +10145,7 @@ function createPanel() {
                 </div>
               </div>
               <div class="aus-stats-filter">
-                <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);">全部</span><span style="font-size:10px;">▼</span></div>
+                <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span><span style="font-size:10px;">▼</span></div>
                 <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div class="aus-stats-filter">
@@ -10218,7 +10237,7 @@ function createPanel() {
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（余额查询仅支持 DeepSeek 官方）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前（DeepSeek）高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DB2777;font-weight:600;margin-bottom:6px;">🔄 消息对比</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中找到想对比的两条消息，前者点“旧”，后者点“新”</div><div>2. 系统并排显示请求消息的文字差异</div><div>3. 差异点即缓存发散起始位置（前 N 条相同为缓存命中段）</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 切换时间、模型、对话、接入类型和 API 密钥查看不同范围的统计</div><div>2. 多图表展示多模请求参数，悬浮查看分模型明细</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 切换时间、模型（可多选）、对话、接入类型和 API 密钥查看不同范围的统计</div><div>2. 多图表展示多模请求参数，悬浮查看分模型明细</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”展开固定区域</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 等详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0891B2;font-weight:600;margin-bottom:6px;">🧡 模型兼容</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 完全兼容 DeepSeek 官方 API</div><div>2. 尽量兼容不同厂商/渠道的请求格式，部分模型可能无缓存命中</div><div>3. 如数据异常，请携带完整请求与响应反馈</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-text-3);font-weight:600;margin-bottom:6px;">✨ 关于</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>本扩展由原脚本（<a href="https://github.com/janmk1453/deepseek-tavern-script" target="_blank" style="color:var(--ds-text);text-decoration:underline;">deepseek-tavern-script</a>）迁移重构。</div><div><span style="color:var(--ds-text);">@janmk</span> · 仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);text-decoration:underline;">janmk1453/Api-Usage</a></div></div></div>
@@ -10400,7 +10419,7 @@ function createPanel() {
       updBtn.onclick = () => {
         updBtn.textContent = "检查中…";
         updBtn.setAttribute("disabled", "");
-        import("./update-BmJoSlIP.js").then((m) => m.checkUpdate(true).finally(() => {
+        import("./update-7wUYo6FJ.js").then((m) => m.checkUpdate(true).finally(() => {
           updBtn.textContent = "检查更新";
           updBtn.removeAttribute("disabled");
         }));
@@ -10453,7 +10472,7 @@ function openPanel() {
   panelOpen = true;
   refreshUI();
   try {
-    import("./update-BmJoSlIP.js").then((m) => m.maybeAutoCheck());
+    import("./update-7wUYo6FJ.js").then((m) => m.maybeAutoCheck());
   } catch {
   }
 }

@@ -150,6 +150,19 @@ describe('统计聚合', () => {
     expect(filtered[0].endpointId).toBe('endpoint-a');
   });
 
+  it('模型筛选支持多选', () => {
+    const history = [
+      { timestamp: 1, model: 'model-a' },
+      { timestamp: 2, model: 'model-b' },
+      { timestamp: 3, model: 'model-c' },
+    ];
+
+    expect(filterStatsHistory(history, { model: ['model-a', 'model-c'] })).toEqual([
+      { timestamp: 1, model: 'model-a' },
+      { timestamp: 3, model: 'model-c' },
+    ]);
+  });
+
   it('旧记录可通过未记录和未识别哨兵筛选', () => {
     const history = [
       { timestamp: 1, model: 'old', chatId: null },
