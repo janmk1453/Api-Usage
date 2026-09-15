@@ -14,6 +14,8 @@ import {
   type StatsHistoryFilter,
 } from '../data/computed';
 import { FOUR_OPTIONS, getFourDisplay } from './overview';
+import { historyRecordKey } from '../utils/history-key';
+import { toast } from '../utils/logger';
 
 type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom' | 'all';
 let currentRange: RangeKey = '30d';
@@ -681,13 +683,13 @@ async function renderChart(filteredRaw: any[]) {
         if (!params?.length) return '';
         const idx = params[0].dataIndex;
         const label = labels[idx];
-        let html = `<div style="font-weight:600;margin-bottom:6px;">${label}</div>`;
+        let html = `<div style="font-weight:600;margin-bottom:6px;">${esc(label)}</div>`;
         for (const p of params) {
           const v = p.value;
           const unit = Y_OPTIONS.find((o:any)=>o.label===p.seriesName)?.unit || '';
           const isCost = unit==='CNY';
           const disp = isCost ? (curCur.symbol + Number(v).toFixed(4) + ' ' + curCur.code) : (Number(v).toLocaleString()+' '+unit);
-          html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${disp}</span></div>`;
+          html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${esc(p.seriesName)}<span style="margin-left:auto;font-weight:600;">${disp}</span></div>`;
         }
         return `<div style="padding:4px 2px;min-width:180px;">${html}</div>`;
       }
@@ -760,38 +762,51 @@ function renderModelSummary(filtered: any[]) {
 }
 
 let cachedAllHistory: any[] | null = null;
-let allHistoryLoading = false;
+let allHistoryPromise: Promise<any[]> | null = null;
+let statsHistoryWarningShown = false;
 
 export function invalidateStatsCache() {
   cachedAllHistory = null;
   lastStatsHistory = [];
 }
-try { onDataEvent(DataEvents.HISTORY_ADDED, () => { cachedAllHistory = null; }); } catch {}
+try {
+  onDataEvent(DataEvents.HISTORY_ADDED, invalidateStatsCache);
+  onDataEvent(DataEvents.UPDATED, invalidateStatsCache);
+} catch {}
 
 async function getHistoryForStats(): Promise<any[]> {
   const s: any = getSelectedSave();
   const hot: any[] = s?.history || [];
   if (cachedAllHistory) {
-    const keyOf = (h: any) => `${h.timestamp}|${h.model||''}|${h.total_tokens||0}`;
+    const keyOf = historyRecordKey;
     const seen = new Set(cachedAllHistory.map(keyOf));
     const fresh = hot.filter((h: any) => !seen.has(keyOf(h)));
     if (fresh.length) cachedAllHistory = [...fresh, ...cachedAllHistory].sort((a: any,b: any)=> b.timestamp - a.timestamp);
     return cachedAllHistory;
   }
-  if (allHistoryLoading) return hot;
-  allHistoryLoading = true;
-  try {
-    const mod: any = await import('../store/persistence');
-    if (mod.getAllHistory) {
-      const all = await mod.getAllHistory();
-      const result = all || hot;
-      cachedAllHistory = result;
-      return result;
+  if (allHistoryPromise) return allHistoryPromise;
+  allHistoryPromise = (async () => {
+    try {
+      const mod: any = await import('../store/persistence');
+      if (mod.getAllHistory) {
+        const all = await mod.getAllHistory();
+        const result = all || hot;
+        cachedAllHistory = result;
+        return result;
+      }
+    } catch (error) {
+      if (!statsHistoryWarningShown) {
+        statsHistoryWarningShown = true;
+        toast('warning', '冷历史读取失败，当前统计可能只包含近期记录');
+      }
+      console.error('[Api-Usage] 全量历史读取失败', error);
+    } finally {
+      allHistoryPromise = null;
     }
-  } catch {}
-  finally { allHistoryLoading = false; }
-  cachedAllHistory = hot;
-  return hot;
+    cachedAllHistory = hot;
+    return hot;
+  })();
+  return allHistoryPromise;
 }
 
 export async function renderStatsView() {

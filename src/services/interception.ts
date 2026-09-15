@@ -10,6 +10,9 @@ let lastFetchModel: string | null = null;
 let lastFetchTime = 0;
 let lastFetchConnection: HistoryConnection | null = null;
 let lastFetchConnectionTime = 0;
+let requestSequence = 0;
+let lastRequestId: string | null = null;
+let lastRequestIdTime = 0;
 
 export function setLastRequest(messages: any[], start: number) {
   lastMessages = messages || [];
@@ -17,6 +20,7 @@ export function setLastRequest(messages: any[], start: number) {
 }
 
 const TARGET_API = '/api/backends/chat-completions/generate';
+const STREAM_TEXT_LIMIT = 1_000_000;
 
 function safeRequestSnapshot(body: any, connection: HistoryConnection | null): any {
   if (!body || typeof body !== 'object') return null;
@@ -36,6 +40,11 @@ function recentConnection(maxAge = 120000): HistoryConnection | null {
     }
     if (lastFetchUsage?.connection && Date.now() - lastFetchTime < maxAge) return lastFetchUsage.connection as HistoryConnection;
   } catch {}
+  return null;
+}
+
+function recentRequestId(maxAge = 5000): string | null {
+  if (lastRequestId && Date.now() - lastRequestIdTime < maxAge) return lastRequestId;
   return null;
 }
 
@@ -81,9 +90,12 @@ function installFetchCapture() {
         try { reqBody = JSON.parse(args[1]?.body || 'null'); } catch {}
         const requestConnection = resolveRuntimeConnectionContext(reqBody || {});
         const fullReq = safeRequestSnapshot(reqBody, requestConnection);
+        const requestId = `req:${Date.now()}:${++requestSequence}`;
         try {
           lastFetchConnection = requestConnection;
           lastFetchConnectionTime = Date.now();
+          lastRequestId = requestId;
+          lastRequestIdTime = Date.now();
         } catch {}
         let msgs: any[] = [];
         try { if (reqBody?.messages?.length) msgs = reqBody.messages.slice(-10); } catch {}
@@ -102,9 +114,11 @@ function installFetchCapture() {
                 try { finishReason = (data as any)?.choices?.[0]?.finish_reason ?? null; } catch {}
               } else {
                 text.split('\n').forEach((line: string) => {
-                  if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+                  if (line.startsWith('data:')) {
+                    const payload = line.slice(5).trim();
+                    if (!payload || payload === '[DONE]') return;
                     try {
-                      const chunk = JSON.parse(line.substring(6));
+                      const chunk = JSON.parse(payload);
                       if (chunk.usage) data = chunk;
                       if (!data && chunk.choices?.[0]?.usage) data = { usage: chunk.choices[0].usage, model: chunk.model };
                       const fr = chunk?.choices?.[0]?.finish_reason;
@@ -128,11 +142,11 @@ function installFetchCapture() {
               try { if (finishReason) (usage as any).__finish_reason = finishReason; } catch {}
               try { estimateThinkTokens(text, usage); } catch {}
               // 完整响应文本（非流式为完整 JSON，流式为 SSE 原文）供历史详情展示
-              lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: text, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason, connection: requestConnection };
+              lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: text, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason, connection: requestConnection, requestId };
               lastFetchModel = typeof model === 'string' ? model : null;
               lastFetchTime = Date.now();
               log.debug('fetch 捕获 usage', { model, hasUsage: !!usage, finishReason });
-              try { processUsage(usage, model, msgs, startTime, fullReq, text, ttftVal, thinkTimeVal, finishReason, requestConnection); } catch (e) { log.error('fetch 用量记录失败 ' + ((e as any)?.message || e)); }
+              try { processUsage(usage, model, msgs, startTime, fullReq, text, ttftVal, thinkTimeVal, finishReason, requestConnection, requestId); } catch (e) { log.error('fetch 用量记录失败 ' + ((e as any)?.message || e)); }
             }
           };
           // 流式测量 TTFT 与思维链耗时：后台消费 clone 的 body 流，不阻塞原始响应透传
@@ -145,7 +159,9 @@ function installFetchCapture() {
             const finish = () => { try { parseAndProcess(fullText, ttft, thinkEnd && thinkStart ? thinkEnd - thinkStart : 0); } catch {} };
             const scanThink = (chunk: string) => {
               for (const line of chunk.split('\n')) {
-                if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+                if (!line.startsWith('data:')) continue;
+                const payload = line.slice(5).trim();
+                if (!payload || payload === '[DONE]') continue;
                 if (!thinkStart && line.indexOf('"reasoning_content"') !== -1) thinkStart = nowMs() - t0;
                 if (thinkStart && !thinkEnd && line.indexOf('"content"') !== -1) thinkEnd = nowMs() - t0;
               }
@@ -161,6 +177,7 @@ function installFetchCapture() {
                 if (first && value && value.byteLength) { ttft = Date.now() - startTime; first = false; }
                 const piece = dec.decode(value, { stream: true });
                 fullText += piece; buf += piece;
+                if (fullText.length > STREAM_TEXT_LIMIT) fullText = fullText.slice(-STREAM_TEXT_LIMIT);
                 const nl = buf.lastIndexOf('\n');
                 if (nl !== -1) {
                   const lines = buf.slice(0, nl); buf = buf.slice(nl + 1);
@@ -307,7 +324,8 @@ function onGenerationEnded(...args: any[]) {
           }
         }
       } catch {}
-      processUsage(usage, model, lastMessages, lastStart, null, null, ttft, think, fr, recentConnection(5000));
+      processUsage(usage, model, lastMessages, lastStart, null, null, ttft, think, fr, recentConnection(5000), recentRequestId());
+      lastFetchUsage = null;
       return;
     }
     if (tail?.swipe_info && typeof tail.swipe_info === 'object') {
@@ -320,7 +338,8 @@ function onGenerationEnded(...args: any[]) {
           log.debug('swipe_info 命中', { model });
           let ttft = 0, think = 0, fr: string | null = (cand as any)?.__finish_reason ?? null;
           try { const fp:any=lastFetchUsage; if (fp && Date.now()-lastFetchTime<5000){ ttft=fp.ttft||0; think=fp.thinkTime||0; if(!fr) fr=fp.finishReason??null; } } catch {}
-          processUsage(usage, model, lastMessages, lastStart, null, null, ttft, think, fr, recentConnection(5000));
+          processUsage(usage, model, lastMessages, lastStart, null, null, ttft, think, fr, recentConnection(5000), recentRequestId());
+          lastFetchUsage = null;
           return;
         }
       }
@@ -333,7 +352,8 @@ function onGenerationEnded(...args: any[]) {
       log.debug('args 命中', { model: m });
       let ttft = 0, think = 0, fr: string | null = (maybeUsage as any)?.__finish_reason ?? null;
       try { const fp:any=lastFetchUsage; if (fp && Date.now()-lastFetchTime<5000){ ttft=fp.ttft||0; think=fp.thinkTime||0; if(!fr) fr=fp.finishReason??null; } } catch {}
-      processUsage(maybeUsage, m, lastMessages, lastStart, null, null, ttft, think, fr, recentConnection(5000));
+      processUsage(maybeUsage, m, lastMessages, lastStart, null, null, ttft, think, fr, recentConnection(5000), recentRequestId());
+      lastFetchUsage = null;
       return;
     }
     {
@@ -350,7 +370,7 @@ function onGenerationEnded(...args: any[]) {
         const fFr = (fetchPack && fetchPack.finishReason) || (fetchUsage as any)?.__finish_reason || null;
         log.debug('fetch 兜底命中', { model: fetchedModel });
         lastFetchUsage = null;
-        processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink, fFr, fetchPack?.connection || recentConnection());
+        processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink, fFr, fetchPack?.connection || recentConnection(), fetchPack?.requestId || recentRequestId(120000));
         return;
       } else if (lastFetchUsage) {
         const fu = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
@@ -371,7 +391,7 @@ function refresh() {
   try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
 }
 
-export function processUsage(usage: any, model: string, messages: any[], startTime: number, fullRequest: any = null, fullResponse: any = null, ttft = 0, thinkTime = 0, finishReason: string | null = null, connection: HistoryConnection | null = null) {
+export function processUsage(usage: any, model: string, messages: any[], startTime: number, fullRequest: any = null, fullResponse: any = null, ttft = 0, thinkTime = 0, finishReason: string | null = null, connection: HistoryConnection | null = null, requestId: string | null = null) {
   // 主路径 usage 多来自 ST，可能缺 reasoning_tokens；从最近 fetch 的估算值补上
   try {
     const fp: any = lastFetchUsage;
@@ -381,10 +401,10 @@ export function processUsage(usage: any, model: string, messages: any[], startTi
       if (est && !hasReal && !(usage as any)?.__think_tokens_est) (usage as any).__think_tokens_est = est;
     }
   } catch {}
-  repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason, connection);
+  repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason, connection, requestId);
   refresh();
 }
 
-export function recalcAllCosts() {
-  repository.recalcAll();
+export function recalcAllCosts(): Promise<void> {
+  return repository.recalcAll();
 }

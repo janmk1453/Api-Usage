@@ -35,6 +35,16 @@ function bindSettingsOutsideClick(doc: Document) {
 
 function localDay(ts: number) { const d = new Date(ts); const pad=(n:number)=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
 
+async function recalcCostsAndRefresh(): Promise<void> {
+  try {
+    await recalcAllCosts();
+    await repository.rebuildAggregates();
+    (globalThis as any).ApiUsageStat?.refreshUI?.();
+  } catch (error: any) {
+    toast('error', '历史费用重算失败：' + (error?.message || error));
+  }
+}
+
 export function renderSettings(doc: Document) {
   const host = doc.getElementById('aus-settings');
   if (!host) return;
@@ -110,7 +120,7 @@ export function renderSettings(doc: Document) {
       <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:6px;">WebDAV 云同步</div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:8px;">双向合并，仅同步统计/设置/余额，不含聊天内容与密钥。强制 https。</div>
         <div style="display:grid;gap:8px;">
           <input id="aus-webdav-url" placeholder="https://dav.jianguoyun.com/dav/" style="padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" />
-          <div style="display:flex;gap:8px;"><input id="aus-webdav-user" placeholder="用户名" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><input id="aus-webdav-pass" type="password" placeholder="应用密码" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /></div>
+          <div style="display:flex;gap:8px;"><input id="aus-webdav-user" placeholder="用户名" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><input id="aus-webdav-pass" type="password" placeholder="应用密码" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><button id="aus-webdav-pass-clear" type="button" style="padding:8px 12px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:11px;cursor:pointer;">清除密码</button></div>
           <input id="aus-webdav-path" placeholder="远程子路径（可空）" style="padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" />
           <input id="aus-webdav-proxy" placeholder="CORS 代理（可选，http://127.0.0.1:8000/proxy?url=）" style="padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" />
           <button id="aus-webdav-sync" class="ds-btn-pill">☁️ 立即同步</button>
@@ -297,20 +307,20 @@ export function renderSettings(doc: Document) {
     state.settings.useNewPricing = newCb.checked;
     if (newSlider) newSlider.style.left = newCb.checked ? '23px' : '3px';
     (doc.getElementById('aus-new-pricing-panel') as HTMLElement).style.display = newCb.checked ? 'grid' : 'none';
-    saveHot({ settings: state.settings }); recalcAllCosts(); try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+    saveHot({ settings: state.settings }); void recalcCostsAndRefresh();
   };
   if (newDate) newDate.onchange = () => {
     if (newDate.value) {
       state.settings.newPricingDate = new Date(newDate.value + 'T00:00:00').getTime();
     } else state.settings.newPricingDate = 0;
-    saveHot({ settings: state.settings }); recalcAllCosts(); try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+    saveHot({ settings: state.settings }); void recalcCostsAndRefresh();
   };
   doc.getElementById('aus-btn-pricing-today')!.onclick = () => {
     const d = new Date(); d.setHours(0,0,0,0);
     state.settings.newPricingDate = d.getTime();
     if (newDate) newDate.value = localDay(d.getTime());
     if (newCb && !newCb.checked) { newCb.checked = true; if (newSlider) newSlider.style.left = '23px'; (doc.getElementById('aus-new-pricing-panel') as HTMLElement).style.display = 'grid'; }
-    saveHot({ settings: state.settings }); recalcAllCosts(); try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+    saveHot({ settings: state.settings }); void recalcCostsAndRefresh();
   };
   if (dbgCb) dbgCb.onchange = () => {
     state.settings.debug = dbgCb.checked;
@@ -335,8 +345,9 @@ export function renderSettings(doc: Document) {
       try {
         const { repository } = await import('../data/repository');
         const { state: st } = await import('../store/index');
-        repository.replaceAll({ history: (st.history || []).filter((h: any) => (h as any)._debug !== true) } as any);
-        repository.recalcAll();
+        await repository.replaceAll({ history: (st.history || []).filter((h: any) => (h as any)._debug !== true) } as any);
+        await repository.recalcAll();
+        await repository.rebuildAggregates();
         try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
         const el = doc.getElementById('aus-debug-status');
         if (el) el.textContent = '已清除调试数据';
@@ -364,6 +375,15 @@ export function renderSettings(doc: Document) {
       (wPass as any).dataset.hasKey = '1';
     }
   };
+  const wPassClear = doc.getElementById('aus-webdav-pass-clear') as HTMLButtonElement | null;
+  if (wPassClear && wPass) {
+    wPassClear.onclick = () => {
+      saveWebdavPass('');
+      wPass.value = '';
+      wPass.placeholder = '应用密码';
+      (wPass as any).dataset.hasKey = '';
+    };
+  }
   doc.getElementById('aus-webdav-sync')!.onclick = () => doSyncNow();
 
   // 模型价格自动同步（models.dev）
@@ -443,7 +463,7 @@ export function renderSettings(doc: Document) {
       }
       saveHot({ settings: state.settings });
       try { import('../services/currency').then(m=> (m as any).restartRateTimer?.()); import('../services/pricing-sync').then(m=> (m as any).restartPricingSyncTimer?.()); } catch {}
-      if (removed) { renderModelsEditor(doc); fillDebugModelSelect(doc); recalcAllCosts(); toast('success', `已移除 ${removed} 个同步模型价格`); }
+      if (removed) { renderModelsEditor(doc); fillDebugModelSelect(doc); void recalcCostsAndRefresh(); toast('success', `已移除 ${removed} 个同步模型价格`); }
       try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
       const unitEl = doc.getElementById('aus-model-price-unit') as HTMLElement | null;
       if (unitEl) { try{  unitEl.textContent = getDisplayCurrency().code + '/百万 tokens'; }catch{} }
@@ -535,8 +555,7 @@ export function renderSettings(doc: Document) {
         const n = clearAllCustomModels();
         renderModelsEditor(doc);
         fillDebugModelSelect(doc);
-        recalcAllCosts();
-        try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+        void recalcCostsAndRefresh();
         if (n) toast('success', `已清空 ${n} 项自定义模型与价格，内置模型计价规则保持不变`);
         else toast('info', '当前没有自定义模型可清空');
       };
@@ -570,7 +589,7 @@ function renderPeakHoursEditor(doc: Document) {
     el.onchange = () => {
       const idx = parseInt(el.getAttribute('data-idx')); const field = el.getAttribute('data-field');
       (state.settings as any).peakHours[idx][field] = el.value;
-      saveHot({ settings: state.settings }); recalcAllCosts(); try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+      saveHot({ settings: state.settings }); void recalcCostsAndRefresh();
     };
   });
   list.querySelectorAll('button[data-del]').forEach((el: any) => {
@@ -579,7 +598,7 @@ function renderPeakHoursEditor(doc: Document) {
       (state.settings as any).peakHours.splice(idx, 1);
       if (!(state.settings as any).peakHours.length) (state.settings as any).peakHours = JSON.parse(JSON.stringify(DEFAULT_PEAK_HOURS));
       saveHot({ settings: state.settings });
-      renderPeakHoursEditor(doc); recalcAllCosts(); try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+      renderPeakHoursEditor(doc); void recalcCostsAndRefresh();
     };
   });
   const addBtn = doc.getElementById('aus-btn-add-peak-hour') as HTMLElement | null;
@@ -619,7 +638,7 @@ function renderModelsEditor(doc: Document) {
       const usePeak = el.checked;
       upsertCustom(model, { usePeakPricing: usePeak });
       saveHot({ settings: state.settings });
-      renderModelsEditor(doc); recalcAllCosts(); try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+      renderModelsEditor(doc); void recalcCostsAndRefresh();
     };
   });
   list.querySelectorAll('input[data-price]').forEach((el: any) => {
@@ -637,7 +656,7 @@ function renderModelsEditor(doc: Document) {
       const model = row.getAttribute('data-model') || '';
       (state.settings as any).customModels = (state.settings as any).customModels.filter((c: any) => c.model !== model);
       saveHot({ settings: state.settings });
-      renderModelsEditor(doc); fillDebugModelSelect(doc); recalcAllCosts(); try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+      renderModelsEditor(doc); fillDebugModelSelect(doc); void recalcCostsAndRefresh();
     };
   });
   const addBtn = doc.getElementById('aus-btn-add-model') as HTMLElement | null;
@@ -678,8 +697,7 @@ function renderModelsSyncNote(doc: Document, syncedCount: number, showSynced: bo
       const n = removeSyncedModels();
       renderModelsEditor(doc);
       fillDebugModelSelect(doc);
-      recalcAllCosts();
-      try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+      void recalcCostsAndRefresh();
       if (n) toast('success', `已移除 ${n} 个同步模型价格`);
     };
   }
@@ -771,7 +789,7 @@ function saveCustomRow(model: string, prices: any, isBuiltin: boolean) {
     const entry = { model, usePeakPricing: prices.usePeakPricing, offpeak: prices.offpeak, peak: prices.peak };
     if (idx !== -1) cms[idx] = entry; else cms.push(entry);
   }
-  saveHot({ settings: state.settings }); recalcAllCosts(); try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+  saveHot({ settings: state.settings }); void recalcCostsAndRefresh();
 }
 function getPricing(model: string) {
   const m = model || 'deepseek-flash';

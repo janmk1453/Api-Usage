@@ -1,5 +1,5 @@
 import { PRICING, HIDDEN_PRICING_MODELS, PRICE_HISTORY, DEFAULT_PEAK_HOURS } from '../constants/pricing';
-import { officialEndpointId, type HistoryConnection } from '../services/connection-identity';
+import { isDeepSeekOfficialEndpoint, officialEndpointId, type HistoryConnection } from '../services/connection-identity';
 import type { Settings } from '../types/settings';
 import {
   DEEPSEEK_WALLET_ID,
@@ -27,6 +27,17 @@ function finiteNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function positiveNumberOrNull(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : parseFloat(String(value));
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
+function builtinContextLimit(model: string): number | null {
+  const key = String(model || '').toLowerCase();
+  if (key.includes('deepseek')) return 128000;
+  return null;
+}
+
 function safeId(s: string): string {
   return s.replace(/[^a-zA-Z0-9:_-]/g, '-').slice(0, 100);
 }
@@ -37,13 +48,16 @@ export function walletIdForEndpoint(endpointId: string | null | undefined): stri
 }
 
 export function isDeepSeekOfficialConnection(connection: HistoryConnection | null | undefined): boolean {
-  return !!connection
-    && cleanText(connection.sourceType).toLowerCase() === 'deepseek'
-    && (
-      !connection.endpointId
-      || connection.endpointId === DEEPSEEK_OFFICIAL_ENDPOINT_ID
-      || cleanText(connection.endpointLabel) === 'DeepSeek 官方'
-    );
+  if (!connection) return false;
+  const sourceType = cleanText(connection.sourceType).toLowerCase();
+  const endpointId = cleanText(connection.endpointId);
+  const endpointLabel = cleanText(connection.endpointLabel);
+  const officialEndpoint = endpointId === DEEPSEEK_OFFICIAL_ENDPOINT_ID
+    || isDeepSeekOfficialEndpoint(endpointId)
+    || isDeepSeekOfficialEndpoint(endpointLabel)
+    || endpointLabel === 'DeepSeek 官方';
+  if (officialEndpoint) return true;
+  return sourceType === 'deepseek' && !endpointId;
 }
 
 export function walletMatchesConnection(
@@ -145,6 +159,7 @@ export function normalizeWalletModel(raw: any, now = Date.now()): WalletModel | 
     sourceModel,
     model,
     aliases: normalizeAliases(raw.aliases, model),
+    contextLimit: positiveNumberOrNull(raw.contextLimit) ?? builtinContextLimit(sourceModel),
     price: normalizeWalletPriceRule(raw.price),
     source,
     locked: raw.locked === true,
@@ -259,6 +274,7 @@ export function createDeepSeekWallet(settings: Settings, now = Date.now()): Wall
     sourceModel: model,
     model,
     aliases: [],
+    contextLimit: builtinContextLimit(model),
     price: currentBuiltinPrice(model, now),
     source: 'builtin',
     locked: false,

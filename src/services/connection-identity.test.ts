@@ -21,21 +21,34 @@ const secretState = {
 };
 
 describe('连接身份', () => {
-  it('规范化接入地址并保持查询参数稳定', () => {
+  it('接入来源只按协议与主机归一化，忽略路径和查询参数', () => {
     const first = normalizeEndpoint('https://OpenCode.AI:443/zen/go/v1/?b=2&a=1');
     const second = normalizeEndpoint('https://opencode.ai/zen/go/v1?a=1&b=2');
     const different = normalizeEndpoint('https://opencode.ai/zen/go/v2');
+    const bare = normalizeEndpoint('youzi.today');
+    const versioned = normalizeEndpoint('youzi.today/v1');
+    const arbitraryPath = normalizeEndpoint('youzi.today/ababa');
 
     expect(first).toEqual({
-      canonical: 'https://opencode.ai/zen/go/v1?a=1&b=2',
-      label: 'opencode.ai/zen/go/v1',
+      canonical: 'https://opencode.ai',
+      label: 'opencode.ai',
     });
     expect(second?.canonical).toBe(first?.canonical);
-    expect(different?.canonical).not.toBe(first?.canonical);
+    expect(different?.canonical).toBe(first?.canonical);
+    expect(versioned?.canonical).toBe(bare?.canonical);
+    expect(arbitraryPath?.canonical).toBe(bare?.canonical);
   });
 
   it('官方接口使用明确名称，自定义接口识别域名与路径', () => {
     const official = buildEndpointContext({ chat_completion_source: 'deepseek' });
+    const officialCustomUrl = buildEndpointContext({
+      chat_completion_source: 'custom',
+      custom_url: 'https://api.deepseek.com/v1/',
+    });
+    const officialReverseProxy = buildEndpointContext({
+      chat_completion_source: 'custom',
+      reverse_proxy: 'https://api.deepseek.com/v1',
+    });
     const custom = buildEndpointContext({
       chat_completion_source: 'custom',
       custom_url: 'https://opencode.ai/zen/go/v1/',
@@ -43,7 +56,11 @@ describe('连接身份', () => {
 
     expect(official.endpointLabel).toBe('DeepSeek 官方');
     expect(official.endpointId).toBeTruthy();
-    expect(custom.endpointLabel).toBe('opencode.ai/zen/go/v1');
+    expect(officialCustomUrl.endpointId).toBe(official.endpointId);
+    expect(officialCustomUrl.endpointLabel).toBe('DeepSeek 官方');
+    expect(officialReverseProxy.endpointId).toBe(official.endpointId);
+    expect(officialReverseProxy.endpointLabel).toBe('DeepSeek 官方');
+    expect(custom.endpointLabel).toBe('opencode.ai');
     expect(custom.endpointId).not.toBe(official.endpointId);
   });
 
@@ -75,7 +92,7 @@ describe('连接身份', () => {
       custom_include_headers: `Authorization: Bearer ${rawSecret}`,
     }, secretState, secretKeys);
 
-    expect(context.endpointLabel).toBe('relay.example/v1');
+    expect(context.endpointLabel).toBe('relay.example');
     expect(context.credentialId).toBeNull();
     expect(context.credentialLabel).toBeNull();
     expect(JSON.stringify(context)).not.toContain(rawSecret);

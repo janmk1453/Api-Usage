@@ -1,13 +1,36 @@
 import { state } from '../store/index';
 import { EXPORT_FORMAT_VERSION } from '../constants/pricing';
 import { repository } from '../data/repository';
-import { isDeepSeekOfficialModel } from './pricing';
+import { normalizeModel } from './pricing';
 import { mergeWalletCollections } from '../data/wallets';
 import { historyRecordKey } from '../utils/history-key';
 
 declare const __APP_VERSION__: string;
 
 function isUnsafeKey(k: string) { return k === '__proto__' || k === 'constructor' || k === 'prototype'; }
+
+function finiteNonNegative(value: unknown, fallback = 0): number {
+  const number = typeof value === 'number' ? value : parseFloat(String(value));
+  return Number.isFinite(number) && number >= 0 ? number : fallback;
+}
+
+function cleanText(value: unknown): string | null {
+  const text = String(value ?? '').trim();
+  return text || null;
+}
+
+function sanitizeImportedValue(value: unknown, depth = 0): any {
+  if (value == null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (depth >= 6) return null;
+  if (Array.isArray(value)) return value.map((item) => sanitizeImportedValue(item, depth + 1));
+  if (typeof value !== 'object') return null;
+  const clean: Record<string, any> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (isUnsafeKey(key)) continue;
+    clean[key] = sanitizeImportedValue(item, depth + 1);
+  }
+  return clean;
+}
 
 function stripHistory(history: any[]) {
   return history.filter((h: any) => h && (h as any)._debug !== true).map((h: any) => {
@@ -23,10 +46,15 @@ export async function exportHistory() {
   const pad = (n: number) => (n < 10 ? '0' + n : '' + n);
   const safeSettings: any = JSON.parse(JSON.stringify(state.settings || {}));
   if (safeSettings.webdav) safeSettings.webdav = { url: '', username: '', path: '', proxy: '' };
-  const _appVer: string = (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.0.0') as string;
+  const _appVer: string = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '';
   // 含冷库全量：热 history + IndexedDB cold_history 合并去重（热溢出转冷后导出不再丢失旧记录）
   let fullHist: any[] = [];
-  try { fullHist = await repository.getAllHistory(); } catch { fullHist = state.history || []; }
+  try {
+    fullHist = await repository.getAllHistory();
+  } catch (error: any) {
+    alert('导出失败：无法读取完整历史（' + (error?.message || error) + '）');
+    return;
+  }
   const payload = {
     format: 'deepseek-stat-export' as const,
     version: EXPORT_FORMAT_VERSION,
@@ -67,6 +95,7 @@ export async function exportHistory() {
 }
 
 export function normalizeImportData(raw: any): { data?: any; error?: string; skipped?: any } {
+  if (!raw || typeof raw !== 'object') return { error: '文件格式不正确' };
   let version = raw.version ?? 1;
   if (typeof version !== 'number' || isNaN(version) || version < 1) version = 1;
   if (version > EXPORT_FORMAT_VERSION) return { error: `文件版本 v${version} 高于当前 v${EXPORT_FORMAT_VERSION}，请升级扩展` };
@@ -84,20 +113,57 @@ export function normalizeImportData(raw: any): { data?: any; error?: string; ski
   const cleaned: any[] = [];
   let skipped = 0;
   for (const h of history) {
-    if (!h || typeof h !== 'object' || h.timestamp === undefined || isNaN(h.timestamp)) { skipped++; continue; }
-    const nh: any = { timestamp: h.timestamp, model: h.model || 'unknown', prompt_tokens: h.prompt_tokens || 0, cache_hit_tokens: h.cache_hit_tokens || 0, cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0, total_tokens: h.total_tokens || 0, priceType: h.priceType || 'old' };
+    if (!h || typeof h !== 'object') { skipped++; continue; }
+    const timestamp = finiteNonNegative(h.timestamp, NaN);
+    const rawModel = cleanText(h.model);
+    if (!Number.isFinite(timestamp) || timestamp <= 0 || !rawModel) { skipped++; continue; }
+    const model = normalizeModel(rawModel);
+    const nh: any = {
+      timestamp,
+      model,
+      rawModel: rawModel !== model ? rawModel : null,
+      prompt_tokens: finiteNonNegative(h.prompt_tokens),
+      cache_hit_tokens: finiteNonNegative(h.cache_hit_tokens),
+      cache_miss_tokens: finiteNonNegative(h.cache_miss_tokens),
+      completion_tokens: finiteNonNegative(h.completion_tokens),
+      total_tokens: finiteNonNegative(h.total_tokens),
+      priceType: cleanText(h.priceType) || 'old',
+    };
     const SKIP_IMPORT = new Set(['messages', 'fullRequest', 'fullResponse', 'raw_usage']);
-    for (const f of Object.keys(h)) { if (isUnsafeKey(f) || SKIP_IMPORT.has(f)) continue; if (nh[f] === undefined) nh[f] = h[f]; }
+    for (const f of Object.keys(h)) {
+      if (isUnsafeKey(f) || SKIP_IMPORT.has(f)) continue;
+      if (nh[f] === undefined) nh[f] = sanitizeImportedValue((h as any)[f]);
+    }
+    for (const field of ['cost', 'input_cost', 'output_cost']) {
+      if (nh[field] !== undefined) nh[field] = finiteNonNegative(nh[field]);
+    }
     cleaned.push(nh);
   }
   cleaned.sort((a, b) => b.timestamp - a.timestamp);
-  return { data: { history: cleaned, balance: d.balance, customBalance: d.customBalance, wallets: Array.isArray(d.wallets) ? d.wallets : undefined, walletIgnored: Array.isArray(d.walletIgnored) ? d.walletIgnored : undefined, settings: d.settings, messageCount: d.messageCount, total_tokens: d.total_tokens, total_cost: d.total_cost, input_tokens: d.input_tokens, output_tokens: d.output_tokens, cache_hit_tokens: d.cache_hit_tokens, cache_miss_tokens: d.cache_miss_tokens, input_cost: d.input_cost, output_cost: d.output_cost, rounds: d.rounds, startTime: d.startTime }, skipped: { entries: skipped } } as any;
+  return { data: {
+    history: cleaned,
+    balance: sanitizeImportedValue(d.balance),
+    customBalance: sanitizeImportedValue(d.customBalance),
+    wallets: Array.isArray(d.wallets) ? sanitizeImportedValue(d.wallets) : undefined,
+    walletIgnored: Array.isArray(d.walletIgnored) ? sanitizeImportedValue(d.walletIgnored) : undefined,
+    settings: sanitizeImportedValue(d.settings),
+    messageCount: finiteNonNegative(d.messageCount),
+    total_tokens: finiteNonNegative(d.total_tokens),
+    total_cost: finiteNonNegative(d.total_cost),
+    input_tokens: finiteNonNegative(d.input_tokens),
+    output_tokens: finiteNonNegative(d.output_tokens),
+    cache_hit_tokens: finiteNonNegative(d.cache_hit_tokens),
+    cache_miss_tokens: finiteNonNegative(d.cache_miss_tokens),
+    input_cost: finiteNonNegative(d.input_cost),
+    output_cost: finiteNonNegative(d.output_cost),
+    rounds: finiteNonNegative(d.rounds),
+    startTime: finiteNonNegative(d.startTime, Date.now()),
+  }, skipped: { entries: skipped } } as any;
 }
 
-export function applyImportedData(d: any, mode: 'overwrite' | 'merge') {
-  let addedOfficial = 0;
+export async function applyImportedData(d: any, mode: 'overwrite' | 'merge'): Promise<void> {
   if (mode === 'overwrite') {
-    repository.replaceAll({
+    await repository.replaceAll({
       history: (d.history || []),
       total_tokens: d.total_tokens ?? (d.history || []).reduce((a: number, h: any) => a + (h.total_tokens || 0), 0),
       total_cost: d.total_cost ?? (d.history || []).reduce((a: number, h: any) => a + (h.cost || 0), 0),
@@ -107,7 +173,7 @@ export function applyImportedData(d: any, mode: 'overwrite' | 'merge') {
       cache_miss_tokens: d.cache_miss_tokens ?? 0,
       input_cost: d.input_cost ?? 0,
       output_cost: d.output_cost ?? 0,
-      rounds: d.rounds ?? d.history?.length ?? 0,
+      rounds: d.rounds ?? 0,
       startTime: d.startTime ?? Date.now(),
       balance: d.balance,
       customBalance: d.customBalance,
@@ -115,41 +181,28 @@ export function applyImportedData(d: any, mode: 'overwrite' | 'merge') {
       walletIgnored: d.walletIgnored,
       settings: d.settings,
       messageCount: d.messageCount,
-    } as any);
+    } as any, { clearCold: true });
   } else {
     // 合并：按记录身份去重，避免同一毫秒的跨钱包记录被误删
-    const seen = new Set((state.history || []).map((h: any) => historyRecordKey(h)));
+    const existing = await repository.getAllHistory();
+    const seen = new Set(existing.map((h: any) => historyRecordKey(h)));
     const toAdd: any[] = [];
     for (const h of d.history || []) {
       const key = historyRecordKey(h);
       if (!seen.has(key)) { seen.add(key); toAdd.push(h); }
     }
-    const merged = [...toAdd, ...state.history].sort((a: any, b: any) => b.timestamp - a.timestamp);
+    const merged = [...toAdd, ...existing].sort((a: any, b: any) => b.timestamp - a.timestamp);
     // 合并时不覆盖余额/设置
-    repository.replaceAll({ history: merged } as any);
+    await repository.replaceAll({ history: merged } as any);
     if (Array.isArray(d.wallets)) {
-      repository.replaceAll({
+      await repository.replaceAll({
         wallets: mergeWalletCollections(repository.getWallets(), d.wallets),
         walletIgnored: Array.from(new Set([...(state.walletIgnored || []), ...(d.walletIgnored || [])])),
       } as any);
     }
-    // 合并新增的官方模型轮次（addEntry 口径：仅 deepseek 官方模型计轮）
-    for (const h of toAdd) { try { if (isDeepSeekOfficialModel(h.model)) addedOfficial++; } catch {} }
   }
-  // 导入后按当前价格段重算每条费用，再按历史重算累计聚合（修复合并后累计不变、跨规则导入费用失真）
-  try { repository.recalcAll(); } catch {}
-  try {
-    let tt = 0, tc = 0, it = 0, ot = 0, ch = 0, cm = 0, ic = 0, oc = 0;
-    for (const h of state.history || []) {
-      tt += h.total_tokens || 0; tc += h.cost || 0;
-      it += (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0); ot += h.completion_tokens || 0;
-      ch += h.cache_hit_tokens || 0; cm += h.cache_miss_tokens || 0;
-      ic += h.input_cost || 0; oc += h.output_cost || 0;
-    }
-    const patch: any = { total_tokens: tt, total_cost: tc, input_tokens: it, output_tokens: ot, cache_hit_tokens: ch, cache_miss_tokens: cm, input_cost: ic, output_cost: oc };
-    if (mode === 'merge') patch.rounds = (state.rounds || 0) + addedOfficial;
-    repository.replaceAll(patch);
-  } catch {}
+  await repository.recalcAll();
+  await repository.rebuildAggregates();
   try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
 }
 
@@ -172,7 +225,7 @@ function triggerImport() {
       const file = inp.files?.[0]; inp.value = '';
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         let raw: any = null;
         try { raw = JSON.parse(reader.result as string); } catch {}
         if (!raw || raw.format !== 'deepseek-stat-export') return alert('导入失败：文件格式不正确');
@@ -181,8 +234,12 @@ function triggerImport() {
         const merge = confirm('导入方式：\n确定 = 合并导入（推荐，按时间戳去重）\n取消 = 覆盖导入（替换全部数据）');
         const mode = merge ? 'merge' : 'overwrite';
         if (mode === 'overwrite' && !confirm('覆盖将删除现有全部统计并无法恢复，确定要覆盖？')) return;
-        applyImportedData(res.data, mode as any);
-        alert(mode === 'overwrite' ? '已覆盖导入' : '已合并导入');
+        try {
+          await applyImportedData(res.data, mode as any);
+          alert(mode === 'overwrite' ? '已覆盖导入' : '已合并导入');
+        } catch (error: any) {
+          alert('导入失败：' + (error?.message || error));
+        }
       };
       reader.readAsText(file, 'utf-8');
     });

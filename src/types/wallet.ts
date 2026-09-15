@@ -32,6 +32,8 @@ export type WalletModel = {
   sourceModel: string;
   model: string;
   aliases: string[];
+  /** 模型上下文上限；未配置时由内置能力表推断 */
+  contextLimit?: number | null;
   price: WalletPriceRule;
   source: WalletModelSource;
   locked: boolean;

@@ -139,29 +139,76 @@ export function officialEndpointId(sourceType: string): string {
   return shortHash(`${sourceType}|official:${sourceType}`);
 }
 
+export function isDeepSeekOfficialEndpoint(value: unknown): boolean {
+  const text = String(value ?? '').trim();
+  if (!text) return false;
+  const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : 'https://' + text;
+  try {
+    const url = new URL(candidate);
+    return url.hostname.replace(/\.$/, '').toLowerCase() === 'api.deepseek.com';
+  } catch {
+    return false;
+  }
+}
+
 export function normalizeEndpoint(raw: string): { canonical: string; label: string } | null {
   const value = String(raw || '').trim();
   if (!value) return null;
   const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : 'https://' + value;
   try {
     const url = new URL(candidate);
-    const path = url.pathname.replace(/\/+$/, '');
-    const host = url.hostname + (url.port ? ':' + url.port : '');
-    const queryPairs: Array<[string, string]> = [];
-    url.searchParams.forEach((value, key) => queryPairs.push([key, value]));
-    const query = queryPairs
-      .sort(([ak, av], [bk, bv]) => ak.localeCompare(bk) || av.localeCompare(bv))
-      .map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v))
-      .join('&');
-    const base = `${url.protocol}//${host}${path}`;
+    const host = url.host;
+    const base = `${url.protocol}//${host}`;
     return {
-      canonical: base + (query ? '?' + query : ''),
-      label: host + path,
+      canonical: base,
+      label: host,
     };
   } catch {
     const fallback = value.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/\/+$/, '');
     return fallback ? { canonical: fallback, label: fallback } : null;
   }
+}
+
+function buildEndpointIdentity(
+  sourceType: string | null,
+  rawEndpoint: string,
+): Pick<HistoryConnection, 'sourceType' | 'endpointId' | 'endpointLabel'> {
+  const endpoint = rawEndpoint ? normalizeEndpoint(rawEndpoint) : null;
+  const sourceIsOfficial = String(sourceType || '').trim().toLowerCase() === 'deepseek' && !endpoint;
+  const endpointIsOfficial = isDeepSeekOfficialEndpoint(endpoint?.canonical) || isDeepSeekOfficialEndpoint(endpoint?.label);
+  const isOfficial = sourceIsOfficial || endpointIsOfficial;
+  const endpointId = isOfficial
+    ? officialEndpointId('deepseek')
+    : ((sourceType || endpoint)
+      ? shortHash(`${sourceType || 'unknown'}|${endpoint?.canonical || 'official:' + (sourceType || 'unknown')}`)
+      : null);
+  const endpointLabel = isOfficial
+    ? 'DeepSeek 官方'
+    : (endpoint?.label || (sourceType ? OFFICIAL_LABELS[sourceType] || `${sourceType} 接口` : null));
+  return { sourceType, endpointId, endpointLabel };
+}
+
+export function normalizeConnectionEndpoint(connection: HistoryConnection | null | undefined): HistoryConnection | null {
+  if (!connection) return null;
+  const sourceType = connection.sourceType ?? null;
+  const endpointLabel = String(connection.endpointLabel || '').trim();
+  if (endpointLabel === 'DeepSeek 官方') {
+    return {
+      ...connection,
+      sourceType,
+      endpointId: officialEndpointId('deepseek'),
+      endpointLabel: 'DeepSeek 官方',
+    };
+  }
+  if (!endpointLabel) return { ...connection, sourceType };
+  const rawEndpoint = endpointLabel;
+  const identity = buildEndpointIdentity(sourceType, rawEndpoint);
+  return {
+    ...connection,
+    sourceType,
+    endpointId: identity.endpointId,
+    endpointLabel: identity.endpointLabel,
+  };
 }
 
 function resolveSecretKey(sourceType: string | null | undefined, secretKeys?: Record<string, string>): string | null {
@@ -210,12 +257,7 @@ export function buildEndpointContext(body: any): Pick<HistoryConnection, 'source
   const rawEndpoint = typeof body?.custom_url === 'string' && body.custom_url.trim()
     ? body.custom_url.trim()
     : (typeof body?.reverse_proxy === 'string' ? body.reverse_proxy.trim() : '');
-  const endpoint = rawEndpoint ? normalizeEndpoint(rawEndpoint) : null;
-  const endpointId = (sourceType || endpoint)
-    ? shortHash(`${sourceType || 'unknown'}|${endpoint?.canonical || 'official:' + (sourceType || 'unknown')}`)
-    : null;
-  const endpointLabel = endpoint?.label || (sourceType ? OFFICIAL_LABELS[sourceType] || `${sourceType} 接口` : null);
-  return { sourceType, endpointId, endpointLabel };
+  return buildEndpointIdentity(sourceType, rawEndpoint);
 }
 
 export function buildConnectionContext(

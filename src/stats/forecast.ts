@@ -168,11 +168,12 @@ export function nextPromptWithBand(fit: FitResult): { prompt: number; low: numbe
   return { prompt: Math.max(0, p), low: Math.max(0, p - fit.sigma), high: p + fit.sigma };
 }
 
-export function ctxLimitForModel(model: string): number {
+export function ctxLimitForModel(model: string, configuredLimit?: number | null): number | null {
+  if (configuredLimit != null && Number.isFinite(configuredLimit) && configuredLimit > 0) return Math.round(configuredLimit);
   const m = (model || '').toLowerCase();
-  if (m.includes('128k') || m.includes('128')) return 128000;
-  if (m.includes('64k') || m.includes('64')) return 64000;
+  if (m.includes('deepseek')) return 128000;
+  if (m.includes('128k')) return 128000;
+  if (m.includes('64k')) return 64000;
   if (m.includes('32k')) return 32000;
-  try { const w:any = (globalThis as any).state; } catch {}
-  return 64000;
+  return null;
 }

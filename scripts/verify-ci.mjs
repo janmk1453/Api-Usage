@@ -40,7 +40,41 @@ function checkAsset(label, value) {
   return value;
 }
 
+function stripCommentsForImportScan(source) {
+  source = String(source).replace(/\/\*[\s\S]*?\*\//g, '');
+  let result = '';
+  let state = 'code';
+  let quote = '';
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i];
+    const next = source[i + 1];
+    if (state === 'line') {
+      if (char === '\n') { state = 'code'; result += char; }
+      continue;
+    }
+    if (state === 'block') {
+      if (char === '*' && next === '/') { state = 'code'; i++; }
+      continue;
+    }
+    if (state === 'string') {
+      result += char;
+      if (char === '\\') { result += next || ''; i++; continue; }
+      if (char === quote) state = 'code';
+      continue;
+    }
+    if (char === '/' && next === '/') { state = 'line'; i++; continue; }
+    if (char === '/' && next === '*') { state = 'block'; i++; continue; }
+    if (char === '"' || char === "'" || char === '`') {
+      state = 'string';
+      quote = char;
+    }
+    result += char;
+  }
+  return result;
+}
+
 function collectRelativeImports(source) {
+  const executableSource = stripCommentsForImportScan(source);
   const patterns = [
     /\bfrom\s+["'](\.\/[^"']+)["']/g,
     /\bimport\s*\(\s*["'](\.\/[^"']+)["']\s*\)/g,
@@ -48,7 +82,7 @@ function collectRelativeImports(source) {
   ];
   const result = new Set();
   for (const pattern of patterns) {
-    for (const match of source.matchAll(pattern)) result.add(match[1]);
+    for (const match of executableSource.matchAll(pattern)) result.add(match[1]);
   }
   return result;
 }

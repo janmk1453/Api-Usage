@@ -108,6 +108,12 @@ function renderModelRows(wallet: WalletConfig): string {
             value="${esc(model.model)}"
             style="width:100%;padding:6px 7px;border:1px solid var(--ds-border);border-radius:7px;background:${model.source === 'builtin' ? 'var(--ds-sidebar-bg)' : 'var(--ds-card-inner)'};color:var(--ds-text);font-size:11px;" />
           <div style="font-size:10px;color:var(--ds-text-3);margin-top:3px;">${esc(model.sourceModel)}${model.aliases.length ? ` · 别名 ${esc(model.aliases.join('、'))}` : ''}</div>
+          <label style="display:flex;align-items:center;gap:5px;margin-top:5px;font-size:10px;color:var(--ds-text-3);">
+            上下文上限
+            <input type="number" min="1" step="1000" data-wallet-context-limit="1" data-wallet-id="${esc(wallet.id)}" data-model-id="${esc(model.id)}"
+              value="${model.contextLimit ?? ''}" placeholder="未知"
+              style="width:80px;padding:3px 5px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;" />
+          </label>
         </td>
         <td style="padding:8px 6px;white-space:nowrap;">
           <span style="padding:2px 7px;border-radius:999px;background:${pending ? 'var(--ds-red-bg)' : model.source === 'sync' ? 'var(--ds-green-bg)' : 'var(--ds-card)'};color:${pending ? 'var(--ds-red)' : model.source === 'sync' ? 'var(--ds-green)' : 'var(--ds-text-2)'};font-size:10px;">${sourceLabel(model)}</span>
@@ -169,8 +175,8 @@ function renderCatalogPicker(wallet: WalletConfig): string {
     </div>`;
 }
 
-function renderWalletCard(wallet: WalletConfig): string {
-  const stats = computeWalletStats(wallet.id);
+function renderWalletCard(wallet: WalletConfig, history: any[]): string {
+  const stats = computeWalletStats(wallet.id, history);
   const pending = walletPendingModelCount(wallet);
   const isOfficial = wallet.id === DEEPSEEK_WALLET_ID;
   const selectedCredential = wallet.credentials.find((item) => item.id === wallet.balance.primaryCredentialId);
@@ -274,10 +280,15 @@ function renderIgnoredWallets(ignored: string[], wallets: WalletConfig[]): strin
   return rows || '<div style="font-size:10px;color:var(--ds-text-3);">暂无已忽略接入</div>';
 }
 
-export function renderWalletView(): void {
+let walletRenderToken = 0;
+
+export async function renderWalletView(): Promise<void> {
   const doc = getDoc();
   const host = doc.getElementById('aus-wallet');
   if (!host) return;
+  const token = ++walletRenderToken;
+  const history = await repository.getAllHistory();
+  if (token !== walletRenderToken || !host.isConnected) return;
   const wallets = repository.getWallets();
   const ignored = repository.getIgnoredWalletIds();
   const ignoredSet = new Set(ignored);
@@ -300,7 +311,7 @@ export function renderWalletView(): void {
         <div><div style="font-size:11px;color:var(--ds-text-2);">钱包数量</div><div style="font-size:20px;font-weight:700;color:var(--ds-text);margin-top:4px;">${active.length}</div><div style="font-size:10px;color:var(--ds-text-3);margin-top:2px;">已忽略 ${ignored.length} 个</div></div>
         <div><div style="font-size:11px;color:var(--ds-text-2);">待定价模型</div><div style="font-size:20px;font-weight:700;color:${pending ? 'var(--ds-red)' : 'var(--ds-green)'};margin-top:4px;">${pending}</div><div style="font-size:10px;color:var(--ds-text-3);margin-top:2px;">保存价格后自动重算</div></div>
       </div>
-      ${active.map(renderWalletCard).join('')}
+      ${active.map((wallet) => renderWalletCard(wallet, history)).join('')}
       <div class="ds-card">
         <div style="font-size:11px;font-weight:600;color:var(--ds-text);margin-bottom:2px;">已忽略接入</div>
         ${renderIgnoredWallets(ignored, wallets)}
@@ -517,6 +528,21 @@ function bindWalletView(doc: Document): void {
         model.updatedAt = Date.now();
       });
       repository.recalcWallet(walletId).catch(() => {});
+      renderWalletView();
+    };
+  });
+
+  doc.querySelectorAll('[data-wallet-context-limit]').forEach((input: any) => {
+    input.onchange = () => {
+      const walletId = input.getAttribute('data-wallet-id');
+      const modelId = input.getAttribute('data-model-id');
+      if (!walletId || !modelId) return;
+      const value = parseFloat(String(input.value || ''));
+      const contextLimit = Number.isFinite(value) && value > 0 ? Math.round(value) : null;
+      repository.updateWallet(walletId, (wallet) => {
+        const model = wallet.models.find((item) => item.id === modelId);
+        if (model) model.contextLimit = contextLimit;
+      });
       renderWalletView();
     };
   });

@@ -74,14 +74,17 @@ function stripHistory(history: any[]) {
   return history.filter((h: any) => h && (h as any)._debug !== true).map((h: any) => { const c = { ...h }; delete c.messages; delete c.fullRequest; delete c.fullResponse; return c; });
 }
 
-function buildLocalBundle(): any {
+async function buildLocalBundle(): Promise<any> {
+  const history = await repository.getAllHistory();
+  const settings = JSON.parse(JSON.stringify(state.settings));
+  if (settings.webdav) settings.webdav = { url: '', username: '', path: '', proxy: '' };
   return {
     format: 'deepseek-stat-sync',
     version: WEBDAV_REMOTE_VERSION,
     walletFormat: 2,
     syncedAt: Date.now(),
     data: {
-      history: stripHistory(state.history),
+      history: stripHistory(history),
       total_tokens: state.total_tokens,
       total_cost: state.total_cost,
       input_tokens: state.input_tokens,
@@ -96,7 +99,7 @@ function buildLocalBundle(): any {
       customBalance: state.customBalance,
       wallets: state.wallets,
       walletIgnored: state.walletIgnored,
-      settings: JSON.parse(JSON.stringify(state.settings)),
+      settings,
       messageCount: state.messageCount,
     },
     _ts: {} as any,
@@ -163,8 +166,8 @@ export async function doSyncNow() {
   syncing = true;
   const btn = (window.parent as any)?.document?.getElementById('aus-webdav-sync') as HTMLButtonElement | null;
   if (btn) { btn.disabled = true; btn.textContent = '同步中…'; }
-  const local = buildLocalBundle();
   try {
+    const local = await buildLocalBundle();
     const res: any = await webdavGet();
     if (res.netError) {
       const isCors = res.errName === 'TypeError' || /Failed to fetch|NetworkError|CORS/i.test(res.errMsg || '');
@@ -179,9 +182,11 @@ export async function doSyncNow() {
       if (remote.version > WEBDAV_REMOTE_VERSION) throw new Error('云端版本过高，请升级扩展');
       merged = mergeBundles(remote, local);
     }
-    repository.replaceAll(merged.mergedData as any);
-    repository.recalcAll();
-    await webdavPut(JSON.stringify(buildLocalBundle()));
+    await repository.replaceAll(merged.mergedData as any);
+    await repository.recalcAll();
+    await repository.rebuildAggregates();
+    const uploaded = await buildLocalBundle();
+    await webdavPut(JSON.stringify(uploaded));
     alert(`同步完成${merged.pulled ? `（拉取 ${merged.pulled} 条）` : ''}${merged.pushed ? `（上传 ${merged.pushed} 条）` : ''}`);
     try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
   } catch (e: any) {
@@ -194,11 +199,13 @@ export async function doSyncNow() {
 
 export function saveWebdavPass(pass: string) {
   try {
-    localStorage.setItem('ds_ds_webdav_pass', encryptKey(pass));
+    if (pass) localStorage.setItem('ds_ds_webdav_pass', encryptKey(pass));
+    else localStorage.removeItem('ds_ds_webdav_pass');
     const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
     if (ctx?.extensionSettings) {
       ctx.extensionSettings['api_usage_stat'] = ctx.extensionSettings['api_usage_stat'] || {};
-      ctx.extensionSettings['api_usage_stat'].webdavPass = encryptKey(pass);
+      if (pass) ctx.extensionSettings['api_usage_stat'].webdavPass = encryptKey(pass);
+      else delete ctx.extensionSettings['api_usage_stat'].webdavPass;
       ctx.saveSettingsDebounced?.();
     }
   } catch {}

@@ -141,16 +141,17 @@ export function getFilteredHistory(range?: TimeRange): any[] {
   });
 }
 
-export function computeOverview(balanceWalletId = 'all'): OverviewView {
+export function computeOverview(balanceWalletId = 'all', historyOverride?: any[]): OverviewView {
   const s: any = getSelectedSave();
   if (!s) return { balanceText: '¥0.00 CNY', hasBalance: false, walletBalanceCount: 0, totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0, remainingRounds: null, avgInputCost: 0, avgInputTokens: 0, avgOutputCost: 0, avgOutputTokens: 0, avgThinkTime: 0, avgThinkTokens: 0, avgHitRate: 0, latestHitRate: null, maxOutput: 0, maxInput: 0, maxTotal: 0, avgThinkRatio: 0, truncationRate: 0 } as any;
   const totalCost = s.total_cost || 0;
   const totalTokens = s.total_tokens || 0;
   const hit = s.cache_hit_tokens || 0, miss = s.cache_miss_tokens || 0, output = s.output_tokens || 0;
   const hitRate = hit + miss > 0 ? (hit / (hit + miss) * 100) : 0;
+  const hist: any[] = historyOverride || s.history || [];
   let savings = 0;
   try {
-    for (const h of s.history || []) {
+    for (const h of hist) {
       savings += calcSavings(
         { timestamp: h.timestamp, model: h.model, prompt_cache_hit_tokens: h.cache_hit_tokens || 0, prompt_cache_miss_tokens: h.cache_miss_tokens || 0, completion_tokens: h.completion_tokens || 0 },
         state.settings as any,
@@ -159,7 +160,6 @@ export function computeOverview(balanceWalletId = 'all'): OverviewView {
     }
   } catch {}
   const rounds = s.rounds || 0;
-  const hist: any[] = s.history || [];
   const avgCost = rounds ? totalCost / rounds : 0;
   const avgTokens = rounds ? totalTokens / rounds : 0;
   const avgDuration = hist.length ? (hist.reduce((a: number, h: any) => a + (h.duration || 0), 0) / hist.length) / 1000 : 0;
@@ -231,8 +231,8 @@ export function computeOverview(balanceWalletId = 'all'): OverviewView {
   let remainingRounds: number | null = null;
   try {
     const balNum = balanceCny == null ? NaN : balanceCny;
-    if (!isNaN(balNum) && s.history?.length) {
-      const scopedHist = (s.history || []).filter((h: any) => !selectedWallet || h.walletId === selectedWallet.id);
+    if (!isNaN(balNum) && hist.length) {
+      const scopedHist = hist.filter((h: any) => !selectedWallet || h.walletId === selectedWallet.id);
       if (scopedHist.length) {
         const alpha = 0.3;
         let ewma = scopedHist[scopedHist.length - 1].cost || 0;
@@ -378,11 +378,11 @@ export type WalletStats = {
   cost: number;
 };
 
-export function computeWalletStats(walletId: string): WalletStats {
+export function computeWalletStats(walletId: string, history?: any[]): WalletStats {
   let requests = 0;
   let tokens = 0;
   let cost = 0;
-  for (const entry of state.history || []) {
+  for (const entry of history || state.history || []) {
     if (entry.walletId !== walletId) continue;
     requests++;
     tokens += entry.total_tokens || 0;

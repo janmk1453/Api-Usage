@@ -1,4 +1,4 @@
-import { localDay } from '../utils/date';
+import { esc, localDay } from '../utils/date';
 import { X_OPTIONS } from './chart-config';
 
 type XKey = 'round'|'hour'|'day'|'week'|'month';
@@ -157,10 +157,10 @@ async function renderOne(id:TrendId, filtered:any[]){
         const idx=params[0].dataIndex;
         const label=labels[idx];
         let sum=0; for(const p of params) sum+=Number(p.value||0);
-        let html=`<div style="font-weight:600;margin-bottom:6px;">${label}<span style="margin-left:8px;color:var(--ds-text-2);font-weight:400;">合计 ${id==='token'? sum.toLocaleString()+' tokens' : sum+' 次'}</span></div>`;
+        let html=`<div style="font-weight:600;margin-bottom:6px;">${esc(label)}<span style="margin-left:8px;color:var(--ds-text-2);font-weight:400;">合计 ${id==='token'? sum.toLocaleString()+' tokens' : sum+' 次'}</span></div>`;
         for(const p of params){
           if (Number(p.value)===0) continue;
-          html+=`<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${id==='token' ? Number(p.value).toLocaleString()+' tokens' : p.value+' 次'}</span></div>`;
+          html+=`<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${esc(p.seriesName)}<span style="margin-left:auto;font-weight:600;">${id==='token' ? Number(p.value).toLocaleString()+' tokens' : p.value+' 次'}</span></div>`;
         }
         if (!params.some((p:any)=>Number(p.value)>0)) html+=`<div style="color:var(--ds-text-3);font-size:10px;">本${xKey==='day'?'日':xKey==='hour'?'时段':xKey==='week'?'周':xKey==='month'?'月':'轮次'}无数据</div>`;
         return `<div style="padding:4px 2px;min-width:180px;max-width:280px;">${html}</div>`;

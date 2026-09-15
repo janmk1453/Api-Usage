@@ -38,7 +38,7 @@ export function generateDebugBatch() {
     }
   }
   state.history.sort((a: any, b: any) => b.timestamp - a.timestamp);
-  repository.recalcAll();
+  void repository.recalcAll();
   try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
   alert('已生成 ' + generated + ' 条模拟数据');
 }

@@ -4,13 +4,16 @@
  */
 import { STORAGE_KEYS } from '../constants/pricing';
 import { historyRecordKey } from '../utils/history-key';
+import { log } from '../utils/logger';
 
 const MODULE = 'api_usage_stat';
 export const HOT_KEEP = 50;
 const DB_NAME = 'api_usage_stat_db';
 const STORE_NAME = 'kv';
 
-function getDB(): Promise<IDBDatabase> {
+let dbPromise: Promise<IDBDatabase> | null = null;
+
+function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     try {
       const req = indexedDB.open(DB_NAME, 1);
@@ -18,10 +21,27 @@ function getDB(): Promise<IDBDatabase> {
         const db = e.target.result;
         if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
       };
-      req.onsuccess = (e: any) => resolve(e.target.result);
+      req.onsuccess = (e: any) => {
+        const db = e.target.result as IDBDatabase;
+        db.onversionchange = () => {
+          try { db.close(); } catch {}
+          if (dbPromise) dbPromise = null;
+        };
+        resolve(db);
+      };
       req.onerror = (e: any) => reject(e.target.error);
     } catch (err) { reject(err); }
   });
+}
+
+function getDB(): Promise<IDBDatabase> {
+  if (!dbPromise) {
+    dbPromise = openDB().catch((error) => {
+      dbPromise = null;
+      throw error;
+    });
+  }
+  return dbPromise;
 }
 async function dbGet(key: string): Promise<string | null> {
   try {
@@ -32,8 +52,13 @@ async function dbGet(key: string): Promise<string | null> {
       r.onsuccess = (e: any) => res(e.target.result ?? null);
       r.onerror = (e: any) => rej(e.target.error);
     });
-  } catch {
-    try { return localStorage.getItem('aus_' + key); } catch { return null; }
+  } catch (dbError) {
+    try {
+      const fallback = localStorage.getItem('aus_' + key);
+      if (fallback != null) return fallback;
+    } catch {}
+    log.warn('IndexedDB 读取失败且无本地降级数据', dbError);
+    throw dbError;
   }
 }
 async function dbSet(key: string, value: string): Promise<void> {
@@ -42,11 +67,37 @@ async function dbSet(key: string, value: string): Promise<void> {
     await new Promise<void>((res, rej) => {
       const tx = db.transaction([STORE_NAME], 'readwrite');
       const r = tx.objectStore(STORE_NAME).put(value, key);
-      r.onsuccess = () => res();
+      tx.oncomplete = () => res();
+      tx.onabort = () => rej(tx.error || r.error);
+      tx.onerror = () => rej(tx.error || r.error);
       r.onerror = (e: any) => rej(e.target.error);
     });
-  } catch {
-    try { localStorage.setItem('aus_' + key, value); } catch {}
+    try { localStorage.removeItem('aus_' + key); } catch {}
+  } catch (dbError) {
+    try {
+      localStorage.setItem('aus_' + key, value);
+    } catch (storageError) {
+      log.error('持久化写入失败', key, dbError, storageError);
+      throw storageError;
+    }
+  }
+}
+
+async function dbDelete(key: string): Promise<void> {
+  try {
+    const db = await getDB();
+    await new Promise<void>((res, rej) => {
+      const tx = db.transaction([STORE_NAME], 'readwrite');
+      const r = tx.objectStore(STORE_NAME).delete(key);
+      tx.oncomplete = () => res();
+      tx.onabort = () => rej(tx.error || r.error);
+      tx.onerror = () => rej(tx.error || r.error);
+      r.onerror = (e: any) => rej(e.target.error);
+    });
+    try { localStorage.removeItem('aus_' + key); } catch {}
+  } catch (dbError) {
+    try { localStorage.removeItem('aus_' + key); } catch {}
+    log.warn('IndexedDB 删除失败，已尝试清理本地降级存储', dbError);
   }
 }
 
@@ -74,28 +125,26 @@ export function saveExtensionSettings(data: any) {
 }
 
 let saveTimer: any = null;
-let pendingNext: any = null;
+let pendingPatch: Record<string, any> | null = null;
 export function saveHot(patch: Record<string, any>) {
-  const cur = getExtensionSettings() || {};
-  const next = { ...cur, ...patch, _updated: Date.now() };
-  pendingNext = next;
+  pendingPatch = { ...(pendingPatch || {}), ...patch };
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     saveTimer = null;
     const latest = getExtensionSettings() || {};
-    const merged = { ...latest, ...(pendingNext || next) };
-    pendingNext = null;
+    const merged = { ...latest, ...(pendingPatch || {}), _updated: Date.now() };
+    pendingPatch = null;
     saveExtensionSettings(merged);
   }, 300);
 }
 
 export function flushSaveHot() {
-  if (!saveTimer && !pendingNext) return;
+  if (!saveTimer && !pendingPatch) return;
   if (saveTimer) { try { clearTimeout(saveTimer); } catch {} saveTimer = null; }
-  if (pendingNext) {
-    const next = pendingNext;
-    pendingNext = null;
-    saveExtensionSettings({ ...(getExtensionSettings() || {}), ...next });
+  if (pendingPatch) {
+    const patch = pendingPatch;
+    pendingPatch = null;
+    saveExtensionSettings({ ...(getExtensionSettings() || {}), ...patch, _updated: Date.now() });
   }
 }
 
@@ -217,32 +266,70 @@ export async function loadHot(): Promise<any> {
   return getExtensionSettings();
 }
 
-export async function loadHistoryCold(): Promise<any[]> {
+async function readHistoryColdRaw(): Promise<any[]> {
   try {
     const raw = await dbGet('cold_history');
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) throw new Error('冷历史格式无效');
+    return parsed;
+  } catch (error) {
+    log.error('冷历史读取失败', error);
+    throw error;
+  }
 }
 
-export async function appendHistoryCold(entries: any[]) {
+let coldWriteChain: Promise<void> = Promise.resolve();
+
+function enqueueColdWrite(task: () => Promise<void>): Promise<void> {
+  const run = coldWriteChain.then(task, task);
+  coldWriteChain = run.catch(() => {});
+  return run;
+}
+
+export async function loadHistoryCold(): Promise<any[]> {
+  await coldWriteChain;
+  return readHistoryColdRaw();
+}
+
+export async function appendHistoryCold(entries: any[]): Promise<void> {
   if (!entries.length) return;
-  const cold = await loadHistoryCold();
-  // 去重：按 timestamp+model+total 指纹，避免同毫秒双记账误删/重复写入
-  const keyOf = historyRecordKey;
-  const seen = new Set(cold.map((h: any) => keyOf(h)));
-  const toAdd = entries.filter((h: any) => !seen.has(keyOf(h)));
-  if (!toAdd.length) return;
-  const next = [...toAdd, ...cold];
-  await dbSet('cold_history', JSON.stringify(next));
-  // 同步热中的 _coldCount，便于调试
-  try {
-    const cur = getExtensionSettings();
-    if (cur) saveExtensionSettings({ ...cur, _coldCount: next.length, _updated: Date.now() });
-  } catch {}
+  return enqueueColdWrite(async () => {
+    const cold = await readHistoryColdRaw();
+    // 去重：按 timestamp+model+total 指纹，避免同毫秒双记账误删/重复写入
+    const keyOf = historyRecordKey;
+    const seen = new Set(cold.map((h: any) => keyOf(h)));
+    const toAdd = entries.filter((h: any) => !seen.has(keyOf(h)));
+    if (!toAdd.length) return;
+    const next = [...toAdd, ...cold];
+    await dbSet('cold_history', JSON.stringify(next));
+    // 同步热中的 _coldCount，便于调试
+    try {
+      const cur = getExtensionSettings();
+      if (cur) saveExtensionSettings({ ...cur, _coldCount: next.length, _updated: Date.now() });
+    } catch {}
+  });
 }
 
 export async function saveHistoryCold(entries: any[]): Promise<void> {
-  await dbSet('cold_history', JSON.stringify(Array.isArray(entries) ? entries : []));
+  const next = Array.isArray(entries) ? entries : [];
+  return enqueueColdWrite(async () => {
+    await dbSet('cold_history', JSON.stringify(next));
+    try {
+      const cur = getExtensionSettings();
+      if (cur) saveExtensionSettings({ ...cur, _coldCount: next.length, _updated: Date.now() });
+    } catch {}
+  });
+}
+
+export async function clearHistoryCold(): Promise<void> {
+  return enqueueColdWrite(async () => {
+    await dbDelete('cold_history');
+    try {
+      const cur = getExtensionSettings();
+      if (cur) saveExtensionSettings({ ...cur, _coldCount: 0, _updated: Date.now() });
+    } catch {}
+  });
 }
 
 export async function getAllHistory(): Promise<any[]> {

@@ -3,7 +3,7 @@
  * 已废弃多存档，所有数据归一至 state.history + 聚合字段
  */
 import { state, getSelectedSave } from '../store/index';
-import { saveHot, loadHot, loadHistoryCold, appendHistoryCold, getAllHistory, saveHistoryCold } from '../store/persistence';
+import { saveHot, loadHot, loadHistoryCold, appendHistoryCold, getAllHistory, saveHistoryCold, clearHistoryCold } from '../store/persistence';
 import { calcCost, isDeepSeekOfficialModel, normalizeModel } from '../services/pricing';
 import { getWalletExchangeRate } from '../services/currency';
 import { MAX_HISTORY, DETAIL_KEEP, PRICING } from '../constants/pricing';
@@ -12,12 +12,13 @@ import type { Snapshot } from './types';
 import { defaultSettings } from '../types/settings';
 import { isUnsafeKey } from '../utils/date';
 import { isTruncatedFinish } from '../utils/finish';
-import { log } from '../utils/logger';
+import { log, toast } from '../utils/logger';
 import { usageFingerprint } from './fingerprint';
-import type { HistoryConnection } from '../services/connection-identity';
+import { normalizeConnectionEndpoint, type HistoryConnection } from '../services/connection-identity';
 import {
   createDeepSeekWallet,
   createWalletFromConnection,
+  cloneWalletPriceRule,
   ensureDeepSeekWallet,
   findWalletForConnection,
   findWalletForHistory,
@@ -55,6 +56,16 @@ function getCurrentChatId(): string | null {
 function getCurrentChatName(): string | null {
   const id = getCurrentChatId();
   return id ? String(id) : null;
+}
+
+const recentUsageFingerprints = new Map<string, number>();
+let storageFailureNotified = false;
+
+function notifyStorageFailure(error: unknown): void {
+  log.error('冷历史写入失败', error);
+  if (storageFailureNotified) return;
+  storageFailureNotified = true;
+  toast('warning', '冷历史写入失败，统计可能不完整；请检查浏览器存储空间');
 }
 
 function numericPrice(value: unknown, fallback: number): number {
@@ -130,13 +141,13 @@ function migrateLegacyBalance(wallet: WalletConfig): boolean {
 
 function historyConnection(entry: any): HistoryConnection | null {
   if (!entry || (!entry.endpointId && !entry.sourceType)) return null;
-  return {
+  return normalizeConnectionEndpoint({
     sourceType: entry.sourceType ?? null,
     endpointId: entry.endpointId ?? null,
     endpointLabel: entry.endpointLabel ?? null,
     credentialId: entry.credentialId ?? null,
     credentialLabel: entry.credentialLabel ?? null,
-  };
+  });
 }
 
 function ensureWalletForConnection(
@@ -204,6 +215,135 @@ function refreshBuiltinWalletModels(wallet: WalletConfig, now = Date.now()): boo
   return changed;
 }
 
+function migrateHistoryModels(entries: any[]): boolean {
+  let changed = false;
+  for (const entry of entries || []) {
+    if (!entry || typeof entry.model !== 'string') continue;
+    const normalized = normalizeModel(entry.model);
+    if (normalized === entry.model) continue;
+    if (entry.rawModel == null) entry.rawModel = entry.model;
+    entry.model = normalized;
+    changed = true;
+  }
+  return changed;
+}
+
+function mergeWalletConfiguration(
+  duplicate: WalletConfig,
+  target: WalletConfig,
+  now = Date.now(),
+): boolean {
+  let changed = false;
+  if ((target.balance.amount == null || String(target.balance.amount).trim() === '')
+    && duplicate.balance.amount != null
+    && String(duplicate.balance.amount).trim() !== '') {
+    target.balance.amount = duplicate.balance.amount;
+    target.balance.currency = duplicate.balance.currency;
+    target.balance.mode = duplicate.balance.mode;
+    target.balance.lastCalibrated = duplicate.balance.lastCalibrated;
+    changed = true;
+  }
+  if (!target.balance.primaryCredentialId && duplicate.balance.primaryCredentialId) {
+    target.balance.primaryCredentialId = duplicate.balance.primaryCredentialId;
+    changed = true;
+  }
+  for (const credential of duplicate.credentials || []) {
+    if (observeCredential(target, credential.id, credential.label, credential.lastSeen || now)) changed = true;
+  }
+  for (const model of duplicate.models || []) {
+    if (!model.price?.priceConfigured || (model.source !== 'manual' && model.source !== 'sync')) continue;
+    const existing = findWalletModel(target, model.sourceModel) || findWalletModel(target, model.model);
+    if (!existing) {
+      target.models.push({
+        ...model,
+        id: `legacy-official:${model.id}`,
+        aliases: [...(model.aliases || [])],
+        price: cloneWalletPriceRule(model.price),
+      });
+      changed = true;
+      continue;
+    }
+    if (existing.source !== 'manual' || model.source === 'manual') {
+      existing.price = cloneWalletPriceRule(model.price);
+      existing.source = model.source;
+      existing.locked = model.locked === true;
+      existing.aliases = Array.from(new Set([...(existing.aliases || []), ...(model.aliases || [])]));
+      existing.updatedAt = now;
+      changed = true;
+    }
+  }
+  if (!target.catalogProvider && duplicate.catalogProvider) {
+    target.catalogProvider = duplicate.catalogProvider;
+    changed = true;
+  }
+  if (!target.lastUsedAt || (duplicate.lastUsedAt || 0) > target.lastUsedAt) {
+    target.lastUsedAt = duplicate.lastUsedAt || target.lastUsedAt;
+    changed = true;
+  }
+  if (changed) target.updatedAt = now;
+  return changed;
+}
+
+function migrateWalletEndpoints(ignored: Set<string>, now = Date.now()): boolean {
+  const byEndpoint = new Map<string, WalletConfig>();
+  const next: WalletConfig[] = [];
+  const duplicateIds = new Set<string>();
+  let changed = false;
+
+  for (const wallet of state.wallets) {
+    if (wallet.id === DEEPSEEK_WALLET_ID) {
+      next.push(wallet);
+      if (wallet.endpointId) byEndpoint.set(wallet.endpointId, wallet);
+      continue;
+    }
+    const oldEndpointLabel = wallet.endpointLabel;
+    const oldEndpointDisplay = wallet.endpointDisplay;
+    const normalized = normalizeConnectionEndpoint({
+      sourceType: wallet.sourceType,
+      endpointId: wallet.endpointId,
+      endpointLabel: wallet.endpointLabel,
+      credentialId: null,
+      credentialLabel: null,
+    });
+    if (!normalized?.endpointId) {
+      next.push(wallet);
+      continue;
+    }
+    if (wallet.endpointId !== normalized.endpointId || wallet.endpointLabel !== normalized.endpointLabel) {
+      wallet.endpointId = normalized.endpointId;
+      wallet.endpointLabel = normalized.endpointLabel ?? null;
+      wallet.endpointDisplay = normalized.endpointLabel ?? null;
+      if (wallet.name === oldEndpointLabel || wallet.name === oldEndpointDisplay) wallet.name = normalized.endpointLabel || wallet.name;
+      wallet.updatedAt = now;
+      changed = true;
+    }
+    const existing = byEndpoint.get(wallet.endpointId);
+    if (!existing) {
+      byEndpoint.set(wallet.endpointId, wallet);
+      next.push(wallet);
+      continue;
+    }
+    const preferCurrent = ignored.has(existing.id) && !ignored.has(wallet.id);
+    const target = preferCurrent ? wallet : existing;
+    const duplicate = preferCurrent ? existing : wallet;
+    if (preferCurrent) {
+      const index = next.indexOf(existing);
+      if (index >= 0) next[index] = wallet;
+      byEndpoint.set(wallet.endpointId, wallet);
+    }
+    if (mergeWalletConfiguration(duplicate, target, now)) changed = true;
+    duplicateIds.add(duplicate.id);
+    changed = true;
+  }
+
+  state.wallets = next;
+  if (duplicateIds.size) {
+    state.walletIgnored = state.walletIgnored.filter((id) => !duplicateIds.has(id));
+    for (const id of duplicateIds) ignored.delete(id);
+  }
+  return changed;
+}
+
 function migrateWallets(hot: any, cold: any[] = []): boolean {
   const now = Date.now();
   const normalized = normalizeWallets(state.wallets, state.settings, now);
@@ -220,10 +360,17 @@ function migrateWallets(hot: any, cold: any[] = []): boolean {
   changed = migrateLegacyBalance(official) || changed;
   changed = refreshBuiltinWalletModels(official, now) || changed;
   migrateLegacyWalletApiKey(official.id);
+  changed = migrateWalletEndpoints(ignored, now) || changed;
   const allHistory = [...(cold || []), ...(state.history || [])];
+  changed = migrateHistoryModels(allHistory) || changed;
   for (const entry of allHistory) {
     const connection = historyConnection(entry);
     if (!connection) continue;
+    if (entry.endpointId !== connection.endpointId || entry.endpointLabel !== connection.endpointLabel) {
+      entry.endpointId = connection.endpointId;
+      entry.endpointLabel = connection.endpointLabel;
+      changed = true;
+    }
     const observed = ensureWalletForConnection(state.wallets, ignored, connection, Number(entry.timestamp) || now);
     if (observed.changed) changed = true;
     if (!observed.wallet) continue;
@@ -299,6 +446,69 @@ function applyTotalDelta(previous: { input: number; output: number; total: numbe
   state.input_cost += (next.input || 0) - (previous.input || 0);
   state.output_cost += (next.output || 0) - (previous.output || 0);
   state.total_cost += (next.total || 0) - (previous.total || 0);
+}
+
+function aggregateHistory(entries: any[]): {
+  total_tokens: number;
+  total_cost: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_hit_tokens: number;
+  cache_miss_tokens: number;
+  input_cost: number;
+  output_cost: number;
+  rounds: number;
+} {
+  const result = {
+    total_tokens: 0,
+    total_cost: 0,
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_hit_tokens: 0,
+    cache_miss_tokens: 0,
+    input_cost: 0,
+    output_cost: 0,
+    rounds: 0,
+  };
+  for (const entry of entries || []) {
+    result.total_tokens += Number(entry?.total_tokens) || 0;
+    result.total_cost += Number(entry?.cost) || 0;
+    result.cache_hit_tokens += Number(entry?.cache_hit_tokens) || 0;
+    result.cache_miss_tokens += Number(entry?.cache_miss_tokens) || 0;
+    result.input_tokens += (Number(entry?.cache_hit_tokens) || 0) + (Number(entry?.cache_miss_tokens) || 0);
+    result.output_tokens += Number(entry?.completion_tokens) || 0;
+    result.input_cost += Number(entry?.input_cost) || 0;
+    result.output_cost += Number(entry?.output_cost) || 0;
+    if (isDeepSeekOfficialModel(entry?.model)) result.rounds += 1;
+  }
+  return result;
+}
+
+function applyAggregate(next: ReturnType<typeof aggregateHistory>): void {
+  state.total_tokens = next.total_tokens;
+  state.total_cost = next.total_cost;
+  state.input_tokens = next.input_tokens;
+  state.output_tokens = next.output_tokens;
+  state.cache_hit_tokens = next.cache_hit_tokens;
+  state.cache_miss_tokens = next.cache_miss_tokens;
+  state.input_cost = next.input_cost;
+  state.output_cost = next.output_cost;
+  state.rounds = next.rounds;
+}
+
+async function rebuildAggregates(): Promise<void> {
+  const cold = await loadHistoryCold();
+  const merged = [...(state.history || []), ...cold].sort((a: any, b: any) => b.timestamp - a.timestamp);
+  const keyOf = historyRecordKey;
+  const seen = new Set<string>();
+  const unique: any[] = [];
+  for (const entry of merged) {
+    const key = keyOf(entry);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(entry);
+  }
+  applyAggregate(aggregateHistory(unique));
 }
 
 function shouldTrackWalletModel(wallet: WalletConfig, model: string): boolean {
@@ -575,9 +785,12 @@ export const repository = {
     thinkTime = 0,
     finishReason: string | null = null,
     connection: HistoryConnection | null = null,
+    requestId: string | null = null,
   ) {
     messages = messages || [];
     if (!model) try { model = (globalThis as any).SillyTavern?.getContext?.().model || 'deepseek-v4-flash'; } catch { model = 'deepseek-v4-flash'; }
+    const rawModel = String(model);
+    model = normalizeModel(rawModel);
     log.debug('addEntry 收到', { model, hasMessages: !!messages?.length });
     // 容错：拒绝数字/空对象导致的 0 token 污染条目
     if (!usage || typeof usage !== 'object' || Array.isArray(usage)) {
@@ -639,16 +852,19 @@ export const repository = {
         wallet.lastUsedAt = nowTs;
       }
     } catch {}
-    // 指纹去重：5秒内同 model+total 防双记账（fetch 与 GENERATION_ENDED 并发）
+    // 同一请求的 fetch 与 GENERATION_ENDED 双路径去重；无请求标识时不去重，避免误删合法重复请求。
     try {
       const now = Date.now();
-      const fp = usageFingerprint(model, total, hit, miss, comp, connection);
-      const lastFp = (state as any)._lastFp as string | undefined;
-      const lastFpTime = (state as any)._lastFpTime as number | undefined;
-      if (lastFp === fp && lastFpTime && now - lastFpTime < 5000) {
+      const fp = requestId
+        ? usageFingerprint(model, total, hit, miss, comp, connection, requestId)
+        : `anonymous:${now}:${Math.random().toString(36).slice(2)}`;
+      const lastFpTime = recentUsageFingerprints.get(fp);
+      if (requestId && lastFpTime && now - lastFpTime < 5000) {
         // 重复记录：主路径先写入时缺完整响应/finish_reason，fetch 后解析到则回填
         try {
-          const head: any = state.history[0];
+          const head: any = requestId
+            ? state.history.find((entry: any) => entry.requestId === requestId) || state.history[0]
+            : state.history[0];
           if (head) {
             let changed = false;
             if (fullResponse && !head.fullResponse) { head.fullResponse = clampResponse(fullResponse); changed = true; }
@@ -691,10 +907,12 @@ export const repository = {
         log.debug('addEntry 去重跳过(5s指纹)', { fp });
         return null as any;
       }
-      (state as any)._lastFp = fp;
-      (state as any)._lastFpTime = now;
+      recentUsageFingerprints.set(fp, now);
+      for (const [key, timestamp] of recentUsageFingerprints) {
+        if (now - timestamp > 30000) recentUsageFingerprints.delete(key);
+      }
     } catch {}
-    const lu: any = { timestamp: Date.now(), model, prompt_tokens: hit + miss, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp, total_tokens: total };
+    const lu: any = { timestamp: Date.now(), model, rawModel: rawModel !== model ? rawModel : null, prompt_tokens: hit + miss, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp, total_tokens: total };
     const duration = startTime ? Date.now() - startTime : 0;
     const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || (usage as any)?.__think_tokens_est || 0;
     lu.duration = duration;
@@ -713,6 +931,7 @@ export const repository = {
     const chatId = getCurrentChatId();
     const chatName = getCurrentChatName();
     (lu as any).chatId = chatId; (lu as any).chatName = chatName;
+    lu.requestId = requestId;
     if (connection) {
       lu.sourceType = connection.sourceType;
       lu.endpointId = connection.endpointId;
@@ -724,7 +943,8 @@ export const repository = {
 
     const fr2 = fr;
     const entry: any = {
-      timestamp: lu.timestamp, model, prompt_tokens: hit + miss, cache_hit_tokens: hit, cache_miss_tokens: miss,
+      timestamp: lu.timestamp, model, rawModel: rawModel !== model ? rawModel : null, prompt_tokens: hit + miss, cache_hit_tokens: hit, cache_miss_tokens: miss,
+      requestId,
       completion_tokens: comp, total_tokens: total, input_cost: lu.input_cost, output_cost: lu.output_cost,
       cost: lu.cost, cache_hit_rate: (hit + miss) > 0 ? (hit / (hit + miss) * 100) : 0, priceType: lu.priceType,
       raw_usage: usage, messages: (messages || []).map(clampMessage), duration, ttft, thinkTime, thinkTokens, tokenRate: lu.tokenRate, fullRequest, fullResponse: safeResponse,
@@ -769,8 +989,7 @@ export const repository = {
     } catch {}
     if (state.history.length > MAX_HISTORY) {
       const overflow = state.history.slice(MAX_HISTORY);
-      // 关键修复：溢出不再静默丢弃，转入冷存储（IndexedDB），fire-and-forget
-      appendHistoryCold(overflow).catch(() => {});
+      appendHistoryCold(overflow).catch(notifyStorageFailure);
       state.history = state.history.slice(0, MAX_HISTORY);
     }
     state.startTime = state.startTime || Date.now();
@@ -779,7 +998,7 @@ export const repository = {
     return entry;
   },
 
-  recalcAll() {
+  async recalcAll(): Promise<void> {
     for (const h of state.history || []) {
       const wallet = findWalletForHistory(state.wallets, h);
       const previous = {
@@ -792,6 +1011,31 @@ export const repository = {
       applyTotalDelta(previous, c);
       h.cache_hit_rate = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) > 0 ? ((h.cache_hit_tokens || 0) / ((h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0)) * 100) : 0;
     }
+    try {
+      const cold = await loadHistoryCold();
+      let coldChanged = false;
+      for (const h of cold) {
+        const wallet = findWalletForHistory(state.wallets, h);
+        const previous = {
+          input: Number(h.input_cost) || 0,
+          output: Number(h.output_cost) || 0,
+          total: Number(h.cost) || 0,
+        };
+        const c = recalcEntryCost(h, wallet);
+        applyCostPatch(h, c);
+        applyTotalDelta(previous, c);
+        h.cache_hit_rate = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) > 0 ? ((h.cache_hit_tokens || 0) / ((h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0)) * 100) : 0;
+        coldChanged = true;
+      }
+      if (coldChanged) await saveHistoryCold(cold);
+    } catch (error) {
+      log.error('冷历史重算失败', error);
+    }
+    persist();
+  },
+
+  async rebuildAggregates(): Promise<void> {
+    await rebuildAggregates();
     persist();
   },
 
@@ -836,7 +1080,7 @@ export const repository = {
     return changed;
   },
 
-  replaceAll(next: Partial<Snapshot> & any) {
+  async replaceAll(next: Partial<Snapshot> & any, options: { clearCold?: boolean } = {}): Promise<void> {
     if (next.history !== undefined) {
       let h = next.history as any[];
       // 清洗原型污染键
@@ -847,11 +1091,15 @@ export const repository = {
       });
       if (h.length > MAX_HISTORY) {
         const overflow = h.slice(MAX_HISTORY);
-        appendHistoryCold(overflow).catch(() => {});
+        if (options.clearCold) await saveHistoryCold(overflow);
+        else await appendHistoryCold(overflow);
         state.history = h.slice(0, MAX_HISTORY);
       } else {
+        if (options.clearCold) await clearHistoryCold();
         state.history = h as any;
       }
+    } else if (options.clearCold) {
+      await clearHistoryCold();
     }
     if (next.total_tokens !== undefined) state.total_tokens = next.total_tokens as any;
     if (next.total_cost !== undefined) state.total_cost = next.total_cost as any;
@@ -877,7 +1125,7 @@ export const repository = {
       for (const h of all) { const k = keyOf(h); if (!seen.has(k)) { seen.add(k); dedup.push(h); } }
       if (dedup.length > MAX_HISTORY) {
         const overflow = dedup.slice(MAX_HISTORY);
-        appendHistoryCold(overflow).catch(() => {});
+        await appendHistoryCold(overflow);
       }
       state.history = dedup.slice(0, MAX_HISTORY);
       if (next.total_tokens === undefined) {
@@ -1071,7 +1319,7 @@ export const repository = {
     // 自动清理历史中的全 0 污染条目（由之前 token_count 误判产生）
     try { this.pruneZeroEntries(); } catch {}
     // 对历史成本按归一化模型重算，修复 [masa]/[OR] 前缀导致的 0 费用
-    try { this.recalcAll(); } catch {}
+    try { await this.recalcAll(); } catch {}
     emit(DataEvents.UPDATED);
     return this.snapshot();
   },
