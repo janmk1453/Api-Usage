@@ -196,20 +196,26 @@ function shortHash(text) {
 function officialEndpointId(sourceType) {
 	return shortHash(`${sourceType}|official:${sourceType}`);
 }
+function isDeepSeekOfficialEndpoint(value) {
+	const text = String(value ?? "").trim();
+	if (!text) return false;
+	const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : "https://" + text;
+	try {
+		return new URL(candidate).hostname.replace(/\.$/, "").toLowerCase() === "api.deepseek.com";
+	} catch {
+		return false;
+	}
+}
 function normalizeEndpoint(raw) {
 	const value = String(raw || "").trim();
 	if (!value) return null;
 	const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : "https://" + value;
 	try {
 		const url = new URL(candidate);
-		const path = url.pathname.replace(/\/+$/, "");
-		const host = url.hostname + (url.port ? ":" + url.port : "");
-		const queryPairs = [];
-		url.searchParams.forEach((value, key) => queryPairs.push([key, value]));
-		const query = queryPairs.sort(([ak, av], [bk, bv]) => ak.localeCompare(bk) || av.localeCompare(bv)).map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v)).join("&");
+		const host = url.host;
 		return {
-			canonical: `${url.protocol}//${host}${path}` + (query ? "?" + query : ""),
-			label: host + path
+			canonical: `${url.protocol}//${host}`,
+			label: host
 		};
 	} catch {
 		const fallback = value.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/\/+$/, "");
@@ -218,6 +224,39 @@ function normalizeEndpoint(raw) {
 			label: fallback
 		} : null;
 	}
+}
+function buildEndpointIdentity(sourceType, rawEndpoint) {
+	const endpoint = rawEndpoint ? normalizeEndpoint(rawEndpoint) : null;
+	const sourceIsOfficial = String(sourceType || "").trim().toLowerCase() === "deepseek" && !endpoint;
+	const endpointIsOfficial = isDeepSeekOfficialEndpoint(endpoint?.canonical) || isDeepSeekOfficialEndpoint(endpoint?.label);
+	const isOfficial = sourceIsOfficial || endpointIsOfficial;
+	return {
+		sourceType,
+		endpointId: isOfficial ? officialEndpointId("deepseek") : sourceType || endpoint ? shortHash(`${sourceType || "unknown"}|${endpoint?.canonical || "official:" + (sourceType || "unknown")}`) : null,
+		endpointLabel: isOfficial ? "DeepSeek 官方" : endpoint?.label || (sourceType ? OFFICIAL_LABELS[sourceType] || `${sourceType} 接口` : null)
+	};
+}
+function normalizeConnectionEndpoint(connection) {
+	if (!connection) return null;
+	const sourceType = connection.sourceType ?? null;
+	const endpointLabel = String(connection.endpointLabel || "").trim();
+	if (endpointLabel === "DeepSeek 官方") return {
+		...connection,
+		sourceType,
+		endpointId: officialEndpointId("deepseek"),
+		endpointLabel: "DeepSeek 官方"
+	};
+	if (!endpointLabel) return {
+		...connection,
+		sourceType
+	};
+	const identity = buildEndpointIdentity(sourceType, endpointLabel);
+	return {
+		...connection,
+		sourceType,
+		endpointId: identity.endpointId,
+		endpointLabel: identity.endpointLabel
+	};
 }
 function resolveSecretKey(sourceType, secretKeys) {
 	if (!sourceType) return null;
@@ -253,14 +292,7 @@ function credentialLabel(entry) {
 	return tail ? `${base} •••${tail}` : base;
 }
 function buildEndpointContext(body) {
-	const sourceType = typeof body?.chat_completion_source === "string" && body.chat_completion_source.trim() ? body.chat_completion_source.trim() : null;
-	const rawEndpoint = typeof body?.custom_url === "string" && body.custom_url.trim() ? body.custom_url.trim() : typeof body?.reverse_proxy === "string" ? body.reverse_proxy.trim() : "";
-	const endpoint = rawEndpoint ? normalizeEndpoint(rawEndpoint) : null;
-	return {
-		sourceType,
-		endpointId: sourceType || endpoint ? shortHash(`${sourceType || "unknown"}|${endpoint?.canonical || "official:" + (sourceType || "unknown")}`) : null,
-		endpointLabel: endpoint?.label || (sourceType ? OFFICIAL_LABELS[sourceType] || `${sourceType} 接口` : null)
-	};
+	return buildEndpointIdentity(typeof body?.chat_completion_source === "string" && body.chat_completion_source.trim() ? body.chat_completion_source.trim() : null, typeof body?.custom_url === "string" && body.custom_url.trim() ? body.custom_url.trim() : typeof body?.reverse_proxy === "string" ? body.reverse_proxy.trim() : "");
 }
 function buildConnectionContext(body, secretState, secretKeys) {
 	const endpoint = buildEndpointContext(body);
@@ -313,7 +345,12 @@ function walletIdForEndpoint(endpointId) {
 	return id ? `wallet:${safeId(id)}` : null;
 }
 function isDeepSeekOfficialConnection(connection) {
-	return !!connection && cleanText(connection.sourceType).toLowerCase() === "deepseek" && (!connection.endpointId || connection.endpointId === DEEPSEEK_OFFICIAL_ENDPOINT_ID || cleanText(connection.endpointLabel) === "DeepSeek 官方");
+	if (!connection) return false;
+	const sourceType = cleanText(connection.sourceType).toLowerCase();
+	const endpointId = cleanText(connection.endpointId);
+	const endpointLabel = cleanText(connection.endpointLabel);
+	if (endpointId === DEEPSEEK_OFFICIAL_ENDPOINT_ID || isDeepSeekOfficialEndpoint(endpointId) || isDeepSeekOfficialEndpoint(endpointLabel) || endpointLabel === "DeepSeek 官方") return true;
+	return sourceType === "deepseek" && !endpointId;
 }
 function walletMatchesConnection(wallet, connection) {
 	if (!wallet || !connection) return false;
@@ -1258,13 +1295,13 @@ function migrateLegacyBalance(wallet) {
 }
 function historyConnection(entry) {
 	if (!entry || !entry.endpointId && !entry.sourceType) return null;
-	return {
+	return normalizeConnectionEndpoint({
 		sourceType: entry.sourceType ?? null,
 		endpointId: entry.endpointId ?? null,
 		endpointLabel: entry.endpointLabel ?? null,
 		credentialId: entry.credentialId ?? null,
 		credentialLabel: entry.credentialLabel ?? null
-	};
+	});
 }
 function ensureWalletForConnection(wallets, ignored, connection, now = Date.now()) {
 	if (!connection || !connection.endpointId) return {
@@ -1344,6 +1381,110 @@ function migrateHistoryModels(entries) {
 	}
 	return changed;
 }
+function mergeWalletConfiguration(duplicate, target, now = Date.now()) {
+	let changed = false;
+	if ((target.balance.amount == null || String(target.balance.amount).trim() === "") && duplicate.balance.amount != null && String(duplicate.balance.amount).trim() !== "") {
+		target.balance.amount = duplicate.balance.amount;
+		target.balance.currency = duplicate.balance.currency;
+		target.balance.mode = duplicate.balance.mode;
+		target.balance.lastCalibrated = duplicate.balance.lastCalibrated;
+		changed = true;
+	}
+	if (!target.balance.primaryCredentialId && duplicate.balance.primaryCredentialId) {
+		target.balance.primaryCredentialId = duplicate.balance.primaryCredentialId;
+		changed = true;
+	}
+	for (const credential of duplicate.credentials || []) if (observeCredential(target, credential.id, credential.label, credential.lastSeen || now)) changed = true;
+	for (const model of duplicate.models || []) {
+		if (!model.price?.priceConfigured || model.source !== "manual" && model.source !== "sync") continue;
+		const existing = findWalletModel(target, model.sourceModel) || findWalletModel(target, model.model);
+		if (!existing) {
+			target.models.push({
+				...model,
+				id: `legacy-official:${model.id}`,
+				aliases: [...model.aliases || []],
+				price: cloneWalletPriceRule(model.price)
+			});
+			changed = true;
+			continue;
+		}
+		if (existing.source !== "manual" || model.source === "manual") {
+			existing.price = cloneWalletPriceRule(model.price);
+			existing.source = model.source;
+			existing.locked = model.locked === true;
+			existing.aliases = Array.from(/* @__PURE__ */ new Set([...existing.aliases || [], ...model.aliases || []]));
+			existing.updatedAt = now;
+			changed = true;
+		}
+	}
+	if (!target.catalogProvider && duplicate.catalogProvider) {
+		target.catalogProvider = duplicate.catalogProvider;
+		changed = true;
+	}
+	if (!target.lastUsedAt || (duplicate.lastUsedAt || 0) > target.lastUsedAt) {
+		target.lastUsedAt = duplicate.lastUsedAt || target.lastUsedAt;
+		changed = true;
+	}
+	if (changed) target.updatedAt = now;
+	return changed;
+}
+function migrateWalletEndpoints(ignored, now = Date.now()) {
+	const byEndpoint = /* @__PURE__ */ new Map();
+	const next = [];
+	const duplicateIds = /* @__PURE__ */ new Set();
+	let changed = false;
+	for (const wallet of state.wallets) {
+		if (wallet.id === "wallet:deepseek-official") {
+			next.push(wallet);
+			if (wallet.endpointId) byEndpoint.set(wallet.endpointId, wallet);
+			continue;
+		}
+		const oldEndpointLabel = wallet.endpointLabel;
+		const oldEndpointDisplay = wallet.endpointDisplay;
+		const normalized = normalizeConnectionEndpoint({
+			sourceType: wallet.sourceType,
+			endpointId: wallet.endpointId,
+			endpointLabel: wallet.endpointLabel,
+			credentialId: null,
+			credentialLabel: null
+		});
+		if (!normalized?.endpointId) {
+			next.push(wallet);
+			continue;
+		}
+		if (wallet.endpointId !== normalized.endpointId || wallet.endpointLabel !== normalized.endpointLabel) {
+			wallet.endpointId = normalized.endpointId;
+			wallet.endpointLabel = normalized.endpointLabel ?? null;
+			wallet.endpointDisplay = normalized.endpointLabel ?? null;
+			if (wallet.name === oldEndpointLabel || wallet.name === oldEndpointDisplay) wallet.name = normalized.endpointLabel || wallet.name;
+			wallet.updatedAt = now;
+			changed = true;
+		}
+		const existing = byEndpoint.get(wallet.endpointId);
+		if (!existing) {
+			byEndpoint.set(wallet.endpointId, wallet);
+			next.push(wallet);
+			continue;
+		}
+		const preferCurrent = ignored.has(existing.id) && !ignored.has(wallet.id);
+		const target = preferCurrent ? wallet : existing;
+		const duplicate = preferCurrent ? existing : wallet;
+		if (preferCurrent) {
+			const index = next.indexOf(existing);
+			if (index >= 0) next[index] = wallet;
+			byEndpoint.set(wallet.endpointId, wallet);
+		}
+		if (mergeWalletConfiguration(duplicate, target, now)) changed = true;
+		duplicateIds.add(duplicate.id);
+		changed = true;
+	}
+	state.wallets = next;
+	if (duplicateIds.size) {
+		state.walletIgnored = state.walletIgnored.filter((id) => !duplicateIds.has(id));
+		for (const id of duplicateIds) ignored.delete(id);
+	}
+	return changed;
+}
 function migrateWallets(hot, cold = []) {
 	const now = Date.now();
 	const normalized = normalizeWallets(state.wallets, state.settings, now);
@@ -1357,11 +1498,17 @@ function migrateWallets(hot, cold = []) {
 	changed = migrateLegacyBalance(official) || changed;
 	changed = refreshBuiltinWalletModels(official, now) || changed;
 	migrateLegacyWalletApiKey(official.id);
+	changed = migrateWalletEndpoints(ignored, now) || changed;
 	const allHistory = [...cold || [], ...state.history || []];
 	changed = migrateHistoryModels(allHistory) || changed;
 	for (const entry of allHistory) {
 		const connection = historyConnection(entry);
 		if (!connection) continue;
+		if (entry.endpointId !== connection.endpointId || entry.endpointLabel !== connection.endpointLabel) {
+			entry.endpointId = connection.endpointId;
+			entry.endpointLabel = connection.endpointLabel;
+			changed = true;
+		}
 		const observed = ensureWalletForConnection(state.wallets, ignored, connection, Number(entry.timestamp) || now);
 		if (observed.changed) changed = true;
 		if (!observed.wallet) continue;
@@ -1802,7 +1949,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && state.settings.pricingSync?.enabled) try {
-						import("./pricing-sync-DVM2rBgj.js").then((n) => n.i).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-DuihwJ1S.js").then((n) => n.i).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;

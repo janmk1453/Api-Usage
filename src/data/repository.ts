@@ -14,10 +14,11 @@ import { isUnsafeKey } from '../utils/date';
 import { isTruncatedFinish } from '../utils/finish';
 import { log, toast } from '../utils/logger';
 import { usageFingerprint } from './fingerprint';
-import type { HistoryConnection } from '../services/connection-identity';
+import { normalizeConnectionEndpoint, type HistoryConnection } from '../services/connection-identity';
 import {
   createDeepSeekWallet,
   createWalletFromConnection,
+  cloneWalletPriceRule,
   ensureDeepSeekWallet,
   findWalletForConnection,
   findWalletForHistory,
@@ -140,13 +141,13 @@ function migrateLegacyBalance(wallet: WalletConfig): boolean {
 
 function historyConnection(entry: any): HistoryConnection | null {
   if (!entry || (!entry.endpointId && !entry.sourceType)) return null;
-  return {
+  return normalizeConnectionEndpoint({
     sourceType: entry.sourceType ?? null,
     endpointId: entry.endpointId ?? null,
     endpointLabel: entry.endpointLabel ?? null,
     credentialId: entry.credentialId ?? null,
     credentialLabel: entry.credentialLabel ?? null,
-  };
+  });
 }
 
 function ensureWalletForConnection(
@@ -227,6 +228,122 @@ function migrateHistoryModels(entries: any[]): boolean {
   return changed;
 }
 
+function mergeWalletConfiguration(
+  duplicate: WalletConfig,
+  target: WalletConfig,
+  now = Date.now(),
+): boolean {
+  let changed = false;
+  if ((target.balance.amount == null || String(target.balance.amount).trim() === '')
+    && duplicate.balance.amount != null
+    && String(duplicate.balance.amount).trim() !== '') {
+    target.balance.amount = duplicate.balance.amount;
+    target.balance.currency = duplicate.balance.currency;
+    target.balance.mode = duplicate.balance.mode;
+    target.balance.lastCalibrated = duplicate.balance.lastCalibrated;
+    changed = true;
+  }
+  if (!target.balance.primaryCredentialId && duplicate.balance.primaryCredentialId) {
+    target.balance.primaryCredentialId = duplicate.balance.primaryCredentialId;
+    changed = true;
+  }
+  for (const credential of duplicate.credentials || []) {
+    if (observeCredential(target, credential.id, credential.label, credential.lastSeen || now)) changed = true;
+  }
+  for (const model of duplicate.models || []) {
+    if (!model.price?.priceConfigured || (model.source !== 'manual' && model.source !== 'sync')) continue;
+    const existing = findWalletModel(target, model.sourceModel) || findWalletModel(target, model.model);
+    if (!existing) {
+      target.models.push({
+        ...model,
+        id: `legacy-official:${model.id}`,
+        aliases: [...(model.aliases || [])],
+        price: cloneWalletPriceRule(model.price),
+      });
+      changed = true;
+      continue;
+    }
+    if (existing.source !== 'manual' || model.source === 'manual') {
+      existing.price = cloneWalletPriceRule(model.price);
+      existing.source = model.source;
+      existing.locked = model.locked === true;
+      existing.aliases = Array.from(new Set([...(existing.aliases || []), ...(model.aliases || [])]));
+      existing.updatedAt = now;
+      changed = true;
+    }
+  }
+  if (!target.catalogProvider && duplicate.catalogProvider) {
+    target.catalogProvider = duplicate.catalogProvider;
+    changed = true;
+  }
+  if (!target.lastUsedAt || (duplicate.lastUsedAt || 0) > target.lastUsedAt) {
+    target.lastUsedAt = duplicate.lastUsedAt || target.lastUsedAt;
+    changed = true;
+  }
+  if (changed) target.updatedAt = now;
+  return changed;
+}
+
+function migrateWalletEndpoints(ignored: Set<string>, now = Date.now()): boolean {
+  const byEndpoint = new Map<string, WalletConfig>();
+  const next: WalletConfig[] = [];
+  const duplicateIds = new Set<string>();
+  let changed = false;
+
+  for (const wallet of state.wallets) {
+    if (wallet.id === DEEPSEEK_WALLET_ID) {
+      next.push(wallet);
+      if (wallet.endpointId) byEndpoint.set(wallet.endpointId, wallet);
+      continue;
+    }
+    const oldEndpointLabel = wallet.endpointLabel;
+    const oldEndpointDisplay = wallet.endpointDisplay;
+    const normalized = normalizeConnectionEndpoint({
+      sourceType: wallet.sourceType,
+      endpointId: wallet.endpointId,
+      endpointLabel: wallet.endpointLabel,
+      credentialId: null,
+      credentialLabel: null,
+    });
+    if (!normalized?.endpointId) {
+      next.push(wallet);
+      continue;
+    }
+    if (wallet.endpointId !== normalized.endpointId || wallet.endpointLabel !== normalized.endpointLabel) {
+      wallet.endpointId = normalized.endpointId;
+      wallet.endpointLabel = normalized.endpointLabel ?? null;
+      wallet.endpointDisplay = normalized.endpointLabel ?? null;
+      if (wallet.name === oldEndpointLabel || wallet.name === oldEndpointDisplay) wallet.name = normalized.endpointLabel || wallet.name;
+      wallet.updatedAt = now;
+      changed = true;
+    }
+    const existing = byEndpoint.get(wallet.endpointId);
+    if (!existing) {
+      byEndpoint.set(wallet.endpointId, wallet);
+      next.push(wallet);
+      continue;
+    }
+    const preferCurrent = ignored.has(existing.id) && !ignored.has(wallet.id);
+    const target = preferCurrent ? wallet : existing;
+    const duplicate = preferCurrent ? existing : wallet;
+    if (preferCurrent) {
+      const index = next.indexOf(existing);
+      if (index >= 0) next[index] = wallet;
+      byEndpoint.set(wallet.endpointId, wallet);
+    }
+    if (mergeWalletConfiguration(duplicate, target, now)) changed = true;
+    duplicateIds.add(duplicate.id);
+    changed = true;
+  }
+
+  state.wallets = next;
+  if (duplicateIds.size) {
+    state.walletIgnored = state.walletIgnored.filter((id) => !duplicateIds.has(id));
+    for (const id of duplicateIds) ignored.delete(id);
+  }
+  return changed;
+}
+
 function migrateWallets(hot: any, cold: any[] = []): boolean {
   const now = Date.now();
   const normalized = normalizeWallets(state.wallets, state.settings, now);
@@ -243,11 +360,17 @@ function migrateWallets(hot: any, cold: any[] = []): boolean {
   changed = migrateLegacyBalance(official) || changed;
   changed = refreshBuiltinWalletModels(official, now) || changed;
   migrateLegacyWalletApiKey(official.id);
+  changed = migrateWalletEndpoints(ignored, now) || changed;
   const allHistory = [...(cold || []), ...(state.history || [])];
   changed = migrateHistoryModels(allHistory) || changed;
   for (const entry of allHistory) {
     const connection = historyConnection(entry);
     if (!connection) continue;
+    if (entry.endpointId !== connection.endpointId || entry.endpointLabel !== connection.endpointLabel) {
+      entry.endpointId = connection.endpointId;
+      entry.endpointLabel = connection.endpointLabel;
+      changed = true;
+    }
     const observed = ensureWalletForConnection(state.wallets, ignored, connection, Number(entry.timestamp) || now);
     if (observed.changed) changed = true;
     if (!observed.wallet) continue;

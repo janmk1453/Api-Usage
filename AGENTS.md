@@ -72,7 +72,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **面板**：全屏 `absolute` 定位置换 + 侧边导航（复刻 DeepSeek 官网 `display` 切换：`≥761px` 常显 `220px ↔ 60px` 折叠（`#aus-sidebar-toggle` 可见），`≤760px` 默认 `display:none` 隐藏 + `#aus-mobile-header` 内 `24px` 汉堡瞬时呼出 `is-open`，`#aus-sidebar-toggle` 隐藏，无遮罩无动画无过渡，`syncMobileSidebar` 清理宽屏折叠残留 inline），外层 `#aus-panel flex:column` + 内层 `#aus-panel-body flex:row`（`#aus-main overflow-x:hidden + min-width:0` 约束防止 720px 表撑开），`8` 视图（用量概览/统计/历史/趋势预测 Beta/钱包/设置/使用说明/关于）经 `data-view` + `opacity 0.15s` 切换，窄屏由汉堡控制 + 导航点击自动收起
 - **样式**：`[data-extension="api-usage-stat"][data-ds-theme="light"]` 隔离，卡片 `1px solid #E5E7EB` 实线，无 `box-shadow`，字重 `600`，`Microsoft YaHei` 保证锐利；`#aus-sidebar` 无过渡（瞬时 `display` 切换），`style.css` 定义 `light/dark` 两套同名变量，深色经 `themeColor()` 注入 ECharts，默认 `light`
 - **拦截**：`GENERATION_ENDED → chat[].extra.api_usage` 主路径，`ApiUsageStatInterceptor` 辅路径，`repository.addEntry/recalcAll` 1:1 脚本；fetch 请求开始时同步快照连接身份并随请求传递，禁止生成结束后重新读取可能已切换的密钥
-- **连接身份**：`connection-identity.ts` 负责接入地址规范化、官方名称、酒馆密钥条目映射和严格隐私模式；不读取、不比较、不持久化 `proxy_password` 与 `custom_include_headers`
+- **连接身份**：`connection-identity.ts` 负责接入地址规范化、官方名称、酒馆密钥条目映射和严格隐私模式；同一协议与主机的不同路径/查询参数归入同一来源（如 `youzi.today/v1`、`youzi.today/ababa`、`youzi.today`）；不读取、不比较、不持久化 `proxy_password` 与 `custom_include_headers`
 - **数据框架**：所有存/取/算/展必须走 `src/data/` — `repository` 唯一写、`wallets.ts` 唯一管理钱包结构和规则、`computed` 唯一算（`computeOverview` 供概览 8 块，`computeStats` 供统计，`computeWalletStats` 供钱包页，`filterStatsHistory` 供统计/历史统一筛选）、`events` 订阅刷新；禁止在 UI 直接读写 `state.history`、`state.wallets` 聚合或手算
 - **持久化**：`saveHot` 节流 `300ms`，`loadHot/migrateIfNeeded` 仅由 `repository.hydrate` 调用，已自动将旧多存档合并为单一历史（`hot 50` + `cold_history`）
 - **CI**：`.github/workflows/ci.yml` 在 `dev/main` 推送及目标为 `dev/main` 的合并请求中执行，使用 Node 24；顺序为 `typecheck → test → build → node --check → verify:ci → 工作区零差异`。`verify` 只读；仅 `main` 推送或从 `main` 手动触发时，成功后再执行 `contents: write` 的 `preview` 作业，创建或更新 `preview-<12位提交哈希>` 预发布。预览说明优先列出上一个 `preview-*` 到当前提交的全部提交；首次预览回退最近正式 `vX.Y.Z` 标签，仍无标签时只列当前提交。`dev` 与合并请求不发布，CI 不提交、不修改三个版本字段、不操作正式 `vX.Y.Z` 标签
@@ -220,7 +220,7 @@ git push origin main --tags
 - **详情双占比去重**：性能块与 Token 消耗块曾各显示一次“思维链占比”，后收敛为仅性能块保留，Token 块改为单列占满的“思维链 Token”
 - **密钥身份与隐私**：普通官方接口的密钥由酒馆后端注入，扩展只读活动密钥条目编号、标签和掩码末三位；反向代理的 `proxy_password` 与 `custom_include_headers` 不读取、不比较、不持久化，因此同一中转地址下的反向代理密码无法细分
 - **隐私与免责声明口径**：酒馆密钥只写“编号、备注、掩码末三位”，用户主动填入的校准密钥才写“实际可用密钥”；明确标注 XOR 不是安全加密。价格来源与模型同步免责声明必须说明不对 models.dev 数据中的商业化中转站负责，且不构成推荐或商业关系
-- **连接身份落盘**：`HistoryEntry` 只保存 `sourceType/endpointId/endpointLabel/credentialId/credentialLabel`，其中接入地址经短哈希生成稳定标识，界面仅显示域名与路径；新增字段为可选兼容字段，随导入导出和 WebDAV 同步透传，不改变导出格式版本
+- **连接身份落盘**：`HistoryEntry` 只保存 `sourceType/endpointId/endpointLabel/credentialId/credentialLabel`，其中接入地址按协议与主机生成稳定标识，路径和查询参数不参与钱包归属；界面显示主机；新增字段为可选兼容字段，随导入导出和 WebDAV 同步透传，不改变导出格式版本
 - **钱包计费隔离**：同一模型名在不同钱包可以使用完全不同的价格和峰谷；匹配顺序为钱包当前模型名/来源模型名/别名，先用 `walletId` 定位历史归属，旧记录才回退接入地址或全局价格
 - **钱包迁移边界**：旧 `customModels` 复制到 DeepSeek 官方钱包但原全局数组保留；带接入地址的旧历史会建立钱包并尽量复制对应旧价格，未识别接入或无地址记录继续使用旧全局兜底
 - **余额口径**：概览钱包选择器只影响充值余额和剩余轮次预测，累计消费、热力图、按对话统计等保持全量；余额汇总按 `CNY/USD` 换算，钱包扣费按钱包自身币种

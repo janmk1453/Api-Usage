@@ -3,12 +3,12 @@ import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from ".
 import { d as WEBDAV_SYNC_FILE, i as HIDDEN_PRICING_MODELS, n as DEFAULT_PEAK_HOURS, s as PRICING } from "./pricing-bcKQQNo6.js";
 import { d as historyRecordKey, u as saveHot } from "./persistence-CrFXrRB_.js";
 import { r as toast, t as log } from "./logger-Bv-AT94O.js";
-import { T as WALLET_CATALOG_PROVIDERS, _ as findWalletForHistory, a as decryptKey, b as walletBalanceToCny, c as DataEvents, d as calcSavings, f as getPricing$1, i as saveWalletApiKey, l as on, m as normalizeModel, o as encryptKey, p as isDeepSeekOfficialModel, r as getWalletApiKey, s as isTruncatedFinish, t as repository, u as calcCost, v as findWalletModel, w as DEEPSEEK_WALLET_ID, x as walletPendingModelCount, y as mergeWalletCollections } from "./repository-j5wICdVE.js";
+import { T as WALLET_CATALOG_PROVIDERS, _ as findWalletForHistory, a as decryptKey, b as walletBalanceToCny, c as DataEvents, d as calcSavings, f as getPricing$1, i as saveWalletApiKey, l as on, m as normalizeModel, o as encryptKey, p as isDeepSeekOfficialModel, r as getWalletApiKey, s as isTruncatedFinish, t as repository, u as calcCost, v as findWalletModel, w as DEEPSEEK_WALLET_ID, x as walletPendingModelCount, y as mergeWalletCollections } from "./repository-WGNbc33W.js";
 import { a as localDay$1, o as localTimeHM, r as isUnsafeKey$1, t as esc$1 } from "./date-DDmqq1qX.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-TUm-Rmzn.js";
-import { r as recalcAllCosts, t as installInterception } from "./interception-Dxg8Khow.js";
-import { i as saveApiKey, n as queryBalance, r as queryWalletBalance } from "./balance-lW7w8n-Q.js";
-import { a as removeSyncedModels, n as isSyncedCustomModel, o as syncPricingFromModelsDev, r as previewSync, t as fetchModelsDevCatalog } from "./pricing-sync-DVM2rBgj.js";
+import { r as recalcAllCosts, t as installInterception } from "./interception-BC_AxeDx.js";
+import { i as saveApiKey, n as queryBalance, r as queryWalletBalance } from "./balance-BC_h0e5d.js";
+import { a as removeSyncedModels, n as isSyncedCustomModel, o as syncPricingFromModelsDev, r as previewSync, t as fetchModelsDevCatalog } from "./pricing-sync-DuihwJ1S.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -989,14 +989,14 @@ function renderSettings(doc) {
 		doc.getElementById("aus-auto-balance-interval").style.display = autoCb.checked ? "block" : "none";
 		saveHot({ settings: state$2.settings });
 		try {
-			import("./balance-lW7w8n-Q.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-BC_h0e5d.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	doc.getElementById("aus-balance-interval").onchange = (e) => {
 		state$2.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state$2.settings });
 		try {
-			import("./balance-lW7w8n-Q.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-BC_h0e5d.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (newCb) newCb.onchange = () => {
@@ -1067,7 +1067,7 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-j5wICdVE.js").then((n) => n.n);
+				const { repository } = await import("./repository-WGNbc33W.js").then((n) => n.n);
 				const { state: st } = await import("./store-CW1NSoAX.js").then((n) => n.i);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
@@ -1196,7 +1196,7 @@ function renderSettings(doc) {
 					intervalDrop.style.display = "none";
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-DVM2rBgj.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+						import("./pricing-sync-DuihwJ1S.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
 						import("./currency-TUm-Rmzn.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};
@@ -1218,7 +1218,7 @@ function renderSettings(doc) {
 			if (panel) panel.style.display = enabledEl.checked ? "grid" : "none";
 			let removed = 0;
 			if (!enabledEl.checked) try {
-				const m = await import("./pricing-sync-DVM2rBgj.js").then((n) => n.i);
+				const m = await import("./pricing-sync-DuihwJ1S.js").then((n) => n.i);
 				try {
 					await m.markLegacySyncedModels?.({ skipRerender: true });
 				} catch {}
@@ -1229,7 +1229,7 @@ function renderSettings(doc) {
 			saveHot({ settings: state$2.settings });
 			try {
 				import("./currency-TUm-Rmzn.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
-				import("./pricing-sync-DVM2rBgj.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+				import("./pricing-sync-DuihwJ1S.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
 			} catch {}
 			if (removed) {
 				renderModelsEditor(doc);
@@ -5527,7 +5527,7 @@ var forecastRenderToken = 0;
 async function renderForecastView() {
 	const doc = getDoc$3();
 	const token = ++forecastRenderToken;
-	const hist = await import("./repository-j5wICdVE.js").then((n) => n.n).then((mod) => mod.repository.getAllHistory()).catch(() => state$2.history || []);
+	const hist = await import("./repository-WGNbc33W.js").then((n) => n.n).then((mod) => mod.repository.getAllHistory()).catch(() => state$2.history || []);
 	if (token !== forecastRenderToken) return;
 	try {
 		renderForecastChatPicker(hist);
@@ -6210,7 +6210,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-lW7w8n-Q.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-BC_h0e5d.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -7781,7 +7781,7 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-Dxg8Khow.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-BC_AxeDx.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -7789,7 +7789,7 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-Dxg8Khow.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-BC_AxeDx.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -7879,13 +7879,13 @@ async function onDelete() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-lW7w8n-Q.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-BC_h0e5d.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-TUm-Rmzn.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DVM2rBgj.js").then((n) => n.i)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-DuihwJ1S.js").then((n) => n.i)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 	try {
@@ -7912,16 +7912,16 @@ async function onDelete() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-Dxg8Khow.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-BC_AxeDx.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./balance-lW7w8n-Q.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-BC_h0e5d.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-TUm-Rmzn.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-DVM2rBgj.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-DuihwJ1S.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -7931,7 +7931,7 @@ async function onDisable() {
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-Dxg8Khow.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-BC_AxeDx.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -7947,13 +7947,13 @@ async function onDisable() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-lW7w8n-Q.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-BC_h0e5d.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-TUm-Rmzn.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DVM2rBgj.js").then((n) => n.i)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-DuihwJ1S.js").then((n) => n.i)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -7975,13 +7975,13 @@ async function init() {
 		console.error("[API用量统计] initStore 失败", e);
 	}
 	try {
-		(await import("./balance-lW7w8n-Q.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-BC_h0e5d.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-TUm-Rmzn.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DVM2rBgj.js").then((n) => n.i)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-DuihwJ1S.js").then((n) => n.i)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
@@ -8003,7 +8003,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-DVM2rBgj.js").then((n) => n.i).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-DuihwJ1S.js").then((n) => n.i).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

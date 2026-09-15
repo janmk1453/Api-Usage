@@ -1,5 +1,5 @@
 import { PRICING, HIDDEN_PRICING_MODELS, PRICE_HISTORY, DEFAULT_PEAK_HOURS } from '../constants/pricing';
-import { officialEndpointId, type HistoryConnection } from '../services/connection-identity';
+import { isDeepSeekOfficialEndpoint, officialEndpointId, type HistoryConnection } from '../services/connection-identity';
 import type { Settings } from '../types/settings';
 import {
   DEEPSEEK_WALLET_ID,
@@ -48,13 +48,16 @@ export function walletIdForEndpoint(endpointId: string | null | undefined): stri
 }
 
 export function isDeepSeekOfficialConnection(connection: HistoryConnection | null | undefined): boolean {
-  return !!connection
-    && cleanText(connection.sourceType).toLowerCase() === 'deepseek'
-    && (
-      !connection.endpointId
-      || connection.endpointId === DEEPSEEK_OFFICIAL_ENDPOINT_ID
-      || cleanText(connection.endpointLabel) === 'DeepSeek 官方'
-    );
+  if (!connection) return false;
+  const sourceType = cleanText(connection.sourceType).toLowerCase();
+  const endpointId = cleanText(connection.endpointId);
+  const endpointLabel = cleanText(connection.endpointLabel);
+  const officialEndpoint = endpointId === DEEPSEEK_OFFICIAL_ENDPOINT_ID
+    || isDeepSeekOfficialEndpoint(endpointId)
+    || isDeepSeekOfficialEndpoint(endpointLabel)
+    || endpointLabel === 'DeepSeek 官方';
+  if (officialEndpoint) return true;
+  return sourceType === 'deepseek' && !endpointId;
 }
 
 export function walletMatchesConnection(

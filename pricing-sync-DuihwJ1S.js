@@ -3,7 +3,7 @@ import { r as state } from "./store-CW1NSoAX.js";
 import { c as PRICING_SYNC_FALLBACK, i as HIDDEN_PRICING_MODELS, l as PRICING_SYNC_SOURCE, s as PRICING } from "./pricing-bcKQQNo6.js";
 import { u as saveHot } from "./persistence-CrFXrRB_.js";
 import { r as toast, t as log } from "./logger-Bv-AT94O.js";
-import { g as cloneWallet, m as normalizeModel, p as isDeepSeekOfficialModel, t as repository, v as findWalletModel } from "./repository-j5wICdVE.js";
+import { g as cloneWallet, m as normalizeModel, p as isDeepSeekOfficialModel, t as repository, v as findWalletModel } from "./repository-WGNbc33W.js";
 import { a as getWalletExchangeRate } from "./currency-TUm-Rmzn.js";
 //#region src/services/pricing-sync.ts
 var pricing_sync_exports = /* @__PURE__ */ __exportAll({

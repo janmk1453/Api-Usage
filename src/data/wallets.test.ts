@@ -3,6 +3,7 @@ import { defaultSettings } from '../types/settings';
 import {
   createDeepSeekWallet,
   createWalletFromConnection,
+  DEEPSEEK_OFFICIAL_ENDPOINT_ID,
   findExactPricedModelMatch,
   findWalletModel,
   mergeWalletCollections,
@@ -40,6 +41,18 @@ describe('钱包数据', () => {
     const normalized = normalizeWallets([wallet], settings, 1000)
       .find((item) => item.id === wallet.id)!;
     expect(normalized.collapsed).toBe(false);
+  });
+
+  it('官方地址的历史接入归入内置 DeepSeek 钱包', () => {
+    const wallet = createWalletFromConnection({
+      sourceType: 'custom',
+      endpointId: DEEPSEEK_OFFICIAL_ENDPOINT_ID,
+      endpointLabel: 'api.deepseek.com/v1',
+      credentialId: null,
+      credentialLabel: null,
+    }, defaultSettings(), 1000);
+
+    expect(wallet?.id).toBe(DEEPSEEK_WALLET_ID);
   });
 
   it('价格来源只保留第一方模型厂商', () => {
