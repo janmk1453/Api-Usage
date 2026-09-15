@@ -45,6 +45,11 @@ export function migrateLegacyWalletApiKey(walletId = DEEPSEEK_WALLET_ID): void {
     const encrypted = settings.apiKey;
     if (!encrypted) return;
     const plain = decryptKey(encrypted);
-    if (plain) saveWalletApiKey(walletId, plain);
+    if (plain) {
+      saveWalletApiKey(walletId, plain);
+      const latest: any = getExtensionSettings() || {};
+      delete latest.apiKey;
+      saveExtensionSettings({ ...latest, _updated: Date.now() });
+    }
   } catch {}
 }

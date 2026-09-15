@@ -1,7 +1,9 @@
 import { defineConfig } from 'vite';
-import { resolve } from 'path';
+import { dirname, resolve } from 'path';
+import { fileURLToPath } from 'url';
 import { readFileSync } from 'fs';
 
+const rootDir = dirname(fileURLToPath(import.meta.url));
 const manifest = (() => {
   try { return JSON.parse(readFileSync('./manifest.json', 'utf-8')); } catch { return { version: '0.0.0' }; }
 })();
@@ -13,7 +15,7 @@ export default defineConfig({
   },
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/index.ts'),
+      entry: resolve(rootDir, 'src/index.ts'),
       name: 'ApiUsageStat',
       fileName: () => 'index.js',
       formats: ['es'],

@@ -1,7 +1,8 @@
 import { toast, log } from '../utils/logger';
+import { esc } from '../utils/date';
 
 declare const __APP_VERSION__: string;
-const CURRENT_VERSION: string = (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.0.0') as string;
+const CURRENT_VERSION: string = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '';
 const REPO = 'janmk1453/Api-Usage';
 const REMOTE_MANIFEST = `https://raw.githubusercontent.com/${REPO}/main/manifest.json`;
 const EXTENSION_FOLDER = 'Api-Usage';
@@ -146,7 +147,7 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
             }
             if (banner) {
               banner.style.display = 'block';
-              banner.innerHTML = `发现新提交 <b>${remoteLabel}</b>（当前 ${localLabel}），请前往「扩展程序 → 管理扩展程序」更新`;
+              banner.innerHTML = `发现新提交 <b>${esc(remoteLabel)}</b>（当前 ${esc(localLabel)}），请前往「扩展程序 → 管理扩展程序」更新`;
             }
           } else {
             toast('info', `已是最新版本（${localLabel}）`);
@@ -181,7 +182,7 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
       }
       if (banner) {
         banner.style.display = 'block';
-        banner.innerHTML = `发现新版本 <b>v${remoteVer}</b>（当前 v${CURRENT_VERSION}），请前往「扩展程序 → 管理扩展程序」更新`;
+        banner.innerHTML = `发现新版本 <b>v${esc(remoteVer)}</b>（当前 v${esc(CURRENT_VERSION)}），请前往「扩展程序 → 管理扩展程序」更新`;
       }
     } else {
       toast('info', `已是最新版本 v${CURRENT_VERSION}`);

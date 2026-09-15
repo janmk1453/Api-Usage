@@ -6,12 +6,57 @@
 import { state } from './store/index';
 import { repository } from './data/repository';
 import { installInterception } from './services/interception';
-import { createPanel, openPanel, closePanel, togglePanel, refreshUI } from './ui/panel';
-import { createPeakDot, updatePeakDot } from './ui/peak-dot';
+import { createPanel, openPanel, closePanel, togglePanel, refreshUI, resetPanelState } from './ui/panel';
+import { createPeakDot, updatePeakDot, stopPeakDot } from './ui/peak-dot';
 import { applyTheme } from './services/theme';
 import { log } from './utils/logger';
 
 const MODULE = 'api_usage_stat';
+let wandRetryTimer: any = null;
+let mountRetryTimer: any = null;
+let interceptionRetryTimer: any = null;
+
+function onEscapeKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') closePanel();
+}
+
+function onPageHide() {
+  try {
+    import('./store/persistence').then(m => m.flushSaveHot()).catch(() => {});
+  } catch {}
+}
+
+function cleanupRuntimeBindings() {
+  if (wandRetryTimer) { try { clearInterval(wandRetryTimer); } catch {} wandRetryTimer = null; }
+  if (mountRetryTimer) { try { clearTimeout(mountRetryTimer); } catch {} mountRetryTimer = null; }
+  if (interceptionRetryTimer) { try { clearInterval(interceptionRetryTimer); } catch {} interceptionRetryTimer = null; }
+  try {
+    const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
+    if (ctx?.eventSource?.off) {
+      ctx.eventSource.off(ctx.event_types?.APP_READY, onAppReady);
+      ctx.eventSource.off(ctx.event_types?.APP_INITIALIZED, onAppInitialized);
+      ctx.eventSource.off(ctx.event_types?.CHAT_CHANGED, onChatChanged);
+    }
+  } catch {}
+  try { getDoc().removeEventListener('keydown', onEscapeKey); } catch {}
+  try { window.removeEventListener('pagehide', onPageHide); } catch {}
+}
+
+function onAppReady() {
+  try { createPanel(); } catch {}
+  try { ensureWandEntry(); } catch {}
+  try { refreshUI(); } catch {}
+  try { import('./services/interception').then(m=>m.installInterception()).catch(() => {}); } catch {}
+}
+
+function onAppInitialized() {
+  try { ensureWandEntry(); } catch {}
+  try { import('./services/interception').then(m=>m.installInterception()).catch(() => {}); } catch {}
+}
+
+function onChatChanged() {
+  try { if ((state.settings as any).historyScope === 'current') refreshUI(); } catch {}
+}
 
 function getDoc(): Document { return (window.parent as any)?.document ?? document; }
 function ensureStyleScope() {
@@ -56,11 +101,21 @@ function injectWandEntry() {
 }
 
 function ensureWandEntry() {
-  if (injectWandEntry()) return;
+  if (injectWandEntry()) {
+    if (wandRetryTimer) {
+      clearInterval(wandRetryTimer);
+      wandRetryTimer = null;
+    }
+    return;
+  }
+  if (wandRetryTimer) clearInterval(wandRetryTimer);
   let tries = 0;
-  const timer = setInterval(() => {
+  wandRetryTimer = setInterval(() => {
     tries++;
-    if (injectWandEntry() || tries > 20) clearInterval(timer);
+    if (injectWandEntry() || tries > 20) {
+      clearInterval(wandRetryTimer);
+      wandRetryTimer = null;
+    }
   }, 500);
 }
 
@@ -76,11 +131,12 @@ export async function onDelete() {
     doc.getElementById('aus_wand_container')?.remove();
     doc.getElementById('aus-peak-dot-indicator')?.remove();
   } catch {}
-  try { const m = await import('./ui/panel'); (m as any).resetPanelState?.(); } catch {}
-  try { const m = await import('./ui/peak-dot'); (m as any).stopPeakDot?.(); } catch {}
+  try { resetPanelState(); } catch {}
+  try { stopPeakDot(); } catch {}
   try { const m2 = await import('./services/balance'); (m2 as any).stopBalanceTimer?.(); } catch {}
   try { const m3 = await import('./services/currency'); (m3 as any).stopRateTimer?.(); } catch {}
   try { const m4 = await import('./services/pricing-sync'); (m4 as any).stopPricingSyncTimer?.(); } catch {}
+  cleanupRuntimeBindings();
   // 清理卸载残留
   try { localStorage.removeItem('ds_ds_webdav_pass'); } catch {}
   try { localStorage.removeItem('ds_ds_peak_dot_pos'); } catch {}
@@ -103,11 +159,12 @@ export async function onDisable() {
     doc.getElementById('aus_wand_container')?.remove();
     doc.getElementById('aus-peak-dot-indicator')?.remove();
   } catch {}
-  try { const m = await import('./ui/panel'); (m as any).resetPanelState?.(); } catch {}
-  try { const m = await import('./ui/peak-dot'); (m as any).stopPeakDot?.(); } catch {}
+  try { resetPanelState(); } catch {}
+  try { stopPeakDot(); } catch {}
   try { const m2 = await import('./services/balance'); (m2 as any).stopBalanceTimer?.(); } catch {}
   try { const m3 = await import('./services/currency'); (m3 as any).stopRateTimer?.(); } catch {}
   try { const m4 = await import('./services/pricing-sync'); (m4 as any).stopPricingSyncTimer?.(); } catch {}
+  cleanupRuntimeBindings();
 }
 export async function onActivate() { ensureStyleScope(); try { injectWandEntry(); ensureWandEntry(); } catch {} }
 
@@ -130,25 +187,35 @@ async function init() {
     try { import('./services/pricing-sync').then((m: any) => m.markLegacySyncedModels?.()).catch(() => {}); } catch {}
   };
   if ((globalThis as any).SillyTavern?.getContext) mount();
-  else window.setTimeout(mount, 1500);
+  else mountRetryTimer = window.setTimeout(mount, 1500);
   try {
     const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
-    ctx?.eventSource?.on?.(ctx?.event_types?.APP_READY, () => { try { createPanel(); } catch {} try { ensureWandEntry(); } catch {} try { refreshUI(); } catch {} try { import('./services/interception').then(m=>m.installInterception()); } catch {} });
-    ctx?.eventSource?.on?.(ctx?.event_types?.APP_INITIALIZED, () => { try { ensureWandEntry(); } catch {} try { import('./services/interception').then(m=>m.installInterception()); } catch {} });
-    ctx?.eventSource?.on?.(ctx?.event_types?.CHAT_CHANGED, () => { try { if ((state.settings as any).historyScope === 'current') refreshUI(); } catch {} });
+    ctx?.eventSource?.on?.(ctx?.event_types?.APP_READY, onAppReady);
+    ctx?.eventSource?.on?.(ctx?.event_types?.APP_INITIALIZED, onAppInitialized);
+    ctx?.eventSource?.on?.(ctx?.event_types?.CHAT_CHANGED, onChatChanged);
     // ST 未就绪时轮询重试安装拦截（最多 6 次，间隔 1.5s，避免生成期间频繁打扰）
     let retry = 0;
-    const timer = setInterval(() => {
+    interceptionRetryTimer = setInterval(() => {
       retry++;
       try {
         const ok = (globalThis as any).SillyTavern?.getContext?.()?.eventSource;
-        if (ok) { try { if (installInterception()) clearInterval(timer); } catch {} }
+        if (ok) {
+          try {
+            if (installInterception()) {
+              clearInterval(interceptionRetryTimer);
+              interceptionRetryTimer = null;
+            }
+          } catch {}
+        }
       } catch {}
-      if (retry > 6) clearInterval(timer);
+      if (retry > 6 && interceptionRetryTimer) {
+        clearInterval(interceptionRetryTimer);
+        interceptionRetryTimer = null;
+      }
     }, 1500);
   } catch {}
-  try { getDoc().addEventListener('keydown', (e: KeyboardEvent) => { if (e.key === 'Escape') closePanel(); }); } catch {}
-  try { window.addEventListener('pagehide', () => { try { import('./store/persistence').then(m => (m as any).flushSaveHot?.()); } catch {} }); } catch {}
+  try { getDoc().addEventListener('keydown', onEscapeKey); } catch {}
+  try { window.addEventListener('pagehide', onPageHide); } catch {}
   // 不在启动期自动检查更新（外网不可达时会长时间挂起请求），改由用户打开面板时触发（openPanel → maybeAutoCheck，每次打开都执行）
   (globalThis as any).ApiUsageStat = { MODULE, refreshUI, updatePeakDot, openPanel, closePanel, togglePanel, state, injectWandEntry: ensureWandEntry };
 }

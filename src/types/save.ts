@@ -1,6 +1,10 @@
 export type HistoryEntry = {
   timestamp: number;
   model: string;
+  /** 模型原始名称；仅在与规范化名称不同时保留 */
+  rawModel?: string | null;
+  /** 内部请求关联标识，用于合并 fetch 与生成结束双路径 */
+  requestId?: string | null;
   prompt_tokens: number;
   cache_hit_tokens: number;
   cache_miss_tokens: number;

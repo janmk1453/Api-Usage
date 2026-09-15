@@ -118,6 +118,7 @@ export function getFourDisplay(key: OverviewFourKey, v: any): { title:string; ht
 let fourBound = false;
 let overviewWalletBound = false;
 let overviewWalletViewportBound = false;
+let overviewAsyncToken = 0;
 
 function closeOverviewWalletDropdown(): void {
   const dropdown = getDoc().getElementById('aus-overview-wallet-dropdown') as HTMLElement | null;
@@ -199,7 +200,7 @@ function openFourDrop(idx:number, v:any) {
   drop.style.display = drop.style.display==='block' ? 'none' : 'block';
 }
 
-export function renderOverview() {
+export function renderOverview(fullHistory?: any[]) {
   const doc = (window.parent as any)?.document ?? document;
   const ignored = new Set(repository.getIgnoredWalletIds());
   const wallets = repository.getWallets().filter((wallet) => !ignored.has(wallet.id));
@@ -207,7 +208,7 @@ export function renderOverview() {
   const activeWalletId = selectedWalletId !== 'all' && wallets.some((wallet) => wallet.id === selectedWalletId)
     ? selectedWalletId
     : 'all';
-  const v = computeOverview(activeWalletId);
+  const v = computeOverview(activeWalletId, fullHistory);
   const walletBtn = doc.getElementById('aus-overview-wallet-btn');
   const walletLabel = doc.getElementById('aus-overview-wallet-label');
   const walletDrop = doc.getElementById('aus-overview-wallet-dropdown') as HTMLElement | null;
@@ -320,14 +321,20 @@ export function renderOverview() {
 
   // 热力图：用量概览页展示全部历史的 token 分布（近 2 年，占满右侧）
   try {
-    const hist: any[] = (state.history || []) as any[];
+    const hist: any[] = fullHistory || (state.history || []) as any[];
     renderHeatmap(hist);
   } catch {}
   // 按对话统计列表（热力图下方，类似趋势预测·对比 Top，全量历史聚合，数据走 computed 唯一算入口）
-  try { renderChatSummaryOverview(); } catch {}
+  try { renderChatSummaryOverview(fullHistory); } catch {}
+  if (!fullHistory) {
+    const token = ++overviewAsyncToken;
+    repository.getAllHistory().then((all) => {
+      if (token === overviewAsyncToken && all?.length) renderOverview(all);
+    }).catch(() => {});
+  }
 }
 
-function renderChatSummaryOverview() {
+function renderChatSummaryOverview(fullHistory?: any[]) {
   const doc = (window.parent as any)?.document ?? document;
   const tbody = doc.getElementById('aus-chat-summary-tbody') as HTMLElement | null;
   const card = doc.getElementById('aus-chat-summary-overview') as HTMLElement | null;
@@ -356,8 +363,9 @@ function renderChatSummaryOverview() {
       </tr>`;
     }).join('');
   };
-  const hotRows = computeChatStats();
+  const hotRows = computeChatStats(fullHistory);
   renderRows(hotRows);
+  if (fullHistory) return;
   // 若存在冷存储全量（IndexedDB），异步补全以确保按对话统计完整（hot 仅 50 条）
   (async () => {
     try {

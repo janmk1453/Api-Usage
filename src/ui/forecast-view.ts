@@ -5,7 +5,7 @@ import { getPricing } from '../services/pricing';
 import { esc } from '../utils/date';
 import { formatMoney } from '../services/currency';
 import { getWalletExchangeRate } from '../services/currency';
-import { findWalletForHistory, walletBalanceToCny } from '../data/wallets';
+import { findWalletForHistory, findWalletModel, walletBalanceToCny } from '../data/wallets';
 
 function getDoc(){ return (window.parent as any)?.document ?? document; }
 function currentChatId(): string | null {
@@ -129,9 +129,13 @@ function bindForecastChatPicker() {
 }
 
 
-export function renderForecastView(){
+let forecastRenderToken = 0;
+
+export async function renderForecastView(): Promise<void> {
   const doc=getDoc();
-  const hist:any[] = (state as any).history||[];
+  const token = ++forecastRenderToken;
+  const hist:any[] = await import('../data/repository').then((mod) => mod.repository.getAllHistory()).catch(() => (state as any).history || []);
+  if (token !== forecastRenderToken) return;
   try { renderForecastChatPicker(hist); } catch {}
   try { bindForecastChatPicker(); } catch {}
   const effectiveHist = getEffectiveHist(hist);
@@ -145,13 +149,15 @@ export function renderForecastView(){
     const fit = fitSegments(effectiveHist, null);
     if (!fit) { host.innerHTML = `<div style="padding:12px;color:var(--ds-text-2);font-size:12px;">暂无数据</div>`; return; }
     const bal = balanceNum();
-    const latestEntry = effectiveHist[effectiveHist.length - 1];
+    const latestEntry = [...effectiveHist].sort((a: any, b: any) => a.timestamp - b.timestamp)[effectiveHist.length - 1];
     const model = latestEntry?.model || 'deepseek-v4-flash';
-    const pricing = getPricing(model, state.settings as any, findWalletForHistory(state.wallets, latestEntry || {}));
+    const wallet = findWalletForHistory(state.wallets, latestEntry || {});
+    const walletModel = findWalletModel(wallet, model);
+    const pricing = getPricing(model, state.settings as any, wallet);
     const p = pricing.offpeak;
     const R = bal!=null? calcR(bal, fit, p): { R:0, R_low:0, R_high:0 };
-    const ctxLim = ctxLimitForModel(model);
-    const rCtx = ctxLimitRounds(fit, ctxLim);
+    const ctxLim = ctxLimitForModel(model, walletModel?.contextLimit);
+    const rCtx = ctxLim != null ? ctxLimitRounds(fit, ctxLim) : null;
     const rShow = rCtx!=null? Math.min(R.R, rCtx): R.R;
     const next = nextPromptWithBand(fit);
     const hitPct = (fit.hitEwma*100).toFixed(1);
@@ -164,8 +170,8 @@ export function renderForecastView(){
         <div style="flex:1;background:var(--ds-card);border-radius:6px;height:8px;position:relative;overflow:hidden;"><div style="position:absolute;left:0;top:0;bottom:0;width:${Math.min(100,(R.R/ Math.max(10,R.R+(rCtx||0)))*100)}%;background:var(--ds-green);"></div></div>
         <div style="flex:1;background:var(--ds-card);border-radius:6px;height:8px;position:relative;overflow:hidden;"><div style="position:absolute;left:0;top:0;bottom:0;width:${rCtx!=null?Math.min(100,(rCtx/ Math.max(10,rCtx))*100):0}%;background:${(rCtx!=null&&rCtx<rShow)?'var(--ds-red)':'var(--ds-purple-bg)'};"></div></div>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ds-text-3);margin-top:4px;"><span>R(余额) ${R.R}</span><span>R(ctx ${ (ctxLim/1000)|0}k) ${rCtx ?? '—'}</span></div>
-      ${rCtx!=null && rCtx<rShow ? `<div style="font-size:11px;color:var(--ds-red);margin-top:6px;">⚠ ${rCtx} 轮后 prompt 达上限 ${ctxLim.toLocaleString()} tok，建议压缩上下文</div>` : ''}
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ds-text-3);margin-top:4px;"><span>R(余额) ${R.R}</span><span>R(ctx ${ctxLim != null ? `${(ctxLim / 1000) | 0}k` : '未知'}) ${rCtx ?? '—'}</span></div>
+      ${rCtx!=null && rCtx<rShow ? `<div style="font-size:11px;color:var(--ds-red);margin-top:6px;">⚠ ${rCtx} 轮后 prompt 达上限 ${ctxLim?.toLocaleString()} tok，建议压缩上下文</div>` : ''}
     </div>`;
   };
   renderCard(doc.getElementById('aus-forecast-card'));
@@ -218,7 +224,9 @@ async function renderForecastChart(history:any[], chatId:string|null){
   const predData = Array(y.length).fill(null).concat(pred);
   const lowData = Array(y.length).fill(null).concat(low);
   const highData = Array(y.length).fill(null).concat(high);
-  const ctxLim = ctxLimitForModel(sorted[sorted.length-1]?.model || 'deepseek-v4-flash');
+  const latestModel = sorted[sorted.length-1];
+  const latestWallet = findWalletForHistory(state.wallets, latestModel || {});
+  const ctxLim = ctxLimitForModel(latestModel?.model || 'deepseek-v4-flash', findWalletModel(latestWallet, latestModel?.model || '')?.contextLimit);
   // echarts
   const ec:any = await import('echarts/core');
   const { LineChart } = await import('echarts/charts');
@@ -242,7 +250,7 @@ async function renderForecastChart(history:any[], chatId:string|null){
       { name:'预测', type:'line', data:predData, lineStyle:{width:1.8,color:'#0BA25E'}, symbol:'none' },
       { name:'置信下', type:'line', data:lowData, lineStyle:{width:0}, symbol:'none', areaStyle:{color:'rgba(16,185,129,0.12)'} },
       { name:'置信上', type:'line', data:highData, lineStyle:{width:0}, symbol:'none' },
-      { type:'line', data:Array(labels.length).fill(ctxLim), lineStyle:{type:'dashed',color:'#ef4444'}, symbol:'none', markLine:{ data:[{ yAxis: ctxLim }] } }
+      ...(ctxLim != null ? [{ type:'line', data:Array(labels.length).fill(ctxLim), lineStyle:{type:'dashed',color:'#ef4444'}, symbol:'none', markLine:{ data:[{ yAxis: ctxLim }] } }] : [])
     ]
   }, true);
 }
@@ -264,7 +272,8 @@ function renderSensitivity(history:any[], chatId:string|null){
     if (bal==null){ if(resEl) resEl.textContent='未设置余额，无法估算剩余轮数'; return; }
     // 临时覆盖 hit
     const tmp={...fit, hitEwma:h} as any;
-    const latestEntry = (chatId ? history.filter((hh:any)=>(hh.chatId??null)===chatId) : history).slice(-1)[0];
+    const scoped = chatId ? history.filter((hh:any)=>(hh.chatId??null)===chatId) : history;
+    const latestEntry = [...scoped].sort((a: any, b: any) => a.timestamp - b.timestamp).slice(-1)[0];
     const model = latestEntry?.model || 'deepseek-v4-flash';
     const pricing = getPricing(model, state.settings as any, findWalletForHistory(state.wallets, latestEntry || {}));
     const R = calcR(bal, tmp, pricing.offpeak);
@@ -283,7 +292,7 @@ function renderCompare(history:any[]){
     const name = r.chatId || '全部/未分组';
     const pct = Math.max(6, Math.min(100, (r.delta/8000)*100));
     return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--ds-border);font-size:11px;">
-      <span style="min-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</span>
+      <span style="min-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(name)}</span>
       <span style="width:18px;height:18px;border-radius:999px;background:${gradeColor(r.grade)};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;">${r.grade}</span>
       <span style="flex:1;height:6px;background:var(--ds-card);border-radius:999px;position:relative;overflow:hidden;"><span style="position:absolute;left:0;top:0;bottom:0;width:${pct}%;background:var(--ds-purple-bg);"></span></span>
       <span style="min-width:60px;text-align:right;">${Math.round(r.delta).toLocaleString()} tok/轮</span>

@@ -25,4 +25,14 @@ describe('用量去重指纹', () => {
     expect(otherEndpoint).not.toBe(base);
     expect(otherCredential).not.toBe(base);
   });
+
+  it('不同请求标识不会因 Token 相同而互相去重', () => {
+    const connection = { endpointId: 'endpoint-a', credentialId: 'secret:a' };
+    const first = usageFingerprint('model', 100, 60, 20, 20, connection, 'req:1');
+    const second = usageFingerprint('model', 100, 60, 20, 20, connection, 'req:2');
+    const duplicateStage = usageFingerprint('model', 100, 60, 20, 20, connection, 'req:1');
+
+    expect(first).not.toBe(second);
+    expect(first).toBe(duplicateStage);
+  });
 });

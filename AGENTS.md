@@ -13,9 +13,9 @@ SillyTavern 原生扩展 `API用量统计`（清单 `api-usage-stat`，版本以
 
 ## 技术栈（已确认）
 
-- **打包**：`Vite 5`（`lib: es`，产物 `index.js + 动态分包 index-*.js/update-*.js + ECharts 9 块` 直出，`define: { process.env.NODE_ENV="production", __APP_VERSION__: manifest.version }` 以修复 `process` 未定义并实现版本单源化）
+- **打包**：`Vite 8`（`lib: es`，产物 `index.js + 动态分包` 直出，`define: { process.env.NODE_ENV="production", __APP_VERSION__: manifest.version }` 以修复 `process` 未定义并实现版本单源化）
 - **语言**：`TypeScript 5 strict`
-- **图表**：`ECharts 5` 按需 `echarts/core + Bar/Line + Grid/Tooltip/CanvasRenderer`，动态分包（`core` 等 9 产物，已提交，随 `index.js` 按需加载），`Y` 8 选项×`X` 5 维度（见下）
+- **图表**：`ECharts 6` 按需 `echarts/core + Bar/Line + Grid/Tooltip/CanvasRenderer`，动态分包（已随 `index.js` 提交并按需加载），`Y` 8 选项×`X` 5 维度（见下）
 - **样式**：无框架，`SmartTheme` 隔离 + `DeepSeek 官方浅色`（`#FFFFFF/#F6F7F8/#111827/#FF6A00/#E6F8EC`，`Microsoft YaHei`，`14px` 圆角，无阴影/无滤镜以保锐利，`absolute` 定位置换修复窄屏 `fixed` 漂移）+ 双主题（`light/dark`，`style.css` 同名变量覆盖 + `services/theme.ts` 切换 + 设置中胶囊下拉，深色高对比 `#0F1419/#1E242E/#E5E7EB`，ECharts 经 `themeColor()` 动态取变量，默认 `light`）
 - **存储**：`extensionSettings[api_usage_stat]` 热 `50` 条 + `IndexedDB api_usage_stat_db` 冷分页（旧多存档已合并为单一历史，`XOR` 密钥兼容，自动迁移备份）；钱包配置、忽略列表、`overviewWalletId` 与 `overviewWalletManuallySet` 随热设置持久化，钱包校准密钥单独存放于 `extensionSettings.walletSecrets` 且不参与导出
 - **最低版本**：`manifest.minimum_client_version 1.11.0`；接入类型筛选兼容最低版本，API 密钥条目区分依赖酒馆 `>=1.14.0`（更早版本无多条密钥编号，归入未识别密钥）

@@ -27,6 +27,17 @@ function finiteNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function positiveNumberOrNull(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : parseFloat(String(value));
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
+function builtinContextLimit(model: string): number | null {
+  const key = String(model || '').toLowerCase();
+  if (key.includes('deepseek')) return 128000;
+  return null;
+}
+
 function safeId(s: string): string {
   return s.replace(/[^a-zA-Z0-9:_-]/g, '-').slice(0, 100);
 }
@@ -145,6 +156,7 @@ export function normalizeWalletModel(raw: any, now = Date.now()): WalletModel | 
     sourceModel,
     model,
     aliases: normalizeAliases(raw.aliases, model),
+    contextLimit: positiveNumberOrNull(raw.contextLimit) ?? builtinContextLimit(sourceModel),
     price: normalizeWalletPriceRule(raw.price),
     source,
     locked: raw.locked === true,
@@ -259,6 +271,7 @@ export function createDeepSeekWallet(settings: Settings, now = Date.now()): Wall
     sourceModel: model,
     model,
     aliases: [],
+    contextLimit: builtinContextLimit(model),
     price: currentBuiltinPrice(model, now),
     source: 'builtin',
     locked: false,

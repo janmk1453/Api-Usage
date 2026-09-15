@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   costAt,
   ctxLimitRounds,
+  ctxLimitForModel,
   fitSegments,
   nextPromptWithBand,
   remainingRounds,
@@ -101,6 +102,13 @@ describe('趋势预测核心', () => {
     expect(costAt(1, fit({ delta: 100_000 }), pricing)).toBe(1.1);
     expect(ctxLimitRounds(fit({ C0: 1_000, delta: 100 }), 3_100)).toBe(21);
     expect(ctxLimitRounds(fit({ delta: 0 }), 3_100)).toBeNull();
+  });
+
+  it('优先使用配置的上下文上限并避免数字猜测', () => {
+    expect(ctxLimitForModel('custom-64-model')).toBeNull();
+    expect(ctxLimitForModel('custom-64k-model')).toBe(64000);
+    expect(ctxLimitForModel('deepseek-flash')).toBe(128000);
+    expect(ctxLimitForModel('custom-model', 256000)).toBe(256000);
   });
 
   it('下一轮预测包含置信带', () => {

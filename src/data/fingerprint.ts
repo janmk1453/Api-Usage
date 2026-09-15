@@ -7,8 +7,10 @@ export function usageFingerprint(
   miss: number,
   completion: number,
   connection?: Partial<HistoryConnection> | null,
+  requestId?: string | null,
 ): string {
   return [
+    requestId || '',
     model,
     total,
     hit,
