@@ -1,14 +1,14 @@
 import { cn as __exportAll } from "./Image-B5UjBJH1.js";
-import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from "./store-CW1NSoAX.js";
+import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from "./store-_kFPP4fT.js";
 import { d as WEBDAV_SYNC_FILE, i as HIDDEN_PRICING_MODELS, n as DEFAULT_PEAK_HOURS, s as PRICING } from "./pricing-bcKQQNo6.js";
 import { d as historyRecordKey, u as saveHot } from "./persistence-CrFXrRB_.js";
 import { r as toast, t as log } from "./logger-Bv-AT94O.js";
-import { T as WALLET_CATALOG_PROVIDERS, _ as findWalletForHistory, a as decryptKey, b as walletBalanceToCny, c as DataEvents, d as calcSavings, f as getPricing$1, i as saveWalletApiKey, l as on, m as normalizeModel, o as encryptKey, p as isDeepSeekOfficialModel, r as getWalletApiKey, s as isTruncatedFinish, t as repository, u as calcCost, v as findWalletModel, w as DEEPSEEK_WALLET_ID, x as walletPendingModelCount, y as mergeWalletCollections } from "./repository-WGNbc33W.js";
-import { a as localDay$1, o as localTimeHM, r as isUnsafeKey$1, t as esc$1 } from "./date-DDmqq1qX.js";
-import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-TUm-Rmzn.js";
-import { r as recalcAllCosts, t as installInterception } from "./interception-BC_AxeDx.js";
-import { i as saveApiKey, n as queryBalance, r as queryWalletBalance } from "./balance-BC_h0e5d.js";
-import { a as removeSyncedModels, n as isSyncedCustomModel, o as syncPricingFromModelsDev, r as previewSync, t as fetchModelsDevCatalog } from "./pricing-sync-DuihwJ1S.js";
+import { T as WALLET_CATALOG_PROVIDERS, _ as findWalletForHistory, a as decryptKey, b as walletBalanceToCny, c as DataEvents, d as calcSavings, f as getPricing$1, i as saveWalletApiKey, l as on, m as normalizeModel, o as encryptKey, p as isDeepSeekOfficialModel, r as getWalletApiKey, s as isTruncatedFinish, t as repository, u as calcCost, v as findWalletModel, w as DEEPSEEK_WALLET_ID, x as walletPendingModelCount, y as mergeWalletCollections } from "./repository-Bd0U64Lk.js";
+import { a as isUnsafeKey$1, c as localDay$1, i as isPeakHour, l as localTimeHM, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay, t as esc$1, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
+import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-DaWccfnd.js";
+import { r as recalcAllCosts, t as installInterception } from "./interception-Bi87Tyz2.js";
+import { i as saveApiKey, n as queryBalance, r as queryWalletBalance } from "./balance-D5Eqn3ox.js";
+import { a as removeSyncedModels, n as isSyncedCustomModel, o as syncPricingFromModelsDev, r as previewSync, t as fetchModelsDevCatalog } from "./pricing-sync-CPVlfQlX.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -761,12 +761,12 @@ function renderSettings(doc) {
         <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">新价格机制（峰谷计费）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-use-new-pricing" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-use-new-pricing-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
         <div id="aus-new-pricing-panel" style="display:${s.useNewPricing ? "grid" : "none"};margin-top:10px;gap:8px;">
           <div style="display:flex;gap:8px;align-items:center;"><input type="date" id="aus-new-pricing-date" style="flex:1;padding:7px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><button id="aus-btn-pricing-today" style="padding:7px 12px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;white-space:nowrap;">设为今日</button></div>
-          <div style="font-size:11px;color:var(--ds-text-2);">生效日期前按旧价，之后按峰谷价（仅 deepseek* 模型，周末全天低谷）。</div>
+          <div style="font-size:11px;color:var(--ds-text-2);">生效日期前按旧价，之后按峰谷价（仅 deepseek* 模型，周末与中国法定节假日全天低谷）。</div>
         </div>
       </div>
 
       <!-- 高峰时段 -->
-      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">新钱包默认峰谷时段</span><button id="aus-btn-add-peak-hour" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 添加</button></div><div id="aus-peak-hours-list" style="display:grid;gap:6px;margin-top:8px;"></div><div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;">支持跨天（如 22:00-02:00）；钱包页可分别覆盖时段和周末规则。</div></div>
+      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">新钱包默认峰谷时段</span><button id="aus-btn-add-peak-hour" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 添加</button></div><div id="aus-peak-hours-list" style="display:grid;gap:6px;margin-top:8px;"></div><div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;line-height:1.6;">支持跨天（如 22:00-02:00）；钱包页可分别覆盖时段和周末规则。<br />DeepSeek 官方规则：周一至周五（不含中国法定节假日）9:00-12:00、14:00-18:00 为高峰，其余时段（含周末和法定节假日全天）为空闲；调休上班的周末同样按空闲计费。</div><div style="margin-top:10px;"><div style="font-size:11px;font-weight:600;color:var(--ds-text);">额外空闲日期</div><textarea id="aus-extra-off-days" rows="3" placeholder="每行一个日期，如 2027-01-01" style="width:100%;margin-top:6px;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;resize:vertical;box-sizing:border-box;"></textarea><div style="font-size:10px;color:var(--ds-text-3);margin-top:4px;">内置法定节假日数据覆盖 ${CN_HOLIDAY_COVERAGE_LABEL}；超出范围的日期可按 YYYY-MM-DD 每行一条补充，全天按空闲计费。</div></div></div>
 
       <!-- 模型与价格（可折叠，默认收起） -->
       <div class="ds-card" style="display:none;"><div id="aus-models-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型与价格（<span id="aus-model-price-unit">${getDisplayCurrency().code}/百万 tokens</span>）</span><div style="display:flex;align-items:center;gap:8px;"><button id="aus-btn-clear-custom-models" style="padding:6px 10px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:11px;cursor:pointer;">清空自定义模型</button><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 自定义模型</button><span id="aus-models-toggle" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;user-select:none;line-height:1;">▼ 展开</span></div></div><div id="aus-models-sync-note" style="display:none;margin-top:8px;padding:8px 10px;border:1px dashed var(--ds-border);border-radius:10px;background:var(--ds-sidebar-bg);font-size:11px;color:var(--ds-text-2);line-height:1.6;"></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
@@ -989,14 +989,14 @@ function renderSettings(doc) {
 		doc.getElementById("aus-auto-balance-interval").style.display = autoCb.checked ? "block" : "none";
 		saveHot({ settings: state$2.settings });
 		try {
-			import("./balance-BC_h0e5d.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-D5Eqn3ox.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	doc.getElementById("aus-balance-interval").onchange = (e) => {
 		state$2.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state$2.settings });
 		try {
-			import("./balance-BC_h0e5d.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-D5Eqn3ox.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (newCb) newCb.onchange = () => {
@@ -1067,8 +1067,8 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-WGNbc33W.js").then((n) => n.n);
-				const { state: st } = await import("./store-CW1NSoAX.js").then((n) => n.i);
+				const { repository } = await import("./repository-Bd0U64Lk.js").then((n) => n.n);
+				const { state: st } = await import("./store-_kFPP4fT.js").then((n) => n.i);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
 				await repository.rebuildAggregates();
@@ -1196,8 +1196,8 @@ function renderSettings(doc) {
 					intervalDrop.style.display = "none";
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-DuihwJ1S.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
-						import("./currency-TUm-Rmzn.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+						import("./pricing-sync-CPVlfQlX.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+						import("./currency-DaWccfnd.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};
 			});
@@ -1218,7 +1218,7 @@ function renderSettings(doc) {
 			if (panel) panel.style.display = enabledEl.checked ? "grid" : "none";
 			let removed = 0;
 			if (!enabledEl.checked) try {
-				const m = await import("./pricing-sync-DuihwJ1S.js").then((n) => n.i);
+				const m = await import("./pricing-sync-CPVlfQlX.js").then((n) => n.i);
 				try {
 					await m.markLegacySyncedModels?.({ skipRerender: true });
 				} catch {}
@@ -1228,8 +1228,8 @@ function renderSettings(doc) {
 			}
 			saveHot({ settings: state$2.settings });
 			try {
-				import("./currency-TUm-Rmzn.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
-				import("./pricing-sync-DuihwJ1S.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+				import("./currency-DaWccfnd.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+				import("./pricing-sync-CPVlfQlX.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
 			} catch {}
 			if (removed) {
 				renderModelsEditor(doc);
@@ -1259,7 +1259,7 @@ function renderSettings(doc) {
 			state$2.settings.pricingSync.useLiveRate = liveEl.checked;
 			saveHot({ settings: state$2.settings });
 			try {
-				import("./currency-TUm-Rmzn.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+				import("./currency-DaWccfnd.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 			} catch {}
 		};
 		if (recalcEl) recalcEl.onchange = () => {
@@ -1432,6 +1432,27 @@ function renderPeakHoursEditor(doc) {
 		});
 		saveHot({ settings: state$2.settings });
 		renderPeakHoursEditor(doc);
+	};
+	bindExtraOffDays(doc);
+}
+function bindExtraOffDays(doc) {
+	const el = doc.getElementById("aus-extra-off-days");
+	if (!el) return;
+	el.value = (state$2.settings.extraOffDays || []).join("\n");
+	el.onchange = () => {
+		const raw = String(el.value || "").split(/[\s,，;；]+/).filter(Boolean);
+		const valid = [];
+		const invalid = [];
+		for (const day of raw) if (isValidDayKey(day)) {
+			if (valid.indexOf(day) === -1) valid.push(day);
+		} else invalid.push(day);
+		valid.sort();
+		state$2.settings.extraOffDays = valid;
+		saveHot({ settings: state$2.settings });
+		renderPeakHoursEditor(doc);
+		recalcCostsAndRefresh();
+		if (invalid.length) toast("warning", `已保存 ${valid.length} 个日期，忽略 ${invalid.length} 个非法日期：${invalid.slice(0, 3).join("、")}`);
+		else toast("success", `已保存 ${valid.length} 个额外空闲日期`);
 	};
 }
 function renderModelsEditor(doc) {
@@ -3140,7 +3161,7 @@ function getYValue(e, key) {
 }
 async function getEcharts$1() {
 	const ec = await import("./core-CiUETK4X.js");
-	const { BarChart, LineChart, PieChart } = await import("./charts-CIYbZu-X.js");
+	const { BarChart, LineChart, PieChart } = await import("./charts-M2nH1u_g.js");
 	const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-CMxWfAxU.js");
 	const { CanvasRenderer } = await import("./renderers-oWWT994T.js");
 	ec.use([
@@ -3653,7 +3674,7 @@ function bucketKey(ts, x, idx) {
 }
 async function getEcharts() {
 	const ec = await import("./core-CiUETK4X.js");
-	const { LineChart } = await import("./charts-CIYbZu-X.js");
+	const { LineChart } = await import("./charts-M2nH1u_g.js");
 	const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-CMxWfAxU.js");
 	const { CanvasRenderer } = await import("./renderers-oWWT994T.js");
 	ec.use([
@@ -4547,7 +4568,7 @@ async function renderChart(filteredRaw) {
 	let echarts;
 	try {
 		echarts = await import("./core-CiUETK4X.js").then(async (ec) => {
-			const { BarChart, LineChart } = await import("./charts-CIYbZu-X.js");
+			const { BarChart, LineChart } = await import("./charts-M2nH1u_g.js");
 			const { GridComponent, TooltipComponent } = await import("./components-CMxWfAxU.js");
 			const { CanvasRenderer } = await import("./renderers-oWWT994T.js");
 			ec.use([
@@ -5527,7 +5548,7 @@ var forecastRenderToken = 0;
 async function renderForecastView() {
 	const doc = getDoc$3();
 	const token = ++forecastRenderToken;
-	const hist = await import("./repository-WGNbc33W.js").then((n) => n.n).then((mod) => mod.repository.getAllHistory()).catch(() => state$2.history || []);
+	const hist = await import("./repository-Bd0U64Lk.js").then((n) => n.n).then((mod) => mod.repository.getAllHistory()).catch(() => state$2.history || []);
 	if (token !== forecastRenderToken) return;
 	try {
 		renderForecastChatPicker(hist);
@@ -5657,7 +5678,7 @@ async function renderForecastChart(history, chatId) {
 	const latestWallet = findWalletForHistory(state$2.wallets, latestModel || {});
 	const ctxLim = ctxLimitForModel(latestModel?.model || "deepseek-v4-flash", findWalletModel(latestWallet, latestModel?.model || "")?.contextLimit);
 	const ec = await import("./core-CiUETK4X.js");
-	const { LineChart } = await import("./charts-CIYbZu-X.js");
+	const { LineChart } = await import("./charts-M2nH1u_g.js");
 	const { GridComponent, TooltipComponent } = await import("./components-CMxWfAxU.js");
 	const { CanvasRenderer } = await import("./renderers-oWWT994T.js");
 	ec.use([
@@ -6083,6 +6104,7 @@ function renderWalletCard(wallet, history) {
             <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" data-wallet-weekend="1" data-wallet-id="${esc$1(wallet.id)}" ${wallet.weekendOffpeak ? "checked" : ""} /> 周末全天按低谷</label>
             <button data-wallet-add-peak="1" data-wallet-id="${esc$1(wallet.id)}" style="padding:6px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;">+ 添加时段</button>
           </div>
+          ${isOfficial ? `<div style="font-size:10px;color:var(--ds-text-3);line-height:1.6;">官方接口按 DeepSeek 规则计费：中国法定节假日全天空闲（内置数据覆盖 ${CN_HOLIDAY_COVERAGE_LABEL}），调休上班的周末同样按空闲计价，可在设置中补充额外空闲日期。</div>` : ""}
         </div>
       </div>
 
@@ -6210,7 +6232,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-BC_h0e5d.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-D5Eqn3ox.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -7337,7 +7359,7 @@ function createPanel() {
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DC2626;font-weight:600;margin-bottom:6px;">隐私声明</div><div style="color:var(--ds-text-2);display:grid;gap:6px;"><div>本扩展有且只能获得用户在酒馆本身中填写的：密钥条目的编号、用户备注和掩码末三位，仅用于独立区分请求来源，不会且无法读取、保存或上传完整明文密钥。</div><div>用户储存在酒馆本身的密钥是安全的，扩展无法获取真实密钥。</div><div>用户主动填入扩展的校准密钥是实际可用的密钥，且仅会被用于查询 DeepSeek 官方余额；它仅经 XOR 混淆后存放于 SillyTavern，不进入历史记录、统计、日志、导入导出或 WebDAV。自动校准时仅由浏览器直接发送至 <a href="https://api.deepseek.com/user/balance" target="_blank" style="color:var(--ds-text);text-decoration:underline;">https://api.deepseek.com/user/balance</a> API。</div><div>XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。</div><div>模型价格同步会访问 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a>；自定义 WebDAV 的数据安全由用户选择的存储服务与网络环境决定。</div><div style="margin-top:2px;padding-top:6px;border-top:1px solid var(--ds-border);font-weight:600;color:#DC2626;">免责声明</div><div>本扩展不对功能“价格来源”、“自动同步”等利用 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 获取的数据中出现或可能出现的商业化中转站负责；我们不建议使用任何商业化中转站，尽管我们已经尽力筛选数据，但由于对大量数据进行完全筛选难以实现，因此我们不对可能出现的任何商业化中转站名称负责，不构成推荐，和 models.dev 或任何中转站没有商业往来，坚定不移反对商业化。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0BA25E;font-weight:600;margin-bottom:6px;">钱包</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 扩展按识别到的接入链接自动创建和汇总钱包，默认始终保留 DeepSeek 官方钱包；同名链接下识别的密钥和模型会归入同一钱包。</div><div>2. 每个钱包可独立维护名称、余额、模型价格、峰谷规则和价格来源；钱包默认收起，展开状态按钱包记忆。价格来源仅展示第一方模型厂商，不展示中转站或聚合平台。</div><div>3. 请求进入后会先匹配所属钱包，再使用该钱包的模型价格和峰谷规则计费，并从对应钱包余额预扣；未配置价格的模型先记零费用，保存或同步价格后自动重算冷热历史。</div><div>4. 自动余额校准仅支持 DeepSeek 官方直连，校准密钥需在钱包内单独填写；其他接入可使用手工余额，多个密钥不会自动相加。</div><div>5. 删除钱包会进入“已忽略接入”，后续请求不会自动重建、不参与余额合计，历史记录仍保留归属，需要时可恢复显示。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（余额查询仅支持 DeepSeek 官方）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前（DeepSeek）高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前（DeepSeek）高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div><div>3. DeepSeek 官方规则：周一至周五（不含中国法定节假日）9:00-12:00、14:00-18:00 为高峰，其余时段（含周末、中国法定节假日全天）为空闲；调休上班的周末同样按空闲计费</div><div>4. 内置中国法定节假日数据覆盖 ${CN_HOLIDAY_COVERAGE_LABEL}，超出范围的年份可在设置中按日期补充“额外空闲日期”</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DB2777;font-weight:600;margin-bottom:6px;">🔄 消息对比</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中找到想对比的两条消息，前者点“旧”，后者点“新”</div><div>2. 系统并排显示请求消息的文字差异</div><div>3. 差异点即缓存发散起始位置（前 N 条相同为缓存命中段）</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 切换时间、模型（可多选）、对话、接入类型和 API 密钥查看不同范围的统计</div><div>2. 多图表展示多模请求参数，悬浮查看分模型明细</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”展开固定区域</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 等详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div></div></div>
@@ -7513,7 +7535,7 @@ function createPanel() {
 		if (updBtn) updBtn.onclick = () => {
 			updBtn.textContent = "检查中…";
 			updBtn.setAttribute("disabled", "");
-			import("./update-BWkI3Azt.js").then((m) => m.checkUpdate(true).finally(() => {
+			import("./update-CKhvgzFQ.js").then((m) => m.checkUpdate(true).finally(() => {
 				updBtn.textContent = "检查更新";
 				updBtn.removeAttribute("disabled");
 			}));
@@ -7563,7 +7585,7 @@ function openPanel() {
 	panelOpen = true;
 	refreshUI();
 	try {
-		import("./update-BWkI3Azt.js").then((m) => m.maybeAutoCheck());
+		import("./update-CKhvgzFQ.js").then((m) => m.maybeAutoCheck());
 	} catch {}
 }
 function closePanel() {
@@ -7585,27 +7607,23 @@ function togglePanel() {
 }
 //#endregion
 //#region src/ui/peak-dot.ts
-function isWeekend(ts) {
-	const d = new Date(ts);
-	return d.getDay() === 0 || d.getDay() === 6;
-}
 function isPeak(ts) {
-	if (isWeekend(ts)) return false;
-	const d = new Date(ts);
-	const mins = d.getHours() * 60 + d.getMinutes();
-	for (const h of state$2.settings.peakHours || []) {
-		const sp = parseInt(h.start.split(":")[0]) * 60 + parseInt(h.start.split(":")[1] || "0");
-		const ep = parseInt(h.end.split(":")[0]) * 60 + parseInt(h.end.split(":")[1] || "0");
-		if (sp < ep) {
-			if (mins >= sp && mins < ep) return true;
-		} else if (mins >= sp || mins < ep) return true;
-	}
-	return false;
+	const hours = state$2.settings.peakHours || [];
+	return isPeakHour(ts, hours, state$2.settings.extraOffDays);
 }
 function getPeakStatus(now = Date.now()) {
-	if (isWeekend(now)) return {
+	const extraOffDays = state$2.settings.extraOffDays;
+	if (isWeekendDay(now)) return {
 		color: "#22c55e",
 		label: "周末全天低谷"
+	};
+	if (isChinaHoliday(now)) return {
+		color: "#22c55e",
+		label: "法定节假日全天低谷"
+	};
+	if (isExtraOffDay(now, extraOffDays)) return {
+		color: "#22c55e",
+		label: "自定义空闲日全天低谷"
 	};
 	if (isPeak(now)) return {
 		color: "#ef4444",
@@ -7781,7 +7799,7 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-BC_AxeDx.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-Bi87Tyz2.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -7789,7 +7807,7 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-BC_AxeDx.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-Bi87Tyz2.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -7879,13 +7897,13 @@ async function onDelete() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-BC_h0e5d.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-D5Eqn3ox.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-TUm-Rmzn.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-DaWccfnd.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DuihwJ1S.js").then((n) => n.i)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-CPVlfQlX.js").then((n) => n.i)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 	try {
@@ -7912,16 +7930,16 @@ async function onDelete() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-BC_AxeDx.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-Bi87Tyz2.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./balance-BC_h0e5d.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-D5Eqn3ox.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
-		import("./currency-TUm-Rmzn.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+		import("./currency-DaWccfnd.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-DuihwJ1S.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-CPVlfQlX.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -7931,7 +7949,7 @@ async function onDisable() {
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-BC_AxeDx.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-Bi87Tyz2.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -7947,13 +7965,13 @@ async function onDisable() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-BC_h0e5d.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-D5Eqn3ox.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-TUm-Rmzn.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-DaWccfnd.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DuihwJ1S.js").then((n) => n.i)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-CPVlfQlX.js").then((n) => n.i)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -7975,13 +7993,13 @@ async function init() {
 		console.error("[API用量统计] initStore 失败", e);
 	}
 	try {
-		(await import("./balance-BC_h0e5d.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-D5Eqn3ox.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-TUm-Rmzn.js").then((n) => n.t)).restartRateTimer?.();
+		(await import("./currency-DaWccfnd.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DuihwJ1S.js").then((n) => n.i)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-CPVlfQlX.js").then((n) => n.i)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
@@ -8003,7 +8021,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-DuihwJ1S.js").then((n) => n.i).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-CPVlfQlX.js").then((n) => n.i).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

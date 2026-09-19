@@ -4,7 +4,7 @@ import type { Settings } from '../types/settings';
 import type { WalletConfig, WalletModel, WalletPriceTier } from '../types/wallet';
 import { DEEPSEEK_WALLET_ID } from '../types/wallet';
 import { findWalletModel } from '../data/wallets';
-import { isPeakHour as isPeakHourRaw, isWeekendDay } from '../utils/date';
+import { isChinaHoliday, isExtraOffDay, isPeakHour as isPeakHourRaw, isWeekendDay } from '../utils/date';
 import { formatMoney as _formatMoney } from './currency';
 
 export { isWeekendDay };
@@ -143,7 +143,7 @@ export function isDeepSeekOfficialModel(m: unknown): boolean {
 
 export function isPeakHour(timestamp: number, settings: Settings): boolean {
   const hours = (settings && settings.peakHours) || (DEFAULT_PEAK_HOURS as any);
-  return isPeakHourRaw(timestamp, hours);
+  return isPeakHourRaw(timestamp, hours, (settings as any)?.extraOffDays);
 }
 
 function isWithinPeakHours(timestamp: number, peakHours: Array<{ start: string; end: string }>): boolean {
@@ -162,8 +162,16 @@ function isWithinPeakHours(timestamp: number, peakHours: Array<{ start: string; 
   return false;
 }
 
-function isWalletPeakHour(timestamp: number, wallet: WalletConfig): boolean {
+function isOfficialPricingWallet(wallet: WalletConfig): boolean {
+  return wallet.id === DEEPSEEK_WALLET_ID || wallet.kind === 'official';
+}
+
+// 官方钱包遵循 DeepSeek 规则：周末与中国法定节假日全天空闲；
+// 额外空闲日期对所有钱包生效（用户显式补充的日期按空闲计费）
+function isWalletPeakHour(timestamp: number, wallet: WalletConfig, settings?: Settings | null): boolean {
   if (wallet.weekendOffpeak !== false && isWeekendDay(timestamp)) return false;
+  if (isOfficialPricingWallet(wallet) && isChinaHoliday(timestamp)) return false;
+  if (isExtraOffDay(timestamp, (settings as any)?.extraOffDays)) return false;
   return isWithinPeakHours(timestamp, wallet.peakHours?.length ? wallet.peakHours : DEFAULT_PEAK_HOURS);
 }
 
@@ -219,7 +227,7 @@ export function calcCost(
   }
   if (useWalletRule && wallet) {
     const pricing = walletPricing(walletRule);
-    const usePeak = pricing.usePeakPricing !== false && isWalletPeakHour(u.timestamp, wallet);
+    const usePeak = pricing.usePeakPricing !== false && isWalletPeakHour(u.timestamp, wallet, settings);
     const p: any = usePeak ? pricing.peak : pricing.offpeak;
     const ih = (u.prompt_cache_hit_tokens / 1e6) * p.hit;
     const im = (u.prompt_cache_miss_tokens / 1e6) * p.miss;
@@ -240,7 +248,7 @@ export function calcCost(
   let p: any;
   let priceType: string;
   if (useNewPricing && pricing.usePeakPricing !== false && isDeepSeekOfficialModel(model)) {
-    const isPeak = isPeakHourRaw(u.timestamp, hours);
+    const isPeak = isPeakHourRaw(u.timestamp, hours, (settings as any)?.extraOffDays);
     p = isPeak ? pricing.peak : pricing.offpeak;
     priceType = isPeak ? 'new-peak' : 'new-offpeak';
   } else {
@@ -274,7 +282,7 @@ export function calcSavings(
   if (!hasPriceForModel(model, settings, wallet)) return 0;
   if (useWalletRule && wallet) {
     const pricing = walletPricing(walletRule);
-    const usePeak = pricing.usePeakPricing !== false && isWalletPeakHour(u.timestamp, wallet);
+    const usePeak = pricing.usePeakPricing !== false && isWalletPeakHour(u.timestamp, wallet, settings);
     const p: any = usePeak ? pricing.peak : pricing.offpeak;
     return ((u.prompt_cache_hit_tokens || 0) / 1e6) * (p.miss - p.hit);
   }
@@ -285,7 +293,7 @@ export function calcSavings(
   const useNewPricing = settings.useNewPricing && u.timestamp >= settings.newPricingDate;
   let p: any;
   if (useNewPricing && pricing.usePeakPricing !== false && isDeepSeekOfficialModel(model)) {
-    p = isPeakHourRaw(u.timestamp, hours) ? pricing.peak : pricing.offpeak;
+    p = isPeakHourRaw(u.timestamp, hours, (settings as any)?.extraOffDays) ? pricing.peak : pricing.offpeak;
   } else p = pricing.offpeak;
   return ((u.prompt_cache_hit_tokens || 0) / 1e6) * (p.miss - p.hit);
 }

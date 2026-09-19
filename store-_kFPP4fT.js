@@ -25,6 +25,7 @@ var defaultSettings = () => ({
 		start: "14:00",
 		end: "18:00"
 	}],
+	extraOffDays: [],
 	peakDot: true,
 	webdav: {
 		url: "https://dav.jianguoyun.com/dav/",

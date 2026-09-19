@@ -68,6 +68,8 @@ export type Settings = {
   newPricingDate: number;
   customModels: CustomModel[];
   peakHours: PeakHour[];
+  // 用户补充的额外空闲日期（YYYY-MM-DD）：内置节假日数据未覆盖年份或特殊调整时使用
+  extraOffDays: string[];
   peakDot: boolean;
   webdav: WebdavSettings;
   historyScope: HistoryScope;
@@ -95,6 +97,7 @@ export const defaultSettings = (): Settings => ({
   newPricingDate: new Date('2026-08-17T00:00:00+08:00').getTime(),
   customModels: [],
   peakHours: [{ start: '09:00', end: '12:00' }, { start: '14:00', end: '18:00' }],
+  extraOffDays: [],
   peakDot: true,
   webdav: { url: 'https://dav.jianguoyun.com/dav/', username: '', path: '', proxy: '' },
   historyScope: 'all',

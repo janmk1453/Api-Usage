@@ -38,6 +38,7 @@ Api-Usage/
 ├── src/
 │   ├── index.ts           # 入口：repository.hydrate + 魔法棒注入 + 全屏面板 + 峰值圆点（ST 未就绪时轮询重试 installInterception）+ 汇率/定价格式同步定时器（24h）+ 延迟自动检查更新
 │   ├── constants/pricing.ts  # PRICING/DEFAULT_PEAK_HOURS/MAX_HISTORY/DETAIL_KEEP/STORAGE_KEYS + PRICING_SYNC_SOURCE/FALLBACK/DEFAULT_EXCHANGE_RATE + PRICE_HISTORY/PriceSegment + FLASH_PRICE_CUTOFF(2026-09-10 12:00)（内置模型多段价格历史：deepseek-v4-flash 新旧两段、deepseek-v4-pro 持续定价单段、deepseek-flash 单段；V4.1 Flash 现役模型名为 deepseek-flash，V4 Pro 继续提供调用并保持现价）
+│   ├── constants/holidays.ts # 中国法定节假日放假日内置数据（2024-2026，源自国务院办公厅通知）：isChinaHolidayDate/hasChinaHolidayData + CN_HOLIDAY_DATA_YEARS/CN_HOLIDAY_COVERAGE_LABEL；只收录放假日，调休上班的周末无需维护（周末本身即空闲）
 │   ├── types/save.ts, settings.ts, wallet.ts # HistoryEntry 含 sourceType/endpointId/endpointLabel/credentialId/credentialLabel/walletId/pricingSource；settings 含 overviewWalletId/overviewWalletManuallySet 与 PricingSyncSettings；wallet.ts 定义 WalletConfig/WalletModel/WalletPriceRule/币种与 catalogProvider 映射
 │   ├── data/              # ★ 统一数据框架（所有存/取/算/展的唯一通路）
 │   │   ├── types.ts       # Snapshot/Aggregated/TimeRange/OverviewView/StatsView
@@ -108,6 +109,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **入口**：侧边栏 `钱包`，`data-view="wallet"` 独立页；页面顶部为钱包汇总卡，下面按接入链接展示钱包，最后展示已忽略接入口
 - **钱包粒度**：一个 `endpointId` 对应一个钱包，同一链接下多个密钥归入同一钱包；默认始终有不可删除的 DeepSeek 官方钱包。历史中已有识别的接入会在迁移时回填，新请求首次出现未忽略接入时自动创建钱包并命名成接入地址
 - **固定与可编辑**：接入地址、接入类型、已识别密钥身份只读；钱包名称、模型名、价格、价格来源、峰谷规则、手工余额和忽略状态可编辑。模型改名会保留旧名别名，旧请求仍能命中规则
+- **官方峰谷规则**：DeepSeek 官方内置定价按北京时间判断——周一至周五（不含中国法定节假日）`9:00-12:00`、`14:00-18:00` 为高峰，其余时段（含周末、中国法定节假日全天）为空闲；调休上班的周末同样按空闲计费。节假日数据在 `src/constants/holidays.ts`（内置覆盖 2024-2026），`settings.extraOffDays` 可补充额外空闲日期；官方钱包的自定义价格规则同样应用节假日豁免，中转钱包仍按自身峰谷配置
 - **默认收起**：每个钱包默认 `collapsed=true`；宽屏收起态采用“身份区 + 五项指标 + 操作区”三栏，指标固定为余额、密钥数、模型数、请求数、费用，待定价数显示为状态徽标，避免中间留白。展开状态按钱包独立记忆并随导入导出/WebDAV 同步
 - **余额**：币种首版支持 `CNY/USD`，手工余额可直接填写；自动校准只开放给 DeepSeek 官方直连钱包，默认使用钱包内单独保存的校准密钥，可选一个主密钥作为账号身份。多密钥不会自动相加。钱包余额在每次请求按当前币种预扣，成功校准后覆盖为服务端余额
 - **密钥隐私**：普通官方接口只记录酒馆密钥条目编号、标签和掩码末三位；反向代理 `proxy_password` 与 `custom_include_headers` 继续不读取、不比较、不持久化，因此按“未识别密钥”处理
@@ -121,7 +123,8 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **使用说明**：帮助页必须保留隐私声明、免责声明和钱包说明。隐私声明需明确区分酒馆密钥识别信息与用户主动填写的钱包校准密钥；免责声明需说明不对 models.dev 数据中的商业化中转站名称或推荐关系负责。
 
 ### 设置
-- 保留全局控制：颜色模式、历史显示范围、自动校准总开关与间隔、新价格机制（日期）、新钱包默认峰谷、models.dev 自动同步、调试、峰值圆点和 WebDAV
+- 保留全局控制：颜色模式、历史显示范围、自动校准总开关与间隔、新价格机制（日期）、新钱包默认峰谷与额外空闲日期、models.dev 自动同步、调试、峰值圆点和 WebDAV
+- 峰谷规则：`extraOffDays`（`YYYY-MM-DD` 数组，`normalizeSettings` 校验去重）用于补充内置节假日数据未覆盖年份；修改后调用 `recalcCostsAndRefresh` 重算冷热费用。峰值圆点（`peak-dot.ts`）复用 `utils/date` 的 `isWeekendDay/isChinaHoliday/isExtraOffDay/isPeakHour`，法定节假日显示“全天低谷”
 - 已迁出钱包页：API 密钥、手工余额、模型与价格编辑。旧 API 密钥、旧余额和旧 `customModels` 由 `repository.hydrate` 自动迁移到 DeepSeek 官方钱包；隐藏兼容控件不参与新增配置
 - `models.dev` 同步已改为逐钱包写入，预览和状态显示总新增/更新/跳过/待定价数量；全局开关关闭时只移除未锁定的同步规则
 - 货币切换仍通过 `formatMoney/getDisplayCurrency` 全站即时换算；钱包余额汇总固定使用 `pricingSync.exchangeRate`，不因关闭美元展示而错误回退为 `1`
@@ -136,7 +139,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 
 ## 常见任务
 
-- **改定价/峰谷**：内置价看 `src/constants/pricing.ts` + `src/services/pricing.ts`；钱包价和独立峰谷看 `src/data/wallets.ts` + `src/ui/wallet-view.ts`；`calcCost/calcSavings/getPricing/hasPriceForModel` 均支持可选钱包上下文，未传钱包时保持旧行为
+- **改定价/峰谷**：内置价看 `src/constants/pricing.ts` + `src/services/pricing.ts`；节假日规则看 `src/constants/holidays.ts` + `src/utils/date.ts`（`isPeakHour/isOffpeakDay/isChinaHoliday`）；钱包价和独立峰谷看 `src/data/wallets.ts` + `src/ui/wallet-view.ts`；`calcCost/calcSavings/getPricing/hasPriceForModel` 均支持可选钱包上下文，未传钱包时保持旧行为
 - **加价格段（多段定价）**：`PRICE_HISTORY[模型].push({since: 生效时间戳, offpeak, peak, usePeakPricing?, peakHours?, label?})`（按 `since` 升序，命中 `timestamp>=since` 最后一段，未来段同样写法）；内置段按记录时间查询，钱包手工/同步规则覆盖后不分段；改价后按钱包执行冷热重算
 - **改面板/导航**：`src/ui/panel.ts`（全屏+`positionPanel` 定位置换+`applyCollapsed`）+ `style.css`（`#aus-mobile-header` 汉堡 + `display` 切换，无过渡；改动钱包 header 响应式时必须保持覆盖规则优先级高于通用网格规则）
 - **改概览/统计**：`src/ui/overview.ts` + `src/ui/stats-view.ts`（五维度 time∩model∩chat∩endpoint∩credential 过滤）+ `src/data/computed.ts`（`computeChatStats` / `filterStatsHistory` / 接入与密钥选项单源）+ `src/ui/heatmap.ts`（概览热力图，GitHub 风格，近 2 年，块内滑动）
@@ -159,6 +162,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **热力图/图表未就绪**：统计页图表在 `display:none` 时 `clientWidth 0` 误报，需检测 `offsetParent` 跳过渲染，切到统计页再 `setTimeout 60ms` 触发；热力图块必须 `max-width:100%; overflow:hidden` 卡片 + `overflow-x:auto` 内部滑动，复刻 `模型汇总` 表 `min-width:720px` 在卡片内滑动的模式，禁止让块本身撑开屏幕
 - **接入/密钥筛选为空**：先检查 `state.history[]` 是否已有 `endpointId/credentialId`；旧记录只会进入“未记录接入/未识别密钥”，反向代理密码模式按严格隐私归入未识别密钥；密钥条目能力依赖酒馆 `>=1.14.0`，1.11 至 1.13 只能区分接入类型
 - **钱包费用为 0**：先检查 `history[].walletId`、钱包 `models[].priceConfigured` 和 `pricingSource`。待定价模型按设计为 0；保存价格、切换价格来源或执行 models.dev 同步后应调用 `recalcWallet`。DeepSeek 官方旧模型若已迁移进钱包，需确认没有误设成未定价 discovered 规则
+- **峰谷时段判断异常**：先确认记录时间是否落在内置节假日/周末（`src/constants/holidays.ts` + `utils/date.ts` 的 `isOffpeakDay`），再检查 `settings.extraOffDays`、钱包 `peakHours/weekendOffpeak` 与 `settings.peakHours`；超出内置数据年份的法定节假日需在设置中补充“额外空闲日期”，否则会按普通工作日峰段计价。修改后须重算冷热历史
 - **钱包没有自动创建**：确认请求包含 `endpointId`，且对应 `wallet:<endpointId>` 未被加入 `walletIgnored`；反向代理仅创建按地址区分的钱包，不识别代理密码
 - **钱包展开状态异常**：状态存于 `WalletConfig.collapsed`，默认 `true`，旧数据缺字段也按收起处理；若展开后刷新仍收起，检查热持久化是否覆盖了 `wallets` 字段
 - **窄屏汇总错位**：钱包汇总卡必须使用 `repeat(3,minmax(0,1fr))`，内侧文本用省略号或缩小字号，不能退回 `1fr` 三行

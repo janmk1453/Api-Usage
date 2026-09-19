@@ -10,6 +10,7 @@ import { getWalletApiKey, saveWalletApiKey } from '../services/wallet-secrets';
 import { syncPricingFromModelsDev } from '../services/pricing-sync';
 import { toast } from '../utils/logger';
 import { esc } from '../utils/date';
+import { CN_HOLIDAY_COVERAGE_LABEL } from '../constants/holidays';
 import {
   DEEPSEEK_WALLET_ID,
   WALLET_CATALOG_PROVIDERS,
@@ -249,6 +250,7 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
             <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" data-wallet-weekend="1" data-wallet-id="${esc(wallet.id)}" ${wallet.weekendOffpeak ? 'checked' : ''} /> 周末全天按低谷</label>
             <button data-wallet-add-peak="1" data-wallet-id="${esc(wallet.id)}" style="padding:6px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;">+ 添加时段</button>
           </div>
+          ${isOfficial ? `<div style="font-size:10px;color:var(--ds-text-3);line-height:1.6;">官方接口按 DeepSeek 规则计费：中国法定节假日全天空闲（内置数据覆盖 ${CN_HOLIDAY_COVERAGE_LABEL}），调休上班的周末同样按空闲计价，可在设置中补充额外空闲日期。</div>` : ''}
         </div>
       </div>
 

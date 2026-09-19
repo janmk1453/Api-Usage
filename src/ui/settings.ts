@@ -5,6 +5,8 @@ import { doSyncNow, saveWebdavPass } from '../services/sync';
 import { decryptKey } from '../utils/crypto';
 import { applyTheme } from '../services/theme';
 import { PRICING, DEFAULT_PEAK_HOURS, HIDDEN_PRICING_MODELS } from '../constants/pricing';
+import { CN_HOLIDAY_COVERAGE_LABEL } from '../constants/holidays';
+import { isValidDayKey } from '../utils/date';
 import { recalcAllCosts } from '../services/interception';
 import { generateDebugBatch } from '../services/debug';
 import { getDisplayCurrency } from '../services/currency';
@@ -73,12 +75,12 @@ export function renderSettings(doc: Document) {
         <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">新价格机制（峰谷计费）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-use-new-pricing" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-use-new-pricing-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
         <div id="aus-new-pricing-panel" style="display:${s.useNewPricing ? 'grid':'none'};margin-top:10px;gap:8px;">
           <div style="display:flex;gap:8px;align-items:center;"><input type="date" id="aus-new-pricing-date" style="flex:1;padding:7px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><button id="aus-btn-pricing-today" style="padding:7px 12px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;white-space:nowrap;">设为今日</button></div>
-          <div style="font-size:11px;color:var(--ds-text-2);">生效日期前按旧价，之后按峰谷价（仅 deepseek* 模型，周末全天低谷）。</div>
+          <div style="font-size:11px;color:var(--ds-text-2);">生效日期前按旧价，之后按峰谷价（仅 deepseek* 模型，周末与中国法定节假日全天低谷）。</div>
         </div>
       </div>
 
       <!-- 高峰时段 -->
-      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">新钱包默认峰谷时段</span><button id="aus-btn-add-peak-hour" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 添加</button></div><div id="aus-peak-hours-list" style="display:grid;gap:6px;margin-top:8px;"></div><div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;">支持跨天（如 22:00-02:00）；钱包页可分别覆盖时段和周末规则。</div></div>
+      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">新钱包默认峰谷时段</span><button id="aus-btn-add-peak-hour" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 添加</button></div><div id="aus-peak-hours-list" style="display:grid;gap:6px;margin-top:8px;"></div><div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;line-height:1.6;">支持跨天（如 22:00-02:00）；钱包页可分别覆盖时段和周末规则。<br />DeepSeek 官方规则：周一至周五（不含中国法定节假日）9:00-12:00、14:00-18:00 为高峰，其余时段（含周末和法定节假日全天）为空闲；调休上班的周末同样按空闲计费。</div><div style="margin-top:10px;"><div style="font-size:11px;font-weight:600;color:var(--ds-text);">额外空闲日期</div><textarea id="aus-extra-off-days" rows="3" placeholder="每行一个日期，如 2027-01-01" style="width:100%;margin-top:6px;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;resize:vertical;box-sizing:border-box;"></textarea><div style="font-size:10px;color:var(--ds-text-3);margin-top:4px;">内置法定节假日数据覆盖 ${CN_HOLIDAY_COVERAGE_LABEL}；超出范围的日期可按 YYYY-MM-DD 每行一条补充，全天按空闲计费。</div></div></div>
 
       <!-- 模型与价格（可折叠，默认收起） -->
       <div class="ds-card" style="display:none;"><div id="aus-models-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">模型与价格（<span id="aus-model-price-unit">${getDisplayCurrency().code}/百万 tokens</span>）</span><div style="display:flex;align-items:center;gap:8px;"><button id="aus-btn-clear-custom-models" style="padding:6px 10px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:11px;cursor:pointer;">清空自定义模型</button><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">+ 自定义模型</button><span id="aus-models-toggle" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;user-select:none;line-height:1;">▼ 展开</span></div></div><div id="aus-models-sync-note" style="display:none;margin-top:8px;padding:8px 10px;border:1px dashed var(--ds-border);border-radius:10px;background:var(--ds-sidebar-bg);font-size:11px;color:var(--ds-text-2);line-height:1.6;"></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
@@ -605,6 +607,30 @@ function renderPeakHoursEditor(doc: Document) {
   if (addBtn) addBtn.onclick = () => {
     (state.settings as any).peakHours.push({ start: '09:00', end: '12:00' });
     saveHot({ settings: state.settings }); renderPeakHoursEditor(doc);
+  };
+  bindExtraOffDays(doc);
+}
+
+// 额外空闲日期：补充内置节假日数据未覆盖年份的法定节假日（YYYY-MM-DD 每行一条）
+function bindExtraOffDays(doc: Document) {
+  const el = doc.getElementById('aus-extra-off-days') as HTMLTextAreaElement | null;
+  if (!el) return;
+  el.value = (((state.settings as any).extraOffDays as string[]) || []).join('\n');
+  el.onchange = () => {
+    const raw = String(el.value || '').split(/[\s,，;；]+/).filter(Boolean);
+    const valid: string[] = [];
+    const invalid: string[] = [];
+    for (const day of raw) {
+      if (isValidDayKey(day)) { if (valid.indexOf(day) === -1) valid.push(day); }
+      else invalid.push(day);
+    }
+    valid.sort();
+    (state.settings as any).extraOffDays = valid;
+    saveHot({ settings: state.settings });
+    renderPeakHoursEditor(doc);
+    void recalcCostsAndRefresh();
+    if (invalid.length) toast('warning', `已保存 ${valid.length} 个日期，忽略 ${invalid.length} 个非法日期：${invalid.slice(0, 3).join('、')}`);
+    else toast('success', `已保存 ${valid.length} 个额外空闲日期`);
   };
 }
 

@@ -1,20 +1,16 @@
 import { state } from '../store/index';
+import { isChinaHoliday, isExtraOffDay, isPeakHour, isWeekendDay } from '../utils/date';
 
-function isWeekend(ts: number) { const d = new Date(ts); return d.getDay() === 0 || d.getDay() === 6; }
 function isPeak(ts: number): boolean {
-  if (isWeekend(ts)) return false;
-  const d = new Date(ts);
-  const mins = d.getHours() * 60 + d.getMinutes();
-  for (const h of (state.settings as any).peakHours || []) {
-    const sp = parseInt(h.start.split(':')[0]) * 60 + parseInt(h.start.split(':')[1] || '0');
-    const ep = parseInt(h.end.split(':')[0]) * 60 + parseInt(h.end.split(':')[1] || '0');
-    if (sp < ep) { if (mins >= sp && mins < ep) return true; } else if (mins >= sp || mins < ep) return true;
-  }
-  return false;
+  const hours = (state.settings as any).peakHours || [];
+  return isPeakHour(ts, hours, (state.settings as any).extraOffDays);
 }
 
 export function getPeakStatus(now = Date.now()) {
-  if (isWeekend(now)) return { color: '#22c55e', label: '周末全天低谷' };
+  const extraOffDays = (state.settings as any).extraOffDays;
+  if (isWeekendDay(now)) return { color: '#22c55e', label: '周末全天低谷' };
+  if (isChinaHoliday(now)) return { color: '#22c55e', label: '法定节假日全天低谷' };
+  if (isExtraOffDay(now, extraOffDays)) return { color: '#22c55e', label: '自定义空闲日全天低谷' };
   if (isPeak(now)) return { color: '#ef4444', label: '高峰时段' };
   const d = new Date(now);
   const mins = d.getHours() * 60 + d.getMinutes();
