@@ -94,6 +94,64 @@ describe('模型定价', () => {
     });
   });
 
+  it('中国法定节假日全天空闲，调休上班的周末同样空闲', () => {
+    const settings = makeSettings();
+    // 2026-09-25 周五（中秋节）与 2026-10-01 周四（国庆节）为法定节假日
+    expect(calcCost(usage(localTimestamp(2026, 9, 25, 10), 'deepseek-flash'), settings)).toMatchObject({
+      total: 1,
+      priceType: 'new-offpeak',
+    });
+    expect(calcCost(usage(localTimestamp(2026, 10, 1, 14), 'deepseek-flash'), settings)).toMatchObject({
+      total: 1,
+      priceType: 'new-offpeak',
+    });
+    // 2026-10-10 周六为调休上班日，仍按空闲计价
+    expect(calcCost(usage(localTimestamp(2026, 10, 10, 10), 'deepseek-flash'), settings)).toMatchObject({
+      total: 1,
+      priceType: 'new-offpeak',
+    });
+    // 对照：普通工作日同一时段为高峰
+    expect(calcCost(usage(localTimestamp(2026, 9, 21, 10), 'deepseek-flash'), settings)).toMatchObject({
+      total: 2,
+      priceType: 'new-peak',
+    });
+  });
+
+  it('额外空闲日期对内置定价与官方钱包同时生效', () => {
+    const extra = ['2027-01-04'];
+    const settings = makeSettings({ extraOffDays: extra });
+    const ts = localTimestamp(2027, 1, 4, 10); // 2027-01-04 周一
+    expect(calcCost(usage(ts, 'deepseek-flash'), makeSettings()).priceType).toBe('new-peak');
+    expect(calcCost(usage(ts, 'deepseek-flash'), settings)).toMatchObject({
+      total: 1,
+      priceType: 'new-offpeak',
+    });
+
+    const official = makeWallet({
+      id: 'wallet:deepseek-official',
+      kind: 'official',
+      models: [{
+        id: 'model:official-peak',
+        sourceModel: 'deepseek-flash',
+        model: 'deepseek-flash',
+        aliases: [],
+        price: {
+          usePeakPricing: true,
+          offpeak: { hit: 0, miss: 1, output: 0 },
+          peak: { hit: 0, miss: 3, output: 0 },
+          priceConfigured: true,
+        },
+        source: 'manual',
+        locked: false,
+        discoveredAt: 0,
+        lastSeen: 0,
+        updatedAt: 0,
+      }],
+    });
+    expect(calcCost(usage(ts, 'deepseek-flash'), settings, official).priceType).toBe('wallet-offpeak');
+    expect(calcCost(usage(ts, 'deepseek-flash'), makeSettings(), official).priceType).toBe('wallet-peak');
+  });
+
   it('自定义价格优先且支持关闭峰谷', () => {
     const settings = makeSettings({
       customModels: [{

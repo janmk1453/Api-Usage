@@ -3671,7 +3671,6 @@ registerLayOutOnCoordSysUsage({
 		return model.getShallow("center");
 	}
 });
-Math.PI * 2;
 PathProxy.CMD;
 function projectPointToLine(x1, y1, x2, y2, x, y, out, limitToEnds) {
 	var dx = x - x1;

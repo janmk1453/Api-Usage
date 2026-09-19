@@ -1,10 +1,10 @@
 import { cn as __exportAll } from "./Image-B5UjBJH1.js";
-import { a as defaultSettings, n as getSelectedSave, r as state } from "./store-CW1NSoAX.js";
+import { a as defaultSettings, n as getSelectedSave, r as state } from "./store-_kFPP4fT.js";
 import { a as MAX_HISTORY, i as HIDDEN_PRICING_MODELS, n as DEFAULT_PEAK_HOURS, o as PRICE_HISTORY, s as PRICING } from "./pricing-bcKQQNo6.js";
 import { a as loadHistoryCold, c as saveExtensionSettings, d as historyRecordKey, i as getExtensionSettings, l as saveHistoryCold, n as clearHistoryCold, o as loadHot, r as getAllHistory, t as appendHistoryCold, u as saveHot } from "./persistence-CrFXrRB_.js";
 import { r as toast, t as log } from "./logger-Bv-AT94O.js";
-import { i as isWeekendDay, n as isPeakHour, r as isUnsafeKey } from "./date-DDmqq1qX.js";
-import { a as getWalletExchangeRate } from "./currency-TUm-Rmzn.js";
+import { a as isUnsafeKey, i as isPeakHour, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay } from "./date-BJI2m6dS.js";
+import { a as getWalletExchangeRate } from "./currency-DaWccfnd.js";
 //#region src/types/wallet.ts
 var DEEPSEEK_WALLET_ID = "wallet:deepseek-official";
 var WALLET_CATALOG_PROVIDERS = [
@@ -947,8 +947,13 @@ function isWithinPeakHours(timestamp, peakHours) {
 	}
 	return false;
 }
-function isWalletPeakHour(timestamp, wallet) {
+function isOfficialPricingWallet(wallet) {
+	return wallet.id === "wallet:deepseek-official" || wallet.kind === "official";
+}
+function isWalletPeakHour(timestamp, wallet, settings) {
 	if (wallet.weekendOffpeak !== false && isWeekendDay(timestamp)) return false;
+	if (isOfficialPricingWallet(wallet) && isChinaHoliday(timestamp)) return false;
+	if (isExtraOffDay(timestamp, settings?.extraOffDays)) return false;
 	return isWithinPeakHours(timestamp, wallet.peakHours?.length ? wallet.peakHours : DEFAULT_PEAK_HOURS);
 }
 function findSegment(normalizedModel, uTs) {
@@ -1000,7 +1005,7 @@ function calcCost(u, settings, wallet) {
 	};
 	if (useWalletRule && wallet) {
 		const pricing = walletPricing(walletRule);
-		const usePeak = pricing.usePeakPricing !== false && isWalletPeakHour(u.timestamp, wallet);
+		const usePeak = pricing.usePeakPricing !== false && isWalletPeakHour(u.timestamp, wallet, settings);
 		const p = usePeak ? pricing.peak : pricing.offpeak;
 		const ih = u.prompt_cache_hit_tokens / 1e6 * p.hit;
 		const im = u.prompt_cache_miss_tokens / 1e6 * p.miss;
@@ -1020,7 +1025,7 @@ function calcCost(u, settings, wallet) {
 	let p;
 	let priceType;
 	if (useNewPricing && pricing.usePeakPricing !== false && isDeepSeekOfficialModel(model)) {
-		const isPeak = isPeakHour(u.timestamp, hours);
+		const isPeak = isPeakHour(u.timestamp, hours, settings?.extraOffDays);
 		p = isPeak ? pricing.peak : pricing.offpeak;
 		priceType = isPeak ? "new-peak" : "new-offpeak";
 	} else {
@@ -1045,7 +1050,7 @@ function calcSavings(u, settings, wallet) {
 	if (!hasPriceForModel(model, settings, wallet)) return 0;
 	if (useWalletRule && wallet) {
 		const pricing = walletPricing(walletRule);
-		const p = pricing.usePeakPricing !== false && isWalletPeakHour(u.timestamp, wallet) ? pricing.peak : pricing.offpeak;
+		const p = pricing.usePeakPricing !== false && isWalletPeakHour(u.timestamp, wallet, settings) ? pricing.peak : pricing.offpeak;
 		return (u.prompt_cache_hit_tokens || 0) / 1e6 * (p.miss - p.hit);
 	}
 	const basePricing = getPricing(model, settings, wallet);
@@ -1053,7 +1058,7 @@ function calcSavings(u, settings, wallet) {
 	const hours = peakHoursFor(hasCustomForModel(model, settings) ? null : findSegment(normalizeModel(model), u.timestamp), settings);
 	const useNewPricing = settings.useNewPricing && u.timestamp >= settings.newPricingDate;
 	let p;
-	if (useNewPricing && pricing.usePeakPricing !== false && isDeepSeekOfficialModel(model)) p = isPeakHour(u.timestamp, hours) ? pricing.peak : pricing.offpeak;
+	if (useNewPricing && pricing.usePeakPricing !== false && isDeepSeekOfficialModel(model)) p = isPeakHour(u.timestamp, hours, settings?.extraOffDays) ? pricing.peak : pricing.offpeak;
 	else p = pricing.offpeak;
 	return (u.prompt_cache_hit_tokens || 0) / 1e6 * (p.miss - p.hit);
 }
@@ -1682,6 +1687,7 @@ function normalizeSettings(incoming) {
 	if (typeof merged.pricingSync.showSyncedModels !== "boolean") merged.pricingSync.showSyncedModels = false;
 	if (!isFinite(parseFloat(String(merged.pricingSync.syncedMarkVersion)))) merged.pricingSync.syncedMarkVersion = 0;
 	if (!Array.isArray(merged.peakHours) || !merged.peakHours.length) merged.peakHours = def.peakHours;
+	merged.extraOffDays = Array.isArray(merged.extraOffDays) ? Array.from(new Set(merged.extraOffDays.filter((day) => isValidDayKey(day)))).sort() : def.extraOffDays;
 	if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
 	if (!merged.historyScope) merged.historyScope = def.historyScope;
 	if (!merged.theme) merged.theme = def.theme;
@@ -1949,7 +1955,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && state.settings.pricingSync?.enabled) try {
-						import("./pricing-sync-DuihwJ1S.js").then((n) => n.i).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-CPVlfQlX.js").then((n) => n.i).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;

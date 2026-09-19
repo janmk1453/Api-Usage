@@ -10,7 +10,7 @@ import { MAX_HISTORY, DETAIL_KEEP, PRICING } from '../constants/pricing';
 import { emit, DataEvents } from './events';
 import type { Snapshot } from './types';
 import { defaultSettings } from '../types/settings';
-import { isUnsafeKey } from '../utils/date';
+import { isUnsafeKey, isValidDayKey } from '../utils/date';
 import { isTruncatedFinish } from '../utils/finish';
 import { log, toast } from '../utils/logger';
 import { usageFingerprint } from './fingerprint';
@@ -575,6 +575,9 @@ function normalizeSettings(incoming: any): any {
   if (typeof merged.pricingSync.showSyncedModels !== 'boolean') merged.pricingSync.showSyncedModels = false;
   if (!isFinite(parseFloat(String(merged.pricingSync.syncedMarkVersion)))) merged.pricingSync.syncedMarkVersion = 0;
   if (!Array.isArray(merged.peakHours) || !merged.peakHours.length) merged.peakHours = def.peakHours;
+  merged.extraOffDays = Array.isArray(merged.extraOffDays)
+    ? Array.from(new Set(merged.extraOffDays.filter((day: any) => isValidDayKey(day)))).sort()
+    : def.extraOffDays;
   if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
   if (!merged.historyScope) merged.historyScope = def.historyScope;
   if (!merged.theme) merged.theme = def.theme;
