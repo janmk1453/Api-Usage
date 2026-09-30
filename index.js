@@ -52,7 +52,7 @@ async function exportHistory() {
 		path: "",
 		proxy: ""
 	};
-	const _appVer = "3.0.9";
+	const _appVer = "3.1.0";
 	let fullHist = [];
 	try {
 		fullHist = await repository.getAllHistory();
@@ -1844,6 +1844,15 @@ function renderDiff() {
 */
 var STATS_FILTER_ALL = "__all__";
 var STATS_FILTER_UNKNOWN = "__unknown__";
+function numberValue(value) {
+	const n = typeof value === "number" ? value : parseFloat(String(value));
+	return Number.isFinite(n) ? n : 0;
+}
+function averagePositive(values) {
+	const valid = values.filter((value) => Number.isFinite(value) && value > 0);
+	if (!valid.length) return 0;
+	return valid.reduce((sum, value) => sum + value, 0) / valid.length;
+}
 function filterStatsHistory(entries, filter = {}) {
 	return (entries || []).filter((entry) => {
 		if (!entry) return false;
@@ -1993,8 +2002,6 @@ function computeOverview(balanceWalletId = "all", historyOverride) {
 	let viewTotalTokens = totalTokens;
 	let viewInputCost = s.input_cost || 0;
 	let viewOutputCost = s.output_cost || 0;
-	let viewInputTokens = s.input_tokens || 0;
-	let viewOutputTokens = s.output_tokens || 0;
 	let viewHit = s.cache_hit_tokens || 0;
 	let viewMiss = s.cache_miss_tokens || 0;
 	let viewOutput = s.output_tokens || 0;
@@ -2004,8 +2011,6 @@ function computeOverview(balanceWalletId = "all", historyOverride) {
 		viewTotalTokens = 0;
 		viewInputCost = 0;
 		viewOutputCost = 0;
-		viewInputTokens = 0;
-		viewOutputTokens = 0;
 		viewHit = 0;
 		viewMiss = 0;
 		viewOutput = 0;
@@ -2019,8 +2024,6 @@ function computeOverview(balanceWalletId = "all", historyOverride) {
 			viewMiss += Number(h.cache_miss_tokens) || 0;
 			viewOutput += Number(h.completion_tokens) || 0;
 		}
-		viewInputTokens = viewHit + viewMiss;
-		viewOutputTokens = viewOutput;
 	}
 	const hitRate = viewHit + viewMiss > 0 ? viewHit / (viewHit + viewMiss) * 100 : 0;
 	let savings = 0;
@@ -2034,17 +2037,15 @@ function computeOverview(balanceWalletId = "all", historyOverride) {
 		}, state$2.settings, findWalletForHistory(state$2.wallets, h));
 	} catch {}
 	const rounds = viewRounds;
-	const avgCost = rounds ? viewTotalCost / rounds : 0;
-	const avgTokens = rounds ? viewTotalTokens / rounds : 0;
-	const avgDuration = hist.length ? hist.reduce((a, h) => a + (h.duration || 0), 0) / hist.length / 1e3 : 0;
-	const avgRate = hist.length ? hist.reduce((a, h) => a + (h.tokenRate || 0), 0) / hist.length : 0;
-	const ttfts = hist.map((h) => h.ttft || 0).filter((v) => v > 0);
-	const avgTtft = ttfts.length ? ttfts.reduce((a, b) => a + b, 0) / ttfts.length / 1e3 : 0;
-	const inputTokens = viewInputTokens;
-	const avgInputCost = rounds ? viewInputCost / rounds : 0;
-	const avgInputTokens = rounds ? inputTokens / rounds : 0;
-	const avgOutputCost = rounds ? viewOutputCost / rounds : 0;
-	const avgOutputTokens = rounds ? viewOutputTokens / rounds : 0;
+	const avgCost = averagePositive(hist.map((h) => numberValue(h.cost)));
+	const avgTokens = averagePositive(hist.map((h) => numberValue(h.total_tokens)));
+	const avgDuration = averagePositive(hist.map((h) => numberValue(h.duration))) / 1e3;
+	const avgRate = averagePositive(hist.map((h) => numberValue(h.tokenRate)));
+	const avgTtft = averagePositive(hist.map((h) => numberValue(h.ttft))) / 1e3;
+	const avgInputCost = averagePositive(hist.map((h) => numberValue(h.input_cost)));
+	const avgInputTokens = averagePositive(hist.map((h) => numberValue(h.cache_hit_tokens) + numberValue(h.cache_miss_tokens)));
+	const avgOutputCost = averagePositive(hist.map((h) => numberValue(h.output_cost)));
+	const avgOutputTokens = averagePositive(hist.map((h) => numberValue(h.completion_tokens)));
 	const thinkTimes = hist.map((h) => h.thinkTime || 0).filter((v) => v > 0);
 	const thinkTokensArr = hist.map((h) => h.thinkTokens || 0).filter((v) => v > 0);
 	const avgThinkTime = thinkTimes.length ? thinkTimes.reduce((a, b) => a + b, 0) / thinkTimes.length / 1e3 : 0;
@@ -2227,25 +2228,58 @@ function computeStatsFour(filtered) {
 		rounds: 0
 	};
 	const rounds = filtered.length;
-	let totalCost = 0, totalTokens = 0, totalDur = 0, totalRate = 0, totalInputCost = 0, totalInputTokens = 0, totalOutputCost = 0, totalOutputTokens = 0;
+	let costSum = 0, costCnt = 0, tokensSum = 0, tokensCnt = 0, durSum = 0, durCnt = 0, rateSum = 0, rateCnt = 0;
+	let inputCostSum = 0, inputCostCnt = 0, inputTokensSum = 0, inputTokensCnt = 0, outputCostSum = 0, outputCostCnt = 0, outputTokensSum = 0, outputTokensCnt = 0;
 	let ttftSum = 0, ttftCnt = 0;
 	let thinkTimeSum = 0, thinkTokensSum = 0, thinkTimeCnt = 0, thinkTokensCnt = 0;
 	let hitRateSum = 0, hitRateCnt = 0;
 	let maxOutput = 0, maxInput = 0, maxTotal = 0;
 	let sumThink = 0, sumOut = 0, truncCnt = 0;
 	for (const h of filtered) {
-		totalCost += h.cost || 0;
-		totalTokens += h.total_tokens || 0;
-		totalDur += h.duration || 0;
-		totalRate += h.tokenRate || 0;
+		const cost = numberValue(h.cost);
+		if (cost > 0) {
+			costSum += cost;
+			costCnt++;
+		}
+		const tokens = numberValue(h.total_tokens);
+		if (tokens > 0) {
+			tokensSum += tokens;
+			tokensCnt++;
+		}
+		const duration = numberValue(h.duration);
+		if (duration > 0) {
+			durSum += duration;
+			durCnt++;
+		}
+		const rate = numberValue(h.tokenRate);
+		if (rate > 0) {
+			rateSum += rate;
+			rateCnt++;
+		}
+		const inputCost = numberValue(h.input_cost);
+		if (inputCost > 0) {
+			inputCostSum += inputCost;
+			inputCostCnt++;
+		}
+		const inputTokens = numberValue(h.cache_hit_tokens) + numberValue(h.cache_miss_tokens);
+		if (inputTokens > 0) {
+			inputTokensSum += inputTokens;
+			inputTokensCnt++;
+		}
+		const outputCost = numberValue(h.output_cost);
+		if (outputCost > 0) {
+			outputCostSum += outputCost;
+			outputCostCnt++;
+		}
+		const outputTokens = numberValue(h.completion_tokens);
+		if (outputTokens > 0) {
+			outputTokensSum += outputTokens;
+			outputTokensCnt++;
+		}
 		if ((h.ttft || 0) > 0) {
 			ttftSum += h.ttft;
 			ttftCnt++;
 		}
-		totalInputCost += h.input_cost || 0;
-		totalInputTokens += (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0);
-		totalOutputCost += h.output_cost || 0;
-		totalOutputTokens += h.completion_tokens || 0;
 		if ((h.thinkTime || 0) > 0) {
 			thinkTimeSum += h.thinkTime;
 			thinkTimeCnt++;
@@ -2268,15 +2302,15 @@ function computeStatsFour(filtered) {
 		if (isTruncatedFinish(h.finishReason) || h.isTruncated) truncCnt++;
 	}
 	return {
-		avgCost: totalCost / rounds,
-		avgTokens: totalTokens / rounds,
-		avgDuration: totalDur / rounds / 1e3,
-		avgRate: totalRate / rounds,
+		avgCost: costCnt ? costSum / costCnt : 0,
+		avgTokens: tokensCnt ? tokensSum / tokensCnt : 0,
+		avgDuration: durCnt ? durSum / durCnt / 1e3 : 0,
+		avgRate: rateCnt ? rateSum / rateCnt : 0,
 		avgTtft: ttftCnt ? ttftSum / ttftCnt / 1e3 : 0,
-		avgInputCost: totalInputCost / rounds,
-		avgInputTokens: totalInputTokens / rounds,
-		avgOutputCost: totalOutputCost / rounds,
-		avgOutputTokens: totalOutputTokens / rounds,
+		avgInputCost: inputCostCnt ? inputCostSum / inputCostCnt : 0,
+		avgInputTokens: inputTokensCnt ? inputTokensSum / inputTokensCnt : 0,
+		avgOutputCost: outputCostCnt ? outputCostSum / outputCostCnt : 0,
+		avgOutputTokens: outputTokensCnt ? outputTokensSum / outputTokensCnt : 0,
 		avgThinkTime: thinkTimeCnt ? thinkTimeSum / thinkTimeCnt / 1e3 : 0,
 		avgThinkTokens: thinkTokensCnt ? thinkTokensSum / thinkTokensCnt : 0,
 		avgHitRate: hitRateCnt ? hitRateSum / hitRateCnt : 0,
@@ -7350,7 +7384,7 @@ function createPanel() {
       <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;">
         <div style="display:flex;flex-direction:column;min-width:0;" id="aus-brand">
           <span style="font-size:13px;font-weight:700;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
-          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v3.0.9</span>
+          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v3.1.0</span>
         </div>
         <button id="aus-sidebar-toggle" style="width:28px;height:28px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;">‹</button>
       </div>
@@ -7541,7 +7575,7 @@ function createPanel() {
                 <div id="aus-update-banner" style="display:none;padding:8px 10px;border-radius:8px;background:var(--ds-yellow-bg);border:1px solid var(--ds-yellow-border);font-size:11px;color:var(--ds-text);"></div>
                 <div style="display:flex;gap:8px;align-items:center;">
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:11px;">检查更新</button>
-                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v3.0.9 · 每 1 小时自动检查</span>
+                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v3.1.0 · 每 1 小时自动检查</span>
                 </div>
               </div>
             </div>
@@ -7698,7 +7732,7 @@ function createPanel() {
 		if (updBtn) updBtn.onclick = () => {
 			updBtn.textContent = "检查中…";
 			updBtn.setAttribute("disabled", "");
-			import("./update-CKhvgzFQ.js").then((m) => m.checkUpdate(true).finally(() => {
+			import("./update-Cbh7hA38.js").then((m) => m.checkUpdate(true).finally(() => {
 				updBtn.textContent = "检查更新";
 				updBtn.removeAttribute("disabled");
 			}));
@@ -7748,7 +7782,7 @@ function openPanel() {
 	panelOpen = true;
 	refreshUI();
 	try {
-		import("./update-CKhvgzFQ.js").then((m) => m.maybeAutoCheck());
+		import("./update-Cbh7hA38.js").then((m) => m.maybeAutoCheck());
 	} catch {}
 }
 function closePanel() {
