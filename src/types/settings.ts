@@ -40,6 +40,7 @@ export type HistoryScope = 'all' | 'current';
 // 概览四块可自定义指标
 export type OverviewFourKey =
   | 'avg_cost' | 'avg_tokens' | 'avg_duration' | 'avg_rate'
+  | 'avg_ttft'
   | 'avg_input_cost' | 'avg_input_tokens' | 'avg_output_cost' | 'avg_output_tokens'
   | 'avg_think_time' | 'avg_think_tokens'
   | 'avg_hit_rate' | 'latest_hit_rate'
@@ -47,6 +48,7 @@ export type OverviewFourKey =
   | 'avg_think_ratio' | 'truncation_rate';
 // 统计页模型汇总上方 4 小块（与概览 8 块同体系，独立配置）
 export type StatsFourKey = 'avg_cost' | 'avg_tokens' | 'avg_duration' | 'avg_rate'
+  | 'avg_ttft'
   | 'avg_input_cost' | 'avg_input_tokens' | 'avg_output_cost' | 'avg_output_tokens'
   | 'avg_think_time' | 'avg_think_tokens' | 'avg_think_ratio' | 'truncation_rate'
   | 'avg_hit_rate' | 'latest_hit_rate' | 'max_output' | 'max_input' | 'max_total';
@@ -64,8 +66,6 @@ export type Settings = {
   debugDateStart: string;
   debugDateEnd: string;
   debugBatchCount: number;
-  useNewPricing: boolean;
-  newPricingDate: number;
   customModels: CustomModel[];
   peakHours: PeakHour[];
   // 用户补充的额外空闲日期（YYYY-MM-DD）：内置节假日数据未覆盖年份或特殊调整时使用
@@ -93,8 +93,6 @@ export const defaultSettings = (): Settings => ({
   debugDateStart: '',
   debugDateEnd: '',
   debugBatchCount: 30,
-  useNewPricing: true,
-  newPricingDate: new Date('2026-08-17T00:00:00+08:00').getTime(),
   customModels: [],
   peakHours: [{ start: '09:00', end: '12:00' }, { start: '14:00', end: '18:00' }],
   extraOffDays: [],

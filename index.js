@@ -1,14 +1,14 @@
 import { cn as __exportAll } from "./Image-B5UjBJH1.js";
-import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from "./store-_kFPP4fT.js";
+import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from "./store-D3uOTDWz.js";
 import { d as WEBDAV_SYNC_FILE, i as HIDDEN_PRICING_MODELS, n as DEFAULT_PEAK_HOURS, s as PRICING } from "./pricing-bcKQQNo6.js";
 import { d as historyRecordKey, u as saveHot } from "./persistence-CrFXrRB_.js";
 import { r as toast, t as log } from "./logger-Bv-AT94O.js";
-import { T as WALLET_CATALOG_PROVIDERS, _ as findWalletForHistory, a as decryptKey, b as walletBalanceToCny, c as DataEvents, d as calcSavings, f as getPricing$1, i as saveWalletApiKey, l as on, m as normalizeModel, o as encryptKey, p as isDeepSeekOfficialModel, r as getWalletApiKey, s as isTruncatedFinish, t as repository, u as calcCost, v as findWalletModel, w as DEEPSEEK_WALLET_ID, x as walletPendingModelCount, y as mergeWalletCollections } from "./repository-Bd0U64Lk.js";
+import { T as WALLET_CATALOG_PROVIDERS, _ as findWalletForHistory, a as decryptKey, b as walletBalanceToCny, c as DataEvents, d as calcSavings, f as getPricing$1, i as saveWalletApiKey, l as on, m as normalizeModel, o as encryptKey, p as isDeepSeekOfficialModel, r as getWalletApiKey, s as isTruncatedFinish, t as repository, u as calcCost, v as findWalletModel, w as DEEPSEEK_WALLET_ID, x as walletPendingModelCount, y as mergeWalletCollections } from "./repository-X68FPYBs.js";
 import { a as isUnsafeKey$1, c as localDay$1, i as isPeakHour, l as localTimeHM, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay, t as esc$1, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
-import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-DaWccfnd.js";
-import { r as recalcAllCosts, t as installInterception } from "./interception-Bi87Tyz2.js";
-import { i as saveApiKey, n as queryBalance, r as queryWalletBalance } from "./balance-D5Eqn3ox.js";
-import { a as removeSyncedModels, n as isSyncedCustomModel, o as syncPricingFromModelsDev, r as previewSync, t as fetchModelsDevCatalog } from "./pricing-sync-CPVlfQlX.js";
+import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-BVe2dp3y.js";
+import { r as recalcAllCosts, t as installInterception } from "./interception-D_n4l_35.js";
+import { i as saveApiKey, n as queryBalance, r as queryWalletBalance } from "./balance-6QFWwhSy.js";
+import { a as removeSyncedModels, n as isSyncedCustomModel, o as syncPricingFromModelsDev, r as previewSync, t as fetchModelsDevCatalog } from "./pricing-sync-9NV4awsG.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -733,6 +733,104 @@ async function recalcCostsAndRefresh() {
 		toast("error", "历史费用重算失败：" + (error?.message || error));
 	}
 }
+function readHistoryDeleteFilter(doc) {
+	const startEl = doc.getElementById("aus-delete-start");
+	const endEl = doc.getElementById("aus-delete-end");
+	const modelEl = doc.getElementById("aus-delete-model");
+	const chatEl = doc.getElementById("aus-delete-chat");
+	const start = String(startEl?.value || "").trim();
+	const end = String(endEl?.value || "").trim();
+	return {
+		start: start && isValidDayKey(start) ? start : "",
+		end: end && isValidDayKey(end) ? end : "",
+		model: String(modelEl?.value || "").trim(),
+		chat: String(chatEl?.value || "").trim()
+	};
+}
+async function countHistoryDeleteMatches(filter) {
+	return (await repository.getAllHistory() || []).filter((entry) => {
+		if (filter.start || filter.end) {
+			const day = localDay(entry.timestamp);
+			if (filter.start && day < filter.start) return false;
+			if (filter.end && day > filter.end) return false;
+		}
+		if (filter.model && String(entry.model || "") !== filter.model) return false;
+		if (filter.chat) {
+			const chatId = String(entry.chatId || "");
+			const chatName = String(entry.chatName || "");
+			if (chatId !== filter.chat && chatName !== filter.chat) return false;
+		}
+		return true;
+	}).length;
+}
+function bindHistoryDelete(doc) {
+	const previewBtn = doc.getElementById("aus-delete-preview");
+	const deleteBtn = doc.getElementById("aus-delete-run");
+	const status = doc.getElementById("aus-delete-status");
+	if (!previewBtn || !deleteBtn) return;
+	let armed = false;
+	let armTimer = null;
+	let armedFilter = null;
+	const resetArmed = () => {
+		armed = false;
+		armedFilter = null;
+		try {
+			deleteBtn.textContent = "删除匹配记录";
+		} catch {}
+	};
+	previewBtn.onclick = async () => {
+		previewBtn.disabled = true;
+		const old = previewBtn.textContent;
+		previewBtn.textContent = "统计中…";
+		try {
+			const count = await countHistoryDeleteMatches(readHistoryDeleteFilter(doc));
+			if (status) status.textContent = `匹配 ${count} 条记录${count ? "，点击“删除匹配记录”后会二次确认" : ""}`;
+		} catch (error) {
+			if (status) status.textContent = "统计失败：" + (error?.message || error);
+		} finally {
+			previewBtn.disabled = false;
+			previewBtn.textContent = old || "统计匹配记录";
+		}
+	};
+	deleteBtn.onclick = async () => {
+		const filter = readHistoryDeleteFilter(doc);
+		if (!armed) {
+			const count = await countHistoryDeleteMatches(filter).catch(() => -1);
+			if (count <= 0) {
+				if (status) status.textContent = count === 0 ? "当前范围没有可删除记录" : "匹配数量检查失败，请重试";
+				return;
+			}
+			armed = true;
+			armedFilter = filter;
+			deleteBtn.textContent = `确认删除 ${count} 条？再点一次`;
+			if (status) status.textContent = `本次将删除 ${count} 条记录，再次点击执行`;
+			if (armTimer) clearTimeout(armTimer);
+			armTimer = setTimeout(() => {
+				armTimer = null;
+				resetArmed();
+			}, 5e3);
+			return;
+		}
+		if (armTimer) {
+			clearTimeout(armTimer);
+			armTimer = null;
+		}
+		const targetFilter = armedFilter || filter;
+		resetArmed();
+		deleteBtn.disabled = true;
+		if (status) status.textContent = "正在删除并重算…";
+		try {
+			const removed = await repository.deleteHistoryByFilter(targetFilter);
+			await recalcCostsAndRefresh();
+			if (status) status.textContent = removed ? `已删除 ${removed} 条记录并完成重算` : "当前范围没有可删除记录";
+			if (removed) toast("success", `已删除 ${removed} 条记录`);
+		} catch (error) {
+			if (status) status.textContent = "删除失败：" + (error?.message || error);
+		} finally {
+			deleteBtn.disabled = false;
+		}
+	};
+}
 function renderSettings(doc) {
 	const host = doc.getElementById("aus-settings");
 	if (!host) return;
@@ -754,15 +852,6 @@ function renderSettings(doc) {
         <div id="aus-auto-balance-interval" style="display:${s.autoBalance ? "block" : "none"};margin-top:8px;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;color:var(--ds-text);">校准间隔（分钟）</span><input type="number" id="aus-balance-interval" min="1" max="1440" style="width:90px;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;text-align:center;" /></div></div>
         <div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;">仅钱包页中启用了自动校准且支持该能力的钱包会在间隔到期后查询。</div>
         <div style="display:none;margin-top:12px;"><input id="aus-custom-balance" /><button id="aus-save-balance"></button><button id="aus-clear-balance"></button><div id="aus-balance-status"></div></div>
-      </div>
-
-      <!-- 新价格机制 -->
-      <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">新价格机制（峰谷计费）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-use-new-pricing" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-use-new-pricing-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
-        <div id="aus-new-pricing-panel" style="display:${s.useNewPricing ? "grid" : "none"};margin-top:10px;gap:8px;">
-          <div style="display:flex;gap:8px;align-items:center;"><input type="date" id="aus-new-pricing-date" style="flex:1;padding:7px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><button id="aus-btn-pricing-today" style="padding:7px 12px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;white-space:nowrap;">设为今日</button></div>
-          <div style="font-size:11px;color:var(--ds-text-2);">生效日期前按旧价，之后按峰谷价（仅 deepseek* 模型，周末与中国法定节假日全天低谷）。</div>
-        </div>
       </div>
 
       <!-- 高峰时段 -->
@@ -804,6 +893,23 @@ function renderSettings(doc) {
       <!-- 峰值圆点 -->
       <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">峰值提示小圆点</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-peak-dot" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-peak-dot-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div><button id="aus-reset-dot" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">重置位置</button></div>
 
+      <!-- 记录数据管理 -->
+      <div class="ds-card">
+        <div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:6px;">按范围删除记录</div>
+        <div style="font-size:11px;color:var(--ds-text-2);line-height:1.7;margin-bottom:8px;">可删除全部记录，或按日期、模型、对话缩小范围。日期留空表示不限；模型与对话需完全匹配，留空表示不限。删除会同时处理热记录与冷记录，并立即重算统计。</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">开始日期</div><input type="date" id="aus-delete-start" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;box-sizing:border-box;" /></div>
+          <div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">结束日期</div><input type="date" id="aus-delete-end" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;box-sizing:border-box;" /></div>
+          <div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">模型</div><input id="aus-delete-model" placeholder="如 deepseek-flash" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;box-sizing:border-box;" /></div>
+          <div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">对话</div><input id="aus-delete-chat" placeholder="对话名称或 chatId" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;box-sizing:border-box;" /></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button id="aus-delete-preview" style="padding:7px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">统计匹配记录</button>
+          <button id="aus-delete-run" style="padding:7px 12px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:11px;cursor:pointer;">删除匹配记录</button>
+        </div>
+        <div id="aus-delete-status" style="font-size:11px;color:var(--ds-text-2);margin-top:8px;"></div>
+      </div>
+
       <!-- WebDAV -->
       <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:6px;">WebDAV 云同步</div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:8px;">双向合并，仅同步统计/设置/余额，不含聊天内容与密钥。强制 https。</div>
         <div style="display:grid;gap:8px;">
@@ -833,12 +939,6 @@ function renderSettings(doc) {
 	if (autoCb) autoCb.checked = !!s.autoBalance;
 	if (autoSlider) autoSlider.style.left = s.autoBalance ? "23px" : "3px";
 	doc.getElementById("aus-balance-interval").value = String(s.balanceInterval ?? 10);
-	const newCb = doc.getElementById("aus-use-new-pricing");
-	const newSlider = doc.getElementById("aus-use-new-pricing-slider");
-	if (newCb) newCb.checked = !!s.useNewPricing;
-	if (newSlider) newSlider.style.left = s.useNewPricing ? "23px" : "3px";
-	const newDate = doc.getElementById("aus-new-pricing-date");
-	if (newDate) newDate.value = s.newPricingDate ? localDay(s.newPricingDate) : "";
 	const dbgCb = doc.getElementById("aus-debug-mode");
 	const dbgSlider = doc.getElementById("aus-debug-mode-slider");
 	if (dbgCb) dbgCb.checked = !!s.debug;
@@ -989,41 +1089,15 @@ function renderSettings(doc) {
 		doc.getElementById("aus-auto-balance-interval").style.display = autoCb.checked ? "block" : "none";
 		saveHot({ settings: state$2.settings });
 		try {
-			import("./balance-D5Eqn3ox.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-6QFWwhSy.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	doc.getElementById("aus-balance-interval").onchange = (e) => {
 		state$2.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state$2.settings });
 		try {
-			import("./balance-D5Eqn3ox.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-6QFWwhSy.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
-	};
-	if (newCb) newCb.onchange = () => {
-		state$2.settings.useNewPricing = newCb.checked;
-		if (newSlider) newSlider.style.left = newCb.checked ? "23px" : "3px";
-		doc.getElementById("aus-new-pricing-panel").style.display = newCb.checked ? "grid" : "none";
-		saveHot({ settings: state$2.settings });
-		recalcCostsAndRefresh();
-	};
-	if (newDate) newDate.onchange = () => {
-		if (newDate.value) state$2.settings.newPricingDate = (/* @__PURE__ */ new Date(newDate.value + "T00:00:00")).getTime();
-		else state$2.settings.newPricingDate = 0;
-		saveHot({ settings: state$2.settings });
-		recalcCostsAndRefresh();
-	};
-	doc.getElementById("aus-btn-pricing-today").onclick = () => {
-		const d = /* @__PURE__ */ new Date();
-		d.setHours(0, 0, 0, 0);
-		state$2.settings.newPricingDate = d.getTime();
-		if (newDate) newDate.value = localDay(d.getTime());
-		if (newCb && !newCb.checked) {
-			newCb.checked = true;
-			if (newSlider) newSlider.style.left = "23px";
-			doc.getElementById("aus-new-pricing-panel").style.display = "grid";
-		}
-		saveHot({ settings: state$2.settings });
-		recalcCostsAndRefresh();
 	};
 	if (dbgCb) dbgCb.onchange = () => {
 		state$2.settings.debug = dbgCb.checked;
@@ -1067,8 +1141,8 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-Bd0U64Lk.js").then((n) => n.n);
-				const { state: st } = await import("./store-_kFPP4fT.js").then((n) => n.i);
+				const { repository } = await import("./repository-X68FPYBs.js").then((n) => n.n);
+				const { state: st } = await import("./store-D3uOTDWz.js").then((n) => n.i);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
 				await repository.rebuildAggregates();
@@ -1101,6 +1175,7 @@ function renderSettings(doc) {
 		} catch {}
 		alert("已重置");
 	};
+	bindHistoryDelete(doc);
 	const wUrl = doc.getElementById("aus-webdav-url");
 	const wUser = doc.getElementById("aus-webdav-user");
 	const wPath = doc.getElementById("aus-webdav-path");
@@ -1196,8 +1271,8 @@ function renderSettings(doc) {
 					intervalDrop.style.display = "none";
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-CPVlfQlX.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
-						import("./currency-DaWccfnd.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+						import("./pricing-sync-9NV4awsG.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+						import("./currency-BVe2dp3y.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};
 			});
@@ -1218,7 +1293,7 @@ function renderSettings(doc) {
 			if (panel) panel.style.display = enabledEl.checked ? "grid" : "none";
 			let removed = 0;
 			if (!enabledEl.checked) try {
-				const m = await import("./pricing-sync-CPVlfQlX.js").then((n) => n.i);
+				const m = await import("./pricing-sync-9NV4awsG.js").then((n) => n.i);
 				try {
 					await m.markLegacySyncedModels?.({ skipRerender: true });
 				} catch {}
@@ -1228,8 +1303,8 @@ function renderSettings(doc) {
 			}
 			saveHot({ settings: state$2.settings });
 			try {
-				import("./currency-DaWccfnd.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
-				import("./pricing-sync-CPVlfQlX.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+				import("./currency-BVe2dp3y.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+				import("./pricing-sync-9NV4awsG.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
 			} catch {}
 			if (removed) {
 				renderModelsEditor(doc);
@@ -1259,7 +1334,7 @@ function renderSettings(doc) {
 			state$2.settings.pricingSync.useLiveRate = liveEl.checked;
 			saveHot({ settings: state$2.settings });
 			try {
-				import("./currency-DaWccfnd.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+				import("./currency-BVe2dp3y.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 			} catch {}
 		};
 		if (recalcEl) recalcEl.onchange = () => {
@@ -1868,14 +1943,12 @@ function getCredentialFilterOptions(history, endpoint = STATS_FILTER_ALL) {
 			}
 		}
 	}
-	const options = Array.from(map.values()).map(({ id, label, count, unknown }) => ({
+	return addLabelCollisionSuffix(Array.from(map.values()).sort((a, b) => b.lastSeen - a.lastSeen || a.label.localeCompare(b.label, "zh-CN")).map(({ id, label, count, unknown }) => ({
 		id,
 		label,
 		count,
 		unknown
-	}));
-	options.sort((a, b) => Number(!!a.unknown) - Number(!!b.unknown) || a.label.localeCompare(b.label, "zh-CN"));
-	return addLabelCollisionSuffix(options);
+	})));
 }
 function computeOverview(balanceWalletId = "all", historyOverride) {
 	const s = getSelectedSave();
@@ -1896,6 +1969,7 @@ function computeOverview(balanceWalletId = "all", historyOverride) {
 		avgTokens: 0,
 		avgDuration: 0,
 		avgRate: 0,
+		avgTtft: 0,
 		rounds: 0,
 		remainingRounds: null,
 		avgInputCost: 0,
@@ -1932,6 +2006,8 @@ function computeOverview(balanceWalletId = "all", historyOverride) {
 	const avgTokens = rounds ? totalTokens / rounds : 0;
 	const avgDuration = hist.length ? hist.reduce((a, h) => a + (h.duration || 0), 0) / hist.length / 1e3 : 0;
 	const avgRate = hist.length ? hist.reduce((a, h) => a + (h.tokenRate || 0), 0) / hist.length : 0;
+	const ttfts = hist.map((h) => h.ttft || 0).filter((v) => v > 0);
+	const avgTtft = ttfts.length ? ttfts.reduce((a, b) => a + b, 0) / ttfts.length / 1e3 : 0;
 	const inputTokens = s.input_tokens || 0;
 	const avgInputCost = rounds ? (s.input_cost || 0) / rounds : 0;
 	const avgInputTokens = rounds ? inputTokens / rounds : 0;
@@ -2025,6 +2101,7 @@ function computeOverview(balanceWalletId = "all", historyOverride) {
 		avgTokens,
 		avgDuration,
 		avgRate,
+		avgTtft,
 		rounds,
 		remainingRounds,
 		avgInputCost,
@@ -2101,6 +2178,7 @@ function computeStatsFour(filtered) {
 		avgTokens: 0,
 		avgDuration: 0,
 		avgRate: 0,
+		avgTtft: 0,
 		avgInputCost: 0,
 		avgInputTokens: 0,
 		avgOutputCost: 0,
@@ -2118,6 +2196,7 @@ function computeStatsFour(filtered) {
 	};
 	const rounds = filtered.length;
 	let totalCost = 0, totalTokens = 0, totalDur = 0, totalRate = 0, totalInputCost = 0, totalInputTokens = 0, totalOutputCost = 0, totalOutputTokens = 0;
+	let ttftSum = 0, ttftCnt = 0;
 	let thinkTimeSum = 0, thinkTokensSum = 0, thinkTimeCnt = 0, thinkTokensCnt = 0;
 	let hitRateSum = 0, hitRateCnt = 0;
 	let maxOutput = 0, maxInput = 0, maxTotal = 0;
@@ -2127,6 +2206,10 @@ function computeStatsFour(filtered) {
 		totalTokens += h.total_tokens || 0;
 		totalDur += h.duration || 0;
 		totalRate += h.tokenRate || 0;
+		if ((h.ttft || 0) > 0) {
+			ttftSum += h.ttft;
+			ttftCnt++;
+		}
 		totalInputCost += h.input_cost || 0;
 		totalInputTokens += (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0);
 		totalOutputCost += h.output_cost || 0;
@@ -2157,6 +2240,7 @@ function computeStatsFour(filtered) {
 		avgTokens: totalTokens / rounds,
 		avgDuration: totalDur / rounds / 1e3,
 		avgRate: totalRate / rounds,
+		avgTtft: ttftCnt ? ttftSum / ttftCnt / 1e3 : 0,
 		avgInputCost: totalInputCost / rounds,
 		avgInputTokens: totalInputTokens / rounds,
 		avgOutputCost: totalOutputCost / rounds,
@@ -2390,6 +2474,10 @@ var FOUR_OPTIONS = [
 		label: "平均耗时"
 	},
 	{
+		key: "avg_ttft",
+		label: "平均首字延迟"
+	},
+	{
 		key: "avg_rate",
 		label: "输出速率"
 	},
@@ -2498,6 +2586,10 @@ function getFourDisplay(key, v) {
 		case "avg_duration": return {
 			title,
 			html: `${(v.avgDuration || 0).toFixed(1)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">s</span>`
+		};
+		case "avg_ttft": return {
+			title,
+			html: (v.avgTtft || 0) > 0 ? `${v.avgTtft.toFixed(1)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">s</span>` : `<span style="color:var(--ds-text-3);">—</span>`
 		};
 		case "avg_rate": return {
 			title: "输出速率",
@@ -2896,6 +2988,7 @@ var X_OPTIONS = [
 		label: "每月"
 	}
 ];
+var X_OPTIONS_WITHOUT_ROUND = X_OPTIONS.filter((option) => option.key !== "round");
 var ySelected = /* @__PURE__ */ new Set(["total_token"]);
 var xSelected = "day";
 function getYSelected() {
@@ -3161,7 +3254,7 @@ function getYValue(e, key) {
 }
 async function getEcharts$1() {
 	const ec = await import("./core-CiUETK4X.js");
-	const { BarChart, LineChart, PieChart } = await import("./charts-M2nH1u_g.js");
+	const { BarChart, LineChart, PieChart } = await import("./charts-CIYbZu-X.js");
 	const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-CMxWfAxU.js");
 	const { CanvasRenderer } = await import("./renderers-oWWT994T.js");
 	ec.use([
@@ -3185,6 +3278,7 @@ async function renderOne$1(id, filtered) {
 	try {
 		const el = getDoc$6().getElementById(`aus-chart-${id}`);
 		if (!el) return;
+		if (id === "req" && state$1[id].x === "round") state$1[id].x = "day";
 		if (id === "pie") {
 			const mode = state$1.pie.pieMode;
 			if (!filtered.length) {
@@ -3598,9 +3692,10 @@ function renderExtraX(id) {
 	const drop = doc.getElementById(`aus-extra-x-drop-${id}`);
 	const label = doc.getElementById(`aus-extra-x-label-${id}`);
 	if (!drop) return;
+	const options = id === "req" ? X_OPTIONS_WITHOUT_ROUND : X_OPTIONS;
 	const cur = state$1[id].x;
-	if (label) label.textContent = X_OPTIONS.find((o) => o.key === cur)?.label || cur;
-	drop.innerHTML = X_OPTIONS.map((o) => {
+	if (label) label.textContent = options.find((o) => o.key === cur)?.label || cur;
+	drop.innerHTML = options.map((o) => {
 		const active = o.key === cur;
 		return `<div data-x="${o.key}" data-chart="${id}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active ? "background:var(--ds-active-bg);font-weight:600;" : ""}">${o.label}</div>`;
 	}).join("");
@@ -3674,7 +3769,7 @@ function bucketKey(ts, x, idx) {
 }
 async function getEcharts() {
 	const ec = await import("./core-CiUETK4X.js");
-	const { LineChart } = await import("./charts-M2nH1u_g.js");
+	const { LineChart } = await import("./charts-CIYbZu-X.js");
 	const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-CMxWfAxU.js");
 	const { CanvasRenderer } = await import("./renderers-oWWT994T.js");
 	ec.use([
@@ -4074,13 +4169,19 @@ function getRecordedChatsFrom(list) {
 		const cid = h.chatId ?? null;
 		const cname = h.chatName ?? null;
 		const key = cid ?? "__null__";
+		const timestamp = Number(h?.timestamp) || 0;
 		if (!map.has(key)) map.set(key, {
 			chatId: cid,
-			chatName: cname
+			chatName: cname,
+			lastSeen: timestamp
 		});
-		else if (cname && !map.get(key).chatName) map.get(key).chatName = cname;
+		else {
+			const current = map.get(key);
+			if (timestamp >= current.lastSeen && cname) current.chatName = cname;
+			if (timestamp > current.lastSeen) current.lastSeen = timestamp;
+		}
 	}
-	return Array.from(map.values()).map((v) => {
+	return Array.from(map.values()).sort((a, b) => b.lastSeen - a.lastSeen).map((v) => {
 		let display = v.chatName || "";
 		if (!display) {
 			if (v.chatId) display = v.chatId.length > 18 ? v.chatId.slice(0, 8) + "…" + v.chatId.slice(-4) : v.chatId;
@@ -4091,7 +4192,7 @@ function getRecordedChatsFrom(list) {
 			chatName: v.chatName,
 			displayName: display
 		};
-	}).sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""));
+	});
 }
 function currentStatsFilter() {
 	const { start, end } = getRangeDates();
@@ -4568,7 +4669,7 @@ async function renderChart(filteredRaw) {
 	let echarts;
 	try {
 		echarts = await import("./core-CiUETK4X.js").then(async (ec) => {
-			const { BarChart, LineChart } = await import("./charts-M2nH1u_g.js");
+			const { BarChart, LineChart } = await import("./charts-CIYbZu-X.js");
 			const { GridComponent, TooltipComponent } = await import("./components-CMxWfAxU.js");
 			const { CanvasRenderer } = await import("./renderers-oWWT994T.js");
 			ec.use([
@@ -4643,6 +4744,21 @@ async function renderChart(filteredRaw) {
 		const isTop = idx === lastBarIdx;
 		let col = s.color;
 		if (col === "#111827" || typeof col === "string" && col.indexOf("var(") === 0) col = themeColor("--ds-text", "#111827");
+		if (isCost) return {
+			name: s.name,
+			type: "line",
+			yAxisIndex: yIndex,
+			data: s.data,
+			smooth: true,
+			symbol: "circle",
+			symbolSize: 4,
+			lineStyle: {
+				color: col,
+				width: 2
+			},
+			itemStyle: { color: col },
+			emphasis: { focus: "series" }
+		};
 		return {
 			name: s.name,
 			type: "bar",
@@ -5461,13 +5577,19 @@ function getRecordedChatsForForecast(list) {
 		const cid = h.chatId ?? null;
 		const cname = h.chatName ?? null;
 		const key = cid ?? "__null__";
+		const timestamp = Number(h?.timestamp) || 0;
 		if (!map.has(key)) map.set(key, {
 			chatId: cid,
-			chatName: cname
+			chatName: cname,
+			lastSeen: timestamp
 		});
-		else if (cname && !map.get(key).chatName) map.get(key).chatName = cname;
+		else {
+			const current = map.get(key);
+			if (timestamp >= current.lastSeen && cname) current.chatName = cname;
+			if (timestamp > current.lastSeen) current.lastSeen = timestamp;
+		}
 	}
-	return Array.from(map.values()).map((v) => {
+	return Array.from(map.values()).sort((a, b) => b.lastSeen - a.lastSeen).map((v) => {
 		let display = v.chatName || "";
 		if (!display) {
 			if (v.chatId) display = v.chatId.length > 18 ? v.chatId.slice(0, 8) + "…" + v.chatId.slice(-4) : v.chatId;
@@ -5478,7 +5600,7 @@ function getRecordedChatsForForecast(list) {
 			chatName: v.chatName,
 			displayName: display
 		};
-	}).sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""));
+	});
 }
 function getEffectiveHist(fullHist) {
 	if (selectedForecastKey === "__all__") return fullHist.slice();
@@ -5548,7 +5670,7 @@ var forecastRenderToken = 0;
 async function renderForecastView() {
 	const doc = getDoc$3();
 	const token = ++forecastRenderToken;
-	const hist = await import("./repository-Bd0U64Lk.js").then((n) => n.n).then((mod) => mod.repository.getAllHistory()).catch(() => state$2.history || []);
+	const hist = await import("./repository-X68FPYBs.js").then((n) => n.n).then((mod) => mod.repository.getAllHistory()).catch(() => state$2.history || []);
 	if (token !== forecastRenderToken) return;
 	try {
 		renderForecastChatPicker(hist);
@@ -5678,7 +5800,7 @@ async function renderForecastChart(history, chatId) {
 	const latestWallet = findWalletForHistory(state$2.wallets, latestModel || {});
 	const ctxLim = ctxLimitForModel(latestModel?.model || "deepseek-v4-flash", findWalletModel(latestWallet, latestModel?.model || "")?.contextLimit);
 	const ec = await import("./core-CiUETK4X.js");
-	const { LineChart } = await import("./charts-M2nH1u_g.js");
+	const { LineChart } = await import("./charts-CIYbZu-X.js");
 	const { GridComponent, TooltipComponent } = await import("./components-CMxWfAxU.js");
 	const { CanvasRenderer } = await import("./renderers-oWWT994T.js");
 	ec.use([
@@ -6232,7 +6354,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-D5Eqn3ox.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-6QFWwhSy.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -6647,18 +6769,27 @@ function getHistoryChatOptions(history) {
 		const id = chatId ?? "__null__";
 		const chatName = String(entry?.chatName || "").trim();
 		const label = chatName || (chatId ? String(chatId).length > 18 ? `${String(chatId).slice(0, 8)}…${String(chatId).slice(-4)}` : String(chatId) : "未分组/旧数据");
+		const timestamp = Number(entry?.timestamp) || 0;
 		const current = map.get(id);
 		if (!current) map.set(id, {
 			id,
 			label,
-			title: String(chatId || label)
+			title: String(chatId || label),
+			lastSeen: timestamp
 		});
-		else if (chatName && current.label !== chatName) {
-			current.label = chatName;
-			current.title = String(chatId || chatName);
+		else {
+			if (timestamp >= current.lastSeen && chatName) {
+				current.label = chatName;
+				current.title = String(chatId || chatName);
+			}
+			if (timestamp > current.lastSeen) current.lastSeen = timestamp;
 		}
 	}
-	return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
+	return Array.from(map.values()).sort((a, b) => b.lastSeen - a.lastSeen || a.label.localeCompare(b.label, "zh-CN")).map(({ id, label, title }) => ({
+		id,
+		label,
+		title
+	}));
 }
 function closeHistoryFilterDropdowns() {
 	const doc = getDoc$1();
@@ -7216,7 +7347,7 @@ function createPanel() {
         <div style="max-width:1100px;margin:0 auto;display:grid;gap:16px;">
           <div data-view="overview">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div class="ds-card aus-overview-balance-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div class="ds-card-title">充值余额</div><div id="aus-overview-wallet-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;"><span style="color:var(--ds-text-2);">余额口径</span><span id="aus-overview-wallet-label" style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部钱包合计</span><span>▼</span></div><div id="aus-overview-wallet-dropdown" style="display:none;position:absolute;top:44px;right:10px;z-index:20;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:190px;max-height:260px;overflow:auto;"></div></div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div id="aus-balance-remaining" style="font-size:11px;color:var(--ds-text-2);margin-top:6px;min-height:16px;"></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:11px;">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导出</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导入</button></div></div>
+              <div class="ds-card aus-overview-balance-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div class="ds-card-title">充值余额</div><div id="aus-overview-wallet-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;"><span style="color:var(--ds-text-2);">余额口径</span><span id="aus-overview-wallet-label" style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部钱包合计</span><span>▼</span></div><div id="aus-overview-wallet-dropdown" style="display:none;position:absolute;top:44px;right:10px;z-index:20;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:190px;max-height:260px;overflow:auto;"></div></div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div id="aus-balance-remaining" style="font-size:11px;color:var(--ds-text-2);margin-top:6px;min-height:16px;"></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:11px;">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导出记录</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">导入记录</button></div></div>
               <div class="ds-card"><div class="ds-card-title">累计消费</div><div class="ds-card-val" id="aus-total-cost">¥0.0000<small>CNY</small></div><div style="font-size:11px;color:var(--ds-text-3);margin-top:2px;" id="aus-total-tokens">0 tokens</div></div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
@@ -7799,7 +7930,7 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-Bi87Tyz2.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-D_n4l_35.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -7807,7 +7938,7 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-Bi87Tyz2.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-D_n4l_35.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -7897,13 +8028,13 @@ async function onDelete() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-D5Eqn3ox.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-6QFWwhSy.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-DaWccfnd.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-BVe2dp3y.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CPVlfQlX.js").then((n) => n.i)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-9NV4awsG.js").then((n) => n.i)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 	try {
@@ -7930,16 +8061,16 @@ async function onDelete() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-Bi87Tyz2.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-D_n4l_35.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./balance-D5Eqn3ox.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-6QFWwhSy.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
-		import("./currency-DaWccfnd.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+		import("./currency-BVe2dp3y.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-CPVlfQlX.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-9NV4awsG.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -7949,7 +8080,7 @@ async function onDisable() {
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-Bi87Tyz2.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-D_n4l_35.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -7965,13 +8096,13 @@ async function onDisable() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-D5Eqn3ox.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-6QFWwhSy.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-DaWccfnd.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-BVe2dp3y.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CPVlfQlX.js").then((n) => n.i)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-9NV4awsG.js").then((n) => n.i)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -7993,13 +8124,13 @@ async function init() {
 		console.error("[API用量统计] initStore 失败", e);
 	}
 	try {
-		(await import("./balance-D5Eqn3ox.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-6QFWwhSy.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-DaWccfnd.js").then((n) => n.t)).restartRateTimer?.();
+		(await import("./currency-BVe2dp3y.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CPVlfQlX.js").then((n) => n.i)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-9NV4awsG.js").then((n) => n.i)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
@@ -8021,7 +8152,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-CPVlfQlX.js").then((n) => n.i).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-9NV4awsG.js").then((n) => n.i).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

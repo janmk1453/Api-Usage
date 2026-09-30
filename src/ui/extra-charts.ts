@@ -1,5 +1,5 @@
 import { localDay } from '../utils/date';
-import { Y_OPTIONS, X_OPTIONS, getYSelected as getMainY, getXSelected as getMainX } from './chart-config';
+import { Y_OPTIONS, X_OPTIONS, X_OPTIONS_WITHOUT_ROUND, getYSelected as getMainY, getXSelected as getMainX } from './chart-config';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 
 type ChartId = 'token'|'cost'|'hit'|'req'|'dur'|'pie';
@@ -84,6 +84,7 @@ async function renderOne(id:ChartId, filtered:any[]){
   const doc=getDoc();
   const el=doc.getElementById(`aus-chart-${id}`) as HTMLElement | null;
   if (!el) return;
+  if (id==='req' && state[id].x==='round') state[id].x='day';
   // pie special
   if (id==='pie'){
     const mode = state.pie.pieMode;
@@ -320,9 +321,10 @@ function renderExtraX(id:ChartId){
   const drop=doc.getElementById(`aus-extra-x-drop-${id}`);
   const label=doc.getElementById(`aus-extra-x-label-${id}`);
   if (!drop) return;
+  const options = id==='req' ? X_OPTIONS_WITHOUT_ROUND : X_OPTIONS;
   const cur = state[id].x;
-  if (label) label.textContent = X_OPTIONS.find(o=>o.key===cur)?.label || cur;
-  drop.innerHTML = X_OPTIONS.map(o=>{
+  if (label) label.textContent = options.find(o=>o.key===cur)?.label || cur;
+  drop.innerHTML = options.map(o=>{
     const active=o.key===cur;
     return `<div data-x="${o.key}" data-chart="${id}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;${active?'background:var(--ds-active-bg);font-weight:600;':''}">${o.label}</div>`;
   }).join('');

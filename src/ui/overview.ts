@@ -29,6 +29,7 @@ export const FOUR_OPTIONS: FourOpt[] = [
   { key: 'avg_cost', label: '每轮费用' },
   { key: 'avg_tokens', label: '每轮 Token' },
   { key: 'avg_duration', label: '平均耗时' },
+  { key: 'avg_ttft', label: '平均首字延迟' },
   { key: 'avg_rate', label: '输出速率' },
   { key: 'avg_input_cost', label: '每轮平均输入费用' },
   { key: 'avg_input_tokens', label: '每轮平均输入 Token' },
@@ -76,6 +77,10 @@ export function getFourDisplay(key: OverviewFourKey, v: any): { title:string; ht
     case 'avg_cost': return { title, html: moneyHtml(v.avgCost||0, 4) };
     case 'avg_tokens': return { title, html: `${Math.round(v.avgTokens||0).toLocaleString('zh-CN')}` };
     case 'avg_duration': return { title, html: `${(v.avgDuration||0).toFixed(1)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">s</span>` };
+    case 'avg_ttft': {
+      const has = (v.avgTtft||0) > 0;
+      return { title, html: has ? `${(v.avgTtft).toFixed(1)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">s</span>` : `<span style="color:var(--ds-text-3);">—</span>` };
+    }
     case 'avg_rate': return { title: '输出速率', html: `${Math.round(v.avgRate||0)} <span style="font-size:11px;color:var(--ds-text-3);font-weight:400;">t/s</span>` };
     case 'avg_input_cost': return { title, html: moneyHtml(v.avgInputCost||0, 4) };
     case 'avg_input_tokens': return { title, html: `${Math.round(v.avgInputTokens||0).toLocaleString('zh-CN')}` };

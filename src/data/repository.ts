@@ -10,7 +10,7 @@ import { MAX_HISTORY, DETAIL_KEEP, PRICING } from '../constants/pricing';
 import { emit, DataEvents } from './events';
 import type { Snapshot } from './types';
 import { defaultSettings } from '../types/settings';
-import { isUnsafeKey, isValidDayKey } from '../utils/date';
+import { isUnsafeKey, isValidDayKey, localDay } from '../utils/date';
 import { isTruncatedFinish } from '../utils/finish';
 import { log, toast } from '../utils/logger';
 import { usageFingerprint } from './fingerprint';
@@ -561,6 +561,13 @@ export function getFilteredHistoryForScope(): any[] {
   return (state.history || []).filter((h: any) => h.chatId === cur);
 }
 
+export type HistoryDeleteFilter = {
+  start?: string;
+  end?: string;
+  model?: string;
+  chat?: string;
+};
+
 // 归一化设置：只接受已知设置键，防止历史/余额等字段污染（如误将整个 state 存入 settings），并清洗非法值
 function normalizeSettings(incoming: any): any {
   const def: any = defaultSettings();
@@ -587,11 +594,11 @@ function normalizeSettings(incoming: any): any {
     merged.overviewFour = [...merged.overviewFour, ...def.overviewFour.slice(4)];
   }
   try {
-    const valid = new Set(['avg_cost','avg_tokens','avg_duration','avg_rate','avg_input_cost','avg_input_tokens','avg_output_cost','avg_output_tokens','avg_think_time','avg_think_tokens','avg_hit_rate','latest_hit_rate','max_output','max_input','max_total','avg_think_ratio','truncation_rate']);
+    const valid = new Set(['avg_cost','avg_tokens','avg_duration','avg_rate','avg_ttft','avg_input_cost','avg_input_tokens','avg_output_cost','avg_output_tokens','avg_think_time','avg_think_tokens','avg_hit_rate','latest_hit_rate','max_output','max_input','max_total','avg_think_ratio','truncation_rate']);
     if (Array.isArray(merged.overviewFour)) merged.overviewFour = merged.overviewFour.map((k:any)=> valid.has(k)?k:'avg_cost');
     if (merged.overviewFour.length !== 8) merged.overviewFour = def.overviewFour;
     if (!Array.isArray(merged.statsFour) || merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
-    const validStats = new Set(['avg_cost','avg_tokens','avg_duration','avg_rate','avg_input_cost','avg_input_tokens','avg_output_cost','avg_output_tokens','avg_think_time','avg_think_tokens','avg_think_ratio','truncation_rate','avg_hit_rate','latest_hit_rate','max_output','max_input','max_total']);
+    const validStats = new Set(['avg_cost','avg_tokens','avg_duration','avg_rate','avg_ttft','avg_input_cost','avg_input_tokens','avg_output_cost','avg_output_tokens','avg_think_time','avg_think_tokens','avg_think_ratio','truncation_rate','avg_hit_rate','latest_hit_rate','max_output','max_input','max_total']);
     if (Array.isArray(merged.statsFour)) merged.statsFour = merged.statsFour.map((k:any)=> validStats.has(k)?k:'avg_cost');
     if (merged.statsFour.length !== 4) merged.statsFour = def.statsFour;
   } catch {}
@@ -720,6 +727,37 @@ export const repository = {
   async getColdHistory() { return loadHistoryCold(); },
 
   async getAllHistory() { return getAllHistory(); },
+
+  async deleteHistoryByFilter(filter: HistoryDeleteFilter = {}): Promise<number> {
+    const start = filter.start && isValidDayKey(filter.start) ? filter.start : '';
+    const end = filter.end && isValidDayKey(filter.end) ? filter.end : '';
+    const model = String(filter.model || '').trim();
+    const chat = String(filter.chat || '').trim();
+    const all = await getAllHistory();
+    const remains = (all || []).filter((entry: any) => {
+      if (!entry) return false;
+      if (start || end) {
+        const day = localDay(entry.timestamp);
+        if (start && day < start) return true;
+        if (end && day > end) return true;
+      }
+      if (model && String(entry.model || '') !== model) return true;
+      if (chat) {
+        const chatId = String(entry.chatId || '');
+        const chatName = String(entry.chatName || '');
+        if (chatId !== chat && chatName !== chat) return true;
+      }
+      return false;
+    });
+    const removed = Math.max(0, (all || []).length - remains.length);
+    if (!removed) return 0;
+    await this.replaceAll({ history: remains } as any, { clearCold: true });
+    await this.recalcAll();
+    await rebuildAggregates();
+    persist();
+    emit(DataEvents.UPDATED);
+    return removed;
+  },
 
   getWallets(): WalletConfig[] {
     return state.wallets || [];
@@ -1267,7 +1305,7 @@ export const repository = {
       try { saveHot({ settings: state.settings }); } catch {}
     } else {
       try {
-        const validStats = new Set(['avg_cost','avg_tokens','avg_duration','avg_rate','avg_input_cost','avg_input_tokens','avg_output_cost','avg_output_tokens','avg_think_time','avg_think_tokens','avg_think_ratio','truncation_rate','avg_hit_rate','latest_hit_rate','max_output','max_input','max_total']);
+        const validStats = new Set(['avg_cost','avg_tokens','avg_duration','avg_rate','avg_ttft','avg_input_cost','avg_input_tokens','avg_output_cost','avg_output_tokens','avg_think_time','avg_think_tokens','avg_think_ratio','truncation_rate','avg_hit_rate','latest_hit_rate','max_output','max_input','max_total']);
         let cur: any[] = (state.settings as any).statsFour;
         if (cur.some((k:any)=> !validStats.has(k))) {
           (state.settings as any).statsFour = ['avg_cost','avg_tokens','avg_think_ratio','truncation_rate'];

@@ -126,8 +126,9 @@ export function getCredentialFilterOptions(history: any[], endpoint = STATS_FILT
       }
     }
   }
-  const options = Array.from(map.values()).map(({ id, label, count, unknown }) => ({ id, label, count, unknown }));
-  options.sort((a, b) => Number(!!a.unknown) - Number(!!b.unknown) || a.label.localeCompare(b.label, 'zh-CN'));
+  const options = Array.from(map.values())
+    .sort((a, b) => b.lastSeen - a.lastSeen || a.label.localeCompare(b.label, 'zh-CN'))
+    .map(({ id, label, count, unknown }) => ({ id, label, count, unknown }));
   return addLabelCollisionSuffix(options);
 }
 
@@ -143,7 +144,7 @@ export function getFilteredHistory(range?: TimeRange): any[] {
 
 export function computeOverview(balanceWalletId = 'all', historyOverride?: any[]): OverviewView {
   const s: any = getSelectedSave();
-  if (!s) return { balanceText: '¥0.00 CNY', hasBalance: false, walletBalanceCount: 0, totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, rounds: 0, remainingRounds: null, avgInputCost: 0, avgInputTokens: 0, avgOutputCost: 0, avgOutputTokens: 0, avgThinkTime: 0, avgThinkTokens: 0, avgHitRate: 0, latestHitRate: null, maxOutput: 0, maxInput: 0, maxTotal: 0, avgThinkRatio: 0, truncationRate: 0 } as any;
+  if (!s) return { balanceText: '¥0.00 CNY', hasBalance: false, walletBalanceCount: 0, totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, avgTtft: 0, rounds: 0, remainingRounds: null, avgInputCost: 0, avgInputTokens: 0, avgOutputCost: 0, avgOutputTokens: 0, avgThinkTime: 0, avgThinkTokens: 0, avgHitRate: 0, latestHitRate: null, maxOutput: 0, maxInput: 0, maxTotal: 0, avgThinkRatio: 0, truncationRate: 0 } as any;
   const totalCost = s.total_cost || 0;
   const totalTokens = s.total_tokens || 0;
   const hit = s.cache_hit_tokens || 0, miss = s.cache_miss_tokens || 0, output = s.output_tokens || 0;
@@ -164,6 +165,8 @@ export function computeOverview(balanceWalletId = 'all', historyOverride?: any[]
   const avgTokens = rounds ? totalTokens / rounds : 0;
   const avgDuration = hist.length ? (hist.reduce((a: number, h: any) => a + (h.duration || 0), 0) / hist.length) / 1000 : 0;
   const avgRate = hist.length ? (hist.reduce((a: number, h: any) => a + (h.tokenRate || 0), 0) / hist.length) : 0;
+  const ttfts = hist.map((h: any) => h.ttft || 0).filter((v: number) => v > 0);
+  const avgTtft = ttfts.length ? (ttfts.reduce((a: number, b: number) => a + b, 0) / ttfts.length) / 1000 : 0;
   // 新增：输入/输出均摊
   const inputTokens = s.input_tokens || 0;
   const avgInputCost = rounds ? (s.input_cost || 0) / rounds : 0;
@@ -252,7 +255,7 @@ export function computeOverview(balanceWalletId = 'all', historyOverride?: any[]
     walletBalanceCount,
     totalCost, totalTokens, hit, miss, output, hitRate, savings,
     inputCost: s.input_cost || 0, outputCost: s.output_cost || 0,
-    avgCost, avgTokens, avgDuration, avgRate, rounds, remainingRounds,
+    avgCost, avgTokens, avgDuration, avgRate, avgTtft, rounds, remainingRounds,
     avgInputCost, avgInputTokens, avgOutputCost, avgOutputTokens, avgThinkTime, avgThinkTokens, avgHitRate, latestHitRate, maxOutput, maxInput, maxTotal,
     avgThinkRatio, truncationRate,
   } as any;
@@ -291,22 +294,27 @@ export type ChatSummaryRow = {
 
 export function getRecordedChats(): Array<{ chatId: string | null; chatName: string | null; displayName: string }> {
   const s: any = getSelectedSave();
-  const map = new Map<string, { chatId: string | null; chatName: string | null }>();
+  const map = new Map<string, { chatId: string | null; chatName: string | null; lastSeen: number }>();
   for (const h of s?.history || []) {
     const cid = (h.chatId ?? null) as string | null;
     const cname = (h.chatName ?? null) as string | null;
     const key = cid ?? '__null__';
-    if (!map.has(key)) map.set(key, { chatId: cid, chatName: cname });
-    else if (cname && !map.get(key)!.chatName) map.get(key)!.chatName = cname;
+    const timestamp = Number(h?.timestamp) || 0;
+    if (!map.has(key)) map.set(key, { chatId: cid, chatName: cname, lastSeen: timestamp });
+    else {
+      const current = map.get(key)!;
+      if (timestamp >= current.lastSeen && cname) current.chatName = cname;
+      if (timestamp > current.lastSeen) current.lastSeen = timestamp;
+    }
   }
-  return Array.from(map.values()).map(v => {
+  return Array.from(map.values()).sort((a, b) => b.lastSeen - a.lastSeen).map(v => {
     let display = v.chatName || '';
     if (!display) {
       if (v.chatId) display = v.chatId.length > 18 ? v.chatId.slice(0, 8) + '…' + v.chatId.slice(-4) : v.chatId;
       else display = '未分组/旧数据';
     }
     return { chatId: v.chatId, chatName: v.chatName, displayName: display };
-  }).sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+  });
 }
 
 export function computeChatStats(hist?: any[]): ChatSummaryRow[] {
@@ -337,18 +345,20 @@ export function computeChatStats(hist?: any[]): ChatSummaryRow[] {
   return rows;
 }
 
-export function computeStatsFour(filtered: any[]): { avgCost:number; avgTokens:number; avgDuration:number; avgRate:number; avgInputCost:number; avgInputTokens:number; avgOutputCost:number; avgOutputTokens:number; avgThinkTime:number; avgThinkTokens:number; avgHitRate:number; latestHitRate:number|null; maxOutput:number; maxInput:number; maxTotal:number; avgThinkRatio:number; truncationRate:number; rounds:number } {
+export function computeStatsFour(filtered: any[]): { avgCost:number; avgTokens:number; avgDuration:number; avgRate:number; avgTtft:number; avgInputCost:number; avgInputTokens:number; avgOutputCost:number; avgOutputTokens:number; avgThinkTime:number; avgThinkTokens:number; avgHitRate:number; latestHitRate:number|null; maxOutput:number; maxInput:number; maxTotal:number; avgThinkRatio:number; truncationRate:number; rounds:number } {
   if (!filtered || !filtered.length) {
-    return { avgCost:0, avgTokens:0, avgDuration:0, avgRate:0, avgInputCost:0, avgInputTokens:0, avgOutputCost:0, avgOutputTokens:0, avgThinkTime:0, avgThinkTokens:0, avgHitRate:0, latestHitRate:null, maxOutput:0, maxInput:0, maxTotal:0, avgThinkRatio:0, truncationRate:0, rounds:0 };
+    return { avgCost:0, avgTokens:0, avgDuration:0, avgRate:0, avgTtft:0, avgInputCost:0, avgInputTokens:0, avgOutputCost:0, avgOutputTokens:0, avgThinkTime:0, avgThinkTokens:0, avgHitRate:0, latestHitRate:null, maxOutput:0, maxInput:0, maxTotal:0, avgThinkRatio:0, truncationRate:0, rounds:0 };
   }
   const rounds = filtered.length;
   let totalCost = 0, totalTokens = 0, totalDur = 0, totalRate = 0, totalInputCost = 0, totalInputTokens = 0, totalOutputCost = 0, totalOutputTokens = 0;
+  let ttftSum = 0, ttftCnt = 0;
   let thinkTimeSum = 0, thinkTokensSum = 0, thinkTimeCnt = 0, thinkTokensCnt = 0;
   let hitRateSum = 0, hitRateCnt = 0;
   let maxOutput = 0, maxInput = 0, maxTotal = 0;
   let sumThink = 0, sumOut = 0, truncCnt = 0;
   for (const h of filtered) {
     totalCost += h.cost || 0; totalTokens += h.total_tokens || 0; totalDur += h.duration || 0; totalRate += h.tokenRate || 0;
+    if ((h.ttft || 0) > 0) { ttftSum += h.ttft; ttftCnt++; }
     totalInputCost += h.input_cost || 0; totalInputTokens += (h.cache_hit_tokens||0)+(h.cache_miss_tokens||0); totalOutputCost += h.output_cost||0; totalOutputTokens += h.completion_tokens||0;
     if ((h.thinkTime||0) > 0) { thinkTimeSum += h.thinkTime; thinkTimeCnt++; }
     if ((h.thinkTokens||0) > 0) { thinkTokensSum += h.thinkTokens; thinkTokensCnt++; }
@@ -360,7 +370,7 @@ export function computeStatsFour(filtered: any[]): { avgCost:number; avgTokens:n
     if (isTruncatedFinish(h.finishReason) || h.isTruncated) truncCnt++;
   }
   return {
-    avgCost: totalCost/rounds, avgTokens: totalTokens/rounds, avgDuration: totalDur/rounds/1000, avgRate: totalRate/rounds,
+    avgCost: totalCost/rounds, avgTokens: totalTokens/rounds, avgDuration: totalDur/rounds/1000, avgRate: totalRate/rounds, avgTtft: ttftCnt? ttftSum/ttftCnt/1000 : 0,
     avgInputCost: totalInputCost/rounds, avgInputTokens: totalInputTokens/rounds, avgOutputCost: totalOutputCost/rounds, avgOutputTokens: totalOutputTokens/rounds,
     avgThinkTime: thinkTimeCnt? thinkTimeSum/thinkTimeCnt/1000 : 0, avgThinkTokens: thinkTokensCnt? thinkTokensSum/thinkTokensCnt : 0,
     avgHitRate: hitRateCnt? hitRateSum/hitRateCnt : 0,

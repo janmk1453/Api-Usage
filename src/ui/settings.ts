@@ -47,6 +47,101 @@ async function recalcCostsAndRefresh(): Promise<void> {
   }
 }
 
+function readHistoryDeleteFilter(doc: Document) {
+  const startEl = doc.getElementById('aus-delete-start') as HTMLInputElement | null;
+  const endEl = doc.getElementById('aus-delete-end') as HTMLInputElement | null;
+  const modelEl = doc.getElementById('aus-delete-model') as HTMLInputElement | null;
+  const chatEl = doc.getElementById('aus-delete-chat') as HTMLInputElement | null;
+  const start = String(startEl?.value || '').trim();
+  const end = String(endEl?.value || '').trim();
+  return {
+    start: start && isValidDayKey(start) ? start : '',
+    end: end && isValidDayKey(end) ? end : '',
+    model: String(modelEl?.value || '').trim(),
+    chat: String(chatEl?.value || '').trim(),
+  };
+}
+
+async function countHistoryDeleteMatches(filter: ReturnType<typeof readHistoryDeleteFilter>): Promise<number> {
+  const all = await repository.getAllHistory();
+  return (all || []).filter((entry: any) => {
+    if (filter.start || filter.end) {
+      const day = localDay(entry.timestamp);
+      if (filter.start && day < filter.start) return false;
+      if (filter.end && day > filter.end) return false;
+    }
+    if (filter.model && String(entry.model || '') !== filter.model) return false;
+    if (filter.chat) {
+      const chatId = String(entry.chatId || '');
+      const chatName = String(entry.chatName || '');
+      if (chatId !== filter.chat && chatName !== filter.chat) return false;
+    }
+    return true;
+  }).length;
+}
+
+function bindHistoryDelete(doc: Document) {
+  const previewBtn = doc.getElementById('aus-delete-preview') as HTMLButtonElement | null;
+  const deleteBtn = doc.getElementById('aus-delete-run') as HTMLButtonElement | null;
+  const status = doc.getElementById('aus-delete-status') as HTMLElement | null;
+  if (!previewBtn || !deleteBtn) return;
+  let armed = false;
+  let armTimer: any = null;
+  let armedFilter: ReturnType<typeof readHistoryDeleteFilter> | null = null;
+  const resetArmed = () => {
+    armed = false;
+    armedFilter = null;
+    try { deleteBtn.textContent = '删除匹配记录'; } catch {}
+  };
+  previewBtn.onclick = async () => {
+    previewBtn.disabled = true;
+    const old = previewBtn.textContent;
+    previewBtn.textContent = '统计中…';
+    try {
+      const filter = readHistoryDeleteFilter(doc);
+      const count = await countHistoryDeleteMatches(filter);
+      if (status) status.textContent = `匹配 ${count} 条记录${count ? '，点击“删除匹配记录”后会二次确认' : ''}`;
+    } catch (error: any) {
+      if (status) status.textContent = '统计失败：' + (error?.message || error);
+    } finally {
+      previewBtn.disabled = false;
+      previewBtn.textContent = old || '统计匹配记录';
+    }
+  };
+  deleteBtn.onclick = async () => {
+    const filter = readHistoryDeleteFilter(doc);
+    if (!armed) {
+      const count = await countHistoryDeleteMatches(filter).catch(() => -1);
+      if (count <= 0) {
+        if (status) status.textContent = count === 0 ? '当前范围没有可删除记录' : '匹配数量检查失败，请重试';
+        return;
+      }
+      armed = true;
+      armedFilter = filter;
+      deleteBtn.textContent = `确认删除 ${count} 条？再点一次`;
+      if (status) status.textContent = `本次将删除 ${count} 条记录，再次点击执行`;
+      if (armTimer) clearTimeout(armTimer);
+      armTimer = setTimeout(() => { armTimer = null; resetArmed(); }, 5000);
+      return;
+    }
+    if (armTimer) { clearTimeout(armTimer); armTimer = null; }
+    const targetFilter = armedFilter || filter;
+    resetArmed();
+    deleteBtn.disabled = true;
+    if (status) status.textContent = '正在删除并重算…';
+    try {
+      const removed = await repository.deleteHistoryByFilter(targetFilter);
+      await recalcCostsAndRefresh();
+      if (status) status.textContent = removed ? `已删除 ${removed} 条记录并完成重算` : '当前范围没有可删除记录';
+      if (removed) toast('success', `已删除 ${removed} 条记录`);
+    } catch (error: any) {
+      if (status) status.textContent = '删除失败：' + (error?.message || error);
+    } finally {
+      deleteBtn.disabled = false;
+    }
+  };
+}
+
 export function renderSettings(doc: Document) {
   const host = doc.getElementById('aus-settings');
   if (!host) return;
@@ -68,15 +163,6 @@ export function renderSettings(doc: Document) {
         <div id="aus-auto-balance-interval" style="display:${s.autoBalance ? 'block':'none'};margin-top:8px;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;color:var(--ds-text);">校准间隔（分钟）</span><input type="number" id="aus-balance-interval" min="1" max="1440" style="width:90px;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;text-align:center;" /></div></div>
         <div style="font-size:10px;color:var(--ds-text-3);margin-top:6px;">仅钱包页中启用了自动校准且支持该能力的钱包会在间隔到期后查询。</div>
         <div style="display:none;margin-top:12px;"><input id="aus-custom-balance" /><button id="aus-save-balance"></button><button id="aus-clear-balance"></button><div id="aus-balance-status"></div></div>
-      </div>
-
-      <!-- 新价格机制 -->
-      <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">新价格机制（峰谷计费）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-use-new-pricing" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-use-new-pricing-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
-        <div id="aus-new-pricing-panel" style="display:${s.useNewPricing ? 'grid':'none'};margin-top:10px;gap:8px;">
-          <div style="display:flex;gap:8px;align-items:center;"><input type="date" id="aus-new-pricing-date" style="flex:1;padding:7px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;" /><button id="aus-btn-pricing-today" style="padding:7px 12px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;white-space:nowrap;">设为今日</button></div>
-          <div style="font-size:11px;color:var(--ds-text-2);">生效日期前按旧价，之后按峰谷价（仅 deepseek* 模型，周末与中国法定节假日全天低谷）。</div>
-        </div>
       </div>
 
       <!-- 高峰时段 -->
@@ -118,6 +204,23 @@ export function renderSettings(doc: Document) {
       <!-- 峰值圆点 -->
       <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">峰值提示小圆点</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-peak-dot" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-peak-dot-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div><button id="aus-reset-dot" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">重置位置</button></div>
 
+      <!-- 记录数据管理 -->
+      <div class="ds-card">
+        <div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:6px;">按范围删除记录</div>
+        <div style="font-size:11px;color:var(--ds-text-2);line-height:1.7;margin-bottom:8px;">可删除全部记录，或按日期、模型、对话缩小范围。日期留空表示不限；模型与对话需完全匹配，留空表示不限。删除会同时处理热记录与冷记录，并立即重算统计。</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">开始日期</div><input type="date" id="aus-delete-start" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;box-sizing:border-box;" /></div>
+          <div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">结束日期</div><input type="date" id="aus-delete-end" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;box-sizing:border-box;" /></div>
+          <div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">模型</div><input id="aus-delete-model" placeholder="如 deepseek-flash" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;box-sizing:border-box;" /></div>
+          <div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:4px;">对话</div><input id="aus-delete-chat" placeholder="对话名称或 chatId" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:12px;box-sizing:border-box;" /></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button id="aus-delete-preview" style="padding:7px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">统计匹配记录</button>
+          <button id="aus-delete-run" style="padding:7px 12px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:11px;cursor:pointer;">删除匹配记录</button>
+        </div>
+        <div id="aus-delete-status" style="font-size:11px;color:var(--ds-text-2);margin-top:8px;"></div>
+      </div>
+
       <!-- WebDAV -->
       <div class="ds-card"><div style="font-size:12px;font-weight:600;color:var(--ds-text);margin-bottom:6px;">WebDAV 云同步</div><div style="font-size:11px;color:var(--ds-text-2);margin-bottom:8px;">双向合并，仅同步统计/设置/余额，不含聊天内容与密钥。强制 https。</div>
         <div style="display:grid;gap:8px;">
@@ -152,12 +255,6 @@ export function renderSettings(doc: Document) {
   if (autoCb) autoCb.checked = !!s.autoBalance;
   if (autoSlider) autoSlider.style.left = s.autoBalance ? '23px' : '3px';
   (doc.getElementById('aus-balance-interval') as HTMLInputElement | null)!.value = String(s.balanceInterval ?? 10);
-  const newCb = doc.getElementById('aus-use-new-pricing') as HTMLInputElement | null;
-  const newSlider = doc.getElementById('aus-use-new-pricing-slider') as HTMLElement | null;
-  if (newCb) newCb.checked = !!s.useNewPricing;
-  if (newSlider) newSlider.style.left = s.useNewPricing ? '23px' : '3px';
-  const newDate = doc.getElementById('aus-new-pricing-date') as HTMLInputElement | null;
-  if (newDate) newDate.value = s.newPricingDate ? localDay(s.newPricingDate) : '';
   const dbgCb = doc.getElementById('aus-debug-mode') as HTMLInputElement | null;
   const dbgSlider = doc.getElementById('aus-debug-mode-slider') as HTMLElement | null;
   if (dbgCb) dbgCb.checked = !!s.debug;
@@ -305,25 +402,6 @@ export function renderSettings(doc: Document) {
     saveHot({ settings: state.settings });
     try { import('../services/balance').then(m=> (m as any).restartBalanceTimer?.()); } catch {}
   };
-  if (newCb) newCb.onchange = () => {
-    state.settings.useNewPricing = newCb.checked;
-    if (newSlider) newSlider.style.left = newCb.checked ? '23px' : '3px';
-    (doc.getElementById('aus-new-pricing-panel') as HTMLElement).style.display = newCb.checked ? 'grid' : 'none';
-    saveHot({ settings: state.settings }); void recalcCostsAndRefresh();
-  };
-  if (newDate) newDate.onchange = () => {
-    if (newDate.value) {
-      state.settings.newPricingDate = new Date(newDate.value + 'T00:00:00').getTime();
-    } else state.settings.newPricingDate = 0;
-    saveHot({ settings: state.settings }); void recalcCostsAndRefresh();
-  };
-  doc.getElementById('aus-btn-pricing-today')!.onclick = () => {
-    const d = new Date(); d.setHours(0,0,0,0);
-    state.settings.newPricingDate = d.getTime();
-    if (newDate) newDate.value = localDay(d.getTime());
-    if (newCb && !newCb.checked) { newCb.checked = true; if (newSlider) newSlider.style.left = '23px'; (doc.getElementById('aus-new-pricing-panel') as HTMLElement).style.display = 'grid'; }
-    saveHot({ settings: state.settings }); void recalcCostsAndRefresh();
-  };
   if (dbgCb) dbgCb.onchange = () => {
     state.settings.debug = dbgCb.checked;
     if (dbgSlider) dbgSlider.style.left = dbgCb.checked ? '23px' : '3px';
@@ -358,6 +436,7 @@ export function renderSettings(doc: Document) {
   } catch {}
   doc.getElementById('aus-peak-dot')!.onchange = (e: any) => { state.settings.peakDot = e.target.checked; const sl = doc.getElementById('aus-peak-dot-slider') as HTMLElement | null; if (sl) sl.style.left = e.target.checked ? '23px' : '3px'; saveHot({ settings: state.settings }); try { (globalThis as any).ApiUsageStat?.updatePeakDot?.(); } catch {} };
   doc.getElementById('aus-reset-dot')!.onclick = () => { try { localStorage.removeItem('ds_ds_peak_dot_pos'); const dot = (window.parent as any)?.document?.getElementById('aus-peak-dot-indicator') as HTMLElement | null; if (dot) { dot.style.left = ''; dot.style.top = '60px'; dot.style.right = '16px'; } } catch {} alert('已重置'); };
+  bindHistoryDelete(doc);
   const wUrl = doc.getElementById('aus-webdav-url') as HTMLInputElement | null;
   const wUser = doc.getElementById('aus-webdav-user') as HTMLInputElement | null;
   const wPath = doc.getElementById('aus-webdav-path') as HTMLInputElement | null;

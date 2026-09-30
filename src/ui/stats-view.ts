@@ -124,22 +124,27 @@ function getRecordedModels(history?: any[]): string[] {
 }
 
 function getRecordedChatsFrom(list: any[]): Array<{ chatId: string | null; chatName: string | null; displayName: string }> {
-  const map = new Map<string, { chatId: string | null; chatName: string | null }>();
+  const map = new Map<string, { chatId: string | null; chatName: string | null; lastSeen: number }>();
   for (const h of list || []) {
     const cid = (h.chatId ?? null) as string | null;
     const cname = (h.chatName ?? null) as string | null;
     const key = cid ?? '__null__';
-    if (!map.has(key)) map.set(key, { chatId: cid, chatName: cname });
-    else if (cname && !map.get(key)!.chatName) map.get(key)!.chatName = cname;
+    const timestamp = Number(h?.timestamp) || 0;
+    if (!map.has(key)) map.set(key, { chatId: cid, chatName: cname, lastSeen: timestamp });
+    else {
+      const current = map.get(key)!;
+      if (timestamp >= current.lastSeen && cname) current.chatName = cname;
+      if (timestamp > current.lastSeen) current.lastSeen = timestamp;
+    }
   }
-  return Array.from(map.values()).map(v => {
+  return Array.from(map.values()).sort((a, b) => b.lastSeen - a.lastSeen).map(v => {
     let display = v.chatName || '';
     if (!display) {
       if (v.chatId) display = v.chatId.length > 18 ? v.chatId.slice(0, 8) + '…' + v.chatId.slice(-4) : v.chatId;
       else display = '未分组/旧数据';
     }
     return { chatId: v.chatId, chatName: v.chatName, displayName: display };
-  }).sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+  });
 }
 
 function currentStatsFilter(): StatsHistoryFilter {
@@ -651,6 +656,20 @@ async function renderChart(filteredRaw: any[]) {
     // 深色下 total_token 颜色同步主题
     let col = s.color;
     if (col === '#111827' || (typeof col === 'string' && col.indexOf('var(')===0)) col = themeColor('--ds-text', '#111827');
+    if (isCost) {
+      return {
+        name: s.name,
+        type: 'line',
+        yAxisIndex: yIndex,
+        data: s.data,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        lineStyle: { color: col, width: 2 },
+        itemStyle: { color: col },
+        emphasis: { focus: 'series' },
+      };
+    }
     return {
       name: s.name,
       type: 'bar',
