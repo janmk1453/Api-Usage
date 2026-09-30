@@ -23,6 +23,8 @@ export const X_OPTIONS: Array<{key:XKey,label:string}> = [
   { key:'month', label:'每月' },
 ];
 
+export const X_OPTIONS_WITHOUT_ROUND: Array<{key:XKey,label:string}> = X_OPTIONS.filter((option) => option.key !== 'round');
+
 let ySelected: Set<YKey> = new Set<YKey>(['total_token']);
 let xSelected: XKey = 'day';
 

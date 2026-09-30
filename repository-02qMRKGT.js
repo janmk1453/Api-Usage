@@ -1,10 +1,10 @@
 import { cn as __exportAll } from "./Image-B5UjBJH1.js";
-import { a as defaultSettings, n as getSelectedSave, r as state } from "./store-_kFPP4fT.js";
+import { a as defaultSettings, n as getSelectedSave, r as state } from "./store-D3uOTDWz.js";
 import { a as MAX_HISTORY, i as HIDDEN_PRICING_MODELS, n as DEFAULT_PEAK_HOURS, o as PRICE_HISTORY, s as PRICING } from "./pricing-bcKQQNo6.js";
 import { a as loadHistoryCold, c as saveExtensionSettings, d as historyRecordKey, i as getExtensionSettings, l as saveHistoryCold, n as clearHistoryCold, o as loadHot, r as getAllHistory, t as appendHistoryCold, u as saveHot } from "./persistence-CrFXrRB_.js";
 import { r as toast, t as log } from "./logger-Bv-AT94O.js";
-import { a as isUnsafeKey, i as isPeakHour, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay } from "./date-BJI2m6dS.js";
-import { a as getWalletExchangeRate } from "./currency-DaWccfnd.js";
+import { a as isUnsafeKey, c as localDay, i as isPeakHour, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay } from "./date-BJI2m6dS.js";
+import { a as getWalletExchangeRate } from "./currency-BVe2dp3y.js";
 //#region src/types/wallet.ts
 var DEEPSEEK_WALLET_ID = "wallet:deepseek-official";
 var WALLET_CATALOG_PROVIDERS = [
@@ -802,6 +802,7 @@ function mergeWalletCollections(local, remote) {
 }
 //#endregion
 //#region src/services/pricing.ts
+var LEGACY_PEAK_PRICING_DATE = (/* @__PURE__ */ new Date("2026-08-17T00:00:00+08:00")).getTime();
 function mergePrices(base, custom) {
 	if (!custom) return base;
 	return {
@@ -1021,7 +1022,7 @@ function calcCost(u, settings, wallet) {
 	const basePricing = getPricing(model, settings, wallet);
 	const pricing = effectivePricingFor(model, u.timestamp, settings, basePricing);
 	const hours = peakHoursFor(hasCustomForModel(model, settings) ? null : findSegment(normalizeModel(model), u.timestamp), settings);
-	const useNewPricing = settings.useNewPricing && u.timestamp >= settings.newPricingDate;
+	const useNewPricing = u.timestamp >= LEGACY_PEAK_PRICING_DATE;
 	let p;
 	let priceType;
 	if (useNewPricing && pricing.usePeakPricing !== false && isDeepSeekOfficialModel(model)) {
@@ -1056,7 +1057,7 @@ function calcSavings(u, settings, wallet) {
 	const basePricing = getPricing(model, settings, wallet);
 	const pricing = effectivePricingFor(model, u.timestamp, settings, basePricing);
 	const hours = peakHoursFor(hasCustomForModel(model, settings) ? null : findSegment(normalizeModel(model), u.timestamp), settings);
-	const useNewPricing = settings.useNewPricing && u.timestamp >= settings.newPricingDate;
+	const useNewPricing = u.timestamp >= LEGACY_PEAK_PRICING_DATE;
 	let p;
 	if (useNewPricing && pricing.usePeakPricing !== false && isDeepSeekOfficialModel(model)) p = isPeakHour(u.timestamp, hours, settings?.extraOffDays) ? pricing.peak : pricing.offpeak;
 	else p = pricing.offpeak;
@@ -1700,6 +1701,7 @@ function normalizeSettings(incoming) {
 			"avg_tokens",
 			"avg_duration",
 			"avg_rate",
+			"avg_ttft",
 			"avg_input_cost",
 			"avg_input_tokens",
 			"avg_output_cost",
@@ -1722,6 +1724,7 @@ function normalizeSettings(incoming) {
 			"avg_tokens",
 			"avg_duration",
 			"avg_rate",
+			"avg_ttft",
 			"avg_input_cost",
 			"avg_input_tokens",
 			"avg_output_cost",
@@ -1860,6 +1863,36 @@ var repository = {
 	async getAllHistory() {
 		return getAllHistory();
 	},
+	async deleteHistoryByFilter(filter = {}) {
+		const start = filter.start && isValidDayKey(filter.start) ? filter.start : "";
+		const end = filter.end && isValidDayKey(filter.end) ? filter.end : "";
+		const model = String(filter.model || "").trim();
+		const chat = String(filter.chat || "").trim();
+		const all = await getAllHistory();
+		const remains = (all || []).filter((entry) => {
+			if (!entry) return false;
+			if (start || end) {
+				const day = localDay(entry.timestamp);
+				if (start && day < start) return true;
+				if (end && day > end) return true;
+			}
+			if (model && String(entry.model || "") !== model) return true;
+			if (chat) {
+				const chatId = String(entry.chatId || "");
+				const chatName = String(entry.chatName || "");
+				if (chatId !== chat && chatName !== chat) return true;
+			}
+			return false;
+		});
+		const removed = Math.max(0, (all || []).length - remains.length);
+		if (!removed) return 0;
+		await this.replaceAll({ history: remains }, { clearCold: true });
+		await this.recalcAll();
+		await rebuildAggregates();
+		persist();
+		emit(DataEvents.UPDATED);
+		return removed;
+	},
 	getWallets() {
 		return state.wallets || [];
 	},
@@ -1955,7 +1988,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && state.settings.pricingSync?.enabled) try {
-						import("./pricing-sync-CPVlfQlX.js").then((n) => n.i).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-BGy2gBtF.js").then((n) => n.i).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
@@ -2476,6 +2509,7 @@ var repository = {
 				"avg_tokens",
 				"avg_duration",
 				"avg_rate",
+				"avg_ttft",
 				"avg_input_cost",
 				"avg_input_tokens",
 				"avg_output_cost",
@@ -2587,6 +2621,10 @@ var repository = {
 		} catch {}
 		try {
 			await this.recalcAll();
+		} catch {}
+		try {
+			await rebuildAggregates();
+			persist();
 		} catch {}
 		emit(DataEvents.UPDATED);
 		return this.snapshot();

@@ -15,8 +15,6 @@ var defaultSettings = () => ({
 	debugDateStart: "",
 	debugDateEnd: "",
 	debugBatchCount: 30,
-	useNewPricing: true,
-	newPricingDate: (/* @__PURE__ */ new Date("2026-08-17T00:00:00+08:00")).getTime(),
 	customModels: [],
 	peakHours: [{
 		start: "09:00",

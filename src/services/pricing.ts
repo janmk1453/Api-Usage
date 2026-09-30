@@ -9,6 +9,9 @@ import { formatMoney as _formatMoney } from './currency';
 
 export { isWeekendDay };
 
+// 旧“新价格机制”入口已移除，保留原默认生效日以保证历史记录按既有口径计费。
+const LEGACY_PEAK_PRICING_DATE = new Date('2026-08-17T00:00:00+08:00').getTime();
+
 export function getModelList(settings: Settings): string[] {
   const set: Record<string, 1> = {};
   Object.keys(PRICING).forEach((k) => (set[k] = 1));
@@ -175,7 +178,7 @@ function isWalletPeakHour(timestamp: number, wallet: WalletConfig, settings?: Se
   return isWithinPeakHours(timestamp, wallet.peakHours?.length ? wallet.peakHours : DEFAULT_PEAK_HOURS);
 }
 
-// 1:1 calcCost（含周末豁免、仅 deepseek* 峰谷、useNewPricing/newPricingDate）
+// 1:1 calcCost（含周末豁免、仅 deepseek* 峰谷、内置价格段与历史默认生效日）
 // 多段价格：按记录 timestamp 命中 PRICE_HISTORY 中 timestamp >= since 的最后一段；
 // 自定义价格优先不回退；段自带 peakHours 优先于用户当前设置（历史峰谷规则不随当前设置漂移）
 // 未来段（since 为未来时间）预置后自动生效，当前记录不受影响
@@ -244,7 +247,7 @@ export function calcCost(
   const pricing = effectivePricingFor(model, u.timestamp, settings, basePricing);
   const segForHours = hasCustomForModel(model, settings) ? null : findSegment(normalizeModel(model), u.timestamp);
   const hours = peakHoursFor(segForHours, settings);
-  const useNewPricing = settings.useNewPricing && u.timestamp >= settings.newPricingDate;
+  const useNewPricing = u.timestamp >= LEGACY_PEAK_PRICING_DATE;
   let p: any;
   let priceType: string;
   if (useNewPricing && pricing.usePeakPricing !== false && isDeepSeekOfficialModel(model)) {
@@ -290,7 +293,7 @@ export function calcSavings(
   const pricing = effectivePricingFor(model, u.timestamp, settings, basePricing);
   const segForHours = hasCustomForModel(model, settings) ? null : findSegment(normalizeModel(model), u.timestamp);
   const hours = peakHoursFor(segForHours, settings);
-  const useNewPricing = settings.useNewPricing && u.timestamp >= settings.newPricingDate;
+  const useNewPricing = u.timestamp >= LEGACY_PEAK_PRICING_DATE;
   let p: any;
   if (useNewPricing && pricing.usePeakPricing !== false && isDeepSeekOfficialModel(model)) {
     p = isPeakHourRaw(u.timestamp, hours, (settings as any)?.extraOffDays) ? pricing.peak : pricing.offpeak;

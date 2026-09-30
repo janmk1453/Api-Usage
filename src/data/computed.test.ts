@@ -112,6 +112,59 @@ describe('统计聚合', () => {
     });
   });
 
+  it('四小块平均值忽略单轮 0 值', () => {
+    const result = computeStatsFour([
+      {
+        timestamp: 1,
+        cost: 0,
+        total_tokens: 0,
+        duration: 0,
+        tokenRate: 0,
+        cache_hit_tokens: 0,
+        cache_miss_tokens: 0,
+        completion_tokens: 0,
+        input_cost: 0,
+        output_cost: 0,
+        thinkTime: 0,
+        thinkTokens: 0,
+        ttft: 0,
+        finishReason: 'stop',
+      },
+      {
+        timestamp: 2,
+        cost: 2,
+        total_tokens: 200,
+        duration: 2_000,
+        tokenRate: 20,
+        cache_hit_tokens: 50,
+        cache_miss_tokens: 50,
+        completion_tokens: 100,
+        input_cost: 1,
+        output_cost: 1,
+        thinkTime: 200,
+        thinkTokens: 10,
+        ttft: 400,
+        finishReason: 'stop',
+      },
+    ]);
+
+    expect(result).toMatchObject({
+      avgCost: 2,
+      avgTokens: 200,
+      avgDuration: 2,
+      avgRate: 20,
+      avgTtft: 0.4,
+      avgInputCost: 1,
+      avgInputTokens: 100,
+      avgOutputCost: 1,
+      avgOutputTokens: 100,
+      avgThinkTime: 0.2,
+      avgThinkTokens: 10,
+      avgHitRate: 50,
+      rounds: 2,
+    });
+  });
+
   it('按时间和接入维度执行交集过滤', () => {
     const history = [
       {
