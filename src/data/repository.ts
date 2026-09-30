@@ -1361,6 +1361,8 @@ export const repository = {
     try { this.pruneZeroEntries(); } catch {}
     // 对历史成本按归一化模型重算，修复 [masa]/[OR] 前缀导致的 0 费用
     try { await this.recalcAll(); } catch {}
+    // 热缓存聚合字段必须与热+冷全量历史一致，避免概览与统计页出现两套总额
+    try { await rebuildAggregates(); persist(); } catch {}
     emit(DataEvents.UPDATED);
     return this.snapshot();
   },

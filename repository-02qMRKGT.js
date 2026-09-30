@@ -1988,7 +1988,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && state.settings.pricingSync?.enabled) try {
-						import("./pricing-sync-9NV4awsG.js").then((n) => n.i).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-BGy2gBtF.js").then((n) => n.i).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
@@ -2621,6 +2621,10 @@ var repository = {
 		} catch {}
 		try {
 			await this.recalcAll();
+		} catch {}
+		try {
+			await rebuildAggregates();
+			persist();
 		} catch {}
 		emit(DataEvents.UPDATED);
 		return this.snapshot();

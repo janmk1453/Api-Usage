@@ -147,9 +147,41 @@ export function computeOverview(balanceWalletId = 'all', historyOverride?: any[]
   if (!s) return { balanceText: '¥0.00 CNY', hasBalance: false, walletBalanceCount: 0, totalCost: 0, totalTokens: 0, hit: 0, miss: 0, output: 0, hitRate: 0, savings: 0, inputCost: 0, outputCost: 0, avgCost: 0, avgTokens: 0, avgDuration: 0, avgRate: 0, avgTtft: 0, rounds: 0, remainingRounds: null, avgInputCost: 0, avgInputTokens: 0, avgOutputCost: 0, avgOutputTokens: 0, avgThinkTime: 0, avgThinkTokens: 0, avgHitRate: 0, latestHitRate: null, maxOutput: 0, maxInput: 0, maxTotal: 0, avgThinkRatio: 0, truncationRate: 0 } as any;
   const totalCost = s.total_cost || 0;
   const totalTokens = s.total_tokens || 0;
-  const hit = s.cache_hit_tokens || 0, miss = s.cache_miss_tokens || 0, output = s.output_tokens || 0;
-  const hitRate = hit + miss > 0 ? (hit / (hit + miss) * 100) : 0;
   const hist: any[] = historyOverride || s.history || [];
+  let viewTotalCost = totalCost;
+  let viewTotalTokens = totalTokens;
+  let viewInputCost = s.input_cost || 0;
+  let viewOutputCost = s.output_cost || 0;
+  let viewInputTokens = s.input_tokens || 0;
+  let viewOutputTokens = s.output_tokens || 0;
+  let viewHit = s.cache_hit_tokens || 0;
+  let viewMiss = s.cache_miss_tokens || 0;
+  let viewOutput = s.output_tokens || 0;
+  let viewRounds = s.rounds || 0;
+  if (historyOverride) {
+    viewTotalCost = 0;
+    viewTotalTokens = 0;
+    viewInputCost = 0;
+    viewOutputCost = 0;
+    viewInputTokens = 0;
+    viewOutputTokens = 0;
+    viewHit = 0;
+    viewMiss = 0;
+    viewOutput = 0;
+    viewRounds = hist.length;
+    for (const h of hist) {
+      viewTotalCost += Number(h.cost) || 0;
+      viewTotalTokens += Number(h.total_tokens) || 0;
+      viewInputCost += Number(h.input_cost) || 0;
+      viewOutputCost += Number(h.output_cost) || 0;
+      viewHit += Number(h.cache_hit_tokens) || 0;
+      viewMiss += Number(h.cache_miss_tokens) || 0;
+      viewOutput += Number(h.completion_tokens) || 0;
+    }
+    viewInputTokens = viewHit + viewMiss;
+    viewOutputTokens = viewOutput;
+  }
+  const hitRate = viewHit + viewMiss > 0 ? (viewHit / (viewHit + viewMiss) * 100) : 0;
   let savings = 0;
   try {
     for (const h of hist) {
@@ -160,19 +192,19 @@ export function computeOverview(balanceWalletId = 'all', historyOverride?: any[]
       );
     }
   } catch {}
-  const rounds = s.rounds || 0;
-  const avgCost = rounds ? totalCost / rounds : 0;
-  const avgTokens = rounds ? totalTokens / rounds : 0;
+  const rounds = viewRounds;
+  const avgCost = rounds ? viewTotalCost / rounds : 0;
+  const avgTokens = rounds ? viewTotalTokens / rounds : 0;
   const avgDuration = hist.length ? (hist.reduce((a: number, h: any) => a + (h.duration || 0), 0) / hist.length) / 1000 : 0;
   const avgRate = hist.length ? (hist.reduce((a: number, h: any) => a + (h.tokenRate || 0), 0) / hist.length) : 0;
   const ttfts = hist.map((h: any) => h.ttft || 0).filter((v: number) => v > 0);
   const avgTtft = ttfts.length ? (ttfts.reduce((a: number, b: number) => a + b, 0) / ttfts.length) / 1000 : 0;
   // 新增：输入/输出均摊
-  const inputTokens = s.input_tokens || 0;
-  const avgInputCost = rounds ? (s.input_cost || 0) / rounds : 0;
+  const inputTokens = viewInputTokens;
+  const avgInputCost = rounds ? viewInputCost / rounds : 0;
   const avgInputTokens = rounds ? inputTokens / rounds : 0;
-  const avgOutputCost = rounds ? (s.output_cost || 0) / rounds : 0;
-  const avgOutputTokens = rounds ? output / rounds : 0;
+  const avgOutputCost = rounds ? viewOutputCost / rounds : 0;
+  const avgOutputTokens = rounds ? viewOutputTokens / rounds : 0;
   // 思维链（剔除 0）
   const thinkTimes = hist.map((h: any) => h.thinkTime || 0).filter((v: number) => v > 0);
   const thinkTokensArr = hist.map((h: any) => h.thinkTokens || 0).filter((v: number) => v > 0);
@@ -253,8 +285,8 @@ export function computeOverview(balanceWalletId = 'all', historyOverride?: any[]
     balanceText,
     hasBalance: balanceCny != null,
     walletBalanceCount,
-    totalCost, totalTokens, hit, miss, output, hitRate, savings,
-    inputCost: s.input_cost || 0, outputCost: s.output_cost || 0,
+    totalCost: viewTotalCost, totalTokens: viewTotalTokens, hit: viewHit, miss: viewMiss, output: viewOutput, hitRate, savings,
+    inputCost: viewInputCost, outputCost: viewOutputCost,
     avgCost, avgTokens, avgDuration, avgRate, avgTtft, rounds, remainingRounds,
     avgInputCost, avgInputTokens, avgOutputCost, avgOutputTokens, avgThinkTime, avgThinkTokens, avgHitRate, latestHitRate, maxOutput, maxInput, maxTotal,
     avgThinkRatio, truncationRate,
