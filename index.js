@@ -7573,12 +7573,19 @@ function createPanel() {
               <div class="ds-card" style="display:grid;gap:8px;">
                 <div style="font-size:12px;font-weight:600;color:var(--ds-text);">检查更新</div>
                 <div id="aus-update-banner" style="display:none;padding:8px 10px;border-radius:8px;background:var(--ds-yellow-bg);border:1px solid var(--ds-yellow-border);font-size:11px;color:var(--ds-text);"></div>
-                <div style="display:flex;gap:8px;align-items:center;">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                  <div style="position:relative;z-index:5;">
+                    <button id="aus-update-branch-btn" class="ds-btn-pill" style="padding:6px 14px;font-size:11px;">更新分支：<span id="aus-update-branch-label">main</span></button>
+                    <div id="aus-update-branch-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);left:0;min-width:150px;padding:6px;background:var(--ds-bg);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:60;flex-direction:column;gap:4px;">
+                      <div data-update-branch="main" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">main（稳定）</div>
+                      <div data-update-branch="dev" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">dev（测试）</div>
+                    </div>
+                  </div>
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:11px;">检查更新</button>
                   <button id="aus-run-update" class="ds-btn-pill" style="display:none;padding:6px 14px;font-size:11px;">立即更新</button>
                   <span style="font-size:11px;color:var(--ds-text-3);">当前 v3.1.0 · 每 1 小时自动检查</span>
                 </div>
-                <div style="font-size:11px;color:var(--ds-text-3);">Git 安装的扩展可直接在本页更新，完成后自动刷新网页；非 Git 安装请使用“管理扩展程序”。</div>
+                <div style="font-size:11px;color:var(--ds-text-3);">可选择 main 或 dev 分支直接更新，默认 main；更新完成后自动刷新网页。非 Git 安装请使用“管理扩展程序”。</div>
               </div>
             </div>
           </div>
@@ -7730,11 +7737,46 @@ function createPanel() {
 		initForecastView();
 	} catch {}
 	try {
+		import("./update-D8En1dZJ.js").then((m) => {
+			const branchBtn = doc.getElementById("aus-update-branch-btn");
+			const branchLabel = doc.getElementById("aus-update-branch-label");
+			const branchDrop = doc.getElementById("aus-update-branch-dropdown");
+			if (!branchBtn || !branchLabel || !branchDrop) return;
+			const renderBranch = () => {
+				const branch = m.getUpdateBranch();
+				branchLabel.textContent = branch;
+				branchDrop.querySelectorAll("[data-update-branch]").forEach((el) => {
+					const active = el.getAttribute("data-update-branch") === branch;
+					el.style.background = active ? "var(--ds-card)" : "transparent";
+					el.style.fontWeight = active ? "600" : "400";
+				});
+			};
+			renderBranch();
+			branchBtn.onclick = (e) => {
+				e.stopPropagation();
+				branchDrop.style.display = branchDrop.style.display === "flex" ? "none" : "flex";
+			};
+			branchDrop.querySelectorAll("[data-update-branch]").forEach((el) => {
+				el.onclick = () => {
+					const branch = el.getAttribute("data-update-branch");
+					if (branch !== "main" && branch !== "dev") return;
+					m.setUpdateBranch(branch);
+					renderBranch();
+					branchDrop.style.display = "none";
+					m.checkUpdate(true);
+				};
+			});
+			doc.addEventListener("click", (ev) => {
+				const drop = doc.getElementById("aus-update-branch-dropdown");
+				if (!drop) return;
+				if (!ev?.target?.closest?.("#aus-update-branch-dropdown") && !ev?.target?.closest?.("#aus-update-branch-btn")) drop.style.display = "none";
+			});
+		}).catch(() => {});
 		const updBtn = doc.getElementById("aus-check-update");
 		if (updBtn) updBtn.onclick = () => {
 			updBtn.textContent = "检查中…";
 			updBtn.setAttribute("disabled", "");
-			import("./update-BmHB7zWp.js").then((m) => m.checkUpdate(true).finally(() => {
+			import("./update-D8En1dZJ.js").then((m) => m.checkUpdate(true).finally(() => {
 				updBtn.textContent = "检查更新";
 				updBtn.removeAttribute("disabled");
 			}));
@@ -7744,14 +7786,14 @@ function createPanel() {
 			if (runUpdBtn.hasAttribute("disabled")) return;
 			runUpdBtn.textContent = "更新中…";
 			runUpdBtn.setAttribute("disabled", "");
-			import("./update-BmHB7zWp.js").then((m) => m.updateSelf()).then((res) => {
-				if (res.ok && !res.isUpToDate) {
+			import("./update-D8En1dZJ.js").then((m) => m.updateSelf()).then((res) => {
+				if (res.ok && res.changed) {
 					const bannerEl = doc.getElementById("aus-update-banner");
 					if (bannerEl) {
 						bannerEl.style.display = "block";
 						bannerEl.style.background = "var(--ds-green-bg)";
 						bannerEl.style.borderColor = "var(--ds-green)";
-						bannerEl.textContent = "更新完成，正在刷新页面…";
+						bannerEl.textContent = `已更新到 ${res.branch} 分支，正在刷新页面…`;
 					}
 					runUpdBtn.textContent = "即将刷新…";
 					setTimeout(() => {
@@ -7767,13 +7809,13 @@ function createPanel() {
 				}
 				runUpdBtn.textContent = "立即更新";
 				runUpdBtn.removeAttribute("disabled");
-				if (res.ok && res.isUpToDate) {
+				if (res.ok && !res.changed) {
 					const bannerEl = doc.getElementById("aus-update-banner");
 					if (bannerEl) {
 						bannerEl.style.display = "block";
 						bannerEl.style.background = "var(--ds-green-bg)";
 						bannerEl.style.borderColor = "var(--ds-green)";
-						bannerEl.textContent = "已是最新版本，无需更新" + (res.commit ? "（" + res.commit + "）" : "");
+						bannerEl.textContent = `已是最新版本（${res.branch}），无需更新` + (res.commit ? "（" + res.commit + "）" : "");
 					}
 					runUpdBtn.style.display = "none";
 				}
@@ -7827,7 +7869,7 @@ function openPanel() {
 	panelOpen = true;
 	refreshUI();
 	try {
-		import("./update-BmHB7zWp.js").then((m) => m.maybeAutoCheck());
+		import("./update-D8En1dZJ.js").then((m) => m.maybeAutoCheck());
 	} catch {}
 }
 function closePanel() {

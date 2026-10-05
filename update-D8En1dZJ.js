@@ -3,14 +3,31 @@ import { t as esc } from "./date-BJI2m6dS.js";
 //#region src/services/update.ts
 var CURRENT_VERSION = "3.1.0";
 var REPO = "janmk1453/Api-Usage";
-var REMOTE_MANIFEST = `https://raw.githubusercontent.com/${REPO}/main/manifest.json`;
 var EXTENSION_FOLDER = "Api-Usage";
 var INTERVAL_MS = 36e5;
 var TIMEOUT_MS = 5e3;
 var LOCAL_TIMEOUT_MS = 15e3;
 var LAST_CHECK_KEY = "aus_update_last_check";
 var LAST_NOTIFIED_KEY = "aus_update_last_notified_version";
+var UPDATE_BRANCH_KEY = "aus_update_branch";
+function getUpdateBranch() {
+	try {
+		const value = localStorage.getItem(UPDATE_BRANCH_KEY);
+		if (value === "main" || value === "dev") return value;
+	} catch {}
+	return "main";
+}
+function setUpdateBranch(branch) {
+	if (branch !== "main" && branch !== "dev") return;
+	try {
+		localStorage.setItem(UPDATE_BRANCH_KEY, branch);
+	} catch {}
+}
+function remoteManifestUrl(branch) {
+	return `https://raw.githubusercontent.com/${REPO}/${branch}/manifest.json`;
+}
 var cachedLocalRepo = null;
+var loadedBranch = null;
 function getParentFetch() {
 	try {
 		const p = window.parent;
@@ -116,8 +133,8 @@ async function fetchLocalCommit() {
 	}
 	return null;
 }
-async function compareWithMain(localSha, signal) {
-	const resp = await getParentFetch()(`https://api.github.com/repos/${REPO}/compare/${localSha}...main?t=${Date.now()}`, {
+async function compareWithBranch(localSha, branch, signal) {
+	const resp = await getParentFetch()(`https://api.github.com/repos/${REPO}/compare/${localSha}...${encodeURIComponent(branch)}?t=${Date.now()}`, {
 		method: "GET",
 		headers: { Accept: "application/vnd.github+json" },
 		cache: "no-store",
@@ -133,8 +150,8 @@ async function compareWithMain(localSha, signal) {
 		remoteSha
 	};
 }
-async function fetchRemoteManifestVersion(signal) {
-	const resp = await getParentFetch()(REMOTE_MANIFEST + "?t=" + Date.now(), {
+async function fetchRemoteManifestVersion(branch, signal) {
+	const resp = await getParentFetch()(remoteManifestUrl(branch) + "?t=" + Date.now(), {
 		method: "GET",
 		headers: { Accept: "application/json" },
 		cache: "no-store",
@@ -183,7 +200,51 @@ async function readErrorText(resp) {
 		return "";
 	}
 }
+async function switchToBranch(branch, global, headers, rf) {
+	const ctrl = new AbortController();
+	const timer = setTimeout(() => {
+		try {
+			ctrl.abort();
+		} catch {}
+	}, LOCAL_TIMEOUT_MS);
+	try {
+		const resp = await rf("/api/extensions/switch", {
+			method: "POST",
+			headers,
+			body: JSON.stringify({
+				extensionName: EXTENSION_FOLDER,
+				branch: `origin/${branch}`,
+				global
+			}),
+			signal: ctrl.signal
+		});
+		clearTimeout(timer);
+		if (!resp?.ok) {
+			const detail = await readErrorText(resp);
+			let message = `切换到 ${branch} 分支失败（HTTP ${resp?.status || "未知"}）`;
+			if (resp?.status === 403) message = "没有切换全局扩展分支的权限，请让管理员操作";
+			else if (resp?.status === 404) message = `远端不存在 ${branch} 分支，或本地尚未获取该分支`;
+			else if (resp?.status === 500) message = "服务端切换分支失败，可能是本地存在未提交改动";
+			if (detail) message += "：" + detail;
+			return {
+				ok: false,
+				message
+			};
+		}
+		return {
+			ok: true,
+			message: ""
+		};
+	} catch (e) {
+		clearTimeout(timer);
+		return {
+			ok: false,
+			message: "切换分支失败：" + (e?.name === "AbortError" ? "请求超时" : e?.message || String(e))
+		};
+	}
+}
 async function updateSelf() {
+	const targetBranch = getUpdateBranch();
 	const ctx = globalThis.SillyTavern?.getContext?.();
 	if (!ctx?.getRequestHeaders) {
 		const message = "当前不在酒馆环境中，无法调用扩展更新接口";
@@ -191,7 +252,9 @@ async function updateSelf() {
 		return {
 			ok: false,
 			isUpToDate: false,
-			message
+			changed: false,
+			message,
+			branch: targetBranch
 		};
 	}
 	let headers;
@@ -200,21 +263,46 @@ async function updateSelf() {
 	} catch {
 		headers = { "Content-Type": "application/json" };
 	}
-	let local = cachedLocalRepo;
-	if (!local) try {
+	let local = null;
+	try {
 		local = await fetchLocalCommit();
 	} catch {}
+	if (!local) local = cachedLocalRepo;
+	const observedBranch = local?.branch || "";
+	if (loadedBranch === null && observedBranch) loadedBranch = observedBranch;
 	if (local && !local.sha) {
 		const message = "当前安装不是 Git 仓库，无法在扩展内自更新，请在「管理扩展程序」中重新安装或更新";
 		toast("error", message);
 		return {
 			ok: false,
 			isUpToDate: false,
-			message
+			changed: false,
+			message,
+			branch: targetBranch
 		};
 	}
 	const global = local?.global ?? false;
 	const rf = getParentFetch();
+	let switchedBranch = false;
+	if (local && local.sha && local.branch && local.branch !== targetBranch) {
+		const switched = await switchToBranch(targetBranch, global, headers, rf);
+		if (!switched.ok) {
+			toast("error", switched.message);
+			return {
+				ok: false,
+				isUpToDate: false,
+				changed: false,
+				message: switched.message,
+				branch: targetBranch
+			};
+		}
+		switchedBranch = true;
+		local = {
+			...local,
+			branch: targetBranch
+		};
+		cachedLocalRepo = local;
+	}
 	const ctrl = new AbortController();
 	const timer = setTimeout(() => {
 		try {
@@ -243,19 +331,24 @@ async function updateSelf() {
 			return {
 				ok: false,
 				isUpToDate: false,
-				message
+				changed: false,
+				message,
+				branch: targetBranch
 			};
 		}
 		const data = await resp.json().catch(() => null);
 		const isUpToDate = data?.isUpToDate === true;
 		const commit = String(data?.shortCommitHash || "").trim();
-		const message = isUpToDate ? "已是最新版本，无需更新" : `更新成功${commit ? "（" + commit + "）" : ""}`;
-		toast(isUpToDate ? "info" : "success", message);
+		const changed = switchedBranch || !!loadedBranch && !!observedBranch && loadedBranch !== observedBranch || !isUpToDate;
+		const message = isUpToDate ? changed ? `已切换到 ${targetBranch} 分支${commit ? "（" + commit + "）" : ""}` : `${targetBranch} 分支已是最新版本，无需更新` : `已更新到 ${targetBranch} 分支${commit ? "（" + commit + "）" : ""}`;
+		toast(changed ? "success" : "info", message);
 		return {
 			ok: true,
 			isUpToDate,
+			changed,
 			message,
-			commit: commit || void 0
+			commit: commit || void 0,
+			branch: targetBranch
 		};
 	} catch (e) {
 		clearTimeout(timer);
@@ -264,7 +357,9 @@ async function updateSelf() {
 		return {
 			ok: false,
 			isUpToDate: false,
-			message
+			changed: false,
+			message,
+			branch: targetBranch
 		};
 	}
 }
@@ -275,16 +370,18 @@ async function checkUpdate(manual = false) {
 	}
 	setStoredLastCheck(Date.now());
 	const banner = getBanner();
+	const targetBranch = getUpdateBranch();
 	let isNonGitInstall = false;
 	try {
 		const local = await fetchLocalCommit();
 		if (local) isNonGitInstall = !local.sha;
 		if (local?.sha) {
-			const branchLabel = local.branch || "unknown";
-			const localLabel = `${branchLabel}@${shortSha(local.sha)}`;
-			let hasUpdate = local.isUpToDate === false;
-			let remoteLabel = `origin/${branchLabel}@最新`;
-			let notifyKey = `origin:${branchLabel}:${local.sha}`;
+			const currentBranch = local.branch || "unknown";
+			const localLabel = `${currentBranch}@${shortSha(local.sha)}`;
+			const needsSwitch = currentBranch !== "unknown" && currentBranch !== targetBranch;
+			let hasUpdate = !needsSwitch && local.isUpToDate === false;
+			let remoteLabel = `${targetBranch}@${shortSha(local.sha)}`;
+			let notifyKey = `${targetBranch}:${local.sha}`;
 			const ctrl = new AbortController();
 			const timer = setTimeout(() => {
 				try {
@@ -292,28 +389,30 @@ async function checkUpdate(manual = false) {
 				} catch {}
 			}, TIMEOUT_MS);
 			try {
-				const cmp = await compareWithMain(local.sha, ctrl.signal);
+				const cmp = await compareWithBranch(local.sha, targetBranch, ctrl.signal);
 				clearTimeout(timer);
 				if (cmp) {
 					if (cmp.hasUpdate) {
 						hasUpdate = true;
-						remoteLabel = `main@${shortSha(cmp.remoteSha)}`;
-						notifyKey = cmp.remoteSha || remoteLabel;
-					} else if (!hasUpdate) remoteLabel = `main@${shortSha(cmp.remoteSha)}`;
+						remoteLabel = `${targetBranch}@${shortSha(cmp.remoteSha)}`;
+						notifyKey = `${targetBranch}:${cmp.remoteSha || remoteLabel}`;
+					} else remoteLabel = `${targetBranch}@${shortSha(cmp.remoteSha || local.sha)}`;
 				}
 			} catch (e) {
 				clearTimeout(timer);
 				log.debug("提交哈希检查失败，回退版本检查", e?.message || e);
 			}
+			if (needsSwitch) hasUpdate = true;
 			if (hasUpdate) {
+				const message = needsSwitch ? `当前 ${localLabel}，可切换到 ${targetBranch} 分支并更新` : `发现 ${remoteLabel} 新提交（当前 ${localLabel}），可在本页直接更新`;
 				if (getLastNotified() !== notifyKey || manual) {
-					toast("info", `发现新提交（${localLabel} → ${remoteLabel}），可在「关于 → 检查更新」中直接更新`);
+					toast("info", message);
 					setLastNotified(notifyKey);
 				}
-				if (banner) showBanner(`发现新提交 <b>${esc(remoteLabel)}</b>（当前 ${esc(localLabel)}），可在本页直接更新`);
+				if (banner) showBanner(needsSwitch ? `当前 <b>${esc(localLabel)}</b>，目标分支 <b>${esc(targetBranch)}</b>，点击“立即更新”将切换并更新` : `发现新提交 <b>${esc(remoteLabel)}</b>（当前 ${esc(localLabel)}），可在本页直接更新`);
 				setUpdateButtonVisible(true);
 			} else {
-				toast("info", `已是最新版本（${localLabel}）`);
+				toast("info", `已是最新版本（${localLabel}，目标 ${targetBranch}）`);
 				hideBanner();
 				setUpdateButtonVisible(false);
 			}
@@ -335,21 +434,22 @@ async function checkUpdate(manual = false) {
 		}, TIMEOUT_MS);
 		let remoteVer = "";
 		try {
-			remoteVer = await fetchRemoteManifestVersion(ctrl.signal);
+			remoteVer = await fetchRemoteManifestVersion(targetBranch, ctrl.signal);
 		} finally {
 			clearTimeout(timer);
 		}
 		const hasUpdate = isNewer(remoteVer, CURRENT_VERSION);
 		if (hasUpdate) {
-			const updateHint = isNonGitInstall ? "，请前往「扩展程序 → 管理扩展程序」更新" : "，可在本页直接更新";
-			if (getLastNotified() !== remoteVer || manual) {
-				toast("info", `发现新版本 v${remoteVer}（当前 v${CURRENT_VERSION}）${updateHint}`);
-				setLastNotified(remoteVer);
+			const updateHint = isNonGitInstall ? "，请前往「扩展程序 → 管理扩展程序」更新" : `，可在本页切换到 ${targetBranch} 并更新`;
+			const notifyKey = `${targetBranch}:v${remoteVer}`;
+			if (getLastNotified() !== notifyKey || manual) {
+				toast("info", `发现 ${targetBranch} 分支新版本 v${remoteVer}（当前 v${CURRENT_VERSION}）${updateHint}`);
+				setLastNotified(notifyKey);
 			}
-			if (banner) showBanner(`发现新版本 <b>v${esc(remoteVer)}</b>（当前 v${esc(CURRENT_VERSION)}）${updateHint}`);
+			if (banner) showBanner(`发现 <b>${esc(targetBranch)}</b> 分支新版本 <b>v${esc(remoteVer)}</b>（当前 v${esc(CURRENT_VERSION)}）${updateHint}`);
 			setUpdateButtonVisible(!isNonGitInstall);
 		} else {
-			toast("info", `已是最新版本 v${CURRENT_VERSION}`);
+			toast("info", `已是最新版本 v${CURRENT_VERSION}（目标 ${targetBranch}）`);
 			hideBanner();
 			setUpdateButtonVisible(false);
 		}
@@ -370,4 +470,4 @@ function maybeAutoCheck() {
 	} catch {}
 }
 //#endregion
-export { checkUpdate, maybeAutoCheck, updateSelf };
+export { checkUpdate, getUpdateBranch, maybeAutoCheck, setUpdateBranch, updateSelf };
