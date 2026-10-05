@@ -595,4 +595,18 @@
   #aus-history-detail .aus-detail-panel [style*="grid-template-columns:1fr 1fr 1fr"] {
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
+  /* 历史卡片操作按钮保持紧凑，避免粗指针通用触控高度把旧/新/详情撑高 */
+  #aus-history .aus-compare-old,
+  #aus-history .aus-compare-new,
+  #aus-history .aus-detail-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    height: 26px !important;
+    min-height: 26px !important;
+    min-width: 34px;
+    padding: 0 8px !important;
+    line-height: 1;
+  }
 }
