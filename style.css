@@ -588,4 +588,11 @@
   #aus-history-detail .aus-detail-panel pre {
     max-height: 50vh !important;
   }
+  /* 移动端详情窗口接近整屏宽：外层信息块继续上下排列，内部指标恢复多列，避免单列造成右侧大片留白 */
+  #aus-history-detail .aus-detail-panel [style*="grid-template-columns:repeat(2,minmax(0,1fr))"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  #aus-history-detail .aus-detail-panel [style*="grid-template-columns:1fr 1fr 1fr"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
 }
