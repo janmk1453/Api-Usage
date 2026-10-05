@@ -52,7 +52,7 @@ async function exportHistory() {
 		path: "",
 		proxy: ""
 	};
-	const _appVer = "3.1.0";
+	const _appVer = "3.1.1";
 	let fullHist = [];
 	try {
 		fullHist = await repository.getAllHistory();
@@ -6976,9 +6976,92 @@ function bindHistoryFilters(doc) {
 		if (!event.target.closest("#aus-history-filter-host")) closeHistoryFilterDropdowns();
 	});
 }
+var activeHistoryDetailTs = null;
+var activeHistoryDetailPanel = null;
+var activeHistoryDetailHost = null;
+var activeHistoryDetailBtn = null;
+function resetHistoryDetailState(doc, clearBody = false) {
+	try {
+		const body = doc.getElementById("aus-history-detail-body");
+		if (body && clearBody) body.innerHTML = "";
+		const drawer = doc.getElementById("aus-history-detail");
+		if (drawer) drawer.style.display = "none";
+		const content = doc.getElementById("aus-content-body");
+		if (content) content.classList.remove("has-history-detail");
+	} catch {}
+	activeHistoryDetailTs = null;
+	activeHistoryDetailPanel = null;
+	activeHistoryDetailHost = null;
+	activeHistoryDetailBtn = null;
+}
+function closeHistoryDetail(doc) {
+	const panel = activeHistoryDetailPanel;
+	const host = activeHistoryDetailHost;
+	if (panel) {
+		try {
+			if (panel.parentElement && panel.parentElement.id === "aus-history-detail-body" && host) host.appendChild(panel);
+		} catch {}
+		panel.style.display = "none";
+		panel.style.flexDirection = "column";
+		panel.style.maxHeight = "min(520px,60vh)";
+		panel.style.overflowY = "auto";
+		panel.style.overflowX = "hidden";
+		panel.style.marginTop = "8px";
+		panel.style.borderTop = "1px solid var(--ds-border)";
+		panel.style.paddingTop = "8px";
+	}
+	const btn = activeHistoryDetailBtn;
+	if (btn && btn.isConnected) {
+		btn.textContent = "详情";
+		btn.style.background = "var(--ds-black)";
+		btn.style.color = "var(--ds-black-text)";
+		btn.style.borderColor = "var(--ds-black)";
+	}
+	resetHistoryDetailState(doc);
+}
+function openHistoryDetail(doc, panel, btn) {
+	const ts = btn.getAttribute("data-ts") || "";
+	if (activeHistoryDetailTs === ts && activeHistoryDetailPanel === panel) {
+		closeHistoryDetail(doc);
+		return;
+	}
+	if (activeHistoryDetailPanel && activeHistoryDetailPanel !== panel) closeHistoryDetail(doc);
+	const body = doc.getElementById("aus-history-detail-body");
+	const drawer = doc.getElementById("aus-history-detail");
+	const title = doc.getElementById("aus-history-detail-title");
+	if (!body || !drawer) return;
+	activeHistoryDetailHost = panel.parentElement;
+	activeHistoryDetailTs = ts;
+	activeHistoryDetailPanel = panel;
+	activeHistoryDetailBtn = btn;
+	panel.style.display = "flex";
+	panel.style.flexDirection = "column";
+	panel.style.maxHeight = "none";
+	panel.style.overflow = "visible";
+	panel.style.marginTop = "0";
+	panel.style.borderTop = "none";
+	panel.style.paddingTop = "0";
+	try {
+		body.appendChild(panel);
+	} catch {}
+	if (title) {
+		const model = btn.getAttribute("data-model") || "记录详情";
+		const time = btn.getAttribute("data-time") || "";
+		title.textContent = time ? `${model} · ${time}` : model;
+	}
+	btn.textContent = "收起";
+	btn.style.background = "var(--ds-card-inner)";
+	btn.style.color = "var(--ds-text)";
+	btn.style.borderColor = "var(--ds-black)";
+	drawer.style.display = "flex";
+	const content = doc.getElementById("aus-content-body");
+	if (content) content.classList.add("has-history-detail");
+}
 function renderHistoryInner(doc, fullHist) {
 	const host = doc.getElementById("aus-history");
 	if (!host) return;
+	const reopenDetailTs = activeHistoryDetailTs;
+	resetHistoryDetailState(doc, true);
 	const total = fullHist.length;
 	if (!total) {
 		host.innerHTML = `<div style="text-align:center;padding:24px;color:var(--ds-text-3);font-size:12px;line-height:1.8;">当前筛选无记录<br/><button id="aus-history-filter-reset" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">清除筛选</button></div>`;
@@ -7041,7 +7124,7 @@ function renderHistoryInner(doc, fullHist) {
           <div style="display:flex;gap:4px;">
             <button class="aus-compare-old" data-ts="${h.timestamp}" style="padding:4px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;">旧</button>
             <button class="aus-compare-new" data-ts="${h.timestamp}" style="padding:4px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;">新</button>
-            <button class="aus-detail-toggle" data-ts="${h.timestamp}" style="padding:4px 8px;border:1px solid var(--ds-black);border-radius:6px;background:var(--ds-black);color:var(--ds-black-text);font-size:10px;cursor:pointer;">详情</button>
+            <button class="aus-detail-toggle" data-ts="${h.timestamp}" data-model="${esc$1(h.model || "")}" data-time="${esc$1(recordDateText + " " + recordTimeText)}" style="padding:4px 8px;border:1px solid var(--ds-black);border-radius:6px;background:var(--ds-black);color:var(--ds-black-text);font-size:10px;cursor:pointer;">详情</button>
           </div>
         </div>
       </div>
@@ -7086,7 +7169,7 @@ function renderHistoryInner(doc, fullHist) {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">Token 消耗</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;font-size:11px;">
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:6px;font-size:11px;">
               <div><div style="color:var(--ds-text-2);font-size:10px;">缓存命中</div><div style="font-weight:600;color:var(--ds-green);margin-top:2px;">${(h.cache_hit_tokens || 0).toLocaleString()}</div></div>
               <div><div style="color:var(--ds-text-2);font-size:10px;">缓存未命中</div><div style="font-weight:600;color:var(--ds-red);margin-top:2px;">${(h.cache_miss_tokens || 0).toLocaleString()}</div></div>
               <div><div style="color:var(--ds-text-2);font-size:10px;">输出 Token</div><div style="font-weight:600;color:var(--ds-purple);margin-top:2px;">${(h.completion_tokens || 0).toLocaleString()}</div></div>
@@ -7156,21 +7239,13 @@ function renderHistoryInner(doc, fullHist) {
 	host.querySelectorAll(".aus-detail-toggle").forEach((btn) => {
 		btn.addEventListener("click", () => {
 			const ts = btn.getAttribute("data-ts");
+			if (activeHistoryDetailBtn === btn && activeHistoryDetailPanel) {
+				closeHistoryDetail(doc);
+				return;
+			}
 			const panel = host.querySelector(`[data-detail="${ts}"]`);
 			if (!panel) return;
-			if (panel.style.display !== "none" && panel.style.display !== "") {
-				panel.style.display = "none";
-				btn.textContent = "详情";
-				btn.style.background = "var(--ds-black)";
-				btn.style.color = "var(--ds-black-text)";
-			} else {
-				panel.style.display = "flex";
-				panel.style.flexDirection = "column";
-				btn.textContent = "收起";
-				btn.style.background = "var(--ds-card-inner)";
-				btn.style.color = "var(--ds-text)";
-				btn.style.borderColor = "var(--ds-black)";
-			}
+			openHistoryDetail(doc, panel, btn);
 		});
 	});
 	host.querySelectorAll(".aus-tab-btn").forEach((btn) => {
@@ -7204,6 +7279,11 @@ function renderHistoryInner(doc, fullHist) {
 			btn.textContent = show ? "隐藏原始完整数据" : "查看原始完整数据";
 		});
 	});
+	if (reopenDetailTs) {
+		const panel = host.querySelector(`[data-detail="${reopenDetailTs}"]`);
+		const btn = host.querySelector(`.aus-detail-toggle[data-ts="${reopenDetailTs}"]`);
+		if (panel && btn) openHistoryDetail(doc, panel, btn);
+	}
 }
 function renderHistory(doc, s) {
 	const host = doc.getElementById("aus-history");
@@ -7277,6 +7357,7 @@ function bindPanel(doc) {
 }
 function switchView(view) {
 	const doc = getDoc$1();
+	if (view !== "history") closeHistoryDetail(doc);
 	doc.querySelectorAll("[data-view]").forEach((el) => {
 		const v = el.getAttribute("data-view");
 		el.style.display = v === view ? "block" : "none";
@@ -7384,7 +7465,7 @@ function createPanel() {
       <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;">
         <div style="display:flex;flex-direction:column;min-width:0;" id="aus-brand">
           <span style="font-size:13px;font-weight:700;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
-          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v3.1.0</span>
+          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v3.1.1</span>
         </div>
         <button id="aus-sidebar-toggle" style="width:28px;height:28px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;">‹</button>
       </div>
@@ -7409,7 +7490,8 @@ function createPanel() {
         <span id="aus-page-title" style="font-size:14px;font-weight:600;color:var(--ds-text);">用量概览</span>
         <button id="aus-panel-close" style="width:32px;height:32px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:14px;">✕</button>
       </div>
-      <div id="aus-main" style="flex:1;overflow:auto;padding:20px;background:var(--ds-panel-bg);">
+      <div id="aus-content-body" style="flex:1;display:flex;flex-direction:row;overflow:hidden;min-height:0;position:relative;">
+      <div id="aus-main" style="flex:1;min-width:0;overflow:auto;padding:20px;background:var(--ds-panel-bg);">
         <div style="max-width:1100px;margin:0 auto;display:grid;gap:16px;">
           <div data-view="overview">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -7553,13 +7635,13 @@ function createPanel() {
           <div data-view="help" style="display:none;">
             <div style="display:grid;gap:12px;">
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#FF6A00;font-weight:600;margin-bottom:6px;">完整使用文档</div><div style="color:var(--ds-text-2);">详细说明各页面、筛选、钱包、定价、同步、隐私与常见问题。</div><a href="https://janmk1453.github.io/Api-Usage/" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;margin-top:10px;padding:8px 14px;border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);text-decoration:none;font-size:12px;font-weight:600;">前往完整使用文档</a></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DC2626;font-weight:600;margin-bottom:6px;">隐私声明</div><div style="color:var(--ds-text-2);display:grid;gap:6px;"><div>本扩展有且只能获得用户在酒馆本身中填写的：密钥条目的编号、用户备注和掩码末三位，仅用于独立区分请求来源，不会且无法读取、保存或上传完整明文密钥。</div><div>用户储存在酒馆本身的密钥是安全的，扩展无法获取真实密钥。</div><div>用户主动填入扩展的校准密钥是实际可用的密钥，且仅会被用于查询 DeepSeek 官方余额；它仅经 XOR 混淆后存放于 SillyTavern，不进入历史记录、统计、日志、导入导出或 WebDAV。自动校准时仅由浏览器直接发送至 <a href="https://api.deepseek.com/user/balance" target="_blank" style="color:var(--ds-text);text-decoration:underline;">https://api.deepseek.com/user/balance</a> API。</div><div>XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。</div><div>模型价格同步会访问 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a>；自定义 WebDAV 的数据安全由用户选择的存储服务与网络环境决定。</div><div style="margin-top:2px;padding-top:6px;border-top:1px solid var(--ds-border);font-weight:600;color:#DC2626;">免责声明</div><div>本扩展不对功能“价格来源”、“自动同步”等利用 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 获取的数据中出现或可能出现的商业化中转站负责；我们不建议使用任何商业化中转站，尽管我们已经尽力筛选数据，但由于对大量数据进行完全筛选难以实现，因此我们不对可能出现的任何商业化中转站名称负责，不构成推荐，和 models.dev 或任何中转站没有商业往来，坚定不移反对商业化。</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DC2626;font-weight:600;margin-bottom:6px;">隐私声明（完整版：<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:#DC2626;text-decoration:underline;">https://janmk1453.github.io/Api-Usage/#privacy</a>）</div><div style="color:var(--ds-text-2);display:grid;gap:6px;"><div>本扩展有且只能获得用户在酒馆本身中填写的：密钥条目的编号、用户备注和掩码末三位，仅用于独立区分请求来源，不会且无法读取、保存或上传完整明文密钥。</div><div>用户储存在酒馆本身的密钥是安全的，本扩展无法获取真实密钥。</div><div>用户主动填入本扩展的校准密钥是实际可用的密钥，且仅会被用于查询 DeepSeek 官方余额，不会额外造成扣费或消耗；它仅经 XOR 混淆后存放于 SillyTavern，不进入历史记录、统计、日志、导入导出或 WebDAV。自动校准时仅由浏览器直接发送至 <a href="https://api.deepseek.com/user/balance" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">https://api.deepseek.com/user/balance</a> API 查询。</div><div>XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。</div><div>本扩展完整代码开源可审查。</div><div style="margin-top:2px;padding-top:6px;border-top:1px solid var(--ds-border);font-weight:600;color:#DC2626;">免责声明（完整版见上方链接）</div><div>本扩展不对功能“价格来源”、“自动同步”等利用 <a href="https://models.dev" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 获取的数据中出现或可能出现的商业化中转站负责；我们不建议使用任何商业化中转站，尽管我们已经尽力筛选数据，但由于对大量数据进行完全筛选难以实现，因此我们不对可能出现的任何商业化中转站名称负责，不构成推荐，和 models.dev 或任何中转站没有商业往来，坚定不移的反对商业化。</div><div>我们将尽可能维护扩展的安全和隐私性，但本扩展不对因酒馆/本扩展的安全漏洞或因间接原因导致的任何形式的密钥泄露及产生的损失负责。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0BA25E;font-weight:600;margin-bottom:6px;">钱包</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 扩展按识别到的接入链接自动创建和汇总钱包，默认始终保留 DeepSeek 官方钱包；同名链接下识别的密钥和模型会归入同一钱包。</div><div>2. 每个钱包可独立维护名称、余额、模型价格、峰谷规则和价格来源；钱包默认收起，展开状态按钱包记忆。价格来源仅展示第一方模型厂商，不展示中转站或聚合平台。</div><div>3. 请求进入后会先匹配所属钱包，再使用该钱包的模型价格和峰谷规则计费，并从对应钱包余额预扣；未配置价格的模型先记零费用，保存或同步价格后自动重算冷热历史。</div><div>4. 自动余额校准仅支持 DeepSeek 官方直连，校准密钥需在钱包内单独填写；其他接入可使用手工余额，多个密钥不会自动相加。</div><div>5. 删除钱包会进入“已忽略接入”，后续请求不会自动重建、不参与余额合计，历史记录仍保留归属，需要时可恢复显示。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（余额查询仅支持 DeepSeek 官方）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前（DeepSeek）高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div><div>3. DeepSeek 官方规则：周一至周五（不含中国法定节假日）9:00-12:00、14:00-18:00 为高峰，其余时段（含周末、中国法定节假日全天）为空闲；调休上班的周末同样按空闲计费</div><div>4. 内置中国法定节假日数据覆盖 ${CN_HOLIDAY_COVERAGE_LABEL}，超出范围的年份可在设置中按日期补充“额外空闲日期”</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DB2777;font-weight:600;margin-bottom:6px;">🔄 消息对比</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中找到想对比的两条消息，前者点“旧”，后者点“新”</div><div>2. 系统并排显示请求消息的文字差异</div><div>3. 差异点即缓存发散起始位置（前 N 条相同为缓存命中段）</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 切换时间、模型（可多选）、对话、接入类型和 API 密钥查看不同范围的统计</div><div>2. 多图表展示多模请求参数，悬浮查看分模型明细</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”展开固定区域</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 等详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”，电脑端会在右侧打开约四分之一宽的窗口并压缩列表宽度，手机端会在屏幕下部弹出约四分之三高度的悬浮窗口</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 等详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0891B2;font-weight:600;margin-bottom:6px;">🧡 模型兼容</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 完全兼容 DeepSeek 官方 API</div><div>2. 尽量兼容不同厂商/渠道的请求格式，部分模型可能无缓存命中</div><div>3. 如数据异常，请携带完整请求与响应反馈</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-text-3);font-weight:600;margin-bottom:6px;">✨ 关于</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>本扩展由原脚本（<a href="https://github.com/janmk1453/deepseek-tavern-script" target="_blank" style="color:var(--ds-text);text-decoration:underline;">deepseek-tavern-script</a>）迁移重构。</div><div><span style="color:var(--ds-text);">@janmk</span> · 仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);text-decoration:underline;">janmk1453/Api-Usage</a></div></div></div>
             </div>
@@ -7573,15 +7655,32 @@ function createPanel() {
               <div class="ds-card" style="display:grid;gap:8px;">
                 <div style="font-size:12px;font-weight:600;color:var(--ds-text);">检查更新</div>
                 <div id="aus-update-banner" style="display:none;padding:8px 10px;border-radius:8px;background:var(--ds-yellow-bg);border:1px solid var(--ds-yellow-border);font-size:11px;color:var(--ds-text);"></div>
-                <div style="display:flex;gap:8px;align-items:center;">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                  <div style="position:relative;z-index:5;">
+                    <button id="aus-update-branch-btn" class="ds-btn-pill" style="padding:6px 14px;font-size:11px;">更新分支：<span id="aus-update-branch-label">main</span></button>
+                    <div id="aus-update-branch-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);left:0;min-width:150px;padding:6px;background:var(--ds-bg);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:60;flex-direction:column;gap:4px;">
+                      <div data-update-branch="main" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">main（稳定）</div>
+                      <div data-update-branch="dev" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;">dev（测试）</div>
+                    </div>
+                  </div>
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:11px;">检查更新</button>
-                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v3.1.0 · 每 1 小时自动检查</span>
+                  <button id="aus-run-update" class="ds-btn-pill" style="display:none;padding:6px 14px;font-size:11px;">立即更新</button>
+                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v3.1.1 · 每 1 小时自动检查</span>
                 </div>
+                <div style="font-size:11px;color:var(--ds-text-3);">可选择 main 或 dev 分支直接更新，默认 main；更新完成后自动刷新网页。非 Git 安装请使用“管理扩展程序”。</div>
               </div>
             </div>
           </div>
         </div>
       </div>
+      <aside id="aus-history-detail" style="display:none;flex-direction:column;width:25%;min-width:300px;max-width:480px;flex-shrink:0;border-left:1px solid var(--ds-border);background:var(--ds-card-inner);overflow:hidden;">
+        <div style="flex-shrink:0;height:48px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 12px;border-bottom:1px solid var(--ds-border);">
+          <span id="aus-history-detail-title" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:600;color:var(--ds-text);">记录详情</span>
+          <button id="aus-history-detail-close" title="关闭" style="width:28px;height:28px;flex-shrink:0;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card);color:var(--ds-text-2);cursor:pointer;font-size:13px;line-height:1;">✕</button>
+        </div>
+        <div id="aus-history-detail-body" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:12px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;"></div>
+      </aside>
+    </div>
     </div>
     </div>
   `;
@@ -7599,6 +7698,7 @@ function createPanel() {
 	} catch {}
 	doc.getElementById("aus-panel-close")?.addEventListener("click", closePanel);
 	doc.getElementById("aus-mobile-panel-close")?.addEventListener("click", closePanel);
+	doc.getElementById("aus-history-detail-close")?.addEventListener("click", () => closeHistoryDetail(doc));
 	doc.querySelectorAll(".aus-nav-item").forEach((el) => {
 		el.addEventListener("click", () => {
 			const v = el.getAttribute("data-nav");
@@ -7728,14 +7828,92 @@ function createPanel() {
 		initForecastView();
 	} catch {}
 	try {
+		import("./update-BybrR9Rd.js").then((m) => {
+			const branchBtn = doc.getElementById("aus-update-branch-btn");
+			const branchLabel = doc.getElementById("aus-update-branch-label");
+			const branchDrop = doc.getElementById("aus-update-branch-dropdown");
+			if (!branchBtn || !branchLabel || !branchDrop) return;
+			const renderBranch = () => {
+				const branch = m.getUpdateBranch();
+				branchLabel.textContent = branch;
+				branchDrop.querySelectorAll("[data-update-branch]").forEach((el) => {
+					const active = el.getAttribute("data-update-branch") === branch;
+					el.style.background = active ? "var(--ds-card)" : "transparent";
+					el.style.fontWeight = active ? "600" : "400";
+				});
+			};
+			renderBranch();
+			branchBtn.onclick = (e) => {
+				e.stopPropagation();
+				branchDrop.style.display = branchDrop.style.display === "flex" ? "none" : "flex";
+			};
+			branchDrop.querySelectorAll("[data-update-branch]").forEach((el) => {
+				el.onclick = () => {
+					const branch = el.getAttribute("data-update-branch");
+					if (branch !== "main" && branch !== "dev") return;
+					m.setUpdateBranch(branch);
+					renderBranch();
+					branchDrop.style.display = "none";
+					m.checkUpdate(true);
+				};
+			});
+			doc.addEventListener("click", (ev) => {
+				const drop = doc.getElementById("aus-update-branch-dropdown");
+				if (!drop) return;
+				if (!ev?.target?.closest?.("#aus-update-branch-dropdown") && !ev?.target?.closest?.("#aus-update-branch-btn")) drop.style.display = "none";
+			});
+		}).catch(() => {});
 		const updBtn = doc.getElementById("aus-check-update");
 		if (updBtn) updBtn.onclick = () => {
 			updBtn.textContent = "检查中…";
 			updBtn.setAttribute("disabled", "");
-			import("./update-Cbh7hA38.js").then((m) => m.checkUpdate(true).finally(() => {
+			import("./update-BybrR9Rd.js").then((m) => m.checkUpdate(true).finally(() => {
 				updBtn.textContent = "检查更新";
 				updBtn.removeAttribute("disabled");
 			}));
+		};
+		const runUpdBtn = doc.getElementById("aus-run-update");
+		if (runUpdBtn) runUpdBtn.onclick = () => {
+			if (runUpdBtn.hasAttribute("disabled")) return;
+			runUpdBtn.textContent = "更新中…";
+			runUpdBtn.setAttribute("disabled", "");
+			import("./update-BybrR9Rd.js").then((m) => m.updateSelf()).then((res) => {
+				if (res.ok && res.changed) {
+					const bannerEl = doc.getElementById("aus-update-banner");
+					if (bannerEl) {
+						bannerEl.style.display = "block";
+						bannerEl.style.background = "var(--ds-green-bg)";
+						bannerEl.style.borderColor = "var(--ds-green)";
+						bannerEl.textContent = `已更新到 ${res.branch} 分支，正在刷新页面…`;
+					}
+					runUpdBtn.textContent = "即将刷新…";
+					setTimeout(() => {
+						try {
+							window.parent?.location?.reload?.();
+						} catch {
+							try {
+								location.reload();
+							} catch {}
+						}
+					}, 1500);
+					return;
+				}
+				runUpdBtn.textContent = "立即更新";
+				runUpdBtn.removeAttribute("disabled");
+				if (res.ok && !res.changed) {
+					const bannerEl = doc.getElementById("aus-update-banner");
+					if (bannerEl) {
+						bannerEl.style.display = "block";
+						bannerEl.style.background = "var(--ds-green-bg)";
+						bannerEl.style.borderColor = "var(--ds-green)";
+						bannerEl.textContent = `已是最新版本（${res.branch}），无需更新` + (res.commit ? "（" + res.commit + "）" : "");
+					}
+					runUpdBtn.style.display = "none";
+				}
+			}).catch(() => {
+				runUpdBtn.textContent = "立即更新";
+				runUpdBtn.removeAttribute("disabled");
+			});
 		};
 	} catch {}
 	switchView("overview");
@@ -7782,7 +7960,7 @@ function openPanel() {
 	panelOpen = true;
 	refreshUI();
 	try {
-		import("./update-Cbh7hA38.js").then((m) => m.maybeAutoCheck());
+		import("./update-BybrR9Rd.js").then((m) => m.maybeAutoCheck());
 	} catch {}
 }
 function closePanel() {

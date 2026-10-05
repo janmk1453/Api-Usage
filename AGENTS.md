@@ -48,11 +48,11 @@ Api-Usage/
 │   │   ├── computed.ts    # 唯一算入口：computeOverview(余额口径)/computeStats/getFilteredHistory/computeStatsFour/filterStatsHistory/getEndpointFilterOptions/getCredentialFilterOptions + computeWalletStats/computeChatStats/getRecordedChats；全部平均值类指标统一走 averagePositive（忽略单轮 0/空值，从分母剔除）
 │   │   └── events.ts      # DataEvents.UPDATED/HISTORY_ADDED/SETTINGS_CHANGED
 │   ├── store/index.ts, persistence.ts # 单一历史聚合（已废弃多存档，saves 仅作迁移兼容；append/getAllHistory 指纹去重 timestamp|model|total）
-│   ├── services/pricing.ts, interception.ts(fetch透传+TTFT/思维链/截断解析+请求开始快照连接身份，GENERATION_ENDED主路径，install/uninstall幂等), connection-identity.ts(接入地址规范化/官方名称/酒馆密钥条目映射/严格隐私模式，不读取 proxy_password 与 custom_include_headers), wallet-secrets.ts(钱包校准密钥 XOR 存取与旧 apiKey 迁移), balance.ts(钱包余额手工/DeepSeek 官方自动校准和定时器), import-export.ts(单一历史+钱包配置+清洗，不导出密钥), sync.ts(单一历史+钱包合并+清洗), debug.ts, theme.ts(applyTheme 同步 overlay), update.ts(检查更新，main 提交哈希优先、失败回退 manifest 版本对比，自动检查 1h 节流), currency.ts(USD↔CNY 动态换算、getDisplayCurrency/formatMoney/getWalletExchangeRate/fetchLiveRate 双源 24h), pricing-sync.ts(按钱包 catalogProvider 从 models.dev 拉取、USD→CNY*rate、add-missing/overwrite-unlocked/overwrite-all 和锁定保护)
+│   ├── services/pricing.ts, interception.ts(fetch透传+TTFT/思维链/截断解析+请求开始快照连接身份，GENERATION_ENDED主路径，install/uninstall幂等), connection-identity.ts(接入地址规范化/官方名称/酒馆密钥条目映射/严格隐私模式，不读取 proxy_password 与 custom_include_headers), wallet-secrets.ts(钱包校准密钥 XOR 存取与旧 apiKey 迁移), balance.ts(钱包余额手工/DeepSeek 官方自动校准和定时器), import-export.ts(单一历史+钱包配置+清洗，不导出密钥), sync.ts(单一历史+钱包合并+清洗), debug.ts, theme.ts(applyTheme 同步 overlay), update.ts(检查更新，目标分支 main/dev 可选且默认 main、提交哈希与服务端仓库状态优先、失败回退目标分支 manifest 版本对比，跨分支先 /api/extensions/switch 再调用 /api/extensions/update 扩展内一键更新并刷新，自动检查 1h 节流), currency.ts(USD↔CNY 动态换算、getDisplayCurrency/formatMoney/getWalletExchangeRate/fetchLiveRate 双源 24h), pricing-sync.ts(按钱包 catalogProvider 从 models.dev 拉取、USD→CNY*rate、add-missing/overwrite-unlocked/overwrite-all 和锁定保护)
 │   ├── stats/forecast.ts, energyScore.ts # 预测核心：分段回归/二次方程求 R，能耗评分 A-G
 │   ├── utils/date.ts, crypto.ts(XOR+UTF-8), logger.ts
 │   ├── **/*.test.ts       # Vitest 核心纯逻辑测试，不进入 Vite 入口构建
-│   └── ui/panel.ts(全屏+absolute定位+DeepSeek式侧边栏display切换+汉堡+钱包入口+history 模型/对话/接入类型/API密钥四维筛选+forecast 对话选择), overview.ts(余额钱包口径+双明细+8块2列+热力图+按对话统计表 cold 异步补全、动态币种), wallet-view.ts(多钱包列表、默认收起/独立记忆、余额、密钥、价格来源、模型价格、独立峰谷、忽略恢复), stats-view.ts(直输日期+五维度 time∩model∩chat∩endpoint∩credential+4小块+图表Y/X配置+费用轴按币种换算+对话/密钥选项按最近时间排序), chart-config.ts(Y 8×X 5 聚合 + X_OPTIONS_WITHOUT_ROUND), heatmap.ts(GitHub风格近2年Token热力图，块内横向滑动), forecast-view.ts(趋势预测 Beta，自选对话胶囊，能耗/预测/敏感度随选中对话联动，余额与价格按钱包口径，对话选项按最近时间排序), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情费用按币种), settings.ts(全局设置 + 按范围删除记录，钱包相关编辑入口已迁出，旧“新价格机制”入口已移除), extra-charts.ts(额外 6 图费用轴按币种换算，API请求数趋势 X 无轮次), peak-dot.ts, customize.ts
+│   └── ui/panel.ts(全屏+absolute定位+DeepSeek式侧边栏display切换+汉堡+钱包入口+history 模型/对话/接入类型/API密钥四维筛选+详情右侧/底部窗口+forecast 对话选择), overview.ts(余额钱包口径+双明细+8块2列+热力图+按对话统计表 cold 异步补全、动态币种), wallet-view.ts(多钱包列表、默认收起/独立记忆、余额、密钥、价格来源、模型价格、独立峰谷、忽略恢复), stats-view.ts(直输日期+五维度 time∩model∩chat∩endpoint∩credential+4小块+图表Y/X配置+费用轴按币种换算+对话/密钥选项按最近时间排序), chart-config.ts(Y 8×X 5 聚合 + X_OPTIONS_WITHOUT_ROUND), heatmap.ts(GitHub风格近2年Token热力图，块内横向滑动), forecast-view.ts(趋势预测 Beta，自选对话胶囊，能耗/预测/敏感度随选中对话联动，余额与价格按钱包口径，对话选项按最近时间排序), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情费用按币种), settings.ts(全局设置 + 按范围删除记录，钱包相关编辑入口已迁出，旧“新价格机制”入口已移除), extra-charts.ts(额外 6 图费用轴按币种换算，API请求数趋势 X 无轮次), peak-dot.ts, customize.ts
 ├── README.md
 └── LICENSE
 ```
@@ -98,7 +98,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **四维度**：模型、对话、接入类型与 API 密钥按交集过滤；接入类型优先联动密钥；筛选先作用于热+冷全量历史，再进行 `30/页` 分页，筛选无结果显示清除按钮；对话与 API 密钥选项同样按最近记录时间从近到远排序
 - 列表按 `timestamp` 倒序，卡片含模型/时间、`in/out/duration/rate`、费用、旧/新/详情
 - **占比条**：`6px` 圆角三段（命中 `#0BA25E`/未命中 `#FCA5A5`/输出 `#A5B4FC`）
-- **内联详情**：点击详情向下展开固定 `320→520px`（`15` 字段按 `基础/性能/Token/费用` 四块 + `4 Tab`：请求参数/完整响应/Raw 用量/消息内容，`pre` `160px` 滚动，收起切换）
+- **详情窗口**：点击“详情”后，电脑端在屏幕右侧打开约 `1/4` 宽的压缩式侧栏，手机端在屏幕下部弹出约 `3/4` 高度的悬浮窗口；`15` 字段按 `基础/性能/Token/费用` 四块竖直排布，保留 `4 Tab`：请求参数/完整响应/Raw 用量/消息内容与 `pre` 滚动、收起切换逻辑
 
 ### 趋势预测（Beta，独立页）
 - **入口**：侧边栏 `趋势预测（Beta）`，`data-view="forecast"` 独立页，概览不再嵌入预测卡（避免与统计混淆）；顶部自选对话胶囊（`当前对话/全部/各对话`，与统计页同款，默认 `__current__` 跟随当前聊天，`__null__` 为未分组），切换后全页联动
@@ -187,7 +187,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **预览预发布边界**：`preview-*` 标签与 Release 只允许由 `main` 分支的 `preview` 作业创建，`dev` 与合并请求永不发布；预览标签基于 12 位提交哈希且不可复用或移动，但**不属于正式版本推进**，不得借预览发布修改 `manifest.json`、`package.json`、`package-lock.json` 的版本字段，也不得创建或移动 `vX.Y.Z` 标签。同一提交重复自动运行或手动补发只更新既有 Release 标题、说明与同名资产，不产生第二个标签
 - **产物铁律**：`Vite lib` 产物为 `index.js(入口) + index-*.js/update-*.js + ECharts 9 块`，`index.js` 为 `import "./index-*.js"` 存根，**必须**随 `index.js` 一并 `git add` 提交，缺一则 `404 index-*.js` 导致 `[object Event]` 加载失败并中断后续扩展；`style.css` 同理直出，`outDir: '.' + emptyOutDir:false` 禁止误删。
 - **主题一致性**：`defaultSettings.theme` 默认为 `light`，与隔离样式浅色保持一致；旧用户无 `theme` 字段时迁移补 `light`，禁止在更新中强制覆为 `dark`
-- **检查更新**：`src/services/update.ts` 优先对比 `main` 提交哈希（本地扩展提交经 GitHub compare 判领先，失败回退 `raw.githubusercontent.../main/manifest.json` 的 `version` 与本地 `__APP_VERSION__` 对比），自动检查 1h 节流（`localStorage + extensionSettings._updateLastCheck`，1 小时内最多一次），关于页按钮为手动触发（不受节流），有更新 `toast + 横幅`，已是最新/检查失败时自动与手动均 `toast` 提示
+- **检查更新**：`src/services/update.ts` 支持在关于页选择更新分支 `main/dev`（默认 `main`，`localStorage` 记忆），优先对比所选分支提交哈希（本地扩展提交经 GitHub compare 判领先，并结合 `/api/extensions/version` 的服务端仓库状态，失败回退 `raw.githubusercontent.../<所选分支>/manifest.json` 的 `version` 与本地 `__APP_VERSION__` 对比），自动检查 1h 节流（`localStorage + extensionSettings._updateLastCheck`，1 小时内最多一次），关于页按钮为手动触发（不受节流）；发现更新或当前分支与所选分支不一致时 `toast + 横幅` 并显示“立即更新”，点击后若分支不同先调用 `/api/extensions/switch` 切换，再调用 `/api/extensions/update` 执行 git 更新，成功后自动刷新页面；非 Git 安装或更新失败时提示改用管理扩展程序
 
 ## 提交与发布
 
