@@ -52,7 +52,7 @@ async function exportHistory() {
 		path: "",
 		proxy: ""
 	};
-	const _appVer = "3.1.0";
+	const _appVer = "3.1.1";
 	let fullHist = [];
 	try {
 		fullHist = await repository.getAllHistory();
@@ -7465,7 +7465,7 @@ function createPanel() {
       <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;">
         <div style="display:flex;flex-direction:column;min-width:0;" id="aus-brand">
           <span style="font-size:13px;font-weight:700;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
-          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v3.1.0</span>
+          <span style="font-size:11px;color:var(--ds-text-2);white-space:nowrap;">v3.1.1</span>
         </div>
         <button id="aus-sidebar-toggle" style="width:28px;height:28px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;">‹</button>
       </div>
@@ -7665,7 +7665,7 @@ function createPanel() {
                   </div>
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:11px;">检查更新</button>
                   <button id="aus-run-update" class="ds-btn-pill" style="display:none;padding:6px 14px;font-size:11px;">立即更新</button>
-                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v3.1.0 · 每 1 小时自动检查</span>
+                  <span style="font-size:11px;color:var(--ds-text-3);">当前 v3.1.1 · 每 1 小时自动检查</span>
                 </div>
                 <div style="font-size:11px;color:var(--ds-text-3);">可选择 main 或 dev 分支直接更新，默认 main；更新完成后自动刷新网页。非 Git 安装请使用“管理扩展程序”。</div>
               </div>
@@ -7828,7 +7828,7 @@ function createPanel() {
 		initForecastView();
 	} catch {}
 	try {
-		import("./update-D8En1dZJ.js").then((m) => {
+		import("./update-BybrR9Rd.js").then((m) => {
 			const branchBtn = doc.getElementById("aus-update-branch-btn");
 			const branchLabel = doc.getElementById("aus-update-branch-label");
 			const branchDrop = doc.getElementById("aus-update-branch-dropdown");
@@ -7867,7 +7867,7 @@ function createPanel() {
 		if (updBtn) updBtn.onclick = () => {
 			updBtn.textContent = "检查中…";
 			updBtn.setAttribute("disabled", "");
-			import("./update-D8En1dZJ.js").then((m) => m.checkUpdate(true).finally(() => {
+			import("./update-BybrR9Rd.js").then((m) => m.checkUpdate(true).finally(() => {
 				updBtn.textContent = "检查更新";
 				updBtn.removeAttribute("disabled");
 			}));
@@ -7877,7 +7877,7 @@ function createPanel() {
 			if (runUpdBtn.hasAttribute("disabled")) return;
 			runUpdBtn.textContent = "更新中…";
 			runUpdBtn.setAttribute("disabled", "");
-			import("./update-D8En1dZJ.js").then((m) => m.updateSelf()).then((res) => {
+			import("./update-BybrR9Rd.js").then((m) => m.updateSelf()).then((res) => {
 				if (res.ok && res.changed) {
 					const bannerEl = doc.getElementById("aus-update-banner");
 					if (bannerEl) {
@@ -7960,7 +7960,7 @@ function openPanel() {
 	panelOpen = true;
 	refreshUI();
 	try {
-		import("./update-D8En1dZJ.js").then((m) => m.maybeAutoCheck());
+		import("./update-BybrR9Rd.js").then((m) => m.maybeAutoCheck());
 	} catch {}
 }
 function closePanel() {
