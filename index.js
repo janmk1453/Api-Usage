@@ -6976,9 +6976,92 @@ function bindHistoryFilters(doc) {
 		if (!event.target.closest("#aus-history-filter-host")) closeHistoryFilterDropdowns();
 	});
 }
+var activeHistoryDetailTs = null;
+var activeHistoryDetailPanel = null;
+var activeHistoryDetailHost = null;
+var activeHistoryDetailBtn = null;
+function resetHistoryDetailState(doc, clearBody = false) {
+	try {
+		const body = doc.getElementById("aus-history-detail-body");
+		if (body && clearBody) body.innerHTML = "";
+		const drawer = doc.getElementById("aus-history-detail");
+		if (drawer) drawer.style.display = "none";
+		const content = doc.getElementById("aus-content-body");
+		if (content) content.classList.remove("has-history-detail");
+	} catch {}
+	activeHistoryDetailTs = null;
+	activeHistoryDetailPanel = null;
+	activeHistoryDetailHost = null;
+	activeHistoryDetailBtn = null;
+}
+function closeHistoryDetail(doc) {
+	const panel = activeHistoryDetailPanel;
+	const host = activeHistoryDetailHost;
+	if (panel) {
+		try {
+			if (panel.parentElement && panel.parentElement.id === "aus-history-detail-body" && host) host.appendChild(panel);
+		} catch {}
+		panel.style.display = "none";
+		panel.style.flexDirection = "column";
+		panel.style.maxHeight = "min(520px,60vh)";
+		panel.style.overflowY = "auto";
+		panel.style.overflowX = "hidden";
+		panel.style.marginTop = "8px";
+		panel.style.borderTop = "1px solid var(--ds-border)";
+		panel.style.paddingTop = "8px";
+	}
+	const btn = activeHistoryDetailBtn;
+	if (btn && btn.isConnected) {
+		btn.textContent = "详情";
+		btn.style.background = "var(--ds-black)";
+		btn.style.color = "var(--ds-black-text)";
+		btn.style.borderColor = "var(--ds-black)";
+	}
+	resetHistoryDetailState(doc);
+}
+function openHistoryDetail(doc, panel, btn) {
+	const ts = btn.getAttribute("data-ts") || "";
+	if (activeHistoryDetailTs === ts && activeHistoryDetailPanel === panel) {
+		closeHistoryDetail(doc);
+		return;
+	}
+	if (activeHistoryDetailPanel && activeHistoryDetailPanel !== panel) closeHistoryDetail(doc);
+	const body = doc.getElementById("aus-history-detail-body");
+	const drawer = doc.getElementById("aus-history-detail");
+	const title = doc.getElementById("aus-history-detail-title");
+	if (!body || !drawer) return;
+	activeHistoryDetailHost = panel.parentElement;
+	activeHistoryDetailTs = ts;
+	activeHistoryDetailPanel = panel;
+	activeHistoryDetailBtn = btn;
+	panel.style.display = "flex";
+	panel.style.flexDirection = "column";
+	panel.style.maxHeight = "none";
+	panel.style.overflow = "visible";
+	panel.style.marginTop = "0";
+	panel.style.borderTop = "none";
+	panel.style.paddingTop = "0";
+	try {
+		body.appendChild(panel);
+	} catch {}
+	if (title) {
+		const model = btn.getAttribute("data-model") || "记录详情";
+		const time = btn.getAttribute("data-time") || "";
+		title.textContent = time ? `${model} · ${time}` : model;
+	}
+	btn.textContent = "收起";
+	btn.style.background = "var(--ds-card-inner)";
+	btn.style.color = "var(--ds-text)";
+	btn.style.borderColor = "var(--ds-black)";
+	drawer.style.display = "flex";
+	const content = doc.getElementById("aus-content-body");
+	if (content) content.classList.add("has-history-detail");
+}
 function renderHistoryInner(doc, fullHist) {
 	const host = doc.getElementById("aus-history");
 	if (!host) return;
+	const reopenDetailTs = activeHistoryDetailTs;
+	resetHistoryDetailState(doc, true);
 	const total = fullHist.length;
 	if (!total) {
 		host.innerHTML = `<div style="text-align:center;padding:24px;color:var(--ds-text-3);font-size:12px;line-height:1.8;">当前筛选无记录<br/><button id="aus-history-filter-reset" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">清除筛选</button></div>`;
@@ -7041,7 +7124,7 @@ function renderHistoryInner(doc, fullHist) {
           <div style="display:flex;gap:4px;">
             <button class="aus-compare-old" data-ts="${h.timestamp}" style="padding:4px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;">旧</button>
             <button class="aus-compare-new" data-ts="${h.timestamp}" style="padding:4px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:10px;cursor:pointer;">新</button>
-            <button class="aus-detail-toggle" data-ts="${h.timestamp}" style="padding:4px 8px;border:1px solid var(--ds-black);border-radius:6px;background:var(--ds-black);color:var(--ds-black-text);font-size:10px;cursor:pointer;">详情</button>
+            <button class="aus-detail-toggle" data-ts="${h.timestamp}" data-model="${esc$1(h.model || "")}" data-time="${esc$1(recordDateText + " " + recordTimeText)}" style="padding:4px 8px;border:1px solid var(--ds-black);border-radius:6px;background:var(--ds-black);color:var(--ds-black-text);font-size:10px;cursor:pointer;">详情</button>
           </div>
         </div>
       </div>
@@ -7156,21 +7239,13 @@ function renderHistoryInner(doc, fullHist) {
 	host.querySelectorAll(".aus-detail-toggle").forEach((btn) => {
 		btn.addEventListener("click", () => {
 			const ts = btn.getAttribute("data-ts");
+			if (activeHistoryDetailBtn === btn && activeHistoryDetailPanel) {
+				closeHistoryDetail(doc);
+				return;
+			}
 			const panel = host.querySelector(`[data-detail="${ts}"]`);
 			if (!panel) return;
-			if (panel.style.display !== "none" && panel.style.display !== "") {
-				panel.style.display = "none";
-				btn.textContent = "详情";
-				btn.style.background = "var(--ds-black)";
-				btn.style.color = "var(--ds-black-text)";
-			} else {
-				panel.style.display = "flex";
-				panel.style.flexDirection = "column";
-				btn.textContent = "收起";
-				btn.style.background = "var(--ds-card-inner)";
-				btn.style.color = "var(--ds-text)";
-				btn.style.borderColor = "var(--ds-black)";
-			}
+			openHistoryDetail(doc, panel, btn);
 		});
 	});
 	host.querySelectorAll(".aus-tab-btn").forEach((btn) => {
@@ -7204,6 +7279,11 @@ function renderHistoryInner(doc, fullHist) {
 			btn.textContent = show ? "隐藏原始完整数据" : "查看原始完整数据";
 		});
 	});
+	if (reopenDetailTs) {
+		const panel = host.querySelector(`[data-detail="${reopenDetailTs}"]`);
+		const btn = host.querySelector(`.aus-detail-toggle[data-ts="${reopenDetailTs}"]`);
+		if (panel && btn) openHistoryDetail(doc, panel, btn);
+	}
 }
 function renderHistory(doc, s) {
 	const host = doc.getElementById("aus-history");
@@ -7277,6 +7357,7 @@ function bindPanel(doc) {
 }
 function switchView(view) {
 	const doc = getDoc$1();
+	if (view !== "history") closeHistoryDetail(doc);
 	doc.querySelectorAll("[data-view]").forEach((el) => {
 		const v = el.getAttribute("data-view");
 		el.style.display = v === view ? "block" : "none";
@@ -7409,7 +7490,8 @@ function createPanel() {
         <span id="aus-page-title" style="font-size:14px;font-weight:600;color:var(--ds-text);">用量概览</span>
         <button id="aus-panel-close" style="width:32px;height:32px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:14px;">✕</button>
       </div>
-      <div id="aus-main" style="flex:1;overflow:auto;padding:20px;background:var(--ds-panel-bg);">
+      <div id="aus-content-body" style="flex:1;display:flex;flex-direction:row;overflow:hidden;min-height:0;position:relative;">
+      <div id="aus-main" style="flex:1;min-width:0;overflow:auto;padding:20px;background:var(--ds-panel-bg);">
         <div style="max-width:1100px;margin:0 auto;display:grid;gap:16px;">
           <div data-view="overview">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -7559,7 +7641,7 @@ function createPanel() {
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前（DeepSeek）高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div><div>3. DeepSeek 官方规则：周一至周五（不含中国法定节假日）9:00-12:00、14:00-18:00 为高峰，其余时段（含周末、中国法定节假日全天）为空闲；调休上班的周末同样按空闲计费</div><div>4. 内置中国法定节假日数据覆盖 ${CN_HOLIDAY_COVERAGE_LABEL}，超出范围的年份可在设置中按日期补充“额外空闲日期”</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DB2777;font-weight:600;margin-bottom:6px;">🔄 消息对比</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中找到想对比的两条消息，前者点“旧”，后者点“新”</div><div>2. 系统并排显示请求消息的文字差异</div><div>3. 差异点即缓存发散起始位置（前 N 条相同为缓存命中段）</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 切换时间、模型（可多选）、对话、接入类型和 API 密钥查看不同范围的统计</div><div>2. 多图表展示多模请求参数，悬浮查看分模型明细</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”展开固定区域</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 等详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”，电脑端会在右侧打开约四分之一宽的窗口并压缩列表宽度，手机端会在屏幕下部弹出约四分之三高度的悬浮窗口</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 等详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0891B2;font-weight:600;margin-bottom:6px;">🧡 模型兼容</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 完全兼容 DeepSeek 官方 API</div><div>2. 尽量兼容不同厂商/渠道的请求格式，部分模型可能无缓存命中</div><div>3. 如数据异常，请携带完整请求与响应反馈</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:var(--ds-text-3);font-weight:600;margin-bottom:6px;">✨ 关于</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>本扩展由原脚本（<a href="https://github.com/janmk1453/deepseek-tavern-script" target="_blank" style="color:var(--ds-text);text-decoration:underline;">deepseek-tavern-script</a>）迁移重构。</div><div><span style="color:var(--ds-text);">@janmk</span> · 仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);text-decoration:underline;">janmk1453/Api-Usage</a></div></div></div>
             </div>
@@ -7591,6 +7673,14 @@ function createPanel() {
           </div>
         </div>
       </div>
+      <aside id="aus-history-detail" style="display:none;flex-direction:column;width:25%;min-width:300px;max-width:480px;flex-shrink:0;border-left:1px solid var(--ds-border);background:var(--ds-card-inner);overflow:hidden;">
+        <div style="flex-shrink:0;height:48px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 12px;border-bottom:1px solid var(--ds-border);">
+          <span id="aus-history-detail-title" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:600;color:var(--ds-text);">记录详情</span>
+          <button id="aus-history-detail-close" title="关闭" style="width:28px;height:28px;flex-shrink:0;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card);color:var(--ds-text-2);cursor:pointer;font-size:13px;line-height:1;">✕</button>
+        </div>
+        <div id="aus-history-detail-body" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:12px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;"></div>
+      </aside>
+    </div>
     </div>
     </div>
   `;
@@ -7608,6 +7698,7 @@ function createPanel() {
 	} catch {}
 	doc.getElementById("aus-panel-close")?.addEventListener("click", closePanel);
 	doc.getElementById("aus-mobile-panel-close")?.addEventListener("click", closePanel);
+	doc.getElementById("aus-history-detail-close")?.addEventListener("click", () => closeHistoryDetail(doc));
 	doc.querySelectorAll(".aus-nav-item").forEach((el) => {
 		el.addEventListener("click", () => {
 			const v = el.getAttribute("data-nav");

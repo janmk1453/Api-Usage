@@ -509,3 +509,83 @@
   #aus-mobile-header { display:none !important; }
   #aus-sidebar { display:flex !important; }
 }
+
+/* 历史详情窗口：桌面端为右侧约 1/4 压缩式侧栏，窄屏改为下部约 3/4 悬浮面板 */
+#aus-history-detail {
+  box-sizing: border-box;
+  min-width: 0;
+}
+#aus-history-detail .aus-detail-panel {
+  display: flex;
+  flex-direction: column;
+  margin-top: 0 !important;
+  border-top: none !important;
+  padding-top: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+  gap: 8px;
+}
+/* 侧栏宽度有限，信息块与外层网格全部竖直排布；内部指标仍保持紧凑两列 */
+#aus-history-detail .aus-detail-panel > div[style*="grid-template-columns:"] {
+  grid-template-columns: 1fr !important;
+}
+#aus-history-detail .aus-detail-panel > div > div[style*="grid-template-columns:1fr 1fr 1fr"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+#aus-history-detail .aus-detail-panel pre {
+  max-height: 46vh !important;
+}
+#aus-content-body.has-history-detail #aus-main {
+  min-width: 0;
+}
+/* 列表被压缩后，历史卡片改回标题与操作分行，避免模型名和费用被挤压 */
+#aus-content-body.has-history-detail .aus-history-card-head {
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+}
+#aus-content-body.has-history-detail .aus-history-card-main {
+  flex: 1 1 100%;
+  width: 100%;
+}
+#aus-content-body.has-history-detail .aus-history-card-title {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+#aus-content-body.has-history-detail .aus-history-card-actions {
+  flex: 1 1 100%;
+  width: 100%;
+  margin-left: 0;
+  justify-content: space-between;
+}
+#aus-content-body.has-history-detail .aus-history-card-cost {
+  min-width: 0;
+  text-align: left;
+}
+
+@media (max-width: 760px) {
+  #aus-history-detail {
+    position: absolute !important;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: 75% !important;
+    border-left: none !important;
+    border-top: 1px solid var(--ds-border);
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.18);
+    z-index: 25;
+  }
+  #aus-history-detail-body {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom)) !important;
+  }
+  #aus-history-detail .aus-detail-panel pre {
+    max-height: 50vh !important;
+  }
+}
