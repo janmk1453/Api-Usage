@@ -1006,7 +1006,7 @@
           <li><a class="toc-link" href="#forecast">8. 趋势预测</a></li>
           <li><a class="toc-link" href="#wallet">9. 钱包</a></li>
           <li><a class="toc-link" href="#settings">10. 设置</a></li>
-          <li><a class="toc-link" href="#data-transfer">11. 导入、导出与 WebDAV</a></li>
+          <li><a class="toc-link" href="#data-transfer">11. 导入、导出、删除与 WebDAV</a></li>
           <li><a class="toc-link" href="#update-about">12. 检查更新与关于</a></li>
           <li><a class="toc-link" href="#faq">13. 常见问题</a></li>
           <li><a class="toc-link" href="#glossary">14. 数据口径与术语</a></li>
@@ -1184,15 +1184,17 @@
         </div>
 
         <h3 id="overview-metrics">八块指标卡</h3>
-        <p>指标卡展示每轮费用、每轮 Token、平均耗时、输出速率等常用指标。每块卡右上角可以切换该卡显示的具体指标，方便按自己的习惯组合概览。</p>
+        <p>指标卡展示每轮费用、每轮 Token、平均耗时、平均首字延迟、输出速率等常用指标。每块卡右上角可以切换该卡显示的具体指标，方便按自己的习惯组合概览；累计消费与 Token 始终基于完整热冷历史，不受余额口径影响。</p>
         <div class="card-grid three">
           <div class="metric-card"><strong>每轮费用</strong><span>平均每次调用产生的费用。</span></div>
           <div class="metric-card"><strong>每轮 Token</strong><span>平均每次调用使用的 Token。</span></div>
           <div class="metric-card"><strong>平均耗时</strong><span>请求从开始到结束的平均时间。</span></div>
+          <div class="metric-card"><strong>平均首字延迟</strong><span>从请求开始到收到第一个有效内容的平均时间。</span></div>
           <div class="metric-card"><strong>输出速率</strong><span>生成阶段每秒输出的 Token 数。</span></div>
           <div class="metric-card"><strong>思维链占比</strong><span>思维链 Token 在输出中的比例。</span></div>
           <div class="metric-card"><strong>截断率</strong><span>以非常规数据结束的请求比例。</span></div>
         </div>
+        <div class="callout"><strong>平均值口径：</strong>所有平均指标都会忽略某轮为 0 或空的数据，只把有效值计入平均，避免空值把均值拉低。概览八块与统计页四小块使用同一口径。</div>
 
         <h3 id="overview-heatmap">Token 热力图</h3>
         <p>热力图按日期汇总近两年的 Token 使用量，颜色越深表示当日使用量越高。悬停或点击主要日期格可以查看日期和 Token 数值；窄屏下可在卡片内部横向滑动。</p>
@@ -1218,19 +1220,20 @@
             <tbody>
               <tr><td>时间维度</td><td>全部、今天、昨天、近 7 天、近 30 天、本月、上月、自定义日期</td><td>自定义范围支持直接输入开始和结束日期；全部范围从已有记录的起始时间开始。</td></tr>
               <tr><td>模型</td><td>全部模型或一个、多个模型</td><td>支持复选多选；未选择时表示“全部”，单选显示模型名，多选显示已选数量。</td></tr>
-              <tr><td>对话</td><td>全部、当前对话、指定聊天或未分组</td><td>用于把统计限定到某个聊天上下文。</td></tr>
+              <tr><td>对话</td><td>全部、当前对话、指定聊天或未分组</td><td>用于把统计限定到某个聊天上下文；选项按最近记录时间从近到远排列。</td></tr>
               <tr><td>接入类型</td><td>全部、已识别接入、未记录接入</td><td>按接入地址区分官方接口、代理和其他连接。</td></tr>
-              <tr><td>API 密钥</td><td>全部、已识别密钥、未识别密钥</td><td>密钥选项会随接入类型联动；切换接入后密钥筛选重置为全部。</td></tr>
+              <tr><td>API 密钥</td><td>全部、已识别密钥、未识别密钥</td><td>密钥选项会随接入类型联动，按最近使用时间从近到远排列；切换接入后密钥筛选重置为全部。</td></tr>
             </tbody>
           </table>
         </div>
         <div class="callout tip"><strong>模型多选：</strong>在模型下拉中勾选多个项目可以同时比较。点击“全部模型”会清空选择，恢复全量统计。</div>
 
         <h3 id="stats-summary">汇总与指标卡</h3>
-        <p>页面上方三块显示消费金额、API 请求次数和总 Token；下方四块显示可配置指标，例如每轮费用、每轮 Token、思维链占比和截断率。</p>
+        <p>页面上方三块显示消费金额、API 请求次数和总 Token；下方四块显示可配置指标，例如每轮费用、每轮 Token、平均首字延迟、思维链占比和截断率，选项与概览八块共用同一套指标。</p>
         <ul>
           <li>费用会自动按当前显示币种换算。</li>
           <li>指标卡使用同一筛选结果，改变任何筛选条件都会同步刷新。</li>
+          <li>平均类指标会忽略单轮为 0 或空的数据，与概览八块口径一致。</li>
           <li>窄屏下汇总卡和四小块会使用两列或单列布局，内容不会横向溢出屏幕。</li>
         </ul>
 
@@ -1240,8 +1243,8 @@
         <h3 id="stats-custom-chart">自定义图表</h3>
         <p>“自定义图表”允许分别选择纵轴和横轴：</p>
         <ul>
-          <li>纵轴支持多项指标，可以同时显示 Token、费用、请求量或性能数据。</li>
-          <li>横轴支持轮次、每小时、每日、每周、每月等时间粒度。</li>
+          <li>纵轴支持多项指标，可以同时显示 Token、费用、请求量或性能数据；Token 类指标以柱状图展示，费用类指标以叠加曲线展示，两者可同屏双轴共存。</li>
+          <li>横轴支持轮次、每小时、每日、每周、每月等时间粒度；“API请求数 趋势”不含轮次，默认按每日展示。</li>
           <li>费用类轴会按当前币种换算，悬浮提示显示对应单位和值。</li>
         </ul>
 
@@ -1280,7 +1283,7 @@
 
         <h3 id="history-filters">四维筛选与分页</h3>
         <ul>
-          <li>支持模型、对话、接入类型和 API 密钥筛选，条件按交集生效。</li>
+          <li>支持模型、对话、接入类型和 API 密钥筛选，条件按交集生效；对话与 API 密钥选项按最近记录时间从近到远排列。</li>
           <li>接入类型与密钥联动；切换接入后，密钥筛选会回到全部。</li>
           <li>筛选先作用于热历史和冷库全量历史，再进行分页，每页显示一定数量的记录。</li>
           <li>没有结果时可以点击清除筛选恢复，不必逐项重置。</li>
@@ -1317,7 +1320,7 @@
         <ul>
           <li>“当前对话”优先跟随正在使用的聊天，适合直接查看当前上下文的压力。</li>
           <li>“全部”会把所有记录合并估算，适合查看整体平均趋势。</li>
-          <li>选择具体对话时，只使用该对话的历史轮次。</li>
+          <li>选择具体对话时，只使用该对话的历史轮次；对话列表按最近记录时间从近到远排列。</li>
           <li>未分组或旧数据没有聊天标识，可在对应选项下查看。</li>
         </ul>
 
@@ -1445,9 +1448,9 @@
         <p>全局开关决定是否允许钱包按间隔自动查询余额。开启后可以设置校准间隔，单位为分钟。只有钱包页中启用了自动校准且支持官方查询的钱包会执行。</p>
         <div class="callout"><strong>优先级：</strong>全局开关关闭时，钱包内即使开启自动校准也不会定时查询；手工余额仍可正常使用。</div>
 
-        <h3 id="settings-pricing">新价格机制与默认峰谷</h3>
+        <h3 id="settings-pricing">内置定价与默认峰谷</h3>
         <ul>
-          <li>开启新价格机制后，可以设置价格生效日期。生效日期前使用旧价格，之后使用峰谷价格。</li>
+          <li>DeepSeek 系列模型的价格已内置为按时间生效的多段定价，扩展会按每条记录的时间自动匹配当时的价格，不再需要手动开启“新价格机制”或设置生效日期。</li>
           <li>内置峰谷机制主要面向 DeepSeek 模型：周末与中国法定节假日全天按空闲计价，调休上班的周末同样空闲。</li>
           <li>内置中国法定节假日数据覆盖 2024-2026。超出范围的年份可在“额外空闲日期”中按 <code>YYYY-MM-DD</code> 每行一条补充，这些日期全天按空闲计费。</li>
           <li>“新钱包默认峰谷时段”用于新建钱包的默认规则，单个钱包可以覆盖。</li>
@@ -1481,10 +1484,24 @@
         </ul>
       </section>
 
-      <section class="doc-section" id="data-transfer" data-keywords="导入 导出 WebDAV 云同步 备份 恢复 合并 覆盖 去重">
+      <section class="doc-section" id="data-transfer" data-keywords="导入 导出 删除记录 清理 WebDAV 云同步 备份 恢复 合并 覆盖 去重">
         <div class="section-kicker">数据管理</div>
-        <h2 id="data-transfer-title">导入、导出与 WebDAV</h2>
-        <p class="lead">数据管理用于备份历史与钱包配置、恢复旧版数据，以及在多台设备之间保持统计一致。导入和同步都不会包含钱包校准密钥与聊天正文。</p>
+        <h2 id="data-transfer-title">导入、导出、删除与 WebDAV</h2>
+        <p class="lead">数据管理用于备份历史与钱包配置、恢复旧版数据、按范围清理记录，以及在多台设备之间保持统计一致。导入和同步都不会包含钱包校准密钥与聊天正文。</p>
+
+        <h3 id="data-transfer-delete">按范围删除记录</h3>
+        <p>设置页提供“按范围删除记录”，用于清理不需要的历史。可留空表示不限，也可组合以下条件缩小范围：</p>
+        <ul>
+          <li>开始日期与结束日期：按记录所在自然日筛选，边界包含在内。</li>
+          <li>模型：按模型名完全匹配。</li>
+          <li>对话：按对话名称或对话标识完全匹配。</li>
+        </ul>
+        <ol class="steps">
+          <li>填写筛选条件后点击“统计匹配记录”，先查看本次会命中多少条。</li>
+          <li>点击“删除匹配记录”，按钮会切换为“确认删除 X 条？再点一次”，再次点击才会执行。</li>
+          <li>删除会同时处理热历史与冷历史，并立即重算全部统计与费用。</li>
+        </ol>
+        <div class="callout warning"><strong>删除前建议：</strong>删除不可撤销，建议先“导出记录”备份完整数据。</div>
 
         <h3 id="data-transfer-export">导出</h3>
         <p>导出会包含可用于恢复的历史记录、钱包配置、忽略状态、余额口径和统计设置。导出的历史会清理隐私字段，不包含完整聊天内容或钱包校准密钥。</p>
@@ -1627,7 +1644,7 @@
             <thead><tr><th>术语</th><th>含义</th></tr></thead>
             <tbody>
               <tr><td>总成本</td><td>按模型价格、Token 数量和峰谷规则计算出的费用。</td></tr>
-              <tr><td>平均成本</td><td>筛选范围内总成本除以请求次数或轮次。</td></tr>
+              <tr><td>平均成本</td><td>筛选范围内按有效记录求平均，单轮为 0 或空的数据不计入分母。</td></tr>
               <tr><td>预计节省</td><td>缓存命中相对未命中价格估算出的节省金额。</td></tr>
               <tr><td>耗时</td><td>一次请求从开始到结束的时间。</td></tr>
               <tr><td>首字延迟</td><td>从请求开始到收到第一个有效内容的时间。</td></tr>
@@ -1667,117 +1684,201 @@
         </div>
       </section>
 
-      <section class="doc-section" id="privacy" data-keywords="隐私 密钥 校准密钥 XOR WebDAV models.dev 数据上传 聊天内容">
+      <section class="doc-section" id="privacy" data-keywords="隐私 密钥 校准密钥 XOR WebDAV models.dev 数据上传 聊天内容 网络请求 域名 权限 删除">
         <div class="section-kicker">隐私声明</div>
         <h2 id="privacy-title">隐私声明</h2>
-        <p class="lead">本声明依据扩展当前实现描述数据访问、本地保存、导出、云同步和外部请求边界。扩展没有遥测、广告或行为分析服务。</p>
+        <p class="lead">本扩展是纯前端、本地运行的 SillyTavern 原生扩展，完整代码开源（MIT 许可证），可随时审查。本声明基于实际代码行为编写，逐项如实披露本扩展的全部网络请求与敏感操作。</p>
+        <p><strong>适用对象：</strong>SillyTavern 扩展「API用量统计」（Api-Usage，仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">janmk1453/Api-Usage</a>）<br>
+        <strong>适用版本：</strong>v3.1.0 及功能行为一致的后续版本<br>
+        <strong>最后更新：</strong>2026年10月4日</p>
 
-        <h3 id="privacy-access">扩展会访问哪些数据</h3>
+        <h3 id="privacy-commitments">一、核心承诺</h3>
+        <ol class="steps">
+          <li>本扩展<strong>没有任何开发者自有服务器</strong>，不采集、不上传任何用户数据到开发者或任何第三方统计、遥测、追踪服务，不包含任何埋点。</li>
+          <li>本扩展发起的所有网络请求<strong>仅限于本声明第四节列出的域名</strong>，除该清单外不存在任何其他网络访问。</li>
+          <li>本扩展<strong>无法获取用户储存在酒馆中的明文 API 密钥</strong>，详见第五节。</li>
+          <li>用户主动填入本扩展的校准密钥<strong>不会被上传到除 DeepSeek 官方余额接口以外的任何位置</strong>，详见第六节。</li>
+        </ol>
+
+        <h3 id="privacy-not-doing">二、本扩展明确不做的事</h3>
+        <ul>
+          <li>不读取、不保存、不上传用户储存在酒馆中的完整明文密钥；</li>
+          <li>不修改、不删除酒馆的聊天记录、角色卡数据、世界书、预设或酒馆密钥本体；</li>
+          <li>不将对话正文发送到本扩展自身或开发者的任何服务器；</li>
+          <li>不进行任何形式的用户画像、行为追踪或数据售卖；</li>
+          <li>不参与导入导出与云同步的数据：<strong>校准密钥</strong>与<strong>对话正文明细</strong>（详见第六、八节）。</li>
+        </ul>
+
+        <h3 id="privacy-scope">三、数据处理的总体范围</h3>
+        <p>本扩展在本地处理的数据包括：</p>
+        <ul>
+          <li>请求元数据：模型名称、接口来源类型（官方、自定义、反代）、自定义接口地址、密钥条目标签、消息条数；</li>
+          <li>用量数据：Token 数（输入、输出、缓存命中、未命中）、耗时、首字延迟、思维链耗时、结束原因、本地估算费用；</li>
+          <li>接入标识：接口地址、密钥条目编号、备注与掩码末三位组成的来源标签；</li>
+          <li>对话归属：当前对话的标识与名称（仅用于「按对话筛选、统计」的展示）；</li>
+          <li>明细快照：最近若干次请求的消息与响应快照（有严格截断与保留上限，详见第八节）。</li>
+        </ul>
+        <p>以上数据<strong>全部仅存储于用户本地</strong>（浏览器 IndexedDB、localStorage 及酒馆自身的扩展设置中），除用户主动触发 WebDAV 同步外不会离开用户设备。</p>
+
+        <h3 id="privacy-endpoints">四、网络请求域名完整披露</h3>
+        <p>下表为本扩展代码中<strong>全部</strong>可能发起的网络请求：</p>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>数据</th><th>访问方式</th><th>用途</th></tr></thead>
+            <thead><tr><th>#</th><th>域名</th><th>资源</th><th>功能</th><th>触发条件</th><th>发送内容</th></tr></thead>
             <tbody>
-              <tr><td>请求配置</td><td>仅在调用酒馆聊天生成接口时读取模型、流式开关、温度、最大输出、顶部概率、接口类型、接入地址和消息数量。</td><td>记录模型、计价、接入身份和请求参数摘要。</td></tr>
-              <tr><td>响应用量</td><td>克隆聊天生成响应并读取用量对象、结束原因、首字延迟、思维链耗时和响应文本。</td><td>记录 Token、缓存、费用、性能、截断和详情。</td></tr>
-              <tr><td>请求消息</td><td>请求消息最多截取末尾 10 条，用于生成历史详情；每条消息内容超过限制时会截断。</td><td>供用户回看请求上下文与缓存差异。</td></tr>
-              <tr><td>连接身份</td><td>读取接入类型、规范化接入地址，以及在酒馆密钥状态中匹配到的密钥条目编号、备注和末三位。</td><td>区分官方接口、代理、钱包和请求来源。</td></tr>
-              <tr><td>钱包与配置</td><td>读取用户填写的余额、币种、模型价格、峰谷规则、同步设置和历史显示设置。</td><td>计算费用、换算币种和恢复用户配置。</td></tr>
+              <tr><td>1</td><td><span class="code">api.deepseek.com</span></td><td><span class="code">GET /user/balance</span></td><td>查询 DeepSeek 官方钱包余额（校准）</td><td>仅当钱包为 DeepSeek 官方接入、且用户主动填写校准密钥后：手动校准，或开启「自动校准」后按设定间隔（1–1440 分钟）触发</td><td>仅 <span class="code">Authorization: Bearer &lt;校准密钥&gt;</span> 请求头；不含任何聊天内容或统计数据</td></tr>
+              <tr><td>2</td><td><span class="code">models.dev</span></td><td><span class="code">/api.json</span>、<span class="code">/catalog.json</span></td><td>模型价格目录同步（「价格来源、自动同步」功能）</td><td><strong>默认关闭</strong>；用户开启后手动或按设定间隔触发</td><td>无用户数据（纯 GET 拉取公开目录）</td></tr>
+              <tr><td>3</td><td><span class="code">raw.githubusercontent.com</span></td><td><span class="code">anomalyco/opencode/main/models.json</span></td><td>价格同步的备用数据源</td><td>同上，仅在主源拉取失败时依序尝试</td><td>无用户数据</td></tr>
+              <tr><td>4</td><td><span class="code">raw.githubusercontent.com</span></td><td><span class="code">janmk1453/Api-Usage/main/manifest.json</span></td><td>检查扩展更新</td><td>每小时一次的自动检查（5 秒超时）</td><td>无用户数据</td></tr>
+              <tr><td>5</td><td><span class="code">api.github.com</span></td><td><span class="code">repos/janmk1453/Api-Usage/compare/...</span></td><td>检查扩展更新（提交比对）</td><td>同上，仅在本地版本与清单版本不一致时</td><td>无用户数据（仅比较目标与缓存破坏时间戳）</td></tr>
+              <tr><td>6</td><td><span class="code">open.er-api.com</span>、<span class="code">api.exchangerate-api.com</span></td><td><span class="code">USD</span> 汇率</td><td>美元→人民币汇率换算</td><td>仅在启用价格同步或美元展示功能时拉取（有缓存间隔）</td><td>无用户数据</td></tr>
+              <tr><td>7</td><td><strong>用户自行填写的 WebDAV 服务器</strong>（设置中的占位示例为 <span class="code">dav.jianguoyun.com</span>，实际地址完全由用户决定）</td><td>用户指定路径下的单一同步文件 <span class="code">DeepSeekStatSync.json</span></td><td>多设备备份与合并同步</td><td>仅当用户显式填写地址、用户名与密码并手动触发同步时；方法仅为 <span class="code">GET</span>（读取）、<span class="code">MKCOL</span>（建目录）、<span class="code">PUT</span>（写入该文件）</td><td>统计历史（<strong>已剥离消息与请求、响应明细</strong>）、聚合数据、钱包配置、扩展设置（<strong>已剔除 WebDAV 凭证</strong>）；不含校准密钥、不含对话正文</td></tr>
+              <tr><td>8</td><td><strong>用户自行填写的 CORS 代理</strong>（可选）</td><td>透传上述 WebDAV 请求</td><td>部分网盘不提供 CORS 响应头时的中转</td><td>仅当用户主动填写代理地址</td><td>与第 7 项相同（经代理转发）</td></tr>
             </tbody>
           </table>
         </div>
-        <p>扩展不读取反向代理的 <span class="code">proxy_password</span>，也不读取或比较 <span class="code">custom_include_headers</span>。反向代理请求不会生成密钥条目身份，而是按接入地址归入钱包。</p>
+        <p><strong>关于聊天生成请求本身：</strong>对话生成请求（SillyTavern 后端路径 <span class="code">/api/backends/chat-completions/generate</span>）始终由 SillyTavern 前端本身发往其自身后端或用户配置的接口。本扩展对该请求<strong>仅做本地观察</strong>（克隆响应用于解析用量数据），不发起、不转发、不复制、不修改该请求，也不会将其中内容发送到任何上述服务器。</p>
+        <p><strong>纯跳转链接（不发送任何数据）：</strong>扩展界面中存在指向 <span class="code">janmk1453.github.io/Api-Usage/</span>（使用文档）、<span class="code">github.com/janmk1453/Api-Usage</span>、<span class="code">github.com/janmk1453/deepseek-tavern-script</span>（仓库与致谢）的超链接，仅在用户主动点击时由浏览器打开，不随附任何数据。</p>
 
-        <h3 id="privacy-secret-metadata">酒馆密钥信息</h3>
-        <p>酒馆密钥识别依赖酒馆自身提供的密钥状态。扩展使用密钥条目编号进行匹配，使用用户备注和密钥值的末三位生成可读标签，用于区分请求来源。</p>
+        <h3 id="privacy-tavern-keys">五、关于酒馆中已储存的密钥</h3>
+        <p>本扩展为了在统计中区分「哪一条密钥发起了请求」，会通过 SillyTavern 官方扩展接口读取酒馆密钥管理模块的<strong>状态信息</strong>。本扩展有且只能获得：</p>
         <ul>
-          <li>完整酒馆密钥不会写入历史、统计、日志、导出文件或 WebDAV 同步包。</li>
-          <li>识别标签可能包含用户备注和末三位，导出与同步历史时可能一并携带该标签。</li>
-          <li>如果酒馆版本不提供多条密钥编号，相关请求会归入未识别密钥。</li>
+          <li>密钥条目的<strong>编号</strong>（id）；</li>
+          <li>密钥条目的<strong>用户备注</strong>（label）；</li>
+          <li>密钥条目<strong>掩码值的末三位字符</strong>。</li>
         </ul>
+        <p>以上信息仅用于生成独立区分请求来源的标签（如 <span class="code">密钥A •••x9f</span>），<strong>不会且无法读取、保存或上传完整明文密钥</strong>。用户储存在酒馆本身的密钥是安全的，本扩展无法获取真实密钥；当请求经由反向代理发出时，本扩展也不会记录任何密钥归属信息。</p>
 
-        <h3 id="privacy-local-history">本地历史与详情保留</h3>
+        <h3 id="privacy-calibration-key">六、关于用户主动填入的校准密钥</h3>
         <ul>
-          <li>热历史保存在酒馆扩展设置中，冷历史保存在浏览器 IndexedDB 中。</li>
-          <li>当前热历史中的最新若干条记录可以保留请求消息、经过清理的请求摘要和响应文本；更早记录的详情会被删除。</li>
-          <li>单条消息内容存在长度上限，完整响应也存在上限；超长内容会被截断。</li>
-          <li>原始用量对象 <span class="code">raw_usage</span> 会参与本地统计。它通常由服务商返回，不应假设其中一定没有额外字段。</li>
-          <li>删除扩展数据、清除浏览器站点数据或删除酒馆扩展设置，可能同时删除本地历史与配置。</li>
+          <li>用户在钱包页主动填写的校准密钥是<strong>实际可用</strong>的密钥，且<strong>仅会被用于查询 DeepSeek 官方余额</strong>（<a href="https://api.deepseek.com/user/balance" target="_blank" rel="noreferrer">https://api.deepseek.com/user/balance</a>），该查询不会产生任何扣费或消耗；</li>
+          <li>自动校准仅对该密钥对应的 DeepSeek 官方钱包生效，由<strong>浏览器直接</strong>发送至上述接口，不经过任何第三方；</li>
+          <li>校准密钥仅经 <strong>XOR 混淆</strong>后存放于 SillyTavern 的扩展设置与浏览器本地存储中；</li>
+          <li>校准密钥<strong>不进入</strong>历史记录、统计聚合、调试日志、导入导出文件或 WebDAV 同步；</li>
+          <li><strong>XOR 不是安全加密</strong>，仅能防止明文直接可见。请使用权限受限的密钥（如仅具只读余额权限的密钥）并自行评估风险。</li>
         </ul>
+        <p>用户填写的 WebDAV 应用密码同样仅经 XOR 混淆后存放于本地，仅用于 WebDAV 同步的 Basic 认证，不参与导出与同步。</p>
 
-        <h3 id="privacy-calibration-key">钱包校准密钥</h3>
-        <p>钱包校准密钥是用户主动填写的实际密钥，仅用于查询 DeepSeek 官方余额。它保存在独立的扩展设置键中，经 XOR 混淆后落盘，不进入历史、统计、日志、导出文件或 WebDAV 同步包。</p>
-        <div class="callout warning"><strong>安全提示：</strong>XOR 只用于避免密钥以直观明文形式出现，不构成安全加密。请使用权限受限、可单独撤销的密钥，并自行评估浏览器与酒馆存储环境的安全风险。</div>
-
-        <h3 id="privacy-export-sync">导出与 WebDAV</h3>
+        <h3 id="privacy-sensitive-ops">七、高权限 / 敏感操作声明</h3>
+        <h4 id="privacy-outside-chat">A. 卡外数据操作（酒馆当前对话之外的数据）</h4>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>路径</th><th>包含</th><th>不包含</th></tr></thead>
+            <thead><tr><th>权限类型</th><th>操作对象</th><th>用途说明</th></tr></thead>
             <tbody>
-              <tr><td>本地导出</td><td>热冷全量历史、统计数据、钱包配置、余额、显示与计价设置，以及部分连接和计价标识。</td><td>请求消息、完整请求、完整响应、钱包校准密钥；导出时 WebDAV 地址和账号字段会被清空。</td></tr>
-              <tr><td>WebDAV 同步</td><td>当前构造同步包时的扩展历史、统计快照、钱包配置、忽略状态和设置。</td><td>请求消息、完整请求、完整响应、钱包校准密钥和 WebDAV 密码。</td></tr>
-              <tr><td>导入</td><td>兼容格式中的历史统计、钱包配置和设置。</td><td>导入时跳过请求消息、完整请求、完整响应和原始用量字段。</td></tr>
+              <tr><td>读取</td><td>酒馆密钥管理状态（条目编号、用户备注、掩码末三位）</td><td>生成来源标签，在统计中区分请求由哪条密钥发起</td></tr>
+              <tr><td>读取</td><td>对话生成请求参数（模型、来源类型、自定义接口地址、反代地址、密钥条目编号、消息条数）</td><td>识别请求的接入方式与计费归属（钱包、接口、密钥）</td></tr>
+              <tr><td>读取</td><td>当前对话标识与名称（酒馆上下文 <span class="code">getCurrentChatId</span> 与当前角色卡的对话字段）</td><td>仅用于「按对话筛选、统计」与「最耗对话」等展示功能</td></tr>
+              <tr><td>读取 + 写入</td><td>酒馆扩展设置中本扩展自己的命名空间（<span class="code">api_usage_stat</span>）</td><td>保存本扩展的设置项、最近的热区历史记录、XOR 混淆的校准密钥与 WebDAV 密码；该命名空间随酒馆自身设置保存在用户本地服务端，本扩展不写入其他扩展的命名空间</td></tr>
+              <tr><td>读取 + 写入 + 删除</td><td>浏览器 IndexedDB（数据库名 <span class="code">api_usage_stat_db</span>）与 localStorage</td><td>存储超出热区的冷历史记录（明细已剥离）、更新检查时间戳、峰值圆点位置、调试日志等本扩展自身数据；删除仅针对本扩展自己的键</td></tr>
+              <tr><td>读取 + 写入</td><td>用户配置的 WebDAV 服务器上<strong>用户指定路径</strong>下的单一同步文件（<span class="code">DeepSeekStatSync.json</span>）</td><td>备份与多设备合并同步；不会读取、覆盖或删除该路径之外的任何文件；仅在用户显式配置并手动触发时执行</td></tr>
+              <tr><td>删除</td><td>仅限本扩展自身数据</td><td>卸载扩展时（<span class="code">onDelete</span> 钩子）清理酒馆设置中本扩展命名空间的数据及本地缓存键</td></tr>
             </tbody>
           </table>
         </div>
-        <p>导出文件仍可能包含接入地址、密钥标签、钱包名称、模型价格和原始用量对象，应按敏感文件保管。调试模式生成的模拟记录不会进入导出或 WebDAV 同步包。</p>
+        <p>本扩展<strong>不读取</strong>其他角色卡数据、世界书、预设、酒馆聊天文件，也<strong>不访问</strong>SillyTavern 服务端文件系统或浏览器本地数据之外的内容。</p>
 
-        <h3 id="privacy-webdav-password">WebDAV 密码</h3>
-        <p>WebDAV 密码经 XOR 混淆后保存在浏览器本地存储和扩展设置中，仅用于构造访问用户指定 WebDAV 地址所需的认证请求。该密码不会进入导出文件或 WebDAV 同步数据包。</p>
-        <div class="callout warning"><strong>代理风险：</strong>如果用户配置非 HTTPS 的 CORS 代理，WebDAV 用户名和密码可能在传输过程中被第三方读取。扩展会提示并需要用户确认后才继续。</div>
-
-        <h3 id="privacy-external">外部服务与出站请求</h3>
+        <h4 id="privacy-inside-chat">B. 卡内数据操作（与当前对话相关的数据）</h4>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>服务</th><th>发送内容</th><th>用途</th></tr></thead>
+            <thead><tr><th>权限类型</th><th>操作对象</th><th>用途说明</th></tr></thead>
             <tbody>
-              <tr><td>DeepSeek 官方余额接口</td><td>钱包校准密钥、余额查询请求。</td><td>获取 DeepSeek 官方钱包余额。</td></tr>
-              <tr><td>models.dev</td><td>公开价格目录请求，不附带模型 API 密钥。</td><td>同步第一方模型价格。</td></tr>
-              <tr><td>汇率服务</td><td>公开汇率请求，不附带用户历史或模型密钥。</td><td>更新 USD 与 CNY 的换算比例。</td></tr>
-              <tr><td>GitHub 更新接口</td><td>扩展版本或提交信息查询，不附带历史、钱包或聊天数据。</td><td>检查扩展是否发布新版本。</td></tr>
-              <tr><td>用户配置的 WebDAV 服务</td><td>清洗后的历史、统计、钱包配置、设置，以及 WebDAV 认证信息。</td><td>执行用户主动发起或配置的同步。</td></tr>
+              <tr><td>读取（仅本地观察）</td><td>最近一次对话生成请求的末尾消息（最多 10 条）及对应响应</td><td>用于「历史记录」页展示单次请求、响应详情（模型参数、用量、耗时等）</td></tr>
+              <tr><td>本地保存</td><td>上述消息内容（每条正文截断至 600 字符）与响应文本（截断至 200,000 字符）</td><td>仅保存于用户本地；<strong>持久化后仅最近 5 条记录保留明细，其余记录的明细字段会被自动剥离</strong>，且<strong>不参与导入导出与 WebDAV 同步</strong></td></tr>
+              <tr><td>写入 / 删除</td><td><strong>无</strong></td><td>本扩展不会写入、修改或删除酒馆的任何聊天记录、消息、角色卡数据或世界书</td></tr>
             </tbody>
           </table>
         </div>
 
-        <h3 id="privacy-recommendations">使用建议</h3>
+        <h4 id="privacy-destructive">C. 破坏性操作声明</h4>
+        <p>本扩展存在以下<strong>不可恢复的删除操作</strong>，且全部<strong>仅作用于本扩展自身记录的统计数据</strong>，不涉及酒馆任何原生数据：</p>
+        <ol class="steps">
+          <li><strong>覆盖导入：</strong>以导入文件替换全部现有统计（经两次确认弹窗后方可执行）；</li>
+          <li><strong>清理记录：</strong>清空历史或移除调试记录，仅删除本扩展本地统计；</li>
+          <li><strong>删除钱包 / 校准密钥：</strong>删除对应钱包配置及其本地保存的校准密钥；</li>
+          <li><strong>卸载扩展：</strong>删除酒馆设置中本扩展命名空间的数据与本地缓存键。</li>
+        </ol>
+
+        <h3 id="privacy-storage">八、数据存储、留存与删除</h3>
         <ul>
-          <li>不要导出、上传或公开包含敏感聊天内容的历史详情。</li>
-          <li>不要把钱包校准密钥或 WebDAV 密码放在共享浏览器配置中。</li>
-          <li>使用 WebDAV 时优先选择 HTTPS、应用专用密码和最小权限目录。</li>
-          <li>定期导出备份，并自行加密后保存重要数据。</li>
+          <li><strong>热数据：</strong>最近 50 条记录与全部设置存于酒馆扩展设置（随酒馆保存于用户本地服务端）；</li>
+          <li><strong>冷数据：</strong>超出热区的历史记录（上限 2000 条，含去重）存于浏览器 IndexedDB；</li>
+          <li><strong>明细：</strong>消息与响应快照仅对最近 5 条记录保留，其余自动剥离，且永不导出；</li>
+          <li><strong>调试日志：</strong>仅存于本地 localStorage，可随时清除，不含聊天正文；</li>
+          <li><strong>卸载行为：</strong>卸载扩展会清除酒馆设置中本扩展的数据与上述本地缓存键；但浏览器 IndexedDB 中的冷历史备份<strong>不会随卸载自动删除</strong>，如需彻底清除，请在浏览器「清除站点数据、存储」中一并清理；</li>
+          <li>用户可随时通过导出功能取得全部统计数据的明文 JSON 副本。</li>
         </ul>
+
+        <h3 id="privacy-third-parties">九、第三方服务说明</h3>
+        <ul>
+          <li><a href="https://models.dev" target="_blank" rel="noreferrer">models.dev</a> 为公开的第三方模型价格目录。本扩展仅拉取其中的价格数据用于本地展示与估算，不发送任何用户数据；</li>
+          <li>汇率、价格目录等第三方公开接口的可用性与准确性不由本扩展控制；</li>
+          <li>WebDAV 同步的数据安全<strong>取决于用户自行选择的存储服务与网络环境</strong>（含可选的 CORS 代理），请选择可信的服务商。</li>
+        </ul>
+
+        <h3 id="privacy-opensource">十、开源与验证</h3>
+        <p>本扩展完整代码开源（MIT 许可证）：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">https://github.com/janmk1453/Api-Usage</a>。本声明所述全部行为均可通过审查源码验证。若未来版本的数据处理方式发生变化，本声明将随之更新，并在仓库中说明变更内容。</p>
+
+        <h3 id="privacy-contact">十一、联系与反馈</h3>
+        <p>如对本声明或扩展行为有任何疑问，欢迎通过仓库 Issues 提出：<a href="https://github.com/janmk1453/Api-Usage/issues" target="_blank" rel="noreferrer">https://github.com/janmk1453/Api-Usage/issues</a>。</p>
       </section>
 
-      <section class="doc-section" id="disclaimer" data-keywords="免责声明 第三方价格 models.dev 中转站 推荐 统计参考">
+      <section class="doc-section" id="disclaimer" data-keywords="免责声明 第三方价格 models.dev 中转站 推荐 统计参考 密钥安全 数据安全 责任限制">
         <div class="section-kicker">免责声明</div>
         <h2 id="disclaimer-title">免责声明</h2>
+        <p class="lead">请在安装或使用本扩展前仔细阅读本声明。<strong>一旦安装、启用或使用本扩展，即视为您已阅读、理解并同意本声明的全部内容。</strong>如不同意，请立即停止使用并卸载本扩展。</p>
+        <p><strong>适用对象：</strong>SillyTavern 扩展「API用量统计」（Api-Usage，仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">janmk1453/Api-Usage</a>）<br>
+        <strong>适用版本：</strong>v3.1.0 及功能行为一致的后续版本<br>
+        <strong>最后更新：</strong>2026年10月4日</p>
 
-        <h3 id="disclaimer-billing">费用与余额不替代服务商账单</h3>
-        <ul>
-          <li>费用由用户配置价格、内置价格或第三方价格目录计算，可能与服务商最终账单不同。</li>
-          <li>USD 与 CNY 的换算受汇率、更新时间和服务可用性影响，只用于界面展示和估算。</li>
-          <li>DeepSeek 峰谷价格和部分模型价格可能采用近似或合成规则，不保证与实际结算完全一致。</li>
-          <li>手工余额可能过期，自动余额查询可能失败或延迟；余额和剩余轮数不构成账户余额证明。</li>
-          <li>计费争议、退款、账户扣除和合同义务应以模型服务商的正式账单、协议和客服结论为准。</li>
-        </ul>
+        <h3 id="disclaimer-as-is">一、按「现状」提供，不作任何担保</h3>
+        <p>本扩展按「现状」（AS IS）提供，开发者以开源社区志愿者的身份尽力维护，但<strong>不对本扩展作出任何形式的明示或默示担保</strong>，包括但不限于对适销性、特定用途适用性、不侵权、无错误或漏洞、不间断运行的担保。本扩展的功能表现可能随 SillyTavern 版本、浏览器环境、上游接口变化而受影响。</p>
 
-        <h3 id="disclaimer-data-accuracy">数据来源与准确性</h3>
-        <p>本扩展中“价格来源”“自动同步”等功能可能使用 <a href="https://models.dev/" target="_blank" rel="noreferrer">models.dev</a> 或其他第三方公开数据。此类数据可能不准确、不完整、过时或发生变更，仅供辅助参考，不构成任何承诺或保证。模型价格、计费、额度、上下文长度、可用性、服务条款等，均以对应服务商官方页面和实际账单为准。用户应自行核验并承担使用决策风险。</p>
+        <h3 id="disclaimer-models-dev">二、关于「价格来源」「自动同步」等基于 models.dev 数据的功能</h3>
+        <ol class="steps">
+          <li>本扩展的「价格来源」「自动同步」等功能利用 <a href="https://models.dev" target="_blank" rel="noreferrer">models.dev</a> 获取的公开数据在<strong>本地</strong>进行价格展示与费用估算。</li>
+          <li>本扩展<strong>不对上述数据中出现或可能出现的任何商业化中转站（中转、代理服务）负责</strong>。我们不建议使用任何商业化中转站。</li>
+          <li>尽管我们已经尽力筛选数据，但由于对大量第三方数据进行完全筛选难以实现，因此我们<strong>不对可能出现的任何商业化中转站名称负责</strong>——其出现不构成推荐、不构成背书，与本扩展亦无任何关联。</li>
+          <li>本扩展与 models.dev、上述数据涉及的任何供应商或中转站<strong>均无任何商业往来</strong>，不接受赞助分成，不进行流量导购，<strong>坚定不移地反对商业化</strong>。</li>
+        </ol>
 
-        <h3 id="disclaimer-commercial-relay">商业化中转站</h3>
-        <p>本扩展不对“价格来源”“自动同步”等利用 <a href="https://models.dev/" target="_blank" rel="noreferrer">models.dev</a> 获取的数据中出现或可能出现的商业化中转站负责。尽管我们已尽力筛选数据，但由于数据量大、来源动态变化，对大量数据进行完全筛选难以实现，因此本扩展不对可能出现的任何商业化中转站名称负责，不构成推荐、背书或保证。我们不建议使用任何商业化中转站，并坚定不移地反对商业化。本扩展与 <a href="https://models.dev/" target="_blank" rel="noreferrer">models.dev</a> 或任何中转站均无商业往来。</p>
+        <h3 id="disclaimer-key-security">三、密钥安全与数据安全免责</h3>
+        <ol class="steps">
+          <li>我们将尽可能维护本扩展的安全和隐私性（XOR 混淆、密钥不落盘到导出与同步、明细自动剥离等，详见隐私声明），但<strong>本扩展不对因酒馆（SillyTavern）或本扩展的安全漏洞、或因其他间接原因导致的任何形式的密钥泄露及由此产生的损失负责</strong>。</li>
+          <li>XOR 混淆<strong>不是安全加密</strong>，仅用于避免明文直接可见。用户应自行评估风险，并建议使用权限受限的密钥（如仅具余额只读权限的密钥）。</li>
+          <li>用户通过 WebDAV 进行的云同步，其数据安全<strong>取决于用户自行选择的存储服务、账号凭证与网络环境</strong>（含可选的 CORS 代理）；因第三方存储服务导致的数据泄露、丢失或损坏，本扩展不承担责任。</li>
+          <li>请从官方仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">https://github.com/janmk1453/Api-Usage</a> 获取本扩展。经第三方渠道分发、篡改的版本不在本声明保障范围内。</li>
+        </ol>
 
-        <h3 id="disclaimer-third-parties">第三方服务</h3>
-        <p>DeepSeek、<a href="https://models.dev/" target="_blank" rel="noreferrer">models.dev</a>、SillyTavern、各模型服务商及任何中转站均为独立第三方，其服务、数据、计费、隐私、安全、可用性和合法性由其自行负责。使用前请阅读并遵守其条款与政策。</p>
+        <h3 id="disclaimer-cost">四、费用与统计估算免责</h3>
+        <ol class="steps">
+          <li>本扩展展示的费用、余额、峰谷计价、汇率换算等数据均为<strong>基于本地配置与第三方公开数据的估算值</strong>，仅供参考，<strong>不构成任何账单依据</strong>。实际消费请以模型服务商的官方账单为准。</li>
+          <li>峰谷时段计价依据 DeepSeek 公开的计费规则，并结合内置的中国法定节假日数据（覆盖 2024–2026 年）合成；超出覆盖范围的年份需用户在设置中自行补充「额外空闲日期」。节假日数据或规则如发生变更（如官方调整计费规则），可能导致估算偏差，本扩展不对该偏差及据此作出的任何决策（如消费预算、用量规划）负责。</li>
+          <li>汇率数据来自第三方公开接口，可能存在延迟或误差。</li>
+          <li>「趋势预测」功能为 <strong>Beta</strong> 特性，基于历史数据的统计模型，其预测结果不构成任何承诺或建议。</li>
+        </ol>
 
-        <h3 id="disclaimer-warranty">无担保与责任限制</h3>
-        <p>在适用法律允许的最大范围内，本扩展按“现状”和“可用”状态提供，作者不对其准确性、可靠性、安全性、兼容性、无中断或无错误作出明示或默示担保。因使用或无法使用本扩展、依赖其数据或第三方服务导致的任何直接或间接损失、费用、数据丢失或服务中断，作者不承担责任。用户应自行备份并评估风险。</p>
+        <h3 id="disclaimer-third-party-apis">五、第三方接口使用免责</h3>
+        <ol class="steps">
+          <li>本扩展可在 SillyTavern 支持的范围内记录用户自行配置的各种接口（官方 API、自定义接口、反向代理等）的用量。用户接入何种服务、以何种密钥接入，均为用户自己的决定，<strong>用户应自行遵守相应服务商的服务条款</strong>。</li>
+          <li>使用任何第三方接口（包括商业化中转站）所带来的费用风险、封号风险、数据安全风险由用户自行承担，与本扩展无关。</li>
+        </ol>
 
-        <h3 id="disclaimer-changes">声明变更</h3>
-        <p>本隐私声明与免责声明可能随项目更新而调整，最新版本以仓库中发布的内容为准。继续使用即表示知悉并接受更新后的声明；若不同意，请停止使用并删除本扩展。</p>
+        <h3 id="disclaimer-availability">六、数据与功能可用性免责</h3>
+        <ol class="steps">
+          <li>本扩展的统计准确度受限于 SillyTavern 及上游接口返回的用量数据。部分接口不返回标准用量字段、流式响应格式异常或中途断开时，可能出现<strong>漏记、少记或估算偏差</strong>，本扩展不对此负责。</li>
+          <li>因浏览器存储配额、隐私模式、用户清理浏览器数据、IndexedDB 写入失败等原因导致的历史数据丢失，本扩展不承担责任。<strong>建议用户定期通过导出功能备份数据。</strong></li>
+          <li>因 SillyTavern 版本更新导致扩展功能失效或行为异常的，开发者将尽力适配，但不承诺任何修复时限。</li>
+        </ol>
 
-        <h3 id="disclaimer-contact">联系方式</h3>
-        <p>如有疑问，请通过项目仓库 Issue 联系：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">https://github.com/janmk1453/Api-Usage</a></p>
+        <h3 id="disclaimer-liability">七、责任限制</h3>
+        <p>在法律允许的最大范围内，对于因使用或无法使用本扩展而产生的任何直接、间接、附带、特殊、惩罚性损失（包括但不限于数据丢失、密钥泄露、费用损失、利润损失、业务中断），本扩展开发者<strong>不承担任何责任</strong>。无论该等损失是否源于本扩展的缺陷、漏洞或本声明所述的任何情形。</p>
+
+        <h3 id="disclaimer-misc">八、其他</h3>
+        <ol class="steps">
+          <li>本扩展完整代码开源（MIT 许可证）并接受公众审查，本声明与源码具有同等的解释参照意义；当描述与实际行为不一致时，以实际代码行为为准，并欢迎通过 Issues 指出，我们将及时修正。</li>
+          <li>开发者保留更新本声明的权利，更新后将发布于仓库；重大变更将尽量在发布说明中提示。</li>
+          <li>本声明的任何条款被认定为无效的，不影响其余条款的效力。</li>
+        </ol>
       </section>
 
       <section class="doc-section" id="credits" data-keywords="致谢 许可 MIT 开源 作者">
