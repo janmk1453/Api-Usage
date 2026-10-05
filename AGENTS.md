@@ -15,7 +15,7 @@ SillyTavern 原生扩展 `API用量统计`（清单 `api-usage-stat`，版本以
 
 - **打包**：`Vite 8`（`lib: es`，产物 `index.js + 动态分包` 直出，`define: { process.env.NODE_ENV="production", __APP_VERSION__: manifest.version }` 以修复 `process` 未定义并实现版本单源化）
 - **语言**：`TypeScript 5 strict`
-- **图表**：`ECharts 6` 按需 `echarts/core + Bar/Line + Grid/Tooltip/CanvasRenderer`，动态分包（已随 `index.js` 提交并按需加载），`Y` 8 选项×`X` 5 维度（见下）
+- **图表**：`ECharts 6` 按需 `echarts/core + Bar/Line + Grid/Tooltip/CanvasRenderer`，动态分包（已随 `index.js` 提交并按需加载），`Y` 8 选项（`4 token + 4 cost`）×`X` 5 维度（`轮次/每小时/每日/每周/每月`，见下）；自定义图表按 `Y.kind` 分流渲染——`token` 类走堆叠柱、`cost` 类走叠加曲线，费用轴按币种换算；`API请求数 趋势` 的 `X` 使用 `X_OPTIONS_WITHOUT_ROUND`（不含 `轮次`，默认 `每日`）
 - **样式**：无框架，`SmartTheme` 隔离 + `DeepSeek 官方浅色`（`#FFFFFF/#F6F7F8/#111827/#FF6A00/#E6F8EC`，`Microsoft YaHei`，`14px` 圆角，无阴影/无滤镜以保锐利，`absolute` 定位置换修复窄屏 `fixed` 漂移）+ 双主题（`light/dark`，`style.css` 同名变量覆盖 + `services/theme.ts` 切换 + 设置中胶囊下拉，深色高对比 `#0F1419/#1E242E/#E5E7EB`，ECharts 经 `themeColor()` 动态取变量，默认 `light`）
 - **存储**：`extensionSettings[api_usage_stat]` 热 `50` 条 + `IndexedDB api_usage_stat_db` 冷分页（旧多存档已合并为单一历史，`XOR` 密钥兼容，自动迁移备份）；钱包配置、忽略列表、`overviewWalletId` 与 `overviewWalletManuallySet` 随热设置持久化，钱包校准密钥单独存放于 `extensionSettings.walletSecrets` 且不参与导出
 - **最低版本**：`manifest.minimum_client_version 1.11.0`；接入类型筛选兼容最低版本，API 密钥条目区分依赖酒馆 `>=1.14.0`（更早版本无多条密钥编号，归入未识别密钥）
@@ -44,15 +44,15 @@ Api-Usage/
 │   │   ├── types.ts       # Snapshot/Aggregated/TimeRange/OverviewView/StatsView
 │   │   ├── fingerprint.ts # 用量去重指纹：model/token + endpointId/credentialId
 │   │   ├── wallets.ts     # 钱包纯逻辑：默认 DeepSeek 钱包、连接自动建钱包、模型别名、余额换算、忽略/合并、价格规则标准化
-│   │   ├── repository.ts  # 唯一写入口：addEntry(连接定位钱包+5s指纹去重+按钱包计费)/recalcAll/recalcWallet(热+冷)/钱包 CRUD/余额更新/replaceAll/hydrate（旧价格、旧余额、旧密钥和历史接入迁移）+ persist（剥离隐私字段）
-│   │   ├── computed.ts    # 唯一算入口：computeOverview(余额口径)/computeStats/getFilteredHistory/computeStatsFour/filterStatsHistory/getEndpointFilterOptions/getCredentialFilterOptions + computeWalletStats/computeChatStats/getRecordedChats
+│   │   ├── repository.ts  # 唯一写入口：addEntry(连接定位钱包+5s指纹去重+按钱包计费)/recalcAll/recalcWallet(热+冷)/钱包 CRUD/余额更新/replaceAll/hydrate（旧价格、旧余额、旧密钥和历史接入迁移）+ deleteHistoryByFilter(按日期/模型/对话删除热+冷记录并重算) + persist（剥离隐私字段）
+│   │   ├── computed.ts    # 唯一算入口：computeOverview(余额口径)/computeStats/getFilteredHistory/computeStatsFour/filterStatsHistory/getEndpointFilterOptions/getCredentialFilterOptions + computeWalletStats/computeChatStats/getRecordedChats；全部平均值类指标统一走 averagePositive（忽略单轮 0/空值，从分母剔除）
 │   │   └── events.ts      # DataEvents.UPDATED/HISTORY_ADDED/SETTINGS_CHANGED
 │   ├── store/index.ts, persistence.ts # 单一历史聚合（已废弃多存档，saves 仅作迁移兼容；append/getAllHistory 指纹去重 timestamp|model|total）
 │   ├── services/pricing.ts, interception.ts(fetch透传+TTFT/思维链/截断解析+请求开始快照连接身份，GENERATION_ENDED主路径，install/uninstall幂等), connection-identity.ts(接入地址规范化/官方名称/酒馆密钥条目映射/严格隐私模式，不读取 proxy_password 与 custom_include_headers), wallet-secrets.ts(钱包校准密钥 XOR 存取与旧 apiKey 迁移), balance.ts(钱包余额手工/DeepSeek 官方自动校准和定时器), import-export.ts(单一历史+钱包配置+清洗，不导出密钥), sync.ts(单一历史+钱包合并+清洗), debug.ts, theme.ts(applyTheme 同步 overlay), update.ts(检查更新，main 提交哈希优先、失败回退 manifest 版本对比，自动检查 1h 节流), currency.ts(USD↔CNY 动态换算、getDisplayCurrency/formatMoney/getWalletExchangeRate/fetchLiveRate 双源 24h), pricing-sync.ts(按钱包 catalogProvider 从 models.dev 拉取、USD→CNY*rate、add-missing/overwrite-unlocked/overwrite-all 和锁定保护)
 │   ├── stats/forecast.ts, energyScore.ts # 预测核心：分段回归/二次方程求 R，能耗评分 A-G
 │   ├── utils/date.ts, crypto.ts(XOR+UTF-8), logger.ts
 │   ├── **/*.test.ts       # Vitest 核心纯逻辑测试，不进入 Vite 入口构建
-│   └── ui/panel.ts(全屏+absolute定位+DeepSeek式侧边栏display切换+汉堡+钱包入口+history 模型/对话/接入类型/API密钥四维筛选+forecast 对话选择), overview.ts(余额钱包口径+双明细+8块2列+热力图+按对话统计表 cold 异步补全、动态币种), wallet-view.ts(多钱包列表、默认收起/独立记忆、余额、密钥、价格来源、模型价格、独立峰谷、忽略恢复), stats-view.ts(直输日期+五维度 time∩model∩chat∩endpoint∩credential+4小块+图表Y/X配置+费用轴按币种换算), chart-config.ts(Y 8×X 5 聚合), heatmap.ts(GitHub风格近2年Token热力图，块内横向滑动), forecast-view.ts(趋势预测 Beta，自选对话胶囊，能耗/预测/敏感度随选中对话联动，余额与价格按钱包口径), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情费用按币种), settings.ts(全局设置，钱包相关编辑入口已迁出), extra-charts.ts(额外 6 图费用轴按币种换算), peak-dot.ts, customize.ts
+│   └── ui/panel.ts(全屏+absolute定位+DeepSeek式侧边栏display切换+汉堡+钱包入口+history 模型/对话/接入类型/API密钥四维筛选+forecast 对话选择), overview.ts(余额钱包口径+双明细+8块2列+热力图+按对话统计表 cold 异步补全、动态币种), wallet-view.ts(多钱包列表、默认收起/独立记忆、余额、密钥、价格来源、模型价格、独立峰谷、忽略恢复), stats-view.ts(直输日期+五维度 time∩model∩chat∩endpoint∩credential+4小块+图表Y/X配置+费用轴按币种换算+对话/密钥选项按最近时间排序), chart-config.ts(Y 8×X 5 聚合 + X_OPTIONS_WITHOUT_ROUND), heatmap.ts(GitHub风格近2年Token热力图，块内横向滑动), forecast-view.ts(趋势预测 Beta，自选对话胶囊，能耗/预测/敏感度随选中对话联动，余额与价格按钱包口径，对话选项按最近时间排序), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情费用按币种), settings.ts(全局设置 + 按范围删除记录，钱包相关编辑入口已迁出，旧“新价格机制”入口已移除), extra-charts.ts(额外 6 图费用轴按币种换算，API请求数趋势 X 无轮次), peak-dot.ts, customize.ts
 ├── README.md
 └── LICENSE
 ```
@@ -81,21 +81,21 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 ## 页面与数据
 
 ### 用量概览（overview）
-- **双余额卡**：充值余额（默认 DeepSeek 官方钱包，胶囊下拉可切换全部钱包合计或其他钱包；仅此选择影响余额和剩余轮次预测，其他概览指标仍按全量历史。旧 `all` 默认值一次性迁移到官方钱包，用户手动选择后由 `overviewWalletManuallySet` 保护）+ 累计消费（动态币种 `¥ CNY ↔ $ USD` 按 `pricingSync.enabled` 切换，`formatMoney(cny)` 经 `getDisplayCurrency()` 换算）+ `tokens`
+- **双余额卡**：充值余额（默认 DeepSeek 官方钱包，胶囊下拉可切换全部钱包合计或其他钱包；仅此选择影响余额和剩余轮次预测，其他概览指标仍按全量历史。旧 `all` 默认值一次性迁移到官方钱包，用户手动选择后由 `overviewWalletManuallySet` 保护）+ 累计消费（动态币种 `¥ CNY ↔ $ USD` 按 `pricingSync.enabled` 切换，`formatMoney(cny)` 经 `getDisplayCurrency()` 换算）+ `tokens`。累计消费与 `tokens` 由 `computeOverview(activeWalletId, fullHistory)` 传入热+冷全量历史逐条累加，**不跟随余额口径**，也与用量统计“全部”同源
 - **双明细**：历史消耗（Token 历史/命中/未命中/输出，`gap:10px + 行内 padding:4px` 与右侧对齐）与支出明细（预计节省/支出输入/输出，分两行，`token` 灰 `10px #9CA3AF`，金额均经 `CNY()/moneyHtml()` 按币种换算）并列
-- **四小块→八小块**：默认 8 块 `repeat(4,1fr)`，`≤760px` 与 `≤480px` 保持 `repeat(2,1fr)` 两列（`gap 10px→8px`，卡片 `10px 12px`），支持 `overviewFour` 自定义 `14` 指标（`computeOverview` 单源，费用类经 `moneyHtml()` 动态 `CNY/USD`，通用兜底排除 `#aus-overview-four`）
+- **四小块→八小块**：默认 8 块 `repeat(4,1fr)`，`≤760px` 与 `≤480px` 保持 `repeat(2,1fr)` 两列（`gap 10px→8px`，卡片 `10px 12px`），支持 `overviewFour` 自定义 `18` 指标（`computeOverview` 单源，含 `avg_ttft 平均首字延迟`，费用类经 `moneyHtml()` 动态 `CNY/USD`，通用兜底排除 `#aus-overview-four`）；所有 `avg_*` 平均值统一走 `averagePositive`，单轮为 `0` 或空值时从分子分母同时剔除，不拉低均值
 - **热力图**：`Token 使用量热力图`（GitHub 风格，近 2 年按日聚合，5 级绿阶 `EBEDF0→216E39/161b22→aceebb`，`#aus-heatmap-card-overview` 块不超出、内部 `overflow-x:auto` 横向滑动，与 `模型汇总` 块一致，悬停显示日期+Token，渲染于 `overview.ts → heatmap.ts`，数据源 `state.history` 全量）
 - **按对话统计**：热力图下方 `#aus-chat-summary-overview` 按 `chatId` 聚合（`computeChatStats` 单源，按总 Token 倒序，列：对话/轮次/命中/未命中/输出/总 Tokens/总费用/平均 Token/平均命中率，费用经 `formatMoney`，`cold` 全量异步补全，`displayName` 截断 `chatId 8…4`/`未分组/旧数据`）
 
 ### 用量统计（stats）
-- **五维度**：时间维度（`全部/今天/昨天/近 7 天/近 30 天/本月/上月/自定义` 直输日期，仅 `自定义` 时显示日历，`全部` 为 `2020-01-01~今日`）、模型、对话、接入类型与 API 密钥；五胶囊互斥关闭、点外关闭，筛选为 `time ∩ model ∩ chat ∩ endpoint ∩ credential`，统一影响本页全部内容。接入类型优先联动密钥，切换接入后密钥重置为全部；选项来自完整热冷历史，旧记录归入“未记录接入/未识别密钥”
+- **五维度**：时间维度（`全部/今天/昨天/近 7 天/近 30 天/本月/上月/自定义` 直输日期，仅 `自定义` 时显示日历，`全部` 为 `2020-01-01~今日`）、模型、对话、接入类型与 API 密钥；五胶囊互斥关闭、点外关闭，筛选为 `time ∩ model ∩ chat ∩ endpoint ∩ credential`，统一影响本页全部内容。接入类型优先联动密钥，切换接入后密钥重置为全部；选项来自完整热冷历史，旧记录归入“未记录接入/未识别密钥”。**对话与 API 密钥选项按最近记录时间从近到远排序**（`getCredentialFilterOptions` 按 `lastSeen` 倒序），方便优先选中活跃项
 - **三块**：消费金额（动态币种 `CNY/USD` 经 `formatMoney`）/API 请求次数/Tokens
-- **四小块**：模型汇总表上方 4 块 `repeat(4,1fr)`，竖屏 `repeat(2,1fr)`，与概览 8 块同体系（`statsFour`，响应五维度过滤，`computeStatsFour` 单源，支持 `avg_think_ratio/truncation_rate`，费用类按币种换算）
+- **四小块**：模型汇总表上方 4 块 `repeat(4,1fr)`，竖屏 `repeat(2,1fr)`，与概览 8 块同体系（`statsFour`，响应五维度过滤，`computeStatsFour` 单源，选项与概览共用 `FOUR_OPTIONS` 18 项、含 `avg_ttft`，支持 `avg_think_ratio/truncation_rate`，费用类按币种换算）；平均值同样按 `averagePositive` 忽略单轮 0/空值
 - **模型汇总表**：`10` 列（模型/调用/命中/未命中/输出/总/总成本/平均成本/平均耗时/平均速率），横向可滚动，随五维度联动，费用列经 `formatMoney`
-- **图表**：首图通用 `图表`（`Y` 8 项多选 + `X` 5 维度双胶囊，默认 `总 Token`，费用 `Y` 经 `getDisplayCurrency()` 换算，`yAxis name=CNY/USD`，`tooltip` 按币种显示）+ 下方 `6` 图 `2×3` 网格（Token/费用堆叠同柱 `stack:'total'` + 曲线、命中 `100%` 面积、请求数柱、耗时/速率双轴、模型环，费用图 `drawBarLine` 内按币种除率），均支持 `Y/X` 独立配置与按 `time ∩ model ∩ chat ∩ endpoint ∩ credential` 联动，`vite.define` 修复 `process` 未定义，**隐藏时跳过初始化**（`display:none` 则不渲染，切到统计页再 `setTimeout 60ms` 触发，避免 `clientWidth 0` 误报 `图表容器未就绪`）
+- **图表**：首图通用 `图表`（`Y` 8 项多选 + `X` 5 维度双胶囊，默认 `总 Token`，费用 `Y` 经 `getDisplayCurrency()` 换算，`yAxis name=CNY/USD`，`tooltip` 按币种显示）；渲染按 `Y.kind` 分流——`token` 类堆叠柱 `stack:'total'`、`cost` 类叠加曲线，同屏双轴共存。下方 `6` 图 `2×3` 网格（Token 3 段堆叠柱、费用曲线、命中 `100%` 面积、请求数柱、耗时/速率双轴、模型环，费用图 `drawBarLine` 内按币种除率）；`API请求数 趋势` 的 `X` 走 `X_OPTIONS_WITHOUT_ROUND`（无「轮次」，默认每日）。均支持 `Y/X` 独立配置与按 `time ∩ model ∩ chat ∩ endpoint ∩ credential` 联动，`vite.define` 修复 `process` 未定义，**隐藏时跳过初始化**（`display:none` 则不渲染，切到统计页再 `setTimeout 60ms` 触发，避免 `clientWidth 0` 误报 `图表容器未就绪`）
 
 ### 历史记录
-- **四维度**：模型、对话、接入类型与 API 密钥按交集过滤；接入类型优先联动密钥；筛选先作用于热+冷全量历史，再进行 `30/页` 分页，筛选无结果显示清除按钮
+- **四维度**：模型、对话、接入类型与 API 密钥按交集过滤；接入类型优先联动密钥；筛选先作用于热+冷全量历史，再进行 `30/页` 分页，筛选无结果显示清除按钮；对话与 API 密钥选项同样按最近记录时间从近到远排序
 - 列表按 `timestamp` 倒序，卡片含模型/时间、`in/out/duration/rate`、费用、旧/新/详情
 - **占比条**：`6px` 圆角三段（命中 `#0BA25E`/未命中 `#FCA5A5`/输出 `#A5B4FC`）
 - **内联详情**：点击详情向下展开固定 `320→520px`（`15` 字段按 `基础/性能/Token/费用` 四块 + `4 Tab`：请求参数/完整响应/Raw 用量/消息内容，`pre` `160px` 滚动，收起切换）
@@ -123,7 +123,9 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **使用说明**：帮助页必须保留隐私声明、免责声明和钱包说明。隐私声明需明确区分酒馆密钥识别信息与用户主动填写的钱包校准密钥；免责声明需说明不对 models.dev 数据中的商业化中转站名称或推荐关系负责。
 
 ### 设置
-- 保留全局控制：颜色模式、历史显示范围、自动校准总开关与间隔、新价格机制（日期）、新钱包默认峰谷与额外空闲日期、models.dev 自动同步、调试、峰值圆点和 WebDAV
+- 保留全局控制：颜色模式、历史显示范围、自动校准总开关与间隔、新钱包默认峰谷与额外空闲日期、models.dev 自动同步、调试、峰值圆点、记录数据管理（按范围删除记录）和 WebDAV
+- 旧“新价格机制（峰谷计费）/生效日期”入口已移除：改用内置 `PRICE_HISTORY` 多段价格按记录时间计价，峰谷规则由 `settings.peakHours` + `extraOffDays` + 内置节假日驱动；`calcCost/calcSavings` 不再读取 `settings.useNewPricing/newPricingDate`，统一以 `LEGACY_PEAK_PRICING_DATE`（2026-08-17 北京时间）作为历史默认生效日，保证历史记录按既有口径计费
+- 按范围删除记录（`#aus-delete-*`，`bindHistoryDelete`）：支持开始/结束日期、模型（完全匹配）、对话（`chatId` 或 `chatName` 完全匹配），留空表示不限；先“统计匹配记录”预览命中条数，再二次确认执行；底层走 `repository.deleteHistoryByFilter`，同时处理热历史与 IndexedDB 冷历史并 `recalcAll + rebuildAggregates`，删除后刷新全站统计
 - 峰谷规则：`extraOffDays`（`YYYY-MM-DD` 数组，`normalizeSettings` 校验去重）用于补充内置节假日数据未覆盖年份；修改后调用 `recalcCostsAndRefresh` 重算冷热费用。峰值圆点（`peak-dot.ts`）复用 `utils/date` 的 `isWeekendDay/isChinaHoliday/isExtraOffDay/isPeakHour`，法定节假日显示“全天低谷”
 - 已迁出钱包页：API 密钥、手工余额、模型与价格编辑。旧 API 密钥、旧余额和旧 `customModels` 由 `repository.hydrate` 自动迁移到 DeepSeek 官方钱包；隐藏兼容控件不参与新增配置
 - `models.dev` 同步已改为逐钱包写入，预览和状态显示总新增/更新/跳过/待定价数量；全局开关关闭时只移除未锁定的同步规则
@@ -144,11 +146,13 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **改面板/导航**：`src/ui/panel.ts`（全屏+`positionPanel` 定位置换+`applyCollapsed`）+ `style.css`（`#aus-mobile-header` 汉堡 + `display` 切换，无过渡；改动钱包 header 响应式时必须保持覆盖规则优先级高于通用网格规则）
 - **改概览/统计**：`src/ui/overview.ts` + `src/ui/stats-view.ts`（五维度 time∩model∩chat∩endpoint∩credential 过滤）+ `src/data/computed.ts`（`computeChatStats` / `filterStatsHistory` / 接入与密钥选项单源）+ `src/ui/heatmap.ts`（概览热力图，GitHub 风格，近 2 年，块内滑动）
 - **改钱包**：`src/types/wallet.ts`（结构与默认值）+ `src/data/wallets.ts`（纯逻辑）+ `src/data/repository.ts`（迁移、自动建钱包、钱包 CRUD、余额和冷热重算）+ `src/ui/wallet-view.ts`（页面交互）+ `src/services/wallet-secrets.ts`（钱包校准密钥）+ `style.css`（收起态三栏、窄屏三列指标与操作按钮换行）
-- **改使用说明/隐私**：`src/ui/panel.ts` 的使用说明卡片与 `README.md` 隐私声明必须同步；不得把酒馆掩码密钥写成可获取的明文密钥，也不得声称 XOR 是安全加密
+- **改使用说明/隐私**：`src/ui/panel.ts` 的使用说明卡片、`README.md` 隐私声明与 `docs.html`（GitHub Pages 完整文档）必须与代码同步；设置项或计费口径变更（如移除“新价格机制”、新增“按范围删除记录”、平均值忽略 0 值、指标数量变化）需同步更新 `docs.html` 对应小节与目录；不得把酒馆掩码密钥写成可获取的明文密钥，也不得声称 XOR 是安全加密
 - **改历史筛选/详情/占比**：`src/ui/panel.ts`（`renderHistory` 四维度筛选 + 筛选后分页 + 内联展开 + 三色条，费用按币种）
 - **改连接身份/隐私**：`src/services/connection-identity.ts`（地址规范、密钥条目映射）+ `src/services/interception.ts`（请求开始快照）+ `src/data/fingerprint.ts`（连接感知去重）；严格隐私模式禁止读取 `proxy_password` 与 `custom_include_headers`
 - **改同步/导入**：`src/services/sync.ts` + `src/services/import-export.ts`（保持 `deepseek-stat-export v1` 兼容；钱包配置通过可选 `wallets/walletIgnored/walletFormat:2` 携带；WebDAV 包版本为 `2` 且兼容读取旧 `1`；历史按 `historyRecordKey` 的 timestamp/model/token/接入/钱包/密钥综合身份去重；导出经 `getAllHistory` 含冷库全量，导入超 `MAX_HISTORY` 自动回冷库，任何钱包校准密钥均不导出）+ `src/services/pricing-sync.ts`（models.dev 按钱包同步）
 - **改预测**：`src/ui/forecast-view.ts`（自选对话胶囊、能耗/预测/敏感度联动）+ `src/stats/forecast.ts`
+- **改自定义小块（概览 8 + 统计 4）**：在 `FOUR_OPTIONS`（`src/ui/overview.ts` 导出，概览与统计页共用的 18 项标签表）+ `OverviewFourKey/StatsFourKey`（`src/types/settings.ts`）+ `getFourDisplay`（渲染）+ `valid/validStats` 白名单（`src/data/repository.ts` 的 `normalizeSettings` 与 `hydrate`）四处同步新增 key；数值算在 `computeOverview`/`computeStatsFour`（`src/data/computed.ts`），**所有 `avg_*` 必须走 `averagePositive`**，让单轮 0/空值从分子分母同时剔除
+- **改删除记录**：`src/ui/settings.ts`（`readHistoryDeleteFilter`/`countHistoryDeleteMatches`/`bindHistoryDelete` 交互）+ `src/data/repository.ts`（`deleteHistoryByFilter` 过滤与热冷重算）；过滤口径需与 `filterStatsHistory` 保持一致（日期用 `localDay` 比较）
 
 ## 调试规范（Playwright MCP）
 
@@ -213,6 +217,7 @@ git push origin main --tags
 - **自动提交规则**：完整完成一项独立修改后必须立即执行提交推送，无需等待用户二次确认。单项定义：通过 `typecheck + test + build + node --check + verify:ci` 且满足用户当轮需求即视为完成。提交需包含 `src/` 源码与 `index.js/style.css` 产物，`commit` 信息遵循 `fix/feat/docs:` 前缀并简述本次变更点。该自动提交仅限 `dev` 的常规提交，不含版本号推进、合并 `main` 与打标签。
 - **提交时机（强制）**：所有修改必须在完整完成并验证通过后最后统一提交，禁止边改边提、分步提交或提前推送。提交前必须依次通过 `npm run typecheck`、`npm test`、`npm run build`、`node --check index.js`、`npm run verify:ci`，且 `index.js/style.css` 与源码保持一致后，一次性添加源码、测试、CI 配置与产物并推送，单轮需求仅产生一次提交。同样禁止在未获明确要求时改动版本号字段。
 - **预览包本地验证**：可用 `node scripts/preview-package.mjs <输出目录> HEAD` 复现 `main` 预览包；脚本只读取指定提交，通过 `git archive` 生成压缩包，并校验清单、入口、引用链、允许文件集合、压缩包结构和 SHA-256。可用 `node scripts/preview-notes.mjs <输出文件> HEAD` 复现更新日志，生成时优先读取上一个 `preview-*`（首次回退最近正式标签）到当前提交的全部提交。不得修改源码或提交产物后再打包。
+- **预览包 import 扫描**：`preview-package.mjs` 与 `verify-ci.mjs` 一致，匹配 `import/from/import()` 前先经 `stripCommentsForImportScan` 剥离注释；ECharts 等分包内注释含示例 `import './XxxModel.js'`，若不剥离会被误判为缺失依赖并使 `main` 预览作业失败（曾发生）。
 - 产物入口存根 `index.js` + `ECharts` 等 hash 分包随仓库提交以保离线加载，`style.css` 直出，勿手改产物；`vite.config.ts` 已 `define: { process.env.NODE_ENV, __APP_VERSION__ }` 防浏览器 `process` 报错且实现版本单源化
 - `RE3.0` 仅同步产物备份，不作为提交源
 
@@ -228,6 +233,10 @@ git push origin main --tags
 - **钱包计费隔离**：同一模型名在不同钱包可以使用完全不同的价格和峰谷；匹配顺序为钱包当前模型名/来源模型名/别名，先用 `walletId` 定位历史归属，旧记录才回退接入地址或全局价格
 - **钱包迁移边界**：旧 `customModels` 复制到 DeepSeek 官方钱包但原全局数组保留；带接入地址的旧历史会建立钱包并尽量复制对应旧价格，未识别接入或无地址记录继续使用旧全局兜底
 - **余额口径**：概览钱包选择器只影响充值余额和剩余轮次预测，累计消费、热力图、按对话统计等保持全量；余额汇总按 `CNY/USD` 换算，钱包扣费按钱包自身币种
+- **概览/统计总额必须同源**：`computeOverview` 在收到 `historyOverride`（热+冷全量）时，`totalCost/totalTokens/hit/miss/output/inputCost/outputCost` 等一律从该数组逐条累加，不再只读 `state.total_*` 热缓存；`repository.hydrate` 结束处额外 `rebuildAggregates() + persist()` 让缓存与全量对齐。曾出现概览 `¥1.4356 / 2,108,164` 与统计“全部” `¥3.06 / 3,651,493` 冲突，即错读热缓存聚合所致
+- **平均值忽略 0/空值**：概览 8 块与统计 4 块所有 `avg_*` 指标统一 `averagePositive`——只把 `>0` 的有效值计入分子与分母，单轮为 `0`（无该字段或为 0）直接剔除，避免 `0` 拉低均值；`avgThinkTime/avgThinkTokens/avgHitRate` 原本即按此口径，现已覆盖 `avgCost/avgTokens/avgDuration/avgRate/avgTtft/avgInputCost/avgInputTokens/avgOutputCost/avgOutputTokens`
+- **旧“新价格机制”入口移除**：`settings.useNewPricing/newPricingDate` 字段删除，`calcCost/calcSavings` 改用固定 `LEGACY_PEAK_PRICING_DATE`（2026-08-17），历史计费口径不变；设置页不再提供开关，勿再新增依赖该字段的逻辑
+- **导入导出文案**：概览余额卡按钮为“导出记录 / 导入记录”（原“导出 / 导入”），绑定 `#aus-btn-export` / `#aus-btn-import` 不变
 - **WalletConfig 兼容**：新增字段必须提供默认值；`collapsed` 缺省为 `true`，`legacyPricingImported` 防止重复迁移，`walletIgnored` 决定是否允许自动重建
 - **旧价回填边界**：同名校验只按完整模型名匹配，不做别名/归一化；只运行一次并覆盖升级时的热冷历史，新请求仍用钱包自身规则。匹配钱包价格变更时，`recalcWallet` 会同时重算引用该钱包的 `legacy-match` 条目
 - **钱包收起态留白**：收起态不能只把指标塞进身份区下方；宽屏使用身份、五项指标、操作区三栏，窄屏按身份、三列指标、操作按钮三行排列，保证按钮和数据均可见
