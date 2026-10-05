@@ -296,8 +296,8 @@
 #aus-main { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
 /* 触控目标 */
 @media (pointer: coarse) {
-  #aus-panel button { min-height: 34px; }
-  #aus-panel .aus-tab-btn, #aus-panel .ds-btn-pill { min-height: 40px; }
+  /* 保留基本触控高度，避免小按钮被通用触控规则撑高变形 */
+  #aus-panel button { min-height: 30px; }
 }
 /* 下拉弹层统一：窄屏不贴边溢出 */
 .ds-popover, #aus-range-dropdown, #aus-model-dropdown, #aus-chat-dropdown, #aus-endpoint-dropdown, #aus-credential-dropdown,
