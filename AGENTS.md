@@ -48,7 +48,7 @@ Api-Usage/
 │   │   ├── computed.ts    # 唯一算入口：computeOverview(余额口径)/computeStats/getFilteredHistory/computeStatsFour/filterStatsHistory/getEndpointFilterOptions/getCredentialFilterOptions + computeWalletStats/computeChatStats/getRecordedChats；全部平均值类指标统一走 averagePositive（忽略单轮 0/空值，从分母剔除）
 │   │   └── events.ts      # DataEvents.UPDATED/HISTORY_ADDED/SETTINGS_CHANGED
 │   ├── store/index.ts, persistence.ts # 单一历史聚合（已废弃多存档，saves 仅作迁移兼容；append/getAllHistory 指纹去重 timestamp|model|total）
-│   ├── services/pricing.ts, interception.ts(fetch透传+TTFT/思维链/截断解析+请求开始快照连接身份，GENERATION_ENDED主路径，install/uninstall幂等), connection-identity.ts(接入地址规范化/官方名称/酒馆密钥条目映射/严格隐私模式，不读取 proxy_password 与 custom_include_headers), wallet-secrets.ts(钱包校准密钥 XOR 存取与旧 apiKey 迁移), balance.ts(钱包余额手工/DeepSeek 官方自动校准和定时器), import-export.ts(单一历史+钱包配置+清洗，不导出密钥), sync.ts(单一历史+钱包合并+清洗), debug.ts, theme.ts(applyTheme 同步 overlay), update.ts(检查更新，main 提交哈希优先、失败回退 manifest 版本对比，自动检查 1h 节流), currency.ts(USD↔CNY 动态换算、getDisplayCurrency/formatMoney/getWalletExchangeRate/fetchLiveRate 双源 24h), pricing-sync.ts(按钱包 catalogProvider 从 models.dev 拉取、USD→CNY*rate、add-missing/overwrite-unlocked/overwrite-all 和锁定保护)
+│   ├── services/pricing.ts, interception.ts(fetch透传+TTFT/思维链/截断解析+请求开始快照连接身份，GENERATION_ENDED主路径，install/uninstall幂等), connection-identity.ts(接入地址规范化/官方名称/酒馆密钥条目映射/严格隐私模式，不读取 proxy_password 与 custom_include_headers), wallet-secrets.ts(钱包校准密钥 XOR 存取与旧 apiKey 迁移), balance.ts(钱包余额手工/DeepSeek 官方自动校准和定时器), import-export.ts(单一历史+钱包配置+清洗，不导出密钥), sync.ts(单一历史+钱包合并+清洗), debug.ts, theme.ts(applyTheme 同步 overlay), update.ts(检查更新，main 提交哈希与服务端仓库状态优先、失败回退 manifest 版本对比，支持调用 /api/extensions/update 扩展内一键更新并刷新，自动检查 1h 节流), currency.ts(USD↔CNY 动态换算、getDisplayCurrency/formatMoney/getWalletExchangeRate/fetchLiveRate 双源 24h), pricing-sync.ts(按钱包 catalogProvider 从 models.dev 拉取、USD→CNY*rate、add-missing/overwrite-unlocked/overwrite-all 和锁定保护)
 │   ├── stats/forecast.ts, energyScore.ts # 预测核心：分段回归/二次方程求 R，能耗评分 A-G
 │   ├── utils/date.ts, crypto.ts(XOR+UTF-8), logger.ts
 │   ├── **/*.test.ts       # Vitest 核心纯逻辑测试，不进入 Vite 入口构建
@@ -187,7 +187,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **预览预发布边界**：`preview-*` 标签与 Release 只允许由 `main` 分支的 `preview` 作业创建，`dev` 与合并请求永不发布；预览标签基于 12 位提交哈希且不可复用或移动，但**不属于正式版本推进**，不得借预览发布修改 `manifest.json`、`package.json`、`package-lock.json` 的版本字段，也不得创建或移动 `vX.Y.Z` 标签。同一提交重复自动运行或手动补发只更新既有 Release 标题、说明与同名资产，不产生第二个标签
 - **产物铁律**：`Vite lib` 产物为 `index.js(入口) + index-*.js/update-*.js + ECharts 9 块`，`index.js` 为 `import "./index-*.js"` 存根，**必须**随 `index.js` 一并 `git add` 提交，缺一则 `404 index-*.js` 导致 `[object Event]` 加载失败并中断后续扩展；`style.css` 同理直出，`outDir: '.' + emptyOutDir:false` 禁止误删。
 - **主题一致性**：`defaultSettings.theme` 默认为 `light`，与隔离样式浅色保持一致；旧用户无 `theme` 字段时迁移补 `light`，禁止在更新中强制覆为 `dark`
-- **检查更新**：`src/services/update.ts` 优先对比 `main` 提交哈希（本地扩展提交经 GitHub compare 判领先，失败回退 `raw.githubusercontent.../main/manifest.json` 的 `version` 与本地 `__APP_VERSION__` 对比），自动检查 1h 节流（`localStorage + extensionSettings._updateLastCheck`，1 小时内最多一次），关于页按钮为手动触发（不受节流），有更新 `toast + 横幅`，已是最新/检查失败时自动与手动均 `toast` 提示
+- **检查更新**：`src/services/update.ts` 优先对比 `main` 提交哈希（本地扩展提交经 GitHub compare 判领先，并结合 `/api/extensions/version` 的服务端仓库状态，失败回退 `raw.githubusercontent.../main/manifest.json` 的 `version` 与本地 `__APP_VERSION__` 对比），自动检查 1h 节流（`localStorage + extensionSettings._updateLastCheck`，1 小时内最多一次），关于页按钮为手动触发（不受节流）；发现更新时 `toast + 横幅` 并显示“立即更新”，点击调用 `/api/extensions/update` 执行 git 更新，成功后自动刷新页面；非 Git 安装或更新失败时提示改用管理扩展程序
 
 ## 提交与发布
 

@@ -1103,7 +1103,7 @@
         </ol>
 
         <h3 id="update-steps">更新</h3>
-        <p>在管理扩展程序中点击更新，完成后刷新网页。关于页也提供检查更新功能，用于查看当前状态和可用更新。</p>
+        <p>在“关于 → 检查更新”中查询更新状态；发现新版本后点击“立即更新”，扩展会调用酒馆服务端接口直接拉取最新提交，成功约 1.5 秒后自动刷新网页。临时更新失败或当前是非 Git 安装时，可在管理扩展程序中点击更新，完成后手动刷新网页。</p>
 
         <h3 id="install-data-compat">旧数据兼容</h3>
         <p>旧版导出数据可以通过导入功能进入当前版本。导入后，扩展会按记录时间、模型、Token、钱包、接入和密钥信息进行去重；钱包配置也会随兼容格式一并恢复。</p>
@@ -1551,8 +1551,9 @@
         <h3 id="update-check">检查更新</h3>
         <ul>
           <li>进入“关于”页，点击“检查更新”可以主动查询新版本。</li>
-          <li>扩展打开后也会按节流策略进行自动检查；发现更新时会显示提示。</li>
-          <li>检查失败不等于扩展失效，可以稍后重试或通过管理扩展程序更新。</li>
+          <li>扩展打开后也会按节流策略进行自动检查；发现更新时会显示提示与“立即更新”按钮。</li>
+          <li>点击“立即更新”后，扩展通过酒馆服务端更新接口执行更新，成功后自动刷新网页。</li>
+          <li>全局扩展需要管理员权限；非 Git 安装或服务端更新失败时，检查失败不等于扩展失效，可以稍后重试或通过管理扩展程序更新。</li>
           <li>更新完成后刷新网页，确保脚本和样式同步生效。</li>
         </ul>
 
@@ -1690,7 +1691,7 @@
         <p class="lead">本扩展是纯前端、本地运行的 SillyTavern 原生扩展，完整代码开源（MIT 许可证），可随时审查。本声明基于实际代码行为编写，逐项如实披露本扩展的全部网络请求与敏感操作。</p>
         <p><strong>适用对象：</strong>SillyTavern 扩展「API用量统计」（Api-Usage，仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">janmk1453/Api-Usage</a>）<br>
         <strong>适用版本：</strong>v3.1.0 及功能行为一致的后续版本<br>
-        <strong>最后更新：</strong>2026年10月4日</p>
+        <strong>最后更新：</strong>2026年10月5日</p>
 
         <h3 id="privacy-commitments">一、核心承诺</h3>
         <ol class="steps">
@@ -1734,6 +1735,7 @@
               <tr><td>6</td><td><span class="code">open.er-api.com</span>、<span class="code">api.exchangerate-api.com</span></td><td><span class="code">USD</span> 汇率</td><td>美元→人民币汇率换算</td><td>仅在启用价格同步或美元展示功能时拉取（有缓存间隔）</td><td>无用户数据</td></tr>
               <tr><td>7</td><td><strong>用户自行填写的 WebDAV 服务器</strong>（设置中的占位示例为 <span class="code">dav.jianguoyun.com</span>，实际地址完全由用户决定）</td><td>用户指定路径下的单一同步文件 <span class="code">DeepSeekStatSync.json</span></td><td>多设备备份与合并同步</td><td>仅当用户显式填写地址、用户名与密码并手动触发同步时；方法仅为 <span class="code">GET</span>（读取）、<span class="code">MKCOL</span>（建目录）、<span class="code">PUT</span>（写入该文件）</td><td>统计历史（<strong>已剥离消息与请求、响应明细</strong>）、聚合数据、钱包配置、扩展设置（<strong>已剔除 WebDAV 凭证</strong>）；不含校准密钥、不含对话正文</td></tr>
               <tr><td>8</td><td><strong>用户自行填写的 CORS 代理</strong>（可选）</td><td>透传上述 WebDAV 请求</td><td>部分网盘不提供 CORS 响应头时的中转</td><td>仅当用户主动填写代理地址</td><td>与第 7 项相同（经代理转发）</td></tr>
+              <tr><td>9</td><td><strong>本机酒馆服务端</strong></td><td><span class="code">POST /api/extensions/version</span>、<span class="code">POST /api/extensions/update</span></td><td>读取扩展当前提交并执行扩展内一键更新</td><td>检查更新时自动或手动触发；点击“立即更新”时触发</td><td>仅发送扩展目录名与本地/全局标记，无用户数据</td></tr>
             </tbody>
           </table>
         </div>
@@ -1828,7 +1830,7 @@
         <p class="lead">请在安装或使用本扩展前仔细阅读本声明。<strong>一旦安装、启用或使用本扩展，即视为您已阅读、理解并同意本声明的全部内容。</strong>如不同意，请立即停止使用并卸载本扩展。</p>
         <p><strong>适用对象：</strong>SillyTavern 扩展「API用量统计」（Api-Usage，仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">janmk1453/Api-Usage</a>）<br>
         <strong>适用版本：</strong>v3.1.0 及功能行为一致的后续版本<br>
-        <strong>最后更新：</strong>2026年10月4日</p>
+        <strong>最后更新：</strong>2026年10月5日</p>
 
         <h3 id="disclaimer-as-is">一、按「现状」提供，不作任何担保</h3>
         <p>本扩展按「现状」（AS IS）提供，开发者以开源社区志愿者的身份尽力维护，但<strong>不对本扩展作出任何形式的明示或默示担保</strong>，包括但不限于对适销性、特定用途适用性、不侵权、无错误或漏洞、不间断运行的担保。本扩展的功能表现可能随 SillyTavern 版本、浏览器环境、上游接口变化而受影响。</p>

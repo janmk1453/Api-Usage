@@ -821,8 +821,10 @@ export function createPanel() {
                 <div id="aus-update-banner" style="display:none;padding:8px 10px;border-radius:8px;background:var(--ds-yellow-bg);border:1px solid var(--ds-yellow-border);font-size:11px;color:var(--ds-text);"></div>
                 <div style="display:flex;gap:8px;align-items:center;">
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:11px;">检查更新</button>
+                  <button id="aus-run-update" class="ds-btn-pill" style="display:none;padding:6px 14px;font-size:11px;">立即更新</button>
                   <span style="font-size:11px;color:var(--ds-text-3);">当前 v${typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : ''} · 每 1 小时自动检查</span>
                 </div>
+                <div style="font-size:11px;color:var(--ds-text-3);">Git 安装的扩展可直接在本页更新，完成后自动刷新网页；非 Git 安装请使用“管理扩展程序”。</div>
               </div>
             </div>
           </div>
@@ -965,6 +967,49 @@ export function createPanel() {
           updBtn.textContent = '检查更新';
           updBtn.removeAttribute('disabled');
         }));
+      };
+    }
+    const runUpdBtn = doc.getElementById('aus-run-update') as HTMLButtonElement | null;
+    if (runUpdBtn) {
+      runUpdBtn.onclick = () => {
+        if (runUpdBtn.hasAttribute('disabled')) return;
+        runUpdBtn.textContent = '更新中…';
+        runUpdBtn.setAttribute('disabled', '');
+        import('../services/update').then(m => m.updateSelf()).then(res => {
+          if (res.ok && !res.isUpToDate) {
+            const bannerEl = doc.getElementById('aus-update-banner') as HTMLElement | null;
+            if (bannerEl) {
+              bannerEl.style.display = 'block';
+              bannerEl.style.background = 'var(--ds-green-bg)';
+              bannerEl.style.borderColor = 'var(--ds-green)';
+              bannerEl.textContent = '更新完成，正在刷新页面…';
+            }
+            runUpdBtn.textContent = '即将刷新…';
+            setTimeout(() => {
+              try {
+                (window.parent as any)?.location?.reload?.();
+              } catch {
+                try { location.reload(); } catch {}
+              }
+            }, 1500);
+            return;
+          }
+          runUpdBtn.textContent = '立即更新';
+          runUpdBtn.removeAttribute('disabled');
+          if (res.ok && res.isUpToDate) {
+            const bannerEl = doc.getElementById('aus-update-banner') as HTMLElement | null;
+            if (bannerEl) {
+              bannerEl.style.display = 'block';
+              bannerEl.style.background = 'var(--ds-green-bg)';
+              bannerEl.style.borderColor = 'var(--ds-green)';
+              bannerEl.textContent = '已是最新版本，无需更新' + (res.commit ? '（' + res.commit + '）' : '');
+            }
+            runUpdBtn.style.display = 'none';
+          }
+        }).catch(() => {
+          runUpdBtn.textContent = '立即更新';
+          runUpdBtn.removeAttribute('disabled');
+        });
       };
     }
   } catch {}

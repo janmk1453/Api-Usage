@@ -10,6 +10,7 @@ var TIMEOUT_MS = 5e3;
 var LOCAL_TIMEOUT_MS = 15e3;
 var LAST_CHECK_KEY = "aus_update_last_check";
 var LAST_NOTIFIED_KEY = "aus_update_last_notified_version";
+var cachedLocalRepo = null;
 function getParentFetch() {
 	try {
 		const p = window.parent;
@@ -97,10 +98,17 @@ async function fetchLocalCommit() {
 			if (resp?.ok) {
 				const data = await resp.json();
 				const sha = String(data?.currentCommitHash || "").trim();
-				if (sha) return {
-					sha,
-					branch: String(data?.currentBranchName || "")
-				};
+				const isUpToDate = typeof data?.isUpToDate === "boolean" ? data.isUpToDate : null;
+				if (sha || isUpToDate !== null) {
+					const info = {
+						sha,
+						branch: String(data?.currentBranchName || ""),
+						global: isGlobal,
+						isUpToDate
+					};
+					cachedLocalRepo = info;
+					return info;
+				}
 			}
 		} catch {
 			clearTimeout(timer);
@@ -145,6 +153,121 @@ function getBanner() {
 		return null;
 	}
 }
+function getUpdateButton() {
+	try {
+		return (window.parent?.document ?? document).getElementById("aus-run-update");
+	} catch {
+		return null;
+	}
+}
+function setUpdateButtonVisible(visible) {
+	const btn = getUpdateButton();
+	if (!btn) return;
+	btn.style.display = visible ? "inline-flex" : "none";
+}
+function showBanner(message) {
+	const banner = getBanner();
+	if (!banner) return;
+	banner.style.display = "block";
+	banner.innerHTML = message;
+}
+function hideBanner() {
+	const banner = getBanner();
+	if (banner) banner.style.display = "none";
+}
+async function readErrorText(resp) {
+	try {
+		const text = String(await resp.text() || "").replace(/\s+/g, " ").trim();
+		return text.length > 200 ? text.slice(0, 200) + "…" : text;
+	} catch {
+		return "";
+	}
+}
+async function updateSelf() {
+	const ctx = globalThis.SillyTavern?.getContext?.();
+	if (!ctx?.getRequestHeaders) {
+		const message = "当前不在酒馆环境中，无法调用扩展更新接口";
+		toast("error", message);
+		return {
+			ok: false,
+			isUpToDate: false,
+			message
+		};
+	}
+	let headers;
+	try {
+		headers = ctx.getRequestHeaders();
+	} catch {
+		headers = { "Content-Type": "application/json" };
+	}
+	let local = cachedLocalRepo;
+	if (!local) try {
+		local = await fetchLocalCommit();
+	} catch {}
+	if (local && !local.sha) {
+		const message = "当前安装不是 Git 仓库，无法在扩展内自更新，请在「管理扩展程序」中重新安装或更新";
+		toast("error", message);
+		return {
+			ok: false,
+			isUpToDate: false,
+			message
+		};
+	}
+	const global = local?.global ?? false;
+	const rf = getParentFetch();
+	const ctrl = new AbortController();
+	const timer = setTimeout(() => {
+		try {
+			ctrl.abort();
+		} catch {}
+	}, LOCAL_TIMEOUT_MS);
+	try {
+		const resp = await rf("/api/extensions/update", {
+			method: "POST",
+			headers,
+			body: JSON.stringify({
+				extensionName: EXTENSION_FOLDER,
+				global
+			}),
+			signal: ctrl.signal
+		});
+		clearTimeout(timer);
+		if (!resp?.ok) {
+			const detail = await readErrorText(resp);
+			let message = `更新失败（HTTP ${resp?.status || "未知"}）`;
+			if (resp?.status === 403) message = "没有更新全局扩展的权限，请让管理员执行更新";
+			else if (resp?.status === 404) message = "服务端未找到扩展目录，当前安装方式可能不支持自更新";
+			else if (resp?.status === 500) message = "服务端执行 git 更新失败，可能是网络、代理或本地改动导致";
+			if (detail) message += "：" + detail;
+			toast("error", message);
+			return {
+				ok: false,
+				isUpToDate: false,
+				message
+			};
+		}
+		const data = await resp.json().catch(() => null);
+		const isUpToDate = data?.isUpToDate === true;
+		const commit = String(data?.shortCommitHash || "").trim();
+		const message = isUpToDate ? "已是最新版本，无需更新" : `更新成功${commit ? "（" + commit + "）" : ""}`;
+		toast(isUpToDate ? "info" : "success", message);
+		return {
+			ok: true,
+			isUpToDate,
+			message,
+			commit: commit || void 0
+		};
+	} catch (e) {
+		clearTimeout(timer);
+		const message = "更新失败：" + (e?.name === "AbortError" ? "请求超时" : e?.message || String(e));
+		toast("error", message);
+		return {
+			ok: false,
+			isUpToDate: false,
+			message
+		};
+	}
+}
 async function checkUpdate(manual = false) {
 	if (!manual) {
 		const last = getStoredLastCheck();
@@ -152,9 +275,16 @@ async function checkUpdate(manual = false) {
 	}
 	setStoredLastCheck(Date.now());
 	const banner = getBanner();
+	let isNonGitInstall = false;
 	try {
 		const local = await fetchLocalCommit();
+		if (local) isNonGitInstall = !local.sha;
 		if (local?.sha) {
+			const branchLabel = local.branch || "unknown";
+			const localLabel = `${branchLabel}@${shortSha(local.sha)}`;
+			let hasUpdate = local.isUpToDate === false;
+			let remoteLabel = `origin/${branchLabel}@最新`;
+			let notifyKey = `origin:${branchLabel}:${local.sha}`;
 			const ctrl = new AbortController();
 			const timer = setTimeout(() => {
 				try {
@@ -165,32 +295,33 @@ async function checkUpdate(manual = false) {
 				const cmp = await compareWithMain(local.sha, ctrl.signal);
 				clearTimeout(timer);
 				if (cmp) {
-					const localLabel = `${local.branch || "unknown"}@${shortSha(local.sha)}`;
-					const remoteLabel = `main@${shortSha(cmp.remoteSha)}`;
 					if (cmp.hasUpdate) {
-						const key = cmp.remoteSha || remoteLabel;
-						if (getLastNotified() !== key || manual) {
-							toast("info", `发现 main 分支新提交（${localLabel} → ${remoteLabel}），请前往「扩展程序 → 管理扩展程序」更新`);
-							setLastNotified(key);
-						}
-						if (banner) {
-							banner.style.display = "block";
-							banner.innerHTML = `发现新提交 <b>${esc(remoteLabel)}</b>（当前 ${esc(localLabel)}），请前往「扩展程序 → 管理扩展程序」更新`;
-						}
-					} else {
-						toast("info", `已是最新版本（${localLabel}）`);
-						if (banner) banner.style.display = "none";
-					}
-					return {
-						hasUpdate: cmp.hasUpdate,
-						current: localLabel,
-						remote: remoteLabel
-					};
+						hasUpdate = true;
+						remoteLabel = `main@${shortSha(cmp.remoteSha)}`;
+						notifyKey = cmp.remoteSha || remoteLabel;
+					} else if (!hasUpdate) remoteLabel = `main@${shortSha(cmp.remoteSha)}`;
 				}
 			} catch (e) {
 				clearTimeout(timer);
 				log.debug("提交哈希检查失败，回退版本检查", e?.message || e);
 			}
+			if (hasUpdate) {
+				if (getLastNotified() !== notifyKey || manual) {
+					toast("info", `发现新提交（${localLabel} → ${remoteLabel}），可在「关于 → 检查更新」中直接更新`);
+					setLastNotified(notifyKey);
+				}
+				if (banner) showBanner(`发现新提交 <b>${esc(remoteLabel)}</b>（当前 ${esc(localLabel)}），可在本页直接更新`);
+				setUpdateButtonVisible(true);
+			} else {
+				toast("info", `已是最新版本（${localLabel}）`);
+				hideBanner();
+				setUpdateButtonVisible(false);
+			}
+			return {
+				hasUpdate,
+				current: localLabel,
+				remote: remoteLabel
+			};
 		}
 	} catch (e) {
 		log.debug("获取本地提交失败，回退版本检查", e?.message || e);
@@ -210,17 +341,17 @@ async function checkUpdate(manual = false) {
 		}
 		const hasUpdate = isNewer(remoteVer, CURRENT_VERSION);
 		if (hasUpdate) {
+			const updateHint = isNonGitInstall ? "，请前往「扩展程序 → 管理扩展程序」更新" : "，可在本页直接更新";
 			if (getLastNotified() !== remoteVer || manual) {
-				toast("info", `发现新版本 v${remoteVer}（当前 v${CURRENT_VERSION}），请前往「扩展程序 → 管理扩展程序」更新`);
+				toast("info", `发现新版本 v${remoteVer}（当前 v${CURRENT_VERSION}）${updateHint}`);
 				setLastNotified(remoteVer);
 			}
-			if (banner) {
-				banner.style.display = "block";
-				banner.innerHTML = `发现新版本 <b>v${esc(remoteVer)}</b>（当前 v${esc(CURRENT_VERSION)}），请前往「扩展程序 → 管理扩展程序」更新`;
-			}
+			if (banner) showBanner(`发现新版本 <b>v${esc(remoteVer)}</b>（当前 v${esc(CURRENT_VERSION)}）${updateHint}`);
+			setUpdateButtonVisible(!isNonGitInstall);
 		} else {
 			toast("info", `已是最新版本 v${CURRENT_VERSION}`);
-			if (banner) banner.style.display = "none";
+			hideBanner();
+			setUpdateButtonVisible(false);
 		}
 		return {
 			hasUpdate,
@@ -239,4 +370,4 @@ function maybeAutoCheck() {
 	} catch {}
 }
 //#endregion
-export { checkUpdate, maybeAutoCheck };
+export { checkUpdate, maybeAutoCheck, updateSelf };
