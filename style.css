@@ -609,4 +609,19 @@
     padding: 0 8px !important;
     line-height: 1;
   }
+  /* 概览余额卡操作按钮保持紧凑，避免粗指针通用触控高度造成变形 */
+  #aus-panel #aus-btn-query-balance,
+  #aus-panel #aus-btn-export,
+  #aus-panel #aus-btn-import {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    height: 30px !important;
+    min-height: 30px !important;
+    padding: 0 12px !important;
+    line-height: 1;
+    border-radius: 999px !important;
+    white-space: nowrap;
+  }
 }
