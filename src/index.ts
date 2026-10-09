@@ -5,13 +5,15 @@
  */
 import { state } from './store/index';
 import { repository } from './data/repository';
-import { installInterception } from './services/interception';
+import { installInterception, interceptionInstalledFlag } from './services/interception';
 import { createPanel, openPanel, closePanel, togglePanel, refreshUI, resetPanelState } from './ui/panel';
 import { createPeakDot, updatePeakDot, stopPeakDot } from './ui/peak-dot';
 import { applyTheme } from './services/theme';
 import { log } from './utils/logger';
+import { diag, dumpDiag, clearDiag } from './utils/diag';
 
 const MODULE = 'api_usage_stat';
+const BUILD_TAG = 'diag-2026-10-09';
 let wandRetryTimer: any = null;
 let mountRetryTimer: any = null;
 let interceptionRetryTimer: any = null;
@@ -43,6 +45,7 @@ function cleanupRuntimeBindings() {
 }
 
 function onAppReady() {
+  diag('钩子:APP_READY');
   try { createPanel(); } catch {}
   try { ensureWandEntry(); } catch {}
   try { refreshUI(); } catch {}
@@ -50,11 +53,13 @@ function onAppReady() {
 }
 
 function onAppInitialized() {
+  diag('钩子:APP_INITIALIZED');
   try { ensureWandEntry(); } catch {}
   try { import('./services/interception').then(m=>m.installInterception()).catch(() => {}); } catch {}
 }
 
 function onChatChanged() {
+  try { diag('钩子:CHAT_CHANGED', { 历史条数: state.history?.length ?? null }); } catch {}
   try { if ((state.settings as any).historyScope === 'current') refreshUI(); } catch {}
 }
 
@@ -147,7 +152,7 @@ export async function onDelete() {
   } catch {}
   try { delete (globalThis as any).ApiUsageStat; delete (globalThis as any).ApiUsageStatInterceptor; } catch {}
 }
-export function onEnable() { log.debug('enabled'); try { import('./services/interception').then(m=>m.installInterception()); } catch {} try { import('./services/balance').then(m=> (m as any).restartBalanceTimer?.()); } catch {} try { import('./services/currency').then(m=> (m as any).restartRateTimer?.()); } catch {} try { import('./services/pricing-sync').then(m=> (m as any).restartPricingSyncTimer?.()); } catch {} }
+export function onEnable() { diag('钩子:onEnable'); log.debug('enabled'); try { import('./services/interception').then(m=>m.installInterception()); } catch {} try { import('./services/balance').then(m=> (m as any).restartBalanceTimer?.()); } catch {} try { import('./services/currency').then(m=> (m as any).restartRateTimer?.()); } catch {} try { import('./services/pricing-sync').then(m=> (m as any).restartPricingSyncTimer?.()); } catch {} }
 export async function onDisable() {
   log.debug('disabled');
   try { const { flushSaveHot } = await import('./store/persistence'); flushSaveHot(); } catch {}
@@ -166,9 +171,27 @@ export async function onDisable() {
   try { const m4 = await import('./services/pricing-sync'); (m4 as any).stopPricingSyncTimer?.(); } catch {}
   cleanupRuntimeBindings();
 }
-export async function onActivate() { ensureStyleScope(); try { injectWandEntry(); ensureWandEntry(); } catch {} }
+export async function onActivate() {
+  diag('钩子:onActivate');
+  ensureStyleScope();
+  try { injectWandEntry(); ensureWandEntry(); } catch {}
+  // 激活钩子是酒馆在扩展加载完成后一定会调用的时机，这里补一次拦截器安装，避免错过生成事件
+  try { installInterception(); } catch {}
+}
 
 async function init() {
+  diag('扩展启动', {
+    版本标签: BUILD_TAG,
+    页面地址: String((window as any).location?.href || '').slice(0, 140),
+    是否在iframe内: (window as any).parent !== (window as any),
+    酒馆对象存在: !!(globalThis as any).SillyTavern,
+    酒馆版本: (globalThis as any).SillyTavern?.getContext?.()?.version
+      ?? (globalThis as any).SillyTavern?.version
+      ?? (window as any).document?.getElementById?.('version_display')?.textContent?.trim?.()
+      ?? null,
+    加载时事件源可用: !!(globalThis as any).SillyTavern?.getContext?.()?.eventSource,
+    fetch已打补丁: !!((window as any).parent || window)?.fetch?.__aus_patched,
+  });
   ensureStyleScope();
   try { applyTheme((state.settings as any).theme); } catch {}
   // 隔离数据初始化错误，不影响入口注入
@@ -176,7 +199,7 @@ async function init() {
   try { const m = await import('./services/balance'); (m as any).restartBalanceTimer?.(); } catch {}
   try { const m = await import('./services/currency'); (m as any).restartRateTimer?.(); } catch {}
   try { const m = await import('./services/pricing-sync'); (m as any).restartPricingSyncTimer?.(); } catch {}
-  try { installInterception(); } catch {}
+  try { diag('拦截器:入口安装', { 结果: installInterception() }); } catch (e) { diag('拦截器:入口安装异常', { 错误: (e as any)?.message || String(e) }); }
   const mount = () => {
     try { applyTheme((state.settings as any).theme); } catch {}
     try { createPanel(); } catch {}
@@ -201,14 +224,19 @@ async function init() {
         const ok = (globalThis as any).SillyTavern?.getContext?.()?.eventSource;
         if (ok) {
           try {
-            if (installInterception()) {
+            const installed = installInterception();
+            diag('拦截器:轮询安装尝试', { 第几次: retry, 结果: installed });
+            if (installed) {
               clearInterval(interceptionRetryTimer);
               interceptionRetryTimer = null;
             }
-          } catch {}
+          } catch (e) { diag('拦截器:轮询安装异常', { 第几次: retry, 错误: (e as any)?.message || String(e) }); }
+        } else {
+          diag('拦截器:轮询等待酒馆上下文', { 第几次: retry });
         }
       } catch {}
       if (retry > 6 && interceptionRetryTimer) {
+        diag('拦截器:轮询停止', { 已尝试次数: retry, 是否已安装: interceptionInstalledFlag() });
         clearInterval(interceptionRetryTimer);
         interceptionRetryTimer = null;
       }
@@ -217,7 +245,7 @@ async function init() {
   try { getDoc().addEventListener('keydown', onEscapeKey); } catch {}
   try { window.addEventListener('pagehide', onPageHide); } catch {}
   // 不在启动期自动检查更新（外网不可达时会长时间挂起请求），改由用户打开面板时触发（openPanel → maybeAutoCheck，每次打开都执行）
-  (globalThis as any).ApiUsageStat = { MODULE, refreshUI, updatePeakDot, openPanel, closePanel, togglePanel, state, injectWandEntry: ensureWandEntry };
+  (globalThis as any).ApiUsageStat = { MODULE, BUILD_TAG, refreshUI, updatePeakDot, openPanel, closePanel, togglePanel, state, injectWandEntry: ensureWandEntry, dumpDiag, clearDiag };
 }
 
 init();
