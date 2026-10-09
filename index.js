@@ -6,7 +6,7 @@ import { r as toast, t as log } from "./logger-Bv-AT94O.js";
 import { C as walletBalanceToCny, D as DEEPSEEK_WALLET_ID, O as WALLET_CATALOG_PROVIDERS, S as mergeWalletCollections, _ as normalizeModel, a as decryptKey, b as findWalletForHistory, c as diag, d as DataEvents, f as on, g as isDeepSeekOfficialModel, h as getPricing$1, i as saveWalletApiKey, l as dumpDiag, m as calcSavings, o as encryptKey, p as calcCost, r as getWalletApiKey, s as clearDiag, t as repository, u as isTruncatedFinish, w as walletPendingModelCount, x as findWalletModel } from "./repository-CdkiaEcM.js";
 import { a as isUnsafeKey$1, c as localDay$1, i as isPeakHour, l as localTimeHM, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay, t as esc$1, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-BVe2dp3y.js";
-import { i as recalcAllCosts, n as interceptionInstalledFlag, t as installInterception } from "./interception-D0d2e48e.js";
+import { i as recalcAllCosts, n as interceptionInstalledFlag, t as installInterception } from "./interception-CjE89PNc.js";
 import { i as saveApiKey, n as queryBalance, r as queryWalletBalance } from "./balance-C34X41PW.js";
 import { a as removeSyncedModels, n as isSyncedCustomModel, o as syncPricingFromModelsDev, r as previewSync, t as fetchModelsDevCatalog } from "./pricing-sync-YWi1NQzt.js";
 //#region src/services/import-export.ts
@@ -8176,7 +8176,7 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-D0d2e48e.js").then((n) => n.r).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-CjE89PNc.js").then((n) => n.r).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -8185,7 +8185,7 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-D0d2e48e.js").then((n) => n.r).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-CjE89PNc.js").then((n) => n.r).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -8312,7 +8312,7 @@ function onEnable() {
 	diag("钩子:onEnable");
 	log.debug("enabled");
 	try {
-		import("./interception-D0d2e48e.js").then((n) => n.r).then((m) => m.installInterception());
+		import("./interception-CjE89PNc.js").then((n) => n.r).then((m) => m.installInterception());
 	} catch {}
 	try {
 		import("./balance-C34X41PW.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
@@ -8331,7 +8331,7 @@ async function onDisable() {
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-D0d2e48e.js").then((n) => n.r).then((m) => m.uninstallInterception?.());
+		import("./interception-CjE89PNc.js").then((n) => n.r).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
 		const doc = getDoc();

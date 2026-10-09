@@ -23,6 +23,37 @@ export function setLastRequest(messages: any[], start: number) {
 const TARGET_API = '/api/backends/chat-completions/generate';
 const STREAM_TEXT_LIMIT = 1_000_000;
 
+// 上游流式响应默认不返回 usage（DeepSeek/MiniMax/OpenAI 都需要 stream_options.include_usage），
+// 而酒馆服务端只对 custom 源透传 custom_include_body（YAML 合并进请求体），
+// 因此这里通过该通道补上 include_usage，换取可计费的真实用量。
+const INCLUDE_USAGE_YAML = 'stream_options:\n  include_usage: true';
+
+function includeUsageSwitchOn(): boolean {
+  try {
+    return localStorage.getItem('ds_include_usage') !== '0';
+  } catch {
+    return true;
+  }
+}
+
+/** 尝试让上游在流式响应里返回 usage；返回是否改动及原因（供诊断日志使用） */
+function injectIncludeUsage(reqBody: any, source: string | null): { changed: boolean; reason: string } {
+  try {
+    if (!reqBody || typeof reqBody !== 'object') return { changed: false, reason: '请求体无法解析' };
+    if (reqBody.stream !== true) return { changed: false, reason: '非流式请求，本就会返回用量' };
+    if (!includeUsageSwitchOn()) return { changed: false, reason: '开关已关闭（localStorage 设 ds_include_usage=0 可关闭）' };
+    if (source !== 'custom') return { changed: false, reason: `补全来源 ${source || '未知'} 无法透传请求体，仅 custom 源可用` };
+    const current = String(reqBody.custom_include_body ?? '');
+    if (/(^|\n)\s*stream_options\s*:/.test(current)) return { changed: false, reason: '请求体已含 stream_options，保持原样' };
+    reqBody.custom_include_body = current.trim()
+      ? `${current.replace(/\s+$/, '')}\n${INCLUDE_USAGE_YAML}\n`
+      : `${INCLUDE_USAGE_YAML}\n`;
+    return { changed: true, reason: '已注入 stream_options.include_usage=true' };
+  } catch (e) {
+    return { changed: false, reason: '注入异常：' + ((e as any)?.message || String(e)) };
+  }
+}
+
 /** 把值替换成“结构描述”，避免把聊天内容写进诊断日志 */
 function describeShape(value: any, depth = 0): any {
   if (value == null) return value;
@@ -174,7 +205,20 @@ function installFetchCapture() {
         try { if (reqBody?.messages?.length) msgs = reqBody.messages.slice(-10); } catch {}
         const startTime = Date.now();
         try { lastMessages = msgs; lastStart = startTime; } catch {}
-        return rawFetch.apply(p, args).then((res: Response) => {
+        // 通过 custom_include_body 让上游返回流式 usage；上游若不认这个参数则原样重试
+        const injection = injectIncludeUsage(reqBody, (reqBody as any)?.chat_completion_source ?? null);
+        diag('fetch:用量参数注入', { 是否注入: injection.changed, 说明: injection.reason });
+        const performFetch = (init: any) => rawFetch.apply(p, init);
+        const fetchArgs = injection.changed
+          ? [args[0], { ...(args[1] as any), body: JSON.stringify(reqBody) }]
+          : args;
+        return performFetch(fetchArgs).then((firstRes: Response) => {
+          if (injection.changed && !firstRes.ok && (firstRes.status === 400 || firstRes.status === 422)) {
+            diag('fetch:注入参数被上游拒绝，按原请求重试', { 状态码: firstRes.status });
+            try { return performFetch(args); } catch { return firstRes; }
+          }
+          return firstRes;
+        }).then((res: Response) => {
           diag('fetch:收到响应', {
             状态码: res.status,
             成功: res.ok,

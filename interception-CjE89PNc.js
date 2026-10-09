@@ -26,6 +26,50 @@ function setLastRequest(messages, start) {
 }
 var TARGET_API = "/api/backends/chat-completions/generate";
 var STREAM_TEXT_LIMIT = 1e6;
+var INCLUDE_USAGE_YAML = "stream_options:\n  include_usage: true";
+function includeUsageSwitchOn() {
+	try {
+		return localStorage.getItem("ds_include_usage") !== "0";
+	} catch {
+		return true;
+	}
+}
+/** 尝试让上游在流式响应里返回 usage；返回是否改动及原因（供诊断日志使用） */
+function injectIncludeUsage(reqBody, source) {
+	try {
+		if (!reqBody || typeof reqBody !== "object") return {
+			changed: false,
+			reason: "请求体无法解析"
+		};
+		if (reqBody.stream !== true) return {
+			changed: false,
+			reason: "非流式请求，本就会返回用量"
+		};
+		if (!includeUsageSwitchOn()) return {
+			changed: false,
+			reason: "开关已关闭（localStorage 设 ds_include_usage=0 可关闭）"
+		};
+		if (source !== "custom") return {
+			changed: false,
+			reason: `补全来源 ${source || "未知"} 无法透传请求体，仅 custom 源可用`
+		};
+		const current = String(reqBody.custom_include_body ?? "");
+		if (/(^|\n)\s*stream_options\s*:/.test(current)) return {
+			changed: false,
+			reason: "请求体已含 stream_options，保持原样"
+		};
+		reqBody.custom_include_body = current.trim() ? `${current.replace(/\s+$/, "")}\n${INCLUDE_USAGE_YAML}\n` : `${INCLUDE_USAGE_YAML}\n`;
+		return {
+			changed: true,
+			reason: "已注入 stream_options.include_usage=true"
+		};
+	} catch (e) {
+		return {
+			changed: false,
+			reason: "注入异常：" + (e?.message || String(e))
+		};
+	}
+}
 /** 把值替换成“结构描述”，避免把聊天内容写进诊断日志 */
 function describeShape(value, depth = 0) {
 	if (value == null) return value;
@@ -185,7 +229,26 @@ function installFetchCapture() {
 					lastMessages = msgs;
 					lastStart = startTime;
 				} catch {}
-				return rawFetch.apply(p, args).then((res) => {
+				const injection = injectIncludeUsage(reqBody, reqBody?.chat_completion_source ?? null);
+				diag("fetch:用量参数注入", {
+					是否注入: injection.changed,
+					说明: injection.reason
+				});
+				const performFetch = (init) => rawFetch.apply(p, init);
+				return performFetch(injection.changed ? [args[0], {
+					...args[1],
+					body: JSON.stringify(reqBody)
+				}] : args).then((firstRes) => {
+					if (injection.changed && !firstRes.ok && (firstRes.status === 400 || firstRes.status === 422)) {
+						diag("fetch:注入参数被上游拒绝，按原请求重试", { 状态码: firstRes.status });
+						try {
+							return performFetch(args);
+						} catch {
+							return firstRes;
+						}
+					}
+					return firstRes;
+				}).then((res) => {
 					diag("fetch:收到响应", {
 						状态码: res.status,
 						成功: res.ok,
