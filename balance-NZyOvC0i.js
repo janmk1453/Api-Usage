@@ -1,7 +1,7 @@
 import { cn as __exportAll } from "./Image-B5UjBJH1.js";
 import { r as state } from "./store-D3uOTDWz.js";
 import { r as toast, t as log } from "./logger-Bv-AT94O.js";
-import { D as DEEPSEEK_WALLET_ID, i as saveWalletApiKey, r as getWalletApiKey, t as repository, v as DEEPSEEK_OFFICIAL_ENDPOINT_ID } from "./repository-CdkiaEcM.js";
+import { h as DEEPSEEK_OFFICIAL_ENDPOINT_ID, i as saveWalletApiKey, r as getWalletApiKey, t as repository, w as DEEPSEEK_WALLET_ID } from "./repository-02qMRKGT.js";
 //#region src/services/balance.ts
 var balance_exports = /* @__PURE__ */ __exportAll({
 	queryBalance: () => queryBalance,

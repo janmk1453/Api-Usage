@@ -14,7 +14,6 @@ import { isUnsafeKey, isValidDayKey, localDay } from '../utils/date';
 import { isTruncatedFinish } from '../utils/finish';
 import { log, toast } from '../utils/logger';
 import { usageFingerprint } from './fingerprint';
-import { diag } from '../utils/diag';
 import { normalizeConnectionEndpoint, type HistoryConnection } from '../services/connection-identity';
 import {
   createDeepSeekWallet,
@@ -836,7 +835,6 @@ export const repository = {
     log.debug('addEntry 收到', { model, hasMessages: !!messages?.length });
     // 容错：拒绝数字/空对象导致的 0 token 污染条目
     if (!usage || typeof usage !== 'object' || Array.isArray(usage)) {
-      diag('写入:拒绝', { 原因: 'usage 非对象', 模型: model });
       log.debug('addEntry 跳过：usage 非对象 model=' + model);
       return null as any;
     }
@@ -849,7 +847,6 @@ export const repository = {
       typeof usage.prompt_cache_hit_tokens === 'number' ||
       (usage.prompt_tokens_details && typeof usage.prompt_tokens_details.cached_tokens === 'number');
     if (!hasAnyTokenField) {
-      diag('写入:拒绝', { 原因: 'usage 里没有任何 token 字段', 模型: model, 字段: Object.keys(usage).slice(0, 12) });
       log.debug('addEntry 跳过：无 token 字段 model=' + model);
       return null as any;
     }
@@ -861,7 +858,6 @@ export const repository = {
     const total = usage.total_tokens || hit + miss + comp;
     // 若解析后仍全 0，视为无效数据，不写入历史
     if (hit === 0 && miss === 0 && comp === 0 && total === 0) {
-      diag('写入:拒绝', { 原因: 'token 全为 0', 模型: model });
       log.debug('addEntry 跳过：全 0 token model=' + model);
       return null as any;
     }
@@ -949,7 +945,6 @@ export const repository = {
             }
           }
         } catch {}
-        diag('写入:跳过（5 秒内相同指纹去重）', { 模型: model, 总tokens: total, 请求标识: requestId });
         log.debug('addEntry 去重跳过(5s指纹)', { fp });
         return null as any;
       }
@@ -1005,17 +1000,6 @@ export const repository = {
       pricingSource: c.source,
     };
     log.debug('addEntry 即将写入', { model: entry.model, total: entry.total_tokens });
-    diag('写入:成功', {
-      模型: entry.model,
-      命中: hit,
-      未命中: miss,
-      输出: comp,
-      总计: total,
-      费用: lu.cost,
-      接入地址: entry.endpointLabel,
-      密钥条目: entry.credentialLabel,
-      历史条数: state.history.length + 1,
-    });
     state.history.unshift(entry);
     state.total_tokens += total; state.total_cost += lu.cost; state.input_tokens += hit + miss; state.output_tokens += comp;
     state.cache_hit_tokens += hit; state.cache_miss_tokens += miss; state.input_cost += lu.input_cost; state.output_cost += lu.output_cost;

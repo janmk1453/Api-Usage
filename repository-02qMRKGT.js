@@ -1117,91 +1117,6 @@ function usageFingerprint(model, total, hit, miss, completion, connection, reque
 	].join("|");
 }
 //#endregion
-//#region src/utils/diag.ts
-/**
-* 临时诊断日志（用于排查“API 调用未被记录”问题）
-*
-* 背景：酒馆 1.19 的聊天补全前端不会把服务端 usage 写进消息 extra，
-* 扩展只能靠自己 hook window.fetch、读取 /api/backends/chat-completions/generate
-* 的响应流来获取用量。若上游流式响应里没有 usage，扩展就无从记录。
-* 因此这里把关键节点（安装、命中、流式解析、GENERATION_ENDED、写入）全部打点，
-* 便于在用户环境一次性定位断点。
-*
-* - 默认开启，控制台前缀 [DS-DIAG]
-* - 关闭方式：localStorage.setItem('ds_diag', '0') 后刷新
-* - 导出方式：控制台执行 ApiUsageStat.dumpDiag()
-*/
-var PREFIX = "[DS-DIAG]";
-var MAX_ITEMS = 400;
-var MAX_STRING = 600;
-var MAX_KEYS = 24;
-var items = [];
-var sequence = 0;
-function isEnabled() {
-	try {
-		return localStorage.getItem("ds_diag") !== "0";
-	} catch {
-		return true;
-	}
-}
-function clip(value, depth = 0) {
-	if (value == null) return value;
-	const type = typeof value;
-	if (type === "string") {
-		const text = value;
-		return text.length > MAX_STRING ? `${text.slice(0, MAX_STRING)}…(共${text.length}字)` : text;
-	}
-	if (type === "number" || type === "boolean") return value;
-	if (type !== "object") return String(value);
-	if (depth >= 3) return "[层级过深]";
-	if (Array.isArray(value)) {
-		const list = value.slice(0, 12).map((v) => clip(v, depth + 1));
-		if (value.length > 12) list.push(`…(共${value.length}项)`);
-		return list;
-	}
-	const out = {};
-	let count = 0;
-	for (const key of Object.keys(value)) {
-		if (count++ >= MAX_KEYS) {
-			out["…"] = "字段已截断";
-			break;
-		}
-		try {
-			out[key] = clip(value[key], depth + 1);
-		} catch {
-			out[key] = "[不可读取]";
-		}
-	}
-	return out;
-}
-/** 记录一条诊断日志（同步输出到控制台并留在内存环形缓冲里） */
-function diag(event, data) {
-	if (!isEnabled()) return;
-	let payload;
-	try {
-		payload = clip(data);
-	} catch {
-		payload = "[数据无法序列化]";
-	}
-	items.push({
-		t: Date.now(),
-		event,
-		data: payload
-	});
-	if (items.length > MAX_ITEMS) items.splice(0, items.length - MAX_ITEMS);
-	try {
-		console.log(PREFIX, `#${++sequence}`, event, payload === void 0 ? "" : payload);
-	} catch {}
-}
-/** 取出内存中的诊断日志（供用户复制回传） */
-function dumpDiag() {
-	return items.slice();
-}
-/** 清空内存诊断日志 */
-function clearDiag() {
-	items.length = 0;
-}
-//#endregion
 //#region src/utils/crypto.ts
 var XOR_KEY = "ds-stats-v1-xor-key!@#$%^&*";
 function encryptKey(plaintext) {
@@ -2036,19 +1951,10 @@ var repository = {
 			hasMessages: !!messages?.length
 		});
 		if (!usage || typeof usage !== "object" || Array.isArray(usage)) {
-			diag("写入:拒绝", {
-				原因: "usage 非对象",
-				模型: model
-			});
 			log.debug("addEntry 跳过：usage 非对象 model=" + model);
 			return null;
 		}
 		if (!(typeof usage.prompt_tokens === "number" || typeof usage.completion_tokens === "number" || typeof usage.total_tokens === "number" || typeof usage.input_tokens === "number" || typeof usage.output_tokens === "number" || typeof usage.prompt_cache_hit_tokens === "number" || usage.prompt_tokens_details && typeof usage.prompt_tokens_details.cached_tokens === "number")) {
-			diag("写入:拒绝", {
-				原因: "usage 里没有任何 token 字段",
-				模型: model,
-				字段: Object.keys(usage).slice(0, 12)
-			});
 			log.debug("addEntry 跳过：无 token 字段 model=" + model);
 			return null;
 		}
@@ -2062,10 +1968,6 @@ var repository = {
 		const comp = usage.completion_tokens || usage.output_tokens || 0;
 		const total = usage.total_tokens || hit + miss + comp;
 		if (hit === 0 && miss === 0 && comp === 0 && total === 0) {
-			diag("写入:拒绝", {
-				原因: "token 全为 0",
-				模型: model
-			});
 			log.debug("addEntry 跳过：全 0 token model=" + model);
 			return null;
 		}
@@ -2086,7 +1988,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && state.settings.pricingSync?.enabled) try {
-						import("./pricing-sync-YWi1NQzt.js").then((n) => n.i).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-BGy2gBtF.js").then((n) => n.i).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
@@ -2164,11 +2066,6 @@ var repository = {
 						}
 					}
 				} catch {}
-				diag("写入:跳过（5 秒内相同指纹去重）", {
-					模型: model,
-					总tokens: total,
-					请求标识: requestId
-				});
 				log.debug("addEntry 去重跳过(5s指纹)", { fp });
 				return null;
 			}
@@ -2265,17 +2162,6 @@ var repository = {
 		log.debug("addEntry 即将写入", {
 			model: entry.model,
 			total: entry.total_tokens
-		});
-		diag("写入:成功", {
-			模型: entry.model,
-			命中: hit,
-			未命中: miss,
-			输出: comp,
-			总计: total,
-			费用: lu.cost,
-			接入地址: entry.endpointLabel,
-			密钥条目: entry.credentialLabel,
-			历史条数: state.history.length + 1
 		});
 		state.history.unshift(entry);
 		state.total_tokens += total;
@@ -2745,4 +2631,4 @@ var repository = {
 	}
 };
 //#endregion
-export { walletBalanceToCny as C, DEEPSEEK_WALLET_ID as D, resolveRuntimeConnectionContext as E, WALLET_CATALOG_PROVIDERS as O, mergeWalletCollections as S, initConnectionIdentity as T, normalizeModel as _, decryptKey as a, findWalletForHistory as b, diag as c, DataEvents as d, on as f, isDeepSeekOfficialModel as g, getPricing as h, saveWalletApiKey as i, dumpDiag as l, calcSavings as m, repository_exports as n, encryptKey as o, calcCost as p, getWalletApiKey as r, clearDiag as s, repository as t, isTruncatedFinish as u, DEEPSEEK_OFFICIAL_ENDPOINT_ID as v, walletPendingModelCount as w, findWalletModel as x, cloneWallet as y };
+export { resolveRuntimeConnectionContext as C, initConnectionIdentity as S, WALLET_CATALOG_PROVIDERS as T, findWalletForHistory as _, decryptKey as a, walletBalanceToCny as b, DataEvents as c, calcSavings as d, getPricing as f, cloneWallet as g, DEEPSEEK_OFFICIAL_ENDPOINT_ID as h, saveWalletApiKey as i, on as l, normalizeModel as m, repository_exports as n, encryptKey as o, isDeepSeekOfficialModel as p, getWalletApiKey as r, isTruncatedFinish as s, repository as t, calcCost as u, findWalletModel as v, DEEPSEEK_WALLET_ID as w, walletPendingModelCount as x, mergeWalletCollections as y };

@@ -1,10 +1,9 @@
 import { cn as __exportAll } from "./Image-B5UjBJH1.js";
 import { t as log } from "./logger-Bv-AT94O.js";
-import { E as resolveRuntimeConnectionContext, T as initConnectionIdentity, c as diag, t as repository } from "./repository-CdkiaEcM.js";
+import { C as resolveRuntimeConnectionContext, S as initConnectionIdentity, t as repository } from "./repository-02qMRKGT.js";
 //#region src/services/interception.ts
 var interception_exports = /* @__PURE__ */ __exportAll({
 	installInterception: () => installInterception,
-	interceptionInstalledFlag: () => interceptionInstalledFlag,
 	processUsage: () => processUsage,
 	recalcAllCosts: () => recalcAllCosts,
 	setLastRequest: () => setLastRequest,
@@ -27,6 +26,7 @@ function setLastRequest(messages, start) {
 var TARGET_API = "/api/backends/chat-completions/generate";
 var STREAM_TEXT_LIMIT = 1e6;
 var INCLUDE_USAGE_YAML = "stream_options:\n  include_usage: true";
+/** 应急逃生阀：控制台执行 localStorage.setItem('ds_include_usage','0') 可整体关闭该注入 */
 function includeUsageSwitchOn() {
 	try {
 		return localStorage.getItem("ds_include_usage") !== "0";
@@ -34,92 +34,20 @@ function includeUsageSwitchOn() {
 		return true;
 	}
 }
-/** 尝试让上游在流式响应里返回 usage；返回是否改动及原因（供诊断日志使用） */
+/** 尝试让上游在流式响应里返回 usage，返回是否改动了请求体 */
 function injectIncludeUsage(reqBody, source) {
 	try {
-		if (!reqBody || typeof reqBody !== "object") return {
-			changed: false,
-			reason: "请求体无法解析"
-		};
-		if (reqBody.stream !== true) return {
-			changed: false,
-			reason: "非流式请求，本就会返回用量"
-		};
-		if (!includeUsageSwitchOn()) return {
-			changed: false,
-			reason: "开关已关闭（localStorage 设 ds_include_usage=0 可关闭）"
-		};
-		if (source !== "custom") return {
-			changed: false,
-			reason: `补全来源 ${source || "未知"} 无法透传请求体，仅 custom 源可用`
-		};
-		const current = String(reqBody.custom_include_body ?? "");
-		if (/(^|\n)\s*stream_options\s*:/.test(current)) return {
-			changed: false,
-			reason: "请求体已含 stream_options，保持原样"
-		};
-		reqBody.custom_include_body = current.trim() ? `${current.replace(/\s+$/, "")}\n${INCLUDE_USAGE_YAML}\n` : `${INCLUDE_USAGE_YAML}\n`;
-		return {
-			changed: true,
-			reason: "已注入 stream_options.include_usage=true"
-		};
-	} catch (e) {
-		return {
-			changed: false,
-			reason: "注入异常：" + (e?.message || String(e))
-		};
-	}
-}
-/** 把值替换成“结构描述”，避免把聊天内容写进诊断日志 */
-function describeShape(value, depth = 0) {
-	if (value == null) return value;
-	if (typeof value === "string") return `<字符串 ${value.length}字>`;
-	if (typeof value === "number" || typeof value === "boolean") return value;
-	if (depth >= 3) return "[层级过深]";
-	if (Array.isArray(value)) {
-		const list = value.slice(0, 4).map((v) => describeShape(v, depth + 1));
-		if (value.length > 4) list.push(`…(共${value.length}项)`);
-		return list;
-	}
-	if (typeof value === "object") {
-		const out = {};
-		let count = 0;
-		for (const key of Object.keys(value)) {
-			if (count++ >= 16) {
-				out["…"] = "字段已截断";
-				break;
-			}
-			out[key] = describeShape(value[key], depth + 1);
-		}
-		return out;
-	}
-	return String(value);
-}
-/** 只保留 SSE 末尾若干条数据的结构，便于判断是否真的没有 usage 字段 */
-function describeSseTail(text, maxLines = 3) {
-	try {
-		return text.split("\n").filter((line) => line.startsWith("data:")).slice(-maxLines).map((line) => {
-			const payload = line.slice(5).trim();
-			if (!payload) return "[空]";
-			if (payload === "[DONE]") return "[DONE]";
-			try {
-				return describeShape(JSON.parse(payload));
-			} catch {
-				return payload.slice(0, 120);
-			}
-		});
+		if (!reqBody || typeof reqBody !== "object") return false;
+		if (reqBody.stream !== true) return false;
+		if (!includeUsageSwitchOn()) return false;
+		if (source !== "custom") return false;
+		const current = String(reqBody.custom_include_body ?? "").trim();
+		if (/(^|\n)\s*stream_options\s*:/.test(current)) return false;
+		if (current.startsWith("-") || current.startsWith("[")) return false;
+		reqBody.custom_include_body = current ? `${current}\n${INCLUDE_USAGE_YAML}\n` : `${INCLUDE_USAGE_YAML}\n`;
+		return true;
 	} catch {
-		return [];
-	}
-}
-/** 从 SSE 原文里摘出 usage 片段（只用来看有没有、长什么样，内容本身是数字，不涉及隐私） */
-function usageSnippet(text) {
-	try {
-		const idx = text.indexOf("\"usage\"");
-		if (idx === -1) return null;
-		return text.slice(idx, idx + 240);
-	} catch {
-		return null;
+		return false;
 	}
 }
 function safeRequestSnapshot(body, connection) {
@@ -180,17 +108,7 @@ function estimateThinkTokens(text, usage) {
 function installFetchCapture() {
 	try {
 		const p = window.parent || window;
-		diag("fetch补丁:安装检查", {
-			与父窗口相同: p === window,
-			当前页地址: String(window.location?.href || "").slice(0, 120),
-			存在fetch: !!p?.fetch,
-			已被本扩展打过补丁: !!(p?.fetch)?.__aus_patched,
-			补丁函数名: (p?.fetch)?.name || null
-		});
-		if (!p || !p.fetch || p.fetch.__aus_patched) {
-			diag("fetch补丁:跳过", { 原因: !p ? "无目标窗口" : !p.fetch ? "目标窗口无 fetch" : "已被本扩展打过补丁（可能是页面未刷新导致旧实例仍在工作）" });
-			return;
-		}
+		if (!p || !p.fetch || p.fetch.__aus_patched) return;
 		const rawFetch = p.fetch.bind(p);
 		const patched = function() {
 			const args = arguments;
@@ -203,17 +121,6 @@ function installFetchCapture() {
 				const requestConnection = resolveRuntimeConnectionContext(reqBody || {});
 				const fullReq = safeRequestSnapshot(reqBody, requestConnection);
 				const requestId = `req:${Date.now()}:${++requestSequence}`;
-				diag("fetch:命中生成请求", {
-					地址: String(url).slice(0, 160),
-					模型: reqBody?.model ?? null,
-					流式: reqBody?.stream ?? null,
-					流式用量参数: reqBody?.stream_options ?? null,
-					补全来源: reqBody?.chat_completion_source ?? null,
-					消息数: Array.isArray(reqBody?.messages) ? reqBody.messages.length : null,
-					接入类型: requestConnection?.sourceType ?? null,
-					接入地址: requestConnection?.endpointLabel ?? null,
-					密钥条目: requestConnection?.credentialLabel ?? null
-				});
 				try {
 					lastFetchConnection = requestConnection;
 					lastFetchConnectionTime = Date.now();
@@ -229,18 +136,14 @@ function installFetchCapture() {
 					lastMessages = msgs;
 					lastStart = startTime;
 				} catch {}
-				const injection = injectIncludeUsage(reqBody, reqBody?.chat_completion_source ?? null);
-				diag("fetch:用量参数注入", {
-					是否注入: injection.changed,
-					说明: injection.reason
-				});
+				const injected = injectIncludeUsage(reqBody, reqBody?.chat_completion_source ?? null);
 				const performFetch = (init) => rawFetch.apply(p, init);
-				return performFetch(injection.changed ? [args[0], {
+				return performFetch(injected ? [args[0], {
 					...args[1],
 					body: JSON.stringify(reqBody)
 				}] : args).then((firstRes) => {
-					if (injection.changed && !firstRes.ok && (firstRes.status === 400 || firstRes.status === 422)) {
-						diag("fetch:注入参数被上游拒绝，按原请求重试", { 状态码: firstRes.status });
+					if (injected && !firstRes.ok && (firstRes.status === 400 || firstRes.status === 422)) {
+						log.debug("上游不接受 include_usage，按原请求重试");
 						try {
 							return performFetch(args);
 						} catch {
@@ -249,11 +152,6 @@ function installFetchCapture() {
 					}
 					return firstRes;
 				}).then((res) => {
-					diag("fetch:收到响应", {
-						状态码: res.status,
-						成功: res.ok,
-						类型: res.headers?.get?.("content-type") || null
-					});
 					try {
 						const clone = res.clone();
 						const parseAndProcess = (text, ttftVal, thinkTimeVal) => {
@@ -295,7 +193,6 @@ function installFetchCapture() {
 									}
 								}
 							} catch (e) {
-								diag("fetch:用量响应解析失败", { 错误: e?.message || String(e) });
 								log.debug("用量响应解析失败", e?.message || e);
 								return;
 							}
@@ -323,13 +220,6 @@ function installFetchCapture() {
 								};
 								lastFetchModel = typeof model === "string" ? model : null;
 								lastFetchTime = Date.now();
-								diag("fetch:解析到 usage", {
-									模型: model,
-									用量: describeShape(usage),
-									结束原因: finishReason,
-									首字毫秒: Math.round(ttftVal),
-									思维链毫秒: Math.round(thinkTimeVal)
-								});
 								log.debug("fetch 捕获 usage", {
 									model,
 									hasUsage: !!usage,
@@ -340,13 +230,7 @@ function installFetchCapture() {
 								} catch (e) {
 									log.error("fetch 用量记录失败 " + (e?.message || e));
 								}
-							} else diag("fetch:响应流里没有可用 usage", {
-								解析到数据对象: !!data,
-								有usage字段: !!data?.usage,
-								文本长度: String(text || "").length,
-								结束原因: finishReason,
-								流末尾结构: describeSseTail(String(text || ""))
-							});
+							}
 						};
 						try {
 							const t0 = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
@@ -372,7 +256,6 @@ function installFetchCapture() {
 								const reader = body.getReader();
 								const dec = new TextDecoder();
 								let first = true, buf = "";
-								let chunkCount = 0, byteCount = 0;
 								for (;;) {
 									const { done, value } = await reader.read();
 									if (done) break;
@@ -380,8 +263,6 @@ function installFetchCapture() {
 										ttft = Date.now() - startTime;
 										first = false;
 									}
-									chunkCount += 1;
-									byteCount += value?.byteLength || 0;
 									const piece = dec.decode(value, { stream: true });
 									fullText += piece;
 									buf += piece;
@@ -394,16 +275,6 @@ function installFetchCapture() {
 									}
 								}
 								if (buf) scanThink(buf);
-								diag("fetch:响应流读取完毕", {
-									分片数: chunkCount,
-									字节数: byteCount,
-									文本长度: fullText.length,
-									耗时毫秒: Date.now() - startTime,
-									首字毫秒: Math.round(ttft),
-									含usage字段: fullText.indexOf("\"usage\"") !== -1,
-									usage片段: usageSnippet(fullText),
-									流末尾结构: describeSseTail(fullText)
-								});
 								finish();
 							};
 							const streamBody = clone.body;
@@ -442,11 +313,6 @@ function installFetchCapture() {
 var interceptionInstalled = false;
 var rawFetchRef = null;
 var messageReceivedHandler = null;
-var generationStartedHandler = null;
-/** 供诊断使用：拦截器当前是否已安装 */
-function interceptionInstalledFlag() {
-	return interceptionInstalled;
-}
 function installInterception() {
 	try {
 		try {
@@ -455,18 +321,8 @@ function installInterception() {
 		const ctx = globalThis.SillyTavern?.getContext?.();
 		const es = ctx?.eventSource;
 		const et = ctx?.event_types;
-		if (!es || !et) {
-			diag("拦截器:安装失败", {
-				原因: "酒馆上下文尚未就绪",
-				有事件源: !!es,
-				有事件类型: !!et
-			});
-			return false;
-		}
-		if (interceptionInstalled) {
-			diag("拦截器:已安装，跳过重复安装");
-			return true;
-		}
+		if (!es || !et) return false;
+		if (interceptionInstalled) return true;
 		try {
 			const p = window.parent || window;
 			if (p?.fetch && !p.fetch.__aus_patched) rawFetchRef = p.fetch.bind(p);
@@ -474,8 +330,6 @@ function installInterception() {
 		es.on(et.GENERATION_ENDED, onGenerationEnded);
 		messageReceivedHandler = () => setTimeout(refresh, 400);
 		es.on(et.MESSAGE_RECEIVED, messageReceivedHandler);
-		generationStartedHandler = (...args) => onGenerationStarted(args);
-		if (et.GENERATION_STARTED) es.on(et.GENERATION_STARTED, generationStartedHandler);
 		globalThis.ApiUsageStatInterceptor = (chat, _ctxSize, _abort, _type) => {
 			try {
 				setLastRequest(chat?.slice(-10) || [], Date.now());
@@ -485,14 +339,8 @@ function installInterception() {
 			installFetchCapture();
 		} catch {}
 		interceptionInstalled = true;
-		diag("拦截器:安装成功", {
-			有GENERATION_ENDED: !!et.GENERATION_ENDED,
-			有MESSAGE_RECEIVED: !!et.MESSAGE_RECEIVED,
-			有GENERATION_STARTED: !!et.GENERATION_STARTED
-		});
 		return true;
-	} catch (e) {
-		diag("拦截器:安装异常", { 错误: e?.message || String(e) });
+	} catch {
 		return false;
 	}
 }
@@ -508,11 +356,7 @@ function uninstallInterception() {
 			try {
 				es.off?.(et.MESSAGE_RECEIVED, messageReceivedHandler);
 			} catch {}
-			try {
-				if (generationStartedHandler) es.off?.(et.GENERATION_STARTED, generationStartedHandler);
-			} catch {}
 		}
-		generationStartedHandler = null;
 		try {
 			const p = window.parent || window;
 			if (p && rawFetchRef && p.fetch.__aus_patched) p.fetch = rawFetchRef;
@@ -538,20 +382,6 @@ function pickUsageFromExtra(extra) {
 	if (isValidUsage(extra)) return extra;
 	return null;
 }
-function onGenerationStarted(args) {
-	try {
-		const p = window.parent || window;
-		const [type, params, dryRun] = args || [];
-		diag("事件:GENERATION_STARTED", {
-			生成类型: type ?? null,
-			预演模式: !!dryRun,
-			补丁仍在: !!(p?.fetch)?.__aus_patched,
-			fetch函数名: (p?.fetch)?.name || null,
-			自动触发: params?.automatic_trigger ?? null,
-			静默生成: params?.quiet_prompt ?? null
-		});
-	} catch {}
-}
 function onGenerationEnded(...args) {
 	try {
 		const ctx = globalThis.SillyTavern?.getContext?.();
@@ -560,21 +390,6 @@ function onGenerationEnded(...args) {
 		const extra = tail?.extra || {};
 		const tailModel = tail?.model || null;
 		const extraModel = extra.model || tailModel || ctx?.model || "deepseek-v4-flash";
-		diag("事件:GENERATION_ENDED", {
-			消息数: chat.length,
-			末条是否用户: !!tail?.is_user,
-			extra字段: Object.keys(extra),
-			extra模型: extra.model ?? null,
-			本地估算tokens: extra.token_count ?? null,
-			首字毫秒: extra.time_to_first_token ?? null,
-			思维链毫秒: extra.reasoning_duration ?? null,
-			有api_usage: !!extra.api_usage,
-			有usage: !!extra.usage,
-			参数个数: args.length,
-			参数0字段: args[0] && typeof args[0] === "object" ? Object.keys(args[0]).slice(0, 12) : null,
-			最近fetch距今毫秒: lastFetchTime ? Date.now() - lastFetchTime : null,
-			最近fetch有usage: !!(lastFetchUsage && (lastFetchUsage.usage || isValidUsage(lastFetchUsage)))
-		});
 		log.debug("onGenerationEnded 触发", {
 			chatLen: chat.length,
 			hasApiUsage: !!extra.api_usage
@@ -586,7 +401,6 @@ function onGenerationEnded(...args) {
 			isValid: usage ? isValidUsage(usage) : false
 		});
 		if (usage && isValidUsage(usage)) {
-			diag("记录路径:extra 主路径命中", { 模型: model });
 			log.debug("命中主路径 extra usage");
 			let ttft = 0, think = 0, fr = usage?.__finish_reason ?? usage?.finish_reason ?? null;
 			try {
@@ -612,7 +426,6 @@ function onGenerationEnded(...args) {
 				if (isValidUsage(cand)) {
 					usage = cand;
 					model = v?.extra?.model || model;
-					diag("记录路径:swipe_info 命中", { 模型: model });
 					log.debug("swipe_info 命中", { model });
 					let ttft = 0, think = 0, fr = cand?.__finish_reason ?? null;
 					try {
@@ -637,7 +450,6 @@ function onGenerationEnded(...args) {
 		});
 		if (isValidUsage(maybeUsage)) {
 			const m = args[0]?.model || model;
-			diag("记录路径:事件参数兜底命中", { 模型: m });
 			log.debug("args 命中", { model: m });
 			let ttft = 0, think = 0, fr = maybeUsage?.__finish_reason ?? null;
 			try {
@@ -664,20 +476,12 @@ function onGenerationEnded(...args) {
 				const fTtft = fetchPack && fetchPack.ttft || 0;
 				const fThink = fetchPack && fetchPack.thinkTime || 0;
 				const fFr = fetchPack && fetchPack.finishReason || fetchUsage?.__finish_reason || null;
-				diag("记录路径:fetch 兜底命中", {
-					模型: fetchedModel,
-					距今毫秒: Date.now() - lastFetchTime
-				});
 				log.debug("fetch 兜底命中", { model: fetchedModel });
 				lastFetchUsage = null;
 				processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink, fFr, fetchPack?.connection || recentConnection(), fetchPack?.requestId || recentRequestId(12e4));
 				return;
 			} else if (lastFetchUsage) {
 				const fu = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
-				diag("记录路径:fetch 缓存无效或超时", {
-					有效: fu ? isValidUsage(fu) : false,
-					距今毫秒: Date.now() - lastFetchTime
-				});
 				log.debug("fetch 有缓存但无效或超时", {
 					has: !!lastFetchUsage,
 					isValid: fu ? isValidUsage(fu) : false,
@@ -686,20 +490,9 @@ function onGenerationEnded(...args) {
 			}
 		}
 		if (extra.token_count != null && !usage) {
-			diag("记录结果:丢弃本次记录", {
-				原因: "只拿到酒馆本地估算的 token_count，没有可计费的服务端用量",
-				本地估算tokens: extra.token_count,
-				模型: model,
-				建议: lastFetchTime ? "若上面出现“fetch:响应流里没有可用 usage”，说明上游流式响应未返回用量" : "本次生成期间扩展未捕获到生成端点请求"
-			});
 			log.debug("跳过无效 usage：仅有本地 token_count=" + extra.token_count + " model=" + model);
 			return;
 		}
-		diag("记录结果:丢弃本次记录", {
-			原因: "未找到任何有效 usage",
-			模型: model,
-			本次生成是否捕获到请求: !!lastFetchTime
-		});
 		log.debug("未找到任何有效 usage，丢弃本次记录");
 	} catch (e) {
 		log.error("onGenerationEnded 异常 " + e?.message || e);
@@ -726,4 +519,4 @@ function recalcAllCosts() {
 	return repository.recalcAll();
 }
 //#endregion
-export { recalcAllCosts as i, interceptionInstalledFlag as n, interception_exports as r, installInterception as t };
+export { interception_exports as n, recalcAllCosts as r, installInterception as t };
