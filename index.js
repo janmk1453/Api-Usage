@@ -866,7 +866,7 @@ function isEndpointConfigured(endpoint = currentEndpoint()) {
 /** 测试用端点覆盖；生产环境始终使用 TELEMETRY_ENDPOINT */
 var endpointOverride = null;
 function currentEndpoint() {
-	return endpointOverride ?? "https://api-usage-stat.janmk1453.workers.dev/collect";
+	return endpointOverride ?? "https://stat.janmk.us.ci/collect";
 }
 var counters = emptyCounters();
 var sessionStart = null;

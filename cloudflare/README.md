@@ -41,10 +41,11 @@ npx wrangler deploy -c wrangler.local.toml
 
 > 仓库内的 `wrangler.toml` 只保留占位符，请不要把真实的 `database_id`、账号 ID、API Token 等信息写进任何被提交的文件；`wrangler.local.toml` 与 `.dev.vars` 已在 `.gitignore` 中忽略。
 
-部署成功后会输出形如 `https://api-usage-stat.<你的子域>.workers.dev` 的地址：
+部署成功后会输出访问地址：
 
-- 看板：`https://api-usage-stat.<你的子域>.workers.dev/dashboard`（浏览器会弹出用户名/口令框，用户名任意，口令填第 5 步设置的令牌）
-- 上报端点：在上面地址后加 `/collect`
+- 未绑自定义域名时是 `https://api-usage-stat.<你的子域>.workers.dev`；**推荐同时绑定自有域名**（本仓库当前部署使用 `https://stat.janmk.us.ci`），原因见下文「大陆用户无法上报」。
+- 看板：`<地址>/dashboard`（浏览器会弹出用户名/口令框，用户名任意，口令填第 5 步设置的令牌）
+- 上报端点：`<地址>/collect`
 
 ## 接入客户端
 
@@ -113,7 +114,7 @@ npx wrangler d1 execute api_usage_stat --remote --command \
 
 ## 常见问题
 
-- **大陆用户无法上报**：`*.workers.dev` 在大陆被定点阻断（DNS 污染 + SNI 阻断，实测换子域无效，而 Cloudflare 边缘自身可达），只有挂代理的客户端能上报。若需要覆盖大陆直连用户，请给 Worker 绑定自定义域名：
+- **大陆用户无法上报**：`*.workers.dev` 在大陆被定点阻断（DNS 污染 + SNI 阻断，实测换子域无效，而 Cloudflare 边缘自身可达），只用 workers.dev 时只有挂代理的客户端能上报。**推荐给 Worker 绑定自有域名**（本仓库当前部署使用 `stat.janmk.us.ci`），把域名的 NS 托管到 Cloudflare 后按下面配置：
 
   ```toml
   [[routes]]

@@ -13,12 +13,11 @@ import { state } from '../store/index';
 import { log } from '../utils/logger';
 
 /**
- * 上报端点。部署 Cloudflare Worker 后把这里替换为真实地址（详见 cloudflare/README.md）。
+ * 上报端点（部署在自有的 Cloudflare Worker 上，详见 cloudflare/README.md）。
+ * 使用自有域名而不是 `*.workers.dev`：后者在大陆被定点阻断（DNS 污染 + SNI），无代理用户无法上报。
  * 仍为占位符时只做本地累加，不发任何请求。
- * 注意：`*.workers.dev` 直连在大陆被定点阻断（DNS 污染 + SNI），无代理用户会上报失败；
- * 如需覆盖这部分用户，请给 Worker 绑定自定义域名并把这里换成该域名（见 cloudflare/README.md）。
  */
-export const TELEMETRY_ENDPOINT = 'https://api-usage-stat.janmk1453.workers.dev/collect';
+export const TELEMETRY_ENDPOINT = 'https://stat.janmk.us.ci/collect';
 
 const IDENTITY_KEY = 'telemetry';
 /** 关闭面板触发上报的最小间隔（吃掉反复开关面板造成的抖动） */
