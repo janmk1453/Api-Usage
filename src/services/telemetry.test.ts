@@ -144,7 +144,11 @@ describe('分桶与归一', () => {
   });
 
   it('本地日期键与页面 key 白名单', () => {
-    expect(todayKey(FIXED_NOW)).toBe('2026-10-10');
+    // 日期键跟随运行环境时区（CI 为 UTC、本地可能为东八区），只校验格式与本地日期字段一致
+    const key = todayKey(FIXED_NOW);
+    const local = new Date(FIXED_NOW);
+    expect(key).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(key.endsWith(String(local.getDate()).padStart(2, '0'))).toBe(true);
     expect(isTelemetryPageKey('overview')).toBe(true);
     expect(isTelemetryPageKey('wallet')).toBe(true);
     expect(isTelemetryPageKey('unknown')).toBe(false);
@@ -260,8 +264,9 @@ describe('累加与上报', () => {
     expect(payload.v).toBe(1);
     expect(payload.id).toMatch(/^[0-9a-f]{32}$/);
     expect(payload.seq).toBe(1);
-    expect(payload.day).toBe('2026-10-10');
-    expect(payload.tz).toBe(8);
+    // 日期与时区偏移都取决于运行环境时区，按同一时区规则计算期望值
+    expect(payload.day).toBe(todayKey());
+    expect(payload.tz).toBe(roundTz(-new Date().getTimezoneOffset() / 60));
     expect(payload.daily).toBe(true);
     expect(payload.s.opens).toBe(1);
     expect(payload.s.pages).toEqual({
@@ -274,7 +279,7 @@ describe('累加与上报', () => {
     // 上报成功后累加器清空、序号落盘
     expect(countersAreEmpty(__peekCountersForTest())).toBe(true);
     expect(readIdentity().seq).toBe(1);
-    expect(readIdentity().day).toBe('2026-10-10');
+    expect(readIdentity().day).toBe(todayKey());
   });
 
   it('没有新数据时不再发起请求', async () => {

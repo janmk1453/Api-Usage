@@ -763,7 +763,8 @@ function renderBucketIndex(ms) {
 function roundTz(hours) {
 	const value = Number.isFinite(hours) ? Number(hours) : 0;
 	const rounded = Math.round(value * 2) / 2;
-	return Math.min(14, Math.max(-12, rounded));
+	const clamped = Math.min(14, Math.max(-12, rounded));
+	return clamped === 0 ? 0 : clamped;
 }
 /** 本地日期（YYYY-MM-DD） */
 function todayKey(now = Date.now()) {

@@ -130,7 +130,9 @@ export function renderBucketIndex(ms: number): number {
 export function roundTz(hours: number): number {
   const value = Number.isFinite(hours) ? Number(hours) : 0;
   const rounded = Math.round(value * 2) / 2;
-  return Math.min(14, Math.max(-12, rounded));
+  const clamped = Math.min(14, Math.max(-12, rounded));
+  // 归一时区的负零（例如 UTC 下 -0），避免与 JSON 序列化后的 0 比较时出现差异
+  return clamped === 0 ? 0 : clamped;
 }
 
 /** 本地日期（YYYY-MM-DD） */
