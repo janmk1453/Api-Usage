@@ -1,14 +1,14 @@
 import { cn as __exportAll } from "./Image-B5UjBJH1.js";
-import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from "./store-D3uOTDWz.js";
+import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from "./store-DSiVmOSF.js";
 import { d as WEBDAV_SYNC_FILE, i as HIDDEN_PRICING_MODELS, n as DEFAULT_PEAK_HOURS, s as PRICING } from "./pricing-bcKQQNo6.js";
-import { d as historyRecordKey, u as saveHot } from "./persistence-CrFXrRB_.js";
+import { c as saveExtensionSettings, d as historyRecordKey, i as getExtensionSettings, u as saveHot } from "./persistence-CrFXrRB_.js";
 import { r as toast, t as log } from "./logger-Bv-AT94O.js";
-import { T as WALLET_CATALOG_PROVIDERS, _ as findWalletForHistory, a as decryptKey, b as walletBalanceToCny, c as DataEvents, d as calcSavings, f as getPricing$1, i as saveWalletApiKey, l as on, m as normalizeModel, o as encryptKey, p as isDeepSeekOfficialModel, r as getWalletApiKey, s as isTruncatedFinish, t as repository, u as calcCost, v as findWalletModel, w as DEEPSEEK_WALLET_ID, x as walletPendingModelCount, y as mergeWalletCollections } from "./repository-02qMRKGT.js";
+import { T as WALLET_CATALOG_PROVIDERS, _ as findWalletForHistory, a as decryptKey, b as walletBalanceToCny, c as DataEvents, d as calcSavings, f as getPricing$1, i as saveWalletApiKey, l as on, m as normalizeModel, o as encryptKey, p as isDeepSeekOfficialModel, r as getWalletApiKey, s as isTruncatedFinish, t as repository, u as calcCost, v as findWalletModel, w as DEEPSEEK_WALLET_ID, x as walletPendingModelCount, y as mergeWalletCollections } from "./repository-DKfxS99y.js";
 import { a as isUnsafeKey$1, c as localDay$1, i as isPeakHour, l as localTimeHM, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay, t as esc$1, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
-import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-BVe2dp3y.js";
-import { r as recalcAllCosts, t as installInterception } from "./interception-CC1fPGpP.js";
-import { i as saveApiKey, n as queryBalance, r as queryWalletBalance } from "./balance-NZyOvC0i.js";
-import { a as removeSyncedModels, n as isSyncedCustomModel, o as syncPricingFromModelsDev, r as previewSync, t as fetchModelsDevCatalog } from "./pricing-sync-BGy2gBtF.js";
+import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-IAtpC2X8.js";
+import { r as recalcAllCosts, t as installInterception } from "./interception-DvYodKY8.js";
+import { i as saveApiKey, n as queryBalance, r as queryWalletBalance } from "./balance-DPSNGqNK.js";
+import { a as removeSyncedModels, n as isSyncedCustomModel, o as syncPricingFromModelsDev, r as previewSync, t as fetchModelsDevCatalog } from "./pricing-sync-Da48y5SX.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -697,11 +697,615 @@ function generateDebugBatch() {
 	} catch {}
 	alert("已生成 " + generated + " 条模拟数据");
 }
+var IDENTITY_KEY = "telemetry";
+/** 关闭面板触发上报的最小间隔（吃掉反复开关面板造成的抖动） */
+var CLOSE_FLUSH_GAP = 6e4;
+/** 页面隐藏/卸载触发上报的最小间隔（合并间隔，避免同一次使用反复发送） */
+var PASSIVE_FLUSH_GAP = 18e5;
+/** 失败重试退避（首次发送 + 3 次重试） */
+var RETRY_DELAYS = [
+	1e3,
+	5e3,
+	3e4
+];
+/** 单次会话时长上限，超出按上限计入 */
+var MAX_DURATION_MS = 432e5;
+var TELEMETRY_PAGE_KEYS = [
+	"overview",
+	"stats",
+	"history",
+	"forecast",
+	"wallet",
+	"settings",
+	"help",
+	"about"
+];
+function emptyPages() {
+	const pages = {};
+	for (const key of TELEMETRY_PAGE_KEYS) pages[key] = 0;
+	return pages;
+}
+function emptyCounters() {
+	return {
+		opens: 0,
+		dur_ms: 0,
+		pages: emptyPages(),
+		render: [
+			0,
+			0,
+			0,
+			0,
+			0
+		]
+	};
+}
+function isTelemetryPageKey(value) {
+	return typeof value === "string" && TELEMETRY_PAGE_KEYS.includes(value);
+}
+/** 面板可用宽度分桶 */
+function widthBucket(width) {
+	const w = Number.isFinite(width) ? Number(width) : 0;
+	if (w > 1024) return "gt1024";
+	if (w > 760) return "761-1024";
+	if (w > 480) return "481-760";
+	return "le480";
+}
+/** 面板首帧渲染耗时分桶下标：<100 / <300 / <800 / <2000 / ≥2000 毫秒 */
+function renderBucketIndex(ms) {
+	const value = Number.isFinite(ms) ? Math.max(0, Number(ms)) : 0;
+	if (value < 100) return 0;
+	if (value < 300) return 1;
+	if (value < 800) return 2;
+	if (value < 2e3) return 3;
+	return 4;
+}
+/** 时区偏移按 0.5 小时取整并钳制到 [-12, 14] */
+function roundTz(hours) {
+	const value = Number.isFinite(hours) ? Number(hours) : 0;
+	const rounded = Math.round(value * 2) / 2;
+	return Math.min(14, Math.max(-12, rounded));
+}
+/** 本地日期（YYYY-MM-DD） */
+function todayKey(now = Date.now()) {
+	const d = new Date(now);
+	const pad = (n) => n < 10 ? "0" + n : String(n);
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+/**
+* 从 UA 解析浏览器名与主版本。UA-CH（userAgentData）在调用侧优先，这里只做字符串回退。
+*/
+function parseBrowser(ua) {
+	const source = String(ua || "");
+	const pick = (pattern) => {
+		const m = source.match(pattern);
+		if (!m) return "";
+		return String(m[1] || "").split(".")[0];
+	};
+	const edge = pick(/\bEdg(?:e|A|iOS)?\/(\d+)/);
+	if (edge) return {
+		name: "Edge",
+		major: edge
+	};
+	const opera = pick(/\b(?:OPR|OPT)\/(\d+)/);
+	if (opera) return {
+		name: "Opera",
+		major: opera
+	};
+	const samsung = pick(/\bSamsungBrowser\/(\d+)/);
+	if (samsung) return {
+		name: "Samsung Internet",
+		major: samsung
+	};
+	const firefox = pick(/\b(?:Firefox|FxiOS)\/(\d+)/);
+	if (firefox) return {
+		name: "Firefox",
+		major: firefox
+	};
+	const chrome = pick(/\b(?:Chrome|CriOS|Chromium)\/(\d+)/);
+	if (chrome) return {
+		name: "Chrome",
+		major: chrome
+	};
+	const safari = pick(/\bVersion\/(\d+)[.\d]*\s+Mobile\/\w+\s+Safari\//) || pick(/\bVersion\/(\d+)[.\d]*\s+Safari\//);
+	if (safari) return {
+		name: "Safari",
+		major: safari
+	};
+	if (/\bSafari\//.test(source)) return {
+		name: "Safari",
+		major: ""
+	};
+	return {
+		name: source ? "Other" : "",
+		major: ""
+	};
+}
+/** 从 UA 解析操作系统 */
+function parseOs(ua) {
+	const source = String(ua || "");
+	if (/\bWindows NT\b/.test(source)) return "Windows";
+	if (/\bAndroid\b/.test(source)) return "Android";
+	if (/\b(?:iPhone|iPod)\b/.test(source)) return "iOS";
+	if (/\biPad\b/.test(source)) return "iPadOS";
+	if (/\bCrOS\b/.test(source)) return "ChromeOS";
+	if (/\bMac OS X\b/.test(source)) return "macOS";
+	if (/\bLinux\b/.test(source)) return "Linux";
+	return source ? "Other" : "";
+}
+/** 合并两份计数（用于把上次发送失败的上报体与本次新数据合并成一条） */
+function mergeCounters(a, b) {
+	const pages = emptyPages();
+	for (const key of TELEMETRY_PAGE_KEYS) pages[key] = Math.max(0, Number(a?.pages?.[key]) || 0) + Math.max(0, Number(b?.pages?.[key]) || 0);
+	const render = [
+		0,
+		0,
+		0,
+		0,
+		0
+	];
+	for (let i = 0; i < render.length; i++) render[i] = Math.max(0, Number(a?.render?.[i]) || 0) + Math.max(0, Number(b?.render?.[i]) || 0);
+	return {
+		opens: Math.max(0, Number(a?.opens) || 0) + Math.max(0, Number(b?.opens) || 0),
+		dur_ms: Math.max(0, Number(a?.dur_ms) || 0) + Math.max(0, Number(b?.dur_ms) || 0),
+		pages,
+		render
+	};
+}
+function countersAreEmpty(counters) {
+	if ((counters?.opens || 0) > 0 || (counters?.dur_ms || 0) > 0) return false;
+	for (const key of TELEMETRY_PAGE_KEYS) if ((counters?.pages?.[key] || 0) > 0) return false;
+	for (const value of counters?.render || []) if ((value || 0) > 0) return false;
+	return true;
+}
+/** 上报端点是否已配置（占位符视为未配置，此时只本地累加） */
+function isEndpointConfigured(endpoint = currentEndpoint()) {
+	const value = String(endpoint || "").trim();
+	if (!/^https:\/\/[^\s<>]+$/i.test(value)) return false;
+	return !value.includes("<") && !value.includes(">");
+}
+/** 测试用端点覆盖；生产环境始终使用 TELEMETRY_ENDPOINT */
+var endpointOverride = null;
+function currentEndpoint() {
+	return endpointOverride ?? "https://stat.janmk.us.ci/collect";
+}
+var counters = emptyCounters();
+var sessionStart = null;
+var envCache = null;
+var lastFlushAt = 0;
+var inFlight = false;
+var bound = false;
+function appVersion() {
+	try {
+		return String("3.1.1");
+	} catch {
+		return "";
+	}
+}
+function safeWindow() {
+	try {
+		return typeof window === "undefined" ? null : window;
+	} catch {
+		return null;
+	}
+}
+function parentWindow() {
+	try {
+		const win = safeWindow();
+		if (!win) return null;
+		const parent = win.parent;
+		return parent && parent !== win ? parent : null;
+	} catch {
+		return null;
+	}
+}
+/** 面板宽度取自酒馆主窗口（面板渲染在主文档中），失败时退回当前窗口 */
+function currentViewportWidth() {
+	try {
+		const parent = parentWindow();
+		const parentWidth = Number(parent?.innerWidth);
+		if (Number.isFinite(parentWidth) && parentWidth > 0) return parentWidth;
+	} catch {}
+	try {
+		const width = Number(safeWindow()?.innerWidth);
+		if (Number.isFinite(width) && width > 0) return width;
+	} catch {}
+	return 0;
+}
+function mediaMatches(query) {
+	try {
+		const win = safeWindow();
+		if (typeof win?.matchMedia !== "function") return false;
+		return !!win.matchMedia(query).matches;
+	} catch {
+		return false;
+	}
+}
+function nav() {
+	try {
+		return typeof navigator === "undefined" ? null : navigator;
+	} catch {
+		return null;
+	}
+}
+/** 探测浏览器环境（只保留分桶与主版本，不含任何可定位到个人的信息） */
+function probeEnv() {
+	const n = nav();
+	const ua = String(n?.userAgent || "");
+	let browser = parseBrowser(ua);
+	try {
+		const brands = Array.isArray(n?.userAgentData?.brands) ? n.userAgentData.brands : [];
+		for (const [pattern, name] of [
+			[/Microsoft Edge/i, "Edge"],
+			[/Opera|OPR/i, "Opera"],
+			[/Samsung/i, "Samsung Internet"],
+			[/Google Chrome/i, "Chrome"],
+			[/Chromium/i, "Chrome"],
+			[/Firefox/i, "Firefox"],
+			[/Safari/i, "Safari"]
+		]) {
+			const hit = brands.find((item) => pattern.test(String(item?.brand || "")));
+			if (hit) {
+				browser = {
+					name,
+					major: String(hit.version || "").split(".")[0] || browser.major
+				};
+				break;
+			}
+		}
+	} catch {}
+	const lang = String(n?.language || n?.languages?.[0] || "").slice(0, 12);
+	return {
+		b: browser.name,
+		bv: browser.major,
+		os: parseOs(ua),
+		arch: "unknown",
+		lang,
+		w: widthBucket(currentViewportWidth()),
+		dark: mediaMatches("(prefers-color-scheme: dark)"),
+		standalone: mediaMatches("(display-mode: standalone)") || n?.standalone === true,
+		touch: mediaMatches("(pointer: coarse)") || Number(n?.maxTouchPoints || 0) > 0
+	};
+}
+/** 尽力补充 CPU 架构（Chromium 高熵值，失败保持 unknown） */
+function refineArch() {
+	try {
+		const uad = nav()?.userAgentData;
+		if (!uad || typeof uad.getHighEntropyValues !== "function") return;
+		uad.getHighEntropyValues(["architecture", "bitness"]).then((values) => {
+			if (!envCache) return;
+			const arch = String(values?.architecture || "").toLowerCase();
+			const bitness = String(values?.bitness || "");
+			let next = "unknown";
+			if (arch.includes("arm")) next = arch.includes("32") || bitness === "32" ? "unknown" : "arm64";
+			else if (arch === "x86" && bitness === "64") next = "x86_64";
+			else if (arch === "x86") next = "x86";
+			if (next !== "unknown") envCache.arch = next;
+		}).catch(() => {});
+	} catch {}
+}
+function randomId() {
+	try {
+		const buf = /* @__PURE__ */ new Uint8Array(16);
+		const cryptoObj = globalThis?.crypto;
+		if (cryptoObj && typeof cryptoObj.getRandomValues === "function") cryptoObj.getRandomValues(buf);
+		else for (let i = 0; i < buf.length; i++) buf[i] = Math.floor(Math.random() * 256);
+		return Array.from(buf, (byte) => byte.toString(16).padStart(2, "0")).join("");
+	} catch {
+		let fallback = "";
+		for (let i = 0; i < 32; i++) fallback += Math.floor(Math.random() * 16).toString(16);
+		return fallback;
+	}
+}
+function isIdentityShape(value) {
+	return !!value && typeof value === "object" && typeof value.id === "string" && /^[0-9a-f]{32}$/.test(value.id);
+}
+function readIdentity() {
+	try {
+		const stored = (getExtensionSettings() || {})[IDENTITY_KEY];
+		if (isIdentityShape(stored)) return {
+			id: stored.id,
+			seq: Number.isFinite(Number(stored.seq)) ? Number(stored.seq) : 0,
+			day: typeof stored.day === "string" ? stored.day : void 0,
+			pending: stored.pending && typeof stored.pending === "object" ? stored.pending : null
+		};
+	} catch {}
+	return {
+		id: "",
+		seq: 0
+	};
+}
+function writeIdentity(identity) {
+	try {
+		const settings = getExtensionSettings() || {};
+		saveExtensionSettings({
+			...settings,
+			[IDENTITY_KEY]: {
+				id: identity.id,
+				seq: identity.seq,
+				day: identity.day,
+				pending: identity.pending ?? null,
+				updatedAt: Date.now()
+			},
+			_updated: Date.now()
+		});
+	} catch {}
+}
+function ensureIdentity() {
+	const identity = readIdentity();
+	if (identity.id) return identity;
+	const created = {
+		id: randomId(),
+		seq: 0
+	};
+	writeIdentity(created);
+	return created;
+}
+/** 重置匿名标识：下次上报会被计为一台新设备 */
+function resetIdentity() {
+	try {
+		resetCounters();
+		writeIdentity({
+			id: randomId(),
+			seq: 0
+		});
+	} catch {}
+}
+function isTelemetryEnabled() {
+	try {
+		const settings = state$2?.settings;
+		if (!settings) return true;
+		return settings.telemetryEnabled !== false;
+	} catch {
+		return true;
+	}
+}
+function telemetryStatus() {
+	const identity = readIdentity();
+	return {
+		enabled: isTelemetryEnabled(),
+		configured: isEndpointConfigured(currentEndpoint()),
+		id: identity.id,
+		seq: identity.seq,
+		hasPending: !!identity.pending
+	};
+}
+function resetCounters() {
+	counters = emptyCounters();
+	sessionStart = null;
+}
+function touchActivity(now) {
+	if (sessionStart === null) sessionStart = now;
+}
+function currentDuration(now) {
+	if (sessionStart === null) return 0;
+	return Math.max(0, Math.min(MAX_DURATION_MS, now - sessionStart));
+}
+/** 打开面板：计一次打开，并开始一个使用时段 */
+function trackOpen() {
+	try {
+		if (!isTelemetryEnabled()) return;
+		const now = Date.now();
+		counters.opens += 1;
+		touchActivity(now);
+		if (!envCache) envCache = probeEnv();
+	} catch {}
+}
+/** 切换视图：对应页面计数 +1 */
+function trackPage(view) {
+	try {
+		if (!isTelemetryEnabled()) return;
+		if (!isTelemetryPageKey(view)) return;
+		const now = Date.now();
+		counters.pages[view] += 1;
+		touchActivity(now);
+		if (!envCache) envCache = probeEnv();
+	} catch {}
+}
+/** 记录面板首帧渲染耗时（毫秒） */
+function trackRender(ms) {
+	try {
+		if (!isTelemetryEnabled()) return;
+		if (!Number.isFinite(ms)) return;
+		counters.render[renderBucketIndex(ms)] += 1;
+		if (!envCache) envCache = probeEnv();
+	} catch {}
+}
+function buildPayload(identity, incoming, pending, now) {
+	const day = todayKey(now);
+	const pendingCounters = pending ? mergeCounters(emptyCounters(), {
+		opens: pending?.s?.opens,
+		dur_ms: pending?.s?.dur_ms,
+		pages: pending?.s?.pages || {},
+		render: Array.isArray(pending?.s?.render) ? pending.s.render : []
+	}) : emptyCounters();
+	const merged = pending ? mergeCounters(pendingCounters, incoming) : incoming;
+	const seq = pending && Number.isFinite(Number(pending.seq)) ? Number(pending.seq) : identity.seq + 1;
+	return {
+		v: 1,
+		id: identity.id,
+		seq: Math.max(1, seq),
+		day,
+		tz: roundTz(-new Date(now).getTimezoneOffset() / 60),
+		app: appVersion(),
+		env: envCache ?? probeEnv(),
+		s: {
+			opens: Math.max(0, Number(merged.opens) || 0),
+			dur_ms: Math.max(0, Math.min(MAX_DURATION_MS, Number(merged.dur_ms) || 0)),
+			pages: merged.pages,
+			render: merged.render
+		},
+		daily: pending ? pending.daily === true : identity.day !== day
+	};
+}
+/**
+* 发送前先把序号写盘：即使响应丢失导致本地状态未更新，下一次上报也会使用更大的 seq，
+* 不会因为服务端已记录该序号而永久丢弃后续数据（同一 seq 的重复提交由服务端幂等丢弃）。
+*/
+function reserveSeq(payload) {
+	try {
+		const identity = ensureIdentity();
+		if (identity.seq < payload.seq) {
+			identity.seq = payload.seq;
+			writeIdentity(identity);
+		}
+	} catch {}
+}
+function commitSuccess(payload) {
+	lastFlushAt = Date.now();
+	const identity = ensureIdentity();
+	if (identity.seq < payload.seq) identity.seq = payload.seq;
+	identity.day = payload.day;
+	identity.pending = null;
+	writeIdentity(identity);
+	resetCounters();
+}
+function commitPending(payload) {
+	try {
+		const identity = ensureIdentity();
+		identity.pending = payload;
+		writeIdentity(identity);
+	} catch {}
+	resetCounters();
+}
+function sleep(ms) {
+	return new Promise((resolve) => {
+		setTimeout(resolve, ms);
+	});
+}
+async function postPayload(body) {
+	try {
+		const res = await fetch(currentEndpoint(), {
+			method: "POST",
+			mode: "cors",
+			keepalive: true,
+			credentials: "omit",
+			headers: { "Content-Type": "text/plain;charset=UTF-8" },
+			body
+		});
+		return res.status === 204 || res.ok;
+	} catch {
+		return false;
+	}
+}
+function sendBeaconOnce(body) {
+	try {
+		const n = nav();
+		if (typeof n?.sendBeacon !== "function") return false;
+		if (typeof Blob === "undefined") return false;
+		return !!n.sendBeacon(currentEndpoint(), new Blob([body], { type: "text/plain;charset=UTF-8" }));
+	} catch {
+		return false;
+	}
+}
+async function sendWithRetry(payload) {
+	const body = JSON.stringify(payload);
+	for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
+		if (await postPayload(body)) {
+			commitSuccess(payload);
+			inFlight = false;
+			return;
+		}
+		if (attempt < RETRY_DELAYS.length) await sleep(RETRY_DELAYS[attempt]);
+	}
+	commitPending(payload);
+	inFlight = false;
+}
+/**
+* 上报入口。数据为空且没有待发缓存时直接返回，不发请求。
+* close：关闭面板触发（主要路径）；hide：页面隐藏/卸载触发；manual：设置页手动触发。
+*/
+function flushTelemetry(reason = "close") {
+	try {
+		if (!isTelemetryEnabled()) {
+			resetCounters();
+			return;
+		}
+		if (!isEndpointConfigured(currentEndpoint())) return;
+		if (inFlight) return;
+		const now = Date.now();
+		counters.dur_ms = currentDuration(now);
+		const gap = reason === "hide" ? PASSIVE_FLUSH_GAP : CLOSE_FLUSH_GAP;
+		if (lastFlushAt && now - lastFlushAt < gap) return;
+		const identity = ensureIdentity();
+		const pending = identity.pending && typeof identity.pending === "object" ? identity.pending : null;
+		if (!pending && countersAreEmpty(counters)) return;
+		const payload = buildPayload(identity, counters, pending, now);
+		inFlight = true;
+		reserveSeq(payload);
+		if (reason === "hide") {
+			if (sendBeaconOnce(JSON.stringify(payload))) {
+				commitSuccess(payload);
+				inFlight = false;
+				return;
+			}
+		}
+		sendWithRetry(payload).catch(() => {
+			inFlight = false;
+		});
+	} catch (error) {
+		inFlight = false;
+		log.warn("匿名统计上报失败", error);
+	}
+}
+function bindLifecycle() {
+	if (bound) return;
+	const win = safeWindow();
+	if (!win || typeof win.addEventListener !== "function") return;
+	bound = true;
+	const onHide = () => {
+		try {
+			flushTelemetry("hide");
+		} catch {}
+	};
+	const onVisibility = (event) => {
+		try {
+			if ((event?.target ?? win.document)?.visibilityState === "hidden") onHide();
+		} catch {}
+	};
+	const targets = [win];
+	const parent = parentWindow();
+	if (parent && typeof parent.addEventListener === "function") targets.push(parent);
+	for (const target of targets) {
+		try {
+			target.addEventListener("pagehide", onHide);
+		} catch {}
+		try {
+			target.addEventListener("visibilitychange", onVisibility);
+		} catch {}
+	}
+}
+/** 初始化：生成匿名标识、缓存环境、绑定生命周期上报时机（幂等） */
+function initTelemetry() {
+	try {
+		if (!ensureIdentity().id) return;
+		if (!envCache) envCache = probeEnv();
+		refineArch();
+		bindLifecycle();
+	} catch (error) {
+		log.warn("匿名统计初始化失败", error);
+	}
+}
 //#endregion
 //#region src/ui/settings.ts
 var settings_exports = /* @__PURE__ */ __exportAll({ renderSettings: () => renderSettings });
 function esc(s) {
 	return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+/** 刷新「匿名使用统计」卡片上的标识与状态文案 */
+function renderTelemetryStatus(doc) {
+	const idEl = doc.getElementById("aus-telemetry-id");
+	const statusEl = doc.getElementById("aus-telemetry-status");
+	let status = null;
+	try {
+		status = telemetryStatus();
+	} catch {}
+	if (idEl) idEl.textContent = status?.id ? `匿名标识：${String(status.id).slice(0, 8)}…` : "匿名标识：待生成";
+	if (!statusEl) return;
+	let hint = "";
+	if (!status?.configured) hint = "未配置上报端点：仅本地累计，不会发送任何数据";
+	else if (!status.enabled) hint = "已关闭：不再采集，也不再发送";
+	statusEl.textContent = hint;
+	statusEl.style.display = hint ? "block" : "none";
 }
 var docClickBound = false;
 function bindSettingsOutsideClick(doc) {
@@ -837,6 +1441,13 @@ function renderSettings(doc) {
 	const s = state$2.settings;
 	host.innerHTML = `
     <div style="display:grid;gap:12px;">
+      <!-- 匿名使用统计（默认开启，可随时关闭） -->
+      <div class="ds-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">匿名使用统计</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-telemetry-enabled" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-telemetry-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div style="font-size:11px;color:var(--ds-text-2);margin-top:6px;line-height:1.6;">仅上报匿名环境分桶（浏览器名与主版本、系统、架构、语言、窄屏分桶、standalone、时区偏移）、扩展版本与面板渲染耗时分桶等开发数据；不含对话内容、密钥等任何隐私信息，数据经过匿名化处理，仅用于开发与完善兼容性。关闭后立即停止采集与上报。<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">隐私声明</a></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;flex-wrap:wrap;"><span id="aus-telemetry-id" style="font-size:11px;color:var(--ds-text-3);">匿名标识：待生成</span><button id="aus-telemetry-reset" style="padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">重置匿名标识</button></div>
+        <div id="aus-telemetry-status" style="font-size:11px;color:var(--ds-text-3);margin-top:6px;"></div>
+      </div>
       <!-- 颜色模式（与用量统计·模型选择一致的胶囊下拉） -->
       <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">颜色模式</span><div id="aus-theme-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模式</span><span id="aus-theme-label" style="font-weight:600;color:var(--ds-text);">浅色</span><span style="font-size:10px;">▼</span></div></div><div id="aus-theme-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:140px;padding:8px;"></div><div style="font-size:11px;color:var(--ds-text-2);margin-top:6px;">切换后立即生效，深色模式针对夜间可读性优化</div></div>
 
@@ -931,6 +1542,11 @@ function renderSettings(doc) {
 		}
 	} catch {}
 	doc.getElementById("aus-custom-balance").value = state$2.customBalance || "";
+	const telemetryCb = doc.getElementById("aus-telemetry-enabled");
+	const telemetrySlider = doc.getElementById("aus-telemetry-slider");
+	if (telemetryCb) telemetryCb.checked = s.telemetryEnabled !== false;
+	if (telemetrySlider) telemetrySlider.style.left = s.telemetryEnabled !== false ? "23px" : "3px";
+	renderTelemetryStatus(doc);
 	doc.getElementById("aus-peak-dot").checked = state$2.settings.peakDot !== false;
 	const peakSlider = doc.getElementById("aus-peak-dot-slider");
 	if (peakSlider) peakSlider.style.left = state$2.settings.peakDot !== false ? "23px" : "3px";
@@ -1089,14 +1705,14 @@ function renderSettings(doc) {
 		doc.getElementById("aus-auto-balance-interval").style.display = autoCb.checked ? "block" : "none";
 		saveHot({ settings: state$2.settings });
 		try {
-			import("./balance-NZyOvC0i.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-DPSNGqNK.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	doc.getElementById("aus-balance-interval").onchange = (e) => {
 		state$2.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state$2.settings });
 		try {
-			import("./balance-NZyOvC0i.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-DPSNGqNK.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -1141,8 +1757,8 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-02qMRKGT.js").then((n) => n.n);
-				const { state: st } = await import("./store-D3uOTDWz.js").then((n) => n.i);
+				const { repository } = await import("./repository-DKfxS99y.js").then((n) => n.n);
+				const { state: st } = await import("./store-DSiVmOSF.js").then((n) => n.i);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
 				await repository.rebuildAggregates();
@@ -1174,6 +1790,22 @@ function renderSettings(doc) {
 			}
 		} catch {}
 		alert("已重置");
+	};
+	const telemetryToggle = doc.getElementById("aus-telemetry-enabled");
+	if (telemetryToggle) telemetryToggle.onchange = (e) => {
+		state$2.settings.telemetryEnabled = !!e.target.checked;
+		const slider = doc.getElementById("aus-telemetry-slider");
+		if (slider) slider.style.left = e.target.checked ? "23px" : "3px";
+		saveHot({ settings: state$2.settings });
+		renderTelemetryStatus(doc);
+	};
+	const telemetryReset = doc.getElementById("aus-telemetry-reset");
+	if (telemetryReset) telemetryReset.onclick = () => {
+		try {
+			resetIdentity();
+		} catch {}
+		renderTelemetryStatus(doc);
+		toast("info", "已重置匿名标识，后续上报将按新设备计入");
 	};
 	bindHistoryDelete(doc);
 	const wUrl = doc.getElementById("aus-webdav-url");
@@ -1271,8 +1903,8 @@ function renderSettings(doc) {
 					intervalDrop.style.display = "none";
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-BGy2gBtF.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
-						import("./currency-BVe2dp3y.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+						import("./pricing-sync-Da48y5SX.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+						import("./currency-IAtpC2X8.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};
 			});
@@ -1293,7 +1925,7 @@ function renderSettings(doc) {
 			if (panel) panel.style.display = enabledEl.checked ? "grid" : "none";
 			let removed = 0;
 			if (!enabledEl.checked) try {
-				const m = await import("./pricing-sync-BGy2gBtF.js").then((n) => n.i);
+				const m = await import("./pricing-sync-Da48y5SX.js").then((n) => n.i);
 				try {
 					await m.markLegacySyncedModels?.({ skipRerender: true });
 				} catch {}
@@ -1303,8 +1935,8 @@ function renderSettings(doc) {
 			}
 			saveHot({ settings: state$2.settings });
 			try {
-				import("./currency-BVe2dp3y.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
-				import("./pricing-sync-BGy2gBtF.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+				import("./currency-IAtpC2X8.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+				import("./pricing-sync-Da48y5SX.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
 			} catch {}
 			if (removed) {
 				renderModelsEditor(doc);
@@ -1334,7 +1966,7 @@ function renderSettings(doc) {
 			state$2.settings.pricingSync.useLiveRate = liveEl.checked;
 			saveHot({ settings: state$2.settings });
 			try {
-				import("./currency-BVe2dp3y.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+				import("./currency-IAtpC2X8.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 			} catch {}
 		};
 		if (recalcEl) recalcEl.onchange = () => {
@@ -5736,7 +6368,7 @@ var forecastRenderToken = 0;
 async function renderForecastView() {
 	const doc = getDoc$3();
 	const token = ++forecastRenderToken;
-	const hist = await import("./repository-02qMRKGT.js").then((n) => n.n).then((mod) => mod.repository.getAllHistory()).catch(() => state$2.history || []);
+	const hist = await import("./repository-DKfxS99y.js").then((n) => n.n).then((mod) => mod.repository.getAllHistory()).catch(() => state$2.history || []);
 	if (token !== forecastRenderToken) return;
 	try {
 		renderForecastChatPicker(hist);
@@ -6420,7 +7052,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-NZyOvC0i.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-DPSNGqNK.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -6711,6 +7343,15 @@ function bindWalletView(doc) {
 }
 //#endregion
 //#region src/ui/panel.ts
+/** 面板首帧渲染耗时的起点（用于匿名统计里的渲染耗时分桶） */
+var panelOpenStartTs = 0;
+function nowTs() {
+	try {
+		return typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+	} catch {
+		return Date.now();
+	}
+}
 function getDoc$1() {
 	return window.parent?.document ?? document;
 }
@@ -7356,6 +7997,9 @@ function bindPanel(doc) {
 	if (q) q.onclick = () => queryBalance();
 }
 function switchView(view) {
+	try {
+		trackPage(view);
+	} catch {}
 	const doc = getDoc$1();
 	if (view !== "history") closeHistoryDetail(doc);
 	doc.querySelectorAll("[data-view]").forEach((el) => {
@@ -7634,6 +8278,7 @@ function createPanel() {
           </div>
           <div data-view="help" style="display:none;">
             <div style="display:grid;gap:12px;">
+              <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0EA5E9;font-weight:600;margin-bottom:6px;">📊 匿名使用统计</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>本扩展默认开启匿名使用统计，仅上报浏览器环境分桶（浏览器名与主版本、系统、架构、语言、窄屏分桶、深色偏好、standalone、时区偏移）、8 个页面的使用次数、打开次数、扩展版本与面板渲染耗时分桶。</div><div>不采集对话名称或内容、模型名、密钥、余额、费用、接口地址等任何隐私数据；服务端不记录 IP 地址。数据按匿名随机标识汇总，仅用于了解用户规模与改进方向。</div><div>可在「设置 → 匿名使用统计」随时关闭，关闭后立即停止采集与上报；也可在那里重置匿名标识。</div><div>完整说明见 <a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">隐私声明</a>。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#FF6A00;font-weight:600;margin-bottom:6px;">完整使用文档</div><div style="color:var(--ds-text-2);">详细说明各页面、筛选、钱包、定价、同步、隐私与常见问题。</div><a href="https://janmk1453.github.io/Api-Usage/" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;margin-top:10px;padding:8px 14px;border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);text-decoration:none;font-size:12px;font-weight:600;">前往完整使用文档</a></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#DC2626;font-weight:600;margin-bottom:6px;">隐私声明（完整版：<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:#DC2626;text-decoration:underline;">https://janmk1453.github.io/Api-Usage/#privacy</a>）</div><div style="color:var(--ds-text-2);display:grid;gap:6px;"><div>本扩展有且只能获得用户在酒馆本身中填写的：密钥条目的编号、用户备注和掩码末三位，仅用于独立区分请求来源，不会且无法读取、保存或上传完整明文密钥。</div><div>用户储存在酒馆本身的密钥是安全的，本扩展无法获取真实密钥。</div><div>用户主动填入本扩展的校准密钥是实际可用的密钥，且仅会被用于查询 DeepSeek 官方余额，不会额外造成扣费或消耗；它仅经 XOR 混淆后存放于 SillyTavern，不进入历史记录、统计、日志、导入导出或 WebDAV。自动校准时仅由浏览器直接发送至 <a href="https://api.deepseek.com/user/balance" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">https://api.deepseek.com/user/balance</a> API 查询。</div><div>XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。</div><div>本扩展完整代码开源可审查。</div><div style="margin-top:2px;padding-top:6px;border-top:1px solid var(--ds-border);font-weight:600;color:#DC2626;">免责声明（完整版见上方链接）</div><div>本扩展不对功能“价格来源”、“自动同步”等利用 <a href="https://models.dev" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 获取的数据中出现或可能出现的商业化中转站负责；我们不建议使用任何商业化中转站，尽管我们已经尽力筛选数据，但由于对大量数据进行完全筛选难以实现，因此我们不对可能出现的任何商业化中转站名称负责，不构成推荐，和 models.dev 或任何中转站没有商业往来，坚定不移的反对商业化。</div><div>我们将尽可能维护扩展的安全和隐私性，但本扩展不对因酒馆/本扩展的安全漏洞或因间接原因导致的任何形式的密钥泄露及产生的损失负责。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:12px;"><div style="font-size:11px;color:#0BA25E;font-weight:600;margin-bottom:6px;">钱包</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 扩展按识别到的接入链接自动创建和汇总钱包，默认始终保留 DeepSeek 官方钱包；同名链接下识别的密钥和模型会归入同一钱包。</div><div>2. 每个钱包可独立维护名称、余额、模型价格、峰谷规则和价格来源；钱包默认收起，展开状态按钱包记忆。价格来源仅展示第一方模型厂商，不展示中转站或聚合平台。</div><div>3. 请求进入后会先匹配所属钱包，再使用该钱包的模型价格和峰谷规则计费，并从对应钱包余额预扣；未配置价格的模型先记零费用，保存或同步价格后自动重算冷热历史。</div><div>4. 自动余额校准仅支持 DeepSeek 官方直连，校准密钥需在钱包内单独填写；其他接入可使用手工余额，多个密钥不会自动相加。</div><div>5. 删除钱包会进入“已忽略接入”，后续请求不会自动重建、不参与余额合计，历史记录仍保留归属，需要时可恢复显示。</div></div></div>
@@ -7925,6 +8570,10 @@ function resetPanelState() {
 }
 function openPanel() {
 	const doc = getDoc$1();
+	panelOpenStartTs = nowTs();
+	try {
+		trackOpen();
+	} catch {}
 	let ov = doc.getElementById("aus-overlay");
 	let pn = doc.getElementById("aus-panel");
 	if (!ov || !pn) {
@@ -7956,6 +8605,9 @@ function openPanel() {
 	requestAnimationFrame(() => {
 		ov.style.opacity = "1";
 		positionPanel();
+		try {
+			if (panelOpenStartTs) trackRender(nowTs() - panelOpenStartTs);
+		} catch {}
 	});
 	panelOpen = true;
 	refreshUI();
@@ -7975,6 +8627,9 @@ function closePanel() {
 	}
 	if (pn) pn.style.display = "none";
 	panelOpen = false;
+	try {
+		flushTelemetry("close");
+	} catch {}
 }
 function togglePanel() {
 	if (panelOpen) closePanel();
@@ -8174,7 +8829,7 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-CC1fPGpP.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DvYodKY8.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -8182,7 +8837,7 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-CC1fPGpP.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DvYodKY8.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -8272,13 +8927,13 @@ async function onDelete() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-NZyOvC0i.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-DPSNGqNK.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-BVe2dp3y.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-IAtpC2X8.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-BGy2gBtF.js").then((n) => n.i)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-Da48y5SX.js").then((n) => n.i)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 	try {
@@ -8305,16 +8960,16 @@ async function onDelete() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-CC1fPGpP.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-DvYodKY8.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./balance-NZyOvC0i.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-DPSNGqNK.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
-		import("./currency-BVe2dp3y.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+		import("./currency-IAtpC2X8.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-BGy2gBtF.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-Da48y5SX.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -8324,7 +8979,7 @@ async function onDisable() {
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-CC1fPGpP.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-DvYodKY8.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -8340,13 +8995,13 @@ async function onDisable() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-NZyOvC0i.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-DPSNGqNK.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-BVe2dp3y.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-IAtpC2X8.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-BGy2gBtF.js").then((n) => n.i)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-Da48y5SX.js").then((n) => n.i)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -8371,13 +9026,16 @@ async function init() {
 		console.error("[API用量统计] initStore 失败", e);
 	}
 	try {
-		(await import("./balance-NZyOvC0i.js").then((n) => n.t)).restartBalanceTimer?.();
+		initTelemetry();
 	} catch {}
 	try {
-		(await import("./currency-BVe2dp3y.js").then((n) => n.t)).restartRateTimer?.();
+		(await import("./balance-DPSNGqNK.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-BGy2gBtF.js").then((n) => n.i)).restartPricingSyncTimer?.();
+		(await import("./currency-IAtpC2X8.js").then((n) => n.t)).restartRateTimer?.();
+	} catch {}
+	try {
+		(await import("./pricing-sync-Da48y5SX.js").then((n) => n.i)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
@@ -8399,7 +9057,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-BGy2gBtF.js").then((n) => n.i).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-Da48y5SX.js").then((n) => n.i).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

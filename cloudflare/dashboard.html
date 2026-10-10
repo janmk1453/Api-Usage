@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API用量统计 · 匿名使用统计看板</title>
+<style>
+  :root {
+    --bg: #FFFFFF; --card: #F6F7F8; --inner: #FFFFFF; --text: #111827;
+    --text2: #6B7280; --text3: #9CA3AF; --border: #E5E7EB; --orange: #FF6A00;
+    --green: #0BA25E; --blue: #2563EB; --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px 18px 48px; background: var(--bg); color: var(--text);
+    font-family: "Microsoft YaHei", -apple-system, "Segoe UI", sans-serif; font-size: 13px; line-height: 1.6;
+  }
+  h1 { font-size: 17px; font-weight: 600; margin: 0 0 4px; }
+  h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
+  .sub { color: var(--text2); font-size: 12px; margin-bottom: 14px; }
+  .dash-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .pill {
+    padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--inner);
+    font-size: 12px; color: var(--text); cursor: pointer;
+  }
+  .pill.active { background: var(--text); color: #FFFFFF; border-color: var(--text); font-weight: 600; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+  .card .label { font-size: 11px; color: var(--text2); }
+  .card .value { font-size: 22px; font-weight: 600; margin-top: 2px; letter-spacing: -0.5px; }
+  .card .hint { font-size: 11px; color: var(--text3); }
+  section { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+  .grid section { margin-bottom: 0; }
+  .bar-row { display: grid; grid-template-columns: 132px 1fr 68px; gap: 8px; align-items: center; margin-bottom: 6px; font-size: 12px; }
+  .bar-track { background: var(--border); border-radius: 999px; height: 8px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 999px; background: var(--orange); }
+  .bar-label { color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-value { text-align: right; color: var(--text2); font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--border); }
+  th { color: var(--text2); font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  canvas { width: 100%; height: 190px; display: block; }
+  .notice { color: var(--text2); font-size: 12px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; font-size: 12px; color: var(--text2); }
+  .legend-item { display: inline-flex; align-items: center; gap: 5px; }
+  .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+  .error { color: #DC2626; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="dash-head">
+  <div>
+    <h1>API用量统计 · 匿名使用统计</h1>
+    <div class="sub" id="meta">加载中…</div>
+  </div>
+  <div class="controls">
+    <button class="pill" data-days="7">近 7 天</button>
+    <button class="pill active" data-days="30">近 30 天</button>
+    <button class="pill" data-days="90">近 90 天</button>
+    <button class="pill" data-days="365">近 1 年</button>
+    <button class="pill" id="reload">刷新</button>
+  </div>
+</div>
+
+<div class="cards" id="cards"></div>
+
+<section>
+  <h2>日活设备趋势</h2>
+  <canvas id="dau-chart"></canvas>
+</section>
+
+<section>
+  <h2>使用强度趋势</h2>
+  <div class="legend" id="trend-legend"></div>
+  <canvas id="usage-chart"></canvas>
+</section>
+
+<section>
+  <h2>页面使用构成（每日切换次数）</h2>
+  <div class="legend" id="pages-chart-legend"></div>
+  <canvas id="pages-chart"></canvas>
+</section>
+
+<section>
+  <h2>页面使用率</h2>
+  <div id="pages"></div>
+</section>
+
+<section>
+  <h2>面板渲染耗时分布</h2>
+  <div id="render"></div>
+  <div class="notice" style="margin-top:6px;">分档：&lt;100ms / &lt;300ms / &lt;800ms / &lt;2000ms / ≥2000ms</div>
+</section>
+
+<section>
+  <h2>扩展版本分布</h2>
+  <div class="notice" style="margin-bottom:6px;">按每台设备在所选范围内最后上报的版本统计，各版本设备数之和等于范围内活跃设备数</div>
+  <div id="versions"></div>
+</section>
+
+<div class="notice" style="margin-bottom:8px;">以下环境分布来自每台设备<strong>首次上报时</strong>的快照（之后更换浏览器或系统不会更新），且不随上方所选时间范围变化。</div>
+<div class="grid">
+  <section><h2>浏览器</h2><div id="env-browser"></div></section>
+  <section><h2>操作系统</h2><div id="env-os"></div></section>
+  <section><h2>CPU 架构</h2><div id="env-arch"></div></section>
+  <section><h2>语言</h2><div id="env-lang"></div></section>
+  <section><h2>窄屏分桶</h2><div id="env-width"></div></section>
+  <section><h2>时区偏移</h2><div id="env-tz"></div></section>
+  <section><h2>深色偏好</h2><div id="env-dark"></div></section>
+  <section><h2>显示形态</h2><div id="env-standalone"></div></section>
+  <section><h2>指针类型</h2><div id="env-touch"></div></section>
+</div>
+
+<script>
+const PAGE_LABELS = {
+  overview: '用量概览', stats: '用量统计', history: '历史记录', forecast: '趋势预测',
+  wallet: '钱包', settings: '设置', help: '使用说明', about: '关于',
+};
+
+let currentDays = 30;
+let lastDaily = [];
+let lastData = null;
+/** 页面构成堆叠柱的配色（顺序与 PAGE_LABELS 一致） */
+const PAGE_COLORS = ['#FF6A00', '#2563EB', '#0BA25E', '#7C3AED', '#DC2626', '#0891B2', '#D97706', '#DB2777'];
+
+function fmtInt(value) {
+  const num = Number(value) || 0;
+  return num.toLocaleString('zh-CN');
+}
+
+function fmtDuration(ms) {
+  const total = Math.round((Number(ms) || 0) / 1000);
+  if (!total) return '0 分钟';
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.round((total % 3600) / 60);
+  return hours ? `${hours} 小时 ${minutes} 分` : `${minutes} 分钟`;
+}
+
+function card(label, value, hint) {
+  return `<div class="card"><div class="label">${label}</div><div class="value">${value}</div>${hint ? `<div class="hint">${hint}</div>` : ''}</div>`;
+}
+
+function renderBars(hostId, items, unit) {
+  const host = document.getElementById(hostId);
+  if (!host) return;
+  const list = Array.isArray(items) ? items.filter((item) => item && item.count > 0) : [];
+  if (!list.length) {
+    host.innerHTML = '<div class="notice">暂无数据</div>';
+    return;
+  }
+  const max = Math.max(...list.map((item) => Number(item.count) || 0)) || 1;
+  const total = list.reduce((sum, item) => sum + (Number(item.count) || 0), 0);
+  host.innerHTML = list.map((item) => {
+    const count = Number(item.count) || 0;
+    const percent = total ? Math.round((count / total) * 1000) / 10 : 0;
+    const width = Math.max(2, Math.round((count / max) * 100));
+    return `<div class="bar-row"><div class="bar-label" title="${String(item.label)}">${String(item.label)}</div>`
+      + `<div class="bar-track"><div class="bar-fill" style="width:${width}%"></div></div>`
+      + `<div class="bar-value">${fmtInt(count)}${unit === 'percent' ? ` · ${percent}%` : ''}</div></div>`;
+  }).join('');
+}
+
+/** 准备 canvas：按设备像素比缩放并清空 */
+function prepCanvas(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth || 600;
+  const height = canvas.clientHeight || 190;
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  return { ctx, width, height };
+}
+
+function drawEmpty(ctx) {
+  ctx.fillStyle = '#9CA3AF';
+  ctx.font = '12px "Microsoft YaHei", sans-serif';
+  ctx.fillText('暂无数据', 12, 24);
+}
+
+function layout(width, height) {
+  const pad = { padLeft: 34, padRight: 10, padTop: 12, padBottom: 22 };
+  pad.plotW = Math.max(10, width - pad.padLeft - pad.padRight);
+  pad.plotH = Math.max(10, height - pad.padTop - pad.padBottom);
+  return pad;
+}
+
+/** 画网格、Y 轴刻度与 X 轴日期标签 */
+function drawAxes(ctx, pad, width, height, maxValue, xOf, rows) {
+  ctx.strokeStyle = '#E5E7EB';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.padTop + (pad.plotH / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(pad.padLeft, y);
+    ctx.lineTo(width - pad.padRight, y);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#9CA3AF';
+  ctx.font = '11px "Microsoft YaHei", sans-serif';
+  ctx.fillText(String(maxValue), 4, pad.padTop + 8);
+  ctx.fillText('0', 4, pad.padTop + pad.plotH);
+  ctx.fillStyle = '#6B7280';
+  const labelCount = Math.min(6, rows.length);
+  for (let i = 0; i < labelCount; i++) {
+    const index = rows.length === 1 ? 0 : Math.round((rows.length - 1) * (i / Math.max(1, labelCount - 1)));
+    const text = String(rows[index].day).slice(5);
+    const x = Math.min(width - pad.padRight - 26, Math.max(pad.padLeft - 6, xOf(index) - 12));
+    ctx.fillText(text, x, height - 6);
+  }
+}
+
+/** 多条折线趋势图；series 每项为 { label, color, get(row) } */
+function drawTrend(canvas, rows, series) {
+  if (!canvas) return;
+  const { ctx, width, height } = prepCanvas(canvas);
+  if (!rows.length) return drawEmpty(ctx);
+  const pad = layout(width, height);
+  let maxValue = 0;
+  for (const row of rows) {
+    for (const item of series) maxValue = Math.max(maxValue, Number(item.get(row)) || 0);
+  }
+  maxValue = Math.max(1, maxValue);
+  const single = rows.length === 1;
+  const stepX = single ? 0 : pad.plotW / (rows.length - 1);
+  const xOf = (index) => pad.padLeft + (single ? pad.plotW / 2 : index * stepX);
+  const yOf = (value) => pad.padTop + pad.plotH - (Math.max(0, value) / maxValue) * pad.plotH;
+  drawAxes(ctx, pad, width, height, maxValue, xOf, rows);
+  for (const item of series) {
+    ctx.beginPath();
+    rows.forEach((row, index) => {
+      const x = xOf(index);
+      const y = yOf(Number(item.get(row)) || 0);
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = item.color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    if (single) {
+      ctx.fillStyle = item.color;
+      ctx.beginPath();
+      ctx.arc(xOf(0), yOf(Number(item.get(rows[0])) || 0), 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+/** 堆叠柱状图；series 每项为 { label, color, get(row) } */
+function drawStacked(canvas, rows, series) {
+  if (!canvas) return;
+  const { ctx, width, height } = prepCanvas(canvas);
+  if (!rows.length) return drawEmpty(ctx);
+  const pad = layout(width, height);
+  const totals = rows.map((row) => series.reduce((sum, item) => sum + (Number(item.get(row)) || 0), 0));
+  const maxValue = Math.max(1, ...totals);
+  const slot = pad.plotW / Math.max(1, rows.length);
+  const barW = Math.max(4, Math.min(38, slot * 0.62));
+  const xOf = (index) => pad.padLeft + slot * index + slot / 2;
+  drawAxes(ctx, pad, width, height, maxValue, xOf, rows);
+  rows.forEach((row, index) => {
+    const x = pad.padLeft + slot * index + (slot - barW) / 2;
+    let bottom = pad.padTop + pad.plotH;
+    for (const item of series) {
+      const value = Number(item.get(row)) || 0;
+      if (value <= 0) continue;
+      const barH = (value / maxValue) * pad.plotH;
+      ctx.fillStyle = item.color;
+      ctx.fillRect(x, bottom - barH, barW, barH);
+      bottom -= barH;
+    }
+  });
+}
+
+function renderLegend(hostId, series) {
+  const host = document.getElementById(hostId);
+  if (!host) return;
+  host.innerHTML = series
+    .map((item) => `<span class="legend-item"><span class="legend-dot" style="background:${item.color}"></span>${item.label}</span>`)
+    .join('');
+}
+
+function render(data) {
+  document.getElementById('meta').textContent =
+    `统计范围：近 ${data.days} 天 · 数据生成于 ${new Date(data.generatedAt).toLocaleString('zh-CN')}` +
+    `（每次打开或点「刷新」都会重新查询，切换范围读到的是同一时刻的数据）`;
+  document.getElementById('cards').innerHTML = [
+    card('累计独立用户', fmtInt(data.devices.total), '历史去重设备数'),
+    card('今日活跃', fmtInt(data.devices.dau), '按客户端本地日期'),
+    card('近 7 天活跃', fmtInt(data.devices.wau), ''),
+    card('近 30 天活跃', fmtInt(data.devices.mau), ''),
+    card('当前范围活跃', fmtInt(data.devices.window), `近 ${data.days} 天`),
+    card('使用时段', fmtInt(data.usage.sessions), '每次上报计一段'),
+    card('打开面板次数', fmtInt(data.usage.opens), ''),
+    card('累计使用时长', fmtDuration(data.usage.durMs), '会话时长之和'),
+  ].join('');
+
+  lastData = data;
+  lastDaily = Array.isArray(data.daily) ? data.daily : [];
+  drawTrend(document.getElementById('dau-chart'), lastDaily, [
+    { label: '活跃设备', color: '#FF6A00', get: (row) => Number(row.devices) || 0 },
+  ]);
+  const trendSeries = [
+    { label: '打开面板次数', color: '#FF6A00', get: (row) => Number(row.opens) || 0 },
+    { label: '使用时段', color: '#2563EB', get: (row) => Number(row.sessions) || 0 },
+    { label: '页面切换次数', color: '#0BA25E', get: (row) => Number(row.pageTotal) || 0 },
+  ];
+  renderLegend('trend-legend', trendSeries);
+  drawTrend(document.getElementById('usage-chart'), lastDaily, trendSeries);
+  const pageSeries = Object.keys(PAGE_LABELS).map((key, index) => ({
+    label: PAGE_LABELS[key],
+    color: PAGE_COLORS[index % PAGE_COLORS.length],
+    get: (row) => Number(row.pages && row.pages[key]) || 0,
+  }));
+  renderLegend('pages-chart-legend', pageSeries);
+  drawStacked(document.getElementById('pages-chart'), lastDaily, pageSeries);
+
+  const pageTotal = Number(data.pages.total) || 0;
+  const pageItems = Object.keys(PAGE_LABELS).map((key) => ({
+    label: PAGE_LABELS[key],
+    count: Number(data.pages[key]) || 0,
+  })).sort((a, b) => b.count - a.count);
+  renderBars('pages', pageItems, 'percent');
+  if (!pageTotal) document.getElementById('pages').innerHTML = '<div class="notice">暂无数据</div>';
+
+  const renderItems = (data.render || []).map((count, index) => ({
+    label: ['<100ms', '<300ms', '<800ms', '<2000ms', '≥2000ms'][index] || String(index),
+    count: Number(count) || 0,
+  }));
+  renderBars('render', renderItems, 'percent');
+
+  renderBars('versions', data.versions || []);
+  renderBars('env-browser', data.env?.browser || []);
+  renderBars('env-os', data.env?.os || []);
+  renderBars('env-arch', data.env?.arch || []);
+  renderBars('env-lang', data.env?.lang || []);
+  renderBars('env-width', data.env?.width || []);
+  renderBars('env-tz', data.env?.tz || []);
+  renderBars('env-dark', data.env?.dark || []);
+  renderBars('env-standalone', data.env?.standalone || []);
+  renderBars('env-touch', data.env?.touch || []);
+}
+
+async function load() {
+  const meta = document.getElementById('meta');
+  try {
+    const res = await fetch(`/api/summary?days=${currentDays}`, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    render(await res.json());
+  } catch (error) {
+    if (meta) meta.innerHTML = `<span class="error">加载失败：${String(error && error.message ? error.message : error)}</span>`;
+  }
+}
+
+document.querySelectorAll('.pill[data-days]').forEach((button) => {
+  button.addEventListener('click', () => {
+    document.querySelectorAll('.pill[data-days]').forEach((item) => item.classList.remove('active'));
+    button.classList.add('active');
+    currentDays = Number(button.getAttribute('data-days')) || 30;
+    load();
+  });
+});
+document.getElementById('reload').addEventListener('click', () => load());
+window.addEventListener('resize', () => { if (lastData) render(lastData); });
+load();
+</script>
+</body>
+</html>

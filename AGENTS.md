@@ -17,7 +17,7 @@ SillyTavern 原生扩展 `API用量统计`（清单 `api-usage-stat`，版本以
 - **语言**：`TypeScript 5 strict`
 - **图表**：`ECharts 6` 按需 `echarts/core + Bar/Line + Grid/Tooltip/CanvasRenderer`，动态分包（已随 `index.js` 提交并按需加载），`Y` 8 选项（`4 token + 4 cost`）×`X` 5 维度（`轮次/每小时/每日/每周/每月`，见下）；自定义图表按 `Y.kind` 分流渲染——`token` 类走堆叠柱、`cost` 类走叠加曲线，费用轴按币种换算；`API请求数 趋势` 的 `X` 使用 `X_OPTIONS_WITHOUT_ROUND`（不含 `轮次`，默认 `每日`）
 - **样式**：无框架，`SmartTheme` 隔离 + `DeepSeek 官方浅色`（`#FFFFFF/#F6F7F8/#111827/#FF6A00/#E6F8EC`，`Microsoft YaHei`，`14px` 圆角，无阴影/无滤镜以保锐利，`absolute` 定位置换修复窄屏 `fixed` 漂移）+ 双主题（`light/dark`，`style.css` 同名变量覆盖 + `services/theme.ts` 切换 + 设置中胶囊下拉，深色高对比 `#0F1419/#1E242E/#E5E7EB`，ECharts 经 `themeColor()` 动态取变量，默认 `light`）
-- **存储**：`extensionSettings[api_usage_stat]` 热 `50` 条 + `IndexedDB api_usage_stat_db` 冷分页（旧多存档已合并为单一历史，`XOR` 密钥兼容，自动迁移备份）；钱包配置、忽略列表、`overviewWalletId` 与 `overviewWalletManuallySet` 随热设置持久化，钱包校准密钥单独存放于 `extensionSettings.walletSecrets` 且不参与导出
+- **存储**：`extensionSettings[api_usage_stat]` 热 `50` 条 + `IndexedDB api_usage_stat_db` 冷分页（旧多存档已合并为单一历史，`XOR` 密钥兼容，自动迁移备份）；钱包配置、忽略列表、`overviewWalletId` 与 `overviewWalletManuallySet` 随热设置持久化，钱包校准密钥单独存放于 `extensionSettings.walletSecrets` 且不参与导出；匿名统计的匿名标识与待发上报数据单独存放于 `extensionSettings.telemetry`（不进 `state.settings`，因而不参与导出、导入与 WebDAV 同步）
 - **最低版本**：`manifest.minimum_client_version 1.11.0`；接入类型筛选兼容最低版本，API 密钥条目区分依赖酒馆 `>=1.14.0`（更早版本无多条密钥编号，归入未识别密钥）
 
 ## 目录
@@ -33,6 +33,13 @@ Api-Usage/
 ├── scripts/verify-ci.mjs  # 版本单源、清单路径、分包引用链与孤立产物检查
 ├── scripts/preview-package.mjs # main 预览包：git archive、SHA-256、压缩包清单校验
 ├── scripts/preview-notes.mjs # main 预览说明：按提交区间生成短哈希、说明与链接
+├── cloudflare/            # ★ 匿名使用统计接收端（Cloudflare Worker + D1 + 看板，不参与 Vite 构建与 CI）
+│   ├── worker.js          # 路由：POST /collect、GET /dashboard、GET /api/summary、GET /health + 每月清理定时任务
+│   ├── payload.js         # 上报体白名单校验与数值钳制（纯函数，cloudflare/payload.test.js 覆盖）
+│   ├── schema.sql         # D1 建表：device 设备快照 + device_daily 逐设备日数据（last_seq 幂等）
+│   ├── wrangler.toml      # Worker 配置（D1 绑定、Cron、HTML 文本模块规则）
+│   ├── dashboard.html     # 口令保护的看板页（原生表格 + canvas 折线，不引第三方资源）
+│   └── README.md          # 部署、接入客户端、免费额度策略与运维 SQL
 ├── i18n/zh-cn.json
 ├── templates/panel.html   # 预留 Handlebars
 ├── src/
@@ -69,6 +76,7 @@ node --check index.js
 npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 ```
 
+- **匿名统计接收端（不参与上述构建与 CI）**：`cloudflare/` 独立部署，步骤见 `cloudflare/README.md`（`wrangler login` → `d1 create` → 填 `database_id` → `d1 execute --file cloudflare/schema.sql` → `secret put DASHBOARD_TOKEN` → `wrangler deploy`）；部署完成后把 `/collect` 地址写入 `src/services/telemetry.ts#TELEMETRY_ENDPOINT` 并重新 `npm run build` 提交产物
 - **入口**：酒馆左下角魔法棒 `#extensionsMenu → #aus_wand_entry`（`list-group-item`），点击 `togglePanel()` 打开全屏 `#aus-overlay + #aus-panel`（`absolute` 视口计算，监听 `scroll/resize`，非 `fixed` 以规避 `transform` 祖先在窄屏漂移）
 - **面板**：全屏 `absolute` 定位置换 + 侧边导航（复刻 DeepSeek 官网 `display` 切换：`≥761px` 常显 `220px ↔ 60px` 折叠（`#aus-sidebar-toggle` 可见），`≤760px` 默认 `display:none` 隐藏 + `#aus-mobile-header` 内 `24px` 汉堡瞬时呼出 `is-open`，`#aus-sidebar-toggle` 隐藏，无遮罩无动画无过渡，`syncMobileSidebar` 清理宽屏折叠残留 inline），外层 `#aus-panel flex:column` + 内层 `#aus-panel-body flex:row`（`#aus-main overflow-x:hidden + min-width:0` 约束防止 720px 表撑开），`8` 视图（用量概览/统计/历史/趋势预测 Beta/钱包/设置/使用说明/关于）经 `data-view` + `opacity 0.15s` 切换，窄屏由汉堡控制 + 导航点击自动收起
 - **样式**：`[data-extension="api-usage-stat"][data-ds-theme="light"]` 隔离，卡片 `1px solid #E5E7EB` 实线，无 `box-shadow`，字重 `600`，`Microsoft YaHei` 保证锐利；`#aus-sidebar` 无过渡（瞬时 `display` 切换），`style.css` 定义 `light/dark` 两套同名变量，深色经 `themeColor()` 注入 ECharts，默认 `light`
@@ -123,7 +131,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **使用说明**：帮助页必须保留隐私声明、免责声明和钱包说明。隐私声明需明确区分酒馆密钥识别信息与用户主动填写的钱包校准密钥；免责声明需说明不对 models.dev 数据中的商业化中转站名称或推荐关系负责。
 
 ### 设置
-- 保留全局控制：颜色模式、历史显示范围、自动校准总开关与间隔、新钱包默认峰谷与额外空闲日期、models.dev 自动同步、调试、峰值圆点、记录数据管理（按范围删除记录）和 WebDAV
+- 保留全局控制：匿名使用统计（默认开启，可关闭并重置匿名标识，位于设置页顶部）、颜色模式、历史显示范围、自动校准总开关与间隔、新钱包默认峰谷与额外空闲日期、models.dev 自动同步、调试、峰值圆点、记录数据管理（按范围删除记录）和 WebDAV
 - 旧“新价格机制（峰谷计费）/生效日期”入口已移除：改用内置 `PRICE_HISTORY` 多段价格按记录时间计价，峰谷规则由 `settings.peakHours` + `extraOffDays` + 内置节假日驱动；`calcCost/calcSavings` 不再读取 `settings.useNewPricing/newPricingDate`，统一以 `LEGACY_PEAK_PRICING_DATE`（2026-08-17 北京时间）作为历史默认生效日，保证历史记录按既有口径计费
 - 按范围删除记录（`#aus-delete-*`，`bindHistoryDelete`）：支持开始/结束日期、模型（完全匹配）、对话（`chatId` 或 `chatName` 完全匹配），留空表示不限；先“统计匹配记录”预览命中条数，再二次确认执行；底层走 `repository.deleteHistoryByFilter`，同时处理热历史与 IndexedDB 冷历史并 `recalcAll + rebuildAggregates`，删除后刷新全站统计
 - 峰谷规则：`extraOffDays`（`YYYY-MM-DD` 数组，`normalizeSettings` 校验去重）用于补充内置节假日数据未覆盖年份；修改后调用 `recalcCostsAndRefresh` 重算冷热费用。峰值圆点（`peak-dot.ts`）复用 `utils/date` 的 `isWeekendDay/isChinaHoliday/isExtraOffDay/isPeakHour`，法定节假日显示“全天低谷”
@@ -147,9 +155,10 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **改面板/导航**：`src/ui/panel.ts`（全屏+`positionPanel` 定位置换+`applyCollapsed`+详情窗口 `#aus-content-body` 桌面右侧/移动端底部）+ `style.css`（`#aus-mobile-header` 汉堡 + `display` 切换，无过渡；改动钱包 header 响应式时必须保持覆盖规则优先级高于通用网格规则；按钮高度不要改回 `34/40px`）
 - **改概览/统计**：`src/ui/overview.ts` + `src/ui/stats-view.ts`（五维度 time∩model∩chat∩endpoint∩credential 过滤）+ `src/data/computed.ts`（`computeChatStats` / `filterStatsHistory` / 接入与密钥选项单源）+ `src/ui/heatmap.ts`（概览热力图，GitHub 风格，近 2 年，块内滑动）
 - **改钱包**：`src/types/wallet.ts`（结构与默认值）+ `src/data/wallets.ts`（纯逻辑）+ `src/data/repository.ts`（迁移、自动建钱包、钱包 CRUD、余额和冷热重算）+ `src/ui/wallet-view.ts`（页面交互）+ `src/services/wallet-secrets.ts`（钱包校准密钥）+ `style.css`（收起态三栏、窄屏三列指标与操作按钮换行）
-- **改使用说明/隐私**：`src/ui/panel.ts` 的使用说明卡片、`README.md` 隐私声明与 `docs.html`（GitHub Pages 完整文档）必须与代码同步；使用说明简版需保留 `docs.html#privacy` 完整版链接，并明确校准密钥查询不额外扣费或消耗、代码开源可审查、安全漏洞及间接原因损失免责；设置项或计费口径变更（如移除“新价格机制”、新增“按范围删除记录”、平均值忽略 0 值、指标数量变化）需同步更新 `docs.html` 对应小节与目录；不得把酒馆掩码密钥写成可获取的明文密钥，也不得声称 XOR 是安全加密
+- **改使用说明/隐私**：`src/ui/panel.ts` 的使用说明卡片、`README.md` 隐私声明与 `docs.html`（GitHub Pages 完整文档）必须与代码同步；使用说明简版需保留 `docs.html#privacy` 完整版链接，并明确校准密钥查询不额外扣费或消耗、代码开源可审查、安全漏洞及间接原因损失免责；设置项或计费口径变更（如移除“新价格机制”、新增“按范围删除记录”、平均值忽略 0 值、指标数量变化）需同步更新 `docs.html` 对应小节与目录；涉及匿名使用统计的改动必须同步 `docs.html` 隐私声明第十节、第四节域名表（第 10 项）、设置章节与 `README.md`，并如实写明采集字段、不采集清单、关闭入口与保留期，**不得再声明“不包含任何埋点”或“不上传任何数据”**；不得把酒馆掩码密钥写成可获取的明文密钥，也不得声称 XOR 是安全加密
 - **改历史筛选/详情/占比**：`src/ui/panel.ts`（`renderHistory` 四维度筛选 + 筛选后分页 + 详情右侧/底部窗口与 4 类原始数据 + 三色条，费用按币种）
 - **改连接身份/隐私**：`src/services/connection-identity.ts`（地址规范、密钥条目映射）+ `src/services/interception.ts`（请求开始快照）+ `src/data/fingerprint.ts`（连接感知去重）；严格隐私模式禁止读取 `proxy_password` 与 `custom_include_headers`
+- **改匿名统计**：客户端 `src/services/telemetry.ts`（环境分桶探测、会话内累加、关闭面板/页面隐藏时批量上报、匿名标识与 `settings.telemetryEnabled` 开关、失败重试与待发合并）+ 埋点收敛点 `src/ui/panel.ts`（`openPanel`→`trackOpen`、`switchView`→`trackPage`、`closePanel`→`flushTelemetry`）+ `src/index.ts`（`initTelemetry`）+ 设置卡片 `src/ui/settings.ts`（开关、标识展示与重置）；服务端 `cloudflare/worker.js` + `cloudflare/payload.js` + `cloudflare/schema.sql`（新增采集字段必须三处同步：客户端 payload、`payload.js` 白名单、`schema.sql` 列，并同步 `docs.html` 隐私声明第十节与第四节域名表）
 - **改同步/导入**：`src/services/sync.ts` + `src/services/import-export.ts`（保持 `deepseek-stat-export v1` 兼容；钱包配置通过可选 `wallets/walletIgnored/walletFormat:2` 携带；WebDAV 包版本为 `2` 且兼容读取旧 `1`；历史按 `historyRecordKey` 的 timestamp/model/token/接入/钱包/密钥综合身份去重；导出经 `getAllHistory` 含冷库全量，导入超 `MAX_HISTORY` 自动回冷库，任何钱包校准密钥均不导出）+ `src/services/pricing-sync.ts`（models.dev 按钱包同步）
 - **改预测**：`src/ui/forecast-view.ts`（自选对话胶囊、能耗/预测/敏感度联动）+ `src/stats/forecast.ts`
 - **改自定义小块（概览 8 + 统计 4）**：在 `FOUR_OPTIONS`（`src/ui/overview.ts` 导出，概览与统计页共用的 18 项标签表）+ `OverviewFourKey/StatsFourKey`（`src/types/settings.ts`）+ `getFourDisplay`（渲染）+ `valid/validStats` 白名单（`src/data/repository.ts` 的 `normalizeSettings` 与 `hydrate`）四处同步新增 key；数值算在 `computeOverview`/`computeStatsFour`（`src/data/computed.ts`），**所有 `avg_*` 必须走 `averagePositive`**，让单轮 0/空值从分子分母同时剔除

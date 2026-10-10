@@ -1,10 +1,10 @@
 import { cn as __exportAll } from "./Image-B5UjBJH1.js";
-import { a as defaultSettings, n as getSelectedSave, r as state } from "./store-D3uOTDWz.js";
+import { a as defaultSettings, n as getSelectedSave, r as state } from "./store-DSiVmOSF.js";
 import { a as MAX_HISTORY, i as HIDDEN_PRICING_MODELS, n as DEFAULT_PEAK_HOURS, o as PRICE_HISTORY, s as PRICING } from "./pricing-bcKQQNo6.js";
 import { a as loadHistoryCold, c as saveExtensionSettings, d as historyRecordKey, i as getExtensionSettings, l as saveHistoryCold, n as clearHistoryCold, o as loadHot, r as getAllHistory, t as appendHistoryCold, u as saveHot } from "./persistence-CrFXrRB_.js";
 import { r as toast, t as log } from "./logger-Bv-AT94O.js";
 import { a as isUnsafeKey, c as localDay, i as isPeakHour, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay } from "./date-BJI2m6dS.js";
-import { a as getWalletExchangeRate } from "./currency-BVe2dp3y.js";
+import { a as getWalletExchangeRate } from "./currency-IAtpC2X8.js";
 //#region src/types/wallet.ts
 var DEEPSEEK_WALLET_ID = "wallet:deepseek-official";
 var WALLET_CATALOG_PROVIDERS = [
@@ -1988,7 +1988,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && state.settings.pricingSync?.enabled) try {
-						import("./pricing-sync-BGy2gBtF.js").then((n) => n.i).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-Da48y5SX.js").then((n) => n.i).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
