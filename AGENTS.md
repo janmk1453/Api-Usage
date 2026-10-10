@@ -138,6 +138,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - 魔法棒悬停：`background: transparent !important`
 - 文字：`Microsoft YaHei`，无 `antialiased/optimizeLegibility` 干预
 - 移动端：`≤760px` 侧边栏 `display:none` 默认隐藏、`#aus-mobile-header` 汉堡（`24px` `☰`，`display:flex`）瞬时呼出 `is-open`，无遮罩无动画；`#aus-panel flex:column + #aus-panel-body flex:row`（`#aus-main overflow-x:hidden + min-width:0` 约束防止 720px 表撑开），概览 8 块保持 `repeat(2,1fr)` 两列，钱包汇总卡强制保持 `repeat(3,minmax(0,1fr))` 一行三列，钱包 header 五项指标保持三列换行、操作按钮单独一行，钱包双栏和其他网格 `4→1` 列，窄屏所有胶囊下拉 `overflow:visible + z-index:50` 不被裁剪；粗指针设备面板按钮统一按 `min-height:30px` 保持紧凑，历史卡片“旧/新/详情”为 `26px`、概览余额卡“查询余额/导出记录/导入记录”为 `30px`，避免被通用触控规则撑高
+  - **宽表块横滑白名单**：窄屏 `[data-view="overview"] .ds-card { overflow:hidden !important }` 会压过卡片内联 `overflow:auto`，凡概览页需块内横滑的卡片都必须补 ID 规则（现存 `#aus-overview-history`、`#aus-overview-spend`、`#aus-chat-summary-overview`，统计页为 `#aus-model-summary`）；ID 选择器特异性高于该属性+类组合，`!important` 下同样胜出
 
 ## 常见任务
 

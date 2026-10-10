@@ -448,6 +448,9 @@
   /* 用量概览的数据块（历史消耗/支出明细）块内滑动；四小块保持 overflow:visible 以显示下拉 */
   #aus-overview-history,
   #aus-overview-spend { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
+  /* 概览页「按对话统计」：与模型汇总同款块内横滑（概览 .ds-card 的 overflow:hidden !important 会裁掉 720px 表） */
+  #aus-chat-summary-overview { overflow-x: auto !important; overflow-y: hidden !important; -webkit-overflow-scrolling: touch !important; overscroll-behavior-x: contain !important; }
+  #aus-chat-summary-overview table { min-width: 720px !important; }
   #aus-overview-four .ds-card, #aus-stats-four .ds-card { overflow: visible !important; }
   #aus-overview-history > div,
   #aus-overview-spend > div { min-width: 0 !important; }
