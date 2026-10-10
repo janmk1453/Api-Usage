@@ -248,8 +248,12 @@ async function buildSummary(env, days) {
     ),
     queryAll(
       env,
-      `SELECT app_version AS version, COUNT(DISTINCT device_id) AS c
-       FROM device_daily WHERE day >= ?1 GROUP BY app_version ORDER BY c DESC LIMIT 10`,
+      // 每台设备只归入它在范围内最后上报的版本，避免同一设备跨版本重复计数
+      `SELECT version, COUNT(*) AS c FROM (
+         SELECT app_version AS version,
+                ROW_NUMBER() OVER (PARTITION BY device_id ORDER BY day DESC, last_seq DESC) AS rn
+         FROM device_daily WHERE day >= ?1
+       ) WHERE rn = 1 GROUP BY version ORDER BY c DESC LIMIT 10`,
       [since],
     ),
     // 环境维度按设备快照聚合：一次性取回后在 Worker 内统计，避免多次全表扫描
