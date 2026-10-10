@@ -1300,11 +1300,12 @@ function renderTelemetryStatus(doc) {
 		status = telemetryStatus();
 	} catch {}
 	if (idEl) idEl.textContent = status?.id ? `匿名标识：${String(status.id).slice(0, 8)}…` : "匿名标识：待生成";
-	if (statusEl) {
-		if (!status?.configured) statusEl.textContent = "未配置上报端点：仅本地累计，不会发送任何数据";
-		else if (!status.enabled) statusEl.textContent = "已关闭：不再采集，也不再发送";
-		else statusEl.textContent = `已开启：成功上报 ${Number(status.seq) || 0} 次${status.hasPending ? "（有 1 条待重试）" : ""}`;
-	}
+	if (!statusEl) return;
+	let hint = "";
+	if (!status?.configured) hint = "未配置上报端点：仅本地累计，不会发送任何数据";
+	else if (!status.enabled) hint = "已关闭：不再采集，也不再发送";
+	statusEl.textContent = hint;
+	statusEl.style.display = hint ? "block" : "none";
 }
 var docClickBound = false;
 function bindSettingsOutsideClick(doc) {
@@ -1443,7 +1444,7 @@ function renderSettings(doc) {
       <!-- 匿名使用统计（默认开启，可随时关闭） -->
       <div class="ds-card">
         <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">匿名使用统计</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-telemetry-enabled" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-telemetry-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
-        <div style="font-size:11px;color:var(--ds-text-2);margin-top:6px;line-height:1.6;">仅上报匿名环境分桶（浏览器名与主版本、系统、架构、语言、窄屏分桶、深色偏好、standalone、时区偏移）、8 个页面的使用次数、打开次数、扩展版本与面板渲染耗时分桶。不含对话内容、模型名、密钥、余额与接口地址，服务端不记录 IP。关闭后立即停止采集与上报。<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">隐私声明</a></div>
+        <div style="font-size:11px;color:var(--ds-text-2);margin-top:6px;line-height:1.6;">仅上报匿名环境分桶（浏览器名与主版本、系统、架构、语言、窄屏分桶、standalone、时区偏移）、扩展版本与面板渲染耗时分桶等开发数据；不含对话内容、密钥等任何隐私信息，数据经过匿名化处理。关闭后立即停止采集与上报。<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">隐私声明</a></div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;flex-wrap:wrap;"><span id="aus-telemetry-id" style="font-size:11px;color:var(--ds-text-3);">匿名标识：待生成</span><button id="aus-telemetry-reset" style="padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">重置匿名标识</button></div>
         <div id="aus-telemetry-status" style="font-size:11px;color:var(--ds-text-3);margin-top:6px;"></div>
       </div>
