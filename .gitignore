@@ -12,3 +12,6 @@ deepseek-ui-reference.md
 # 本地 Cloudflare 部署配置（含真实 D1 database_id 等账号私有信息，禁止提交）
 cloudflare/wrangler.local.toml
 .dev.vars
+
+# 提交信息临时文件
+.commit-msg.tmp
