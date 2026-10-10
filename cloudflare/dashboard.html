@@ -285,7 +285,7 @@ function renderLegend(hostId, series) {
 function render(data) {
   document.getElementById('meta').textContent =
     `统计范围：近 ${data.days} 天 · 数据生成于 ${new Date(data.generatedAt).toLocaleString('zh-CN')}` +
-    `（接口缓存 30 分钟，点「刷新」立即取最新）`;
+    `（每次打开或点「刷新」都会重新查询，切换范围读到的是同一时刻的数据）`;
   document.getElementById('cards').innerHTML = [
     card('累计独立用户', fmtInt(data.devices.total), '历史去重设备数'),
     card('今日活跃', fmtInt(data.devices.dau), '按客户端本地日期'),
@@ -343,10 +343,13 @@ function render(data) {
   renderBars('env-touch', data.env?.touch || []);
 }
 
-async function load(fresh = false) {
+async function load() {
   const meta = document.getElementById('meta');
   try {
-    const res = await fetch(`/api/summary?days=${currentDays}${fresh ? '&fresh=1' : ''}`, { headers: { Accept: 'application/json' } });
+    const res = await fetch(`/api/summary?days=${currentDays}`, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     render(await res.json());
   } catch (error) {
@@ -362,7 +365,7 @@ document.querySelectorAll('.pill[data-days]').forEach((button) => {
     load();
   });
 });
-document.getElementById('reload').addEventListener('click', () => load(true));
+document.getElementById('reload').addEventListener('click', () => load());
 window.addEventListener('resize', () => { if (lastData) render(lastData); });
 load();
 </script>

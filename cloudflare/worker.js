@@ -16,8 +16,6 @@ import { MAX_BODY_BYTES, PAGE_KEYS, normalizePayload } from './payload.js';
 
 /** 逐设备日数据保留天数（设备环境快照表长期保留） */
 const RETENTION_DAYS = 730;
-/** 看板与汇总接口的缓存时长（秒） */
-const CACHE_TTL_SECONDS = 1800;
 /** device 表 last_seen/版本的回写间隔（毫秒），避免每次上报都写这一行 */
 const DEVICE_REFRESH_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -96,7 +94,7 @@ export default {
         headers: { 'Content-Type': 'text/html; charset=UTF-8', 'Cache-Control': 'no-store' },
       });
     }
-    if (path === '/api/summary') return handleSummary(url, env, ctx);
+    if (path === '/api/summary') return handleSummary(url, env);
     return new Response('Not Found', { status: 404 });
   },
 
@@ -161,35 +159,19 @@ async function writeRow(db, payload, now) {
 
 /* ---------------------------------- /api/summary ---------------------------------- */
 
-async function handleSummary(url, env, ctx) {
+/**
+ * 看板汇总接口。这里刻意不做任何缓存（包括 Cache API 与 HTTP 缓存）：
+ * 不同时间范围各自缓存时会停留在不同时刻的快照上，让「近 7 天」与「近 30 天」看起来互相矛盾，
+ * 而两者其实读的是同一份数据。看板由开发者手动查看，请求量极低，实时查询的读放大可以接受。
+ */
+async function handleSummary(url, env) {
   const days = clampDays(url.searchParams.get('days'));
-  // fresh=1 时跳过缓存读取（看板「刷新」按钮使用），但仍会把最新结果写回缓存
-  const fresh = url.searchParams.get('fresh') === '1';
-  const cache = typeof caches !== 'undefined' ? caches.default : null;
-  const cacheKey = new Request(`https://api-usage-stat.internal/summary?days=${days}`, { method: 'GET' });
-  if (cache && !fresh) {
-    try {
-      const hit = await cache.match(cacheKey);
-      if (hit) return hit;
-    } catch {}
-  }
-  let data;
   try {
-    data = await buildSummary(env, days);
+    const data = await buildSummary(env, days);
+    return jsonResponse(data, { status: 200, headers: noStore() });
   } catch (error) {
     return jsonResponse({ ok: false, error: '查询失败' }, { status: 500, headers: noStore() });
   }
-  const response = jsonResponse(data, {
-    status: 200,
-    headers: {
-      'Cache-Control': `public, max-age=${CACHE_TTL_SECONDS}`,
-      'Content-Type': 'application/json; charset=UTF-8',
-    },
-  });
-  if (cache && ctx?.waitUntil) {
-    try { ctx.waitUntil(cache.put(cacheKey, response.clone())); } catch {}
-  }
-  return response;
 }
 
 function clampDays(value) {
