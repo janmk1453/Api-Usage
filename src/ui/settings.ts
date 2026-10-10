@@ -15,8 +15,23 @@ import { syncPricingFromModelsDev, previewSync, fetchModelsDevCatalog, removeSyn
 import { fetchLiveRate } from '../services/currency';
 import { toast } from '../utils/logger';
 import { repository } from '../data/repository';
+import { telemetryStatus, resetIdentity } from '../services/telemetry';
 
 function esc(s: string) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+/** 刷新「匿名使用统计」卡片上的标识与状态文案 */
+function renderTelemetryStatus(doc: Document) {
+  const idEl = doc.getElementById('aus-telemetry-id');
+  const statusEl = doc.getElementById('aus-telemetry-status');
+  let status: any = null;
+  try { status = telemetryStatus(); } catch {}
+  if (idEl) idEl.textContent = status?.id ? `匿名标识：${String(status.id).slice(0, 8)}…` : '匿名标识：待生成';
+  if (statusEl) {
+    if (!status?.configured) statusEl.textContent = '未配置上报端点：仅本地累计，不会发送任何数据';
+    else if (!status.enabled) statusEl.textContent = '已关闭：不再采集，也不再发送';
+    else statusEl.textContent = `已开启：成功上报 ${Number(status.seq) || 0} 次${status.hasPending ? '（有 1 条待重试）' : ''}`;
+  }
+}
 
 let docClickBound = false;
 function bindSettingsOutsideClick(doc: Document) {
@@ -148,6 +163,13 @@ export function renderSettings(doc: Document) {
   const s = state.settings as any;
   host.innerHTML = `
     <div style="display:grid;gap:12px;">
+      <!-- 匿名使用统计（默认开启，可随时关闭） -->
+      <div class="ds-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">匿名使用统计</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-telemetry-enabled" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-telemetry-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div style="font-size:11px;color:var(--ds-text-2);margin-top:6px;line-height:1.6;">仅上报匿名环境分桶（浏览器名与主版本、系统、架构、语言、窄屏分桶、深色偏好、standalone、时区偏移）、8 个页面的使用次数、打开次数、扩展版本与面板渲染耗时分桶。不含对话内容、模型名、密钥、余额与接口地址，服务端不记录 IP。关闭后立即停止采集与上报。<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">隐私声明</a></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;flex-wrap:wrap;"><span id="aus-telemetry-id" style="font-size:11px;color:var(--ds-text-3);">匿名标识：待生成</span><button id="aus-telemetry-reset" style="padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:11px;cursor:pointer;">重置匿名标识</button></div>
+        <div id="aus-telemetry-status" style="font-size:11px;color:var(--ds-text-3);margin-top:6px;"></div>
+      </div>
       <!-- 颜色模式（与用量统计·模型选择一致的胶囊下拉） -->
       <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:600;color:var(--ds-text);">颜色模式</span><div id="aus-theme-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:12px;cursor:pointer;"><span style="color:var(--ds-text-2);">模式</span><span id="aus-theme-label" style="font-weight:600;color:var(--ds-text);">浅色</span><span style="font-size:10px;">▼</span></div></div><div id="aus-theme-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:140px;padding:8px;"></div><div style="font-size:11px;color:var(--ds-text-2);margin-top:6px;">切换后立即生效，深色模式针对夜间可读性优化</div></div>
 
@@ -246,6 +268,12 @@ export function renderSettings(doc: Document) {
     }
   } catch {}
   (doc.getElementById('aus-custom-balance') as HTMLInputElement | null)!.value = state.customBalance || '';
+  // 匿名使用统计：开关状态与标识展示
+  const telemetryCb = doc.getElementById('aus-telemetry-enabled') as HTMLInputElement | null;
+  const telemetrySlider = doc.getElementById('aus-telemetry-slider') as HTMLElement | null;
+  if (telemetryCb) telemetryCb.checked = s.telemetryEnabled !== false;
+  if (telemetrySlider) telemetrySlider.style.left = s.telemetryEnabled !== false ? '23px' : '3px';
+  renderTelemetryStatus(doc);
   (doc.getElementById('aus-peak-dot') as HTMLInputElement | null)!.checked = state.settings.peakDot !== false;
   const peakSlider = doc.getElementById('aus-peak-dot-slider') as HTMLElement | null;
   if (peakSlider) peakSlider.style.left = state.settings.peakDot !== false ? '23px' : '3px';
@@ -436,6 +464,20 @@ export function renderSettings(doc: Document) {
   } catch {}
   doc.getElementById('aus-peak-dot')!.onchange = (e: any) => { state.settings.peakDot = e.target.checked; const sl = doc.getElementById('aus-peak-dot-slider') as HTMLElement | null; if (sl) sl.style.left = e.target.checked ? '23px' : '3px'; saveHot({ settings: state.settings }); try { (globalThis as any).ApiUsageStat?.updatePeakDot?.(); } catch {} };
   doc.getElementById('aus-reset-dot')!.onclick = () => { try { localStorage.removeItem('ds_ds_peak_dot_pos'); const dot = (window.parent as any)?.document?.getElementById('aus-peak-dot-indicator') as HTMLElement | null; if (dot) { dot.style.left = ''; dot.style.top = '60px'; dot.style.right = '16px'; } } catch {} alert('已重置'); };
+  const telemetryToggle = doc.getElementById('aus-telemetry-enabled') as HTMLInputElement | null;
+  if (telemetryToggle) telemetryToggle.onchange = (e: any) => {
+    (state.settings as any).telemetryEnabled = !!e.target.checked;
+    const slider = doc.getElementById('aus-telemetry-slider') as HTMLElement | null;
+    if (slider) slider.style.left = e.target.checked ? '23px' : '3px';
+    saveHot({ settings: state.settings });
+    renderTelemetryStatus(doc);
+  };
+  const telemetryReset = doc.getElementById('aus-telemetry-reset') as HTMLButtonElement | null;
+  if (telemetryReset) telemetryReset.onclick = () => {
+    try { resetIdentity(); } catch {}
+    renderTelemetryStatus(doc);
+    toast('info', '已重置匿名标识，后续上报将按新设备计入');
+  };
   bindHistoryDelete(doc);
   const wUrl = doc.getElementById('aus-webdav-url') as HTMLInputElement | null;
   const wUser = doc.getElementById('aus-webdav-user') as HTMLInputElement | null;

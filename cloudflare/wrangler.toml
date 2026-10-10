@@ -1,0 +1,27 @@
+name = "api-usage-stat"
+main = "worker.js"
+compatibility_date = "2026-04-01"
+
+# 看板页作为文本模块打包进 Worker，不需要额外的静态资源托管
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "api_usage_stat"
+# 执行 `npx wrangler d1 create api_usage_stat` 后，把返回的 database_id 填到这里
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+# 每月 1 号 03:00 UTC 清理超过保留期的逐设备日数据（device 快照表长期保留）
+[triggers]
+crons = ["0 3 1 * *"]
+
+# 可选：绑定自定义域名后，把下面的注释打开并修改 pattern，客户端常量同步改成该域名
+# [[routes]]
+# pattern = "stat.example.com"
+# custom_domain = true
+
+[observability]
+enabled = false

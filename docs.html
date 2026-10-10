@@ -1433,10 +1433,17 @@
         <p>概览页选择的余额口径来自钱包列表。选择某个钱包时，余额和基于余额的剩余轮数会使用该钱包；选择全部钱包合计时，会汇总所有未忽略且已设置余额的钱包。统计、历史和趋势中的其他指标仍使用自己的筛选范围。</p>
       </section>
 
-      <section class="doc-section" id="settings" data-keywords="设置 主题 历史范围 自动校准 新价格机制 峰谷 法定节假日 额外空闲日期 汇率 models.dev 调试 峰值圆点">
+      <section class="doc-section" id="settings" data-keywords="设置 主题 历史范围 匿名使用统计 遥测 自动校准 新价格机制 峰谷 法定节假日 额外空闲日期 汇率 models.dev 调试 峰值圆点">
         <div class="section-kicker">设置</div>
         <h2 id="settings-title">设置</h2>
         <p class="lead">设置页集中控制全局显示、余额校准、价格机制、价格同步和调试选项。钱包级别的余额与模型价格在钱包页维护。</p>
+
+        <h3 id="settings-telemetry">匿名使用统计</h3>
+        <ul>
+          <li><strong>匿名使用统计</strong>位于设置页最上方，默认开启；关闭后立即停止采集与上报，不再产生任何相关网络请求。</li>
+          <li>只上报浏览器环境分桶、8 个页面使用次数、打开次数、扩展版本与面板渲染耗时分桶，不含对话内容、模型名、密钥、余额、费用与接口地址，服务端不记录 IP 地址，详见<a href="#privacy-telemetry">隐私声明第十节</a>。</li>
+          <li>卡片上显示当前匿名标识前 8 位与已成功上报次数；「重置匿名标识」会让后续上报按一台新设备计数。</li>
+        </ul>
 
         <h3 id="settings-theme">颜色模式与历史范围</h3>
         <ul>
@@ -1686,17 +1693,17 @@
         </div>
       </section>
 
-      <section class="doc-section" id="privacy" data-keywords="隐私 密钥 校准密钥 XOR WebDAV models.dev 数据上传 聊天内容 网络请求 域名 权限 删除">
+      <section class="doc-section" id="privacy" data-keywords="隐私 密钥 校准密钥 XOR WebDAV models.dev 数据上传 聊天内容 网络请求 域名 权限 删除 匿名使用统计 遥测 上报 匿名标识 关闭">
         <div class="section-kicker">隐私声明</div>
         <h2 id="privacy-title">隐私声明</h2>
         <p class="lead">本扩展是纯前端、本地运行的 SillyTavern 原生扩展，完整代码开源（MIT 许可证），可随时审查。本声明基于实际代码行为编写，逐项如实披露本扩展的全部网络请求与敏感操作。</p>
         <p><strong>适用对象：</strong>SillyTavern 扩展「API用量统计」（Api-Usage，仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">janmk1453/Api-Usage</a>）<br>
         <strong>适用版本：</strong>当前发行版本及功能行为一致的后续版本<br>
-        <strong>最后更新：</strong>2026年10月5日</p>
+        <strong>最后更新：</strong>2026年10月10日</p>
 
         <h3 id="privacy-commitments">一、核心承诺</h3>
         <ol class="steps">
-          <li>本扩展<strong>没有任何开发者自有服务器</strong>，不采集、不上传任何用户数据到开发者或任何第三方统计、遥测、追踪服务，不包含任何埋点。</li>
+          <li>本扩展<strong>不采集、不上传任何可识别个人身份的数据</strong>。唯一会离开设备的，是可在「设置 → 匿名使用统计」一键关闭的匿名使用统计（随机设备标识、环境分桶、页面使用次数、扩展版本与渲染耗时分桶），其中不含聊天内容、模型名、密钥、余额、费用与接口地址，详见第十节。</li>
           <li>本扩展发起的所有网络请求<strong>仅限于本声明第四节列出的域名</strong>，除该清单外不存在任何其他网络访问。</li>
           <li>本扩展<strong>无法获取用户储存在酒馆中的明文 API 密钥</strong>，详见第五节。</li>
           <li>用户主动填入本扩展的校准密钥<strong>不会被上传到除 DeepSeek 官方余额接口以外的任何位置</strong>，详见第六节。</li>
@@ -1737,6 +1744,7 @@
               <tr><td>7</td><td><strong>用户自行填写的 WebDAV 服务器</strong>（设置中的占位示例为 <span class="code">dav.jianguoyun.com</span>，实际地址完全由用户决定）</td><td>用户指定路径下的单一同步文件 <span class="code">DeepSeekStatSync.json</span></td><td>多设备备份与合并同步</td><td>仅当用户显式填写地址、用户名与密码并手动触发同步时；方法仅为 <span class="code">GET</span>（读取）、<span class="code">MKCOL</span>（建目录）、<span class="code">PUT</span>（写入该文件）</td><td>统计历史（<strong>已剥离消息与请求、响应明细</strong>）、聚合数据、钱包配置、扩展设置（<strong>已剔除 WebDAV 凭证</strong>）；不含校准密钥、不含对话正文</td></tr>
               <tr><td>8</td><td><strong>用户自行填写的 CORS 代理</strong>（可选）</td><td>透传上述 WebDAV 请求</td><td>部分网盘不提供 CORS 响应头时的中转</td><td>仅当用户主动填写代理地址</td><td>与第 7 项相同（经代理转发）</td></tr>
               <tr><td>9</td><td><strong>本机酒馆服务端</strong></td><td><span class="code">POST /api/extensions/version</span>、<span class="code">POST /api/extensions/switch</span>、<span class="code">POST /api/extensions/update</span></td><td>读取扩展当前提交、切换所选分支并执行扩展内一键更新</td><td>检查更新时自动或手动触发；点击“立即更新”时触发</td><td>仅发送扩展目录名、所选分支名与本地/全局标记，无用户数据</td></tr>
+              <tr><td>10</td><td><span class="code">api-usage-stat.&lt;部署者子域&gt;.workers.dev</span>（或部署者自行绑定的自定义域名）</td><td><span class="code">POST /collect</span></td><td>匿名使用统计上报（仅聚合数据，可在「设置 → 匿名使用统计」关闭）</td><td>默认开启；面板关闭或页面隐藏时合并上报（同一会话内只在结束时发一次，失败最多重试三次），关闭开关后不再发起任何请求</td><td>随机匿名标识、上报序号、客户端本地日期、时区偏移、扩展版本、浏览器名与主版本、操作系统、CPU 架构、语言、窄屏分桶、深色偏好、standalone、触屏标记、8 个页面使用次数、打开次数、会话时长、面板渲染耗时分桶；<strong>不含</strong>对话名称与内容、模型名、密钥、余额、费用、接口地址，服务端不记录 IP 地址，也不保存原始请求体</td></tr>
             </tbody>
           </table>
         </div>
@@ -1771,7 +1779,7 @@
               <tr><td>读取</td><td>酒馆密钥管理状态（条目编号、用户备注、掩码末三位）</td><td>生成来源标签，在统计中区分请求由哪条密钥发起</td></tr>
               <tr><td>读取</td><td>对话生成请求参数（模型、来源类型、自定义接口地址、反代地址、密钥条目编号、消息条数）</td><td>识别请求的接入方式与计费归属（钱包、接口、密钥）</td></tr>
               <tr><td>读取</td><td>当前对话标识与名称（酒馆上下文 <span class="code">getCurrentChatId</span> 与当前角色卡的对话字段）</td><td>仅用于「按对话筛选、统计」与「最耗对话」等展示功能</td></tr>
-              <tr><td>读取 + 写入</td><td>酒馆扩展设置中本扩展自己的命名空间（<span class="code">api_usage_stat</span>）</td><td>保存本扩展的设置项、最近的热区历史记录、XOR 混淆的校准密钥与 WebDAV 密码；该命名空间随酒馆自身设置保存在用户本地服务端，本扩展不写入其他扩展的命名空间</td></tr>
+              <tr><td>读取 + 写入</td><td>酒馆扩展设置中本扩展自己的命名空间（<span class="code">api_usage_stat</span>）</td><td>保存本扩展的设置项、最近的热区历史记录、XOR 混淆的校准密钥与 WebDAV 密码、匿名使用统计的匿名标识与待重发上报数据；该命名空间随酒馆自身设置保存在用户本地服务端，本扩展不写入其他扩展的命名空间</td></tr>
               <tr><td>读取 + 写入 + 删除</td><td>浏览器 IndexedDB（数据库名 <span class="code">api_usage_stat_db</span>）与 localStorage</td><td>存储超出热区的冷历史记录（明细已剥离）、更新检查时间戳、峰值圆点位置、调试日志等本扩展自身数据；删除仅针对本扩展自己的键</td></tr>
               <tr><td>读取 + 写入</td><td>用户配置的 WebDAV 服务器上<strong>用户指定路径</strong>下的单一同步文件（<span class="code">DeepSeekStatSync.json</span>）</td><td>备份与多设备合并同步；不会读取、覆盖或删除该路径之外的任何文件；仅在用户显式配置并手动触发时执行</td></tr>
               <tr><td>删除</td><td>仅限本扩展自身数据</td><td>卸载扩展时（<span class="code">onDelete</span> 钩子）清理酒馆设置中本扩展命名空间的数据及本地缓存键</td></tr>
@@ -1818,10 +1826,22 @@
           <li>WebDAV 同步的数据安全<strong>取决于用户自行选择的存储服务与网络环境</strong>（含可选的 CORS 代理），请选择可信的服务商。</li>
         </ul>
 
-        <h3 id="privacy-opensource">十、开源与验证</h3>
+        <h3 id="privacy-telemetry">十、匿名使用统计（可关闭）</h3>
+        <p>从加入该功能的版本开始，扩展默认开启一份<strong>匿名、聚合、去标识化</strong>的使用统计，用于了解功能的使用规模与改进方向。数据由部署者自建的 Cloudflare Worker 接收并存入 Cloudflare D1 数据库，不经过任何商业统计服务，接入地址见第四节第 10 项。</p>
+        <ul>
+          <li><strong>采集内容：</strong>随机生成的匿名标识（首次运行时在本地生成，不包含任何设备指纹）、上报序号、客户端本地日期、时区偏移、扩展版本、浏览器名与主版本、操作系统、CPU 架构、语言、面板宽度分桶、系统深色偏好、是否 standalone、触屏标记、8 个页面的使用次数、打开面板次数、会话时长、面板首帧渲染耗时分桶。</li>
+          <li><strong>明确不采集：</strong>对话名称与内容、模型名、密钥信息、余额与费用、接口地址、历史条数、User-Agent 原文、精确屏幕分辨率、设备型号；服务端<strong>不记录 IP 地址</strong>，也不保存原始请求体，只把校验后的白名单字段写入数据库。</li>
+          <li><strong>上报时机：</strong>面板关闭或页面隐藏时，把本次会话累计的数据合并成一次请求发出（每次打开扩展通常只产生 1 个请求）；发送失败时最多重试三次，仍失败则保留一条待重发数据，下次会话合并上报。</li>
+          <li><strong>存储与保留：</strong>匿名标识与待发数据保存在酒馆扩展设置中本扩展自己的命名空间内，<strong>不参与导入导出与 WebDAV 同步</strong>；服务端只保存去标识化后的聚合数据，逐设备日数据保留 730 天后自动清理，设备环境快照长期保留。</li>
+          <li><strong>如何关闭：</strong>「设置 → 匿名使用统计」可一键关闭，关闭后立即停止采集与上报，不再产生任何相关网络请求；同一位置提供「重置匿名标识」，重置后服务端会按一台新设备计数，无法再与此前数据关联。</li>
+          <li>被采集的只有分桶与计数，无法还原任何具体对话、模型使用情况或金额；即便如此，如果你不希望参与，可在上述位置随时关闭。</li>
+        </ul>
+        <p>该功能完整实现可审查：客户端 <span class="code">src/services/telemetry.ts</span>，服务端 <span class="code">cloudflare/</span>（Worker、D1 建表脚本与看板页）。</p>
+
+        <h3 id="privacy-opensource">十一、开源与验证</h3>
         <p>本扩展完整代码开源（MIT 许可证）：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">https://github.com/janmk1453/Api-Usage</a>。本声明所述全部行为均可通过审查源码验证。若未来版本的数据处理方式发生变化，本声明将随之更新，并在仓库中说明变更内容。</p>
 
-        <h3 id="privacy-contact">十一、联系与反馈</h3>
+        <h3 id="privacy-contact">十二、联系与反馈</h3>
         <p>如对本声明或扩展行为有任何疑问，欢迎通过仓库 Issues 提出：<a href="https://github.com/janmk1453/Api-Usage/issues" target="_blank" rel="noreferrer">https://github.com/janmk1453/Api-Usage/issues</a>。</p>
       </section>
 

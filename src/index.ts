@@ -9,6 +9,7 @@ import { installInterception } from './services/interception';
 import { createPanel, openPanel, closePanel, togglePanel, refreshUI, resetPanelState } from './ui/panel';
 import { createPeakDot, updatePeakDot, stopPeakDot } from './ui/peak-dot';
 import { applyTheme } from './services/theme';
+import { initTelemetry } from './services/telemetry';
 import { log } from './utils/logger';
 
 const MODULE = 'api_usage_stat';
@@ -178,6 +179,8 @@ async function init() {
   try { applyTheme((state.settings as any).theme); } catch {}
   // 隔离数据初始化错误，不影响入口注入
   try { await initStore(); } catch (e) { console.error('[API用量统计] initStore 失败', e); }
+  // 匿名使用统计：生成/读取匿名标识并绑定关闭面板、页面隐藏时的上报时机
+  try { initTelemetry(); } catch {}
   try { const m = await import('./services/balance'); (m as any).restartBalanceTimer?.(); } catch {}
   try { const m = await import('./services/currency'); (m as any).restartRateTimer?.(); } catch {}
   try { const m = await import('./services/pricing-sync'); (m as any).restartPricingSyncTimer?.(); } catch {}

@@ -71,6 +71,8 @@ export type Settings = {
   // 用户补充的额外空闲日期（YYYY-MM-DD）：内置节假日数据未覆盖年份或特殊调整时使用
   extraOffDays: string[];
   peakDot: boolean;
+  /** 匿名使用统计开关（默认开启，关闭后不再采集与上报） */
+  telemetryEnabled: boolean;
   webdav: WebdavSettings;
   historyScope: HistoryScope;
   overviewFour: OverviewFourKey[];
@@ -97,6 +99,7 @@ export const defaultSettings = (): Settings => ({
   peakHours: [{ start: '09:00', end: '12:00' }, { start: '14:00', end: '18:00' }],
   extraOffDays: [],
   peakDot: true,
+  telemetryEnabled: true,
   webdav: { url: 'https://dav.jianguoyun.com/dav/', username: '', path: '', proxy: '' },
   historyScope: 'all',
   overviewFour: ['avg_cost', 'avg_tokens', 'avg_duration', 'avg_rate', 'avg_input_tokens', 'avg_output_tokens', 'avg_hit_rate', 'max_total'],
