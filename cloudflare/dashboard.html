@@ -44,6 +44,9 @@
   td.num { text-align: right; font-variant-numeric: tabular-nums; }
   canvas { width: 100%; height: 190px; display: block; }
   .notice { color: var(--text2); font-size: 12px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; font-size: 12px; color: var(--text2); }
+  .legend-item { display: inline-flex; align-items: center; gap: 5px; }
+  .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
   .error { color: #DC2626; font-size: 12px; }
 </style>
 </head>
@@ -67,6 +70,18 @@
 <section>
   <h2>日活设备趋势</h2>
   <canvas id="dau-chart"></canvas>
+</section>
+
+<section>
+  <h2>使用强度趋势</h2>
+  <div class="legend" id="trend-legend"></div>
+  <canvas id="usage-chart"></canvas>
+</section>
+
+<section>
+  <h2>页面使用构成（每日切换次数）</h2>
+  <div class="legend" id="pages-chart-legend"></div>
+  <canvas id="pages-chart"></canvas>
 </section>
 
 <section>
@@ -105,6 +120,9 @@ const PAGE_LABELS = {
 
 let currentDays = 30;
 let lastDaily = [];
+let lastData = null;
+/** 页面构成堆叠柱的配色（顺序与 PAGE_LABELS 一致） */
+const PAGE_COLORS = ['#FF6A00', '#2563EB', '#0BA25E', '#7C3AED', '#DC2626', '#0891B2', '#D97706', '#DB2777'];
 
 function fmtInt(value) {
   const num = Number(value) || 0;
@@ -143,8 +161,8 @@ function renderBars(hostId, items, unit) {
   }).join('');
 }
 
-function drawDaily(canvas, rows) {
-  if (!canvas) return;
+/** 准备 canvas：按设备像素比缩放并清空 */
+function prepCanvas(canvas) {
   const dpr = window.devicePixelRatio || 1;
   const width = canvas.clientWidth || 600;
   const height = canvas.clientHeight || 190;
@@ -153,64 +171,115 @@ function drawDaily(canvas, rows) {
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
-  if (!rows.length) {
-    ctx.fillStyle = '#9CA3AF';
-    ctx.font = '12px "Microsoft YaHei", sans-serif';
-    ctx.fillText('暂无数据', 12, 24);
-    return;
-  }
-  const padLeft = 34;
-  const padRight = 10;
-  const padTop = 12;
-  const padBottom = 22;
-  const plotW = Math.max(10, width - padLeft - padRight);
-  const plotH = Math.max(10, height - padTop - padBottom);
-  const maxValue = Math.max(1, ...rows.map((row) => Number(row.devices) || 0));
-  const stepX = rows.length > 1 ? plotW / (rows.length - 1) : 0;
-  const xOf = (index) => padLeft + index * stepX;
-  const yOf = (value) => padTop + plotH - (Math.max(0, value) / maxValue) * plotH;
+  return { ctx, width, height };
+}
 
+function drawEmpty(ctx) {
+  ctx.fillStyle = '#9CA3AF';
+  ctx.font = '12px "Microsoft YaHei", sans-serif';
+  ctx.fillText('暂无数据', 12, 24);
+}
+
+function layout(width, height) {
+  const pad = { padLeft: 34, padRight: 10, padTop: 12, padBottom: 22 };
+  pad.plotW = Math.max(10, width - pad.padLeft - pad.padRight);
+  pad.plotH = Math.max(10, height - pad.padTop - pad.padBottom);
+  return pad;
+}
+
+/** 画网格、Y 轴刻度与 X 轴日期标签 */
+function drawAxes(ctx, pad, width, height, maxValue, xOf, rows) {
   ctx.strokeStyle = '#E5E7EB';
   ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
-    const y = padTop + (plotH / 4) * i;
+    const y = pad.padTop + (pad.plotH / 4) * i;
     ctx.beginPath();
-    ctx.moveTo(padLeft, y);
-    ctx.lineTo(width - padRight, y);
+    ctx.moveTo(pad.padLeft, y);
+    ctx.lineTo(width - pad.padRight, y);
     ctx.stroke();
   }
   ctx.fillStyle = '#9CA3AF';
   ctx.font = '11px "Microsoft YaHei", sans-serif';
-  ctx.fillText(String(maxValue), 4, padTop + 8);
-  ctx.fillText('0', 4, padTop + plotH);
-
-  ctx.beginPath();
-  rows.forEach((row, index) => {
-    const x = xOf(index);
-    const y = yOf(Number(row.devices) || 0);
-    if (index === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.strokeStyle = '#FF6A00';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  ctx.fillStyle = 'rgba(255, 106, 0, 0.10)';
-  ctx.beginPath();
-  ctx.moveTo(xOf(0), padTop + plotH);
-  rows.forEach((row, index) => ctx.lineTo(xOf(index), yOf(Number(row.devices) || 0)));
-  ctx.lineTo(xOf(rows.length - 1), padTop + plotH);
-  ctx.closePath();
-  ctx.fill();
-
+  ctx.fillText(String(maxValue), 4, pad.padTop + 8);
+  ctx.fillText('0', 4, pad.padTop + pad.plotH);
   ctx.fillStyle = '#6B7280';
   const labelCount = Math.min(6, rows.length);
   for (let i = 0; i < labelCount; i++) {
-    const index = Math.round((rows.length - 1) * (i / Math.max(1, labelCount - 1)));
+    const index = rows.length === 1 ? 0 : Math.round((rows.length - 1) * (i / Math.max(1, labelCount - 1)));
     const text = String(rows[index].day).slice(5);
-    const x = Math.min(width - padRight - 26, Math.max(padLeft - 6, xOf(index) - 12));
+    const x = Math.min(width - pad.padRight - 26, Math.max(pad.padLeft - 6, xOf(index) - 12));
     ctx.fillText(text, x, height - 6);
   }
+}
+
+/** 多条折线趋势图；series 每项为 { label, color, get(row) } */
+function drawTrend(canvas, rows, series) {
+  if (!canvas) return;
+  const { ctx, width, height } = prepCanvas(canvas);
+  if (!rows.length) return drawEmpty(ctx);
+  const pad = layout(width, height);
+  let maxValue = 0;
+  for (const row of rows) {
+    for (const item of series) maxValue = Math.max(maxValue, Number(item.get(row)) || 0);
+  }
+  maxValue = Math.max(1, maxValue);
+  const single = rows.length === 1;
+  const stepX = single ? 0 : pad.plotW / (rows.length - 1);
+  const xOf = (index) => pad.padLeft + (single ? pad.plotW / 2 : index * stepX);
+  const yOf = (value) => pad.padTop + pad.plotH - (Math.max(0, value) / maxValue) * pad.plotH;
+  drawAxes(ctx, pad, width, height, maxValue, xOf, rows);
+  for (const item of series) {
+    ctx.beginPath();
+    rows.forEach((row, index) => {
+      const x = xOf(index);
+      const y = yOf(Number(item.get(row)) || 0);
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = item.color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    if (single) {
+      ctx.fillStyle = item.color;
+      ctx.beginPath();
+      ctx.arc(xOf(0), yOf(Number(item.get(rows[0])) || 0), 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+/** 堆叠柱状图；series 每项为 { label, color, get(row) } */
+function drawStacked(canvas, rows, series) {
+  if (!canvas) return;
+  const { ctx, width, height } = prepCanvas(canvas);
+  if (!rows.length) return drawEmpty(ctx);
+  const pad = layout(width, height);
+  const totals = rows.map((row) => series.reduce((sum, item) => sum + (Number(item.get(row)) || 0), 0));
+  const maxValue = Math.max(1, ...totals);
+  const slot = pad.plotW / Math.max(1, rows.length);
+  const barW = Math.max(4, Math.min(38, slot * 0.62));
+  const xOf = (index) => pad.padLeft + slot * index + slot / 2;
+  drawAxes(ctx, pad, width, height, maxValue, xOf, rows);
+  rows.forEach((row, index) => {
+    const x = pad.padLeft + slot * index + (slot - barW) / 2;
+    let bottom = pad.padTop + pad.plotH;
+    for (const item of series) {
+      const value = Number(item.get(row)) || 0;
+      if (value <= 0) continue;
+      const barH = (value / maxValue) * pad.plotH;
+      ctx.fillStyle = item.color;
+      ctx.fillRect(x, bottom - barH, barW, barH);
+      bottom -= barH;
+    }
+  });
+}
+
+function renderLegend(hostId, series) {
+  const host = document.getElementById(hostId);
+  if (!host) return;
+  host.innerHTML = series
+    .map((item) => `<span class="legend-item"><span class="legend-dot" style="background:${item.color}"></span>${item.label}</span>`)
+    .join('');
 }
 
 function render(data) {
@@ -228,8 +297,25 @@ function render(data) {
     card('累计使用时长', fmtDuration(data.usage.durMs), '会话时长之和'),
   ].join('');
 
+  lastData = data;
   lastDaily = Array.isArray(data.daily) ? data.daily : [];
-  drawDaily(document.getElementById('dau-chart'), lastDaily);
+  drawTrend(document.getElementById('dau-chart'), lastDaily, [
+    { label: '活跃设备', color: '#FF6A00', get: (row) => Number(row.devices) || 0 },
+  ]);
+  const trendSeries = [
+    { label: '打开面板次数', color: '#FF6A00', get: (row) => Number(row.opens) || 0 },
+    { label: '使用时段', color: '#2563EB', get: (row) => Number(row.sessions) || 0 },
+    { label: '页面切换次数', color: '#0BA25E', get: (row) => Number(row.pageTotal) || 0 },
+  ];
+  renderLegend('trend-legend', trendSeries);
+  drawTrend(document.getElementById('usage-chart'), lastDaily, trendSeries);
+  const pageSeries = Object.keys(PAGE_LABELS).map((key, index) => ({
+    label: PAGE_LABELS[key],
+    color: PAGE_COLORS[index % PAGE_COLORS.length],
+    get: (row) => Number(row.pages && row.pages[key]) || 0,
+  }));
+  renderLegend('pages-chart-legend', pageSeries);
+  drawStacked(document.getElementById('pages-chart'), lastDaily, pageSeries);
 
   const pageTotal = Number(data.pages.total) || 0;
   const pageItems = Object.keys(PAGE_LABELS).map((key) => ({
@@ -277,7 +363,7 @@ document.querySelectorAll('.pill[data-days]').forEach((button) => {
   });
 });
 document.getElementById('reload').addEventListener('click', () => load(true));
-window.addEventListener('resize', () => drawDaily(document.getElementById('dau-chart'), lastDaily));
+window.addEventListener('resize', () => { if (lastData) render(lastData); });
 load();
 </script>
 </body>

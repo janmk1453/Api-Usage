@@ -258,7 +258,9 @@ async function buildSummary(env, days) {
     ),
     queryAll(
       env,
-      `SELECT day, COUNT(DISTINCT device_id) AS devices, SUM(opens) AS opens, SUM(sessions) AS sessions
+      `SELECT day, COUNT(DISTINCT device_id) AS devices, SUM(opens) AS opens, SUM(sessions) AS sessions,
+              SUM(dur_ms) AS dur_ms,
+              ${PAGE_KEYS.map((key) => `SUM(p_${key}) AS p_${key}`).join(', ')}
        FROM device_daily WHERE day >= ?1 GROUP BY day ORDER BY day`,
       [since],
     ),
@@ -300,12 +302,24 @@ async function buildSummary(env, days) {
       durMs: numberOrZero(usage.dur_ms),
     },
     pages: { ...pages, total: pageTotal },
-    daily: dailyRows.map((row) => ({
-      day: String(row.day),
-      devices: numberOrZero(row.devices),
-      opens: numberOrZero(row.opens),
-      sessions: numberOrZero(row.sessions),
-    })),
+    daily: dailyRows.map((row) => {
+      const dayPages = {};
+      let pageTotal = 0;
+      for (const key of PAGE_KEYS) {
+        const value = numberOrZero(row[`p_${key}`]);
+        dayPages[key] = value;
+        pageTotal += value;
+      }
+      return {
+        day: String(row.day),
+        devices: numberOrZero(row.devices),
+        opens: numberOrZero(row.opens),
+        sessions: numberOrZero(row.sessions),
+        durMs: numberOrZero(row.dur_ms),
+        pageTotal,
+        pages: dayPages,
+      };
+    }),
     versions: versionRows.map((row) => ({
       label: row.version ? String(row.version) : '未知',
       count: numberOrZero(row.c),
