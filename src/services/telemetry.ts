@@ -15,8 +15,10 @@ import { log } from '../utils/logger';
 /**
  * 上报端点。部署 Cloudflare Worker 后把这里替换为真实地址（详见 cloudflare/README.md）。
  * 仍为占位符时只做本地累加，不发任何请求。
+ * 注意：`*.workers.dev` 直连在大陆被定点阻断（DNS 污染 + SNI），无代理用户会上报失败；
+ * 如需覆盖这部分用户，请给 Worker 绑定自定义域名并把这里换成该域名（见 cloudflare/README.md）。
  */
-export const TELEMETRY_ENDPOINT = 'https://api-usage-stat.<subdomain>.workers.dev/collect';
+export const TELEMETRY_ENDPOINT = 'https://api-usage-stat.janmk1453.workers.dev/collect';
 
 const IDENTITY_KEY = 'telemetry';
 /** 关闭面板触发上报的最小间隔（吃掉反复开关面板造成的抖动） */
@@ -204,7 +206,7 @@ export function countersAreEmpty(counters: TelemetryCounters): boolean {
 }
 
 /** 上报端点是否已配置（占位符视为未配置，此时只本地累加） */
-export function isEndpointConfigured(endpoint: string = TELEMETRY_ENDPOINT): boolean {
+export function isEndpointConfigured(endpoint: string = currentEndpoint()): boolean {
   const value = String(endpoint || '').trim();
   if (!/^https:\/\/[^\s<>]+$/i.test(value)) return false;
   return !value.includes('<') && !value.includes('>');

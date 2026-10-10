@@ -697,23 +697,6 @@ function generateDebugBatch() {
 	} catch {}
 	alert("已生成 " + generated + " 条模拟数据");
 }
-//#endregion
-//#region src/services/telemetry.ts
-/**
-* 匿名使用统计（客户端）
-*
-* 设计要点：
-* - 只在本地内存累加事件，面板关闭或页面隐藏时才合并成一次上报，避免频繁消耗免费额度；
-* - 上报体经 text/plain 发出（跨域简单请求，不触发 CORS 预检，一次上报只消耗 1 个请求）；
-* - 只采集浏览器环境分桶、页面使用次数、活跃度与面板渲染耗时分桶，不采集任何隐私数据；
-* - 匿名标识与待发缓存存放于 extensionSettings 的独立键（不会进入 state.settings，因而不参与导出与 WebDAV 同步）；
-* - 开关关闭后立即停止累加与发送；标识重置是独立动作，用于让用户随时更换匿名身份。
-*/
-/**
-* 上报端点。部署 Cloudflare Worker 后把这里替换为真实地址（详见 cloudflare/README.md）。
-* 仍为占位符时只做本地累加，不发任何请求。
-*/
-var TELEMETRY_ENDPOINT = "https://api-usage-stat.<subdomain>.workers.dev/collect";
 var IDENTITY_KEY = "telemetry";
 /** 关闭面板触发上报的最小间隔（吃掉反复开关面板造成的抖动） */
 var CLOSE_FLUSH_GAP = 6e4;
@@ -875,7 +858,7 @@ function countersAreEmpty(counters) {
 	return true;
 }
 /** 上报端点是否已配置（占位符视为未配置，此时只本地累加） */
-function isEndpointConfigured(endpoint = TELEMETRY_ENDPOINT) {
+function isEndpointConfigured(endpoint = currentEndpoint()) {
 	const value = String(endpoint || "").trim();
 	if (!/^https:\/\/[^\s<>]+$/i.test(value)) return false;
 	return !value.includes("<") && !value.includes(">");
@@ -883,7 +866,7 @@ function isEndpointConfigured(endpoint = TELEMETRY_ENDPOINT) {
 /** 测试用端点覆盖；生产环境始终使用 TELEMETRY_ENDPOINT */
 var endpointOverride = null;
 function currentEndpoint() {
-	return endpointOverride ?? "https://api-usage-stat.<subdomain>.workers.dev/collect";
+	return endpointOverride ?? "https://api-usage-stat.janmk1453.workers.dev/collect";
 }
 var counters = emptyCounters();
 var sessionStart = null;

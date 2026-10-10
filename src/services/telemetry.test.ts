@@ -170,7 +170,9 @@ describe('分桶与归一', () => {
   });
 
   it('占位符端点视为未配置', () => {
-    expect(isEndpointConfigured(TELEMETRY_ENDPOINT)).toBe(false);
+    // 已接入自有接收端：生产常量必须是可用的真实地址
+    expect(isEndpointConfigured(TELEMETRY_ENDPOINT)).toBe(true);
+    expect(isEndpointConfigured('https://api-usage-stat.<subdomain>.workers.dev/collect')).toBe(false);
     expect(isEndpointConfigured('https://api-usage-stat.demo.workers.dev/collect')).toBe(true);
     expect(isEndpointConfigured('http://insecure.example.com/collect')).toBe(false);
     expect(isEndpointConfigured('')).toBe(false);
@@ -361,7 +363,7 @@ describe('累加与上报', () => {
 
   it('未配置端点时只本地累加，不发任何请求', async () => {
     // 恢复占位符端点：视为未配置，只本地累加
-    __setEndpointForTest(null);
+    __setEndpointForTest('https://api-usage-stat.<subdomain>.workers.dev/collect');
     expect(isEndpointConfigured()).toBe(false);
     trackOpen();
     flushTelemetry('close');

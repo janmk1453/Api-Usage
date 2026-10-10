@@ -9,7 +9,7 @@
 | `worker.js` | Worker 入口：`POST /collect`、`GET /dashboard`、`GET /api/summary`、`GET /health`，以及每月清理的定时任务 |
 | `payload.js` | 上报体白名单校验与数值钳制（纯函数，有单元测试） |
 | `schema.sql` | D1 建表脚本（`device` 设备快照 + `device_daily` 逐设备日数据） |
-| `wrangler.toml` | Worker 配置（D1 绑定、D1 database_id、Cron、文本模块规则） |
+| `wrangler.toml` | Worker 配置模板（D1 绑定、Cron、文本模块规则）；`database_id` 保持占位符，真实值放本地 `wrangler.local.toml` |
 | `dashboard.html` | 看板页模板，作为文本模块打包进 Worker |
 
 ## 部署步骤
@@ -23,7 +23,10 @@ npx wrangler login
 # 2. 创建 D1 数据库，记下返回的 database_id
 npx wrangler d1 create api_usage_stat
 
-# 3. 把 database_id 填进 cloudflare/wrangler.toml（替换 REPLACE_WITH_D1_DATABASE_ID）
+# 3. 生成本地部署配置（含账号私有信息，已在 .gitignore 中，切勿提交）
+#    把 cloudflare/wrangler.toml 复制为 cloudflare/wrangler.local.toml，
+#    并把 database_id 替换为上一步返回的真实值
+cp cloudflare/wrangler.toml cloudflare/wrangler.local.toml
 
 # 4. 建表（远程库）
 npx wrangler d1 execute api_usage_stat --remote --file cloudflare/schema.sql
@@ -31,10 +34,12 @@ npx wrangler d1 execute api_usage_stat --remote --file cloudflare/schema.sql
 # 5. 设置看板访问口令（自定义一个足够长的随机串）
 npx wrangler secret put DASHBOARD_TOKEN
 
-# 6. 部署
+# 6. 部署（使用本地配置，其中含真实 database_id）
 cd cloudflare
-npx wrangler deploy
+npx wrangler deploy -c wrangler.local.toml
 ```
+
+> 仓库内的 `wrangler.toml` 只保留占位符，请不要把真实的 `database_id`、账号 ID、API Token 等信息写进任何被提交的文件；`wrangler.local.toml` 与 `.dev.vars` 已在 `.gitignore` 中忽略。
 
 部署成功后会输出形如 `https://api-usage-stat.<你的子域>.workers.dev` 的地址：
 
@@ -54,7 +59,7 @@ npx wrangler deploy
 ```bash
 cd cloudflare
 npx wrangler d1 execute api_usage_stat --local --file schema.sql   # 建本地库
-npx wrangler dev --local                                           # 本地启动，默认 http://127.0.0.1:8787
+npx wrangler dev --local -c wrangler.local.toml                    # 本地启动，默认 http://127.0.0.1:8787
 ```
 
 本地调试时可以把 `TELEMETRY_ENDPOINT` 临时指向本地地址（或直接用 curl 手工发一条上报体）：
@@ -108,6 +113,15 @@ npx wrangler d1 execute api_usage_stat --remote --command \
 
 ## 常见问题
 
+- **大陆用户无法上报**：`*.workers.dev` 在大陆被定点阻断（DNS 污染 + SNI 阻断，实测换子域无效，而 Cloudflare 边缘自身可达），只有挂代理的客户端能上报。若需要覆盖大陆直连用户，请给 Worker 绑定自定义域名：
+
+  ```toml
+  [[routes]]
+  pattern = "stat.你的域名"
+  custom_domain = true
+  ```
+
+  再执行 `npx wrangler deploy`，并把 `src/services/telemetry.ts` 的 `TELEMETRY_ENDPOINT` 换成 `https://stat.你的域名/collect` 后重新构建。
 - **看板 401**：未设置 `DASHBOARD_TOKEN`，或浏览器缓存了错误口令；重新 `npx wrangler secret put DASHBOARD_TOKEN` 后换浏览器隐私窗口访问。
 - **设置页一直显示"未配置上报端点"**：`TELEMETRY_ENDPOINT` 仍是占位符，按上文「接入客户端」修改后重新构建。
 - **看板数据不变**：汇总接口有 30 分钟缓存，属预期；点"刷新"按钮会命中缓存，等待缓存过期即可看到最新数据。

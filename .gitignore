@@ -8,3 +8,7 @@ node_modules/
 # 本地草稿文档
 deepseek-ui-reference.md
 趋势预测初步计划.md
+
+# 本地 Cloudflare 部署配置（含真实 D1 database_id 等账号私有信息，禁止提交）
+cloudflare/wrangler.local.toml
+.dev.vars
