@@ -215,13 +215,14 @@ function drawDaily(canvas, rows) {
 
 function render(data) {
   document.getElementById('meta').textContent =
-    `统计范围：近 ${data.days} 天 · 生成于 ${new Date(data.generatedAt).toLocaleString('zh-CN')}`;
+    `统计范围：近 ${data.days} 天 · 数据生成于 ${new Date(data.generatedAt).toLocaleString('zh-CN')}` +
+    `（接口缓存 30 分钟，点「刷新」立即取最新）`;
   document.getElementById('cards').innerHTML = [
     card('累计独立用户', fmtInt(data.devices.total), '历史去重设备数'),
     card('今日活跃', fmtInt(data.devices.dau), '按客户端本地日期'),
     card('近 7 天活跃', fmtInt(data.devices.wau), ''),
     card('近 30 天活跃', fmtInt(data.devices.mau), ''),
-    card(`近 ${data.days} 天活跃`, fmtInt(data.devices.window), ''),
+    card('当前范围活跃', fmtInt(data.devices.window), `近 ${data.days} 天`),
     card('使用时段', fmtInt(data.usage.sessions), '每次上报计一段'),
     card('打开面板次数', fmtInt(data.usage.opens), ''),
     card('累计使用时长', fmtDuration(data.usage.durMs), '会话时长之和'),
@@ -256,10 +257,10 @@ function render(data) {
   renderBars('env-touch', data.env?.touch || []);
 }
 
-async function load() {
+async function load(fresh = false) {
   const meta = document.getElementById('meta');
   try {
-    const res = await fetch(`/api/summary?days=${currentDays}`, { headers: { Accept: 'application/json' } });
+    const res = await fetch(`/api/summary?days=${currentDays}${fresh ? '&fresh=1' : ''}`, { headers: { Accept: 'application/json' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     render(await res.json());
   } catch (error) {
@@ -275,7 +276,7 @@ document.querySelectorAll('.pill[data-days]').forEach((button) => {
     load();
   });
 });
-document.getElementById('reload').addEventListener('click', () => load());
+document.getElementById('reload').addEventListener('click', () => load(true));
 window.addEventListener('resize', () => drawDaily(document.getElementById('dau-chart'), lastDaily));
 load();
 </script>

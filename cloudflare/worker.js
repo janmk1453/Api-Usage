@@ -163,9 +163,11 @@ async function writeRow(db, payload, now) {
 
 async function handleSummary(url, env, ctx) {
   const days = clampDays(url.searchParams.get('days'));
+  // fresh=1 时跳过缓存读取（看板「刷新」按钮使用），但仍会把最新结果写回缓存
+  const fresh = url.searchParams.get('fresh') === '1';
   const cache = typeof caches !== 'undefined' ? caches.default : null;
   const cacheKey = new Request(`https://api-usage-stat.internal/summary?days=${days}`, { method: 'GET' });
-  if (cache) {
+  if (cache && !fresh) {
     try {
       const hit = await cache.match(cacheKey);
       if (hit) return hit;
