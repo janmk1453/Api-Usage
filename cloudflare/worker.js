@@ -230,6 +230,9 @@ SELECT app_version, st_version, history_count, telemetry_off,
 FROM device
 `;
 
+/** 未执行 migrate-theme-mode.sql 的库：不查 theme_mode，画面改用「未知」而不是整页报错 */
+const DEVICE_SELECT_LEGACY_SQL = DEVICE_SELECT_SQL.replace('dark, theme_mode, standalone', 'dark, standalone');
+
 /** 当日汇总：只扫当天行（行数 = 当日活跃设备数），同时给出当日去重设备数（日活） */
 const TODAY_SELECT_SQL = `
 SELECT COUNT(DISTINCT device_id) AS devices,
@@ -479,7 +482,8 @@ async function buildSummary(env) {
   const now = Date.now();
   const today = beijingDayKey(now);
   const [deviceRows, todayRows] = await Promise.all([
-    queryAll(env, DEVICE_SELECT_SQL),
+    // theme_mode 列尚未迁移时退回不带该列的查询，保证看板照常出数（颜色模式显示为未知）
+    queryAll(env, DEVICE_SELECT_SQL).catch(() => queryAll(env, DEVICE_SELECT_LEGACY_SQL)),
     queryAll(env, TODAY_SELECT_SQL, [today]),
   ]);
 

@@ -27,12 +27,18 @@ function createDb(fixtures, options) {
         },
         async all() {
           calls.push({ sql, params: stmt.params });
+          // 模拟既有库尚未执行 migrate-theme-mode.sql：读取 theme_mode 的查询整体失败
+          if (opts.failThemeSelect && sql.includes('theme_mode')) throw new Error('no such column: theme_mode');
           if (sql.includes('strftime')) return { results: fixtures.growthHourly };
           if (sql.includes('first_seen <')) return { results: fixtures.growthBaseline };
           if (sql.includes('GROUP BY hour')) return { results: fixtures.hourly };
           if (sql.includes('GROUP BY day')) return { results: fixtures.daily };
           if (sql.includes('GROUP BY app_version')) return { results: fixtures.render };
           if (sql.includes('FROM device_daily')) return { results: fixtures.today };
+          if (opts.failThemeSelect) {
+            // 列不存在时查询结果里自然不会有该字段
+            return { results: fixtures.devices.map((row) => { const copy = Object.assign({}, row); delete copy.theme_mode; return copy; }) };
+          }
           return { results: fixtures.devices };
         },
         async run() {
@@ -419,6 +425,15 @@ describe('/api/summary 总计口径', () => {
     expect(data.durationHistogram.reduce((sum, item) => sum + item.count, 0)).toBe(2);
     expect(data.durationHistogram[1]).toEqual({ label: '<1 分钟', count: 1 });
     expect(data.durationHistogram[2]).toEqual({ label: '<10 分钟', count: 1 });
+  });
+
+  it('theme_mode 列尚未迁移时总计仍能出数（颜色模式记为未知）', async () => {
+    const { env } = makeEnv({}, { failThemeSelect: true });
+    const res = await get('/api/summary', env);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.totals.users).toBe(2);
+    expect(data.env.themeMode).toEqual([{ label: '未上报', count: 2 }]);
   });
 
   it('空库时返回零值而不是报错', async () => {
