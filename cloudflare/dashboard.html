@@ -323,7 +323,7 @@
   const HOUR_RANGE_HOURS = 24;
   const HOUR_MS = 60 * 60 * 1000;
   /** 看板构建标识：每次改动看板后更新，便于确认浏览器拿到的是否为最新页面 */
-  const BUILD_ID = '2026-10-21.4';
+  const BUILD_ID = '2026-10-21.5';
   /**
    * 图表库来源：**仅自托管**（Worker 同源的 `/vendor/echarts.js`），不使用任何第三方 CDN。
    * 这样看板不会向外部站点发起请求，也就不会被广告拦截类扩展或网络策略误伤；
@@ -347,7 +347,8 @@
   const PANELS = [
     { grid: 'grid-trend', id: 'growth', title: '累计用户趋势', note: 'Y 轴为截至当日的不重复用户累计值', kind: 'line', range: true },
     { grid: 'grid-trend', id: 'daily-opens', title: '每日打开面板次数', note: '当日全部设备的打开次数之和', kind: 'line', range: true },
-    { grid: 'grid-trend', id: 'daily-users', title: '每日不重复用户数', note: '当日产生遥测数据的去重设备数', kind: 'line', range: true },
+    { grid: 'grid-trend', id: 'daily-users', title: '每日不重复用户数', note: '当日产生遥测数据的去重设备数（日活，老设备当天使用也计入）', kind: 'line', range: true },
+    { grid: 'grid-trend', id: 'daily-new-users', title: '每日新增用户数', note: '当日首次出现的去重设备数（新增用户），与「每日不重复用户数」互补', kind: 'line', range: true, dayOnly: true },
     { grid: 'grid-trend', id: 'daily-pages', title: '每日面板打开占比', note: '各面板当日打开次数占当日面板打开总数的百分比', kind: 'line', range: true, tall: true },
     { grid: 'grid-trend', id: 'hour-of-day', title: '时段活跃分布（0–24 时）', note: '按北京时间小时汇总：柱=该时段活跃设备数（窗口内去重），线=累计占比，用来看用户一天中在哪个时段更活跃', kind: 'hours', range: true, dayOnly: true, tall: true },
     { grid: 'grid-usage', id: 'pages', title: '面板累计打开次数', note: '全部时间累计', kind: 'bar' },
@@ -1292,6 +1293,18 @@
       { yName: '用户数' });
   }
 
+  /** 每日新增用户：当日首次出现的设备数（来自 userGrowth / userGrowthHourly 的 added 字段） */
+  function paintDailyNewUsers(range, result) {
+    const rows = (result.growthRows || []).filter((row) => {
+      const key = row.hour || row.day;
+      return key >= range.from && key <= range.to;
+    });
+    drawLine('daily-new-users',
+      rows.map((row) => trendLabel(range, row)),
+      [{ name: '每日新增用户', color: themeColors().green, area: true, data: rows.map((row) => Number(row.added) || 0) }],
+      { yName: '新增用户' });
+  }
+
   function paintDailyPages(range, result) {
     drawLine('daily-pages',
       result.rows.map((row) => trendLabel(range, row)),
@@ -1429,7 +1442,7 @@
     if (button) button.textContent = expanded.has(id) ? '收起' : '展开全部';
   }
 
-  const TREND_IDS = ['growth', 'daily-opens', 'daily-users', 'daily-pages', 'hour-of-day'];
+  const TREND_IDS = ['growth', 'daily-opens', 'daily-users', 'daily-new-users', 'daily-pages', 'hour-of-day'];
 
   async function refreshTrendView(id, force) {
     const range = ranges[id];
@@ -1452,6 +1465,7 @@
       if (id === 'growth') paintGrowth(range, result);
       if (id === 'daily-opens') paintDailyOpens(range, result);
       if (id === 'daily-users') paintDailyUsers(range, result);
+      if (id === 'daily-new-users') paintDailyNewUsers(range, result);
       if (id === 'daily-pages') paintDailyPages(range, result);
       noteCache(result);
     } catch (error) {

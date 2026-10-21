@@ -322,6 +322,12 @@ describe('看板页渲染（图表库可用）', () => {
     expect(pages.series[0].data).toHaveLength(8);
     expect(pages.tooltip.trigger).toBe('item');
 
+    // 每日新增用户：与「每日不重复用户数」互补，取 userGrowth 的 added
+    const newUsers = option('daily-new-users');
+    expect(newUsers.series).toHaveLength(1);
+    expect(newUsers.series[0].data).toEqual([1, 1, 1]);
+    expect(newUsers.xAxis.data).toHaveLength(3);
+
     const growth = option('growth');
     expect(growth.series).toHaveLength(1);
     expect(growth.series[0].areaStyle).toBeDefined();
