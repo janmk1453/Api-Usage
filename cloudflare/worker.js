@@ -83,9 +83,31 @@ const DEVICE_BASE_VALUES = `?1, ?2, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?1
   ?14, ?15, ?16, ?17`;
 
 /**
- * 设备维度汇总上行（含酒馆版本号与 TauriTavern 版本号）：
+ * 设备维度汇总上行（新库首选）：在酒馆版本、TauriTavern 版本、历史条数与开关状态之外，
+ * 额外写入颜色模式 theme_mode（light / dark / auto），空值不覆盖既有状态；
  * `WHERE excluded.last_seq > device.last_seq` 保证重复/重发上报不重复累加，
  * 与 device_daily / device_hourly 的幂等判据一致。
+ */
+const DEVICE_UPSERT_THEME_SQL = `
+INSERT INTO device (
+  ${DEVICE_BASE_COLUMNS},
+  ${TOTAL_COLUMNS.join(', ')}, st_version, tt_version, history_count, telemetry_off, theme_mode
+) VALUES (
+  ${DEVICE_BASE_VALUES},
+  ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30
+)
+${DEVICE_UPSERT_SET},
+  st_version = COALESCE(NULLIF(excluded.st_version, ''), device.st_version),
+  tt_version = COALESCE(NULLIF(excluded.tt_version, ''), device.tt_version),
+  history_count = excluded.history_count,
+  telemetry_off = excluded.telemetry_off,
+  theme_mode = COALESCE(NULLIF(excluded.theme_mode, ''), device.theme_mode)
+WHERE excluded.last_seq > device.last_seq
+`;
+
+/**
+ * 含酒馆与 TauriTavern 版本号、但不含 theme_mode 的语句：
+ * 已执行 migrate-tt-version.sql、尚未执行 migrate-theme-mode.sql 的库使用。
  */
 const DEVICE_UPSERT_SQL = `
 INSERT INTO device (
@@ -202,7 +224,7 @@ WHERE device_hourly.last_seq < excluded.last_seq
 const DEVICE_SELECT_SQL = `
 SELECT app_version, st_version, history_count, telemetry_off,
        browser, browser_major, os, arch, lang, width_bucket,
-       dark, standalone, touch, tz_offset, first_day, first_seen,
+       dark, theme_mode, standalone, touch, tz_offset, first_day, first_seen,
        opens_total, dur_ms_total,
        ${TOTAL_COLUMNS.join(', ')}
 FROM device
@@ -362,6 +384,8 @@ async function writeRow(db, payload, now) {
   // 设备最新状态：历史记录总条数（精确值）与匿名统计开关是否已关闭
   const historyCount = Number.isFinite(Number(payload.hc)) ? Math.max(0, Math.floor(Number(payload.hc))) : 0;
   const offFlag = Number(payload.off) === 1 ? 1 : 0;
+  // 颜色模式：客户端设置值（light/dark/auto），旧客户端不报时为空字符串，写入时按「空值不覆盖」处理
+  const themeMode = typeof env.tm === 'string' ? env.tm : '';
 
   const deviceArgs = [
     payload.id, now, payload.app,
@@ -374,6 +398,7 @@ async function writeRow(db, payload, now) {
   ];
   const ttArgs = [...deviceArgs, env.stv, historyCount, offFlag];
   const extendedDeviceArgs = [...deviceArgs, env.stv, env.ttv, historyCount, offFlag];
+  const themeArgs = [...extendedDeviceArgs, themeMode];
   const dailyArgs = [
     payload.day, payload.id,
     counters.opens, counters.dur_ms,
@@ -386,6 +411,7 @@ async function writeRow(db, payload, now) {
 
   // 每次重试重新 prepare：batch 事务失败会整体回滚，last_seq 判据保证重放不会重复累加
   const buildDevice = (mode) => {
+    if (mode === 'theme') return db.prepare(DEVICE_UPSERT_THEME_SQL).bind(...themeArgs);
     if (mode === 'tt') return db.prepare(DEVICE_UPSERT_SQL).bind(...extendedDeviceArgs);
     if (mode === 'st') return db.prepare(DEVICE_UPSERT_ST_ONLY_SQL).bind(...ttArgs);
     return db.prepare(DEVICE_UPSERT_LEGACY_SQL).bind(...deviceArgs);
@@ -394,13 +420,18 @@ async function writeRow(db, payload, now) {
   const buildHourly = () => db.prepare(DEVICE_HOURLY_UPSERT_SQL).bind(...hourlyArgs);
 
   try {
-    await db.batch([buildDevice('tt'), buildDaily(), buildHourly()]);
+    await db.batch([buildDevice('theme'), buildDaily(), buildHourly()]);
     return;
   } catch {
     // 继续走降级链：可能是 device_hourly 表缺失，也可能是 device 扩展列缺失
   }
   try {
     // 小时表尚未迁移（migrate-hourly.sql）：保留原有的设备 + 日两条写入
+    await db.batch([buildDevice('theme'), buildDaily()]);
+    return;
+  } catch {}
+  try {
+    // theme_mode 列尚未迁移（migrate-theme-mode.sql）：保留其余扩展列，颜色模式本次不写
     await db.batch([buildDevice('tt'), buildDaily()]);
     return;
   } catch {}

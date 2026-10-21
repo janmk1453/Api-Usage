@@ -18,6 +18,7 @@
 | `migrate-st-version.sql` | 已有库补充 `device.st_version` 酒馆版本号列（不改动既有数据，重复执行会提示列已存在） |
 | `migrate-tt-version.sql` | 已有库补充 `device.tt_version` TauriTavern 版本号列（不改动既有数据，未执行时 Worker 自动降级并保留 `st_version`） |
 | `migrate-device-metrics.sql` | 已有库补充 `device.history_count` 与 `device.telemetry_off` 两列（未执行时 Worker 自动回退旧列集合，不影响上报） |
+| `migrate-theme-mode.sql` | 已有库补充 `device.theme_mode` 颜色模式列（light / dark / auto，未执行时 Worker 自动降级为不写该列，不影响上报） |
 | `wrangler.toml` | Worker 配置模板（D1 绑定、Cron、文本模块规则）；`database_id` 保持占位符，真实值放本地 `wrangler.local.toml` |
 | `dashboard.html` | 看板页模板，作为文本模块打包进 Worker |
 
@@ -213,7 +214,7 @@ Cloudflare 免费额度（2026 年 4 月官方文档）：Workers **10 万请求
 
 ## 隐私边界
 
-采集字段严格限定为：匿名随机标识、上报序号、客户端本地日期、**上报时刻（时间戳，服务端归一为分钟精度）**、时区偏移、扩展版本、**酒馆版本号**、**TauriTavern 版本号（仅该宿主有值）**、浏览器名与主版本、操作系统、CPU 架构、语言、窄屏分桶、深色偏好、standalone、触屏标记、8 个页面使用次数、打开面板次数、会话时长、面板渲染耗时分桶。分钟级时间戳仅用于按小时聚合趋势，旧版本扩展不含该字段时由服务端接收时间兜底，不影响上报。
+采集字段严格限定为：匿名随机标识、上报序号、客户端本地日期、**上报时刻（时间戳，服务端归一为分钟精度）**、时区偏移、扩展版本、**酒馆版本号**、**TauriTavern 版本号（仅该宿主有值）**、浏览器名与主版本、操作系统、CPU 架构、语言、窄屏分桶、系统深色偏好、**颜色模式（浅色 / 深色 / 跟随系统）**、standalone、触屏标记、8 个页面使用次数、打开面板次数、会话时长、面板渲染耗时分桶。分钟级时间戳仅用于按小时聚合趋势，旧版本扩展不含该字段时由服务端接收时间兜底，不影响上报。
 
 服务端存储：
 

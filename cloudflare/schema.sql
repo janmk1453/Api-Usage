@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS device (
   lang TEXT,
   width_bucket TEXT,
   dark INTEGER,
+  theme_mode TEXT,
   standalone INTEGER,
   touch INTEGER,
   tz_offset REAL,

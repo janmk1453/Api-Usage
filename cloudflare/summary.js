@@ -300,6 +300,19 @@ export function widthLabel(bucket) {
   return WIDTH_LABELS[key] || key || '未知';
 }
 
+/** 扩展颜色模式标签：light / dark / auto（跟随系统）；空值表示该版本尚未上报 */
+export const THEME_MODE_LABELS = {
+  light: '浅色',
+  dark: '深色',
+  auto: '跟随系统',
+};
+
+export function themeModeLabel(value) {
+  const key = String(value ?? '');
+  if (!key) return '未上报';
+  return THEME_MODE_LABELS[key] || '未知';
+}
+
 /** 把 device 表行聚合成看板需要的画像维度（全部为「每设备最近一次上报的状态」） */
 export function envBreakdown(rows) {
   const list = Array.isArray(rows) ? rows : [];
@@ -319,6 +332,8 @@ export function envBreakdown(rows) {
     lang: tally(list.map((row) => row?.lang)),
     width: tally(list.map((row) => widthLabel(row?.width_bucket))),
     dark: tally(list.map((row) => (numberOrZero(row?.dark) === 1 ? '深色偏好' : '浅色偏好'))),
+    // 扩展颜色模式（用户设置值），与上面的系统深色偏好分开统计；旧版本未上报的记为「未上报」
+    themeMode: tally(list.map((row) => themeModeLabel(row?.theme_mode))),
     standalone: tally(list.map((row) => (numberOrZero(row?.standalone) === 1 ? '独立窗口' : '浏览器标签'))),
     touch: tally(list.map((row) => (numberOrZero(row?.touch) === 1 ? '触屏 / 粗指针' : '鼠标 / 精确指针'))),
     tz: tally(list.map((row) => tzLabel(row?.tz_offset))),

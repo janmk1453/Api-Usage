@@ -199,7 +199,38 @@ describe('环境探测', () => {
     expect(env.dark).toBe(true);
     expect(env.touch).toBe(true);
     expect(env.arch).toBe('unknown');
-    expect(Object.keys(env).sort()).toEqual(['arch', 'b', 'bv', 'dark', 'lang', 'os', 'standalone', 'stv', 'touch', 'ttv', 'w']);
+    expect(Object.keys(env).sort()).toEqual(['arch', 'b', 'bv', 'dark', 'lang', 'os', 'standalone', 'stv', 'tm', 'touch', 'ttv', 'w']);
+  });
+
+  it('颜色模式读取扩展设置值，并在每次上报前重新取一次', async () => {
+    // 默认（无 theme 字段）按浅色上报，与旧版本行为一致
+    expect(probeEnv().tm).toBe('light');
+
+    mocks.state.settings = { telemetryEnabled: true, theme: 'auto' };
+    expect(probeEnv().tm).toBe('auto');
+
+    // 非法值一律归为 light
+    mocks.state.settings = { telemetryEnabled: true, theme: 'sepia' };
+    expect(probeEnv().tm).toBe('light');
+
+    // 先按浅色打开面板，发送前改成跟随系统：上报体必须反映最新设置
+    mocks.state.settings = { telemetryEnabled: true, theme: 'light' };
+    trackOpen();
+    mocks.state.settings = { telemetryEnabled: true, theme: 'auto' };
+    flushTelemetry('manual');
+    await vi.runAllTimersAsync();
+    const payload = JSON.parse((vi.mocked(fetch).mock.calls[0] as any[])[1].body);
+    expect(payload.env.tm).toBe('auto');
+
+    // 深色模式同样如实上报，且与系统深色偏好分开
+    mocks.state.settings = { telemetryEnabled: true, theme: 'dark' };
+    vi.setSystemTime(FIXED_NOW + 2 * 60 * 1000);
+    trackOpen();
+    flushTelemetry('manual');
+    await vi.runAllTimersAsync();
+    const second = JSON.parse((vi.mocked(fetch).mock.calls[1] as any[])[1].body);
+    expect(second.env.tm).toBe('dark');
+    expect(second.env.dark).toBe(false);
   });
 
   it('从酒馆上下文读取版本号并清洗非法字符', () => {

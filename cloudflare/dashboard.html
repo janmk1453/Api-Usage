@@ -236,7 +236,8 @@
     { grid: 'grid-profile', id: 'env-browser-version', title: '浏览器主版本', note: '浏览器名 + 主版本号', kind: 'bar' },
     { grid: 'grid-profile', id: 'env-lang', title: '语言', note: '每台设备最近一次上报', kind: 'bar' },
     { grid: 'grid-profile', id: 'env-width', title: '面板宽度分桶', note: '每台设备最近一次上报', kind: 'bar' },
-    { grid: 'grid-profile', id: 'env-dark', title: '深浅色偏好', note: '每台设备最近一次上报', kind: 'bar' },
+    { grid: 'grid-profile', id: 'env-dark', title: '系统深浅色偏好', note: '浏览器的 prefers-color-scheme，与扩展内的颜色模式设置无关；每台设备最近一次上报', kind: 'bar' },
+    { grid: 'grid-profile', id: 'env-theme', title: '颜色模式设置', note: '扩展「设置 → 颜色模式」的取值（浅色 / 深色 / 跟随系统）；旧版本扩展未上报时记为未上报', kind: 'bar' },
     { grid: 'grid-profile', id: 'env-standalone', title: '显示形态', note: '独立窗口 / 浏览器标签', kind: 'bar' },
     { grid: 'grid-profile', id: 'env-touch', title: '指针类型', note: '触屏 / 鼠标', kind: 'bar' },
     { grid: 'grid-profile', id: 'env-tz', title: '时区分布', note: '每台设备最近一次上报', kind: 'bar' },
@@ -1014,6 +1015,7 @@
     drawBar('env-lang', env.lang || [], { color: themeColors().green });
     drawBar('env-width', env.width || [], { color: themeColors().orange });
     drawBar('env-dark', env.dark || [], { colors: [PIE_COLORS[0], PIE_COLORS[1]] });
+    drawBar('env-theme', env.themeMode || [], { colors: [PIE_COLORS[0], PIE_COLORS[1], PIE_COLORS[2], PIE_COLORS[3]] });
     drawBar('env-standalone', env.standalone || [], { colors: [PIE_COLORS[3], PIE_COLORS[4]] });
     drawBar('env-touch', env.touch || [], { colors: [PIE_COLORS[2], PIE_COLORS[5]] });
     drawBar('env-tz', env.tz || [], { color: themeColors().blue });

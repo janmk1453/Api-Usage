@@ -1514,6 +1514,17 @@ function mediaMatches(query) {
 		return false;
 	}
 }
+/**
+* 当前颜色模式（扩展设置里的 light / dark / auto）。
+* 每次发送前重新读取，用户中途切换「跟随系统」也会在本次上报中体现。
+*/
+function currentThemeMode() {
+	try {
+		return normalizeThemeMode(state$2?.settings?.theme);
+	} catch {
+		return "light";
+	}
+}
 function nav() {
 	try {
 		return typeof navigator === "undefined" ? null : navigator;
@@ -1558,6 +1569,7 @@ function probeEnv() {
 		dark: mediaMatches("(prefers-color-scheme: dark)"),
 		standalone: mediaMatches("(display-mode: standalone)") || n?.standalone === true,
 		touch: mediaMatches("(pointer: coarse)") || Number(n?.maxTouchPoints || 0) > 0,
+		tm: currentThemeMode(),
 		stv: tavernVersionFromContext(),
 		ttv: ""
 	};
@@ -1827,6 +1839,9 @@ function buildPayload(identity, incoming, pending, now, final = false) {
 	const merged = pending ? mergeCounters(pendingCounters, incoming) : incoming;
 	const seq = pending && Number.isFinite(Number(pending.seq)) ? Number(pending.seq) : identity.seq + 1;
 	const env = envCache ?? probeEnv();
+	env.tm = currentThemeMode();
+	env.dark = mediaMatches("(prefers-color-scheme: dark)");
+	env.w = widthBucket(currentViewportWidth());
 	if (!env.stv) env.stv = tavernVersionFromContext();
 	return {
 		v: 1,

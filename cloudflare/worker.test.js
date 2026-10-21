@@ -58,6 +58,10 @@ function createDb(fixtures, options) {
       if (opts.failStvColumn && stmts[0] && String(stmts[0].sql).includes('st_version')) {
         throw new Error('no such column: st_version');
       }
+      // 模拟既有库尚未执行 migrate-theme-mode.sql：含 theme_mode 列的语句整体失败
+      if (opts.failThemeColumn && stmts[0] && String(stmts[0].sql).includes('theme_mode')) {
+        throw new Error('no such column: theme_mode');
+      }
       return stmts.map(() => ({ success: true }));
     },
   };
@@ -68,7 +72,7 @@ function deviceRow(overrides) {
     app_version: '3.1.2',
     browser: 'Chrome', browser_major: '141', os: 'Windows', arch: 'x86_64',
     lang: 'zh-CN', width_bucket: 'gt1024', dark: 0, standalone: 0, touch: 0,
-    tz_offset: 8, first_day: YESTERDAY, first_seen: 1000, st_version: '1.13.5', tt_version: null,
+    tz_offset: 8, first_day: YESTERDAY, first_seen: 1000, st_version: '1.13.5', tt_version: null, theme_mode: 'auto',
     history_count: 128, telemetry_off: 0,
     opens_total: 5, dur_ms_total: 8 * MIN,
   };
@@ -86,7 +90,7 @@ const DEVICES = [
     app_version: '3.1.1',
     browser: 'Firefox', browser_major: '128', os: 'Android', arch: 'arm64',
     lang: 'ja-JP', width_bucket: 'le480', dark: 1, standalone: 1, touch: 1,
-    tz_offset: 9, first_day: TODAY, first_seen: 2000,
+    tz_offset: 9, first_day: TODAY, first_seen: 2000, theme_mode: 'light',
     history_count: 5, telemetry_off: 1,
     opens_total: 1, dur_ms_total: 1 * MIN,
     p_overview_total: 0, p_stats_total: 0, p_wallet_total: 4,
@@ -246,6 +250,8 @@ describe('/collect 写入契约保持不变', () => {
     expect(batch.params[0][26]).toBe('');
     expect(batch.params[0][27]).toBe(0);
     expect(batch.params[0][28]).toBe(0);
+    // 设备语句末位为颜色模式（未携带该字段的旧版本上报为空字符串）
+    expect(batch.params[0][29]).toBe('');
     expect(batch.params[2][0]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}$/);
     expect(batch.params[2][19] % 60000).toBe(0);
   });
@@ -298,8 +304,8 @@ describe('/collect 写入契约保持不变', () => {
     }), env, { waitUntil() {} });
     expect(res.status).toBe(204);
     const batches = db.calls.filter((call) => call.batch);
-    expect(batches.map((call) => call.batch)).toEqual([3, 2, 2, 2]);
-    expect(batches[3].sqls[0]).not.toContain('st_version');
+    expect(batches.map((call) => call.batch)).toEqual([3, 2, 2, 2, 2]);
+    expect(batches[4].sqls[0]).not.toContain('st_version');
   });
 
   it('TauriTavern 版本列尚未迁移时保留酒馆版本列写入', async () => {
@@ -311,10 +317,44 @@ describe('/collect 写入契约保持不变', () => {
     }), env, { waitUntil() {} });
     expect(res.status).toBe(204);
     const batches = db.calls.filter((call) => call.batch);
-    // 前两次（含 tt_version）失败，第三次落到只含 st_version 的语句并成功
+    // 前三次（含 tt_version）失败，第四次落到只含 st_version 的语句并成功
+    expect(batches.map((call) => call.batch)).toEqual([3, 2, 2, 2]);
+    expect(batches[3].sqls[0]).toContain('st_version');
+    expect(batches[3].sqls[0]).not.toContain('tt_version');
+  });
+
+  it('颜色模式列尚未迁移时降级为不含 theme_mode 的语句，上报仍返回 204', async () => {
+    const { env, db } = makeEnv({}, { failThemeColumn: true });
+    const res = await worker.fetch(new Request('https://stat.example.com/collect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: legacyBody({ env: {
+        b: 'Chrome', bv: '141', os: 'Windows', arch: 'x86_64', lang: 'zh-CN',
+        w: 'gt1024', dark: false, standalone: false, touch: false, stv: '1.13.5', tm: 'auto',
+      } }),
+    }), env, { waitUntil() {} });
+    expect(res.status).toBe(204);
+    const batches = db.calls.filter((call) => call.batch);
     expect(batches.map((call) => call.batch)).toEqual([3, 2, 2]);
-    expect(batches[2].sqls[0]).toContain('st_version');
-    expect(batches[2].sqls[0]).not.toContain('tt_version');
+    expect(batches[2].sqls[0]).toContain('tt_version');
+    expect(batches[2].sqls[0]).not.toContain('theme_mode');
+  });
+
+  it('颜色模式写入设备最新状态（light / dark / auto）', async () => {
+    const { env, db } = makeEnv();
+    const res = await worker.fetch(new Request('https://stat.example.com/collect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: legacyBody({ env: {
+        b: 'Chrome', bv: '141', os: 'Windows', arch: 'x86_64', lang: 'zh-CN',
+        w: 'gt1024', dark: false, standalone: false, touch: false, stv: '1.13.5', tm: 'auto',
+      } }),
+    }), env, { waitUntil() {} });
+    expect(res.status).toBe(204);
+    const batch = db.calls.find((call) => call.batch);
+    expect(batch.batch).toBe(3);
+    expect(batch.sqls[0]).toContain('theme_mode');
+    expect(batch.params[0][29]).toBe('auto');
   });
 
   it('非法上报返回 400 且不写库', async () => {
@@ -371,6 +411,9 @@ describe('/api/summary 总计口径', () => {
     expect(data.env.browserVersion).toHaveLength(2);
     expect(data.env.stVersion).toEqual([{ label: '1.13.5', count: 2 }]);
     expect(data.env.dark[0]).toEqual({ label: '浅色偏好', count: 1 });
+    // 颜色模式与系统深色偏好分列统计（同数量时顺序由标签排序决定，只校验取值与计数）
+    expect(data.env.themeMode.map((item) => item.label).sort()).toEqual(['浅色', '跟随系统']);
+    expect(data.env.themeMode.every((item) => item.count === 1)).toBe(true);
     expect(data.env.tz.map((item) => item.label)).toEqual(['UTC+8', 'UTC+9']);
     expect(data.durationHistogram).toHaveLength(9);
     expect(data.durationHistogram.reduce((sum, item) => sum + item.count, 0)).toBe(2);

@@ -13,6 +13,8 @@ export const PAGE_KEYS = [
 ];
 export const WIDTH_BUCKETS = ['gt1024', '761-1024', '481-760', 'le480'];
 export const ARCHES = ['x86_64', 'x86', 'arm64', 'unknown'];
+/** 扩展颜色模式的白名单取值：浅色 / 深色 / 跟随系统 */
+export const THEME_MODES = ['light', 'dark', 'auto'];
 export const RENDER_BUCKET_COUNT = 5;
 
 const MAX_OPENS = 500;
@@ -115,6 +117,7 @@ export function normalizePayload(raw, now = Date.now()) {
     lang: toStr(envRaw.lang, 12),
     w: WIDTH_BUCKETS.includes(envRaw.w) ? envRaw.w : 'gt1024',
     dark: envRaw.dark === true ? 1 : 0,
+    tm: THEME_MODES.includes(envRaw.tm) ? envRaw.tm : '',
     standalone: envRaw.standalone === true ? 1 : 0,
     touch: envRaw.touch === true ? 1 : 0,
     stv: toVersion(envRaw.stv, 16),

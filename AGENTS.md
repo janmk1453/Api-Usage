@@ -44,6 +44,7 @@ Api-Usage/
 │   ├── migrate-hourly.sql # 已有库新增 device_hourly 小时表与索引（不改旧表、可重复执行；未迁移时旧版上报自动降级不受影响）
 │   ├── migrate-st-version.sql # 已有库补充 device.st_version 酒馆版本号列（未迁移时 Worker 自动回退旧列集合，旧版上报不受影响）
 │   ├── migrate-device-metrics.sql # 已有库补充 device.history_count/telemetry_off 列（未迁移时 Worker 自动回退旧列集合，不影响上报）
+│   ├── migrate-theme-mode.sql # 已有库补充 device.theme_mode 颜色模式列（light/dark/auto，未迁移时 Worker 自动降级不写该列，不影响上报）
 │   ├── migrate-backfill-device-totals.sql # 只做累计列回填与校验，可安全重复执行（列已存在或需重算时使用）
 │   ├── wrangler.toml      # Worker 配置（D1 绑定、Cron、HTML 文本模块规则）
 │   ├── dashboard.html     # 口令保护的看板（总计/趋势/面板构成/画像/性能五分区，ECharts 6.1.0 仅同源自托管且**必须 full 构建**（simple 构建不含 Tooltip 组件，会让 tooltip/axisPointer 静默失效）、无任何第三方 CDN、页头显示来源徽标与 BUILD_ID、移动端触屏点按固定数值提示（touchstart/showTip + touchend 补钉），历史记录条数分布为折线图（X 轴分段分组：1–499 每 10 条、500–999 每 50 条、1000 以上合并，**0 条不计**，共 61 点；`summary.js#historyCountCurve`，常量 `HISTORY_COUNT_CURVE_STEP/MID/WIDE_STEP/MAX`），每个趋势图独立时间控件默认 30 天，手机竖屏单列）

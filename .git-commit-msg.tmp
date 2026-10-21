@@ -1,0 +1,16 @@
+fix(telemetry): 颜色模式（含跟随系统）纳入匿名统计并落到看板
+
+此前「跟随系统」只改了本地设置与样式，遥测完全没读这个值：
+env 里只有一个来自 prefers-color-scheme 的 dark（系统偏好），
+服务端白名单也不接收颜色模式，device 表更没有对应列。
+
+- telemetry.ts: env 新增 tm（light/dark/auto），复用 theme.ts 的
+  normalizeThemeMode；上报前重新读取颜色模式、系统深色偏好与宽度分桶，
+  用户中途切换「跟随系统」或系统切换都能在当次上报体现
+- payload.js: 白名单新增 THEME_MODES，非法值留空，旧客户端不报不受影响
+- worker.js: device 写入新增 theme_mode（空值不覆盖），并补一级降级语句，
+  未执行新迁移时自动回退为不含该列的写入，/collect 始终 204
+- schema.sql + migrate-theme-mode.sql: device.theme_mode 列
+- summary.js/dashboard.html: 画像新增「颜色模式设置」横条图，
+  原「深浅色偏好」改为「系统深浅色偏好」以区分系统偏好与扩展设置
+- 测试与文档同步（payload/summary/worker/dashboard/telemetry、cloudflare README、docs.html 隐私第十节与设置章节）

@@ -28,7 +28,9 @@ import {
   sumBy,
   tally,
   tzLabel,
+  themeModeLabel,
   widthLabel,
+  THEME_MODE_LABELS,
 } from './summary.js';
 
 /** 北京时间已是 2026-10-11，UTC 仍是 2026-10-10 */
@@ -213,18 +215,33 @@ describe('累计用户序列', () => {
   });
 });
 
+describe('颜色模式标签', () => {
+  it('light / dark / auto 分别映射为浅色 / 深色 / 跟随系统', () => {
+    expect(themeModeLabel('light')).toBe('浅色');
+    expect(themeModeLabel('dark')).toBe('深色');
+    expect(themeModeLabel('auto')).toBe('跟随系统');
+    // 旧版本扩展不报该字段（列为 NULL 或空串）时单独记「未上报」，不混入「未知」
+    expect(themeModeLabel('')).toBe('未上报');
+    expect(themeModeLabel(null)).toBe('未上报');
+    expect(themeModeLabel(undefined)).toBe('未上报');
+    // 库里的脏值不冒充已知取值
+    expect(themeModeLabel('sepia')).toBe('未知');
+    expect(Object.keys(THEME_MODE_LABELS).sort()).toEqual(['auto', 'dark', 'light']);
+  });
+});
+
 describe('环境画像聚合', () => {
   it('输出全部维度并给宽度/时区/开关加标签', () => {
     const env = envBreakdown([
       {
         browser: 'Chrome', browser_major: '141', os: 'Windows', arch: 'x86_64',
         lang: 'zh-CN', width_bucket: 'gt1024', dark: 1, standalone: 0, touch: 0, tz_offset: 8,
-        st_version: '1.13.5', tt_version: '2.3.0',
+        st_version: '1.13.5', tt_version: '2.3.0', theme_mode: 'auto',
       },
       {
         browser: 'Chrome', browser_major: '141', os: 'Windows', arch: 'x86_64',
         lang: 'zh-CN', width_bucket: 'le480', dark: 0, standalone: 0, touch: 0, tz_offset: 8,
-        st_version: '1.13.5', tt_version: '2.3.0',
+        st_version: '1.13.5', tt_version: '2.3.0', theme_mode: 'auto',
       },
       {
         browser: 'Firefox', browser_major: '128', os: 'Android', arch: 'arm64',
@@ -247,6 +264,11 @@ describe('环境画像聚合', () => {
     expect(env.dark).toEqual([
       { label: '浅色偏好', count: 2 },
       { label: '深色偏好', count: 1 },
+    ]);
+    // 颜色模式单独统计：已上报「跟随系统」2 台，未上报该字段的旧版本设备记为「未上报」
+    expect(env.themeMode).toEqual([
+      { label: '跟随系统', count: 2 },
+      { label: '未上报', count: 1 },
     ]);
     expect(env.touch[0]).toEqual({ label: '鼠标 / 精确指针', count: 2 });
     expect(env.standalone[0]).toEqual({ label: '浏览器标签', count: 2 });

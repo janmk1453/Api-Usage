@@ -20,7 +20,7 @@ function goodPayload(overrides = {}) {
     app: '3.1.1',
     env: {
       b: 'Chrome', bv: '141', os: 'Windows', arch: 'x86_64', lang: 'zh-CN',
-      w: 'gt1024', dark: true, standalone: false, touch: false, stv: '1.13.5', ttv: '2.3.0',
+      w: 'gt1024', dark: true, standalone: false, touch: false, stv: '1.13.5', ttv: '2.3.0', tm: 'auto',
     },
     s: {
       opens: 2,
@@ -74,7 +74,7 @@ describe('上报体归一', () => {
     expect(result.value.app).toBe('3.1.1');
     expect(result.value.env).toEqual({
       b: 'Chrome', bv: '141', os: 'Windows', arch: 'x86_64', lang: 'zh-CN',
-      w: 'gt1024', dark: 1, standalone: 0, touch: 0, stv: '1.13.5', ttv: '2.3.0',
+      w: 'gt1024', dark: 1, standalone: 0, touch: 0, stv: '1.13.5', ttv: '2.3.0', tm: 'auto',
     });
     expect(result.value.counters.opens).toBe(2);
     expect(result.value.counters.pages).toEqual({
@@ -166,7 +166,7 @@ describe('上报体归一', () => {
 
   it('缺失或非法枚举回退到安全默认值', () => {
     const result = normalizePayload(goodPayload({
-      env: { arch: 'mips', w: 'huge', dark: 'yes', standalone: 1, touch: null, b: 123 },
+      env: { arch: 'mips', w: 'huge', dark: 'yes', standalone: 1, touch: null, b: 123, tm: 'sepia' },
     }), NOW);
     expect(result.ok).toBe(true);
     expect(result.value.env.arch).toBe('unknown');
@@ -175,6 +175,20 @@ describe('上报体归一', () => {
     expect(result.value.env.standalone).toBe(0);
     expect(result.value.env.touch).toBe(0);
     expect(result.value.env.b).toBe('');
+    // 颜色模式只接受 light / dark / auto，其余一律留空（服务端按「未上报」处理）
+    expect(result.value.env.tm).toBe('');
+  });
+
+  it('颜色模式白名单只接受浅色/深色/跟随系统', () => {
+    expect(normalizePayload(goodPayload({ env: { ...goodPayload().env, tm: 'light' } }), NOW).value.env.tm).toBe('light');
+    expect(normalizePayload(goodPayload({ env: { ...goodPayload().env, tm: 'dark' } }), NOW).value.env.tm).toBe('dark');
+    expect(normalizePayload(goodPayload({ env: { ...goodPayload().env, tm: 'auto' } }), NOW).value.env.tm).toBe('auto');
+    expect(normalizePayload(goodPayload({ env: { ...goodPayload().env, tm: 'AUTO' } }), NOW).value.env.tm).toBe('');
+    expect(normalizePayload(goodPayload({ env: { ...goodPayload().env, tm: 1 } }), NOW).value.env.tm).toBe('');
+    // 旧版本扩展不报该字段时留空，不影响其它字段
+    const legacy = normalizePayload(goodPayload({ env: { b: 'Chrome', os: 'Windows' } }), NOW);
+    expect(legacy.value.env.tm).toBe('');
+    expect(legacy.value.env.os).toBe('Windows');
   });
 
   it('酒馆版本号清洗非法字符并在缺失时为空', () => {

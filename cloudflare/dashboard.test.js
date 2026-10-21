@@ -53,6 +53,7 @@ const summaryData = {
     lang: [{ label: 'zh-CN', count: 40 }, { label: 'en-US', count: 2 }],
     width: [{ label: '> 1024px', count: 36 }, { label: '≤ 480px', count: 6 }],
     dark: [{ label: '浅色偏好', count: 25 }, { label: '深色偏好', count: 17 }],
+    themeMode: [{ label: '跟随系统', count: 18 }, { label: '浅色', count: 15 }, { label: '深色', count: 9 }],
     standalone: [{ label: '浏览器标签', count: 39 }, { label: '独立窗口', count: 3 }],
     touch: [{ label: '鼠标 / 精确指针', count: 34 }, { label: '触屏 / 粗指针', count: 8 }],
     tz: [{ label: 'UTC+8', count: 38 }, { label: 'UTC+9', count: 4 }],
@@ -330,6 +331,12 @@ describe('看板页渲染（图表库可用）', () => {
     expect(historyCount.xAxis.data[60]).toBe(1000);
     expect(historyCount.series[0].data.reduce((sum, value) => sum + value, 0)).toBe(42);
     expect(typeof historyCount.tooltip.formatter).toBe('function');
+
+    // 颜色模式与系统深色偏好是两个独立维度，各自一张横条图
+    const themeChart = option('env-theme');
+    expect(themeChart.series).toHaveLength(1);
+    expect(themeChart.series[0].data).toHaveLength(3);
+    expect(JSON.stringify(themeChart)).toContain('跟随系统');
 
     const os = option('os');
     expect(os.series[0].type).toBe('pie');
