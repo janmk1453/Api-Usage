@@ -360,7 +360,10 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
       const localLabel = `${currentBranch}@${shortSha(local.sha)}`;
       const needsSwitch = currentBranch !== 'unknown' && currentBranch !== targetBranch;
       let hasUpdate = !needsSwitch && local.isUpToDate === false;
-      let remoteLabel = `${targetBranch}@${shortSha(local.sha)}`;
+      // 远端提交只在「确实领先本地」且与本地不同时才拿来展示：
+      // compare 失败（限流/网络）或返回同一条提交时，拼出来的「远端」会和本地一模一样，容易误导。
+      let remoteLabel = '';
+      let remoteSha = '';
       let notifyKey = `${targetBranch}:${local.sha}`;
       const ctrl = new AbortController();
       const timer = setTimeout(() => { try { ctrl.abort(); } catch {} }, TIMEOUT_MS);
@@ -370,10 +373,11 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
         if (cmp) {
           if (cmp.hasUpdate) {
             hasUpdate = true;
-            remoteLabel = `${targetBranch}@${shortSha(cmp.remoteSha)}`;
-            notifyKey = `${targetBranch}:${cmp.remoteSha || remoteLabel}`;
-          } else {
-            remoteLabel = `${targetBranch}@${shortSha(cmp.remoteSha || local.sha)}`;
+            if (cmp.remoteSha && shortSha(cmp.remoteSha) !== shortSha(local.sha)) {
+              remoteSha = cmp.remoteSha;
+              remoteLabel = `${targetBranch}@${shortSha(cmp.remoteSha)}`;
+            }
+            notifyKey = `${targetBranch}:${cmp.remoteSha || local.sha}`;
           }
         }
       } catch (e: any) {
@@ -382,9 +386,12 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
       }
       if (needsSwitch) hasUpdate = true;
       if (hasUpdate) {
+        // 三种提示：切分支 / 已知远端提交 / 只知道「落后」但拿不到远端哈希（例如 GitHub API 限流）
         const message = needsSwitch
           ? `当前 ${localLabel}，可切换到 ${targetBranch} 分支并更新`
-          : `发现 ${remoteLabel} 新提交（当前 ${localLabel}），可在本页直接更新`;
+          : remoteLabel
+            ? `发现新提交 ${remoteLabel}（当前 ${localLabel}），可在本页直接更新`
+            : `当前 ${localLabel} 落后于 ${targetBranch} 分支，可在本页直接更新`;
         if (getLastNotified() !== notifyKey || manual) {
           toast('info', message);
           setLastNotified(notifyKey);
@@ -392,7 +399,9 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
         if (banner) {
           showBanner(needsSwitch
             ? `当前 <b>${esc(localLabel)}</b>，目标分支 <b>${esc(targetBranch)}</b>，点击“立即更新”将切换并更新`
-            : `发现新提交 <b>${esc(remoteLabel)}</b>（当前 ${esc(localLabel)}），可在本页直接更新`);
+            : remoteLabel
+              ? `发现新提交 <b>${esc(remoteLabel)}</b>（当前 ${esc(localLabel)}），可在本页直接更新`
+              : `当前 <b>${esc(localLabel)}</b> 落后于 <b>${esc(targetBranch)}</b> 分支，点击“立即更新”拉取最新提交`);
         }
         setUpdateButtonVisible(true);
         setNavBadge(true);
@@ -402,7 +411,7 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
         setUpdateButtonVisible(false);
         setNavBadge(false);
       }
-      return { hasUpdate, current: localLabel, remote: remoteLabel };
+      return { hasUpdate, current: localLabel, remote: remoteLabel || (remoteSha ? shortSha(remoteSha) : `${targetBranch}（领先本地）`) };
     }
   } catch (e: any) {
     log.debug('获取本地提交失败，回退版本检查', e?.message || e);

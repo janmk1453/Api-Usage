@@ -11092,7 +11092,7 @@ function createPanel() {
         <div class="aus-nav-group" style="display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--ds-border);padding-top:10px;">
           <div class="aus-nav-item" data-nav="settings" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon("settings")}</span><span class="aus-nav-label">设置</span></div>
           <div class="aus-nav-item" data-nav="help" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon("help")}</span><span class="aus-nav-label">使用说明</span></div>
-          <div class="aus-nav-item" data-nav="about" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon("about")}</span><span class="aus-nav-label">关于</span><span id="aus-nav-update-badge" data-on="0" title="检测到新版本，点击查看关于页">有新版本</span></div>
+          <div class="aus-nav-item" data-nav="about" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon("about")}</span><span class="aus-nav-label">关于</span><span id="aus-nav-update-badge" data-on="0" title="检测到新版本，点击查看关于页">新版本</span></div>
         </div>
       </div>
     </div>
@@ -11370,7 +11370,7 @@ function createPanel() {
 	doc.body.appendChild(overlay);
 	doc.body.appendChild(panel);
 	try {
-		import("./update-D3ABqvXc.js").then((mod) => mod.syncUpdateIndicators?.());
+		import("./update-D2SX3ZSG.js").then((mod) => mod.syncUpdateIndicators?.());
 	} catch {}
 	try {
 		applyTheme(theme);
@@ -11511,7 +11511,7 @@ function createPanel() {
 		initForecastView();
 	} catch {}
 	try {
-		import("./update-D3ABqvXc.js").then((m) => {
+		import("./update-D2SX3ZSG.js").then((m) => {
 			const branchBtn = doc.getElementById("aus-update-branch-btn");
 			const branchLabel = doc.getElementById("aus-update-branch-label");
 			const branchDrop = doc.getElementById("aus-update-branch-dropdown");
@@ -11550,7 +11550,7 @@ function createPanel() {
 		if (updBtn) updBtn.onclick = () => {
 			updBtn.textContent = "检查中…";
 			updBtn.setAttribute("disabled", "");
-			import("./update-D3ABqvXc.js").then((m) => m.checkUpdate(true).finally(() => {
+			import("./update-D2SX3ZSG.js").then((m) => m.checkUpdate(true).finally(() => {
 				updBtn.textContent = "检查更新";
 				updBtn.removeAttribute("disabled");
 			}));
@@ -11560,7 +11560,7 @@ function createPanel() {
 			if (runUpdBtn.hasAttribute("disabled")) return;
 			runUpdBtn.textContent = "更新中…";
 			runUpdBtn.setAttribute("disabled", "");
-			import("./update-D3ABqvXc.js").then((m) => m.updateSelf()).then((res) => {
+			import("./update-D2SX3ZSG.js").then((m) => m.updateSelf()).then((res) => {
 				if (res.ok && res.changed) {
 					const bannerEl = doc.getElementById("aus-update-banner");
 					if (bannerEl) {
@@ -11653,7 +11653,7 @@ function openPanel() {
 		import("./collector-Dx_PJTz1.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
-		import("./update-D3ABqvXc.js").then((m) => m.maybeAutoCheck());
+		import("./update-D2SX3ZSG.js").then((m) => m.maybeAutoCheck());
 	} catch {}
 }
 function closePanel() {

@@ -406,7 +406,8 @@ async function checkUpdate(manual = false) {
 			const localLabel = `${currentBranch}@${shortSha(local.sha)}`;
 			const needsSwitch = currentBranch !== "unknown" && currentBranch !== targetBranch;
 			let hasUpdate = !needsSwitch && local.isUpToDate === false;
-			let remoteLabel = `${targetBranch}@${shortSha(local.sha)}`;
+			let remoteLabel = "";
+			let remoteSha = "";
 			let notifyKey = `${targetBranch}:${local.sha}`;
 			const ctrl = new AbortController();
 			const timer = setTimeout(() => {
@@ -420,9 +421,12 @@ async function checkUpdate(manual = false) {
 				if (cmp) {
 					if (cmp.hasUpdate) {
 						hasUpdate = true;
-						remoteLabel = `${targetBranch}@${shortSha(cmp.remoteSha)}`;
-						notifyKey = `${targetBranch}:${cmp.remoteSha || remoteLabel}`;
-					} else remoteLabel = `${targetBranch}@${shortSha(cmp.remoteSha || local.sha)}`;
+						if (cmp.remoteSha && shortSha(cmp.remoteSha) !== shortSha(local.sha)) {
+							remoteSha = cmp.remoteSha;
+							remoteLabel = `${targetBranch}@${shortSha(cmp.remoteSha)}`;
+						}
+						notifyKey = `${targetBranch}:${cmp.remoteSha || local.sha}`;
+					}
 				}
 			} catch (e) {
 				clearTimeout(timer);
@@ -430,12 +434,12 @@ async function checkUpdate(manual = false) {
 			}
 			if (needsSwitch) hasUpdate = true;
 			if (hasUpdate) {
-				const message = needsSwitch ? `当前 ${localLabel}，可切换到 ${targetBranch} 分支并更新` : `发现 ${remoteLabel} 新提交（当前 ${localLabel}），可在本页直接更新`;
+				const message = needsSwitch ? `当前 ${localLabel}，可切换到 ${targetBranch} 分支并更新` : remoteLabel ? `发现新提交 ${remoteLabel}（当前 ${localLabel}），可在本页直接更新` : `当前 ${localLabel} 落后于 ${targetBranch} 分支，可在本页直接更新`;
 				if (getLastNotified() !== notifyKey || manual) {
 					toast("info", message);
 					setLastNotified(notifyKey);
 				}
-				if (banner) showBanner(needsSwitch ? `当前 <b>${esc(localLabel)}</b>，目标分支 <b>${esc(targetBranch)}</b>，点击“立即更新”将切换并更新` : `发现新提交 <b>${esc(remoteLabel)}</b>（当前 ${esc(localLabel)}），可在本页直接更新`);
+				if (banner) showBanner(needsSwitch ? `当前 <b>${esc(localLabel)}</b>，目标分支 <b>${esc(targetBranch)}</b>，点击“立即更新”将切换并更新` : remoteLabel ? `发现新提交 <b>${esc(remoteLabel)}</b>（当前 ${esc(localLabel)}），可在本页直接更新` : `当前 <b>${esc(localLabel)}</b> 落后于 <b>${esc(targetBranch)}</b> 分支，点击“立即更新”拉取最新提交`);
 				setUpdateButtonVisible(true);
 				setNavBadge(true);
 			} else {
@@ -447,7 +451,7 @@ async function checkUpdate(manual = false) {
 			return {
 				hasUpdate,
 				current: localLabel,
-				remote: remoteLabel
+				remote: remoteLabel || (remoteSha ? shortSha(remoteSha) : `${targetBranch}（领先本地）`)
 			};
 		}
 	} catch (e) {
