@@ -5,179 +5,290 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>API用量统计 · 匿名使用统计看板</title>
 <style>
+  /* ---------------------------------- 设计令牌 ---------------------------------- */
   :root {
-    --bg: #FFFFFF; --card: #F6F7F8; --inner: #FFFFFF; --text: #111827;
-    --text2: #6B7280; --text3: #9CA3AF; --border: #E5E7EB; --grid: #E9EBEF;
-    --orange: #FF6A00; --green: #0BA25E; --blue: #2563EB; --red: #DC2626;
+    color-scheme: light;
+    --bg: #FFFFFF;
+    --bg-soft: #F7F8FA;
+    --card: #F6F7F8;            /* JS 读取：饼图描边与卡片底色 */
+    --inner: #FFFFFF;
+    --text: #111827;
+    --text2: #6B7280;
+    --text3: #9CA3AF;
+    --border: #E5E7EB;
+    --border-strong: #D3D8E0;
+    --grid: #E9EBEF;
+    --orange: #FF6A00;
+    --orange-soft: #FFF2E8;
+    --green: #0BA25E;
+    --green-soft: #E6F8EC;
+    --blue: #2563EB;
+    --red: #DC2626;
+    --tooltip-bg: #FFFFFF;
+    --tooltip-border: #E5E7EB;
+    --tooltip-text: #111827;
+    --header-bg: rgba(255, 255, 255, 0.84);
     --radius: 14px;
+    --radius-lg: 18px;
+    --radius-sm: 10px;
+    --shadow-1: 0 1px 2px rgba(17, 24, 39, 0.04);
+    --font: "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Helvetica Neue", sans-serif;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #0F1419; --card: #1E242E; --inner: #161B22; --text: #E5E7EB;
-      --text2: #9CA3AF; --text3: #6B7280; --border: #2A3341; --grid: #2A3341;
+      color-scheme: dark;
+      --bg: #0B0F14;
+      --bg-soft: #0F1419;
+      --card: #161C24;
+      --inner: #121820;
+      --text: #E8EBF0;
+      --text2: #9BA5B4;
+      --text3: #6C7686;
+      --border: #232C38;
+      --border-strong: #33404F;
+      --grid: #212A35;
+      --orange-soft: #2B1B11;
+      --green-soft: #10261B;
+      --tooltip-bg: #1B232D;
+      --tooltip-border: #2C3745;
+      --tooltip-text: #E8EBF0;
+      --header-bg: rgba(11, 15, 20, 0.82);
+      --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
     }
   }
+
   * { box-sizing: border-box; }
   /* 带 hidden 属性的元素必须真正隐藏：.banner/.panel-foot 都设了 display，会盖掉 UA 的 [hidden] 规则 */
   [hidden] { display: none !important; }
   html, body { max-width: 100%; overflow-x: hidden; }
   body {
-    margin: 0; padding: 18px 14px 40px; background: var(--bg); color: var(--text);
-    font-family: "Microsoft YaHei", -apple-system, "Segoe UI", sans-serif; font-size: 13px; line-height: 1.6;
-    -webkit-text-size-adjust: 100%;
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: var(--font); font-size: 13px; line-height: 1.6;
+    -webkit-text-size-adjust: 100%; -webkit-font-smoothing: antialiased;
+    padding: 0 16px calc(40px + env(safe-area-inset-bottom));
   }
-  h1 { font-size: 17px; font-weight: 600; margin: 0 0 4px; }
-  h2 { font-size: 14px; font-weight: 600; margin: 0; }
-  h3 { font-size: 12.5px; font-weight: 600; margin: 0; }
-  .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-  .meta { color: var(--text2); font-size: 12px; }
+  .wrap { max-width: 1440px; margin: 0 auto; }
+
+  /* ---------------------------------- 页头 ---------------------------------- */
+  .top {
+    position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap; padding: 14px 0 12px; margin-bottom: 16px;
+    background: var(--header-bg); backdrop-filter: saturate(180%) blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .brand-mark {
+    width: 26px; height: 26px; border-radius: 9px; flex: none;
+    background: linear-gradient(140deg, var(--orange), #FF9052);
+    box-shadow: 0 2px 8px -2px rgba(255, 106, 0, 0.55);
+  }
+  .brand-text { min-width: 0; }
+  h1 { font-size: 16px; font-weight: 600; margin: 0; letter-spacing: -0.2px; }
+  h2 { font-size: 14px; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 8px; }
+  h2::before { content: ""; width: 3px; height: 13px; border-radius: 2px; background: var(--orange); flex: none; }
+  h3 { font-size: 13px; font-weight: 600; margin: 0; }
+  .meta { color: var(--text2); font-size: 11.5px; margin-top: 2px; }
   .meta b { color: var(--text); font-weight: 600; }
   .top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .badge {
     font-size: 11px; color: var(--text2); border: 1px solid var(--border); border-radius: 999px;
-    padding: 3px 9px; background: var(--inner); white-space: nowrap;
+    padding: 3px 10px; background: var(--inner); white-space: nowrap; font-variant-numeric: tabular-nums;
   }
-  .badge.hit { color: var(--green); }
-  .badge.bypass { color: var(--orange); }
+  .badge.hit { color: var(--green); border-color: color-mix(in srgb, var(--green) 35%, var(--border)); }
+  .badge.bypass { color: var(--orange); border-color: color-mix(in srgb, var(--orange) 35%, var(--border)); }
   header.top .error, .error { color: var(--red); font-size: 12px; }
+
+  /* ---------------------------------- 控件 ---------------------------------- */
   .chip {
     font-family: inherit; font-size: 11.5px; color: var(--text); background: var(--inner);
-    border: 1px solid var(--border); border-radius: 999px; padding: 4px 11px; cursor: pointer;
-    min-height: 26px; line-height: 1.4;
+    border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; cursor: pointer;
+    min-height: 30px; line-height: 1.4; transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
   }
-  .chip:hover { border-color: var(--text3); }
+  .chip:hover { border-color: var(--border-strong); background: var(--bg-soft); }
   .chip.active { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 600; }
-  .chip.primary { background: var(--orange); border-color: var(--orange); color: #FFFFFF; font-weight: 600; }
+  .chip.primary { background: var(--orange); border-color: var(--orange); color: #FFFFFF; font-weight: 600; padding: 5px 16px; }
+  .chip.primary:hover { background: #F26000; border-color: #F26000; }
+  .chip:focus-visible, .range-bar input:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
   .banner {
     border: 1px solid var(--border); background: var(--card); border-radius: var(--radius);
-    padding: 10px 12px; margin-bottom: 12px; color: var(--text2); font-size: 12px;
+    padding: 10px 12px; margin-bottom: 14px; color: var(--text2); font-size: 12px;
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   }
-  .block { margin-bottom: 18px; }
-  .block-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 0 2px 8px; }
+
+  /* ---------------------------------- 分区与卡片 ---------------------------------- */
+  .block { margin-bottom: 22px; }
+  .block-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 0 2px 10px; }
   .note { color: var(--text2); font-size: 11.5px; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 10px; }
-  .cards + .cards { margin-top: 10px; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 11px 12px; min-width: 0; }
-  .card .label { font-size: 11.5px; color: var(--text2); }
-  .card .value {
-    font-size: 21px; font-weight: 600; letter-spacing: -0.4px; margin-top: 2px;
-    font-variant-numeric: tabular-nums; word-break: break-all;
-  }
-  .card .hint { font-size: 11px; color: var(--text3); }
-  /* 「当日」三块数值用绿色强调（浅深主题共用 --green，深色卡片上对比度约 4.8:1） */
-  #cards-today .value { color: var(--green); }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 12px; align-items: start; }
-  .grid.single { grid-template-columns: 1fr; }
-  .panel {
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 12px; }
+  .cards + .cards { margin-top: 12px; }
+  .card {
+    position: relative; overflow: hidden; min-width: 0;
     background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 12px; min-width: 0; overflow: hidden;
+    padding: 13px 14px 12px; box-shadow: var(--shadow-1);
+    transition: border-color 140ms ease, transform 140ms ease;
   }
-  .panel-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
-  .panel-foot { margin-top: 6px; display: flex; justify-content: flex-end; }
-  .chart { width: 100%; height: 250px; min-width: 0; }
-  .chart.tall { height: 300px; }
+  .card:hover { border-color: var(--border-strong); }
+  .card .label { font-size: 11.5px; color: var(--text2); letter-spacing: 0.01em; }
+  .card .value {
+    font-size: 23px; font-weight: 600; letter-spacing: -0.6px; margin-top: 3px; line-height: 1.25;
+    font-variant-numeric: tabular-nums; word-break: break-word;
+  }
+  .card .hint { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  /* 概览卡首块（不重复用户）用品牌色做细强调条，避免整卡着色影响可读性 */
+  #cards-life .card:first-child .value { color: var(--orange); }
+  /* 「当日」四块数值用绿色强调（浅深主题共用 --green） */
+  #cards-today .card { background: var(--green-soft); border-color: color-mix(in srgb, var(--green) 22%, var(--border)); }
+  #cards-today .value { color: var(--green); }
+
+  /* ---------------------------------- 图表栅格 ---------------------------------- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 14px; align-items: start; }
+  .grid.single { grid-template-columns: 1fr; }
+  #grid-profile { grid-template-columns: repeat(auto-fit, minmax(min(100%, 288px), 1fr)); }
+  .panel {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 14px 14px 10px; min-width: 0; overflow: hidden; box-shadow: var(--shadow-1);
+    transition: border-color 140ms ease;
+  }
+  .panel:hover { border-color: var(--border-strong); }
+  .panel-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .panel-foot { margin-top: 8px; display: flex; justify-content: center; }
+  .chart { width: 100%; height: 258px; min-width: 0; }
+  .chart.tall { height: 312px; }
   .fallback { font-size: 12px; }
-  .fb-row { display: grid; grid-template-columns: 104px 1fr 62px; gap: 8px; align-items: center; margin-bottom: 6px; }
-  .fb-label { color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .fb-track { background: var(--border); border-radius: 999px; height: 8px; overflow: hidden; }
+  .fb-row { display: grid; grid-template-columns: minmax(68px, 38%) 1fr auto; gap: 10px; align-items: center; margin-bottom: 7px; }
+  .fb-label { color: var(--text2); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fb-track { background: var(--grid); border-radius: 999px; height: 7px; overflow: hidden; }
   .fb-fill { height: 100%; border-radius: 999px; background: var(--orange); }
-  .fb-value { text-align: right; color: var(--text2); font-variant-numeric: tabular-nums; }
-  .range-bar {
-    display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;
-    padding-bottom: 8px; border-bottom: 1px dashed var(--border);
-  }
-  .range-bar .custom { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .fb-value { text-align: right; color: var(--text2); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+
+  /* ---------------------------------- 时间控件 ---------------------------------- */
+  .range-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
   .range-bar [hidden] { display: none !important; }
-  .range-bar .range-group { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .range-bar .range-group {
+    display: inline-flex; align-items: center; gap: 2px; padding: 2px; flex-wrap: nowrap;
+    background: var(--inner); border: 1px solid var(--border); border-radius: 999px;
+  }
+  .range-bar .range-group .chip { border: 0; background: transparent; min-height: 26px; padding: 3px 10px; }
+  .range-bar .range-group .chip:hover { background: var(--bg-soft); border: 0; }
+  .range-bar .range-group .chip.active { background: var(--text); color: var(--bg); }
+  .range-bar .custom { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .range-bar input[type="date"] {
     font-family: inherit; font-size: 11.5px; color: var(--text); background: var(--inner);
-    border: 1px solid var(--border); border-radius: 8px; padding: 3px 6px; min-height: 26px;
-    max-width: 132px;
+    border: 1px solid var(--border); border-radius: 9px; padding: 4px 8px; min-height: 30px; max-width: 136px;
   }
   .range-bar .tilde { color: var(--text3); }
-  .range-bar .current { font-size: 11px; color: var(--text2); margin-left: auto; font-variant-numeric: tabular-nums; }
-  footer { color: var(--text2); font-size: 11.5px; border-top: 1px solid var(--border); padding-top: 12px; }
-  footer ul { margin: 6px 0 0; padding-left: 18px; }
-  footer li { margin-bottom: 3px; }
+  .range-bar .current { font-size: 11px; color: var(--text3); margin-left: auto; font-variant-numeric: tabular-nums; }
+
+  footer { color: var(--text2); font-size: 11.5px; border-top: 1px solid var(--border); padding-top: 14px; }
+  footer ul { margin: 8px 0 0; padding-left: 18px; }
+  footer li { margin-bottom: 4px; }
+
+  /* ---------------------------------- 移动端 ---------------------------------- */
+  @media (max-width: 860px) {
+    .grid, #grid-profile { grid-template-columns: 1fr; }
+    .chart { height: 244px; }
+    .chart.tall { height: 286px; }
+  }
   @media (max-width: 760px) {
-    body { padding: 14px 10px 32px; }
-    .grid { grid-template-columns: 1fr; }
-    .chart { height: 240px; }
-    .chart.tall { height: 280px; }
-    .card .value { font-size: 19px; }
+    body { padding: 0 12px calc(32px + env(safe-area-inset-bottom)); }
+    .top { padding: 10px 0 10px; gap: 8px; }
+    h1 { font-size: 15px; }
+    .brand-mark { width: 22px; height: 22px; border-radius: 8px; }
+    .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .card { padding: 11px 12px 10px; }
+    .card .value { font-size: 20px; }
+    .panel { padding: 12px 12px 8px; border-radius: var(--radius); }
+    .range-bar { gap: 6px; }
     .range-bar .current { margin-left: 0; width: 100%; }
+    .range-bar .range-group { flex-wrap: wrap; }
+    .chip { min-height: 32px; }
+    .fb-row { grid-template-columns: minmax(60px, 40%) 1fr auto; gap: 8px; }
+  }
+  @media (max-width: 420px) {
+    .cards { grid-template-columns: 1fr; }
+    .card .value { font-size: 21px; }
+    .top-actions { width: 100%; }
+    .top-actions .chip.primary { margin-left: auto; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; transition: none !important; }
   }
 </style>
 </head>
 <body>
+<div class="wrap">
 <header class="top">
-  <div>
-    <h1>API用量统计 · 匿名使用统计</h1>
-    <div class="meta" id="meta">加载中…</div>
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true"></div>
+    <div class="brand-text">
+      <h1>API用量统计 · 匿名使用统计</h1>
+      <div class="meta" id="meta">加载中…</div>
+    </div>
   </div>
   <div class="top-actions">
     <span class="badge" id="cache-badge" hidden></span>
     <span class="badge" id="lib-badge" hidden></span>
-    <button class="chip primary" id="refresh">刷新</button>
+    <button class="chip primary" id="refresh" type="button">刷新</button>
   </div>
 </header>
 
 <div class="banner" id="lib-banner" hidden>
   <span id="lib-banner-text">图表库加载失败，已改用纯文本数值列表展示。</span>
-  <button class="chip" id="lib-retry">重试加载图表库</button>
+  <button class="chip" id="lib-retry" type="button">重试加载图表库</button>
 </div>
 
-<section class="block">
-  <div class="block-head">
-    <h2>总计速览</h2>
-    <span class="note">全部时间累计，不随时间筛选变化；「今日」按北京时间</span>
-  </div>
-  <div class="cards" id="cards-life"></div>
-  <div class="cards" id="cards-today"></div>
-</section>
+<main>
+  <section class="block">
+    <div class="block-head">
+      <h2>总计速览</h2>
+      <span class="note">全部时间累计，不随时间筛选变化；「今日」按北京时间</span>
+    </div>
+    <div class="cards" id="cards-life"></div>
+    <div class="cards" id="cards-today"></div>
+  </section>
 
-<section class="block">
-  <div class="block-head">
-    <h2>增长与活跃趋势</h2>
-    <span class="note">每个图表可独立选择时间范围，默认最近 30 天</span>
-  </div>
-  <div class="grid" id="grid-trend"></div>
-</section>
+  <section class="block">
+    <div class="block-head">
+      <h2>增长与活跃趋势</h2>
+      <span class="note">每个图表可独立选择时间范围，默认最近 30 天</span>
+    </div>
+    <div class="grid" id="grid-trend"></div>
+  </section>
 
-<section class="block">
-  <div class="block-head">
-    <h2>面板使用构成</h2>
-    <span class="note">全部时间累计打开次数</span>
-  </div>
-  <div class="grid single" id="grid-usage"></div>
-</section>
+  <section class="block">
+    <div class="block-head">
+      <h2>面板使用构成</h2>
+      <span class="note">全部时间累计打开次数</span>
+    </div>
+    <div class="grid single" id="grid-usage"></div>
+  </section>
 
-<section class="block">
-  <div class="block-head">
-    <h2>用户与设备画像</h2>
-    <span class="note">环境维度取每台设备最近一次上报的状态</span>
-  </div>
-  <div class="grid" id="grid-profile"></div>
-</section>
+  <section class="block">
+    <div class="block-head">
+      <h2>用户与设备画像</h2>
+      <span class="note">环境维度取每台设备最近一次上报的状态</span>
+    </div>
+    <div class="grid" id="grid-profile"></div>
+  </section>
 
-<section class="block">
-  <div class="block-head">
-    <h2>使用时长与渲染性能</h2>
-    <span class="note">时长分布按全部时间累计；渲染耗时按所选时间范围</span>
-  </div>
-  <div class="grid" id="grid-perf"></div>
-</section>
+  <section class="block">
+    <div class="block-head">
+      <h2>使用时长与渲染性能</h2>
+      <span class="note">时长分布按全部时间累计；渲染耗时按所选时间范围</span>
+    </div>
+    <div class="grid" id="grid-perf"></div>
+  </section>
+</main>
 
 <footer>
   <div>数据来自扩展「API用量统计」的匿名、聚合、去标识化上报，仅包含分桶与计数，不含对话内容、模型名、密钥、金额与 IP。</div>
   <ul>
     <li>使用时长 = 面板打开期间由客户端累计的会话时长；「今日」按北京时间（UTC+8）计算。</li>
-    <li>渲染耗时由客户端 5 档（&lt;100/&lt;300/&lt;800/&lt;2000/≥2000ms）按档位代表值估算，条长偏保守，用于版本间横向对比。</li>
+    <li>渲染耗时由客户端 5 档（&lt;100/&lt;300/&lt;800/&lt;2000/&ge;2000ms）按档位代表值估算，条长偏保守，用于版本间横向对比。</li>
     <li>接口默认缓存 10 分钟；点「刷新」会绕过缓存重新查询，页面顶部显示数据生成时间。</li>
   </ul>
 </footer>
-
+</div>
 <script>
 (function () {
   'use strict';
@@ -199,7 +310,7 @@
   const HOUR_RANGE_HOURS = 24;
   const HOUR_MS = 60 * 60 * 1000;
   /** 看板构建标识：每次改动看板后更新，便于确认浏览器拿到的是否为最新页面 */
-  const BUILD_ID = '2026-10-12.11';
+  const BUILD_ID = '2026-10-21.1';
   /**
    * 图表库来源：**仅自托管**（Worker 同源的 `/vendor/echarts.js`），不使用任何第三方 CDN。
    * 这样看板不会向外部站点发起请求，也就不会被广告拦截类扩展或网络策略误伤；
@@ -388,6 +499,22 @@
       orange: read('--orange', '#FF6A00'),
       green: read('--green', '#0BA25E'),
       blue: read('--blue', '#2563EB'),
+      tooltipBg: read('--tooltip-bg', '#FFFFFF'),
+      tooltipBorder: read('--tooltip-border', '#E5E7EB'),
+      tooltipText: read('--tooltip-text', '#111827'),
+    };
+  }
+
+  /** 统一 tooltip 外观：跟随深浅色的圆角浮层 + 轻阴影，避免用默认白底灰边 */
+  function tooltipStyle(t) {
+    return {
+      confine: true,
+      backgroundColor: t.tooltipBg,
+      borderColor: t.tooltipBorder,
+      borderWidth: 1,
+      padding: [8, 10],
+      textStyle: { color: t.tooltipText, fontSize: 11 },
+      extraCssText: 'border-radius:10px;box-shadow:0 10px 26px -14px rgba(17,24,39,0.45);',
     };
   }
 
@@ -713,14 +840,12 @@
     hideFallback(id);
     instance.setOption({
       backgroundColor: 'transparent',
-      grid: { left: 52, right: 16, top: series.length > 1 ? 46 : 18, bottom: 30, containLabel: false },
-      tooltip: {
+      grid: { left: 6, right: 14, top: series.length > 1 ? 48 : 20, bottom: 4, containLabel: true },
+      tooltip: Object.assign(tooltipStyle(t), {
         trigger: 'axis',
-        confine: true,
-        axisPointer: { type: 'line', lineStyle: { color: t.text3 } },
-        textStyle: { fontSize: 11 },
+        axisPointer: { type: 'line', lineStyle: { color: t.text3, width: 1, type: 'dashed' } },
         formatter: opts.tooltipFormatter,
-      },
+      }),
       legend: series.length > 1
         ? {
           type: 'scroll', top: 0, left: 0, right: 0, itemWidth: 10, itemHeight: 10,
@@ -795,15 +920,13 @@
     if (!instance) return;
     instance.setOption({
       backgroundColor: 'transparent',
-      grid: { left: 4, right: 62, top: 6, bottom: 6, containLabel: true },
-      tooltip: {
+      grid: { left: 2, right: 58, top: 4, bottom: 4, containLabel: true },
+      tooltip: Object.assign(tooltipStyle(t), {
         trigger: 'item',
-        confine: true,
-        textStyle: { fontSize: 11 },
         formatter: (params) => opts.itemTooltip
           ? opts.itemTooltip(ordered[params.dataIndex], params)
           : escapeHtml(params.name) + '<br/>' + fmtInt(params.value),
-      },
+      }),
       xAxis: { type: 'value', show: false, max: max * 1.02 },
       yAxis: {
         type: 'category',
@@ -816,11 +939,14 @@
         type: 'bar',
         data: values.map((value, index) => ({
           value,
-          itemStyle: { color: Array.isArray(colors) ? colors[index] : colors, borderRadius: [0, 6, 6, 0] },
+          itemStyle: { color: Array.isArray(colors) ? colors[index] : colors, borderRadius: [0, 7, 7, 0] },
         })),
-        barMaxWidth: 16,
+        barMaxWidth: 13,
+        // 背景轨道让横向条形在数值很小时也能看出「这一行有数据」
+        showBackground: true,
+        backgroundStyle: { color: t.grid, borderRadius: [0, 7, 7, 0] },
         label: {
-          show: true, position: 'right', color: t.text2, fontSize: 11,
+          show: true, position: 'right', color: t.text2, fontSize: 11, distance: 6,
           formatter: (params) => (opts.valueFormatter ? opts.valueFormatter(params.value, ordered[params.dataIndex]) : fmtInt(params.value)),
         },
       }],
@@ -840,17 +966,17 @@
     const t = themeColors();
     instance.setOption({
       backgroundColor: 'transparent',
-      tooltip: { trigger: 'item', confine: true, textStyle: { fontSize: 11 }, formatter: '{b}<br/>{c}（{d}%）' },
+      tooltip: Object.assign(tooltipStyle(t), { trigger: 'item', formatter: '{b}<br/>{c}（{d}%）' }),
       legend: {
         bottom: 0, left: 'center', itemWidth: 10, itemHeight: 10,
         textStyle: { color: t.text2, fontSize: 11 },
       },
       series: [{
         type: 'pie',
-        radius: ['40%', '66%'],
-        center: ['50%', '42%'],
+        radius: ['44%', '68%'],
+        center: ['50%', '43%'],
         avoidLabelOverlap: true,
-        itemStyle: { borderColor: t.card, borderWidth: 2 },
+        itemStyle: { borderColor: t.card, borderWidth: 3, borderRadius: 3 },
         label: { show: false },
         labelLine: { show: false },
         data: list.map((item, index) => ({
@@ -875,8 +1001,8 @@
     const t = themeColors();
     instance.setOption({
       backgroundColor: 'transparent',
-      grid: { left: 46, right: 14, top: 16, bottom: 34 },
-      tooltip: { trigger: 'axis', confine: true, axisPointer: { type: 'shadow' }, textStyle: { fontSize: 11 } },
+      grid: { left: 6, right: 12, top: 22, bottom: 4, containLabel: true },
+      tooltip: Object.assign(tooltipStyle(t), { trigger: 'axis', axisPointer: { type: 'shadow' } }),
       xAxis: Object.assign({
         type: 'category',
         data: list.map((item) => item.label),
@@ -887,9 +1013,9 @@
       yAxis: Object.assign({ type: 'value', minInterval: 1, axisLabel: { color: t.text2, fontSize: 11 } }, baseAxis()),
       series: [{
         type: 'bar',
-        barMaxWidth: 34,
-        itemStyle: { color: t.blue, borderRadius: [6, 6, 0, 0] },
-        label: { show: true, position: 'top', color: t.text2, fontSize: 11 },
+        barMaxWidth: 30,
+        itemStyle: { color: t.blue, borderRadius: [8, 8, 0, 0] },
+        label: { show: true, position: 'top', color: t.text2, fontSize: 11, distance: 4 },
         data: list.map((item) => Number(item.count) || 0),
       }],
       animationDuration: 260,
