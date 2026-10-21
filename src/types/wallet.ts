@@ -106,9 +106,12 @@ export function walletCurrencyOrDefault(value: unknown): WalletCurrency {
   return String(value || '').trim().toUpperCase() === 'USD' ? 'USD' : 'CNY';
 }
 
+// 自动识别出的模型（source='discovered'）默认不启用峰谷计价：
+// 中转/第三方接入通常只有一个价格，勾上峰谷会让价格只按低谷时段命中。
+// 只影响新建的规则；已有钱包里的模型走 normalizeWalletPriceRule，保留用户原有设置。
 export function emptyWalletPriceRule(): WalletPriceRule {
   return {
-    usePeakPricing: true,
+    usePeakPricing: false,
     offpeak: { hit: 0, miss: 0, output: 0 },
     peak: { hit: 0, miss: 0, output: 0 },
     priceConfigured: false,

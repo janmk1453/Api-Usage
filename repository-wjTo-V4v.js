@@ -73,7 +73,7 @@ function walletCurrencyOrDefault(value) {
 }
 function emptyWalletPriceRule() {
 	return {
-		usePeakPricing: true,
+		usePeakPricing: false,
 		offpeak: {
 			hit: 0,
 			miss: 0,
@@ -2143,7 +2143,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && state.settings.pricingSync?.enabled) try {
-						import("./pricing-sync-DOJR4JVD.js").then((n) => n.i).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-DUVox4wX.js").then((n) => n.i).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;

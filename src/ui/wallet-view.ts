@@ -509,7 +509,8 @@ function bindWalletView(doc: Document): void {
           model: name,
           aliases: [],
           price: {
-            usePeakPricing: true,
+            // 与「自动识别出的模型」口径一致：非官方钱包默认关闭峰谷（DeepSeek 官方钱包仍默认开启）
+            usePeakPricing: wallet.kind === 'official',
             offpeak: { hit: 0, miss: 0, output: 0 },
             peak: { hit: 0, miss: 0, output: 0 },
             priceConfigured: false,
