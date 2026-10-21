@@ -208,11 +208,20 @@
     .chip { min-height: 32px; }
     .fb-row { grid-template-columns: minmax(60px, 40%) 1fr auto; gap: 8px; }
   }
+  /* 竖屏手机：九个 KPI 卡片保持一行两个（仅压缩字号/内距，不退回单列） */
   @media (max-width: 420px) {
-    .cards { grid-template-columns: 1fr; }
-    .card .value { font-size: 21px; }
+    .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .card { padding: 10px 11px 9px; border-radius: 12px; }
+    .card .label { font-size: 11px; }
+    .card .value { font-size: 19px; letter-spacing: -0.5px; line-height: 1.3; }
+    .card .hint { font-size: 10px; line-height: 1.45; }
     .top-actions { width: 100%; }
     .top-actions .chip.primary { margin-left: auto; }
+  }
+  /* 极窄屏（老机型/分屏）才退回单列，避免两个 150px 以下的卡片挤爆数字 */
+  @media (max-width: 340px) {
+    .cards { grid-template-columns: 1fr; }
+    .card .value { font-size: 20px; }
   }
   @media (prefers-reduced-motion: reduce) {
     * { animation-duration: 0.001ms !important; transition: none !important; }
@@ -314,7 +323,7 @@
   const HOUR_RANGE_HOURS = 24;
   const HOUR_MS = 60 * 60 * 1000;
   /** 看板构建标识：每次改动看板后更新，便于确认浏览器拿到的是否为最新页面 */
-  const BUILD_ID = '2026-10-21.2';
+  const BUILD_ID = '2026-10-21.3';
   /**
    * 图表库来源：**仅自托管**（Worker 同源的 `/vendor/echarts.js`），不使用任何第三方 CDN。
    * 这样看板不会向外部站点发起请求，也就不会被广告拦截类扩展或网络策略误伤；
