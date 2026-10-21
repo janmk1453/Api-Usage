@@ -57,7 +57,6 @@ export type Settings = {
   theme: ThemeMode;
   overviewWalletId: string;
   overviewWalletManuallySet: boolean;
-  autoBalance: boolean;
   balanceInterval: number;
   debug: boolean;
   debugHit: number;
@@ -87,7 +86,6 @@ export const defaultSettings = (): Settings => ({
   theme: 'light',
   overviewWalletId: 'wallet:deepseek-official',
   overviewWalletManuallySet: false,
-  autoBalance: false,
   balanceInterval: 10,
   debug: false,
   debugHit: 10000,

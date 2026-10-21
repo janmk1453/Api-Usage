@@ -5,7 +5,6 @@ var defaultSettings = () => ({
 	theme: "light",
 	overviewWalletId: "wallet:deepseek-official",
 	overviewWalletManuallySet: false,
-	autoBalance: false,
 	balanceInterval: 10,
 	debug: false,
 	debugHit: 1e4,

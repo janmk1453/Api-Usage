@@ -185,9 +185,9 @@ export function renderSettings(doc: Document) {
 
       <!-- 余额 -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">自动校准余额（全局开关）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-auto-balance" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-auto-balance-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
-        <div id="aus-auto-balance-interval" style="display:${s.autoBalance ? 'block':'none'};margin-top:8px;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);color:var(--ds-text);">校准间隔（分钟）</span><input type="number" id="aus-balance-interval" min="1" max="1440" style="width:90px;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);text-align:center;" /></div></div>
-        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">仅钱包页中启用了自动校准且支持该能力的钱包会在间隔到期后查询。</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">自动校准余额</span><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);color:var(--ds-text);">校准间隔（分钟）</span>
+          <input type="number" id="aus-balance-interval" min="1" max="1440" style="width:90px;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);text-align:center;" /></div></div>
+        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">在钱包页勾选「自动校准」后即按此间隔自动查询余额（仅 DeepSeek 官方直连钱包支持），无需再开全局开关；未勾选的钱包一律使用手工余额。</div>
         <div style="display:none;margin-top:12px;"><input id="aus-custom-balance" /><button id="aus-save-balance"></button><button id="aus-clear-balance"></button><div id="aus-balance-status"></div></div>
       </div>
 
@@ -285,10 +285,6 @@ export function renderSettings(doc: Document) {
   const peakSlider = doc.getElementById('aus-peak-dot-slider') as HTMLElement | null;
   if (peakSlider) peakSlider.style.left = state.settings.peakDot !== false ? '23px' : '3px';
 
-  const autoCb = doc.getElementById('aus-auto-balance') as HTMLInputElement | null;
-  const autoSlider = doc.getElementById('aus-auto-balance-slider') as HTMLElement | null;
-  if (autoCb) autoCb.checked = !!s.autoBalance;
-  if (autoSlider) autoSlider.style.left = s.autoBalance ? '23px' : '3px';
   (doc.getElementById('aus-balance-interval') as HTMLInputElement | null)!.value = String(s.balanceInterval ?? 10);
   const dbgCb = doc.getElementById('aus-debug-mode') as HTMLInputElement | null;
   const dbgSlider = doc.getElementById('aus-debug-mode-slider') as HTMLElement | null;
@@ -435,13 +431,6 @@ export function renderSettings(doc: Document) {
   doc.getElementById('aus-clear-balance')!.onclick = () => {
     state.customBalance = null; saveHot({ customBalance: null }); (doc.getElementById('aus-custom-balance') as HTMLInputElement).value = ''; doc.getElementById('aus-balance-status')!.textContent = '已清除';
     try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
-  };
-  if (autoCb) autoCb.onchange = () => {
-    state.settings.autoBalance = autoCb.checked;
-    if (autoSlider) autoSlider.style.left = autoCb.checked ? '23px' : '3px';
-    (doc.getElementById('aus-auto-balance-interval') as HTMLElement).style.display = autoCb.checked ? 'block' : 'none';
-    saveHot({ settings: state.settings });
-    try { import('../services/balance').then(m=> (m as any).restartBalanceTimer?.()); } catch {}
   };
   (doc.getElementById('aus-balance-interval') as HTMLInputElement).onchange = (e: any) => {
     state.settings.balanceInterval = parseInt(e.target.value) || 10;

@@ -94,12 +94,16 @@ export function restartBalanceTimer(): void {
     balanceTimer = null;
   }
   const settings: any = state.settings;
-  if (!settings.autoBalance) return;
+  // 校准由钱包页的「自动校准」勾选直接决定（全局开关已移除）：
+  // 只要有一个未忽略的钱包勾了自动校准就启动轮询，否则不占用定时器。
+  const ignored = new Set(state.walletIgnored || []);
+  const autoWallets = (state.wallets || []).filter((wallet) => !ignored.has(wallet.id) && wallet.balance.mode === 'auto');
+  if (!autoWallets.length) return;
   const minutes = Math.min(Math.max(parseInt(settings.balanceInterval) || 10, 1), 1440);
   balanceTimer = setInterval(() => {
-    const ignored = new Set(state.walletIgnored || []);
+    const currentIgnored = new Set(state.walletIgnored || []);
     for (const wallet of state.wallets || []) {
-      if (ignored.has(wallet.id) || wallet.balance.mode !== 'auto') continue;
+      if (currentIgnored.has(wallet.id) || wallet.balance.mode !== 'auto') continue;
       queryWalletBalance(wallet.id, true).catch(() => {});
     }
   }, minutes * 60 * 1000);

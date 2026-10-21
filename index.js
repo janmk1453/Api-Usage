@@ -1,14 +1,14 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from "./store-WwPsxyLG.js";
+import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from "./store-BhaWFCjs.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { c as saveExtensionSettings, d as historyRecordKey, i as getExtensionSettings, u as saveHot } from "./persistence-C4IJVd-B.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as DEEPSEEK_WALLET_ID, C as findWalletModel, E as walletPendingModelCount, S as findWalletForHistory, T as walletBalanceToCny, _ as normalizeModel, a as decryptKey, b as defaultContextLimitForModel, c as isTruncatedFinish, d as calcCost, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, j as WALLET_CATALOG_PROVIDERS, l as DataEvents, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, w as mergeWalletCollections } from "./repository-BpLpGBGE.js";
+import { A as DEEPSEEK_WALLET_ID, C as findWalletModel, E as walletPendingModelCount, S as findWalletForHistory, T as walletBalanceToCny, _ as normalizeModel, a as decryptKey, b as defaultContextLimitForModel, c as isTruncatedFinish, d as calcCost, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, j as WALLET_CATALOG_PROVIDERS, l as DataEvents, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, w as mergeWalletCollections } from "./repository-CC3dXSA9.js";
 import { a as isUnsafeKey$1, c as localDay$1, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay, t as esc$2, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
-import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-BEAwnAAU.js";
-import { r as recalcAllCosts, t as installInterception } from "./interception-DB8VGjpa.js";
-import { i as saveApiKey, n as queryBalance, r as queryWalletBalance } from "./balance-DhYgf0jN.js";
-import { a as removeSyncedModels, n as isSyncedCustomModel, o as syncPricingFromModelsDev, r as previewSync, t as fetchModelsDevCatalog } from "./pricing-sync-CW7ujfWy.js";
+import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-CkKG5JR0.js";
+import { r as recalcAllCosts, t as installInterception } from "./interception-DdeipS-S.js";
+import { i as saveApiKey, n as queryBalance, r as queryWalletBalance } from "./balance-DxuR7vSn.js";
+import { a as removeSyncedModels, n as isSyncedCustomModel, o as syncPricingFromModelsDev, r as previewSync, t as fetchModelsDevCatalog } from "./pricing-sync-DOJR4JVD.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -2194,9 +2194,9 @@ function renderSettings(doc) {
 
       <!-- 余额 -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">自动校准余额（全局开关）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-auto-balance" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-auto-balance-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
-        <div id="aus-auto-balance-interval" style="display:${s.autoBalance ? "block" : "none"};margin-top:8px;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);color:var(--ds-text);">校准间隔（分钟）</span><input type="number" id="aus-balance-interval" min="1" max="1440" style="width:90px;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);text-align:center;" /></div></div>
-        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">仅钱包页中启用了自动校准且支持该能力的钱包会在间隔到期后查询。</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">自动校准余额</span><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);color:var(--ds-text);">校准间隔（分钟）</span>
+          <input type="number" id="aus-balance-interval" min="1" max="1440" style="width:90px;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);text-align:center;" /></div></div>
+        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">在钱包页勾选「自动校准」后即按此间隔自动查询余额（仅 DeepSeek 官方直连钱包支持），无需再开全局开关；未勾选的钱包一律使用手工余额。</div>
         <div style="display:none;margin-top:12px;"><input id="aus-custom-balance" /><button id="aus-save-balance"></button><button id="aus-clear-balance"></button><div id="aus-balance-status"></div></div>
       </div>
 
@@ -2288,10 +2288,6 @@ function renderSettings(doc) {
 	doc.getElementById("aus-peak-dot").checked = state$2.settings.peakDot !== false;
 	const peakSlider = doc.getElementById("aus-peak-dot-slider");
 	if (peakSlider) peakSlider.style.left = state$2.settings.peakDot !== false ? "23px" : "3px";
-	const autoCb = doc.getElementById("aus-auto-balance");
-	const autoSlider = doc.getElementById("aus-auto-balance-slider");
-	if (autoCb) autoCb.checked = !!s.autoBalance;
-	if (autoSlider) autoSlider.style.left = s.autoBalance ? "23px" : "3px";
 	doc.getElementById("aus-balance-interval").value = String(s.balanceInterval ?? 10);
 	const dbgCb = doc.getElementById("aus-debug-mode");
 	const dbgSlider = doc.getElementById("aus-debug-mode-slider");
@@ -2452,20 +2448,11 @@ function renderSettings(doc) {
 			globalThis.ApiUsageStat?.refreshUI?.();
 		} catch {}
 	};
-	if (autoCb) autoCb.onchange = () => {
-		state$2.settings.autoBalance = autoCb.checked;
-		if (autoSlider) autoSlider.style.left = autoCb.checked ? "23px" : "3px";
-		doc.getElementById("aus-auto-balance-interval").style.display = autoCb.checked ? "block" : "none";
-		saveHot({ settings: state$2.settings });
-		try {
-			import("./balance-DhYgf0jN.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
-		} catch {}
-	};
 	doc.getElementById("aus-balance-interval").onchange = (e) => {
 		state$2.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state$2.settings });
 		try {
-			import("./balance-DhYgf0jN.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-DxuR7vSn.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2510,8 +2497,8 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-BpLpGBGE.js").then((n) => n.n);
-				const { state: st } = await import("./store-WwPsxyLG.js").then((n) => n.i);
+				const { repository } = await import("./repository-CC3dXSA9.js").then((n) => n.n);
+				const { state: st } = await import("./store-BhaWFCjs.js").then((n) => n.i);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
 				await repository.rebuildAggregates();
@@ -2660,8 +2647,8 @@ function renderSettings(doc) {
 					intervalDrop.style.display = "none";
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-CW7ujfWy.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
-						import("./currency-BEAwnAAU.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+						import("./pricing-sync-DOJR4JVD.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+						import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};
 			});
@@ -2682,7 +2669,7 @@ function renderSettings(doc) {
 			if (panel) panel.style.display = enabledEl.checked ? "grid" : "none";
 			let removed = 0;
 			if (!enabledEl.checked) try {
-				const m = await import("./pricing-sync-CW7ujfWy.js").then((n) => n.i);
+				const m = await import("./pricing-sync-DOJR4JVD.js").then((n) => n.i);
 				try {
 					await m.markLegacySyncedModels?.({ skipRerender: true });
 				} catch {}
@@ -2692,8 +2679,8 @@ function renderSettings(doc) {
 			}
 			saveHot({ settings: state$2.settings });
 			try {
-				import("./currency-BEAwnAAU.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
-				import("./pricing-sync-CW7ujfWy.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+				import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+				import("./pricing-sync-DOJR4JVD.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
 			} catch {}
 			if (removed) {
 				renderModelsEditor(doc);
@@ -2723,7 +2710,7 @@ function renderSettings(doc) {
 			state$2.settings.pricingSync.useLiveRate = liveEl.checked;
 			saveHot({ settings: state$2.settings });
 			try {
-				import("./currency-BEAwnAAU.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+				import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 			} catch {}
 		};
 		if (recalcEl) recalcEl.onchange = () => {
@@ -9850,7 +9837,7 @@ function renderWalletCard(wallet, history) {
               <input type="password" data-wallet-api-key="1" data-wallet-id="${esc$2(wallet.id)}" value="" placeholder="${getWalletApiKey(wallet.id) ? "已保存钱包校准密钥（留空不修改）" : "填写钱包校准密钥"}" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
               <button data-wallet-save-key="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">保存密钥</button>
             </div>
-            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">自动校准仅支持 DeepSeek 官方直连，并需在设置开启自动校准总开关；主密钥：${esc$2(selectedCredential?.label || "未指定")}</div>
+            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">自动校准仅支持 DeepSeek 官方直连，勾选后按设置页的校准间隔自动查询，无需全局开关；主密钥：${esc$2(selectedCredential?.label || "未指定")}</div>
             <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc$2(item.label)).join("、") : "未识别"}</div>
           ` : `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">该接入暂不支持自动余额校准，请手工维护余额。</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc$2(item.label)).join("、") : "未识别"}</div>`}
         </div>
@@ -9993,7 +9980,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-DhYgf0jN.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-DxuR7vSn.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -11659,7 +11646,7 @@ function openPanel() {
 	panelOpen = true;
 	refreshUI();
 	try {
-		import("./collector-DLt66Svz.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-Dx_PJTz1.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-Ct72N0n3.js").then((m) => m.maybeAutoCheck());
@@ -11879,10 +11866,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-DB8VGjpa.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DdeipS-S.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-DLt66Svz.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-Dx_PJTz1.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -11890,10 +11877,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-DB8VGjpa.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DdeipS-S.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-DLt66Svz.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-Dx_PJTz1.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -11983,13 +11970,13 @@ async function onDelete() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-DhYgf0jN.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-DxuR7vSn.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-BEAwnAAU.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-CkKG5JR0.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CW7ujfWy.js").then((n) => n.i)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-DOJR4JVD.js").then((n) => n.i)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 	try {
@@ -12016,19 +12003,19 @@ async function onDelete() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-DB8VGjpa.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-DdeipS-S.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-DLt66Svz.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-Dx_PJTz1.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-DhYgf0jN.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-DxuR7vSn.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
-		import("./currency-BEAwnAAU.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+		import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-CW7ujfWy.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-DOJR4JVD.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -12038,10 +12025,10 @@ async function onDisable() {
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-DB8VGjpa.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-DdeipS-S.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-DLt66Svz.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-Dx_PJTz1.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -12060,13 +12047,13 @@ async function onDisable() {
 		unwatchSystemTheme();
 	} catch {}
 	try {
-		(await import("./balance-DhYgf0jN.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-DxuR7vSn.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-BEAwnAAU.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-CkKG5JR0.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CW7ujfWy.js").then((n) => n.i)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-DOJR4JVD.js").then((n) => n.i)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -12094,19 +12081,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-DhYgf0jN.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-DxuR7vSn.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-BEAwnAAU.js").then((n) => n.t)).restartRateTimer?.();
+		(await import("./currency-CkKG5JR0.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CW7ujfWy.js").then((n) => n.i)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-DOJR4JVD.js").then((n) => n.i)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-DLt66Svz.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-Dx_PJTz1.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -12128,7 +12115,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-CW7ujfWy.js").then((n) => n.i).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-DOJR4JVD.js").then((n) => n.i).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();
