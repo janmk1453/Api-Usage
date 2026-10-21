@@ -6,6 +6,7 @@ import {
   beijingDayKey,
   beijingHourKey,
   hoursBetween,
+  hourOfDaySeries,
   cumulativeGrowth,
   daysBetween,
   durationBucketIndex,
@@ -212,6 +213,32 @@ describe('累计用户序列', () => {
 
   it('空输入返回空数组', () => {
     expect(cumulativeGrowth(null)).toEqual([]);
+  });
+});
+
+describe('时段活跃分布（0–24 时）', () => {
+  it('补全 24 个小时并计算占比与累计占比', () => {
+    const series = hourOfDaySeries([
+      { hh: '09', devices: 3, opens: 12 },
+      { hh: '10', devices: 6, opens: 30 },
+      { hh: '23', devices: 1, opens: 2 },
+    ]);
+    expect(series).toHaveLength(24);
+    expect(series.map((item) => item.hour)).toEqual(Array.from({ length: 24 }, (_, i) => i));
+    expect(series[9].devices).toBe(3);
+    expect(series[10].opens).toBe(30);
+    expect(series[0].devices).toBe(0);
+    // 总设备数 10：9 时占 30%，累计到 10 时 = 90%
+    expect(series[9].share).toBeCloseTo(0.3, 6);
+    expect(series[10].cumulativeShare).toBeCloseTo(0.9, 6);
+    expect(series[23].cumulativeShare).toBeCloseTo(1, 6);
+  });
+
+  it('缺失/非法时段被忽略，空数据时占比为 0', () => {
+    const series = hourOfDaySeries([{ hour: -1, devices: 5 }, { hour: 99, devices: 5 }, { hour: 'x' }, null]);
+    expect(series).toHaveLength(24);
+    expect(series.every((item) => item.devices === 0 && item.share === 0 && item.cumulativeShare === 0)).toBe(true);
+    expect(hourOfDaySeries(undefined)).toHaveLength(24);
   });
 });
 

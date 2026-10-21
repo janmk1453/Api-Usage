@@ -30,6 +30,7 @@ import {
   estimateRenderMs,
   historyCountCurve,
   hourKeyToMs,
+  hourOfDaySeries,
   normalizeHourWindow,
   normalizeWindow,
   numberOrZero,
@@ -296,6 +297,20 @@ GROUP BY hour
 ORDER BY hour
 `;
 
+/**
+ * 时段活跃分布：把窗口内的 device_hourly 按「一天中的第几小时」（北京时间）重新聚合。
+ * devices 用 COUNT(DISTINCT device_id) 去重，反映该时段有多少台设备在用。
+ */
+const HOUR_OF_DAY_SELECT_SQL = `
+SELECT substr(hour, 12, 2) AS hh,
+       COUNT(DISTINCT device_id) AS devices,
+       COALESCE(SUM(opens), 0) AS opens
+FROM device_hourly
+WHERE hour >= ?1 AND hour <= ?2
+GROUP BY hh
+ORDER BY hh
+`;
+
 /** 小时粒度累计用户：窗口内按设备首次出现时间（分钟精度）分桶 */
 const GROWTH_HOUR_SELECT_SQL = `
 SELECT strftime('%Y-%m-%dT%H', CAST(first_seen / 1000 AS INTEGER), 'unixepoch', '+8 hours') AS hour,
@@ -490,12 +505,14 @@ function handleTrend(request, env) {
       const window = normalizeHourWindow(url.searchParams.get('from'), url.searchParams.get('to'), Date.now());
       return buildTrend(env, window, {
         hourly: parts === 'both' || parts === 'daily',
+        hourOfDay: parts === 'hours',
         render: parts === 'both' || parts === 'render',
       });
     }
     const window = normalizeWindow(url.searchParams.get('from'), url.searchParams.get('to'), Date.now());
     return buildTrend(env, window, {
       daily: parts === 'both' || parts === 'daily',
+      hourOfDay: parts === 'hours',
       render: parts === 'both' || parts === 'render',
     });
   });
@@ -615,6 +632,19 @@ async function buildTrend(env, window, parts) {
       fillHourlyTrend(payload, window, [], [], []);
       payload.hourlyError = true;
     }));
+  }
+
+  if (parts.hourOfDay) {
+    // 时段活跃分布：窗口按天给，内部换算成北京时间小时键范围（含首尾整天）
+    const fromHour = String(window.from).slice(0, 10) + 'T00';
+    const toHour = String(window.to).slice(0, 10) + 'T23';
+    tasks.push(queryAll(env, HOUR_OF_DAY_SELECT_SQL, [fromHour, toHour])
+      .then((rows) => { payload.hourOfDay = hourOfDaySeries(rows); })
+      .catch(() => {
+        // 小时表尚未迁移（migrate-hourly.sql）：返回全 0 分布而不是让接口失败
+        payload.hourOfDay = hourOfDaySeries([]);
+        payload.hourOfDayError = true;
+      }));
   }
 
   if (parts.render) {

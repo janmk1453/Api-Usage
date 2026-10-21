@@ -323,7 +323,7 @@
   const HOUR_RANGE_HOURS = 24;
   const HOUR_MS = 60 * 60 * 1000;
   /** 看板构建标识：每次改动看板后更新，便于确认浏览器拿到的是否为最新页面 */
-  const BUILD_ID = '2026-10-21.3';
+  const BUILD_ID = '2026-10-21.4';
   /**
    * 图表库来源：**仅自托管**（Worker 同源的 `/vendor/echarts.js`），不使用任何第三方 CDN。
    * 这样看板不会向外部站点发起请求，也就不会被广告拦截类扩展或网络策略误伤；
@@ -349,6 +349,7 @@
     { grid: 'grid-trend', id: 'daily-opens', title: '每日打开面板次数', note: '当日全部设备的打开次数之和', kind: 'line', range: true },
     { grid: 'grid-trend', id: 'daily-users', title: '每日不重复用户数', note: '当日产生遥测数据的去重设备数', kind: 'line', range: true },
     { grid: 'grid-trend', id: 'daily-pages', title: '每日面板打开占比', note: '各面板当日打开次数占当日面板打开总数的百分比', kind: 'line', range: true, tall: true },
+    { grid: 'grid-trend', id: 'hour-of-day', title: '时段活跃分布（0–24 时）', note: '按北京时间小时汇总：柱=该时段活跃设备数（窗口内去重），线=累计占比，用来看用户一天中在哪个时段更活跃', kind: 'hours', range: true, dayOnly: true, tall: true },
     { grid: 'grid-usage', id: 'pages', title: '面板累计打开次数', note: '全部时间累计', kind: 'bar' },
     { grid: 'grid-usage', id: 'history-count', title: '历史记录条数分布', note: 'X 轴分段分组（1–499 每 10 条、500–999 每 50 条，不含 0 条），Y 轴为该组设备数，取每台设备最新上报值', kind: 'line' },
     { grid: 'grid-profile', id: 'versions', title: '扩展版本分布', note: '每台设备最近一次上报的版本', kind: 'bar' },
@@ -791,13 +792,14 @@
 
   /* ---------------------------------- 面板骨架 ---------------------------------- */
 
-  function rangeBarHtml(id) {
+  function rangeBarHtml(id, panel) {
+    const dayOnly = !!(panel && panel.dayOnly);
     return '<div class="range-bar" data-range="' + id + '">'
-      // 粒度可选：按天（默认，保留原时间控件）/ 按小时（含最近 24 小时）
-      + '<span class="range-group" data-mode="both">'
-      + '<button class="chip" type="button" data-bucket="day">按天</button>'
-      + '<button class="chip" type="button" data-bucket="hour">按小时</button>'
-      + '</span>'
+      // 粒度可选：按天（默认，保留原时间控件）/ 按小时（含最近 24 小时）；时段分布图按天给窗口
+      + (dayOnly ? '' : '<span class="range-group" data-mode="both">'
+        + '<button class="chip" type="button" data-bucket="day">按天</button>'
+        + '<button class="chip" type="button" data-bucket="hour">按小时</button>'
+        + '</span>')
       + '<span class="range-group" data-mode="day">'
       + '<button class="chip" type="button" data-days="30">30 天</button>'
       + '<button class="chip" type="button" data-days="90">90 天</button>'
@@ -827,7 +829,7 @@
       section.setAttribute('data-panel', panel.id);
       section.innerHTML = '<div class="panel-head"><h3>' + escapeHtml(panel.title) + '</h3>'
         + '<span class="note">' + escapeHtml(panel.note) + '</span></div>'
-        + (panel.range ? rangeBarHtml(panel.id) : '')
+        + (panel.range ? rangeBarHtml(panel.id, panel) : '')
         + '<div class="chart' + (panel.tall ? ' tall' : '') + '" id="chart-' + panel.id + '"></div>'
         + '<div class="fallback" id="fallback-' + panel.id + '" hidden></div>'
         + '<div class="panel-foot" id="foot-' + panel.id + '" hidden><button class="chip" type="button" data-role="expand">展开全部</button></div>';
@@ -1225,6 +1227,26 @@
     return trendCache.get(key);
   }
 
+  /** 时段活跃分布：一次请求按「一天中的小时」聚合，独立缓存键避免与日/小时趋势混用 */
+  function ensureHours(range, force) {
+    const key = 'hours|' + range.from + '|' + range.to;
+    if (force) trendCache.delete(key);
+    if (!trendCache.has(key)) {
+      const url = '/api/trend?from=' + encodeURIComponent(range.from) + '&to=' + encodeURIComponent(range.to)
+        + '&parts=hours' + (force ? '&force=1' : '');
+      const promise = fetchJSON(url)
+        .then((data) => ({
+          rows: data.hourOfDay || [],
+          error: data.hourOfDayError === true,
+          cache: data.__cache,
+          generatedAt: data.generatedAt,
+        }))
+        .catch((error) => { trendCache.delete(key); throw error; });
+      trendCache.set(key, promise);
+    }
+    return trendCache.get(key);
+  }
+
   function ensureRender(range, force) {
     const key = cacheKey(range);
     if (force) renderCache.delete(key);
@@ -1285,6 +1307,97 @@
       { percent: true, minInterval: 0, max: 100, yName: '占比 %' });
   }
 
+  /** 时段活跃分布：柱=活跃设备数，线=累计占比（右轴 0–100%），空数据显示「暂无数据」 */
+  function paintHourOfDay(result) {
+    const rows = Array.isArray(result && result.rows) ? result.rows : [];
+    const total = rows.reduce((sum, item) => sum + (Number(item.devices) || 0), 0);
+    if (!rows.length || !total) {
+      renderFallbackBars('hour-of-day', []);
+      return;
+    }
+    drawHourOfDay('hour-of-day', rows);
+  }
+
+  function drawHourOfDay(id, rows) {
+    if (!echartsOk) {
+      renderFallbackBars(id, rows.map((item) => ({
+        label: String(item.hour).padStart(2, '0') + ' 时',
+        count: Number(item.devices) || 0,
+      })), { color: themeColors().orange });
+      return;
+    }
+    hideFallback(id);
+    const host = el('chart-' + id);
+    if (host) host.style.height = '';
+    const instance = getChart(id);
+    if (!instance) return;
+    const t = themeColors();
+    const categories = rows.map((item) => String(item.hour));
+    const devices = rows.map((item) => Number(item.devices) || 0);
+    const cumulative = rows.map((item) => Math.round((Number(item.cumulativeShare) || 0) * 1000) / 10);
+    instance.setOption({
+      backgroundColor: 'transparent',
+      grid: { left: 6, right: 10, top: 40, bottom: 4, containLabel: true },
+      tooltip: Object.assign(tooltipStyle(t), {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
+        formatter: (params) => {
+          const index = params && params[0] ? params[0].dataIndex : 0;
+          const row = rows[index];
+          if (!row) return '';
+          return escapeHtml(String(row.hour).padStart(2, '0') + ':00') + '–'
+            + escapeHtml(String(row.hour).padStart(2, '0') + ':59')
+            + '<br/>活跃设备：' + fmtInt(row.devices)
+            + '<br/>面板打开：' + fmtInt(row.opens)
+            + '<br/>时段占比：' + fmtPercent(row.share)
+            + '<br/>累计占比：' + fmtPercent(row.cumulativeShare);
+        },
+      }),
+      legend: {
+        type: 'scroll', top: 0, left: 0, right: 0, itemWidth: 10, itemHeight: 10,
+        textStyle: { color: t.text2, fontSize: 11 },
+      },
+      xAxis: Object.assign({
+        type: 'category',
+        data: categories,
+        boundaryGap: true,
+        axisLabel: { color: t.text2, fontSize: 11, interval: 1, hideOverlap: true, formatter: (value) => value + ' 时' },
+      }, baseAxis(), { splitLine: { show: false } }),
+      yAxis: [
+        Object.assign({ type: 'value', minInterval: 1, axisLabel: { color: t.text2, fontSize: 11 } }, baseAxis()),
+        Object.assign({
+          type: 'value', min: 0, max: 100,
+          axisLabel: { color: t.text3, fontSize: 11, formatter: '{value}%' },
+          axisLine: { show: false }, axisTick: { show: false },
+        }, baseAxis(), { splitLine: { show: false } }),
+      ],
+      series: [
+        {
+          name: '活跃设备数',
+          type: 'bar',
+          barMaxWidth: 18,
+          itemStyle: { color: t.orange, borderRadius: [6, 6, 0, 0] },
+          emphasis: { focus: 'series' },
+          data: devices,
+        },
+        {
+          name: '累计占比',
+          type: 'line',
+          yAxisIndex: 1,
+          smooth: false,
+          showSymbol: false,
+          symbolSize: 5,
+          lineStyle: { width: 2, color: t.blue },
+          itemStyle: { color: t.blue },
+          areaStyle: { opacity: 0.1 },
+          data: cumulative,
+        },
+      ],
+      animationDuration: 260,
+    }, true);
+    instance.resize();
+  }
+
   function paintRender(rows) {
     const items = (rows || []).map((row) => ({
       label: row.version,
@@ -1316,11 +1429,21 @@
     if (button) button.textContent = expanded.has(id) ? '收起' : '展开全部';
   }
 
-  const TREND_IDS = ['growth', 'daily-opens', 'daily-users', 'daily-pages'];
+  const TREND_IDS = ['growth', 'daily-opens', 'daily-users', 'daily-pages', 'hour-of-day'];
 
   async function refreshTrendView(id, force) {
     const range = ranges[id];
     try {
+      if (id === 'hour-of-day') {
+        const hourResult = await ensureHours(range, force);
+        if (hourResult.error) {
+          showPanelError(id, new Error('小时数据表尚未迁移，请先执行 cloudflare/migrate-hourly.sql'));
+          return;
+        }
+        paintHourOfDay(hourResult);
+        noteCache(hourResult);
+        return;
+      }
       const result = await ensureTrend(range, force);
       if (result.error) {
         showPanelError(id, new Error('小时数据表尚未迁移，请先执行 cloudflare/migrate-hourly.sql'));

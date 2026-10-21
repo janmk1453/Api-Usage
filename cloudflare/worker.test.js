@@ -30,6 +30,7 @@ function createDb(fixtures, options) {
           // 模拟既有库尚未执行 migrate-theme-mode.sql：读取 theme_mode 的查询整体失败
           if (opts.failThemeSelect && sql.includes('theme_mode')) throw new Error('no such column: theme_mode');
           if (opts.failTtSelect && sql.includes('tt_version')) throw new Error('no such column: tt_version');
+          if (sql.includes('substr(hour, 12, 2)')) return { results: fixtures.hourOfDay };
           if (sql.includes('strftime')) return { results: fixtures.growthHourly };
           if (sql.includes('first_seen <')) return { results: fixtures.growthBaseline };
           if (sql.includes('GROUP BY hour')) return { results: fixtures.hourly };
@@ -153,6 +154,12 @@ const HOURLY = [
 
 const GROWTH_HOURLY = [{ hour: NOW_HOUR, added: 1 }];
 
+/** 时段活跃分布：SQL 已按小时分组，这里给两段有数据的时段 */
+const HOUR_OF_DAY = [
+  { hh: '09', devices: 3, opens: 12 },
+  { hh: '21', devices: 5, opens: 20 },
+];
+
 function makeEnv(fixtures = {}, options = {}) {
   const db = createDb({
     devices: DEVICES,
@@ -160,6 +167,7 @@ function makeEnv(fixtures = {}, options = {}) {
     today: [{ devices: 2, opens: 3, dur_ms: 4 * MIN }],
     render: RENDER,
     hourly: HOURLY,
+    hourOfDay: HOUR_OF_DAY,
     growthHourly: GROWTH_HOURLY,
     growthBaseline: [{ total: 5 }],
     ...fixtures,
@@ -493,6 +501,21 @@ describe('/api/trend 趋势口径', () => {
     expect(versions[0].avgMs).toBe(Math.round((2 * 200 + 3000) / 3));
     expect(versions[0].samples).toBe(3);
     expect(versions[1].avgMs).toBe(50);
+  });
+
+  it('parts=hours 返回按小时的时段活跃分布（24 项，含累计占比）', async () => {
+    const { env } = makeEnv();
+    const res = await get('/api/trend?parts=hours', env);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.hourOfDay).toHaveLength(24);
+    expect(data.daily).toBeUndefined();
+    expect(data.renderByVersion).toBeUndefined();
+    expect(data.hourOfDay[9]).toMatchObject({ hour: 9, devices: 3, opens: 12 });
+    expect(data.hourOfDay[21]).toMatchObject({ hour: 21, devices: 5, opens: 20 });
+    // 总设备数 8：9 时占 37.5%，累计到 21 时为 100%
+    expect(data.hourOfDay[9].share).toBeCloseTo(3 / 8, 6);
+    expect(data.hourOfDay[21].cumulativeShare).toBeCloseTo(1, 6);
   });
 
   it('parts 参数可单独取趋势或渲染数据', async () => {

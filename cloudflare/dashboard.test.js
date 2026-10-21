@@ -91,6 +91,18 @@ const dailyData = {
   ],
 };
 
+/** 时段活跃分布：服务端固定返回 24 项（0–23 时） */
+const hourOfDayData = {
+  generatedAt: Date.now(),
+  hourOfDay: Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    devices: hour === 9 ? 30 : hour === 21 ? 10 : 0,
+    opens: hour === 9 ? 90 : hour === 21 ? 30 : 0,
+    share: hour === 9 ? 0.75 : hour === 21 ? 0.25 : 0,
+    cumulativeShare: hour < 9 ? 0 : hour < 21 ? 0.75 : 1,
+  })),
+};
+
 const renderData = {
   generatedAt: Date.now(),
   renderByVersion: [
@@ -203,7 +215,9 @@ function createHarness(mode) {
       ? summaryData
       : url.includes('parts=render')
         ? renderData
-        : dailyData;
+        : url.includes('parts=hours')
+          ? hourOfDayData
+          : dailyData;
     return {
       ok: true,
       status: 200,
@@ -341,6 +355,17 @@ describe('看板页渲染（图表库可用）', () => {
     const os = option('os');
     expect(os.series[0].type).toBe('pie');
     expect(os.series[0].data).toHaveLength(2);
+
+    // 时段活跃分布：X 轴 24 小时，柱=活跃设备数，线=累计占比（右轴 0–100%）
+    const hourChart = option('hour-of-day');
+    expect(hourChart.xAxis.data).toHaveLength(24);
+    expect(hourChart.series).toHaveLength(2);
+    expect(hourChart.series[0].type).toBe('bar');
+    expect(hourChart.series[1].type).toBe('line');
+    expect(hourChart.series[1].yAxisIndex).toBe(1);
+    expect(hourChart.yAxis[1].max).toBe(100);
+    expect(hourChart.series[0].data[9]).toBe(30);
+    expect(hourChart.series[1].data[21]).toBe(100);
 
     const duration = option('duration');
     expect(duration.series[0].data).toHaveLength(9);

@@ -313,6 +313,48 @@ export function themeModeLabel(value) {
   return THEME_MODE_LABELS[key] || '未知';
 }
 
+/**
+ * 时段活跃分布（0–24 时，北京时间）：把窗口内的 device_hourly 行按「一天中的第几小时」重新聚合。
+ * - devices：窗口内该时段活跃的去重设备数（同一设备在不同时段各计一次，用于看时段热度）；
+ * - opens：该时段的面板打开次数之和；
+ * - share / cumulativeShare：该时段占全天活跃设备数的比例，以及截至该小时的累计占比（0–1），
+ *   用作「叠加累计」曲线，直观看出到几点为止覆盖了大部分活跃。
+ * 输入行可带 hour(0-23) 或 hh(两位字符串)；缺失时段补 0，输出固定 24 项。
+ */
+export function hourOfDaySeries(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const byHour = new Map();
+  for (const row of list) {
+    const raw = row?.hour !== undefined ? row.hour : row?.hh;
+    const hour = Number(raw);
+    if (!Number.isFinite(hour) || hour < 0 || hour > 23) continue;
+    const key = Math.floor(hour);
+    const prev = byHour.get(key) || { devices: 0, opens: 0 };
+    byHour.set(key, {
+      devices: prev.devices + numberOrZero(row?.devices),
+      opens: prev.opens + numberOrZero(row?.opens),
+    });
+  }
+  let totalDevices = 0;
+  const base = [];
+  for (let hour = 0; hour < 24; hour++) {
+    const hit = byHour.get(hour) || { devices: 0, opens: 0 };
+    totalDevices += hit.devices;
+    base.push({ hour, devices: hit.devices, opens: hit.opens });
+  }
+  let running = 0;
+  return base.map((item) => {
+    running += item.devices;
+    return {
+      hour: item.hour,
+      devices: item.devices,
+      opens: item.opens,
+      share: totalDevices > 0 ? item.devices / totalDevices : 0,
+      cumulativeShare: totalDevices > 0 ? running / totalDevices : 0,
+    };
+  });
+}
+
 /** 把 device 表行聚合成看板需要的画像维度（全部为「每设备最近一次上报的状态」） */
 export function envBreakdown(rows) {
   const list = Array.isArray(rows) ? rows : [];
