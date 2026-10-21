@@ -28,6 +28,47 @@ describe('钱包数据', () => {
     expect(official?.collapsed).toBe(true);
   });
 
+  it('自动识别出的模型默认不启用峰谷计价，且不影响已有模型的设置', () => {
+    const settings = defaultSettings();
+    const wallet = createWalletFromConnection({
+      sourceType: 'custom',
+      endpointId: 'relay-peak-default',
+      endpointLabel: 'relay.peak/v1',
+      credentialId: null,
+      credentialLabel: null,
+    }, settings, 1000)!;
+
+    // 新发现的模型：峰谷关闭、价格未配置
+    const created = observeModel(wallet, 'relay-only-model', 2000).model!;
+    expect(created.source).toBe('discovered');
+    expect(created.price.usePeakPricing).toBe(false);
+    expect(created.price.priceConfigured).toBe(false);
+
+    // 已有模型（老数据里 usePeakPricing=true）经归一化后保持开启
+    const legacyOn = normalizeWalletModel({
+      sourceModel: 'legacy-peak-model',
+      model: 'legacy-peak-model',
+      price: { usePeakPricing: true, offpeak: { hit: 1, miss: 1, output: 1 }, peak: { hit: 2, miss: 2, output: 2 }, priceConfigured: true },
+    }, 3000)!;
+    expect(legacyOn.price.usePeakPricing).toBe(true);
+
+    // 老数据里没有该字段时仍按旧口径视为开启（不改动现有钱包）
+    const legacyMissing = normalizeWalletModel({
+      sourceModel: 'legacy-missing-field',
+      model: 'legacy-missing-field',
+      price: { offpeak: { hit: 1, miss: 1, output: 1 }, peak: { hit: 2, miss: 2, output: 2 }, priceConfigured: true },
+    }, 3000)!;
+    expect(legacyMissing.price.usePeakPricing).toBe(true);
+
+    // 显式关闭的老模型同样保持关闭
+    const legacyOff = normalizeWalletModel({
+      sourceModel: 'legacy-off-model',
+      model: 'legacy-off-model',
+      price: { usePeakPricing: false, offpeak: { hit: 1, miss: 1, output: 1 }, peak: { hit: 2, miss: 2, output: 2 }, priceConfigured: true },
+    }, 3000)!;
+    expect(legacyOff.price.usePeakPricing).toBe(false);
+  });
+
   it('钱包默认收起并记忆展开状态', () => {
     const settings = defaultSettings();
     const wallet = createWalletFromConnection({

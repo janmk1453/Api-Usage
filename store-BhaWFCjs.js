@@ -5,7 +5,6 @@ var defaultSettings = () => ({
 	theme: "light",
 	overviewWalletId: "wallet:deepseek-official",
 	overviewWalletManuallySet: false,
-	autoBalance: false,
 	balanceInterval: 10,
 	debug: false,
 	debugHit: 1e4,
@@ -24,7 +23,7 @@ var defaultSettings = () => ({
 		end: "18:00"
 	}],
 	extraOffDays: [],
-	peakDot: true,
+	peakDot: false,
 	telemetryEnabled: true,
 	webdav: {
 		url: "https://dav.jianguoyun.com/dav/",

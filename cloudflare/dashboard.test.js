@@ -53,6 +53,7 @@ const summaryData = {
     lang: [{ label: 'zh-CN', count: 40 }, { label: 'en-US', count: 2 }],
     width: [{ label: '> 1024px', count: 36 }, { label: '≤ 480px', count: 6 }],
     dark: [{ label: '浅色偏好', count: 25 }, { label: '深色偏好', count: 17 }],
+    themeMode: [{ label: '跟随系统', count: 18 }, { label: '浅色', count: 15 }, { label: '深色', count: 9 }],
     standalone: [{ label: '浏览器标签', count: 39 }, { label: '独立窗口', count: 3 }],
     touch: [{ label: '鼠标 / 精确指针', count: 34 }, { label: '触屏 / 粗指针', count: 8 }],
     tz: [{ label: 'UTC+8', count: 38 }, { label: 'UTC+9', count: 4 }],
@@ -88,6 +89,18 @@ const dailyData = {
       pages: { overview: 0, stats: 0, history: 0, forecast: 0, wallet: 0, settings: 0, help: 0, about: 0 },
     },
   ],
+};
+
+/** 时段活跃分布：服务端固定返回 24 项（0–23 时） */
+const hourOfDayData = {
+  generatedAt: Date.now(),
+  hourOfDay: Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    devices: hour === 9 ? 30 : hour === 21 ? 10 : 0,
+    opens: hour === 9 ? 90 : hour === 21 ? 30 : 0,
+    share: hour === 9 ? 0.75 : hour === 21 ? 0.25 : 0,
+    cumulativeShare: hour < 9 ? 0 : hour < 21 ? 0.75 : 1,
+  })),
 };
 
 const renderData = {
@@ -202,7 +215,9 @@ function createHarness(mode) {
       ? summaryData
       : url.includes('parts=render')
         ? renderData
-        : dailyData;
+        : url.includes('parts=hours')
+          ? hourOfDayData
+          : dailyData;
     return {
       ok: true,
       status: 200,
@@ -307,6 +322,12 @@ describe('看板页渲染（图表库可用）', () => {
     expect(pages.series[0].data).toHaveLength(8);
     expect(pages.tooltip.trigger).toBe('item');
 
+    // 每日新增用户：与「每日不重复用户数」互补，取 userGrowth 的 added
+    const newUsers = option('daily-new-users');
+    expect(newUsers.series).toHaveLength(1);
+    expect(newUsers.series[0].data).toEqual([1, 1, 1]);
+    expect(newUsers.xAxis.data).toHaveLength(3);
+
     const growth = option('growth');
     expect(growth.series).toHaveLength(1);
     expect(growth.series[0].areaStyle).toBeDefined();
@@ -331,9 +352,26 @@ describe('看板页渲染（图表库可用）', () => {
     expect(historyCount.series[0].data.reduce((sum, value) => sum + value, 0)).toBe(42);
     expect(typeof historyCount.tooltip.formatter).toBe('function');
 
+    // 颜色模式与系统深色偏好是两个独立维度，各自一张横条图
+    const themeChart = option('env-theme');
+    expect(themeChart.series).toHaveLength(1);
+    expect(themeChart.series[0].data).toHaveLength(3);
+    expect(JSON.stringify(themeChart)).toContain('跟随系统');
+
     const os = option('os');
     expect(os.series[0].type).toBe('pie');
     expect(os.series[0].data).toHaveLength(2);
+
+    // 时段活跃分布：X 轴 24 小时，柱=活跃设备数，线=累计占比（右轴 0–100%）
+    const hourChart = option('hour-of-day');
+    expect(hourChart.xAxis.data).toHaveLength(24);
+    expect(hourChart.series).toHaveLength(2);
+    expect(hourChart.series[0].type).toBe('bar');
+    expect(hourChart.series[1].type).toBe('line');
+    expect(hourChart.series[1].yAxisIndex).toBe(1);
+    expect(hourChart.yAxis[1].max).toBe(100);
+    expect(hourChart.series[0].data[9]).toBe(30);
+    expect(hourChart.series[1].data[21]).toBe(100);
 
     const duration = option('duration');
     expect(duration.series[0].data).toHaveLength(9);

@@ -170,6 +170,39 @@ function setUpdateButtonVisible(visible: boolean) {
   btn.style.display = visible ? 'inline-flex' : 'none';
 }
 
+/** 最近一次检查得到的新版本状态：面板可能晚于检查创建，用于回填导航徽标 */
+let pendingUpdate = false;
+
+export function isUpdateAvailable(): boolean {
+  return pendingUpdate;
+}
+
+function getNavBadge(): HTMLElement | null {
+  try {
+    const doc = (window.parent as any)?.document ?? document;
+    return doc.getElementById('aus-nav-update-badge') as HTMLElement | null;
+  } catch { return null; }
+}
+
+/**
+ * 导航栏「关于」右侧的蓝色「有新版本」徽标。
+ * 徽标在导航项内部，点击时事件冒泡到 .aus-nav-item → 与点击「关于」完全一致；
+ * 折叠态（60px 侧栏）由 style.css 按 #aus-sidebar[data-collapsed="1"] 隐藏。
+ */
+function setNavBadge(visible: boolean) {
+  pendingUpdate = visible;
+  const badge = getNavBadge();
+  if (!badge) return;
+  badge.setAttribute('data-on', visible ? '1' : '0');
+}
+
+/** 面板创建晚于更新检查时调用：把当前更新状态回填到导航徽标 */
+export function syncUpdateIndicators(): void {
+  const badge = getNavBadge();
+  if (!badge) return;
+  badge.setAttribute('data-on', pendingUpdate ? '1' : '0');
+}
+
 function showBanner(message: string) {
   const banner = getBanner();
   if (!banner) return;
@@ -327,7 +360,10 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
       const localLabel = `${currentBranch}@${shortSha(local.sha)}`;
       const needsSwitch = currentBranch !== 'unknown' && currentBranch !== targetBranch;
       let hasUpdate = !needsSwitch && local.isUpToDate === false;
-      let remoteLabel = `${targetBranch}@${shortSha(local.sha)}`;
+      // 远端提交只在「确实领先本地」且与本地不同时才拿来展示：
+      // compare 失败（限流/网络）或返回同一条提交时，拼出来的「远端」会和本地一模一样，容易误导。
+      let remoteLabel = '';
+      let remoteSha = '';
       let notifyKey = `${targetBranch}:${local.sha}`;
       const ctrl = new AbortController();
       const timer = setTimeout(() => { try { ctrl.abort(); } catch {} }, TIMEOUT_MS);
@@ -337,10 +373,11 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
         if (cmp) {
           if (cmp.hasUpdate) {
             hasUpdate = true;
-            remoteLabel = `${targetBranch}@${shortSha(cmp.remoteSha)}`;
-            notifyKey = `${targetBranch}:${cmp.remoteSha || remoteLabel}`;
-          } else {
-            remoteLabel = `${targetBranch}@${shortSha(cmp.remoteSha || local.sha)}`;
+            if (cmp.remoteSha && shortSha(cmp.remoteSha) !== shortSha(local.sha)) {
+              remoteSha = cmp.remoteSha;
+              remoteLabel = `${targetBranch}@${shortSha(cmp.remoteSha)}`;
+            }
+            notifyKey = `${targetBranch}:${cmp.remoteSha || local.sha}`;
           }
         }
       } catch (e: any) {
@@ -349,9 +386,12 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
       }
       if (needsSwitch) hasUpdate = true;
       if (hasUpdate) {
+        // 三种提示：切分支 / 已知远端提交 / 只知道「落后」但拿不到远端哈希（例如 GitHub API 限流）
         const message = needsSwitch
-          ? `当前 ${localLabel}，可切换到 ${targetBranch} 分支并更新`
-          : `发现 ${remoteLabel} 新提交（当前 ${localLabel}），可在本页直接更新`;
+          ? `当前 ${localLabel}，可在关于页切换到 ${targetBranch} 分支并更新`
+          : remoteLabel
+            ? `发现新提交 ${remoteLabel}（当前 ${localLabel}），可在关于页更新`
+            : `检测到 ${targetBranch} 有新提交（当前 ${localLabel}），可在关于页更新`;
         if (getLastNotified() !== notifyKey || manual) {
           toast('info', message);
           setLastNotified(notifyKey);
@@ -359,15 +399,19 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
         if (banner) {
           showBanner(needsSwitch
             ? `当前 <b>${esc(localLabel)}</b>，目标分支 <b>${esc(targetBranch)}</b>，点击“立即更新”将切换并更新`
-            : `发现新提交 <b>${esc(remoteLabel)}</b>（当前 ${esc(localLabel)}），可在本页直接更新`);
+            : remoteLabel
+              ? `发现新提交 <b>${esc(remoteLabel)}</b>（当前 ${esc(localLabel)}），可在本页直接更新`
+              : `当前 <b>${esc(localLabel)}</b> 落后于 <b>${esc(targetBranch)}</b> 分支，点击“立即更新”拉取最新提交`);
         }
         setUpdateButtonVisible(true);
+        setNavBadge(true);
       } else {
         toast('info', `已是最新版本（${localLabel}，目标 ${targetBranch}）`);
         hideBanner();
         setUpdateButtonVisible(false);
+        setNavBadge(false);
       }
-      return { hasUpdate, current: localLabel, remote: remoteLabel };
+      return { hasUpdate, current: localLabel, remote: remoteLabel || (remoteSha ? shortSha(remoteSha) : `${targetBranch}（领先本地）`) };
     }
   } catch (e: any) {
     log.debug('获取本地提交失败，回退版本检查', e?.message || e);
@@ -385,7 +429,7 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
     }
     const hasUpdate = isNewer(remoteVer, CURRENT_VERSION);
     if (hasUpdate) {
-      const updateHint = isNonGitInstall ? '，请前往「扩展程序 → 管理扩展程序」更新' : `，可在本页切换到 ${targetBranch} 并更新`;
+      const updateHint = isNonGitInstall ? '，请前往「扩展程序 → 管理扩展程序」更新' : `，可在关于页切换到 ${targetBranch} 并更新`;
       const notifyKey = `${targetBranch}:v${remoteVer}`;
       if (getLastNotified() !== notifyKey || manual) {
         toast('info', `发现 ${targetBranch} 分支新版本 v${remoteVer}（当前 v${CURRENT_VERSION}）${updateHint}`);
@@ -395,10 +439,13 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
         showBanner(`发现 <b>${esc(targetBranch)}</b> 分支新版本 <b>v${esc(remoteVer)}</b>（当前 v${esc(CURRENT_VERSION)}）${updateHint}`);
       }
       setUpdateButtonVisible(!isNonGitInstall);
+      // 非 Git 安装也能看到徽标：点进去在关于页按提示走「管理扩展程序」
+      setNavBadge(true);
     } else {
       toast('info', `已是最新版本 v${CURRENT_VERSION}（目标 ${targetBranch}）`);
       hideBanner();
       setUpdateButtonVisible(false);
+      setNavBadge(false);
     }
     return { hasUpdate, current: CURRENT_VERSION, remote: remoteVer };
   } catch (e: any) {

@@ -300,6 +300,61 @@ export function widthLabel(bucket) {
   return WIDTH_LABELS[key] || key || '未知';
 }
 
+/** 扩展颜色模式标签：light / dark / auto（跟随系统）；空值表示该版本尚未上报 */
+export const THEME_MODE_LABELS = {
+  light: '浅色',
+  dark: '深色',
+  auto: '跟随系统',
+};
+
+export function themeModeLabel(value) {
+  const key = String(value ?? '');
+  if (!key) return '未上报';
+  return THEME_MODE_LABELS[key] || '未知';
+}
+
+/**
+ * 时段活跃分布（0–24 时，北京时间）：把窗口内的 device_hourly 行按「一天中的第几小时」重新聚合。
+ * - devices：窗口内该时段活跃的去重设备数（同一设备在不同时段各计一次，用于看时段热度）；
+ * - opens：该时段的面板打开次数之和；
+ * - share / cumulativeShare：该时段占全天活跃设备数的比例，以及截至该小时的累计占比（0–1），
+ *   用作「叠加累计」曲线，直观看出到几点为止覆盖了大部分活跃。
+ * 输入行可带 hour(0-23) 或 hh(两位字符串)；缺失时段补 0，输出固定 24 项。
+ */
+export function hourOfDaySeries(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const byHour = new Map();
+  for (const row of list) {
+    const raw = row?.hour !== undefined ? row.hour : row?.hh;
+    const hour = Number(raw);
+    if (!Number.isFinite(hour) || hour < 0 || hour > 23) continue;
+    const key = Math.floor(hour);
+    const prev = byHour.get(key) || { devices: 0, opens: 0 };
+    byHour.set(key, {
+      devices: prev.devices + numberOrZero(row?.devices),
+      opens: prev.opens + numberOrZero(row?.opens),
+    });
+  }
+  let totalDevices = 0;
+  const base = [];
+  for (let hour = 0; hour < 24; hour++) {
+    const hit = byHour.get(hour) || { devices: 0, opens: 0 };
+    totalDevices += hit.devices;
+    base.push({ hour, devices: hit.devices, opens: hit.opens });
+  }
+  let running = 0;
+  return base.map((item) => {
+    running += item.devices;
+    return {
+      hour: item.hour,
+      devices: item.devices,
+      opens: item.opens,
+      share: totalDevices > 0 ? item.devices / totalDevices : 0,
+      cumulativeShare: totalDevices > 0 ? running / totalDevices : 0,
+    };
+  });
+}
+
 /** 把 device 表行聚合成看板需要的画像维度（全部为「每设备最近一次上报的状态」） */
 export function envBreakdown(rows) {
   const list = Array.isArray(rows) ? rows : [];
@@ -319,6 +374,8 @@ export function envBreakdown(rows) {
     lang: tally(list.map((row) => row?.lang)),
     width: tally(list.map((row) => widthLabel(row?.width_bucket))),
     dark: tally(list.map((row) => (numberOrZero(row?.dark) === 1 ? '深色偏好' : '浅色偏好'))),
+    // 扩展颜色模式（用户设置值），与上面的系统深色偏好分开统计；旧版本未上报的记为「未上报」
+    themeMode: tally(list.map((row) => themeModeLabel(row?.theme_mode))),
     standalone: tally(list.map((row) => (numberOrZero(row?.standalone) === 1 ? '独立窗口' : '浏览器标签'))),
     touch: tally(list.map((row) => (numberOrZero(row?.touch) === 1 ? '触屏 / 粗指针' : '鼠标 / 精确指针'))),
     tz: tally(list.map((row) => tzLabel(row?.tz_offset))),

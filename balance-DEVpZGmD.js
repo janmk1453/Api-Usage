@@ -1,7 +1,7 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { r as state } from "./store-Cc2SGj8q.js";
+import { r as state } from "./store-BhaWFCjs.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as DEEPSEEK_WALLET_ID, i as saveWalletApiKey, r as getWalletApiKey, t as repository, v as DEEPSEEK_OFFICIAL_ENDPOINT_ID } from "./repository-JvxNaSRi.js";
+import { A as DEEPSEEK_WALLET_ID, i as saveWalletApiKey, r as getWalletApiKey, t as repository, v as DEEPSEEK_OFFICIAL_ENDPOINT_ID } from "./repository-wjTo-V4v.js";
 //#region src/services/balance.ts
 var balance_exports = /* @__PURE__ */ __exportAll({
 	queryBalance: () => queryBalance,
@@ -98,12 +98,13 @@ function restartBalanceTimer() {
 		balanceTimer = null;
 	}
 	const settings = state.settings;
-	if (!settings.autoBalance) return;
+	const ignored = new Set(state.walletIgnored || []);
+	if (!(state.wallets || []).filter((wallet) => !ignored.has(wallet.id) && wallet.balance.mode === "auto").length) return;
 	const minutes = Math.min(Math.max(parseInt(settings.balanceInterval) || 10, 1), 1440);
 	balanceTimer = setInterval(() => {
-		const ignored = new Set(state.walletIgnored || []);
+		const currentIgnored = new Set(state.walletIgnored || []);
 		for (const wallet of state.wallets || []) {
-			if (ignored.has(wallet.id) || wallet.balance.mode !== "auto") continue;
+			if (currentIgnored.has(wallet.id) || wallet.balance.mode !== "auto") continue;
 			queryWalletBalance(wallet.id, true).catch(() => {});
 		}
 	}, minutes * 60 * 1e3);

@@ -684,6 +684,16 @@ function switchView(view: typeof currentView) {
     // 瞬时切换：不再走“先透明再淡入”，避免点击后有一小段延迟感
     if (on) { el.style.transition = 'none'; el.style.opacity = '1'; }
   });
+  // 所有视图共用 #aus-main 作为滚动容器，切换页面时必须把滚动位置归零，
+  // 否则会沿用上一页的 scrollTop，出现“切过去直接显示页面中部”的问题。
+  try {
+    for (const id of ['aus-main', 'aus-content-body']) {
+      const scroller = doc.getElementById(id) as HTMLElement | null;
+      if (!scroller) continue;
+      scroller.scrollTop = 0;
+      scroller.scrollLeft = 0;
+    }
+  } catch {}
   doc.querySelectorAll('.aus-nav-item').forEach((el: any) => {
     const v = el.getAttribute('data-nav');
     if (v === view) el.classList.add('active');
@@ -779,7 +789,7 @@ export function createPanel() {
         <div class="aus-nav-group" style="display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--ds-border);padding-top:10px;">
           <div class="aus-nav-item" data-nav="settings" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon('settings')}</span><span class="aus-nav-label">设置</span></div>
           <div class="aus-nav-item" data-nav="help" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon('help')}</span><span class="aus-nav-label">使用说明</span></div>
-          <div class="aus-nav-item" data-nav="about" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon('about')}</span><span class="aus-nav-label">关于</span></div>
+          <div class="aus-nav-item" data-nav="about" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon('about')}</span><span class="aus-nav-label">关于</span><span id="aus-nav-update-badge" data-on="0" title="检测到新版本，点击查看关于页">新版本</span></div>
         </div>
       </div>
     </div>
@@ -1015,8 +1025,8 @@ export function createPanel() {
           <div data-view="about" style="display:none;">
             <div style="display:grid;gap:12px;">
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);color:var(--ds-text);">
-                <div style="font-size:var(--aus-fs-base);font-weight:600;">关于<br/>API用量统计 · SillyTavern 扩展</div>
-                <div style="margin-top:8px;color:var(--ds-text-2);">迁移至原 DeepSeek使用预测 脚本<br/>致力于实现最全面的用量可视化统计<br/><br/>仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);">janmk1453/Api-Usage</a></div>
+                <div style="font-size:var(--aus-fs-base);font-weight:600;">关于<br/>API用量统计</div>
+                <div style="margin-top:8px;color:var(--ds-text-2);">致力于实现最全面的用量可视化统计<br/><br/>仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);">janmk1453/Api-Usage</a></div>
               </div>
               <div class="ds-card" style="display:grid;gap:8px;">
                 <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">检查更新</div>
@@ -1033,7 +1043,7 @@ export function createPanel() {
                   <button id="aus-run-update" class="ds-btn-pill" style="display:none;padding:6px 14px;font-size:var(--aus-fs-sm);">立即更新</button>
                   <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">当前 v${typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : ''} · 每 1 小时自动检查</span>
                 </div>
-                <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">可选择 main 或 dev 分支直接更新，默认 main；更新完成后自动刷新网页。非 Git 安装请使用“管理扩展程序”。</div>
+                <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">可选择 main（稳定）或 dev（测试）分支获取更新，默认 main；更新完成后自动刷新网页。</div>
               </div>
             </div>
           </div>
@@ -1057,6 +1067,8 @@ export function createPanel() {
   panel.appendChild(sbOverlay);
   doc.body.appendChild(overlay);
   doc.body.appendChild(panel);
+  // 面板可能晚于更新检查创建：挂载后按当前更新状态同步导航徽标
+  try { import('../services/update').then((mod: any) => mod.syncUpdateIndicators?.()); } catch {}
   try { applyTheme(theme); } catch {}
   try {
     const p = (window.parent as any) || window;
@@ -1128,6 +1140,8 @@ export function createPanel() {
       syncMobileSidebar();
       return;
     }
+    // 折叠态隐藏「有新版本」徽标（60px 侧栏放不下），展开后按真实状态恢复
+    sb.setAttribute('data-collapsed', collapsed ? '1' : '0');
     // 宽屏：保留 60/260 折叠
     sb.style.setProperty('width', collapsed ? '60px' : '260px', 'important');
     sb.style.setProperty('min-width', collapsed ? '60px' : '260px', 'important');

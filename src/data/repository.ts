@@ -640,7 +640,7 @@ export type HistoryDeleteFilter = {
 };
 
 // 归一化设置：只接受已知设置键，防止历史/余额等字段污染（如误将整个 state 存入 settings），并清洗非法值
-function normalizeSettings(incoming: any): any {
+export function normalizeSettings(incoming: any): any {
   const def: any = defaultSettings();
   const src: any = (incoming && typeof incoming === 'object') ? incoming : {};
   const merged: any = { ...def };
@@ -660,6 +660,9 @@ function normalizeSettings(incoming: any): any {
   if (!merged.historyScope) merged.historyScope = def.historyScope;
   if (!merged.theme) merged.theme = def.theme;
   if (typeof merged.modelsPricingCollapsed !== 'boolean') merged.modelsPricingCollapsed = true;
+  // 峰值圆点默认值改为「关闭」只作用于全新安装（没有任何已存设置）：
+  // 老版本持久化里根本没有这个键的用户，按旧行为迁移成开启，避免升级后圆点无声消失。
+  if (src.peakDot === undefined && Object.keys(src).length > 0) merged.peakDot = true;
   if (!Array.isArray(merged.overviewFour) || (merged.overviewFour.length !== 8 && merged.overviewFour.length !== 4)) merged.overviewFour = def.overviewFour;
   if (Array.isArray(merged.overviewFour) && merged.overviewFour.length === 4) {
     merged.overviewFour = [...merged.overviewFour, ...def.overviewFour.slice(4)];

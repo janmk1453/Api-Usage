@@ -57,7 +57,6 @@ export type Settings = {
   theme: ThemeMode;
   overviewWalletId: string;
   overviewWalletManuallySet: boolean;
-  autoBalance: boolean;
   balanceInterval: number;
   debug: boolean;
   debugHit: number;
@@ -71,6 +70,7 @@ export type Settings = {
   peakHours: PeakHour[];
   // 用户补充的额外空闲日期（YYYY-MM-DD）：内置节假日数据未覆盖年份或特殊调整时使用
   extraOffDays: string[];
+  /** 峰值提示小圆点（默认关闭；老版本缺字段的用户在 normalizeSettings 里按旧的「开启」迁移） */
   peakDot: boolean;
   /** 匿名使用统计开关（默认开启，关闭后不再采集与上报） */
   telemetryEnabled: boolean;
@@ -86,7 +86,6 @@ export const defaultSettings = (): Settings => ({
   theme: 'light',
   overviewWalletId: 'wallet:deepseek-official',
   overviewWalletManuallySet: false,
-  autoBalance: false,
   balanceInterval: 10,
   debug: false,
   debugHit: 10000,
@@ -99,7 +98,7 @@ export const defaultSettings = (): Settings => ({
   customModels: [],
   peakHours: [{ start: '09:00', end: '12:00' }, { start: '14:00', end: '18:00' }],
   extraOffDays: [],
-  peakDot: true,
+  peakDot: false,
   telemetryEnabled: true,
   webdav: { url: 'https://dav.jianguoyun.com/dav/', username: '', path: '', proxy: '' },
   historyScope: 'all',

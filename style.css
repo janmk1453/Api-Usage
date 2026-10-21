@@ -1501,3 +1501,58 @@
   }
 }
 
+
+/* 「新版本」导航徽标：蓝色实心胶囊，仅在有更新且侧栏展开时显示 */
+#aus-nav-update-badge {
+  display: none;
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #2563EB;
+  color: #FFFFFF;
+  font-size: var(--aus-fs-xs);
+  font-weight: 600;
+  line-height: 1.7;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+#aus-nav-update-badge[data-on="1"] { display: inline-flex; }
+#aus-sidebar[data-collapsed="1"] #aus-nav-update-badge { display: none !important; }
+
+/* ===== 顶部筛选胶囊：与趋势预测工具栏（.aus-forecast-pill）保持同一尺寸口径 ===== */
+/* 其余页面原先用 inline 的 padding:8px 12px + 14px 字号，移动端比趋势预测明显大一圈；
+   这里统一成 6px 11px / min-height 32px（桌面）与 6px 10px / 12px 字号 / 30px（≤760px）。 */
+#aus-range-btn,
+#aus-model-btn,
+#aus-chat-btn,
+#aus-endpoint-btn,
+#aus-credential-btn,
+#aus-history-model-btn,
+#aus-history-chat-btn,
+#aus-history-endpoint-btn,
+#aus-history-credential-btn,
+#aus-theme-btn,
+#aus-history-scope-btn {
+  padding: 6px 11px !important;
+  min-height: 32px !important;
+  gap: 6px !important;
+  box-sizing: border-box;
+}
+@media (max-width: 760px) {
+  #aus-range-btn,
+  #aus-model-btn,
+  #aus-chat-btn,
+  #aus-endpoint-btn,
+  #aus-credential-btn,
+  #aus-history-model-btn,
+  #aus-history-chat-btn,
+  #aus-history-endpoint-btn,
+  #aus-history-credential-btn,
+  #aus-theme-btn,
+  #aus-history-scope-btn {
+    padding: 6px 10px !important;
+    font-size: var(--aus-fs-sm) !important;
+    min-height: 30px !important;
+    gap: 6px !important;
+  }
+}

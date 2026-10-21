@@ -44,6 +44,7 @@ Api-Usage/
 │   ├── migrate-hourly.sql # 已有库新增 device_hourly 小时表与索引（不改旧表、可重复执行；未迁移时旧版上报自动降级不受影响）
 │   ├── migrate-st-version.sql # 已有库补充 device.st_version 酒馆版本号列（未迁移时 Worker 自动回退旧列集合，旧版上报不受影响）
 │   ├── migrate-device-metrics.sql # 已有库补充 device.history_count/telemetry_off 列（未迁移时 Worker 自动回退旧列集合，不影响上报）
+│   ├── migrate-theme-mode.sql # 已有库补充 device.theme_mode 颜色模式列（light/dark/auto，未迁移时 Worker 自动降级不写该列，不影响上报）
 │   ├── migrate-backfill-device-totals.sql # 只做累计列回填与校验，可安全重复执行（列已存在或需重算时使用）
 │   ├── wrangler.toml      # Worker 配置（D1 绑定、Cron、HTML 文本模块规则）
 │   ├── dashboard.html     # 口令保护的看板（总计/趋势/面板构成/画像/性能五分区，ECharts 6.1.0 仅同源自托管且**必须 full 构建**（simple 构建不含 Tooltip 组件，会让 tooltip/axisPointer 静默失效）、无任何第三方 CDN、页头显示来源徽标与 BUILD_ID、移动端触屏点按固定数值提示（touchstart/showTip + touchend 补钉），历史记录条数分布为折线图（X 轴分段分组：1–499 每 10 条、500–999 每 50 条、1000 以上合并，**0 条不计**，共 61 点；`summary.js#historyCountCurve`，常量 `HISTORY_COUNT_CURVE_STEP/MID/WIDE_STEP/MAX`），每个趋势图独立时间控件默认 30 天，手机竖屏单列）
@@ -131,7 +132,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **固定与可编辑**：接入地址、接入类型、已识别密钥身份只读；钱包名称、模型名、价格、价格来源、峰谷规则、手工余额和忽略状态可编辑。模型改名会保留旧名别名，旧请求仍能命中规则
 - **官方峰谷规则**：DeepSeek 官方内置定价按北京时间判断——周一至周五（不含中国法定节假日）`9:00-12:00`、`14:00-18:00` 为高峰，其余时段（含周末、中国法定节假日全天）为空闲；调休上班的周末同样按空闲计费。节假日数据在 `src/constants/holidays.ts`（内置覆盖 2024-2026），`settings.extraOffDays` 可补充额外空闲日期；官方钱包的自定义价格规则同样应用节假日豁免，中转钱包仍按自身峰谷配置
 - **默认收起**：每个钱包默认 `collapsed=true`；宽屏收起态为单行卡片——左侧 `44px` 方形标识（取钱包名首个有意义字符，剥离 `http(s)://`、`www.`、`api.` 前缀，`--ds-black` 底 + `--ds-black-text` 字）、中间名称（无边框标题态输入，hover/focus 才显底色与描边）与副标题（接入地址 · 来源）、右侧只外显**余额**与**模型数**两项指标（密钥数/请求数/费用不外显），操作收为 `30px` 图标按钮（展开/收起 `chevron-down`/`chevron-up`、同步 `refresh`、忽略 `close`，均 `16px` SVG，仅可忽略项显示忽略），待定价数显示为状态徽标。展开状态按钱包独立记忆并随导入导出/WebDAV 同步
-- **余额**：币种首版支持 `CNY/USD`，手工余额可直接填写；自动校准只开放给 DeepSeek 官方直连钱包，默认使用钱包内单独保存的校准密钥，可选一个主密钥作为账号身份。多密钥不会自动相加。钱包余额在每次请求按当前币种预扣，成功校准后覆盖为服务端余额
+- **余额**：币种首版支持 `CNY/USD`，手工余额可直接填写；自动校准只开放给 DeepSeek 官方直连钱包，默认使用钱包内单独保存的校准密钥，可选一个主密钥作为账号身份。多密钥不会自动相加。钱包余额在每次请求按当前币种预扣，成功校准后覆盖为服务端余额。**自动校准没有全局开关**：钱包页勾选「自动校准」即按设置页的校准间隔轮询（`restartBalanceTimer` 仅在存在已勾选且未忽略的钱包时启动定时器）
 - **密钥隐私**：普通官方接口只记录酒馆密钥条目编号、标签和掩码末三位；反向代理 `proxy_password` 与 `custom_include_headers` 继续不读取、不比较、不持久化，因此按“未识别密钥”处理
 - **钱包模型**：模型条目含 `sourceModel/model/aliases/price/source/locked`；非峰与高峰均包含命中、未命中、输出三价。每条规则可关闭峰谷、锁定防止同步覆盖。每个钱包可独立配置跨天峰谷时段与“周末全天低谷”
 - **计价优先级**：钱包规则优先；DeepSeek 官方钱包无覆盖时使用内置 `PRICE_HISTORY` 多段价格；其他钱包无价格时标记待定价并计零费用。旧全局 `customModels` 复制到官方钱包并继续作为旧记录/未映射记录只读兜底
@@ -143,7 +144,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **使用说明**：帮助页必须保留隐私声明、免责声明和钱包说明。隐私声明需明确区分酒馆密钥识别信息与用户主动填写的钱包校准密钥；免责声明需说明不对 models.dev 数据中的商业化中转站名称或推荐关系负责。
 
 ### 设置
-- 保留全局控制：匿名使用统计（默认开启，可关闭并重置匿名标识，位于设置页顶部）、颜色模式、历史显示范围、自动校准总开关与间隔、新钱包默认峰谷与额外空闲日期、models.dev 自动同步、调试、峰值圆点、记录数据管理（按范围删除记录）和 WebDAV
+- 保留全局控制：匿名使用统计（默认开启，可关闭并重置匿名标识，位于设置页顶部）、颜色模式、历史显示范围、自动校准间隔（总开关已移除，改由钱包页逐钱包勾选）、新钱包默认峰谷与额外空闲日期、models.dev 自动同步、调试、峰值圆点、记录数据管理（按范围删除记录）和 WebDAV
 - 旧“新价格机制（峰谷计费）/生效日期”入口已移除：改用内置 `PRICE_HISTORY` 多段价格按记录时间计价，峰谷规则由 `settings.peakHours` + `extraOffDays` + 内置节假日驱动；`calcCost/calcSavings` 不再读取 `settings.useNewPricing/newPricingDate`，统一以 `LEGACY_PEAK_PRICING_DATE`（2026-08-17 北京时间）作为历史默认生效日，保证历史记录按既有口径计费
 - 按范围删除记录（`#aus-delete-*`，`bindHistoryDelete`）：支持开始/结束日期、模型（完全匹配）、对话（`chatId` 或 `chatName` 完全匹配），留空表示不限；先“统计匹配记录”预览命中条数，再二次确认执行；底层走 `repository.deleteHistoryByFilter`，同时处理热历史与 IndexedDB 冷历史并 `recalcAll + rebuildAggregates`，删除后刷新全站统计
 - 峰谷规则：`extraOffDays`（`YYYY-MM-DD` 数组，`normalizeSettings` 校验去重）用于补充内置节假日数据未覆盖年份；修改后调用 `recalcCostsAndRefresh` 重算冷热费用。峰值圆点（`peak-dot.ts`）复用 `utils/date` 的 `isWeekendDay/isChinaHoliday/isExtraOffDay/isPeakHour`，法定节假日显示“全天低谷”

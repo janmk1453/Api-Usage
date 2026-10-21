@@ -11,6 +11,7 @@
 import { getExtensionSettings, saveExtensionSettings } from '../store/persistence';
 import { state } from '../store/index';
 import { log } from '../utils/logger';
+import { normalizeThemeMode } from './theme';
 
 /**
  * 上报端点（部署在自有的 Cloudflare Worker 上，详见 cloudflare/README.md）。
@@ -39,6 +40,8 @@ export const TELEMETRY_PAGE_KEYS: TelemetryPageKey[] = [
 
 export type TelemetryWidthBucket = 'gt1024' | '761-1024' | '481-760' | 'le480';
 export type TelemetryArch = 'x86_64' | 'x86' | 'arm64' | 'unknown';
+/** 颜色模式（扩展设置值，与系统深色偏好 dark 不是一回事） */
+export type TelemetryThemeMode = 'light' | 'dark' | 'auto';
 
 export type TelemetryEnv = {
   /** 浏览器名 */
@@ -53,8 +56,10 @@ export type TelemetryEnv = {
   lang: string;
   /** 面板宽度分桶 */
   w: TelemetryWidthBucket;
-  /** 系统深色偏好 */
+  /** 系统深色偏好（浏览器 prefers-color-scheme，与扩展颜色模式无关） */
   dark: boolean;
+  /** 扩展颜色模式设置：light / dark / auto（跟随系统） */
+  tm: TelemetryThemeMode;
   /** 是否以独立窗口（standalone）形态运行 */
   standalone: boolean;
   /** 是否粗指针/触屏设备 */
@@ -313,6 +318,18 @@ function mediaMatches(query: string): boolean {
   }
 }
 
+/**
+ * 当前颜色模式（扩展设置里的 light / dark / auto）。
+ * 每次发送前重新读取，用户中途切换「跟随系统」也会在本次上报中体现。
+ */
+export function currentThemeMode(): TelemetryThemeMode {
+  try {
+    return normalizeThemeMode((state as any)?.settings?.theme);
+  } catch {
+    return 'light';
+  }
+}
+
 function nav(): any {
   try {
     return typeof navigator === 'undefined' ? null : navigator;
@@ -357,6 +374,7 @@ export function probeEnv(): TelemetryEnv {
     dark: mediaMatches('(prefers-color-scheme: dark)'),
     standalone: mediaMatches('(display-mode: standalone)') || n?.standalone === true,
     touch: mediaMatches('(pointer: coarse)') || Number(n?.maxTouchPoints || 0) > 0,
+    tm: currentThemeMode(),
     stv: tavernVersionFromContext(),
     ttv: '',
   };
@@ -655,6 +673,10 @@ function buildPayload(
   const merged = pending ? mergeCounters(pendingCounters, incoming) : incoming;
   const seq = pending && Number.isFinite(Number(pending.seq)) ? Number(pending.seq) : identity.seq + 1;
   const env = envCache ?? probeEnv();
+  // 颜色模式与系统深色偏好可能在两次上报之间变化（含「跟随系统」下系统切换），发送前重新取一次
+  env.tm = currentThemeMode();
+  env.dark = mediaMatches('(prefers-color-scheme: dark)');
+  env.w = widthBucket(currentViewportWidth());
   // 异步补全可能还没回来，发送前再尝试一次同步来源，尽量让首报也带上酒馆版本号
   if (!env.stv) env.stv = tavernVersionFromContext();
 

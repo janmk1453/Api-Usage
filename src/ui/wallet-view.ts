@@ -245,7 +245,7 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
               <input type="password" data-wallet-api-key="1" data-wallet-id="${esc(wallet.id)}" value="" placeholder="${getWalletApiKey(wallet.id) ? '已保存钱包校准密钥（留空不修改）' : '填写钱包校准密钥'}" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
               <button data-wallet-save-key="1" data-wallet-id="${esc(wallet.id)}" style="padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">保存密钥</button>
             </div>
-            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">自动校准仅支持 DeepSeek 官方直连，并需在设置开启自动校准总开关；主密钥：${esc(selectedCredential?.label || '未指定')}</div>
+            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">自动校准仅支持 DeepSeek 官方，勾选后按设置页的校准间隔自动查询；主密钥：${esc(selectedCredential?.label || '未指定')}</div>
             <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc(item.label)).join('、') : '未识别'}</div>
           ` : `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">该接入暂不支持自动余额校准，请手工维护余额。</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc(item.label)).join('、') : '未识别'}</div>`}
         </div>
@@ -509,7 +509,8 @@ function bindWalletView(doc: Document): void {
           model: name,
           aliases: [],
           price: {
-            usePeakPricing: true,
+            // 与「自动识别出的模型」口径一致：非官方钱包默认关闭峰谷（DeepSeek 官方钱包仍默认开启）
+            usePeakPricing: wallet.kind === 'official',
             offpeak: { hit: 0, miss: 0, output: 0 },
             peak: { hit: 0, miss: 0, output: 0 },
             priceConfigured: false,
