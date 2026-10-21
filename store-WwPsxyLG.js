@@ -24,7 +24,7 @@ var defaultSettings = () => ({
 		end: "18:00"
 	}],
 	extraOffDays: [],
-	peakDot: true,
+	peakDot: false,
 	telemetryEnabled: true,
 	webdav: {
 		url: "https://dav.jianguoyun.com/dav/",

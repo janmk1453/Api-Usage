@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { repository } from './repository';
+import { normalizeSettings, repository } from './repository';
 import { state } from '../store/index';
 import { defaultSettings } from '../types/settings';
 import { createDeepSeekWallet, createWalletFromConnection } from './wallets';
@@ -154,5 +154,23 @@ describe('仓库全量处理', () => {
     expect(relayWallets).toHaveLength(1);
     expect(relayWallets[0].endpointLabel).toBe('youzi.today');
     expect(state.history.map((item) => item.walletId)).toEqual([relayWallets[0].id, relayWallets[0].id]);
+  });
+});
+
+describe('峰值提示小圆点默认值', () => {
+  it('全新安装（没有任何已存设置）默认关闭', () => {
+    expect(defaultSettings().peakDot).toBe(false);
+    expect(normalizeSettings({}).peakDot).toBe(false);
+    expect(normalizeSettings(undefined).peakDot).toBe(false);
+  });
+
+  it('老版本设置里没有该键时按旧行为迁移为开启，升级后不受影响', () => {
+    expect(normalizeSettings({ theme: 'light', historyScope: 'all' }).peakDot).toBe(true);
+    expect(normalizeSettings({ telemetryEnabled: true }).peakDot).toBe(true);
+  });
+
+  it('用户显式选择的开关状态一律保留', () => {
+    expect(normalizeSettings({ peakDot: false, theme: 'dark' }).peakDot).toBe(false);
+    expect(normalizeSettings({ peakDot: true }).peakDot).toBe(true);
   });
 });

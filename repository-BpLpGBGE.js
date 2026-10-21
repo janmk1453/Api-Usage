@@ -1,10 +1,10 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { a as defaultSettings, n as getSelectedSave, r as state } from "./store-Cc2SGj8q.js";
+import { a as defaultSettings, n as getSelectedSave, r as state } from "./store-WwPsxyLG.js";
 import { a as HIDDEN_PRICING_MODELS, c as PRICE_HISTORY, l as PRICING, r as DEFAULT_PEAK_HOURS, s as MAX_HISTORY, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { a as loadHistoryCold, c as saveExtensionSettings, d as historyRecordKey, i as getExtensionSettings, l as saveHistoryCold, n as clearHistoryCold, o as loadHot, r as getAllHistory, t as appendHistoryCold, u as saveHot } from "./persistence-C4IJVd-B.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
 import { a as isUnsafeKey, c as localDay, i as isPeakHour$1, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay } from "./date-BJI2m6dS.js";
-import { a as getWalletExchangeRate } from "./currency-BZt-7TC7.js";
+import { a as getWalletExchangeRate } from "./currency-BEAwnAAU.js";
 //#region src/types/wallet.ts
 var DEEPSEEK_WALLET_ID = "wallet:deepseek-official";
 var WALLET_CATALOG_PROVIDERS = [
@@ -1276,7 +1276,10 @@ function migrateLegacyWalletApiKey(walletId = DEEPSEEK_WALLET_ID) {
 * 统一仓库 — 单一历史的唯一 储存/调用/修改 入口
 * 已废弃多存档，所有数据归一至 state.history + 聚合字段
 */
-var repository_exports = /* @__PURE__ */ __exportAll({ repository: () => repository });
+var repository_exports = /* @__PURE__ */ __exportAll({
+	normalizeSettings: () => normalizeSettings,
+	repository: () => repository
+});
 function getCurrentChatId() {
 	try {
 		const ctx = globalThis.SillyTavern?.getContext?.();
@@ -1830,6 +1833,7 @@ function normalizeSettings(incoming) {
 	if (!merged.historyScope) merged.historyScope = def.historyScope;
 	if (!merged.theme) merged.theme = def.theme;
 	if (typeof merged.modelsPricingCollapsed !== "boolean") merged.modelsPricingCollapsed = true;
+	if (src.peakDot === void 0 && Object.keys(src).length > 0) merged.peakDot = true;
 	if (!Array.isArray(merged.overviewFour) || merged.overviewFour.length !== 8 && merged.overviewFour.length !== 4) merged.overviewFour = def.overviewFour;
 	if (Array.isArray(merged.overviewFour) && merged.overviewFour.length === 4) merged.overviewFour = [...merged.overviewFour, ...def.overviewFour.slice(4)];
 	try {
@@ -2139,7 +2143,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && state.settings.pricingSync?.enabled) try {
-						import("./pricing-sync-CADPKT9h.js").then((n) => n.i).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-CW7ujfWy.js").then((n) => n.i).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
