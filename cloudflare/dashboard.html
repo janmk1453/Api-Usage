@@ -141,20 +141,24 @@
   #cards-today .value { color: var(--green); }
 
   /* ---------------------------------- 图表栅格 ---------------------------------- */
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 14px; align-items: start; }
+  /* align-items: stretch 让同一行的卡片等高，内部图表用 flex 撑满，避免长短不齐的锯齿感 */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 14px; align-items: stretch; }
   .grid.single { grid-template-columns: 1fr; }
   #grid-profile { grid-template-columns: repeat(auto-fit, minmax(min(100%, 288px), 1fr)); }
   .panel {
+    display: flex; flex-direction: column;
     background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg);
     padding: 14px 14px 10px; min-width: 0; overflow: hidden; box-shadow: var(--shadow-1);
-    transition: border-color 140ms ease;
+    min-height: 348px; transition: border-color 140ms ease;
   }
   .panel:hover { border-color: var(--border-strong); }
   .panel-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
   .panel-foot { margin-top: 8px; display: flex; justify-content: center; }
-  .chart { width: 100%; height: 258px; min-width: 0; }
+  /* 图表高度由卡片撑开（flex:1），同类卡片因此天然等高 */
+  .chart { width: 100%; height: 258px; min-width: 0; flex: 1 1 auto; }
   .chart.tall { height: 312px; }
-  .fallback { font-size: 12px; }
+  .fallback { font-size: 12px; flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; min-height: 120px; }
+  .fallback .note { text-align: center; }
   .fb-row { display: grid; grid-template-columns: minmax(68px, 38%) 1fr auto; gap: 10px; align-items: center; margin-bottom: 7px; }
   .fb-label { color: var(--text2); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .fb-track { background: var(--grid); border-radius: 999px; height: 7px; overflow: hidden; }
@@ -197,7 +201,7 @@
     .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     .card { padding: 11px 12px 10px; }
     .card .value { font-size: 20px; }
-    .panel { padding: 12px 12px 8px; border-radius: var(--radius); }
+    .panel { padding: 12px 12px 8px; border-radius: var(--radius); min-height: 320px; }
     .range-bar { gap: 6px; }
     .range-bar .current { margin-left: 0; width: 100%; }
     .range-bar .range-group { flex-wrap: wrap; }
@@ -310,7 +314,7 @@
   const HOUR_RANGE_HOURS = 24;
   const HOUR_MS = 60 * 60 * 1000;
   /** 看板构建标识：每次改动看板后更新，便于确认浏览器拿到的是否为最新页面 */
-  const BUILD_ID = '2026-10-21.1';
+  const BUILD_ID = '2026-10-21.2';
   /**
    * 图表库来源：**仅自托管**（Worker 同源的 `/vendor/echarts.js`），不使用任何第三方 CDN。
    * 这样看板不会向外部站点发起请求，也就不会被广告拦截类扩展或网络策略误伤；
@@ -626,6 +630,21 @@
     }, LATE_WATCH_INTERVAL_MS);
   }
 
+  /**
+   * 卡片高度由 CSS 栅格（等高）决定，容器尺寸可能在图表初始化之后才被拉伸，
+   * 因此用 ResizeObserver 兜住尺寸变化，避免 ECharts 按旧尺寸绘制留白。
+   * 旧内核没有 ResizeObserver 时静默跳过，退化为窗口 resize 时重绘。
+   */
+  const chartResizeObserver = typeof ResizeObserver === 'function'
+    ? new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const id = String((entry.target && entry.target.id) || '').replace('chart-', '');
+        const instance = charts.get(id);
+        if (instance) { try { instance.resize(); } catch (e) {} }
+      }
+    })
+    : null;
+
   function getChart(id) {
     const host = el('chart-' + id);
     if (!host || !echartsOk) return null;
@@ -634,6 +653,7 @@
       instance = window.echarts.init(host, null, { renderer: 'canvas' });
       charts.set(id, instance);
       bindTouchTip(instance);
+      if (chartResizeObserver) { try { chartResizeObserver.observe(host); } catch (e) {} }
     }
     return instance;
   }
@@ -905,6 +925,11 @@
       : opts.perItem
         ? ordered.map((item) => item.color || NEUTRAL)
         : (opts.color || t.orange);
+    // 没有数据时给出「暂无数据」而不是一张空白图（例如某维度全站都没上报过）
+    if (!full.length) {
+      renderFallbackBars(id, [], opts);
+      return;
+    }
     if (!echartsOk) {
       renderFallbackBars(id, ordered.map((item, index) => Object.assign({}, item, {
         color: Array.isArray(colors) ? colors[index] : colors,
@@ -914,7 +939,8 @@
     hideFallback(id);
     const host = el('chart-' + id);
     if (host) {
-      host.style.height = Math.max(150, list.length * 26 + 34) + 'px';
+      // 默认不按条目数撑高卡片（高度交给 CSS 栅格保持一致）；仅「展开全部」时才加高
+      host.style.height = expanded.has(id) ? Math.max(220, list.length * 26 + 34) + 'px' : '';
     }
     const instance = getChart(id);
     if (!instance) return;
@@ -1257,7 +1283,8 @@
       samples: row.samples,
       buckets: row.buckets,
     }));
-    const sorted = items.slice().sort((a, b) => b.count - a.count);
+    // 按版本号降序（与其它版本类图表一致），不再按耗时数值排序
+    const sorted = sortByVersionDesc(items);
     drawBar('render', sorted, {
       color: themeColors().green,
       valueFormatter: (value) => fmtMs(value),
