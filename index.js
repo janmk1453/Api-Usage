@@ -169,6 +169,16 @@ function normalizeImportData(raw) {
 			"input_cost",
 			"output_cost"
 		]) if (nh[field] !== void 0) nh[field] = finiteNonNegative(nh[field]);
+		if (h.raw_usage && typeof h.raw_usage === "object") {
+			const raw = sanitizeImportedValue(h.raw_usage);
+			if (raw && typeof raw === "object") try {
+				if (JSON.stringify(raw).length <= 8192) nh.raw_usage = raw;
+			} catch {}
+		}
+		if (!(Number(nh.total_tokens) > 0)) {
+			const derived = Number(nh.prompt_tokens || 0) + Number(nh.completion_tokens || 0);
+			if (derived > 0) nh.total_tokens = derived;
+		}
 		sanitizeHistoryTiming(nh);
 		cleaned.push(nh);
 	}
@@ -233,6 +243,11 @@ async function applyImportedData(d, mode) {
 			wallets: mergeWalletCollections(repository.getWallets(), d.wallets),
 			walletIgnored: Array.from(/* @__PURE__ */ new Set([...state$2.walletIgnored || [], ...d.walletIgnored || []]))
 		});
+		if (d.settings && typeof d.settings === "object") {
+			const mergedSettings = { ...d.settings };
+			mergedSettings.webdav = { ...state$2.settings?.webdav || {} };
+			await repository.replaceAll({ settings: mergedSettings });
+		}
 	}
 	await repository.recalcAll();
 	await repository.rebuildAggregates();
@@ -270,7 +285,7 @@ function triggerImport() {
 				if (!raw || raw.format !== "deepseek-stat-export") return alert("导入失败：文件格式不正确");
 				const res = normalizeImportData(raw);
 				if (res.error) return alert("导入失败：" + res.error);
-				const mode = confirm("导入方式：\n确定 = 合并导入（推荐，按时间戳去重）\n取消 = 覆盖导入（替换全部数据）") ? "merge" : "overwrite";
+				const mode = confirm("导入方式：\n确定 = 合并导入（推荐：历史按记录去重，钱包与设置一并合并，保留本机 WebDAV 配置）\n取消 = 覆盖导入（替换全部数据）") ? "merge" : "overwrite";
 				if (mode === "overwrite" && !confirm("覆盖将删除现有全部统计并无法恢复，确定要覆盖？")) return;
 				try {
 					await applyImportedData(res.data, mode);

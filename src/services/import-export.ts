@@ -130,6 +130,7 @@ export function normalizeImportData(raw: any): { data?: any; error?: string; ski
       total_tokens: finiteNonNegative(h.total_tokens),
       priceType: cleanText(h.priceType) || 'old',
     };
+    // raw_usage 走下面的专用分支（限量接收），这里先跳过，避免超大对象被通用拷贝带进来
     const SKIP_IMPORT = new Set(['messages', 'fullRequest', 'fullResponse', 'raw_usage']);
     for (const f of Object.keys(h)) {
       if (isUnsafeKey(f) || SKIP_IMPORT.has(f)) continue;
@@ -137,6 +138,21 @@ export function normalizeImportData(raw: any): { data?: any; error?: string; ski
     }
     for (const field of ['cost', 'input_cost', 'output_cost']) {
       if (nh[field] !== undefined) nh[field] = finiteNonNegative(nh[field]);
+    }
+    // raw_usage 是详情页「Raw 用量」Tab 的数据源：导出会带上它，导入必须同样接收（导出/导入保持对称），
+    // 只做白名单化与体积限制，避免异常文件塞进超大对象。
+    if (h.raw_usage && typeof h.raw_usage === 'object') {
+      const raw = sanitizeImportedValue(h.raw_usage);
+      if (raw && typeof raw === 'object') {
+        try {
+          if (JSON.stringify(raw).length <= 8192) nh.raw_usage = raw;
+        } catch {}
+      }
+    }
+    // H) total_tokens 为 0/缺失但明细非 0 时按 prompt+completion 校正，避免导入后统计少算
+    if (!(Number(nh.total_tokens) > 0)) {
+      const derived = Number(nh.prompt_tokens || 0) + Number(nh.completion_tokens || 0);
+      if (derived > 0) nh.total_tokens = derived;
     }
     // 清洗异常速率与失真 TTFT，避免污染平均速率与平均首字延迟
     sanitizeHistoryTiming(nh);
@@ -203,6 +219,13 @@ export async function applyImportedData(d: any, mode: 'overwrite' | 'merge'): Pr
         walletIgnored: Array.from(new Set([...(state.walletIgnored || []), ...(d.walletIgnored || [])])),
       } as any);
     }
+    // 合并导入同样应用文件里的设置（否则跨设备恢复后颜色模式、统计小块、额外空闲日期等都不会跟过来）；
+    // 导出时 WebDAV 配置被刻意清空，这里保留本机已有配置，避免合并把本机同步配置抹掉。
+    if (d.settings && typeof d.settings === 'object') {
+      const mergedSettings: any = { ...d.settings };
+      mergedSettings.webdav = { ...((state.settings as any)?.webdav || {}) };
+      await repository.replaceAll({ settings: mergedSettings } as any);
+    }
   }
   await repository.recalcAll();
   await repository.rebuildAggregates();
@@ -234,7 +257,7 @@ function triggerImport() {
         if (!raw || raw.format !== 'deepseek-stat-export') return alert('导入失败：文件格式不正确');
         const res: any = normalizeImportData(raw);
         if (res.error) return alert('导入失败：' + res.error);
-        const merge = confirm('导入方式：\n确定 = 合并导入（推荐，按时间戳去重）\n取消 = 覆盖导入（替换全部数据）');
+        const merge = confirm('导入方式：\n确定 = 合并导入（推荐：历史按记录去重，钱包与设置一并合并，保留本机 WebDAV 配置）\n取消 = 覆盖导入（替换全部数据）');
         const mode = merge ? 'merge' : 'overwrite';
         if (mode === 'overwrite' && !confirm('覆盖将删除现有全部统计并无法恢复，确定要覆盖？')) return;
         try {
