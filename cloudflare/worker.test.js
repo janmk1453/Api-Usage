@@ -29,15 +29,23 @@ function createDb(fixtures, options) {
           calls.push({ sql, params: stmt.params });
           // 模拟既有库尚未执行 migrate-theme-mode.sql：读取 theme_mode 的查询整体失败
           if (opts.failThemeSelect && sql.includes('theme_mode')) throw new Error('no such column: theme_mode');
+          if (opts.failTtSelect && sql.includes('tt_version')) throw new Error('no such column: tt_version');
           if (sql.includes('strftime')) return { results: fixtures.growthHourly };
           if (sql.includes('first_seen <')) return { results: fixtures.growthBaseline };
           if (sql.includes('GROUP BY hour')) return { results: fixtures.hourly };
           if (sql.includes('GROUP BY day')) return { results: fixtures.daily };
           if (sql.includes('GROUP BY app_version')) return { results: fixtures.render };
           if (sql.includes('FROM device_daily')) return { results: fixtures.today };
-          if (opts.failThemeSelect) {
+          if (opts.failThemeSelect || opts.failTtSelect) {
             // 列不存在时查询结果里自然不会有该字段
-            return { results: fixtures.devices.map((row) => { const copy = Object.assign({}, row); delete copy.theme_mode; return copy; }) };
+            return {
+              results: fixtures.devices.map((row) => {
+                const copy = Object.assign({}, row);
+                if (opts.failThemeSelect) delete copy.theme_mode;
+                if (opts.failTtSelect) delete copy.tt_version;
+                return copy;
+              }),
+            };
           }
           return { results: fixtures.devices };
         },
@@ -96,7 +104,7 @@ const DEVICES = [
     app_version: '3.1.1',
     browser: 'Firefox', browser_major: '128', os: 'Android', arch: 'arm64',
     lang: 'ja-JP', width_bucket: 'le480', dark: 1, standalone: 1, touch: 1,
-    tz_offset: 9, first_day: TODAY, first_seen: 2000, theme_mode: 'light',
+    tz_offset: 9, first_day: TODAY, first_seen: 2000, theme_mode: 'light', tt_version: '2.3.0',
     history_count: 5, telemetry_off: 1,
     opens_total: 1, dur_ms_total: 1 * MIN,
     p_overview_total: 0, p_stats_total: 0, p_wallet_total: 4,
@@ -416,6 +424,8 @@ describe('/api/summary 总计口径', () => {
     ]);
     expect(data.env.browserVersion).toHaveLength(2);
     expect(data.env.stVersion).toEqual([{ label: '1.13.5', count: 2 }]);
+    // TauriTavern 版本只在真正上报过的设备上计数（此前该列没被 SELECT，图表一直是空的）
+    expect(data.env.ttVersion).toEqual([{ label: '2.3.0', count: 1 }]);
     expect(data.env.dark[0]).toEqual({ label: '浅色偏好', count: 1 });
     // 颜色模式与系统深色偏好分列统计（同数量时顺序由标签排序决定，只校验取值与计数）
     expect(data.env.themeMode.map((item) => item.label).sort()).toEqual(['浅色', '跟随系统']);
@@ -433,6 +443,16 @@ describe('/api/summary 总计口径', () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.totals.users).toBe(2);
+    expect(data.env.themeMode).toEqual([{ label: '未上报', count: 2 }]);
+  });
+
+  it('tt_version 与 theme_mode 都未迁移时仍能出数（两项均记为未上报）', async () => {
+    const { env } = makeEnv({}, { failThemeSelect: true, failTtSelect: true });
+    const res = await get('/api/summary', env);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.totals.users).toBe(2);
+    expect(data.env.ttVersion).toEqual([]);
     expect(data.env.themeMode).toEqual([{ label: '未上报', count: 2 }]);
   });
 

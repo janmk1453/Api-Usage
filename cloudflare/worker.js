@@ -220,18 +220,45 @@ ON CONFLICT(hour, device_id) DO UPDATE SET
 WHERE device_hourly.last_seq < excluded.last_seq
 `;
 
-/** 设备维度汇总：一次全表读（行数 = 设备数）覆盖总计、环境画像、版本分布与时长分布 */
-const DEVICE_SELECT_SQL = `
-SELECT app_version, st_version, history_count, telemetry_off,
+/**
+ * 设备维度汇总：一次全表读（行数 = 设备数）覆盖总计、环境画像、版本分布与时长分布。
+ * tt_version / theme_mode 属于后加的列，未跑对应迁移的库上整条查询会失败，
+ * 因此按「两列都有 → 去掉 theme_mode → 去掉 tt_version → 两者都去掉」四档降级。
+ */
+function deviceSelectSql(columns) {
+  const optional = [];
+  if (columns.tt) optional.push('tt_version');
+  if (columns.theme) optional.push('theme_mode');
+  const extra = optional.length ? ',\n       ' + optional.join(', ') : '';
+  return `
+SELECT app_version, st_version, history_count, telemetry_off${extra},
        browser, browser_major, os, arch, lang, width_bucket,
-       dark, theme_mode, standalone, touch, tz_offset, first_day, first_seen,
+       dark, standalone, touch, tz_offset, first_day, first_seen,
        opens_total, dur_ms_total,
        ${TOTAL_COLUMNS.join(', ')}
 FROM device
 `;
+}
 
-/** 未执行 migrate-theme-mode.sql 的库：不查 theme_mode，画面改用「未知」而不是整页报错 */
-const DEVICE_SELECT_LEGACY_SQL = DEVICE_SELECT_SQL.replace('dark, theme_mode, standalone', 'dark, standalone');
+const DEVICE_SELECT_SQLS = [
+  deviceSelectSql({ tt: true, theme: true }),
+  deviceSelectSql({ tt: true, theme: false }),
+  deviceSelectSql({ tt: false, theme: true }),
+  deviceSelectSql({ tt: false, theme: false }),
+];
+
+/** 依次尝试各列组合，全部失败才抛错（未迁移的新列不影响看板出数） */
+async function queryDevices(env) {
+  let lastError;
+  for (const sql of DEVICE_SELECT_SQLS) {
+    try {
+      return await queryAll(env, sql);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
 
 /** 当日汇总：只扫当天行（行数 = 当日活跃设备数），同时给出当日去重设备数（日活） */
 const TODAY_SELECT_SQL = `
@@ -482,8 +509,7 @@ async function buildSummary(env) {
   const now = Date.now();
   const today = beijingDayKey(now);
   const [deviceRows, todayRows] = await Promise.all([
-    // theme_mode 列尚未迁移时退回不带该列的查询，保证看板照常出数（颜色模式显示为未知）
-    queryAll(env, DEVICE_SELECT_SQL).catch(() => queryAll(env, DEVICE_SELECT_LEGACY_SQL)),
+    queryDevices(env),
     queryAll(env, TODAY_SELECT_SQL, [today]),
   ]);
 
