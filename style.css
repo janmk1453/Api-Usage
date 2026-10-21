@@ -1501,3 +1501,20 @@
   }
 }
 
+
+/* 「有新版本」导航徽标：蓝色实心胶囊，仅在有更新且侧栏展开时显示 */
+#aus-nav-update-badge {
+  display: none;
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #2563EB;
+  color: #FFFFFF;
+  font-size: var(--aus-fs-xs);
+  font-weight: 600;
+  line-height: 1.7;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+#aus-nav-update-badge[data-on="1"] { display: inline-flex; }
+#aus-sidebar[data-collapsed="1"] #aus-nav-update-badge { display: none !important; }

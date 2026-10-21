@@ -170,6 +170,39 @@ function setUpdateButtonVisible(visible: boolean) {
   btn.style.display = visible ? 'inline-flex' : 'none';
 }
 
+/** 最近一次检查得到的新版本状态：面板可能晚于检查创建，用于回填导航徽标 */
+let pendingUpdate = false;
+
+export function isUpdateAvailable(): boolean {
+  return pendingUpdate;
+}
+
+function getNavBadge(): HTMLElement | null {
+  try {
+    const doc = (window.parent as any)?.document ?? document;
+    return doc.getElementById('aus-nav-update-badge') as HTMLElement | null;
+  } catch { return null; }
+}
+
+/**
+ * 导航栏「关于」右侧的蓝色「有新版本」徽标。
+ * 徽标在导航项内部，点击时事件冒泡到 .aus-nav-item → 与点击「关于」完全一致；
+ * 折叠态（60px 侧栏）由 style.css 按 #aus-sidebar[data-collapsed="1"] 隐藏。
+ */
+function setNavBadge(visible: boolean) {
+  pendingUpdate = visible;
+  const badge = getNavBadge();
+  if (!badge) return;
+  badge.setAttribute('data-on', visible ? '1' : '0');
+}
+
+/** 面板创建晚于更新检查时调用：把当前更新状态回填到导航徽标 */
+export function syncUpdateIndicators(): void {
+  const badge = getNavBadge();
+  if (!badge) return;
+  badge.setAttribute('data-on', pendingUpdate ? '1' : '0');
+}
+
 function showBanner(message: string) {
   const banner = getBanner();
   if (!banner) return;
@@ -362,10 +395,12 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
             : `发现新提交 <b>${esc(remoteLabel)}</b>（当前 ${esc(localLabel)}），可在本页直接更新`);
         }
         setUpdateButtonVisible(true);
+        setNavBadge(true);
       } else {
         toast('info', `已是最新版本（${localLabel}，目标 ${targetBranch}）`);
         hideBanner();
         setUpdateButtonVisible(false);
+        setNavBadge(false);
       }
       return { hasUpdate, current: localLabel, remote: remoteLabel };
     }
@@ -395,10 +430,13 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
         showBanner(`发现 <b>${esc(targetBranch)}</b> 分支新版本 <b>v${esc(remoteVer)}</b>（当前 v${esc(CURRENT_VERSION)}）${updateHint}`);
       }
       setUpdateButtonVisible(!isNonGitInstall);
+      // 非 Git 安装也能看到徽标：点进去在关于页按提示走「管理扩展程序」
+      setNavBadge(true);
     } else {
       toast('info', `已是最新版本 v${CURRENT_VERSION}（目标 ${targetBranch}）`);
       hideBanner();
       setUpdateButtonVisible(false);
+      setNavBadge(false);
     }
     return { hasUpdate, current: CURRENT_VERSION, remote: remoteVer };
   } catch (e: any) {
