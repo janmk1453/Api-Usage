@@ -11367,7 +11367,7 @@ function createPanel() {
 	doc.body.appendChild(overlay);
 	doc.body.appendChild(panel);
 	try {
-		import("./update-D2SX3ZSG.js").then((mod) => mod.syncUpdateIndicators?.());
+		import("./update-CZCvbZd5.js").then((mod) => mod.syncUpdateIndicators?.());
 	} catch {}
 	try {
 		applyTheme(theme);
@@ -11508,7 +11508,7 @@ function createPanel() {
 		initForecastView();
 	} catch {}
 	try {
-		import("./update-D2SX3ZSG.js").then((m) => {
+		import("./update-CZCvbZd5.js").then((m) => {
 			const branchBtn = doc.getElementById("aus-update-branch-btn");
 			const branchLabel = doc.getElementById("aus-update-branch-label");
 			const branchDrop = doc.getElementById("aus-update-branch-dropdown");
@@ -11547,7 +11547,7 @@ function createPanel() {
 		if (updBtn) updBtn.onclick = () => {
 			updBtn.textContent = "检查中…";
 			updBtn.setAttribute("disabled", "");
-			import("./update-D2SX3ZSG.js").then((m) => m.checkUpdate(true).finally(() => {
+			import("./update-CZCvbZd5.js").then((m) => m.checkUpdate(true).finally(() => {
 				updBtn.textContent = "检查更新";
 				updBtn.removeAttribute("disabled");
 			}));
@@ -11557,7 +11557,7 @@ function createPanel() {
 			if (runUpdBtn.hasAttribute("disabled")) return;
 			runUpdBtn.textContent = "更新中…";
 			runUpdBtn.setAttribute("disabled", "");
-			import("./update-D2SX3ZSG.js").then((m) => m.updateSelf()).then((res) => {
+			import("./update-CZCvbZd5.js").then((m) => m.updateSelf()).then((res) => {
 				if (res.ok && res.changed) {
 					const bannerEl = doc.getElementById("aus-update-banner");
 					if (bannerEl) {
@@ -11650,7 +11650,7 @@ function openPanel() {
 		import("./collector-BJ9e-sSf.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
-		import("./update-D2SX3ZSG.js").then((m) => m.maybeAutoCheck());
+		import("./update-CZCvbZd5.js").then((m) => m.maybeAutoCheck());
 	} catch {}
 }
 function closePanel() {

@@ -434,7 +434,7 @@ async function checkUpdate(manual = false) {
 			}
 			if (needsSwitch) hasUpdate = true;
 			if (hasUpdate) {
-				const message = needsSwitch ? `当前 ${localLabel}，可切换到 ${targetBranch} 分支并更新` : remoteLabel ? `发现新提交 ${remoteLabel}（当前 ${localLabel}），可在本页直接更新` : `当前 ${localLabel} 落后于 ${targetBranch} 分支，可在本页直接更新`;
+				const message = needsSwitch ? `当前 ${localLabel}，可在关于页切换到 ${targetBranch} 分支并更新` : remoteLabel ? `发现新提交 ${remoteLabel}（当前 ${localLabel}），可在关于页更新` : `检测到 ${targetBranch} 有新提交（当前 ${localLabel}），可在关于页更新`;
 				if (getLastNotified() !== notifyKey || manual) {
 					toast("info", message);
 					setLastNotified(notifyKey);
@@ -472,7 +472,7 @@ async function checkUpdate(manual = false) {
 		}
 		const hasUpdate = isNewer(remoteVer, CURRENT_VERSION);
 		if (hasUpdate) {
-			const updateHint = isNonGitInstall ? "，请前往「扩展程序 → 管理扩展程序」更新" : `，可在本页切换到 ${targetBranch} 并更新`;
+			const updateHint = isNonGitInstall ? "，请前往「扩展程序 → 管理扩展程序」更新" : `，可在关于页切换到 ${targetBranch} 并更新`;
 			const notifyKey = `${targetBranch}:v${remoteVer}`;
 			if (getLastNotified() !== notifyKey || manual) {
 				toast("info", `发现 ${targetBranch} 分支新版本 v${remoteVer}（当前 v${CURRENT_VERSION}）${updateHint}`);
