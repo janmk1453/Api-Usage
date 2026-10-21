@@ -10974,6 +10974,14 @@ function switchView(view) {
 			el.style.opacity = "1";
 		}
 	});
+	try {
+		for (const id of ["aus-main", "aus-content-body"]) {
+			const scroller = doc.getElementById(id);
+			if (!scroller) continue;
+			scroller.scrollTop = 0;
+			scroller.scrollLeft = 0;
+		}
+	} catch {}
 	doc.querySelectorAll(".aus-nav-item").forEach((el) => {
 		if (el.getAttribute("data-nav") === view) el.classList.add("active");
 		else el.classList.remove("active");

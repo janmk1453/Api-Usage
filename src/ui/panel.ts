@@ -684,6 +684,16 @@ function switchView(view: typeof currentView) {
     // 瞬时切换：不再走“先透明再淡入”，避免点击后有一小段延迟感
     if (on) { el.style.transition = 'none'; el.style.opacity = '1'; }
   });
+  // 所有视图共用 #aus-main 作为滚动容器，切换页面时必须把滚动位置归零，
+  // 否则会沿用上一页的 scrollTop，出现“切过去直接显示页面中部”的问题。
+  try {
+    for (const id of ['aus-main', 'aus-content-body']) {
+      const scroller = doc.getElementById(id) as HTMLElement | null;
+      if (!scroller) continue;
+      scroller.scrollTop = 0;
+      scroller.scrollLeft = 0;
+    }
+  } catch {}
   doc.querySelectorAll('.aus-nav-item').forEach((el: any) => {
     const v = el.getAttribute('data-nav');
     if (v === view) el.classList.add('active');
