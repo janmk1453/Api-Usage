@@ -760,9 +760,8 @@ async function renderChart(filteredRaw: any[]) {
   const minPerLabel = cw < 500 ? 42 : cw < 760 ? 56 : 68;
   const maxLabels = Math.max(8, Math.floor(cw / minPerLabel));
   const xInterval = labels.length <= maxLabels ? 0 : Math.ceil(labels.length / maxLabels) - 1;
-  const needZoom = labels.length > maxLabels;
-  const zoomStartPercent = needZoom ? Math.max(0, (labels.length - maxLabels) / labels.length * 100) : 0;
-  // 第一张图表常驻视窗滑块：数据点 ≥2 即显示，可拖中间平移、拖两端缩放
+  // 第一张图表常驻视窗滑块：数据点 ≥2 即显示，可拖中间平移、拖两端缩放。
+  // 默认（含切换时间维度、切换 X 维度、改筛选后）都完整展示全部 X 轴数据，由用户自己拉窄放大。
   const showZoom = labels.length > 1;
   chart.setOption({
     backgroundColor: 'transparent',
@@ -796,11 +795,11 @@ async function renderChart(filteredRaw: any[]) {
     grid: { left: narrow ? 40 : 50, right: 12 + rightOffset, top: 8, bottom: showZoom ? (narrow ? 48 : 52) : 28 },
     // 底部视窗滑块：拖中间平移 X 轴，拖两端改变可视范围（缩放）
     dataZoom: showZoom ? [
-      { type: 'inside', xAxisIndex: 0, start: zoomStartPercent, end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true },
+      { type: 'inside', xAxisIndex: 0, start: 0, end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true },
       {
         type: 'slider',
         xAxisIndex: 0,
-        start: zoomStartPercent,
+        start: 0,
         end: 100,
         height: 14,
         bottom: narrow ? 4 : 6,

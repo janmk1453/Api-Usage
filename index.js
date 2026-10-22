@@ -7310,7 +7310,6 @@ async function renderChart(filteredRaw) {
 	const cw = w || 320;
 	const maxLabels = Math.max(8, Math.floor(cw / (cw < 500 ? 42 : cw < 760 ? 56 : 68)));
 	const xInterval = labels.length <= maxLabels ? 0 : Math.ceil(labels.length / maxLabels) - 1;
-	const zoomStartPercent = labels.length > maxLabels ? Math.max(0, (labels.length - maxLabels) / labels.length * 100) : 0;
 	const showZoom = labels.length > 1;
 	chart.setOption({
 		backgroundColor: "transparent",
@@ -7353,14 +7352,14 @@ async function renderChart(filteredRaw) {
 		dataZoom: showZoom ? [{
 			type: "inside",
 			xAxisIndex: 0,
-			start: zoomStartPercent,
+			start: 0,
 			end: 100,
 			zoomOnMouseWheel: false,
 			moveOnMouseMove: true
 		}, {
 			type: "slider",
 			xAxisIndex: 0,
-			start: zoomStartPercent,
+			start: 0,
 			end: 100,
 			height: 14,
 			bottom: narrow ? 4 : 6,
