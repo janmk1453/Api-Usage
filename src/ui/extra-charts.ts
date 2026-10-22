@@ -1,6 +1,7 @@
 import { localDay } from '../utils/date';
 import { Y_OPTIONS, X_OPTIONS, X_OPTIONS_WITHOUT_ROUND, getYSelected as getMainY, getXSelected as getMainX } from './chart-config';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
+import { attachChartZoom, detachChartZoom } from './range-zoom';
 
 type ChartId = 'token'|'cost'|'hit'|'req'|'dur'|'pie';
 type XKey = 'round'|'hour'|'day'|'week'|'month';
@@ -89,6 +90,7 @@ let lastFiltered: any[] = [];
 function dropChart(id: ChartId){
   const c = (charts as any)[id];
   if (!c) return;
+  try { detachChartZoom(c); } catch {}
   try { c.dispose(); } catch {}
   (charts as any)[id] = null;
 }
@@ -221,8 +223,8 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
   const ec = await getEcharts();
   let c = charts[id];
   if (!c || (c as any).isDisposed?.()) {
-    el.innerHTML=''; (el as any).style.height='260px';
-    c = charts[id]=ec.init(el);
+    el.innerHTML=''; (el as any).style.height='290px';
+    c = charts[id]=ec.init(el, undefined, { width: el.clientWidth || 320, height: el.clientHeight || 290 });
   }
   // 前两张：重叠柱 + 曲线（Token/费用）
   const isTokenCost = id==='token' || id==='cost';
@@ -230,12 +232,12 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
   const opts:any = {
     backgroundColor:'transparent',
     tooltip:{ trigger:'axis', backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12} },
-    // 旋转标签需要额外底部空间，否则会被裁掉（表现为「X 轴名称丢失」）
-    grid:{ left:40, right:20, top:8, bottom: labels.length>12 ? 42 : 24 },
+    // 旋转标签 + 底部视窗滑块都需要额外空间，否则标签被裁（表现为「X 轴名称丢失」）
+    grid:{ left:40, right:20, top:8, bottom: labels.length>12 ? 62 : 46 },
     xAxis:{ type:'category', data: labels, axisLine:{lineStyle:{color:themeColor('--ds-border','#E5E7EB')}}, axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF'),rotate: labels.length>12?30:0, interval: 'auto', hideOverlap: false} },
     yAxis:{ type:'value', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF')}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F6F7F8')}} },
     // 默认完整展示全部 X 轴数据（与第一张图一致），缩放交给 inside 手势/拖拽
-    dataZoom: labels.length > 8 ? [{ type:'inside', xAxisIndex:0, start: 0, end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : undefined,
+    dataZoom: labels.length > 1 ? [{ type:'inside', xAxisIndex:0, start: 0, end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : undefined,
     series: (() => {
       // 堆叠柱仅最顶段有圆角，中间段直角以无缝衔接
       const barIndices = series.map((s, i) => ({ s, i })).filter(({ s }) => !(isTokenCost && s.name.includes('总'))).map(({ i }) => i);
@@ -272,6 +274,7 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
     }));
   }
   c.setOption(opts, true);
+  attachChartZoom({ doc: getDoc(), chart: c, container: el, left: 40, right: 20, bottom: 2, enabled: labels.length > 1 });
   setTimeout(()=>{ try{ c.resize(); }catch{} }, 60);
   } catch(e:any){
     dropChart(id);

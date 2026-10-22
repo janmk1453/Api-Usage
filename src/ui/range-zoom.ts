@@ -150,3 +150,59 @@ export function attachRangeZoom(options: RangeZoomOptions): RangeZoomHandle {
     },
   };
 }
+
+/** 图表实例 → 滑块句柄（用 WeakMap，实例销毁后自动回收） */
+const chartHandles = new WeakMap<object, RangeZoomHandle>();
+
+export type ChartZoomOptions = {
+  doc: Document;
+  chart: any;
+  container: HTMLElement;
+  left: number;
+  right: number;
+  bottom?: number;
+  minSpan?: number;
+  /** false 时不挂载（并清理旧滑块） */
+  enabled?: boolean;
+};
+
+/**
+ * 给任意 ECharts 实例挂载视窗滑块，并与 inside dataZoom 双向同步。
+ * 同一实例重复调用会先清理旧滑块，避免叠加。
+ */
+export function attachChartZoom(options: ChartZoomOptions): RangeZoomHandle | null {
+  const { chart, container, enabled = true } = options;
+  if (chart) detachChartZoom(chart);
+  if (!chart || !enabled) return null;
+  const handle = attachRangeZoom({
+    doc: options.doc,
+    container,
+    left: options.left,
+    right: options.right,
+    bottom: options.bottom,
+    minSpan: options.minSpan,
+    onChange: (start: number, end: number) => {
+      try { chart.dispatchAction({ type: 'dataZoom', start, end }); } catch {}
+    },
+  });
+  chartHandles.set(chart, handle);
+  try {
+    chart.off('datazoom');
+    chart.on('datazoom', () => {
+      try {
+        const option = chart.getOption();
+        const dataZoom = option && option.dataZoom && option.dataZoom[0];
+        if (dataZoom) handle.setRange(Number(dataZoom.start ?? 0), Number(dataZoom.end ?? 100));
+      } catch {}
+    });
+  } catch {}
+  return handle;
+}
+
+export function detachChartZoom(chart: any): void {
+  if (!chart) return;
+  const handle = chartHandles.get(chart);
+  if (!handle) return;
+  try { handle.destroy(); } catch {}
+  chartHandles.delete(chart);
+}

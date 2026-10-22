@@ -3,7 +3,7 @@ import { getSelectedSave, state } from '../store/index';
 import { localDay, esc } from '../utils/date';
 import { Y_OPTIONS, Y_GROUPS, X_OPTIONS, getYSelected, getXSelected, getChartType, setChartType, getAxisLabelMode, setAxisLabelMode, toggleY, setXSelected, aggregateForChart } from './chart-config';
 import { renderExtraCharts } from './extra-charts';
-import { attachRangeZoom, type RangeZoomHandle } from './range-zoom';
+import { attachChartZoom, detachChartZoom, type RangeZoomHandle } from './range-zoom';
 import { renderModelTrends, initModelTrends } from './model-trends';
 import { DataEvents, on as onDataEvent } from '../data/events';
 import {
@@ -619,6 +619,7 @@ async function renderChart(filteredRaw: any[]) {
   const { labels, series } = aggregateForChart(filteredRaw, yKeys, xKey);
   if (!labels.length) {
     if (chart) { try { chart.dispose(); } catch {} chart = null; }
+    if (chart) { try { detachChartZoom(chart); } catch {} }
     if (rangeZoom) { try { rangeZoom.destroy(); } catch {} rangeZoom = null; }
     el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--ds-text-3);font-size:var(--aus-fs-base);">该筛选无数据（历史 ' + filteredRaw.length + ' 条）</div>';
     return;
@@ -807,30 +808,16 @@ async function renderChart(filteredRaw: any[]) {
     yAxis: yAxis.length?yAxis:{ type:'value', axisLabel:{color:cText3,fontSize: 12} },
     series: seriesOpt,
   }, true);
-  // 自绘视窗滑块：Pointer Events，触屏可拖（ECharts 原生 slider 手柄只认鼠标）
-  if (rangeZoom) { try { rangeZoom.destroy(); } catch {} rangeZoom = null; }
-  if (showZoom) {
-    rangeZoom = attachRangeZoom({
-      doc,
-      container: el,
-      left: gridLeft,
-      right: gridRight,
-      bottom: narrow ? 2 : 4,
-      onChange: (startPercent, endPercent) => {
-        try { chart.dispatchAction({ type: 'dataZoom', dataZoomIndex: 0, start: startPercent, end: endPercent }); } catch {}
-      },
-    });
-    try {
-      chart.off('datazoom');
-      chart.on('datazoom', () => {
-        try {
-          const opt = chart.getOption();
-          const dz = opt && opt.dataZoom && opt.dataZoom[0];
-          if (dz) rangeZoom?.setRange(Number(dz.start ?? 0), Number(dz.end ?? 100));
-        } catch {}
-      });
-    } catch {}
-  }
+  // 自绘视窗滑块（与 inside dataZoom 双向同步，触屏可拖）
+  rangeZoom = attachChartZoom({
+    doc,
+    chart,
+    container: el,
+    left: gridLeft,
+    right: gridRight,
+    bottom: narrow ? 2 : 4,
+    enabled: showZoom,
+  });
   setTimeout(()=>{ try{ chart.resize(); }catch{} }, 60);
 }
 

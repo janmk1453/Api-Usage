@@ -5457,6 +5457,191 @@ function aggregateForChart(entries, yKeys, xKey) {
 	};
 }
 //#endregion
+//#region src/ui/range-zoom.ts
+var clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+function attachRangeZoom(options) {
+	const { doc, container, onChange } = options;
+	const left = Math.max(0, options.left);
+	const right = Math.max(0, options.right);
+	const bottom = options.bottom ?? 4;
+	const minSpan = Math.max(2, options.minSpan ?? 4);
+	try {
+		container.style.position = "relative";
+	} catch {}
+	const existing = container.querySelector("[data-range-zoom=\"1\"]");
+	if (existing) existing.remove();
+	const root = doc.createElement("div");
+	root.className = "aus-range-zoom";
+	root.setAttribute("data-range-zoom", "1");
+	root.style.left = left + "px";
+	root.style.right = right + "px";
+	root.style.bottom = bottom + "px";
+	const track = doc.createElement("div");
+	track.className = "aus-range-zoom-track";
+	const win = doc.createElement("div");
+	win.className = "aus-range-zoom-window";
+	win.setAttribute("data-range-window", "1");
+	const handleLeft = doc.createElement("div");
+	handleLeft.className = "aus-range-zoom-handle is-left";
+	handleLeft.setAttribute("data-range-handle", "left");
+	const handleRight = doc.createElement("div");
+	handleRight.className = "aus-range-zoom-handle is-right";
+	handleRight.setAttribute("data-range-handle", "right");
+	win.appendChild(handleLeft);
+	win.appendChild(handleRight);
+	root.appendChild(track);
+	root.appendChild(win);
+	container.appendChild(root);
+	let start = 0;
+	let end = 100;
+	let dragging = null;
+	let dragStartX = 0;
+	let dragStartValue = 0;
+	let dragEndValue = 100;
+	const paint = () => {
+		win.style.left = start + "%";
+		win.style.width = Math.max(0, end - start) + "%";
+	};
+	paint();
+	const width = () => {
+		return root.getBoundingClientRect().width || 1;
+	};
+	const emit = () => {
+		paint();
+		onChange(start, end);
+	};
+	const onPointerDown = (event) => {
+		const target = event.target;
+		const handle = target?.getAttribute?.("data-range-handle");
+		const isWindow = !!target?.getAttribute?.("data-range-window");
+		if (!handle && !isWindow) return;
+		dragging = handle === "left" ? "left" : handle === "right" ? "right" : "move";
+		dragStartX = Number(event.clientX) || 0;
+		dragStartValue = start;
+		dragEndValue = end;
+		root.classList.add("is-dragging");
+		try {
+			root.setPointerCapture(event.pointerId);
+		} catch {}
+		try {
+			event.preventDefault();
+		} catch {}
+		try {
+			event.stopPropagation();
+		} catch {}
+	};
+	const onPointerMove = (event) => {
+		if (!dragging) return;
+		const delta = ((Number(event.clientX) || 0) - dragStartX) / width() * 100;
+		if (dragging === "move") {
+			const span = dragEndValue - dragStartValue;
+			start = clamp(dragStartValue + delta, 0, 100 - span);
+			end = start + span;
+		} else if (dragging === "left") {
+			start = clamp(dragStartValue + delta, 0, dragEndValue - minSpan);
+			end = dragEndValue;
+		} else {
+			start = dragStartValue;
+			end = clamp(dragEndValue + delta, dragStartValue + minSpan, 100);
+		}
+		emit();
+		try {
+			event.preventDefault();
+		} catch {}
+	};
+	const onPointerUp = (event) => {
+		if (!dragging) return;
+		dragging = null;
+		root.classList.remove("is-dragging");
+		try {
+			root.releasePointerCapture(event.pointerId);
+		} catch {}
+	};
+	root.addEventListener("pointerdown", onPointerDown);
+	root.addEventListener("pointermove", onPointerMove);
+	root.addEventListener("pointerup", onPointerUp);
+	root.addEventListener("pointercancel", onPointerUp);
+	root.addEventListener("touchstart", (event) => {
+		try {
+			event.preventDefault();
+		} catch {}
+	}, { passive: false });
+	return {
+		setRange(nextStart, nextEnd) {
+			const s = clamp(Number(nextStart) || 0, 0, 100);
+			const e = clamp(Number(nextEnd) || 0, 0, 100);
+			start = Math.min(s, e);
+			end = Math.max(s, e);
+			if (end - start < minSpan) end = Math.min(100, start + minSpan);
+			paint();
+		},
+		getRange() {
+			return {
+				start,
+				end
+			};
+		},
+		destroy() {
+			root.removeEventListener("pointerdown", onPointerDown);
+			root.removeEventListener("pointermove", onPointerMove);
+			root.removeEventListener("pointerup", onPointerUp);
+			root.removeEventListener("pointercancel", onPointerUp);
+			try {
+				root.remove();
+			} catch {}
+		}
+	};
+}
+/** 图表实例 → 滑块句柄（用 WeakMap，实例销毁后自动回收） */
+var chartHandles = /* @__PURE__ */ new WeakMap();
+/**
+* 给任意 ECharts 实例挂载视窗滑块，并与 inside dataZoom 双向同步。
+* 同一实例重复调用会先清理旧滑块，避免叠加。
+*/
+function attachChartZoom(options) {
+	const { chart, container, enabled = true } = options;
+	if (chart) detachChartZoom(chart);
+	if (!chart || !enabled) return null;
+	const handle = attachRangeZoom({
+		doc: options.doc,
+		container,
+		left: options.left,
+		right: options.right,
+		bottom: options.bottom,
+		minSpan: options.minSpan,
+		onChange: (start, end) => {
+			try {
+				chart.dispatchAction({
+					type: "dataZoom",
+					start,
+					end
+				});
+			} catch {}
+		}
+	});
+	chartHandles.set(chart, handle);
+	try {
+		chart.off("datazoom");
+		chart.on("datazoom", () => {
+			try {
+				const option = chart.getOption();
+				const dataZoom = option && option.dataZoom && option.dataZoom[0];
+				if (dataZoom) handle.setRange(Number(dataZoom.start ?? 0), Number(dataZoom.end ?? 100));
+			} catch {}
+		});
+	} catch {}
+	return handle;
+}
+function detachChartZoom(chart) {
+	if (!chart) return;
+	const handle = chartHandles.get(chart);
+	if (!handle) return;
+	try {
+		handle.destroy();
+	} catch {}
+	chartHandles.delete(chart);
+}
+//#endregion
 //#region src/ui/extra-charts.ts
 var CHART_DEFS = {
 	token: {
@@ -5646,6 +5831,9 @@ var lastFiltered$1 = [];
 function dropChart(id) {
 	const c = charts$1[id];
 	if (!c) return;
+	try {
+		detachChartZoom(c);
+	} catch {}
 	try {
 		c.dispose();
 	} catch {}
@@ -5840,8 +6028,11 @@ async function drawBarLine(el, id, labels, series) {
 		let c = charts$1[id];
 		if (!c || c.isDisposed?.()) {
 			el.innerHTML = "";
-			el.style.height = "260px";
-			c = charts$1[id] = ec.init(el);
+			el.style.height = "290px";
+			c = charts$1[id] = ec.init(el, void 0, {
+				width: el.clientWidth || 320,
+				height: el.clientHeight || 290
+			});
 		}
 		const isTokenCost = id === "token" || id === "cost";
 		calcXInterval(labels, el);
@@ -5857,7 +6048,7 @@ async function drawBarLine(el, id, labels, series) {
 				left: 40,
 				right: 20,
 				top: 8,
-				bottom: labels.length > 12 ? 42 : 24
+				bottom: labels.length > 12 ? 62 : 46
 			},
 			xAxis: {
 				type: "category",
@@ -5879,7 +6070,7 @@ async function drawBarLine(el, id, labels, series) {
 				},
 				splitLine: { lineStyle: { color: themeColor$3("--ds-card", "#F6F7F8") } }
 			},
-			dataZoom: labels.length > 8 ? [{
+			dataZoom: labels.length > 1 ? [{
 				type: "inside",
 				xAxisIndex: 0,
 				start: 0,
@@ -6012,6 +6203,15 @@ async function drawBarLine(el, id, labels, series) {
 			}));
 		}
 		c.setOption(opts, true);
+		attachChartZoom({
+			doc: getDoc$8(),
+			chart: c,
+			container: el,
+			left: 40,
+			right: 20,
+			bottom: 2,
+			enabled: labels.length > 1
+		});
 		setTimeout(() => {
 			try {
 				c.resize();
@@ -6109,142 +6309,6 @@ function renderExtraX(id) {
 	});
 }
 //#endregion
-//#region src/ui/range-zoom.ts
-var clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-function attachRangeZoom(options) {
-	const { doc, container, onChange } = options;
-	const left = Math.max(0, options.left);
-	const right = Math.max(0, options.right);
-	const bottom = options.bottom ?? 4;
-	const minSpan = Math.max(2, options.minSpan ?? 4);
-	try {
-		container.style.position = "relative";
-	} catch {}
-	const existing = container.querySelector("[data-range-zoom=\"1\"]");
-	if (existing) existing.remove();
-	const root = doc.createElement("div");
-	root.className = "aus-range-zoom";
-	root.setAttribute("data-range-zoom", "1");
-	root.style.left = left + "px";
-	root.style.right = right + "px";
-	root.style.bottom = bottom + "px";
-	const track = doc.createElement("div");
-	track.className = "aus-range-zoom-track";
-	const win = doc.createElement("div");
-	win.className = "aus-range-zoom-window";
-	win.setAttribute("data-range-window", "1");
-	const handleLeft = doc.createElement("div");
-	handleLeft.className = "aus-range-zoom-handle is-left";
-	handleLeft.setAttribute("data-range-handle", "left");
-	const handleRight = doc.createElement("div");
-	handleRight.className = "aus-range-zoom-handle is-right";
-	handleRight.setAttribute("data-range-handle", "right");
-	win.appendChild(handleLeft);
-	win.appendChild(handleRight);
-	root.appendChild(track);
-	root.appendChild(win);
-	container.appendChild(root);
-	let start = 0;
-	let end = 100;
-	let dragging = null;
-	let dragStartX = 0;
-	let dragStartValue = 0;
-	let dragEndValue = 100;
-	const paint = () => {
-		win.style.left = start + "%";
-		win.style.width = Math.max(0, end - start) + "%";
-	};
-	paint();
-	const width = () => {
-		return root.getBoundingClientRect().width || 1;
-	};
-	const emit = () => {
-		paint();
-		onChange(start, end);
-	};
-	const onPointerDown = (event) => {
-		const target = event.target;
-		const handle = target?.getAttribute?.("data-range-handle");
-		const isWindow = !!target?.getAttribute?.("data-range-window");
-		if (!handle && !isWindow) return;
-		dragging = handle === "left" ? "left" : handle === "right" ? "right" : "move";
-		dragStartX = Number(event.clientX) || 0;
-		dragStartValue = start;
-		dragEndValue = end;
-		root.classList.add("is-dragging");
-		try {
-			root.setPointerCapture(event.pointerId);
-		} catch {}
-		try {
-			event.preventDefault();
-		} catch {}
-		try {
-			event.stopPropagation();
-		} catch {}
-	};
-	const onPointerMove = (event) => {
-		if (!dragging) return;
-		const delta = ((Number(event.clientX) || 0) - dragStartX) / width() * 100;
-		if (dragging === "move") {
-			const span = dragEndValue - dragStartValue;
-			start = clamp(dragStartValue + delta, 0, 100 - span);
-			end = start + span;
-		} else if (dragging === "left") {
-			start = clamp(dragStartValue + delta, 0, dragEndValue - minSpan);
-			end = dragEndValue;
-		} else {
-			start = dragStartValue;
-			end = clamp(dragEndValue + delta, dragStartValue + minSpan, 100);
-		}
-		emit();
-		try {
-			event.preventDefault();
-		} catch {}
-	};
-	const onPointerUp = (event) => {
-		if (!dragging) return;
-		dragging = null;
-		root.classList.remove("is-dragging");
-		try {
-			root.releasePointerCapture(event.pointerId);
-		} catch {}
-	};
-	root.addEventListener("pointerdown", onPointerDown);
-	root.addEventListener("pointermove", onPointerMove);
-	root.addEventListener("pointerup", onPointerUp);
-	root.addEventListener("pointercancel", onPointerUp);
-	root.addEventListener("touchstart", (event) => {
-		try {
-			event.preventDefault();
-		} catch {}
-	}, { passive: false });
-	return {
-		setRange(nextStart, nextEnd) {
-			const s = clamp(Number(nextStart) || 0, 0, 100);
-			const e = clamp(Number(nextEnd) || 0, 0, 100);
-			start = Math.min(s, e);
-			end = Math.max(s, e);
-			if (end - start < minSpan) end = Math.min(100, start + minSpan);
-			paint();
-		},
-		getRange() {
-			return {
-				start,
-				end
-			};
-		},
-		destroy() {
-			root.removeEventListener("pointerdown", onPointerDown);
-			root.removeEventListener("pointermove", onPointerMove);
-			root.removeEventListener("pointerup", onPointerUp);
-			root.removeEventListener("pointercancel", onPointerUp);
-			try {
-				root.remove();
-			} catch {}
-		}
-	};
-}
-//#endregion
 //#region src/ui/model-trends.ts
 var MODEL_COLORS = [
 	"#0BA25E",
@@ -6331,9 +6395,14 @@ async function renderOne(id, filtered) {
 		if (!el) return;
 		const xKey = state[id].x;
 		if (!filtered.length) {
-			if (charts[id]) try {
-				charts[id].dispose();
-			} catch {}
+			if (charts[id]) {
+				try {
+					detachChartZoom(charts[id]);
+				} catch {}
+				try {
+					charts[id].dispose();
+				} catch {}
+			}
 			charts[id] = null;
 			el.innerHTML = "<div style=\"text-align:center;padding:40px;color:var(--ds-text-3);font-size:var(--aus-fs-sm);\">暂无数据</div>";
 			return;
@@ -6401,10 +6470,10 @@ async function renderOne(id, filtered) {
 		let c = charts[id];
 		if (!c || c.isDisposed?.()) {
 			el.innerHTML = "";
-			el.style.height = "220px";
+			el.style.height = "250px";
 			c = charts[id] = ec.init(el, void 0, {
 				width: el.clientWidth || 320,
-				height: el.clientHeight || 260
+				height: el.clientHeight || 250
 			});
 		}
 		const cBorder = themeColor$2("--ds-border", "#E5E7EB");
@@ -6415,7 +6484,7 @@ async function renderOne(id, filtered) {
 		const cw = w || 320;
 		const maxLabels = Math.max(8, Math.floor(cw / (cw < 500 ? 42 : cw < 760 ? 56 : 68)));
 		labels.length <= maxLabels || Math.ceil(labels.length / maxLabels) - 1;
-		const needZoom = labels.length > maxLabels;
+		labels.length;
 		const legendTop = models.length > 4 ? 2 : 0;
 		c.setOption({
 			backgroundColor: "transparent",
@@ -6459,9 +6528,9 @@ async function renderOne(id, filtered) {
 				left: 42,
 				right: 16,
 				top: 22 + (models.length > 4 ? 8 : 0),
-				bottom: labels.length > 12 ? 42 : 24
+				bottom: labels.length > 12 ? 62 : 46
 			},
-			dataZoom: needZoom ? [{
+			dataZoom: labels.length > 1 ? [{
 				type: "inside",
 				xAxisIndex: 0,
 				start: 0,
@@ -6509,6 +6578,15 @@ async function renderOne(id, filtered) {
 				data: s.data
 			}))
 		}, true);
+		attachChartZoom({
+			doc,
+			chart: c,
+			container: el,
+			left: 42,
+			right: 16,
+			bottom: 2,
+			enabled: labels.length > 1
+		});
 		setTimeout(() => {
 			try {
 				c.resize();
@@ -6516,6 +6594,9 @@ async function renderOne(id, filtered) {
 		}, 60);
 	} catch (e) {
 		if (charts[id]) {
+			try {
+				detachChartZoom(charts[id]);
+			} catch {}
 			try {
 				charts[id].dispose();
 			} catch {}
@@ -7246,6 +7327,9 @@ async function renderChart(filteredRaw) {
 			} catch {}
 			chart = null;
 		}
+		if (chart) try {
+			detachChartZoom(chart);
+		} catch {}
 		if (rangeZoom) {
 			try {
 				rangeZoom.destroy();
@@ -7559,41 +7643,15 @@ async function renderChart(filteredRaw) {
 		},
 		series: seriesOpt
 	}, true);
-	if (rangeZoom) {
-		try {
-			rangeZoom.destroy();
-		} catch {}
-		rangeZoom = null;
-	}
-	if (showZoom) {
-		rangeZoom = attachRangeZoom({
-			doc,
-			container: el,
-			left: gridLeft,
-			right: gridRight,
-			bottom: narrow ? 2 : 4,
-			onChange: (startPercent, endPercent) => {
-				try {
-					chart.dispatchAction({
-						type: "dataZoom",
-						dataZoomIndex: 0,
-						start: startPercent,
-						end: endPercent
-					});
-				} catch {}
-			}
-		});
-		try {
-			chart.off("datazoom");
-			chart.on("datazoom", () => {
-				try {
-					const opt = chart.getOption();
-					const dz = opt && opt.dataZoom && opt.dataZoom[0];
-					if (dz) rangeZoom?.setRange(Number(dz.start ?? 0), Number(dz.end ?? 100));
-				} catch {}
-			});
-		} catch {}
-	}
+	rangeZoom = attachChartZoom({
+		doc,
+		chart,
+		container: el,
+		left: gridLeft,
+		right: gridRight,
+		bottom: narrow ? 2 : 4,
+		enabled: showZoom
+	});
 	setTimeout(() => {
 		try {
 			chart.resize();
