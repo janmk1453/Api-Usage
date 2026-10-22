@@ -1674,3 +1674,57 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* ── 统计页第一张图表：自绘 X 轴视窗滑块（长条 + 两端圆点，触屏可拖） ── */
+#aus-stats-chart { position: relative; }
+.aus-range-zoom {
+  position: absolute;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  z-index: 4;
+}
+.aus-range-zoom-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--ds-border);
+}
+.aus-range-zoom-window {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.32);
+  cursor: grab;
+}
+.aus-range-zoom.is-dragging .aus-range-zoom-window {
+  cursor: grabbing;
+  background: rgba(148, 163, 184, 0.46);
+}
+.aus-range-zoom-handle {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin-top: -7px;
+  border-radius: 50%;
+  background: var(--ds-text-3);
+  border: 2px solid var(--ds-card);
+  cursor: ew-resize;
+}
+.aus-range-zoom-handle.is-left { left: 0; transform: translateX(-50%); }
+.aus-range-zoom-handle.is-right { left: 100%; transform: translateX(-50%); }
+.aus-range-zoom-handle:hover,
+.aus-range-zoom.is-dragging .aus-range-zoom-handle { background: var(--ds-text-2); }
+/* 触屏（粗指针）：加大滑块高度与圆点命中区域 */
+@media (pointer: coarse) {
+  .aus-range-zoom { height: 30px; }
+  .aus-range-zoom-handle { width: 20px; height: 20px; margin-top: -10px; }
+}

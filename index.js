@@ -5611,9 +5611,9 @@ function getYValue(e, key) {
 	return 0;
 }
 async function getEcharts$1() {
-	const ec = await import("./core-CaukIycj.js");
-	const { BarChart, LineChart, PieChart } = await import("./charts-B1ny-S7z.js");
-	const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-B4ltpzQV.js");
+	const ec = await import("./core-fg_o3xmJ.js");
+	const { BarChart, LineChart, PieChart } = await import("./charts-BstuNsfd.js");
+	const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-CpGqNjDG.js");
 	const { CanvasRenderer } = await import("./renderers-DtxFY9_W.js");
 	ec.use([
 		BarChart,
@@ -6082,6 +6082,142 @@ function renderExtraX(id) {
 	});
 }
 //#endregion
+//#region src/ui/range-zoom.ts
+var clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+function attachRangeZoom(options) {
+	const { doc, container, onChange } = options;
+	const left = Math.max(0, options.left);
+	const right = Math.max(0, options.right);
+	const bottom = options.bottom ?? 4;
+	const minSpan = Math.max(2, options.minSpan ?? 4);
+	try {
+		container.style.position = "relative";
+	} catch {}
+	const existing = container.querySelector("[data-range-zoom=\"1\"]");
+	if (existing) existing.remove();
+	const root = doc.createElement("div");
+	root.className = "aus-range-zoom";
+	root.setAttribute("data-range-zoom", "1");
+	root.style.left = left + "px";
+	root.style.right = right + "px";
+	root.style.bottom = bottom + "px";
+	const track = doc.createElement("div");
+	track.className = "aus-range-zoom-track";
+	const win = doc.createElement("div");
+	win.className = "aus-range-zoom-window";
+	win.setAttribute("data-range-window", "1");
+	const handleLeft = doc.createElement("div");
+	handleLeft.className = "aus-range-zoom-handle is-left";
+	handleLeft.setAttribute("data-range-handle", "left");
+	const handleRight = doc.createElement("div");
+	handleRight.className = "aus-range-zoom-handle is-right";
+	handleRight.setAttribute("data-range-handle", "right");
+	win.appendChild(handleLeft);
+	win.appendChild(handleRight);
+	root.appendChild(track);
+	root.appendChild(win);
+	container.appendChild(root);
+	let start = 0;
+	let end = 100;
+	let dragging = null;
+	let dragStartX = 0;
+	let dragStartValue = 0;
+	let dragEndValue = 100;
+	const paint = () => {
+		win.style.left = start + "%";
+		win.style.width = Math.max(0, end - start) + "%";
+	};
+	paint();
+	const width = () => {
+		return root.getBoundingClientRect().width || 1;
+	};
+	const emit = () => {
+		paint();
+		onChange(start, end);
+	};
+	const onPointerDown = (event) => {
+		const target = event.target;
+		const handle = target?.getAttribute?.("data-range-handle");
+		const isWindow = !!target?.getAttribute?.("data-range-window");
+		if (!handle && !isWindow) return;
+		dragging = handle === "left" ? "left" : handle === "right" ? "right" : "move";
+		dragStartX = Number(event.clientX) || 0;
+		dragStartValue = start;
+		dragEndValue = end;
+		root.classList.add("is-dragging");
+		try {
+			root.setPointerCapture(event.pointerId);
+		} catch {}
+		try {
+			event.preventDefault();
+		} catch {}
+		try {
+			event.stopPropagation();
+		} catch {}
+	};
+	const onPointerMove = (event) => {
+		if (!dragging) return;
+		const delta = ((Number(event.clientX) || 0) - dragStartX) / width() * 100;
+		if (dragging === "move") {
+			const span = dragEndValue - dragStartValue;
+			start = clamp(dragStartValue + delta, 0, 100 - span);
+			end = start + span;
+		} else if (dragging === "left") {
+			start = clamp(dragStartValue + delta, 0, dragEndValue - minSpan);
+			end = dragEndValue;
+		} else {
+			start = dragStartValue;
+			end = clamp(dragEndValue + delta, dragStartValue + minSpan, 100);
+		}
+		emit();
+		try {
+			event.preventDefault();
+		} catch {}
+	};
+	const onPointerUp = (event) => {
+		if (!dragging) return;
+		dragging = null;
+		root.classList.remove("is-dragging");
+		try {
+			root.releasePointerCapture(event.pointerId);
+		} catch {}
+	};
+	root.addEventListener("pointerdown", onPointerDown);
+	root.addEventListener("pointermove", onPointerMove);
+	root.addEventListener("pointerup", onPointerUp);
+	root.addEventListener("pointercancel", onPointerUp);
+	root.addEventListener("touchstart", (event) => {
+		try {
+			event.preventDefault();
+		} catch {}
+	}, { passive: false });
+	return {
+		setRange(nextStart, nextEnd) {
+			const s = clamp(Number(nextStart) || 0, 0, 100);
+			const e = clamp(Number(nextEnd) || 0, 0, 100);
+			start = Math.min(s, e);
+			end = Math.max(s, e);
+			if (end - start < minSpan) end = Math.min(100, start + minSpan);
+			paint();
+		},
+		getRange() {
+			return {
+				start,
+				end
+			};
+		},
+		destroy() {
+			root.removeEventListener("pointerdown", onPointerDown);
+			root.removeEventListener("pointermove", onPointerMove);
+			root.removeEventListener("pointerup", onPointerUp);
+			root.removeEventListener("pointercancel", onPointerUp);
+			try {
+				root.remove();
+			} catch {}
+		}
+	};
+}
+//#endregion
 //#region src/ui/model-trends.ts
 var MODEL_COLORS = [
 	"#0BA25E",
@@ -6140,9 +6276,9 @@ function bucketKey(ts, x, idx) {
 	return localDay$1(ts);
 }
 async function getEcharts() {
-	const ec = await import("./core-CaukIycj.js");
-	const { LineChart } = await import("./charts-B1ny-S7z.js");
-	const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-B4ltpzQV.js");
+	const ec = await import("./core-fg_o3xmJ.js");
+	const { LineChart } = await import("./charts-BstuNsfd.js");
+	const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-CpGqNjDG.js");
 	const { CanvasRenderer } = await import("./renderers-DtxFY9_W.js");
 	ec.use([
 		LineChart,
@@ -7060,6 +7196,7 @@ function bindChartSelectors() {
 	});
 }
 var chart = null;
+var rangeZoom = null;
 async function renderChart(filteredRaw) {
 	const doc = getDoc$6();
 	const el = doc.getElementById("aus-stats-chart");
@@ -7071,6 +7208,12 @@ async function renderChart(filteredRaw) {
 				chart.dispose();
 			} catch {}
 			chart = null;
+		}
+		if (rangeZoom) {
+			try {
+				rangeZoom.destroy();
+			} catch {}
+			rangeZoom = null;
 		}
 		el.innerHTML = "<div style=\"text-align:center;padding:40px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">该筛选无数据（历史 " + filteredRaw.length + " 条）</div>";
 		return;
@@ -7097,16 +7240,15 @@ async function renderChart(filteredRaw) {
 	renderChart._retryCount = 0;
 	let echarts;
 	try {
-		echarts = await import("./core-CaukIycj.js").then(async (ec) => {
-			const { BarChart, LineChart } = await import("./charts-B1ny-S7z.js");
-			const { GridComponent, TooltipComponent, DataZoomSliderComponent, DataZoomInsideComponent } = await import("./components-B4ltpzQV.js");
+		echarts = await import("./core-fg_o3xmJ.js").then(async (ec) => {
+			const { BarChart, LineChart } = await import("./charts-BstuNsfd.js");
+			const { GridComponent, TooltipComponent, DataZoomInsideComponent } = await import("./components-CpGqNjDG.js");
 			const { CanvasRenderer } = await import("./renderers-DtxFY9_W.js");
 			ec.use([
 				BarChart,
 				LineChart,
 				GridComponent,
 				TooltipComponent,
-				DataZoomSliderComponent,
 				DataZoomInsideComponent,
 				CanvasRenderer
 			]);
@@ -7311,6 +7453,8 @@ async function renderChart(filteredRaw) {
 	const maxLabels = Math.max(8, Math.floor(cw / (cw < 500 ? 42 : cw < 760 ? 56 : 68)));
 	const xInterval = labels.length <= maxLabels ? 0 : Math.ceil(labels.length / maxLabels) - 1;
 	const showZoom = labels.length > 1;
+	const gridLeft = narrow ? 40 : 50;
+	const gridRight = 12 + rightOffset;
 	chart.setOption({
 		backgroundColor: "transparent",
 		tooltip: {
@@ -7344,10 +7488,10 @@ async function renderChart(filteredRaw) {
 			}
 		},
 		grid: {
-			left: narrow ? 40 : 50,
-			right: 12 + rightOffset,
+			left: gridLeft,
+			right: gridRight,
 			top: 8,
-			bottom: showZoom ? narrow ? 48 : 52 : 28
+			bottom: showZoom ? narrow ? 50 : 54 : 28
 		},
 		dataZoom: showZoom ? [{
 			type: "inside",
@@ -7356,46 +7500,6 @@ async function renderChart(filteredRaw) {
 			end: 100,
 			zoomOnMouseWheel: false,
 			moveOnMouseMove: true
-		}, {
-			type: "slider",
-			xAxisIndex: 0,
-			start: 0,
-			end: 100,
-			height: 14,
-			bottom: narrow ? 4 : 6,
-			borderColor: "transparent",
-			backgroundColor: "transparent",
-			fillerColor: "rgba(148,163,184,0.16)",
-			handleIcon: "path://M8 0C3.6 0 0 3.6 0 8s3.6 8 8 8 8-3.6 8-8-3.6-8-8-8z",
-			handleSize: "90%",
-			handleStyle: {
-				color: cText3,
-				borderColor: cCard,
-				borderWidth: 2
-			},
-			moveHandleSize: 0,
-			showDetail: false,
-			brushSelect: false,
-			dataBackground: {
-				lineStyle: {
-					color: cBorder,
-					width: 1,
-					opacity: .85
-				},
-				areaStyle: { color: "transparent" }
-			},
-			selectedDataBackground: {
-				lineStyle: {
-					color: cText3,
-					width: 1
-				},
-				areaStyle: { color: "rgba(148,163,184,0.18)" }
-			},
-			textStyle: {
-				color: cText3,
-				fontSize: 10
-			},
-			labelFormatter: ""
 		}] : void 0,
 		xAxis: {
 			type: "category",
@@ -7418,6 +7522,41 @@ async function renderChart(filteredRaw) {
 		},
 		series: seriesOpt
 	}, true);
+	if (rangeZoom) {
+		try {
+			rangeZoom.destroy();
+		} catch {}
+		rangeZoom = null;
+	}
+	if (showZoom) {
+		rangeZoom = attachRangeZoom({
+			doc,
+			container: el,
+			left: gridLeft,
+			right: gridRight,
+			bottom: narrow ? 2 : 4,
+			onChange: (startPercent, endPercent) => {
+				try {
+					chart.dispatchAction({
+						type: "dataZoom",
+						dataZoomIndex: 0,
+						start: startPercent,
+						end: endPercent
+					});
+				} catch {}
+			}
+		});
+		try {
+			chart.off("datazoom");
+			chart.on("datazoom", () => {
+				try {
+					const opt = chart.getOption();
+					const dz = opt && opt.dataZoom && opt.dataZoom[0];
+					if (dz) rangeZoom?.setRange(Number(dz.start ?? 0), Number(dz.end ?? 100));
+				} catch {}
+			});
+		} catch {}
+	}
 	setTimeout(() => {
 		try {
 			chart.resize();
@@ -8069,9 +8208,9 @@ function themeColor(name, fallback) {
 }
 async function loadECharts() {
 	if (!echartsPromise) echartsPromise = (async () => {
-		const echarts = await import("./core-CaukIycj.js");
-		const { LineChart, ScatterChart } = await import("./charts-B1ny-S7z.js");
-		const { GridComponent, TooltipComponent, LegendComponent, MarkLineComponent, MarkPointComponent, GraphicComponent } = await import("./components-B4ltpzQV.js");
+		const echarts = await import("./core-fg_o3xmJ.js");
+		const { LineChart, ScatterChart } = await import("./charts-BstuNsfd.js");
+		const { GridComponent, TooltipComponent, LegendComponent, MarkLineComponent, MarkPointComponent, GraphicComponent } = await import("./components-CpGqNjDG.js");
 		const { CanvasRenderer } = await import("./renderers-DtxFY9_W.js");
 		echarts.use([
 			LineChart,

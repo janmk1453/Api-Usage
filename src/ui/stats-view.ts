@@ -3,6 +3,7 @@ import { getSelectedSave, state } from '../store/index';
 import { localDay, esc } from '../utils/date';
 import { Y_OPTIONS, Y_GROUPS, X_OPTIONS, getYSelected, getXSelected, getChartType, setChartType, getAxisLabelMode, setAxisLabelMode, toggleY, setXSelected, aggregateForChart } from './chart-config';
 import { renderExtraCharts } from './extra-charts';
+import { attachRangeZoom, type RangeZoomHandle } from './range-zoom';
 import { renderModelTrends, initModelTrends } from './model-trends';
 import { DataEvents, on as onDataEvent } from '../data/events';
 import {
@@ -608,6 +609,7 @@ function bindChartSelectors() {
 
 // 可配置图表（Y多选 X单选，双轴）
 let chart: any = null;
+let rangeZoom: RangeZoomHandle | null = null;
 async function renderChart(filteredRaw: any[]) {
   const doc = getDoc();
   const el = doc.getElementById('aus-stats-chart') as HTMLElement | null;
@@ -617,6 +619,7 @@ async function renderChart(filteredRaw: any[]) {
   const { labels, series } = aggregateForChart(filteredRaw, yKeys, xKey);
   if (!labels.length) {
     if (chart) { try { chart.dispose(); } catch {} chart = null; }
+    if (rangeZoom) { try { rangeZoom.destroy(); } catch {} rangeZoom = null; }
     el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--ds-text-3);font-size:var(--aus-fs-base);">该筛选无数据（历史 ' + filteredRaw.length + ' 条）</div>';
     return;
   }
@@ -643,9 +646,9 @@ async function renderChart(filteredRaw: any[]) {
   try {
     echarts = await import('echarts/core').then(async (ec: any) => {
       const { BarChart, LineChart } = await import('echarts/charts');
-      const { GridComponent, TooltipComponent, DataZoomSliderComponent, DataZoomInsideComponent } = await import('echarts/components');
+      const { GridComponent, TooltipComponent, DataZoomInsideComponent } = await import('echarts/components');
       const { CanvasRenderer } = await import('echarts/renderers');
-      ec.use([BarChart, LineChart, GridComponent, TooltipComponent, DataZoomSliderComponent, DataZoomInsideComponent, CanvasRenderer]);
+      ec.use([BarChart, LineChart, GridComponent, TooltipComponent, DataZoomInsideComponent, CanvasRenderer]);
       return ec;
     });
   } catch (e) {
@@ -763,6 +766,8 @@ async function renderChart(filteredRaw: any[]) {
   // 第一张图表常驻视窗滑块：数据点 ≥2 即显示，可拖中间平移、拖两端缩放。
   // 默认（含切换时间维度、切换 X 维度、改筛选后）都完整展示全部 X 轴数据，由用户自己拉窄放大。
   const showZoom = labels.length > 1;
+  const gridLeft = narrow ? 40 : 50;
+  const gridRight = 12 + rightOffset;
   chart.setOption({
     backgroundColor: 'transparent',
     tooltip: {
@@ -792,37 +797,40 @@ async function renderChart(filteredRaw: any[]) {
         return `<div style="padding:4px 2px;min-width:180px;">${html}</div>`;
       }
     },
-    grid: { left: narrow ? 40 : 50, right: 12 + rightOffset, top: 8, bottom: showZoom ? (narrow ? 48 : 52) : 28 },
+    grid: { left: gridLeft, right: gridRight, top: 8, bottom: showZoom ? (narrow ? 50 : 54) : 28 },
     // 底部视窗滑块：拖中间平移 X 轴，拖两端改变可视范围（缩放）
-    dataZoom: showZoom ? [
-      { type: 'inside', xAxisIndex: 0, start: 0, end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true },
-      {
-        type: 'slider',
-        xAxisIndex: 0,
-        start: 0,
-        end: 100,
-        height: 14,
-        bottom: narrow ? 4 : 6,
-        borderColor: 'transparent',
-        backgroundColor: 'transparent',
-        fillerColor: 'rgba(148,163,184,0.16)',
-        handleIcon: 'path://M8 0C3.6 0 0 3.6 0 8s3.6 8 8 8 8-3.6 8-8-3.6-8-8-8z',
-        handleSize: '90%',
-        handleStyle: { color: cText3, borderColor: cCard, borderWidth: 2 },
-        moveHandleSize: 0,
-        showDetail: false,
-        brushSelect: false,
-        dataBackground: { lineStyle: { color: cBorder, width: 1, opacity: 0.85 }, areaStyle: { color: 'transparent' } },
-        selectedDataBackground: { lineStyle: { color: cText3, width: 1 }, areaStyle: { color: 'rgba(148,163,184,0.18)' } },
-        textStyle: { color: cText3, fontSize: 10 },
-        labelFormatter: '',
-      },
-    ] : undefined,
+    dataZoom: showZoom
+      ? [{ type: 'inside', xAxisIndex: 0, start: 0, end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true }]
+      : undefined,
     // 有视窗滑块时让 ECharts 按当前可视范围自适应标签密度（缩放后不会只剩一两个刻度）
     xAxis: { type:'category', data: labels, axisLine:{lineStyle:{color:cBorder}}, axisLabel:{color:cText3,fontSize: 12,interval: showZoom ? 'auto' : xInterval,rotate: labels.length>12?30:0, hideOverlap: false} },
     yAxis: yAxis.length?yAxis:{ type:'value', axisLabel:{color:cText3,fontSize: 12} },
     series: seriesOpt,
   }, true);
+  // 自绘视窗滑块：Pointer Events，触屏可拖（ECharts 原生 slider 手柄只认鼠标）
+  if (rangeZoom) { try { rangeZoom.destroy(); } catch {} rangeZoom = null; }
+  if (showZoom) {
+    rangeZoom = attachRangeZoom({
+      doc,
+      container: el,
+      left: gridLeft,
+      right: gridRight,
+      bottom: narrow ? 2 : 4,
+      onChange: (startPercent, endPercent) => {
+        try { chart.dispatchAction({ type: 'dataZoom', dataZoomIndex: 0, start: startPercent, end: endPercent }); } catch {}
+      },
+    });
+    try {
+      chart.off('datazoom');
+      chart.on('datazoom', () => {
+        try {
+          const opt = chart.getOption();
+          const dz = opt && opt.dataZoom && opt.dataZoom[0];
+          if (dz) rangeZoom?.setRange(Number(dz.start ?? 0), Number(dz.end ?? 100));
+        } catch {}
+      });
+    } catch {}
+  }
   setTimeout(()=>{ try{ chart.resize(); }catch{} }, 60);
 }
 

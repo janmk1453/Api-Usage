@@ -1,6 +1,6 @@
-import { $t as noop, At as extend, Bt as isFunction, D as parse, Et as defaults, Ft as indexOf, Gt as isString, I as TRANSFORMABLE_PROPS, Jt as keys, Lt as isArray, O as stringify, Ot as each$2, Pt as hasOwn, Qt as mixin, Rt as isArrayLike, St as clone$1, Tt as curry$1, Ut as isNumber, Wt as isObject, Xt as map, Z as Point, Zt as merge, _t as translate, c as ZRImage, ct as sub, dt as create, fn as __extends, gt as rotate, h as Displayable, jt as filter, nn as retrieve, ot as normalize, q as getBoundingRect, rn as retrieve2, sn as trim, tn as reduce, u as Path, wt as createHashMap, x as cloneValue, xt as bind$1, y as Eventful, yt as env, zt as isDom } from "./graphic-BAx7jeh4.js";
-import { At as createSymbol$1, B as stop, Bi as mathFloor, Bn as Model, Br as Group$2, Bt as DataFormatMixin, Di as asc, Ei as addSafe, F as getVisualFromData, Fr as Polygon, Ft as TooltipMarkupStyleCreator, Gn as setLabelStyle, Gr as enterEmphasis, Gt as copyLayoutParams, H as clear, Hi as mathMin, Hn as createTextStyle, Hr as SPECIAL_STATES, Ht as ComponentModel, I as ComponentView, It as buildTooltipMarkup, Kr as leaveBlur, Kt as createBoxLayoutReference, Li as linearMap, Lt as createTooltipMarkup, Mi as getPrecision, Mr as BezierCurve, Mt as normalizeSymbolSize, N as createOrUpdatePatternFromDecal, Nr as Line$1, Nt as symbolBuildProxies, Oi as getAcceptableTickPrecision, On as parseDataValue, P as findEventDispatcher, Pi as isNullableNumberFinite, Pr as Polyline, Qn as createIcon, Qt as positionElement, R as isMiddleOrRightButtonOnMouseUpDown, Ri as mathAbs, Rt as getPaddingFromTooltipModel, Sn as SeriesData, Tr as updateProps$1, Tt as isTimeScale, U as createOrUpdate, Un as getLabelStatesModels, Ur as enableHoverEmphasis, Ut as LOCATION_PARAMS, Vi as mathMax, Vt as normalizeTooltipFormatResult, Wr as enterBlur, Wt as box, X as calcBandWidth, Xr as toggleHoverEmphasis, Xt as getLayoutRect, Yn as applyTransform, Yt as getLayoutParams, Zt as mergeLayoutParam, _ as registerAction, _i as normalizeToArray, _n as getStackedDimension, _r as transformDirection, ai as createSimpleOverallStageHandler2, an as normalizeCssArray, ar as getTransform, bi as queryDataIndex, br as getAnimationConfig, ct as getAxisRawValue, ea as round, ei as getECData, fn as encodeHTML, gi as mappingToExists, hi as makeInner, hn as inheritDefaultOption, hr as setTooltipConfig, i as use, ir as getShapeClass, jt as normalizeSymbolOffset, mi as makeCallOnlyOnce, mn as transformLocalCoordClear, mr as retrieveZInfo, na as ZRText, ni as SINGLE_REFERRING, oi as defaultEmphasis, on as toCamelCase, or as graphic_exports, pi as isNameSpecified, pn as transformLocalCoord, q as scaleRawExtentInfoCreate, qi as parsePercent, qr as leaveEmphasis, ra as Rect$1, ri as convertOptionIdName, rn as formatTpl, rt as getCachePerECPrepare, si as ensureExtentAscSimply, sn as format, ti as MULTIPLE_REFERRING, tn as convertToColorString, ui as getTooltipRenderMode, vi as preParseFinder, vn as isDimensionStacked, vr as traverseElements, wi as throwError, wt as isOrdinalScale, xi as queryReferringComponents, xr as initProps, yr as traverseUpdateZ, z as normalizeEvent, zi as mathCeil, zt as tokens } from "./axisNiceTicks-CuV_QnHy.js";
-import { a as makeKey, c as layout, f as isCoordinateSystemType, i as getAxisInfo$1, l as AxisBuilder, n as AxisView, p as SymbolDraw, r as collect, t as install$11 } from "./installSimple-D0KaMtwO.js";
+import { $t as noop, At as extend, Bt as isFunction, D as parse, Et as defaults, Ft as indexOf, Gt as isString, I as TRANSFORMABLE_PROPS, Jt as keys, Lt as isArray, O as stringify, Ot as each$2, Pt as hasOwn, Qt as mixin, Rt as isArrayLike, St as clone$1, Tt as curry$1, Ut as isNumber, Wt as isObject, Xt as map, Zt as merge, _t as translate, c as ZRImage, ct as sub, dt as create, fn as __extends, gt as rotate, h as Displayable, jt as filter, nn as retrieve, ot as normalize, q as getBoundingRect, rn as retrieve2, sn as trim, tn as reduce, u as Path, wt as createHashMap, x as cloneValue, xt as bind$1, y as Eventful, yt as env, zt as isDom } from "./graphic-BAx7jeh4.js";
+import { $r as MULTIPLE_REFERRING, Ai as getPrecision, Ar as BezierCurve, At as createSymbol$1, B as stop, Bi as mathMin, Br as SPECIAL_STATES, Bt as normalizeTooltipFormatResult, Cr as updateProps$1, Dn as parseDataValue, Ei as getAcceptableTickPrecision, F as getVisualFromData, Fi as linearMap, Ft as buildTooltipMarkup, Gi as parsePercent, Gr as leaveEmphasis, Gt as createBoxLayoutReference, H as clear, Hn as getLabelStatesModels, Hr as enterBlur, Ht as LOCATION_PARAMS, I as ComponentView, Ii as mathAbs, It as createTooltipMarkup, Jn as applyTransform, Jr as toggleHoverEmphasis, Jt as getLayoutParams, Li as mathCeil, Lt as getPaddingFromTooltipModel, Mi as isNullableNumberFinite, Mt as normalizeSymbolSize, N as createOrUpdatePatternFromDecal, P as findEventDispatcher, Pt as TooltipMarkupStyleCreator, Qi as round, Qr as getECData, R as isMiddleOrRightButtonOnMouseUpDown, Ri as mathFloor, Rr as Group$2, Rt as tokens, Si as throwError, Ti as asc, Tt as isTimeScale, U as createOrUpdate, Ur as enterEmphasis, Ut as box, Vn as createTextStyle, Vr as enableHoverEmphasis, Vt as ComponentModel, Wn as setLabelStyle, Wr as leaveBlur, Wt as copyLayoutParams, X as calcBandWidth, Xt as mergeLayoutParam, Yt as getLayoutRect, Zn as createIcon, Zt as positionElement, _ as registerAction, _n as isDimensionStacked, _r as traverseUpdateZ, ai as ensureExtentAscSimply, an as toCamelCase, ar as graphic_exports, ci as getTooltipRenderMode, ct as getAxisRawValue, di as isNameSpecified, dn as encodeHTML, ea as ZRText, ei as SINGLE_REFERRING, en as convertToColorString, fi as makeCallOnlyOnce, fn as transformLocalCoord, gi as preParseFinder, gn as getStackedDimension, gr as traverseElements, hi as normalizeToArray, i as use, ii as defaultEmphasis, in as normalizeCssArray, jr as Line$1, jt as normalizeSymbolOffset, mi as mappingToExists, mn as inheritDefaultOption, mr as setTooltipConfig, nn as formatTpl, on as format, pi as makeInner, pn as transformLocalCoordClear, pr as retrieveZInfo, q as scaleRawExtentInfoCreate, ri as createSimpleOverallStageHandler2, rr as getShapeClass, rt as getCachePerECPrepare, ta as Rect, ti as convertOptionIdName, vi as queryDataIndex, vr as getAnimationConfig, wi as addSafe, wt as isOrdinalScale, xn as SeriesData, yi as queryReferringComponents, yr as initProps, z as normalizeEvent, zi as mathMax, zn as Model, zt as DataFormatMixin } from "./axisNiceTicks-ea3QyOO7.js";
+import { a as makeKey, c as layout, f as isCoordinateSystemType, i as getAxisInfo$1, l as AxisBuilder, n as AxisView, p as SymbolDraw, r as collect, t as install$10 } from "./installSimple-DDZrei-8.js";
 //#region node_modules/echarts/lib/util/styleCompat.js
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
@@ -2341,7 +2341,7 @@ function illegalPoint(point) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-function install$10(registers) {
+function install$9(registers) {
 	AxisView.registerAxisPointerClass("CartesianAxisPointer", CartesianAxisPointer);
 	registers.registerComponentModel(AxisPointerModel);
 	registers.registerComponentView(AxisPointerView);
@@ -2366,9 +2366,9 @@ function install$10(registers) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-function install$3(registers) {
-	use(install$11);
+function install$2(registers) {
 	use(install$10);
+	use(install$9);
 }
 //#endregion
 //#region node_modules/echarts/lib/component/graphic/GraphicModel.js
@@ -2777,7 +2777,7 @@ function setEventData(el, graphicModel, elOption) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-function install$2(registers) {
+function install$1(registers) {
 	registers.registerComponentModel(GraphicComponentModel);
 	registers.registerComponentView(GraphicComponentView);
 	registers.registerPreprocessor(function(option) {
@@ -3573,7 +3573,7 @@ function makeBackground(rect, componentModel) {
 	var padding = normalizeCssArray(componentModel.get("padding"));
 	var style = componentModel.getItemStyle(["color", "opacity"]);
 	style.fill = componentModel.get("backgroundColor");
-	return new Rect$1({
+	return new Rect({
 		shape: {
 			x: rect.x - padding[3],
 			y: rect.y - padding[0],
@@ -4152,7 +4152,7 @@ function makeStyleCoord(out, zr, zrX, zrY) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-var proxyRect = new Rect$1({ shape: {
+var proxyRect = new Rect({ shape: {
 	x: -1,
 	y: -1,
 	width: 2,
@@ -4749,8 +4749,8 @@ function findComponentReference(payload, ecModel, api) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-function install$7(registers) {
-	use(install$10);
+function install$6(registers) {
+	use(install$9);
 	registers.registerComponentModel(TooltipModel);
 	registers.registerComponentView(TooltipView);
 	/**
@@ -5217,7 +5217,7 @@ function createData(coordSys, seriesModel, mpModel) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-function install$6(registers) {
+function install$5(registers) {
 	registers.registerComponentModel(MarkPointModel);
 	registers.registerComponentView(MarkPointView);
 	registers.registerPreprocessor(function(opt) {
@@ -5498,7 +5498,7 @@ function createList(coordSys, seriesModel, mlModel) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-function install$5(registers) {
+function install$4(registers) {
 	registers.registerComponentModel(MarkLineModel);
 	registers.registerComponentView(MarkLineView);
 	registers.registerPreprocessor(function(opt) {
@@ -5958,7 +5958,7 @@ var LegendView = function(_super) {
 			align: textAlign,
 			verticalAlign: "middle"
 		}, { inheritColor: textColor }) }));
-		var hitRect = new Rect$1({
+		var hitRect = new Rect({
 			shape: itemGroup.getBoundingRect(),
 			style: { fill: "transparent" }
 		});
@@ -6211,7 +6211,7 @@ function legendFilter(ecModel) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-function install$9(registers) {
+function install$8(registers) {
 	registers.registerComponentModel(LegendModel);
 	registers.registerComponentView(LegendView);
 	registers.registerProcessor(registers.PRIORITY.PROCESSOR.SERIES_FILTER, legendFilterStageHandler);
@@ -6419,7 +6419,7 @@ var ScrollableLegendView = function(_super) {
 			};
 			clipShape[wh] = Math.max(maxSize[wh] - controllerRect[wh] - pageButtonGap, 0);
 			clipShape[hw] = mainRect[hw];
-			containerGroup.setClipPath(new Rect$1({ shape: clipShape }));
+			containerGroup.setClipPath(new Rect({ shape: clipShape }));
 			containerGroup.__rectSize = clipShape[wh];
 		} else controllerGroup.eachChild(function(child) {
 			child.attr({
@@ -6574,8 +6574,8 @@ function installScrollableLegendAction(registers) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-function install$8(registers) {
-	use(install$9);
+function install$7(registers) {
+	use(install$8);
 	registers.registerComponentModel(ScrollableLegendModel);
 	registers.registerComponentView(ScrollableLegendView);
 	installScrollableLegendAction(registers);
@@ -6585,9 +6585,9 @@ function install$8(registers) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-function install$4(registers) {
-	use(install$9);
+function install$3(registers) {
 	use(install$8);
+	use(install$7);
 }
 //#endregion
 //#region node_modules/echarts/lib/component/dataZoom/InsideZoomModel.js
@@ -6917,790 +6917,4 @@ function install(registers) {
 	installDataZoomRoamProcessor(registers);
 }
 //#endregion
-//#region node_modules/echarts/lib/component/dataZoom/SliderZoomModel.js
-/**
-* AUTO-GENERATED FILE. DO NOT MODIFY.
-*/
-var SliderZoomModel = function(_super) {
-	__extends(SliderZoomModel, _super);
-	function SliderZoomModel() {
-		var _this = _super !== null && _super.apply(this, arguments) || this;
-		_this.type = SliderZoomModel.type;
-		return _this;
-	}
-	SliderZoomModel.type = "dataZoom.slider";
-	SliderZoomModel.layoutMode = "box";
-	SliderZoomModel.defaultOption = inheritDefaultOption(DataZoomModel.defaultOption, {
-		show: true,
-		right: "ph",
-		top: "ph",
-		width: "ph",
-		height: "ph",
-		left: null,
-		bottom: null,
-		borderColor: tokens.color.accent10,
-		borderRadius: 0,
-		backgroundColor: tokens.color.transparent,
-		dataBackground: {
-			lineStyle: {
-				color: tokens.color.accent30,
-				width: .5
-			},
-			areaStyle: {
-				color: tokens.color.accent20,
-				opacity: .2
-			}
-		},
-		selectedDataBackground: {
-			lineStyle: {
-				color: tokens.color.accent40,
-				width: .5
-			},
-			areaStyle: {
-				color: tokens.color.accent20,
-				opacity: .3
-			}
-		},
-		fillerColor: "rgba(135,175,274,0.2)",
-		handleIcon: "path://M-9.35,34.56V42m0-40V9.5m-2,0h4a2,2,0,0,1,2,2v21a2,2,0,0,1-2,2h-4a2,2,0,0,1-2-2v-21A2,2,0,0,1-11.35,9.5Z",
-		handleSize: "100%",
-		handleStyle: {
-			color: tokens.color.neutral00,
-			borderColor: tokens.color.accent20
-		},
-		moveHandleSize: 7,
-		moveHandleIcon: "path://M-320.9-50L-320.9-50c18.1,0,27.1,9,27.1,27.1V85.7c0,18.1-9,27.1-27.1,27.1l0,0c-18.1,0-27.1-9-27.1-27.1V-22.9C-348-41-339-50-320.9-50z M-212.3-50L-212.3-50c18.1,0,27.1,9,27.1,27.1V85.7c0,18.1-9,27.1-27.1,27.1l0,0c-18.1,0-27.1-9-27.1-27.1V-22.9C-239.4-41-230.4-50-212.3-50z M-103.7-50L-103.7-50c18.1,0,27.1,9,27.1,27.1V85.7c0,18.1-9,27.1-27.1,27.1l0,0c-18.1,0-27.1-9-27.1-27.1V-22.9C-130.9-41-121.8-50-103.7-50z",
-		moveHandleStyle: {
-			color: tokens.color.accent40,
-			opacity: .5
-		},
-		showDetail: true,
-		showDataShadow: "auto",
-		realtime: true,
-		zoomLock: false,
-		textStyle: { color: tokens.color.tertiary },
-		brushSelect: true,
-		brushStyle: {
-			color: tokens.color.accent30,
-			opacity: .3
-		},
-		emphasis: {
-			handleLabel: { show: true },
-			handleStyle: { borderColor: tokens.color.accent40 },
-			moveHandleStyle: { opacity: .8 }
-		},
-		defaultLocationEdgeGap: 15
-	});
-	return SliderZoomModel;
-}(DataZoomModel);
-//#endregion
-//#region node_modules/echarts/lib/component/dataZoom/SliderZoomView.js
-/**
-* AUTO-GENERATED FILE. DO NOT MODIFY.
-*/
-var Rect = Rect$1;
-var DEFAULT_FRAME_BORDER_WIDTH = 1;
-var DEFAULT_FILLER_SIZE = 30;
-var DEFAULT_MOVE_HANDLE_SIZE = 7;
-var HORIZONTAL = "horizontal";
-var VERTICAL = "vertical";
-var LABEL_GAP = 5;
-var SHOW_DATA_SHADOW_SERIES_TYPE = [
-	"line",
-	"bar",
-	"candlestick",
-	"scatter"
-];
-var REALTIME_ANIMATION_CONFIG = {
-	easing: "cubicOut",
-	duration: 100,
-	delay: 0
-};
-var SliderZoomView = function(_super) {
-	__extends(SliderZoomView, _super);
-	function SliderZoomView() {
-		var _this = _super !== null && _super.apply(this, arguments) || this;
-		_this.type = SliderZoomView.type;
-		_this._displayables = {};
-		return _this;
-	}
-	SliderZoomView.prototype.init = function(ecModel, api) {
-		this.api = api;
-		this._onBrush = bind$1(this._onBrush, this);
-		this._onBrushEnd = bind$1(this._onBrushEnd, this);
-	};
-	SliderZoomView.prototype.render = function(dataZoomModel, ecModel, api, payload) {
-		_super.prototype.render.apply(this, arguments);
-		createOrUpdate(this, "_dispatchZoomAction", dataZoomModel.get("throttle"), "fixRate");
-		this._orient = dataZoomModel.getOrient();
-		if (dataZoomModel.get("show") === false) {
-			this.group.removeAll();
-			return;
-		}
-		if (dataZoomModel.noTarget()) {
-			this._clear();
-			this.group.removeAll();
-			return;
-		}
-		if (!payload || payload.type !== "dataZoom" || payload.from !== this.uid) this._buildView();
-		this._updateView();
-	};
-	SliderZoomView.prototype.dispose = function() {
-		this._clear();
-		_super.prototype.dispose.apply(this, arguments);
-	};
-	SliderZoomView.prototype._clear = function() {
-		clear(this, "_dispatchZoomAction");
-		var zr = this.api.getZr();
-		zr.off("mousemove", this._onBrush);
-		zr.off("mouseup", this._onBrushEnd);
-	};
-	SliderZoomView.prototype._buildView = function() {
-		var thisGroup = this.group;
-		thisGroup.removeAll();
-		this._brushing = false;
-		this._displayables.brushRect = null;
-		this._resetLocation();
-		this._resetInterval();
-		var barGroup = this._displayables.sliderGroup = new Group$2();
-		this._renderBackground();
-		this._renderHandle();
-		this._renderDataShadow();
-		thisGroup.add(barGroup);
-		this._positionGroup();
-	};
-	SliderZoomView.prototype._resetLocation = function() {
-		var dataZoomModel = this.dataZoomModel;
-		var api = this.api;
-		var moveHandleSize = dataZoomModel.get("brushSelect") ? DEFAULT_MOVE_HANDLE_SIZE : 0;
-		var refContainer = createBoxLayoutReference(dataZoomModel, api).refContainer;
-		var coordRect = this._findCoordRect();
-		var edgeGap = dataZoomModel.get("defaultLocationEdgeGap", true) || 0;
-		var positionInfo = this._orient === HORIZONTAL ? {
-			right: refContainer.width - coordRect.x - coordRect.width,
-			top: refContainer.height - DEFAULT_FILLER_SIZE - edgeGap - moveHandleSize,
-			width: coordRect.width,
-			height: DEFAULT_FILLER_SIZE
-		} : {
-			right: edgeGap,
-			top: coordRect.y,
-			width: DEFAULT_FILLER_SIZE,
-			height: coordRect.height
-		};
-		var layoutParams = getLayoutParams(dataZoomModel.option);
-		each$2([
-			"right",
-			"top",
-			"width",
-			"height"
-		], function(name) {
-			if (layoutParams[name] === "ph") layoutParams[name] = positionInfo[name];
-		});
-		var layoutRect = getLayoutRect(layoutParams, refContainer);
-		this._location = {
-			x: layoutRect.x,
-			y: layoutRect.y
-		};
-		this._size = [layoutRect.width, layoutRect.height];
-		this._orient === VERTICAL && this._size.reverse();
-	};
-	SliderZoomView.prototype._positionGroup = function() {
-		var thisGroup = this.group;
-		var location = this._location;
-		var orient = this._orient;
-		var targetAxisModel = this.dataZoomModel.getFirstTargetAxisModel();
-		var inverse = targetAxisModel && targetAxisModel.get("inverse");
-		var sliderGroup = this._displayables.sliderGroup;
-		var otherAxisInverse = (this._dataShadowInfo || {}).otherAxisInverse;
-		sliderGroup.attr(orient === HORIZONTAL && !inverse ? {
-			scaleY: otherAxisInverse ? 1 : -1,
-			scaleX: 1
-		} : orient === HORIZONTAL && inverse ? {
-			scaleY: otherAxisInverse ? 1 : -1,
-			scaleX: -1
-		} : orient === VERTICAL && !inverse ? {
-			scaleY: otherAxisInverse ? -1 : 1,
-			scaleX: 1,
-			rotation: Math.PI / 2
-		} : {
-			scaleY: otherAxisInverse ? -1 : 1,
-			scaleX: -1,
-			rotation: Math.PI / 2
-		});
-		var rect = thisGroup.getBoundingRect([sliderGroup]);
-		var rectX = isNaN(rect.x) ? 0 : rect.x;
-		var rectY = isNaN(rect.y) ? 0 : rect.y;
-		thisGroup.x = location.x - rectX;
-		thisGroup.y = location.y - rectY;
-		thisGroup.markRedraw();
-	};
-	SliderZoomView.prototype._getViewExtent = function() {
-		return [0, this._size[0]];
-	};
-	SliderZoomView.prototype._renderBackground = function() {
-		var dataZoomModel = this.dataZoomModel;
-		var size = this._size;
-		var barGroup = this._displayables.sliderGroup;
-		var brushSelect = dataZoomModel.get("brushSelect");
-		barGroup.add(new Rect({
-			silent: true,
-			shape: {
-				x: 0,
-				y: 0,
-				width: size[0],
-				height: size[1]
-			},
-			style: { fill: dataZoomModel.get("backgroundColor") },
-			z2: -40
-		}));
-		var clickPanel = new Rect({
-			shape: {
-				x: 0,
-				y: 0,
-				width: size[0],
-				height: size[1]
-			},
-			style: { fill: "transparent" },
-			z2: 0,
-			onclick: bind$1(this._onClickPanel, this)
-		});
-		var zr = this.api.getZr();
-		if (brushSelect) {
-			clickPanel.on("mousedown", this._onBrushStart, this);
-			clickPanel.cursor = "crosshair";
-			zr.on("mousemove", this._onBrush);
-			zr.on("mouseup", this._onBrushEnd);
-		} else {
-			zr.off("mousemove", this._onBrush);
-			zr.off("mouseup", this._onBrushEnd);
-		}
-		barGroup.add(clickPanel);
-	};
-	SliderZoomView.prototype._renderDataShadow = function() {
-		var info = this._dataShadowInfo = this._prepareDataShadowInfo();
-		this._displayables.dataShadowSegs = [];
-		if (!info) return;
-		var size = this._size;
-		var oldSize = this._shadowSize || [];
-		var seriesModel = info.series;
-		var data = seriesModel.getRawData();
-		var candlestickDim = seriesModel.getShadowDim && seriesModel.getShadowDim();
-		var otherDim = candlestickDim && data.getDimensionInfo(candlestickDim) ? seriesModel.getShadowDim() : info.otherDim;
-		if (otherDim == null) return;
-		var polygonPts = this._shadowPolygonPts;
-		var polylinePts = this._shadowPolylinePts;
-		if (data !== this._shadowData || otherDim !== this._shadowDim || size[0] !== oldSize[0] || size[1] !== oldSize[1]) {
-			var thisDataExtent_1 = data.getDataExtent(info.thisDim);
-			var otherDataExtent_1 = data.getDataExtent(otherDim);
-			var otherOffset = (otherDataExtent_1[1] - otherDataExtent_1[0]) * .3;
-			otherDataExtent_1 = [otherDataExtent_1[0] - otherOffset, otherDataExtent_1[1] + otherOffset];
-			var otherShadowExtent_1 = [0, size[1]];
-			var thisShadowExtent = [0, size[0]];
-			var areaPoints_1 = [[size[0], 0], [0, 0]];
-			var linePoints_1 = [];
-			var step_1 = thisShadowExtent[1] / Math.max(1, data.count() - 1);
-			var normalizationConstant_1 = size[0] / (thisDataExtent_1[1] - thisDataExtent_1[0]);
-			var isTimeAxis_1 = info.thisAxis.type === "time";
-			var thisCoord_1 = -step_1;
-			var stride_1 = Math.round(data.count() / size[0]);
-			var lastIsEmpty_1;
-			data.each([info.thisDim, otherDim], function(thisValue, otherValue, index) {
-				if (stride_1 > 0 && index % stride_1) {
-					if (!isTimeAxis_1) thisCoord_1 += step_1;
-					return;
-				}
-				thisCoord_1 = isTimeAxis_1 ? (+thisValue - thisDataExtent_1[0]) * normalizationConstant_1 : thisCoord_1 + step_1;
-				var isEmpty = otherValue == null || isNaN(otherValue) || otherValue === "";
-				var otherCoord = isEmpty ? 0 : linearMap(otherValue, otherDataExtent_1, otherShadowExtent_1, true);
-				if (isEmpty && !lastIsEmpty_1 && index) {
-					areaPoints_1.push([areaPoints_1[areaPoints_1.length - 1][0], 0]);
-					linePoints_1.push([linePoints_1[linePoints_1.length - 1][0], 0]);
-				} else if (!isEmpty && lastIsEmpty_1) {
-					areaPoints_1.push([thisCoord_1, 0]);
-					linePoints_1.push([thisCoord_1, 0]);
-				}
-				if (!isEmpty) {
-					areaPoints_1.push([thisCoord_1, otherCoord]);
-					linePoints_1.push([thisCoord_1, otherCoord]);
-				}
-				lastIsEmpty_1 = isEmpty;
-			});
-			polygonPts = this._shadowPolygonPts = areaPoints_1;
-			polylinePts = this._shadowPolylinePts = linePoints_1;
-		}
-		this._shadowData = data;
-		this._shadowDim = otherDim;
-		this._shadowSize = [size[0], size[1]];
-		var dataZoomModel = this.dataZoomModel;
-		function createDataShadowGroup(isSelectedArea) {
-			var model = dataZoomModel.getModel(isSelectedArea ? "selectedDataBackground" : "dataBackground");
-			var group = new Group$2();
-			var polygon = new Polygon({
-				shape: { points: polygonPts },
-				segmentIgnoreThreshold: 1,
-				style: model.getModel("areaStyle").getAreaStyle(),
-				silent: true,
-				z2: -20
-			});
-			var polyline = new Polyline({
-				shape: { points: polylinePts },
-				segmentIgnoreThreshold: 1,
-				style: model.getModel("lineStyle").getLineStyle(),
-				silent: true,
-				z2: -19
-			});
-			group.add(polygon);
-			group.add(polyline);
-			return group;
-		}
-		for (var i = 0; i < 3; i++) {
-			var group = createDataShadowGroup(i === 1);
-			this._displayables.sliderGroup.add(group);
-			this._displayables.dataShadowSegs.push(group);
-		}
-	};
-	SliderZoomView.prototype._prepareDataShadowInfo = function() {
-		var dataZoomModel = this.dataZoomModel;
-		var showDataShadow = dataZoomModel.get("showDataShadow");
-		if (showDataShadow === false) return;
-		var result;
-		var ecModel = this.ecModel;
-		dataZoomModel.eachTargetAxis(function(axisDim, axisIndex) {
-			var seriesModels = dataZoomModel.getAxisProxy(axisDim, axisIndex).getTargetSeriesModels();
-			each$2(seriesModels, function(seriesModel) {
-				if (result) return;
-				if (showDataShadow !== true && indexOf(SHOW_DATA_SHADOW_SERIES_TYPE, seriesModel.get("type")) < 0) return;
-				var thisAxis = ecModel.getComponent(getAxisMainType(axisDim), axisIndex).axis;
-				var otherDim = getOtherDim(axisDim);
-				var otherAxisInverse;
-				var coordSys = seriesModel.coordinateSystem;
-				if (otherDim != null && coordSys.getOtherAxis) otherAxisInverse = coordSys.getOtherAxis(thisAxis).inverse;
-				otherDim = seriesModel.getData().mapDimension(otherDim);
-				result = {
-					thisAxis,
-					series: seriesModel,
-					thisDim: seriesModel.getData().mapDimension(axisDim),
-					otherDim,
-					otherAxisInverse
-				};
-			}, this);
-		}, this);
-		return result;
-	};
-	SliderZoomView.prototype._renderHandle = function() {
-		var thisGroup = this.group;
-		var displayables = this._displayables;
-		var handles = displayables.handles = [null, null];
-		var handleLabels = displayables.handleLabels = [null, null];
-		var sliderGroup = this._displayables.sliderGroup;
-		var size = this._size;
-		var dataZoomModel = this.dataZoomModel;
-		var api = this.api;
-		var borderRadius = dataZoomModel.get("borderRadius") || 0;
-		var brushSelect = dataZoomModel.get("brushSelect");
-		var filler = displayables.filler = new Rect({
-			silent: brushSelect,
-			style: { fill: dataZoomModel.get("fillerColor") },
-			textConfig: { position: "inside" }
-		});
-		sliderGroup.add(filler);
-		sliderGroup.add(new Rect({
-			silent: true,
-			subPixelOptimize: true,
-			shape: {
-				x: 0,
-				y: 0,
-				width: size[0],
-				height: size[1],
-				r: borderRadius
-			},
-			style: {
-				stroke: dataZoomModel.get("dataBackgroundColor") || dataZoomModel.get("borderColor"),
-				lineWidth: DEFAULT_FRAME_BORDER_WIDTH,
-				fill: tokens.color.transparent
-			}
-		}));
-		each$2([0, 1], function(handleIndex) {
-			var iconStr = dataZoomModel.get("handleIcon");
-			if (!symbolBuildProxies[iconStr] && iconStr.indexOf("path://") < 0 && iconStr.indexOf("image://") < 0) iconStr = "path://" + iconStr;
-			var path = createSymbol$1(iconStr, -1, 0, 2, 2, null, true);
-			path.attr({
-				cursor: getCursor(this._orient),
-				draggable: true,
-				drift: bind$1(this._onDragMove, this, handleIndex),
-				ondragend: bind$1(this._onDragEnd, this),
-				onmouseover: bind$1(this._onOverDataInfoTriggerArea, this, true),
-				onmouseout: bind$1(this._onOverDataInfoTriggerArea, this, false),
-				z2: 5
-			});
-			var bRect = path.getBoundingRect();
-			var handleSize = dataZoomModel.get("handleSize");
-			this._handleHeight = parsePercent(handleSize, this._size[1]);
-			this._handleWidth = bRect.width / bRect.height * this._handleHeight;
-			path.setStyle(dataZoomModel.getModel("handleStyle").getItemStyle());
-			path.style.strokeNoScale = true;
-			path.rectHover = true;
-			path.ensureState("emphasis").style = dataZoomModel.getModel(["emphasis", "handleStyle"]).getItemStyle();
-			enableHoverEmphasis(path);
-			var handleColor = dataZoomModel.get("handleColor");
-			if (handleColor != null) path.style.fill = handleColor;
-			sliderGroup.add(handles[handleIndex] = path);
-			var textStyleModel = dataZoomModel.getModel("textStyle");
-			var handleLabelShow = (dataZoomModel.get("handleLabel") || {}).show || false;
-			thisGroup.add(handleLabels[handleIndex] = new ZRText({
-				silent: true,
-				invisible: !handleLabelShow,
-				style: createTextStyle(textStyleModel, {
-					x: 0,
-					y: 0,
-					text: "",
-					verticalAlign: "middle",
-					align: "center",
-					fill: textStyleModel.getTextColor(),
-					font: textStyleModel.getFont()
-				}),
-				z2: 10
-			}));
-		}, this);
-		var actualMoveZone = filler;
-		if (brushSelect) {
-			var moveHandleHeight = parsePercent(dataZoomModel.get("moveHandleSize"), size[1]);
-			var moveHandle_1 = displayables.moveHandle = new Rect$1({
-				style: dataZoomModel.getModel("moveHandleStyle").getItemStyle(),
-				silent: true,
-				shape: {
-					r: [
-						0,
-						0,
-						2,
-						2
-					],
-					y: size[1] - .5,
-					height: moveHandleHeight
-				}
-			});
-			var iconSize = moveHandleHeight * .8;
-			var moveHandleIcon = displayables.moveHandleIcon = createSymbol$1(dataZoomModel.get("moveHandleIcon"), -iconSize / 2, -iconSize / 2, iconSize, iconSize, tokens.color.neutral00, true);
-			moveHandleIcon.silent = true;
-			moveHandleIcon.y = size[1] + moveHandleHeight / 2 - .5;
-			moveHandle_1.ensureState("emphasis").style = dataZoomModel.getModel(["emphasis", "moveHandleStyle"]).getItemStyle();
-			var moveZoneExpandSize = Math.min(size[1] / 2, Math.max(moveHandleHeight, 10));
-			actualMoveZone = displayables.moveZone = new Rect$1({
-				invisible: true,
-				shape: {
-					y: size[1] - moveZoneExpandSize,
-					height: moveHandleHeight + moveZoneExpandSize
-				}
-			});
-			actualMoveZone.on("mouseover", function() {
-				api.enterEmphasis(moveHandle_1);
-			}).on("mouseout", function() {
-				api.leaveEmphasis(moveHandle_1);
-			});
-			sliderGroup.add(moveHandle_1);
-			sliderGroup.add(moveHandleIcon);
-			sliderGroup.add(actualMoveZone);
-		}
-		actualMoveZone.attr({
-			draggable: true,
-			cursor: "grab",
-			drift: bind$1(this._onActualMoveZoneDrift, this),
-			ondragstart: bind$1(this._onActualMoveZoneDragStart, this),
-			ondragend: bind$1(this._onActualMoveZoneDragEnd, this),
-			onmouseover: bind$1(this._onOverDataInfoTriggerArea, this, true),
-			onmouseout: bind$1(this._onOverDataInfoTriggerArea, this, false)
-		});
-	};
-	SliderZoomView.prototype._resetInterval = function() {
-		var range = this._range = this.dataZoomModel.getPercentRange();
-		var viewExtent = this._getViewExtent();
-		this._handleEnds = [linearMap(range[0], [0, 100], viewExtent, true), linearMap(range[1], [0, 100], viewExtent, true)];
-	};
-	SliderZoomView.prototype._updateInterval = function(handleIndex, delta) {
-		var dataZoomModel = this.dataZoomModel;
-		var handleEnds = this._handleEnds;
-		var viewExtend = this._getViewExtent();
-		var minMaxSpan = dataZoomModel.findRepresentativeAxisProxy().getMinMaxSpan();
-		var percentExtent = [0, 100];
-		sliderMove(delta, handleEnds, viewExtend, dataZoomModel.get("zoomLock") ? "all" : handleIndex, minMaxSpan.minSpan != null ? linearMap(minMaxSpan.minSpan, percentExtent, viewExtend, true) : null, minMaxSpan.maxSpan != null ? linearMap(minMaxSpan.maxSpan, percentExtent, viewExtend, true) : null);
-		var lastRange = this._range;
-		var range = this._range = asc([linearMap(handleEnds[0], viewExtend, percentExtent, true), linearMap(handleEnds[1], viewExtend, percentExtent, true)]);
-		return !lastRange || lastRange[0] !== range[0] || lastRange[1] !== range[1];
-	};
-	SliderZoomView.prototype._updateView = function(nonRealtime) {
-		var displaybles = this._displayables;
-		var handleEnds = this._handleEnds;
-		var handleInterval = asc(handleEnds.slice());
-		var size = this._size;
-		each$2([0, 1], function(handleIndex) {
-			var handle = displaybles.handles[handleIndex];
-			var handleHeight = this._handleHeight;
-			handle.attr({
-				scaleX: handleHeight / 2,
-				scaleY: handleHeight / 2,
-				x: handleEnds[handleIndex] + (handleIndex ? -1 : 1),
-				y: size[1] / 2 - handleHeight / 2
-			});
-		}, this);
-		displaybles.filler.setShape({
-			x: handleInterval[0],
-			y: 0,
-			width: handleInterval[1] - handleInterval[0],
-			height: size[1]
-		});
-		var viewExtent = {
-			x: handleInterval[0],
-			width: handleInterval[1] - handleInterval[0]
-		};
-		if (displaybles.moveHandle) {
-			displaybles.moveHandle.setShape(viewExtent);
-			displaybles.moveZone.setShape(viewExtent);
-			displaybles.moveZone.getBoundingRect();
-			displaybles.moveHandleIcon && displaybles.moveHandleIcon.attr("x", viewExtent.x + viewExtent.width / 2);
-		}
-		var dataShadowSegs = displaybles.dataShadowSegs;
-		var segIntervals = [
-			0,
-			handleInterval[0],
-			handleInterval[1],
-			size[0]
-		];
-		for (var i = 0; i < dataShadowSegs.length; i++) {
-			var segGroup = dataShadowSegs[i];
-			var clipPath = segGroup.getClipPath();
-			if (!clipPath) {
-				clipPath = new Rect$1();
-				segGroup.setClipPath(clipPath);
-			}
-			clipPath.setShape({
-				x: segIntervals[i],
-				y: 0,
-				width: segIntervals[i + 1] - segIntervals[i],
-				height: size[1]
-			});
-		}
-		this._updateDataInfo(nonRealtime);
-	};
-	SliderZoomView.prototype._updateDataInfo = function(nonRealtime) {
-		var dataZoomModel = this.dataZoomModel;
-		var displayables = this._displayables;
-		var handleLabels = displayables.handleLabels;
-		var orient = this._orient;
-		var labelTexts = ["", ""];
-		if (dataZoomModel.get("showDetail")) {
-			var axisProxy = dataZoomModel.findRepresentativeAxisProxy();
-			var scale = axisProxy.getAxisModel().axis.scale;
-			if (axisProxy) {
-				var range = this._range;
-				var window_1;
-				if (nonRealtime) {
-					var calcWinInput = {
-						start: range[0],
-						end: range[1]
-					};
-					var alignTo = getAlignTo(dataZoomModel, axisProxy);
-					if (alignTo) {
-						var alignToWindow = alignTo.calculateDataWindow(calcWinInput).percentInverted;
-						calcWinInput = {
-							start: alignToWindow[0],
-							end: alignToWindow[1]
-						};
-					}
-					window_1 = axisProxy.calculateDataWindow(calcWinInput);
-				} else window_1 = axisProxy.getWindow();
-				labelTexts = [formatLabel(dataZoomModel, 0, window_1, scale), formatLabel(dataZoomModel, 1, window_1, scale)];
-			}
-		}
-		var orderedHandleEnds = asc(this._handleEnds.slice());
-		setLabel.call(this, 0);
-		setLabel.call(this, 1);
-		function setLabel(handleIndex) {
-			var barTransform = getTransform(displayables.handles[handleIndex].parent, this.group);
-			var direction = transformDirection(handleIndex === 0 ? "right" : "left", barTransform);
-			var offset = this._handleWidth / 2 + LABEL_GAP;
-			var textPoint = applyTransform([orderedHandleEnds[handleIndex] + (handleIndex === 0 ? -offset : offset), this._size[1] / 2], barTransform);
-			handleLabels[handleIndex].setStyle({
-				x: textPoint[0],
-				y: textPoint[1],
-				verticalAlign: orient === HORIZONTAL ? "middle" : direction,
-				align: orient === HORIZONTAL ? direction : "center",
-				text: labelTexts[handleIndex]
-			});
-		}
-	};
-	SliderZoomView.prototype._onOverDataInfoTriggerArea = function(isOver) {
-		this._isOverDataInfoTriggerArea = isOver;
-		this._showDataInfo(isOver);
-	};
-	/**
-	* @param isEmphasis true: show, false: hide
-	*/
-	SliderZoomView.prototype._showDataInfo = function(isEmphasis) {
-		var normalShow = (this.dataZoomModel.get("handleLabel") || {}).show || false;
-		var emphasisShow = this.dataZoomModel.getModel(["emphasis", "handleLabel"]).get("show") || false;
-		var toShow = isEmphasis || this._dragging ? emphasisShow : normalShow;
-		var displayables = this._displayables;
-		var handleLabels = displayables.handleLabels;
-		handleLabels[0].attr("invisible", !toShow);
-		handleLabels[1].attr("invisible", !toShow);
-		displayables.moveHandle && this.api[toShow ? "enterEmphasis" : "leaveEmphasis"](displayables.moveHandle, 1);
-	};
-	SliderZoomView.prototype._onActualMoveZoneDrift = function(dx, dy, event) {
-		this.api.getZr().setCursorStyle("grabbing");
-		this._onDragMove("all", dx, dy, event);
-	};
-	SliderZoomView.prototype._onActualMoveZoneDragStart = function(event) {
-		event.target.attr("cursor", "grabbing");
-		this._showDataInfo(true);
-	};
-	SliderZoomView.prototype._onActualMoveZoneDragEnd = function(event) {
-		event.target.attr("cursor", "grab");
-		this._onDragEnd();
-	};
-	SliderZoomView.prototype._onDragMove = function(handleIndex, dx, dy, event) {
-		this._dragging = true;
-		stop(event.event);
-		var barTransform = this._displayables.sliderGroup.getLocalTransform();
-		var vertex = applyTransform([dx, dy], barTransform, true);
-		var changed = this._updateInterval(handleIndex, vertex[0]);
-		var realtime = this.dataZoomModel.get("realtime");
-		this._updateView(!realtime);
-		changed && realtime && this._dispatchZoomAction(true);
-	};
-	SliderZoomView.prototype._onDragEnd = function() {
-		this._dragging = false;
-		if (!this._isOverDataInfoTriggerArea) this._showDataInfo(false);
-		!this.dataZoomModel.get("realtime") && this._dispatchZoomAction(false);
-	};
-	SliderZoomView.prototype._onClickPanel = function(e) {
-		var size = this._size;
-		var localPoint = this._displayables.sliderGroup.transformCoordToLocal(e.offsetX, e.offsetY);
-		if (localPoint[0] < 0 || localPoint[0] > size[0] || localPoint[1] < 0 || localPoint[1] > size[1]) return;
-		var handleEnds = this._handleEnds;
-		var center = (handleEnds[0] + handleEnds[1]) / 2;
-		var changed = this._updateInterval("all", localPoint[0] - center);
-		this._updateView();
-		changed && this._dispatchZoomAction(false);
-	};
-	SliderZoomView.prototype._onBrushStart = function(e) {
-		var x = e.offsetX;
-		var y = e.offsetY;
-		this._brushStart = new Point(x, y);
-		this._brushing = true;
-		this._brushStartTime = +/* @__PURE__ */ new Date();
-	};
-	SliderZoomView.prototype._onBrushEnd = function(e) {
-		if (!this._brushing) return;
-		var brushRect = this._displayables.brushRect;
-		this._brushing = false;
-		if (!brushRect) return;
-		brushRect.attr("ignore", true);
-		var brushShape = brushRect.shape;
-		if (+/* @__PURE__ */ new Date() - this._brushStartTime < 200 && Math.abs(brushShape.width) < 5) return;
-		var viewExtend = this._getViewExtent();
-		var percentExtent = [0, 100];
-		var handleEnds = this._handleEnds = [brushShape.x, brushShape.x + brushShape.width];
-		var minMaxSpan = this.dataZoomModel.findRepresentativeAxisProxy().getMinMaxSpan();
-		sliderMove(0, handleEnds, viewExtend, 0, minMaxSpan.minSpan != null ? linearMap(minMaxSpan.minSpan, percentExtent, viewExtend, true) : null, minMaxSpan.maxSpan != null ? linearMap(minMaxSpan.maxSpan, percentExtent, viewExtend, true) : null);
-		this._range = asc([linearMap(handleEnds[0], viewExtend, percentExtent, true), linearMap(handleEnds[1], viewExtend, percentExtent, true)]);
-		this._updateView();
-		this._dispatchZoomAction(false);
-	};
-	SliderZoomView.prototype._onBrush = function(e) {
-		if (this._brushing) {
-			stop(e.event);
-			this._updateBrushRect(e.offsetX, e.offsetY);
-		}
-	};
-	SliderZoomView.prototype._updateBrushRect = function(mouseX, mouseY) {
-		var displayables = this._displayables;
-		var dataZoomModel = this.dataZoomModel;
-		var brushRect = displayables.brushRect;
-		if (!brushRect) {
-			brushRect = displayables.brushRect = new Rect({
-				silent: true,
-				style: dataZoomModel.getModel("brushStyle").getItemStyle()
-			});
-			displayables.sliderGroup.add(brushRect);
-		}
-		brushRect.attr("ignore", false);
-		var brushStart = this._brushStart;
-		var sliderGroup = this._displayables.sliderGroup;
-		var endPoint = sliderGroup.transformCoordToLocal(mouseX, mouseY);
-		var startPoint = sliderGroup.transformCoordToLocal(brushStart.x, brushStart.y);
-		var size = this._size;
-		endPoint[0] = Math.max(Math.min(size[0], endPoint[0]), 0);
-		brushRect.setShape({
-			x: startPoint[0],
-			y: 0,
-			width: endPoint[0] - startPoint[0],
-			height: size[1]
-		});
-	};
-	/**
-	* This action will be throttled.
-	*/
-	SliderZoomView.prototype._dispatchZoomAction = function(realtime) {
-		var range = this._range;
-		this.api.dispatchAction({
-			type: "dataZoom",
-			from: this.uid,
-			dataZoomId: this.dataZoomModel.id,
-			animation: realtime ? REALTIME_ANIMATION_CONFIG : null,
-			start: range[0],
-			end: range[1]
-		});
-	};
-	SliderZoomView.prototype._findCoordRect = function() {
-		var rect;
-		var coordSysInfoList = collectReferCoordSysModelInfo(this.dataZoomModel).infoList;
-		if (!rect && coordSysInfoList.length) {
-			var coordSys = coordSysInfoList[0].model.coordinateSystem;
-			rect = coordSys.getRect && coordSys.getRect();
-		}
-		if (!rect) {
-			var width = this.api.getWidth();
-			var height = this.api.getHeight();
-			rect = {
-				x: width * .2,
-				y: height * .2,
-				width: width * .6,
-				height: height * .6
-			};
-		}
-		return rect;
-	};
-	SliderZoomView.type = "dataZoom.slider";
-	return SliderZoomView;
-}(DataZoomView);
-function formatLabel(dataZoomModel, extentIdx, window, scale) {
-	var labelFormatter = dataZoomModel.get("labelFormatter");
-	var labelPrecision = dataZoomModel.get("labelPrecision");
-	if (labelPrecision == null || labelPrecision === "auto") labelPrecision = window.valuePrecision;
-	var value = window.value[extentIdx];
-	var valueStr = value == null || isNaN(value) ? "" : isOrdinalScale(scale) || isTimeScale(scale) ? scale.getLabel({ value: Math.round(value) }) : isFinite(labelPrecision) ? round(value, labelPrecision, true) : value + "";
-	return isFunction(labelFormatter) ? labelFormatter(value, valueStr) : isString(labelFormatter) ? labelFormatter.replace("{value}", valueStr) : valueStr;
-}
-function getOtherDim(thisDim) {
-	return {
-		x: "y",
-		y: "x",
-		radius: "angle",
-		angle: "radius"
-	}[thisDim];
-}
-function getCursor(orient) {
-	return orient === "vertical" ? "ns-resize" : "ew-resize";
-}
-//#endregion
-//#region node_modules/echarts/lib/component/dataZoom/installDataZoomSlider.js
-/**
-* AUTO-GENERATED FILE. DO NOT MODIFY.
-*/
-function install$1(registers) {
-	registers.registerComponentModel(SliderZoomModel);
-	registers.registerComponentView(SliderZoomView);
-	installCommon(registers);
-}
-//#endregion
-export { install as DataZoomInsideComponent, install$1 as DataZoomSliderComponent, install$2 as GraphicComponent, install$3 as GridComponent, install$4 as LegendComponent, install$5 as MarkLineComponent, install$6 as MarkPointComponent, install$7 as TooltipComponent };
+export { install as DataZoomInsideComponent, install$1 as GraphicComponent, install$2 as GridComponent, install$3 as LegendComponent, install$4 as MarkLineComponent, install$5 as MarkPointComponent, install$6 as TooltipComponent };
