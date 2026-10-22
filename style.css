@@ -1572,3 +1572,55 @@
 #aus-wallet [data-wallet-model-row]:hover { background: var(--ds-card); }
 #aus-wallet [data-wallet-card] .aus-wallet-icon-btn:focus-visible,
 #aus-wallet [data-wallet-card] button:focus-visible { outline: 2px solid var(--ds-orange); outline-offset: 1px; }
+
+/* ── 块内横向滚动条：细、低调，浅色/深色一致（沿用 --ds-scrollbar） ── */
+#aus-heatmap-scroll-overview,
+#aus-model-summary,
+#aus-chat-summary-overview,
+#aus-overview-history,
+#aus-overview-spend,
+#aus-wallet div[style*="overflow-x:auto"],
+#aus-panel [data-scroll-x="1"] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ds-scrollbar) transparent;
+}
+#aus-heatmap-scroll-overview::-webkit-scrollbar,
+#aus-model-summary::-webkit-scrollbar,
+#aus-chat-summary-overview::-webkit-scrollbar,
+#aus-overview-history::-webkit-scrollbar,
+#aus-overview-spend::-webkit-scrollbar,
+#aus-wallet div[style*="overflow-x:auto"]::-webkit-scrollbar,
+#aus-panel [data-scroll-x="1"]::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+#aus-heatmap-scroll-overview::-webkit-scrollbar-track,
+#aus-model-summary::-webkit-scrollbar-track,
+#aus-chat-summary-overview::-webkit-scrollbar-track,
+#aus-overview-history::-webkit-scrollbar-track,
+#aus-overview-spend::-webkit-scrollbar-track,
+#aus-wallet div[style*="overflow-x:auto"]::-webkit-scrollbar-track,
+#aus-panel [data-scroll-x="1"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+#aus-heatmap-scroll-overview::-webkit-scrollbar-thumb,
+#aus-model-summary::-webkit-scrollbar-thumb,
+#aus-chat-summary-overview::-webkit-scrollbar-thumb,
+#aus-overview-history::-webkit-scrollbar-thumb,
+#aus-overview-spend::-webkit-scrollbar-thumb,
+#aus-wallet div[style*="overflow-x:auto"]::-webkit-scrollbar-thumb,
+#aus-panel [data-scroll-x="1"]::-webkit-scrollbar-thumb {
+  background: var(--ds-scrollbar);
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+#aus-heatmap-scroll-overview::-webkit-scrollbar-thumb:hover,
+#aus-model-summary::-webkit-scrollbar-thumb:hover,
+#aus-chat-summary-overview::-webkit-scrollbar-thumb:hover,
+#aus-overview-history::-webkit-scrollbar-thumb:hover,
+#aus-overview-spend::-webkit-scrollbar-thumb:hover,
+#aus-wallet div[style*="overflow-x:auto"]::-webkit-scrollbar-thumb:hover,
+#aus-panel [data-scroll-x="1"]::-webkit-scrollbar-thumb:hover {
+  background: var(--ds-text-3);
+}
