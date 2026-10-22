@@ -37,9 +37,9 @@ function bucketKey(ts:number, x:XKey, idx:number):string {
 async function getEcharts(){
   const ec:any = await import('echarts/core');
   const { LineChart } = await import('echarts/charts');
-  const { GridComponent, TooltipComponent, LegendComponent } = await import('echarts/components');
+  const { GridComponent, TooltipComponent, LegendComponent, DataZoomInsideComponent } = await import('echarts/components');
   const { CanvasRenderer } = await import('echarts/renderers');
-  ec.use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
+  ec.use([LineChart, GridComponent, TooltipComponent, LegendComponent, DataZoomInsideComponent, CanvasRenderer]);
   return ec;
 }
 
@@ -128,7 +128,7 @@ async function renderOne(id:TrendId, filtered:any[]){
   let c = charts[id];
   if (!c || (c as any).isDisposed?.()) {
     el.innerHTML=''; (el as any).style.height='220px';
-    c = charts[id]=ec.init(el);
+    c = charts[id]=ec.init(el, undefined, { width: el.clientWidth || 320, height: el.clientHeight || 260 });
   }
 
   const cBorder = themeColor('--ds-border','#E5E7EB');
@@ -174,9 +174,9 @@ async function renderOne(id:TrendId, filtered:any[]){
       pageTextStyle:{ color:cText3 },
       itemWidth:10, itemHeight:6,
     },
-    grid:{ left:42, right:16, top: 22 + (models.length>4?8:0), bottom: 24 },
-    dataZoom: needZoom ? [{ type:'inside', xAxisIndex:0, start: Math.max(0, (labels.length - maxLabels)/labels.length*100), end:100, zoomOnMouseWheel:false, moveOnMouseMove:true }] : undefined,
-    xAxis:{ type:'category', data: labels, boundaryGap:false, axisLine:{lineStyle:{color:cBorder}}, axisLabel:{ color:cText3, fontSize: 12, interval: xInterval, rotate: labels.length>12?30:0, hideOverlap:false } },
+    grid:{ left:42, right:16, top: 22 + (models.length>4?8:0), bottom: labels.length>12 ? 42 : 24 },
+    dataZoom: needZoom ? [{ type:'inside', xAxisIndex:0, start: 0, end: 100, zoomOnMouseWheel:false, moveOnMouseMove:true }] : undefined,
+    xAxis:{ type:'category', data: labels, boundaryGap:false, axisLine:{lineStyle:{color:cBorder}}, axisLabel:{ color:cText3, fontSize: 12, interval: 'auto', rotate: labels.length>12?30:0, hideOverlap:false } },
     yAxis:{ type:'value', axisLabel:{ color:cText3, fontSize: 12, formatter:(v:number)=> id==='token' ? (v>=1000? (v/1000).toFixed(0)+'k' : String(v)) : String(v) }, splitLine:{lineStyle:{color:cCard}} },
     series: seriesData.map(s=>({
       name: s.name,
@@ -192,6 +192,7 @@ async function renderOne(id:TrendId, filtered:any[]){
   }, true);
   setTimeout(()=>{ try{ c.resize(); }catch{} }, 60);
   } catch(e:any){
+  if (charts[id]) { try{ charts[id].dispose(); }catch{} charts[id]=null as any; }
     try{ const doc2=getDoc(); const el2=doc2.getElementById(`aus-chart-model-${id}`) as HTMLElement | null; if(el2) el2.innerHTML='<div style="text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);">图表加载失败</div>'; }catch{}
     try{ console.error('[Api-Usage] renderModelTrends failed', id, e); }catch{}
   }

@@ -5613,7 +5613,7 @@ function getYValue(e, key) {
 async function getEcharts$1() {
 	const ec = await import("./core-fg_o3xmJ.js");
 	const { BarChart, LineChart, PieChart } = await import("./charts-BstuNsfd.js");
-	const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-CpGqNjDG.js");
+	const { GridComponent, TooltipComponent, LegendComponent, DataZoomInsideComponent } = await import("./components-CpGqNjDG.js");
 	const { CanvasRenderer } = await import("./renderers-DtxFY9_W.js");
 	ec.use([
 		BarChart,
@@ -5622,6 +5622,7 @@ async function getEcharts$1() {
 		GridComponent,
 		TooltipComponent,
 		LegendComponent,
+		DataZoomInsideComponent,
 		CanvasRenderer
 	]);
 	return ec;
@@ -5641,6 +5642,15 @@ function resetChartThemeCache() {
 	}
 }
 var lastFiltered$1 = [];
+/** 容器被文案覆盖时同步销毁实例，否则下次有数据会往已脱离 DOM 的 canvas 上 setOption（表现为图表空白） */
+function dropChart(id) {
+	const c = charts$1[id];
+	if (!c) return;
+	try {
+		c.dispose();
+	} catch {}
+	charts$1[id] = null;
+}
 function renderExtraCharts(filtered) {
 	lastFiltered$1 = filtered || [];
 	for (const id of Object.keys(CHART_DEFS)) renderOne$1(id, filtered);
@@ -5653,6 +5663,7 @@ async function renderOne$1(id, filtered) {
 		if (id === "pie") {
 			const mode = state$1.pie.pieMode;
 			if (!filtered.length) {
+				dropChart(id);
 				el.innerHTML = "<div style=\"text-align:center;padding:40px;color:var(--ds-text-3);\">暂无数据</div>";
 				return;
 			}
@@ -5671,7 +5682,10 @@ async function renderOne$1(id, filtered) {
 			if (!c || c.isDisposed?.()) {
 				el.innerHTML = "";
 				el.style.height = "260px";
-				c = charts$1[id] = ec.init(el);
+				c = charts$1[id] = ec.init(el, void 0, {
+					width: el.clientWidth || 320,
+					height: el.clientHeight || 260
+				});
 			}
 			c.setOption({
 				backgroundColor: "transparent",
@@ -5703,11 +5717,17 @@ async function renderOne$1(id, filtered) {
 					data
 				}]
 			}, true);
+			setTimeout(() => {
+				try {
+					c.resize();
+				} catch {}
+			}, 60);
 			return;
 		}
 		const yKeys = Array.from(state$1[id].y);
 		const xKey = state$1[id].x;
 		if (!yKeys.length) {
+			dropChart(id);
 			el.innerHTML = "<div style=\"text-align:center;padding:30px;color:var(--ds-text-3);font-size:var(--aus-fs-sm);\">请选择 Y 轴</div>";
 			return;
 		}
@@ -5784,6 +5804,7 @@ async function renderOne$1(id, filtered) {
 			};
 		}));
 	} catch (e) {
+		dropChart(id);
 		try {
 			const el2 = getDoc$8().getElementById(`aus-chart-${id}`);
 			if (el2) el2.innerHTML = "<div style=\"text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);\">图表加载失败: " + (e?.message || e) + "</div>";
@@ -5823,7 +5844,7 @@ async function drawBarLine(el, id, labels, series) {
 			c = charts$1[id] = ec.init(el);
 		}
 		const isTokenCost = id === "token" || id === "cost";
-		const interval = calcXInterval(labels, el);
+		calcXInterval(labels, el);
 		const opts = {
 			backgroundColor: "transparent",
 			tooltip: {
@@ -5836,7 +5857,7 @@ async function drawBarLine(el, id, labels, series) {
 				left: 40,
 				right: 20,
 				top: 8,
-				bottom: 24
+				bottom: labels.length > 12 ? 42 : 24
 			},
 			xAxis: {
 				type: "category",
@@ -5846,7 +5867,7 @@ async function drawBarLine(el, id, labels, series) {
 					fontSize: 12,
 					color: themeColor$3("--ds-text-3", "#9CA3AF"),
 					rotate: labels.length > 12 ? 30 : 0,
-					interval,
+					interval: "auto",
 					hideOverlap: false
 				}
 			},
@@ -5861,7 +5882,7 @@ async function drawBarLine(el, id, labels, series) {
 			dataZoom: labels.length > 8 ? [{
 				type: "inside",
 				xAxisIndex: 0,
-				start: Math.max(0, (labels.length - Math.max(8, Math.min(labels.length, Math.floor((el.clientWidth || 320) / 44)))) / labels.length * 100),
+				start: 0,
 				end: 100,
 				zoomOnMouseWheel: false,
 				moveOnMouseMove: true
@@ -5991,7 +6012,13 @@ async function drawBarLine(el, id, labels, series) {
 			}));
 		}
 		c.setOption(opts, true);
+		setTimeout(() => {
+			try {
+				c.resize();
+			} catch {}
+		}, 60);
 	} catch (e) {
+		dropChart(id);
 		try {
 			el.innerHTML = "<div style=\"text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);\">图表渲染失败</div>";
 		} catch {}
@@ -6278,13 +6305,14 @@ function bucketKey(ts, x, idx) {
 async function getEcharts() {
 	const ec = await import("./core-fg_o3xmJ.js");
 	const { LineChart } = await import("./charts-BstuNsfd.js");
-	const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-CpGqNjDG.js");
+	const { GridComponent, TooltipComponent, LegendComponent, DataZoomInsideComponent } = await import("./components-CpGqNjDG.js");
 	const { CanvasRenderer } = await import("./renderers-DtxFY9_W.js");
 	ec.use([
 		LineChart,
 		GridComponent,
 		TooltipComponent,
 		LegendComponent,
+		DataZoomInsideComponent,
 		CanvasRenderer
 	]);
 	return ec;
@@ -6374,7 +6402,10 @@ async function renderOne(id, filtered) {
 		if (!c || c.isDisposed?.()) {
 			el.innerHTML = "";
 			el.style.height = "220px";
-			c = charts[id] = ec.init(el);
+			c = charts[id] = ec.init(el, void 0, {
+				width: el.clientWidth || 320,
+				height: el.clientHeight || 260
+			});
 		}
 		const cBorder = themeColor$2("--ds-border", "#E5E7EB");
 		const cCard = themeColor$2("--ds-card", "#F6F7F8");
@@ -6383,7 +6414,7 @@ async function renderOne(id, filtered) {
 		const cText = themeColor$2("--ds-text", "#111827");
 		const cw = w || 320;
 		const maxLabels = Math.max(8, Math.floor(cw / (cw < 500 ? 42 : cw < 760 ? 56 : 68)));
-		const xInterval = labels.length <= maxLabels ? 0 : Math.ceil(labels.length / maxLabels) - 1;
+		labels.length <= maxLabels || Math.ceil(labels.length / maxLabels) - 1;
 		const needZoom = labels.length > maxLabels;
 		const legendTop = models.length > 4 ? 2 : 0;
 		c.setOption({
@@ -6428,12 +6459,12 @@ async function renderOne(id, filtered) {
 				left: 42,
 				right: 16,
 				top: 22 + (models.length > 4 ? 8 : 0),
-				bottom: 24
+				bottom: labels.length > 12 ? 42 : 24
 			},
 			dataZoom: needZoom ? [{
 				type: "inside",
 				xAxisIndex: 0,
-				start: Math.max(0, (labels.length - maxLabels) / labels.length * 100),
+				start: 0,
 				end: 100,
 				zoomOnMouseWheel: false,
 				moveOnMouseMove: true
@@ -6446,7 +6477,7 @@ async function renderOne(id, filtered) {
 				axisLabel: {
 					color: cText3,
 					fontSize: 12,
-					interval: xInterval,
+					interval: "auto",
 					rotate: labels.length > 12 ? 30 : 0,
 					hideOverlap: false
 				}
@@ -6484,6 +6515,12 @@ async function renderOne(id, filtered) {
 			} catch {}
 		}, 60);
 	} catch (e) {
+		if (charts[id]) {
+			try {
+				charts[id].dispose();
+			} catch {}
+			charts[id] = null;
+		}
 		try {
 			const el2 = getDoc$7().getElementById(`aus-chart-model-${id}`);
 			if (el2) el2.innerHTML = "<div style=\"text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);\">图表加载失败</div>";
