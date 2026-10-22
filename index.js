@@ -5611,9 +5611,9 @@ function getYValue(e, key) {
 	return 0;
 }
 async function getEcharts$1() {
-	const ec = await import("./core-ooVr14Lq.js");
-	const { BarChart, LineChart, PieChart } = await import("./charts-6tQsz9zF.js");
-	const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-jF_EZHLs.js");
+	const ec = await import("./core-CaukIycj.js");
+	const { BarChart, LineChart, PieChart } = await import("./charts-B1ny-S7z.js");
+	const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-B4ltpzQV.js");
 	const { CanvasRenderer } = await import("./renderers-DtxFY9_W.js");
 	ec.use([
 		BarChart,
@@ -6140,9 +6140,9 @@ function bucketKey(ts, x, idx) {
 	return localDay$1(ts);
 }
 async function getEcharts() {
-	const ec = await import("./core-ooVr14Lq.js");
-	const { LineChart } = await import("./charts-6tQsz9zF.js");
-	const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-jF_EZHLs.js");
+	const ec = await import("./core-CaukIycj.js");
+	const { LineChart } = await import("./charts-B1ny-S7z.js");
+	const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-B4ltpzQV.js");
 	const { CanvasRenderer } = await import("./renderers-DtxFY9_W.js");
 	ec.use([
 		LineChart,
@@ -7097,15 +7097,17 @@ async function renderChart(filteredRaw) {
 	renderChart._retryCount = 0;
 	let echarts;
 	try {
-		echarts = await import("./core-ooVr14Lq.js").then(async (ec) => {
-			const { BarChart, LineChart } = await import("./charts-6tQsz9zF.js");
-			const { GridComponent, TooltipComponent } = await import("./components-jF_EZHLs.js");
+		echarts = await import("./core-CaukIycj.js").then(async (ec) => {
+			const { BarChart, LineChart } = await import("./charts-B1ny-S7z.js");
+			const { GridComponent, TooltipComponent, DataZoomSliderComponent, DataZoomInsideComponent } = await import("./components-B4ltpzQV.js");
 			const { CanvasRenderer } = await import("./renderers-DtxFY9_W.js");
 			ec.use([
 				BarChart,
 				LineChart,
 				GridComponent,
 				TooltipComponent,
+				DataZoomSliderComponent,
+				DataZoomInsideComponent,
 				CanvasRenderer
 			]);
 			return ec;
@@ -7308,7 +7310,8 @@ async function renderChart(filteredRaw) {
 	const cw = w || 320;
 	const maxLabels = Math.max(8, Math.floor(cw / (cw < 500 ? 42 : cw < 760 ? 56 : 68)));
 	const xInterval = labels.length <= maxLabels ? 0 : Math.ceil(labels.length / maxLabels) - 1;
-	const needZoom = labels.length > maxLabels;
+	const zoomStartPercent = labels.length > maxLabels ? Math.max(0, (labels.length - maxLabels) / labels.length * 100) : 0;
+	const showZoom = labels.length > 1;
 	chart.setOption({
 		backgroundColor: "transparent",
 		tooltip: {
@@ -7345,15 +7348,55 @@ async function renderChart(filteredRaw) {
 			left: narrow ? 40 : 50,
 			right: 12 + rightOffset,
 			top: 8,
-			bottom: 28
+			bottom: showZoom ? narrow ? 48 : 52 : 28
 		},
-		dataZoom: needZoom ? [{
+		dataZoom: showZoom ? [{
 			type: "inside",
 			xAxisIndex: 0,
-			start: Math.max(0, (labels.length - maxLabels) / labels.length * 100),
+			start: zoomStartPercent,
 			end: 100,
 			zoomOnMouseWheel: false,
 			moveOnMouseMove: true
+		}, {
+			type: "slider",
+			xAxisIndex: 0,
+			start: zoomStartPercent,
+			end: 100,
+			height: 14,
+			bottom: narrow ? 4 : 6,
+			borderColor: "transparent",
+			backgroundColor: "transparent",
+			fillerColor: "rgba(148,163,184,0.16)",
+			handleIcon: "path://M8 0C3.6 0 0 3.6 0 8s3.6 8 8 8 8-3.6 8-8-3.6-8-8-8z",
+			handleSize: "90%",
+			handleStyle: {
+				color: cText3,
+				borderColor: cCard,
+				borderWidth: 2
+			},
+			moveHandleSize: 0,
+			showDetail: false,
+			brushSelect: false,
+			dataBackground: {
+				lineStyle: {
+					color: cBorder,
+					width: 1,
+					opacity: .85
+				},
+				areaStyle: { color: "transparent" }
+			},
+			selectedDataBackground: {
+				lineStyle: {
+					color: cText3,
+					width: 1
+				},
+				areaStyle: { color: "rgba(148,163,184,0.18)" }
+			},
+			textStyle: {
+				color: cText3,
+				fontSize: 10
+			},
+			labelFormatter: ""
 		}] : void 0,
 		xAxis: {
 			type: "category",
@@ -7362,7 +7405,7 @@ async function renderChart(filteredRaw) {
 			axisLabel: {
 				color: cText3,
 				fontSize: 12,
-				interval: xInterval,
+				interval: showZoom ? "auto" : xInterval,
 				rotate: labels.length > 12 ? 30 : 0,
 				hideOverlap: false
 			}
@@ -8027,9 +8070,9 @@ function themeColor(name, fallback) {
 }
 async function loadECharts() {
 	if (!echartsPromise) echartsPromise = (async () => {
-		const echarts = await import("./core-ooVr14Lq.js");
-		const { LineChart, ScatterChart } = await import("./charts-6tQsz9zF.js");
-		const { GridComponent, TooltipComponent, LegendComponent, MarkLineComponent, MarkPointComponent, GraphicComponent } = await import("./components-jF_EZHLs.js");
+		const echarts = await import("./core-CaukIycj.js");
+		const { LineChart, ScatterChart } = await import("./charts-B1ny-S7z.js");
+		const { GridComponent, TooltipComponent, LegendComponent, MarkLineComponent, MarkPointComponent, GraphicComponent } = await import("./components-B4ltpzQV.js");
 		const { CanvasRenderer } = await import("./renderers-DtxFY9_W.js");
 		echarts.use([
 			LineChart,

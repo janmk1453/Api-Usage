@@ -643,9 +643,9 @@ async function renderChart(filteredRaw: any[]) {
   try {
     echarts = await import('echarts/core').then(async (ec: any) => {
       const { BarChart, LineChart } = await import('echarts/charts');
-      const { GridComponent, TooltipComponent } = await import('echarts/components');
+      const { GridComponent, TooltipComponent, DataZoomSliderComponent, DataZoomInsideComponent } = await import('echarts/components');
       const { CanvasRenderer } = await import('echarts/renderers');
-      ec.use([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
+      ec.use([BarChart, LineChart, GridComponent, TooltipComponent, DataZoomSliderComponent, DataZoomInsideComponent, CanvasRenderer]);
       return ec;
     });
   } catch (e) {
@@ -761,6 +761,9 @@ async function renderChart(filteredRaw: any[]) {
   const maxLabels = Math.max(8, Math.floor(cw / minPerLabel));
   const xInterval = labels.length <= maxLabels ? 0 : Math.ceil(labels.length / maxLabels) - 1;
   const needZoom = labels.length > maxLabels;
+  const zoomStartPercent = needZoom ? Math.max(0, (labels.length - maxLabels) / labels.length * 100) : 0;
+  // 第一张图表常驻视窗滑块：数据点 ≥2 即显示，可拖中间平移、拖两端缩放
+  const showZoom = labels.length > 1;
   chart.setOption({
     backgroundColor: 'transparent',
     tooltip: {
@@ -790,9 +793,34 @@ async function renderChart(filteredRaw: any[]) {
         return `<div style="padding:4px 2px;min-width:180px;">${html}</div>`;
       }
     },
-    grid: { left: narrow ? 40 : 50, right: 12 + rightOffset, top: 8, bottom: 28 },
-    dataZoom: needZoom ? [{ type:'inside', xAxisIndex:0, start: Math.max(0, (labels.length - maxLabels) / labels.length * 100), end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : undefined,
-    xAxis: { type:'category', data: labels, axisLine:{lineStyle:{color:cBorder}}, axisLabel:{color:cText3,fontSize: 12,interval: xInterval,rotate: labels.length>12?30:0, hideOverlap: false} },
+    grid: { left: narrow ? 40 : 50, right: 12 + rightOffset, top: 8, bottom: showZoom ? (narrow ? 48 : 52) : 28 },
+    // 底部视窗滑块：拖中间平移 X 轴，拖两端改变可视范围（缩放）
+    dataZoom: showZoom ? [
+      { type: 'inside', xAxisIndex: 0, start: zoomStartPercent, end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true },
+      {
+        type: 'slider',
+        xAxisIndex: 0,
+        start: zoomStartPercent,
+        end: 100,
+        height: 14,
+        bottom: narrow ? 4 : 6,
+        borderColor: 'transparent',
+        backgroundColor: 'transparent',
+        fillerColor: 'rgba(148,163,184,0.16)',
+        handleIcon: 'path://M8 0C3.6 0 0 3.6 0 8s3.6 8 8 8 8-3.6 8-8-3.6-8-8-8z',
+        handleSize: '90%',
+        handleStyle: { color: cText3, borderColor: cCard, borderWidth: 2 },
+        moveHandleSize: 0,
+        showDetail: false,
+        brushSelect: false,
+        dataBackground: { lineStyle: { color: cBorder, width: 1, opacity: 0.85 }, areaStyle: { color: 'transparent' } },
+        selectedDataBackground: { lineStyle: { color: cText3, width: 1 }, areaStyle: { color: 'rgba(148,163,184,0.18)' } },
+        textStyle: { color: cText3, fontSize: 10 },
+        labelFormatter: '',
+      },
+    ] : undefined,
+    // 有视窗滑块时让 ECharts 按当前可视范围自适应标签密度（缩放后不会只剩一两个刻度）
+    xAxis: { type:'category', data: labels, axisLine:{lineStyle:{color:cBorder}}, axisLabel:{color:cText3,fontSize: 12,interval: showZoom ? 'auto' : xInterval,rotate: labels.length>12?30:0, hideOverlap: false} },
     yAxis: yAxis.length?yAxis:{ type:'value', axisLabel:{color:cText3,fontSize: 12} },
     series: seriesOpt,
   }, true);
