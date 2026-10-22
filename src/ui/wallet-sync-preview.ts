@@ -67,7 +67,7 @@ export async function openWalletSyncPreview(options: { walletId?: string; onDone
 
   const overlay = doc.createElement('div');
   overlay.id = OVERLAY_ID;
-  overlay.style.cssText = 'position:absolute;inset:0;z-index:140;background:rgba(15,20,25,0.32);display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.style.cssText = 'position:absolute;inset:0;z-index:400;background:rgba(15,20,25,0.32);display:flex;align-items:center;justify-content:center;padding:16px;';
   overlay.innerHTML = '<div style="width:min(880px,100%);max-height:86%;display:flex;flex-direction:column;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:14px;overflow:hidden;">'
     + '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--ds-border);">'
     + '<div style="font-weight:600;color:var(--ds-text);">价格同步预览</div>'
@@ -75,7 +75,9 @@ export async function openWalletSyncPreview(options: { walletId?: string; onDone
     + '</div>'
     + '<div data-sync-body="1" style="padding:12px 14px;overflow:auto;display:grid;gap:10px;"></div>'
     + '</div>';
-  doc.body.appendChild(overlay);
+  // 挂到面板内部：面板自身是 fixed/absolute 且层级很高，挂到 body 会被压在下面（表现为点了没反应）
+  const mount = doc.getElementById('aus-panel') || doc.getElementById('aus-main') || doc.body;
+  mount.appendChild(overlay);
 
   const close = () => { overlay.remove(); doc.removeEventListener('keydown', onKey); };
   const onKey = (event: any) => { if (event?.key === 'Escape') close(); };
@@ -84,7 +86,7 @@ export async function openWalletSyncPreview(options: { walletId?: string; onDone
   (overlay.querySelector('[data-sync-close]') as HTMLElement | null)?.addEventListener('click', close);
 
   const body = overlay.querySelector('[data-sync-body]') as HTMLElement;
-  body.innerHTML = '<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">正在拉取价格目录…</div>';
+  body.innerHTML = '<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">正在拉取价格目录（首次约 6 MB，之后走浏览器缓存）…</div>';
 
   const walletId = options.walletId;
   const wallet = walletId ? repository.getWallet(walletId) : null;

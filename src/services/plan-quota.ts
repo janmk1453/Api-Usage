@@ -173,6 +173,30 @@ export function planPresetById(id: string): PlanPreset | null {
   return PLAN_PRESETS.find((preset) => preset.id === id) || null;
 }
 
+/**
+ * 按适配器给出默认窗口：只按该供应商实际存在的额度窗口生成，
+ * 不再让用户在多个供应商预设里挑。
+ */
+export function planWindowsForAdapter(adapterId: string | null | undefined): WalletPlanWindow[] {
+  const id = String(adapterId || '').trim();
+  if (id === 'zhipu') {
+    return [
+      { id: '5h', label: '5 小时额度', unit: 'token', limit: 0, resetMode: 'rolling' },
+      { id: '7d', label: '每周额度', unit: 'token', limit: 0, resetMode: 'rolling' },
+    ];
+  }
+  if (id === 'minimax') {
+    return [
+      { id: '5h', label: '5 小时额度', unit: 'request', limit: 0, resetMode: 'rolling' },
+      { id: '7d', label: '每周额度', unit: 'request', limit: 0, resetMode: 'rolling' },
+    ];
+  }
+  if (id === 'new-api') {
+    return [{ id: '1m', label: '订阅额度', unit: 'cost', limit: 0, resetMode: 'calendar' }];
+  }
+  return [];
+}
+
 /** 展示用：窗口标题（含周期说明） */
 export function describePlanWindow(window: WalletPlanWindow): string {
   if (window.label) return window.label;

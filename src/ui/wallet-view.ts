@@ -13,7 +13,7 @@ import { walletSyncStatus } from '../services/pricing-sync';
 import { openWalletSyncPreview } from './wallet-sync-preview';
 import { resolveVendor, vendorInitialFallback } from '../services/provider-registry';
 import { BALANCE_ADAPTERS, resolveBalanceAdapter } from '../services/balance-adapters';
-import { renderPlanBlock, bindPlanBlock } from './wallet-plan';
+import { renderPlanBlock, bindPlanBlock, hasPlanCapability } from './wallet-plan';
 import { toast } from '../utils/logger';
 import { esc } from '../utils/date';
 import { CN_HOLIDAY_COVERAGE_LABEL } from '../constants/holidays';
@@ -260,7 +260,7 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
         </div>
         <div class="aus-wallet-actions">
           <button class="aus-wallet-icon-btn" data-wallet-toggle="1" data-wallet-id="${esc(wallet.id)}" title="${collapsed ? '展开钱包详情' : '收起钱包详情'}" aria-label="${collapsed ? '展开钱包详情' : '收起钱包详情'}">${collapsed ? icon('chevron-down', 16) : icon('chevron-up', 16)}</button>
-          ${wallet.catalogProvider ? `<button class="aus-wallet-icon-btn" data-wallet-sync="1" data-wallet-id="${esc(wallet.id)}" title="预览并应用价格同步（按已识别模型模糊匹配）" aria-label="预览价格同步">${icon('refresh', 16)}</button>` : ''}
+          <button class="aus-wallet-icon-btn" data-wallet-sync="1" data-wallet-id="${esc(wallet.id)}" title="${wallet.catalogProvider ? '预览并应用价格同步（按已识别模型模糊匹配）' : '先选择价格来源，再同步价格'}" aria-label="预览价格同步">${icon('refresh', 16)}</button>
           ${isOfficial ? '' : `<button class="aus-wallet-icon-btn is-danger" data-wallet-ignore="1" data-wallet-id="${esc(wallet.id)}" title="忽略该钱包（历史与统计保留）" aria-label="忽略钱包">${icon('close', 16)}</button>`}
         </div>
       </div>
@@ -270,7 +270,7 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
         <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
             <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包余额</div><div style="font-size:17px;font-weight:700;color:var(--ds-text);">${esc(walletBalanceText(wallet))}</div></div>
-            <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:${isOfficial ? 'pointer' : 'not-allowed'};">
+            <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:${supportsAuto ? 'pointer' : 'not-allowed'};">
               <input type="checkbox" data-wallet-auto-balance="1" data-wallet-id="${esc(wallet.id)}" ${wallet.balance.mode === 'auto' ? 'checked' : ''} ${supportsAuto ? '' : 'disabled'} /> 自动校准
             </label>
           </div>
@@ -292,9 +292,9 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
             </div>
             <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">查询方式：${esc(balanceAdapter?.label || '无')}${balanceAdapter?.note ? '（' + esc(balanceAdapter.note) + '）' : ''}；勾选「自动校准」后按设置页校准间隔轮询；主密钥：${esc(selectedCredential?.label || '未指定')}</div>
             <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc(item.label)).join('、') : '未识别'}</div>
-          ` : `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">该接入暂无可用查询适配器，请手工维护余额；中转站可在「查询适配器」中选择 new-api 后填写系统访问令牌。</div>
-            ${renderAdapterPicker(wallet)}
-            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc(item.label)).join('、') : '未识别'}</div>`}
+          ` : `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">该接入暂无可用查询适配器，可直接手工维护余额；中转站可在下方「查询适配器」中选择 new-api 并填写系统访问令牌与用户 ID。</div>`}
+          ${renderAdapterPicker(wallet)}
+          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc(item.label)).join('、') : '未识别'}</div>
         </div>
 
         <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;position:relative;">
@@ -324,7 +324,7 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
         </div>
       </div>
 
-      ${renderPlanBlock(wallet, history)}
+      ${hasPlanCapability(wallet) ? renderPlanBlock(wallet, history) : ''}
       </div>
     </section>`;
 }
@@ -354,8 +354,8 @@ export async function renderWalletView(): Promise<void> {
   const ignored = repository.getIgnoredWalletIds();
   const ignoredSet = new Set(ignored);
   const active = wallets.filter((wallet) => !ignoredSet.has(wallet.id));
-  const planWallets = active.filter((wallet) => wallet.plan?.enabled === true);
-  const planRemoteCount = planWallets.filter((wallet) => (wallet.plan?.remote || []).length > 0).length;
+  const planCapable = active.filter((wallet) => resolveBalanceAdapter(wallet)?.supports.plan === true);
+  const planRemoteCount = planCapable.filter((wallet) => (wallet.plan?.remote || []).length > 0).length;
   let walletFilter = 'all';
   let walletQuery = '';
   try {
@@ -365,12 +365,12 @@ export async function renderWalletView(): Promise<void> {
   const filters: Array<{ id: string; label: string; count?: number }> = [
     { id: 'all', label: '全部', count: active.length },
     { id: 'pending', label: '有待定价', count: active.filter((wallet) => walletPendingModelCount(wallet) > 0).length },
-    { id: 'plan', label: '有套餐', count: planWallets.length },
+    { id: 'plan', label: '可查套餐', count: planCapable.length },
     { id: 'official', label: '官方', count: active.filter((wallet) => wallet.id === DEEPSEEK_WALLET_ID).length },
   ];
   const matchesFilter = (wallet: WalletConfig) => {
     if (walletFilter === 'pending') return walletPendingModelCount(wallet) > 0;
-    if (walletFilter === 'plan') return wallet.plan?.enabled === true;
+    if (walletFilter === 'plan') return resolveBalanceAdapter(wallet)?.supports.plan === true;
     if (walletFilter === 'official') return wallet.id === DEEPSEEK_WALLET_ID;
     return true;
   };
@@ -399,7 +399,7 @@ export async function renderWalletView(): Promise<void> {
         <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包余额合计</div><div style="font-size:20px;font-weight:700;color:var(--ds-text);margin-top:4px;">${money(balanceCny, 2)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">${balanceCount} 个钱包已设置余额</div></div>
         <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包数量</div><div style="font-size:20px;font-weight:700;color:var(--ds-text);margin-top:4px;">${active.length}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">已忽略 ${ignored.length} 个</div></div>
         <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">待定价模型</div><div style="font-size:20px;font-weight:700;color:${pending ? 'var(--ds-red)' : 'var(--ds-green)'};margin-top:4px;">${pending}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">保存价格后自动重算</div></div>
-        <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">套餐额度</div><div style="font-size:20px;font-weight:700;color:var(--ds-text);margin-top:4px;">${planWallets.length}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">${planRemoteCount ? `${planRemoteCount} 个远端真值` : '本地估算，仅展示'}</div></div>
+        <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">可查套餐</div><div style="font-size:20px;font-weight:700;color:var(--ds-text);margin-top:4px;">${planCapable.length}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">${planRemoteCount ? `已查到 ${planRemoteCount} 个` : '仅展示可查询的厂商'}</div></div>
       </div>
       ${toolbar}
       ${visibleWallets.length

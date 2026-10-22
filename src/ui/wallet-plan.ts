@@ -6,17 +6,21 @@ import { getWalletApiKey } from '../services/wallet-secrets';
 import { queryWalletBalance } from '../services/balance';
 import { resolveBalanceAdapter } from '../services/balance-adapters';
 import {
-  PLAN_PRESETS,
-  planWindowSpan,
   PLAN_UNIT_LABEL,
   computeAllPlanUsage,
   describePlanWindow,
   estimateExhaustion,
   formatPlanUnit,
-  planPresetById,
+  planWindowSpan,
+  planWindowsForAdapter,
   type PlanUsageEntry,
 } from '../services/plan-quota';
 import type { WalletConfig, WalletPlan, WalletPlanWindow } from '../types/wallet';
+
+/** 该钱包是否具备「可查询套餐额度」能力（无则整块不显示） */
+export function hasPlanCapability(wallet: WalletConfig): boolean {
+  return resolveBalanceAdapter(wallet)?.supports.plan === true;
+}
 
 function bar(ratio: number, color: string): string {
   const percent = Math.max(0, Math.min(100, Math.round(ratio * 100)));
@@ -50,34 +54,39 @@ function resetLabel(window: WalletPlanWindow, resetAt: number | null): string {
   return '重置 ' + relativeTime(resetAt);
 }
 
+/** 远端真值：查到哪个展示哪个 */
 function renderRemote(wallet: WalletConfig): string {
   const remote = wallet.plan?.remote || [];
   if (!remote.length) return '';
   const rows = remote.map((item) => {
     const ratio = item.used != null && item.limit ? Math.min(1, item.used / item.limit) : 0;
     const percent = Math.round(ratio * 100);
-    const left = item.remaining != null ? formatPlanUnit(item.remaining, item.unit === 'percent' ? 'percent' : item.unit) : formatPlanUnit(Math.max(0, 100 - percent), 'percent');
+    const left = item.remaining != null
+      ? formatPlanUnit(item.remaining, item.unit === 'percent' ? 'percent' : item.unit === 'count' ? 'count' : item.unit)
+      : formatPlanUnit(Math.max(0, 100 - percent), 'percent');
     return '<div style="display:grid;gap:4px;">'
       + '<div style="display:flex;justify-content:space-between;gap:8px;font-size:var(--aus-fs-sm);">'
       + '<span style="color:var(--ds-text-2);">' + esc(item.label) + '</span>'
       + '<span style="color:' + ratioColor(ratio) + ';font-weight:600;">已用 ' + percent + '% · 剩余 ' + esc(left) + '</span>'
       + '</div>'
       + bar(ratio, ratioColor(ratio))
-      + '<div style="font-size:var(--aus-fs-xs,11px);color:var(--ds-text-3);">远端真值 · 重置 ' + esc(relativeTime(item.resetAt)) + ' · 更新于 ' + esc(item.checkedAt ? new Date(item.checkedAt).toLocaleTimeString('zh-CN') : '—') + '</div>'
+      + '<div style="font-size:var(--aus-fs-xs,11px);color:var(--ds-text-3);">厂商返回 · ' + esc(resetLabel({ id: 'custom', label: item.label, unit: 'token', limit: 0, resetMode: item.resetAt ? 'calendar' : 'rolling' }, item.resetAt))
+      + ' · 查询于 ' + esc(item.checkedAt ? new Date(item.checkedAt).toLocaleTimeString('zh-CN') : '—') + '</div>'
       + '</div>';
   }).join('');
-  return '<div style="display:grid;gap:8px;">' + rows + '</div>';
+  return '<div style="border:1px solid var(--ds-border);border-radius:8px;padding:8px;display:grid;gap:8px;">' + rows + '</div>';
 }
 
+/** 本地估算（可选，仅作补充） */
 function renderLocal(wallet: WalletConfig, history: PlanUsageEntry[]): string {
   const plan = wallet.plan;
   if (!plan || !plan.windows.length) return '';
   const usages = computeAllPlanUsage(plan.windows, history, wallet.id);
-  return usages.map((usage, index) => {
+  const rows = usages.map((usage, index) => {
     const window = usage.window;
     const eta = estimateExhaustion(usage);
     const hasLimit = usage.limit > 0;
-    return '<div style="display:grid;gap:4px;" data-plan-row="' + index + '">'
+    return '<div style="display:grid;gap:4px;">'
       + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:space-between;">'
       + '<span style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">' + esc(describePlanWindow(window)) + '</span>'
       + '<span style="display:flex;align-items:center;gap:4px;font-size:var(--aus-fs-sm);">'
@@ -86,58 +95,54 @@ function renderLocal(wallet: WalletConfig, history: PlanUsageEntry[]): string {
       + '<button data-plan-reset="' + index + '" title="切换重置方式：滚动窗口 / 自然月" style="padding:2px 7px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;">' + (window.resetMode === 'calendar' ? '自然月' : '滚动') + '</button>'
       + '<button data-plan-remove="' + index + '" title="移除该窗口" style="padding:2px 6px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">' + icon('close', 12) + '</button>'
       + '</span></div>'
-      + (hasLimit
-        ? bar(usage.ratio, ratioColor(usage.ratio))
-        : '<div style="height:6px;border-radius:999px;background:var(--ds-border);"></div>')
-      + '<div style="font-size:var(--aus-fs-xs,11px);color:var(--ds-text-3);">'
-      + (hasLimit
-        ? '本地估算 · 已用 ' + esc(formatPlanUnit(usage.used, window.unit)) + ' / ' + esc(formatPlanUnit(usage.limit, window.unit)) + '（' + Math.round(usage.ratio * 100) + '%）· 剩余 ' + esc(formatPlanUnit(usage.remaining, window.unit)) + ' · ' + resetLabel(window, usage.resetAt)
-        : '本地估算 · 窗口内已用 ' + esc(formatPlanUnit(usage.used, window.unit)) + '（填额度后显示比例）· ' + resetLabel(window, usage.resetAt))
+      + (hasLimit ? bar(usage.ratio, ratioColor(usage.ratio)) : '<div style="height:6px;border-radius:999px;background:var(--ds-border);"></div>')
+      + '<div style="font-size:var(--aus-fs-xs,11px);color:var(--ds-text-3);">本地估算 · 已用 ' + esc(formatPlanUnit(usage.used, window.unit))
+      + (hasLimit ? ' / ' + esc(formatPlanUnit(usage.limit, window.unit)) + '（' + Math.round(usage.ratio * 100) + '%）· 剩余 ' + esc(formatPlanUnit(usage.remaining, window.unit)) : '（填额度后显示比例）')
+      + ' · ' + resetLabel(window, usage.resetAt)
       + (eta ? ' · 预计 ' + esc(relativeTime(eta)) + '耗尽' : '')
-      + '</div>'
-      + '</div>';
+      + '</div></div>';
   }).join('');
+  return rows;
 }
 
 export function renderPlanBlock(wallet: WalletConfig, history: PlanUsageEntry[]): string {
-  const plan: WalletPlan | undefined = wallet.plan;
-  const enabled = plan?.enabled === true;
   const adapter = resolveBalanceAdapter(wallet);
-  const canRemote = !!adapter?.supports.plan;
+  // 只对**能查询套餐额度**的钱包展示；查不到接口的供应商整块不出现
+  if (!adapter?.supports.plan) return '';
+  const plan: WalletPlan | undefined = wallet.plan;
+  const remote = plan?.remote || [];
+  const localEnabled = plan?.enabled === true && (plan?.windows || []).length > 0;
+  const hasKey = !!getWalletApiKey(wallet.id);
+
   const header = '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">'
     + '<div><div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">套餐额度</div>'
-    + '<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">仅供展示参考，不参与计费与导出；'
-    + (canRemote ? '该供应商可查询远端真值' : '该供应商无公开额度接口，按本地历史估算') + '</div></div>'
+    + '<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">' + esc(adapter.label) + ' · 仅供展示参考，不参与计费与导出</div></div>'
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;">'
-    + (enabled && canRemote ? '<button data-plan-refresh="1" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;display:inline-flex;align-items:center;gap:4px;">' + icon('refresh', 13) + ' 查询额度</button>' : '')
-    + (enabled ? '<button data-plan-disable="1" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;">关闭套餐</button>' : '')
+    + '<button data-plan-query="1" style="padding:6px 11px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;display:inline-flex;align-items:center;gap:4px;">' + icon('refresh', 13) + ' 查询额度</button>'
+    + (localEnabled
+      ? '<button data-plan-disable="1" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;">关闭本地估算</button>'
+      : '<button data-plan-enable="1" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">启用本地估算</button>')
     + '</div></div>';
 
-  if (!enabled) {
-    const presets = '<div style="display:flex;flex-wrap:wrap;gap:6px;">'
-      + PLAN_PRESETS.map((preset) => '<button data-plan-preset="' + preset.id + '" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">' + esc(preset.label) + '</button>').join('')
-      + '</div>';
-    return '<div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;">'
-      + header
-      + '<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);line-height:1.6;">选择预设后填写额度即可看到「已用 / 剩余 / 重置倒计时」。额度由本地历史按窗口聚合，缺失历史上限会偏低，请以厂商账单为准。</div>'
-      + presets
-      + '</div>';
-  }
-
-  const remote = renderRemote(wallet);
-  const local = renderLocal(wallet, history);
   const error = plan?.remoteError
-    ? '<div style="font-size:var(--aus-fs-sm);color:var(--ds-red);">远端查询失败：' + esc(plan.remoteError) + '</div>'
+    ? '<div style="font-size:var(--aus-fs-sm);color:var(--ds-red);">查询失败：' + esc(plan.remoteError) + '</div>'
     : '';
+  const remoteHtml = renderRemote(wallet);
+  const localHtml = localEnabled ? renderLocal(wallet, history) : '';
+  const empty = !remoteHtml && !localHtml
+    ? '<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">'
+      + (hasKey ? '点击「查询额度」获取厂商返回的额度与剩余。' : '先在下方填写查询密钥，再点「查询额度」。')
+      + '</div>'
+    : '';
+  const localTools = localEnabled && !remoteHtml
+    ? '<div style="display:flex;gap:6px;"><button data-plan-add="1" style="padding:5px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加本地窗口</button></div>'
+    : '';
+
   return '<div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;">'
-    + header
-    + error
-    + (remote ? '<div style="border:1px solid var(--ds-border);border-radius:8px;padding:8px;display:grid;gap:8px;">' + remote + '</div>' : '')
-    + '<div style="display:grid;gap:8px;">' + (local || '<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">还没有额度窗口，点下方按钮添加</div>') + '</div>'
-    + '<div style="display:flex;gap:6px;flex-wrap:wrap;">'
-    + '<button data-plan-add="1" style="padding:5px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加窗口</button>'
-    + (canRemote && !plan?.remoteAt ? '<button data-plan-refresh="1" style="padding:5px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">查询远端额度</button>' : '')
-    + '</div>'
+    + header + error + empty
+    + (remoteHtml ? '<div style="display:grid;gap:8px;">' + remoteHtml + '</div>' : '')
+    + (localHtml ? '<div style="display:grid;gap:8px;">' + localHtml + '</div>' : '')
+    + localTools
     + '</div>';
 }
 
@@ -146,30 +151,38 @@ export function bindPlanBlock(doc: Document, walletId: string, onChange: () => v
   if (!host) return;
   const updatePlan = (mutate: (plan: WalletPlan) => void) => {
     repository.updateWallet(walletId, (wallet) => {
-      const plan: WalletPlan = wallet.plan && wallet.plan.enabled !== undefined
-        ? wallet.plan
-        : { enabled: false, windows: [] };
+      const plan: WalletPlan = wallet.plan || { enabled: false, windows: [] };
       mutate(plan);
       wallet.plan = plan;
     });
     onChange();
   };
 
-  host.querySelectorAll('[data-plan-preset]').forEach((button: any) => {
-    button.onclick = (event: Event) => {
+  host.querySelectorAll('[data-plan-query]').forEach((button: any) => {
+    button.onclick = async (event: Event) => {
       event.stopPropagation();
-      const preset = planPresetById(button.getAttribute('data-plan-preset') || '');
-      if (!preset) return;
-      updatePlan((plan) => {
-        plan.enabled = true;
-        plan.label = preset.label;
-        plan.windows = preset.windows.map((window: WalletPlanWindow) => ({ ...window }));
-      });
+      const wallet = repository.getWallet(walletId);
+      const adapter = resolveBalanceAdapter(wallet);
+      if (!adapter?.supports.plan) return;
+      if (!getWalletApiKey(walletId)) {
+        toast('warning', '请先在该钱包填写查询密钥');
+        return;
+      }
+      button.textContent = '查询中…';
+      await queryWalletBalance(walletId, false);
+      onChange();
     };
   });
 
   host.querySelectorAll('[data-plan-enable]').forEach((button: any) => {
-    button.onclick = () => updatePlan((plan) => { plan.enabled = true; });
+    button.onclick = (event: Event) => {
+      event.stopPropagation();
+      const adapter = resolveBalanceAdapter(repository.getWallet(walletId));
+      updatePlan((plan) => {
+        plan.enabled = true;
+        if (!plan.windows.length) plan.windows = planWindowsForAdapter(adapter?.id);
+      });
+    };
   });
 
   host.querySelectorAll('[data-plan-disable]').forEach((button: any) => {
@@ -211,23 +224,11 @@ export function bindPlanBlock(doc: Document, walletId: string, onChange: () => v
 
   host.querySelectorAll('[data-plan-add]').forEach((button: any) => {
     button.onclick = () => {
+      const adapter = resolveBalanceAdapter(repository.getWallet(walletId));
       updatePlan((plan) => {
         plan.windows.push({ id: 'custom', label: '', unit: plan.windows[0]?.unit || 'token', limit: 0, resetMode: 'rolling', hours: 5 });
+        if (adapter) plan.label = adapter.label;
       });
-    };
-  });
-
-  host.querySelectorAll('[data-plan-refresh]').forEach((button: any) => {
-    button.onclick = async (event: Event) => {
-      event.stopPropagation();
-      const adapter = resolveBalanceAdapter(repository.getWallet(walletId));
-      if (adapter && !getWalletApiKey(walletId)) {
-        toast('warning', '请先在该钱包填写查询密钥');
-        return;
-      }
-      button.textContent = '查询中…';
-      await queryWalletBalance(walletId, false);
-      onChange();
     };
   });
 }
