@@ -320,7 +320,7 @@ function renderExtraY(id:ChartId){
   if (label) label.textContent = sel.size? `${sel.size} 项` : '选择';
   drop.innerHTML = opts.map(o=>{
     const checked = sel.has(o.key);
-    return `<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--aus-fs-sm);${checked?'background:var(--ds-active-bg);':''}"><input type="checkbox" data-y="${o.key}" data-chart="${id}" ${checked?'checked':''} style="accent-color:var(--ds-text);" /><span style="width:8px;height:8px;background:${o.color};border-radius:2px;"></span>${o.label}</label>`;
+    return `<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--aus-fs-sm);${checked?'background:var(--ds-active-bg);':''}"><input type="checkbox" data-y="${o.key}" data-chart="${id}" ${checked?'checked':''} class="aus-checkbox" /><span style="width:8px;height:8px;background:${o.color};border-radius:2px;"></span>${o.label}</label>`;
   }).join('');
   drop.querySelectorAll('input[data-y]').forEach((el:any)=>{
     el.onchange=()=>{

@@ -224,11 +224,11 @@ function renderModelPicker(modelsHist?: any[]) {
   const allSelected = selectedModels.length === 0;
   label.textContent = allSelected ? '全部' : selectedModels.length === 1 ? selectedModels[0] : `已选 ${selectedModels.length} 项`;
   label.title = allSelected ? '全部模型' : selectedModels.join('、');
-  let html = `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${allSelected?'background:var(--ds-card);font-weight:600;':''}"><input type="checkbox" data-model-all ${allSelected?'checked':''} style="accent-color:var(--ds-text);" /><span>全部模型</span></label>`;
+  let html = `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${allSelected?'background:var(--ds-card);font-weight:600;':''}"><input type="checkbox" data-model-all ${allSelected?'checked':''} class="aus-checkbox" /><span>全部模型</span></label>`;
   for (const m of models) {
     const checked = selectedModels.includes(m);
     const active = checked ? 'background:var(--ds-card);font-weight:600;' : '';
-    html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}"><input type="checkbox" data-model="${esc(m)}" ${checked?'checked':''} style="accent-color:var(--ds-text);" /><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m)}</span></label>`;
+    html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}"><input type="checkbox" data-model="${esc(m)}" ${checked?'checked':''} class="aus-checkbox" /><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m)}</span></label>`;
   }
   if (!models.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);">暂无模型</div>';
   dropdown.innerHTML = html;
@@ -526,7 +526,7 @@ function renderChartSelectors() {
     yHtml += `<div style="padding:6px 8px 2px;font-size:var(--aus-fs-xs);color:var(--ds-text-3);font-weight:600;">${group.label}</div>`;
     for (const opt of opts) {
       const checked = ySel.includes(opt.key);
-      yHtml += `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--aus-fs-sm);${checked?'background:var(--ds-card);':''}"><input type="checkbox" data-ykey="${opt.key}" ${checked?'checked':''} style="accent-color:var(--ds-text);" /><span style="display:inline-block;width:8px;height:8px;background:${opt.color};border-radius:2px;"></span>${opt.label}<span style="margin-left:auto;color:var(--ds-text-3);font-size:var(--aus-fs-sm);">${opt.unit}</span></label>`;
+      yHtml += `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--aus-fs-sm);${checked?'background:var(--ds-card);':''}"><input type="checkbox" data-ykey="${opt.key}" ${checked?'checked':''} class="aus-checkbox" /><span style="display:inline-block;width:8px;height:8px;background:${opt.color};border-radius:2px;"></span>${opt.label}<span style="margin-left:auto;color:var(--ds-text-3);font-size:var(--aus-fs-sm);">${opt.unit}</span></label>`;
     }
   }
   const typeSel = getChartType();

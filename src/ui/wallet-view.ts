@@ -142,8 +142,8 @@ function renderModelRows(wallet: WalletConfig, showHidden = false): string {
         <td style="padding:8px 6px;min-width:224px;opacity:${model.price.usePeakPricing ? '1' : '0.45'};">
           <div style="display:grid;grid-template-columns:repeat(3,minmax(68px,1fr));gap:4px;">${priceField(wallet.id, model.id, 'peak', 'hit', model.price.peak.hit)}${priceField(wallet.id, model.id, 'peak', 'miss', model.price.peak.miss)}${priceField(wallet.id, model.id, 'peak', 'output', model.price.peak.output)}</div>
         </td>
-        <td style="padding:8px 6px;text-align:center;"><input type="checkbox" data-wallet-model-peak="1" data-wallet-id="${esc(wallet.id)}" data-model-id="${esc(model.id)}" ${model.price.usePeakPricing ? 'checked' : ''} /></td>
-        <td style="padding:8px 6px;text-align:center;"><input type="checkbox" data-wallet-model-lock="1" data-wallet-id="${esc(wallet.id)}" data-model-id="${esc(model.id)}" ${model.locked ? 'checked' : ''} /></td>
+        <td style="padding:8px 6px;text-align:center;"><input type="checkbox" class="aus-checkbox" data-wallet-model-peak="1" data-wallet-id="${esc(wallet.id)}" data-model-id="${esc(model.id)}" ${model.price.usePeakPricing ? 'checked' : ''} /></td>
+        <td style="padding:8px 6px;text-align:center;"><input type="checkbox" class="aus-checkbox" data-wallet-model-lock="1" data-wallet-id="${esc(wallet.id)}" data-model-id="${esc(model.id)}" ${model.locked ? 'checked' : ''} /></td>
         <td style="padding:8px 6px;text-align:center;">${canDelete ? `<button data-wallet-model-delete="1" data-wallet-id="${esc(wallet.id)}" data-model-id="${esc(model.id)}" style="padding:4px 8px;border:1px solid var(--ds-red-border);border-radius:7px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">删除</button>` : '—'}</td>
       </tr>`;
   }).join('');
@@ -274,7 +274,7 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
             <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包余额</div><div style="font-size:17px;font-weight:700;color:var(--ds-text);">${esc(walletBalanceText(wallet))}</div></div>
             <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:${supportsAuto ? 'pointer' : 'not-allowed'};">
-              <input type="checkbox" data-wallet-auto-balance="1" data-wallet-id="${esc(wallet.id)}" ${wallet.balance.mode === 'auto' ? 'checked' : ''} ${supportsAuto ? '' : 'disabled'} /> 自动校准
+              <input type="checkbox" class="aus-checkbox" data-wallet-auto-balance="1" data-wallet-id="${esc(wallet.id)}" ${wallet.balance.mode === 'auto' ? 'checked' : ''} ${supportsAuto ? '' : 'disabled'} /> 自动校准
             </label>
           </div>
           <div style="display:flex;gap:6px;align-items:center;position:relative;">
@@ -307,7 +307,7 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
           </div>
           <div style="display:grid;gap:6px;">${renderPeakRows(wallet)}</div>
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-            <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" data-wallet-weekend="1" data-wallet-id="${esc(wallet.id)}" ${wallet.weekendOffpeak ? 'checked' : ''} /> 周末全天按低谷</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" class="aus-checkbox" data-wallet-weekend="1" data-wallet-id="${esc(wallet.id)}" ${wallet.weekendOffpeak ? 'checked' : ''} /> 周末全天按低谷</label>
             <button data-wallet-add-peak="1" data-wallet-id="${esc(wallet.id)}" style="padding:6px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加时段</button>
           </div>
           ${isOfficial ? `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);line-height:1.6;">官方接口按 DeepSeek 规则计费：中国法定节假日全天空闲（内置数据覆盖 ${CN_HOLIDAY_COVERAGE_LABEL}），调休上班的周末同样按空闲计价，可在设置中补充额外空闲日期。</div>` : ''}

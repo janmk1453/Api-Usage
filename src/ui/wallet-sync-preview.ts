@@ -139,7 +139,7 @@ export async function openWalletSyncPreview(options: { walletId?: string; onDone
       + '</div>'
       + '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;">'
       + '<input data-sync-search="1" value="' + esc(keyword) + '" placeholder="搜索模型" style="flex:1;min-width:140px;padding:6px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card);color:var(--ds-text);font-size:var(--aus-fs-sm);" />'
-      + '<label style="display:flex;align-items:center;gap:5px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" data-sync-only-changed="1" ' + (onlyChanged ? 'checked' : '') + ' /> 仅看变化</label>'
+      + '<label style="display:flex;align-items:center;gap:5px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" class="aus-checkbox" data-sync-only-changed="1" ' + (onlyChanged ? 'checked' : '') + ' /> 仅看变化</label>'
       + '</div>'
       + '<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);line-height:1.7;">'
       + '按钱包里已识别的模型名，在目录中用模糊匹配找到对应价格后写入该模型（不会新增模型）。'
@@ -158,7 +158,7 @@ export async function openWalletSyncPreview(options: { walletId?: string; onDone
         + rows.map((row) => {
           const checked = selected.has(row.key);
           return '<tr style="border-top:1px solid var(--ds-border);">'
-            + '<td style="padding:6px;"><input type="checkbox" data-sync-row="' + esc(row.key) + '" ' + (checked ? 'checked' : '') + ' ' + (row.changed ? '' : 'disabled') + ' /></td>'
+            + '<td style="padding:6px;"><input type="checkbox" class="aus-checkbox" data-sync-row="' + esc(row.key) + '" ' + (checked ? 'checked' : '') + ' ' + (row.changed ? '' : 'disabled') + ' /></td>'
             + '<td style="padding:6px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(row.localModel) + '">' + esc(row.localModel) + '</td>'
             + '<td style="padding:6px;white-space:nowrap;">' + scoreLabel(row) + '</td>'
             + '<td style="padding:6px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ds-text-2);" title="' + esc(row.catalogModel || '') + '">' + esc(row.catalogModel || '—') + '</td>'

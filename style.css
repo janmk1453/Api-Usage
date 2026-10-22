@@ -1624,3 +1624,44 @@
 #aus-panel [data-scroll-x="1"]::-webkit-scrollbar-thumb:hover {
   background: var(--ds-text-3);
 }
+
+/* ── 统一复选框外观：自绘方框（不再依赖 accent-color，避免深/浅色下变黑块与错位） ── */
+#aus-panel input[type="checkbox"].aus-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--ds-border-strong);
+  border-radius: 4px;
+  background: var(--ds-card-inner);
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  vertical-align: middle;
+}
+#aus-panel input[type="checkbox"].aus-checkbox::after {
+  content: '';
+  width: 9px;
+  height: 5px;
+  margin-top: -2px;
+  border-left: 2px solid var(--ds-bg);
+  border-bottom: 2px solid var(--ds-bg);
+  transform: rotate(-45deg);
+  opacity: 0;
+}
+#aus-panel input[type="checkbox"].aus-checkbox:checked {
+  background: var(--ds-text);
+  border-color: var(--ds-text);
+}
+#aus-panel input[type="checkbox"].aus-checkbox:checked::after { opacity: 1; }
+#aus-panel input[type="checkbox"].aus-checkbox:focus-visible {
+  outline: 2px solid var(--ds-orange);
+  outline-offset: 1px;
+}
+#aus-panel input[type="checkbox"].aus-checkbox:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
