@@ -15,7 +15,45 @@ export type WalletPriceRule = {
   peak: WalletPriceTier;
   priceConfigured: boolean;
 };
+/** 套餐额度窗口（本地估算口径） */
+export type WalletPlanWindow = {
+  id: '5h' | '7d' | '1m' | 'custom';
+  label: string;
+  unit: 'token' | 'cost' | 'request';
+  limit: number;
+  resetMode: 'rolling' | 'calendar';
+  /** resetMode=rolling 且 id=custom 时的滚动小时数 */
+  hours?: number;
+};
+
+/** 远端查询到的套餐用量快照 */
+export type PlanQuotaSnapshot = {
+  id: string;
+  label: string;
+  unit: 'percent' | 'count' | 'cost' | 'token';
+  used: number | null;
+  limit: number | null;
+  remaining: number | null;
+  resetAt: number | null;
+  source: 'remote';
+  checkedAt: number;
+};
+
+/** 套餐额度（只在钱包页展示，仅供展示参考，不参与计费与导出） */
+export type WalletPlan = {
+  enabled: boolean;
+  label?: string;
+  windows: WalletPlanWindow[];
+  remote?: PlanQuotaSnapshot[];
+  remoteAt?: number | null;
+  remoteError?: string | null;
+};
+
 export type WalletBalance = {
+  /** 余额查询适配器 id；空则由地址自动识别 */
+  adapter?: string | null;
+  /** new-api 等需要的用户 ID（New-Api-User 头） */
+  userId?: string | null;
   mode: WalletBalanceMode;
   amount: string | null;
   currency: WalletCurrency;
@@ -70,6 +108,8 @@ export type WalletConfig = {
   weekendOffpeak: boolean;
   credentials: WalletCredentialObservation[];
   models: WalletModel[];
+  /** 套餐额度（CodePlan 类），仅展示用 */
+  plan?: WalletPlan;
   collapsed: boolean;
   createdAt: number;
   updatedAt: number;

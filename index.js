@@ -3,12 +3,12 @@ import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from ".
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { c as saveExtensionSettings, d as historyRecordKey, i as getExtensionSettings, u as saveHot } from "./persistence-C4IJVd-B.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as DEEPSEEK_WALLET_ID, C as findWalletModel, E as walletPendingModelCount, S as findWalletForHistory, T as walletBalanceToCny, _ as normalizeModel, a as decryptKey, b as defaultContextLimitForModel, c as isTruncatedFinish, d as calcCost, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, j as WALLET_CATALOG_PROVIDERS, l as DataEvents, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, w as mergeWalletCollections } from "./repository-amYRMrqm.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, a as decryptKey, c as isTruncatedFinish, d as calcCost, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-CtjJtPhT.js";
 import { a as isUnsafeKey$1, c as localDay$1, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay, t as esc$2, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-CkKG5JR0.js";
-import { r as recalcAllCosts, t as installInterception } from "./interception-Bvb0Xpuv.js";
-import { i as saveApiKey, n as queryBalance, r as queryWalletBalance } from "./balance-DQEQi8QK.js";
-import { c as walletSyncStatus, i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev, t as applySyncPlan } from "./pricing-sync-CYpuFVv-.js";
+import { r as recalcAllCosts, t as installInterception } from "./interception-B7OkhTwG.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, i as saveApiKey, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-yd2ZFi0D.js";
+import { c as walletSyncStatus, i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev, t as applySyncPlan } from "./pricing-sync-CVyzrHKV.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -2464,7 +2464,7 @@ function renderSettings(doc) {
 		state$2.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state$2.settings });
 		try {
-			import("./balance-DQEQi8QK.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-yd2ZFi0D.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2509,7 +2509,7 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-amYRMrqm.js").then((n) => n.n);
+				const { repository } = await import("./repository-CtjJtPhT.js").then((n) => n.n);
 				const { state: st } = await import("./store-BhaWFCjs.js").then((n) => n.i);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
@@ -2659,7 +2659,7 @@ function renderSettings(doc) {
 					intervalDrop.style.display = "none";
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-CYpuFVv-.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./pricing-sync-CVyzrHKV.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 						import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};
@@ -2681,7 +2681,7 @@ function renderSettings(doc) {
 			if (panel) panel.style.display = enabledEl.checked ? "grid" : "none";
 			let removed = 0;
 			if (!enabledEl.checked) try {
-				const m = await import("./pricing-sync-CYpuFVv-.js").then((n) => n.a);
+				const m = await import("./pricing-sync-CVyzrHKV.js").then((n) => n.a);
 				try {
 					await m.markLegacySyncedModels?.({ skipRerender: true });
 				} catch {}
@@ -2692,7 +2692,7 @@ function renderSettings(doc) {
 			saveHot({ settings: state$2.settings });
 			try {
 				import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
-				import("./pricing-sync-CYpuFVv-.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+				import("./pricing-sync-CVyzrHKV.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 			} catch {}
 			if (removed) {
 				renderModelsEditor(doc);
@@ -9632,373 +9632,6 @@ function initForecastView() {
 	bindGlobalClose();
 }
 //#endregion
-//#region src/services/provider-registry.ts
-var VENDORS = [
-	{
-		id: "deepseek",
-		label: "DeepSeek",
-		color: "#4D6BFE",
-		mark: "DS",
-		hosts: ["deepseek.com"],
-		catalog: "deepseek",
-		modelPrefixes: ["deepseek-"]
-	},
-	{
-		id: "openai",
-		label: "OpenAI",
-		color: "#10A37F",
-		mark: "OA",
-		hosts: ["openai.com", "openai.azure.com"],
-		catalog: "openai",
-		modelPrefixes: [
-			"gpt-",
-			"o1",
-			"o3",
-			"o4",
-			"chatgpt-",
-			"codex-"
-		]
-	},
-	{
-		id: "anthropic",
-		label: "Anthropic",
-		color: "#D97757",
-		mark: "A",
-		hosts: ["anthropic.com", "claude.ai"],
-		catalog: "anthropic",
-		modelPrefixes: ["claude-"]
-	},
-	{
-		id: "google",
-		label: "Google Gemini",
-		color: "#4285F4",
-		mark: "G",
-		hosts: [
-			"googleapis.com",
-			"generativelanguage.googleapis.com",
-			"google.com"
-		],
-		catalog: "google",
-		modelPrefixes: [
-			"gemini-",
-			"gemma-",
-			"learnlm-"
-		]
-	},
-	{
-		id: "xai",
-		label: "xAI",
-		color: "#111827",
-		mark: "X",
-		hosts: ["x.ai"],
-		catalog: "xai",
-		modelPrefixes: ["grok-"]
-	},
-	{
-		id: "moonshot",
-		label: "Moonshot / Kimi",
-		color: "#1F1F1F",
-		mark: "K",
-		hosts: [
-			"moonshot.cn",
-			"moonshot.ai",
-			"kimi.com",
-			"kimi.ai"
-		],
-		catalog: "moonshotai",
-		modelPrefixes: ["kimi-", "moonshot-"]
-	},
-	{
-		id: "zhipu",
-		label: "Z.ai / 智谱 GLM",
-		color: "#3859FF",
-		mark: "智",
-		hosts: [
-			"bigmodel.cn",
-			"z.ai",
-			"zhipuai.cn"
-		],
-		catalog: "zai",
-		modelPrefixes: ["glm-", "zai-"]
-	},
-	{
-		id: "minimax",
-		label: "MiniMax",
-		color: "#F23F5D",
-		mark: "MM",
-		hosts: [
-			"minimaxi.com",
-			"minimaxi.io",
-			"minimax.chat",
-			"minimax.io"
-		],
-		catalog: "minimax",
-		modelPrefixes: [
-			"minimax-",
-			"abab",
-			"m2",
-			"hailuo"
-		]
-	},
-	{
-		id: "mistral",
-		label: "Mistral",
-		color: "#FF7000",
-		mark: "MI",
-		hosts: ["mistral.ai"],
-		catalog: "mistral",
-		modelPrefixes: [
-			"mistral-",
-			"codestral-",
-			"pixtral-",
-			"magistral-",
-			"devstral-",
-			"ministral-"
-		]
-	},
-	{
-		id: "cohere",
-		label: "Cohere",
-		color: "#39594D",
-		mark: "C",
-		hosts: ["cohere.ai", "cohere.com"],
-		catalog: "cohere",
-		modelPrefixes: [
-			"command-",
-			"c4ai-",
-			"embed-"
-		]
-	},
-	{
-		id: "openrouter",
-		label: "OpenRouter",
-		color: "#6467F2",
-		mark: "OR",
-		hosts: ["openrouter.ai"],
-		catalog: null,
-		modelPrefixes: []
-	},
-	{
-		id: "siliconflow",
-		label: "硅基流动",
-		color: "#7C3AED",
-		mark: "硅",
-		hosts: ["siliconflow.cn", "siliconflow.com"],
-		catalog: null,
-		modelPrefixes: []
-	},
-	{
-		id: "stepfun",
-		label: "阶跃星辰",
-		color: "#0E7490",
-		mark: "阶",
-		hosts: ["stepfun.com", "stepfun.ai"],
-		catalog: null,
-		modelPrefixes: ["step-"]
-	},
-	{
-		id: "novita",
-		label: "Novita",
-		color: "#0EA5E9",
-		mark: "N",
-		hosts: ["novita.ai"],
-		catalog: null,
-		modelPrefixes: []
-	},
-	{
-		id: "groq",
-		label: "Groq",
-		color: "#F55036",
-		mark: "GQ",
-		hosts: ["groq.com"],
-		catalog: null,
-		modelPrefixes: []
-	},
-	{
-		id: "together",
-		label: "Together",
-		color: "#0F6FFF",
-		mark: "T",
-		hosts: ["together.xyz", "together.ai"],
-		catalog: null,
-		modelPrefixes: []
-	},
-	{
-		id: "fireworks",
-		label: "Fireworks",
-		color: "#F97316",
-		mark: "FW",
-		hosts: ["fireworks.ai"],
-		catalog: null,
-		modelPrefixes: []
-	},
-	{
-		id: "dashscope",
-		label: "阿里云百炼 / 通义",
-		color: "#FF6A00",
-		mark: "通",
-		hosts: [
-			"aliyuncs.com",
-			"dashscope.aliyuncs.com",
-			"aliyun.com"
-		],
-		catalog: null,
-		modelPrefixes: [
-			"qwen",
-			"qwq-",
-			"qvq-"
-		]
-	},
-	{
-		id: "volcengine",
-		label: "火山方舟 / 豆包",
-		color: "#1664FF",
-		mark: "火",
-		hosts: [
-			"volces.com",
-			"volcengine.com",
-			"bytepluses.com"
-		],
-		catalog: null,
-		modelPrefixes: ["doubao-", "ep-"]
-	},
-	{
-		id: "baidu",
-		label: "百度千帆 / 文心",
-		color: "#2932E1",
-		mark: "百",
-		hosts: ["baidubce.com", "baidu.com"],
-		catalog: null,
-		modelPrefixes: ["ernie-"]
-	},
-	{
-		id: "tencent",
-		label: "腾讯混元",
-		color: "#0052D9",
-		mark: "混",
-		hosts: ["tencentcloudapi.com", "tencent.com"],
-		catalog: null,
-		modelPrefixes: ["hunyuan-"]
-	},
-	{
-		id: "xfyun",
-		label: "讯飞星火",
-		color: "#1F7AFF",
-		mark: "讯",
-		hosts: ["xf-yun.com", "xfyun.cn"],
-		catalog: null,
-		modelPrefixes: ["spark-", "generalv"]
-	},
-	{
-		id: "github",
-		label: "GitHub Models",
-		color: "#24292F",
-		mark: "GH",
-		hosts: [
-			"githubcopilot.com",
-			"models.github.ai",
-			"github.com"
-		],
-		catalog: null,
-		modelPrefixes: []
-	},
-	{
-		id: "cursor",
-		label: "Cursor",
-		color: "#111827",
-		mark: "CU",
-		hosts: ["cursor.com", "cursor.sh"],
-		catalog: null,
-		modelPrefixes: []
-	}
-];
-/** 酒馆接入类型 → 供应商 */
-var SOURCE_TYPE_MAP = {
-	deepseek: "deepseek",
-	openai: "openai",
-	claude: "anthropic",
-	makersuite: "google",
-	vertexai: "google",
-	mistralai: "mistral",
-	xai: "xai",
-	moonshot: "moonshot",
-	zai: "zhipu",
-	minimax: "minimax",
-	cohere: "cohere",
-	groq: "groq",
-	together: "together",
-	fireworks: "fireworks",
-	dashscope: "dashscope",
-	volcengine: "volcengine",
-	baidu: "baidu",
-	hunyuan: "tencent",
-	xfyun: "xfyun",
-	openrouter: "openrouter"
-};
-function vendorById(id) {
-	const key = String(id || "").trim().toLowerCase();
-	if (!key) return null;
-	return VENDORS.find((vendor) => vendor.id === key) || null;
-}
-/** 从任意地址/标签文本中提取主机名（无协议亦可） */
-function extractHost(raw) {
-	const text = String(raw ?? "").trim().toLowerCase();
-	if (!text) return "";
-	const host = text.replace(/^[a-z][a-z0-9+.-]*:\/\//, "").split("/")[0].split("?")[0].split("#")[0].split(":")[0].replace(/^www\./, "");
-	return host.includes(".") ? host : "";
-}
-/** 主机名 → 供应商：要求主域精确或子域后缀匹配，避免仿冒域名误判 */
-function vendorFromHost(host) {
-	const target = extractHost(host);
-	if (!target) return null;
-	let best = null;
-	let bestLength = 0;
-	for (const vendor of VENDORS) for (const domain of vendor.hosts) if (target === domain || target.endsWith("." + domain)) {
-		if (domain.length > bestLength) {
-			best = vendor;
-			bestLength = domain.length;
-		}
-	}
-	return best;
-}
-/**
-* 供应商识别四级回退：接入地址 → 接入类型 → 模型名前缀。
-* 全部失败返回 null（UI 退回单字符标识）。
-*/
-function resolveVendor(input) {
-	for (const raw of [
-		input.endpointDisplay,
-		input.endpointLabel,
-		input.endpointId
-	]) {
-		const vendor = vendorFromHost(String(raw ?? ""));
-		if (vendor) return vendor;
-	}
-	const bySource = SOURCE_TYPE_MAP[String(input.sourceType || "").trim().toLowerCase()];
-	if (bySource) return vendorById(bySource) || null;
-	const models = (input.models || []).map((item) => String(item || "").trim().toLowerCase()).filter(Boolean);
-	if (models.length) {
-		const counts = /* @__PURE__ */ new Map();
-		for (const model of models) for (const vendor of VENDORS) {
-			if (!vendor.modelPrefixes.length) continue;
-			if (vendor.modelPrefixes.some((prefix) => model.startsWith(prefix))) counts.set(vendor.id, (counts.get(vendor.id) || 0) + 1);
-		}
-		let winner = null;
-		let winnerCount = 0;
-		for (const [id, count] of counts) if (count > winnerCount) {
-			winner = id;
-			winnerCount = count;
-		}
-		if (winner && winnerCount * 2 >= models.length) return vendorById(winner);
-	}
-	return null;
-}
-/** 未识别时的兜底字标：取名称首个有意义字符（剥离协议与 api./www. 前缀） */
-function vendorInitialFallback(name) {
-	const first = String(name || "").trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/^api\./i, "").replace(/^[^0-9a-zA-Z\u4e00-\u9fa5]+/, "").charAt(0);
-	return first ? first.toUpperCase() : "?";
-}
-//#endregion
 //#region src/ui/wallet-sync-preview.ts
 var OVERLAY_ID = "aus-wallet-sync-overlay";
 var MODE_LABELS = [
@@ -10181,6 +9814,331 @@ async function openWalletSyncPreview(options = {}) {
 	render();
 }
 //#endregion
+//#region src/services/plan-quota.ts
+var HOUR = 36e5;
+var DAY = 24 * HOUR;
+/** 窗口起点（滚动窗口回溯，自然月按本地时间月初） */
+function planWindowStart(window, now) {
+	if (window.resetMode === "calendar") {
+		const date = new Date(now);
+		date.setDate(1);
+		date.setHours(0, 0, 0, 0);
+		return date.getTime();
+	}
+	if (window.id === "5h") return now - 5 * HOUR;
+	if (window.id === "7d") return now - 7 * DAY;
+	if (window.id === "1m") return now - 30 * DAY;
+	return now - (Number.isFinite(window.hours) && window.hours > 0 ? window.hours : 5) * HOUR;
+}
+/** 窗口周期（毫秒） */
+function planWindowSpan(window) {
+	if (window.id === "5h") return 5 * HOUR;
+	if (window.id === "7d") return 7 * DAY;
+	if (window.id === "1m") return 30 * DAY;
+	return (Number.isFinite(window.hours) && window.hours > 0 ? window.hours : 5) * HOUR;
+}
+/** 整体重置时刻：只有自然月窗口才有（滚动窗口随记录滑出逐步恢复） */
+function planWindowResetAt(window, now) {
+	if (window.resetMode !== "calendar") return null;
+	const date = new Date(now);
+	date.setMonth(date.getMonth() + 1, 1);
+	date.setHours(0, 0, 0, 0);
+	return date.getTime();
+}
+function entryTokens(entry) {
+	const value = entry.total_tokens ?? entry.totalTokens;
+	return Number.isFinite(Number(value)) ? Number(value) : 0;
+}
+function entryCost(entry) {
+	const value = entry.cost ?? entry.total_cost;
+	return Number.isFinite(Number(value)) ? Number(value) : 0;
+}
+function computePlanWindowUsage(window, entries, walletId, now = Date.now()) {
+	const startAt = planWindowStart(window, now);
+	const resetAt = planWindowResetAt(window, now);
+	let used = 0;
+	for (const entry of entries) {
+		if (!entry) continue;
+		if (entry.walletId !== walletId) continue;
+		const ts = Number(entry.timestamp);
+		if (!Number.isFinite(ts) || ts < startAt) continue;
+		if (window.unit === "token") used += entryTokens(entry);
+		else if (window.unit === "cost") used += entryCost(entry);
+		else used += 1;
+	}
+	const limit = Number.isFinite(window.limit) && window.limit > 0 ? window.limit : 0;
+	const remaining = limit > 0 ? Math.max(0, limit - used) : 0;
+	const ratio = limit > 0 ? Math.min(1, used / limit) : 0;
+	return {
+		window,
+		used,
+		limit,
+		remaining,
+		ratio,
+		startAt,
+		resetAt,
+		unit: window.unit
+	};
+}
+function computeAllPlanUsage(windows, entries, walletId, now = Date.now()) {
+	return (windows || []).map((window) => computePlanWindowUsage(window, entries, walletId, now));
+}
+/** 按近期速率估算耗尽时刻；数据不足返回 null */
+function estimateExhaustion(usage, now = Date.now()) {
+	if (!usage.limit || usage.remaining <= 0 || usage.used <= 0) return null;
+	const elapsed = Math.max(1, now - usage.startAt);
+	const rate = usage.used / elapsed;
+	if (!Number.isFinite(rate) || rate <= 0) return null;
+	const eta = now + usage.remaining / rate;
+	if (eta <= now) return null;
+	if (usage.resetAt != null && eta > usage.resetAt) return null;
+	return eta;
+}
+function formatPlanUnit(value, unit) {
+	if (!Number.isFinite(value)) return "—";
+	if (unit === "cost") return value.toFixed(2);
+	if (unit === "percent") return Math.round(value) + "%";
+	if (value >= 1e4) return (value / 1e4).toFixed(1) + " 万";
+	return String(Math.round(value));
+}
+var PLAN_PRESETS = [
+	{
+		id: "glm-coding",
+		label: "GLM Coding Plan（5 小时 + 每周）",
+		windows: [{
+			id: "5h",
+			label: "5 小时额度",
+			unit: "token",
+			limit: 0,
+			resetMode: "rolling"
+		}, {
+			id: "7d",
+			label: "每周额度",
+			unit: "token",
+			limit: 0,
+			resetMode: "rolling"
+		}]
+	},
+	{
+		id: "minimax-plan",
+		label: "MiniMax 套餐（5 小时 + 每周）",
+		windows: [{
+			id: "5h",
+			label: "5 小时额度",
+			unit: "request",
+			limit: 0,
+			resetMode: "rolling"
+		}, {
+			id: "7d",
+			label: "每周额度",
+			unit: "request",
+			limit: 0,
+			resetMode: "rolling"
+		}]
+	},
+	{
+		id: "kimi-coding",
+		label: "Kimi For Coding（5 小时 + 每周）",
+		windows: [{
+			id: "5h",
+			label: "5 小时额度",
+			unit: "request",
+			limit: 0,
+			resetMode: "rolling"
+		}, {
+			id: "7d",
+			label: "每周额度",
+			unit: "request",
+			limit: 0,
+			resetMode: "rolling"
+		}]
+	},
+	{
+		id: "monthly-cost",
+		label: "月度预算（按消费额）",
+		windows: [{
+			id: "1m",
+			label: "本月预算",
+			unit: "cost",
+			limit: 0,
+			resetMode: "calendar"
+		}]
+	}
+];
+function planPresetById(id) {
+	return PLAN_PRESETS.find((preset) => preset.id === id) || null;
+}
+/** 展示用：窗口标题（含周期说明） */
+function describePlanWindow(window) {
+	if (window.label) return window.label;
+	if (window.id === "5h") return "5 小时额度";
+	if (window.id === "7d") return "每周额度";
+	if (window.id === "1m") return window.resetMode === "calendar" ? "本月额度" : "30 天额度";
+	return (Number.isFinite(window.hours) ? window.hours : 5) + " 小时额度";
+}
+var PLAN_UNIT_LABEL = {
+	token: "tokens",
+	cost: "金额",
+	request: "次请求"
+};
+//#endregion
+//#region src/ui/wallet-plan.ts
+function bar(ratio, color) {
+	return "<div style=\"height:6px;border-radius:999px;background:var(--ds-border);overflow:hidden;\"><div style=\"height:100%;width:" + Math.max(0, Math.min(100, Math.round(ratio * 100))) + "%;background:" + color + ";\"></div></div>";
+}
+function ratioColor(ratio) {
+	if (ratio >= .85) return "var(--ds-red)";
+	if (ratio >= .6) return "var(--ds-orange)";
+	return "var(--ds-green)";
+}
+function relativeTime(timestamp) {
+	if (!timestamp) return "—";
+	const diff = timestamp - Date.now();
+	if (!Number.isFinite(diff)) return "—";
+	if (diff <= 0) return "已重置";
+	const minutes = Math.round(diff / 6e4);
+	if (minutes < 60) return minutes + " 分钟后";
+	const hours = Math.round(minutes / 60);
+	if (hours < 36) return hours + " 小时后";
+	return Math.round(hours / 24) + " 天后";
+}
+function resetLabel(window, resetAt) {
+	if (!resetAt) {
+		const hours = Math.round(planWindowSpan(window) / 36e5);
+		return "滚动窗口（" + (hours >= 24 ? Math.round(hours / 24) + " 天" : hours + " 小时") + "）";
+	}
+	return "重置 " + relativeTime(resetAt);
+}
+function renderRemote(wallet) {
+	const remote = wallet.plan?.remote || [];
+	if (!remote.length) return "";
+	return "<div style=\"display:grid;gap:8px;\">" + remote.map((item) => {
+		const ratio = item.used != null && item.limit ? Math.min(1, item.used / item.limit) : 0;
+		const percent = Math.round(ratio * 100);
+		const left = item.remaining != null ? formatPlanUnit(item.remaining, item.unit === "percent" ? "percent" : item.unit) : formatPlanUnit(Math.max(0, 100 - percent), "percent");
+		return "<div style=\"display:grid;gap:4px;\"><div style=\"display:flex;justify-content:space-between;gap:8px;font-size:var(--aus-fs-sm);\"><span style=\"color:var(--ds-text-2);\">" + esc$2(item.label) + "</span><span style=\"color:" + ratioColor(ratio) + ";font-weight:600;\">已用 " + percent + "% · 剩余 " + esc$2(left) + "</span></div>" + bar(ratio, ratioColor(ratio)) + "<div style=\"font-size:var(--aus-fs-xs,11px);color:var(--ds-text-3);\">远端真值 · 重置 " + esc$2(relativeTime(item.resetAt)) + " · 更新于 " + esc$2(item.checkedAt ? new Date(item.checkedAt).toLocaleTimeString("zh-CN") : "—") + "</div></div>";
+	}).join("") + "</div>";
+}
+function renderLocal(wallet, history) {
+	const plan = wallet.plan;
+	if (!plan || !plan.windows.length) return "";
+	return computeAllPlanUsage(plan.windows, history, wallet.id).map((usage, index) => {
+		const window = usage.window;
+		const eta = estimateExhaustion(usage);
+		const hasLimit = usage.limit > 0;
+		return "<div style=\"display:grid;gap:4px;\" data-plan-row=\"" + index + "\"><div style=\"display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:space-between;\"><span style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-2);\">" + esc$2(describePlanWindow(window)) + "</span><span style=\"display:flex;align-items:center;gap:4px;font-size:var(--aus-fs-sm);\"><input type=\"number\" min=\"0\" step=\"1000\" data-plan-limit=\"" + index + "\" value=\"" + (window.limit || "") + "\" placeholder=\"额度\" style=\"width:96px;padding:3px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);\" /><span style=\"color:var(--ds-text-3);\">" + esc$2(PLAN_UNIT_LABEL[window.unit]) + "</span><button data-plan-reset=\"" + index + "\" title=\"切换重置方式：滚动窗口 / 自然月\" style=\"padding:2px 7px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;\">" + (window.resetMode === "calendar" ? "自然月" : "滚动") + "</button><button data-plan-remove=\"" + index + "\" title=\"移除该窗口\" style=\"padding:2px 6px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;\">" + icon("close", 12) + "</button></span></div>" + (hasLimit ? bar(usage.ratio, ratioColor(usage.ratio)) : "<div style=\"height:6px;border-radius:999px;background:var(--ds-border);\"></div>") + "<div style=\"font-size:var(--aus-fs-xs,11px);color:var(--ds-text-3);\">" + (hasLimit ? "本地估算 · 已用 " + esc$2(formatPlanUnit(usage.used, window.unit)) + " / " + esc$2(formatPlanUnit(usage.limit, window.unit)) + "（" + Math.round(usage.ratio * 100) + "%）· 剩余 " + esc$2(formatPlanUnit(usage.remaining, window.unit)) + " · " + resetLabel(window, usage.resetAt) : "本地估算 · 窗口内已用 " + esc$2(formatPlanUnit(usage.used, window.unit)) + "（填额度后显示比例）· " + resetLabel(window, usage.resetAt)) + (eta ? " · 预计 " + esc$2(relativeTime(eta)) + "耗尽" : "") + "</div></div>";
+	}).join("");
+}
+function renderPlanBlock(wallet, history) {
+	const plan = wallet.plan;
+	const enabled = plan?.enabled === true;
+	const canRemote = !!resolveBalanceAdapter(wallet)?.supports.plan;
+	const header = "<div style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;\"><div><div style=\"font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);\">套餐额度</div><div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">仅供展示参考，不参与计费与导出；" + (canRemote ? "该供应商可查询远端真值" : "该供应商无公开额度接口，按本地历史估算") + "</div></div><div style=\"display:flex;gap:6px;flex-wrap:wrap;\">" + (enabled && canRemote ? "<button data-plan-refresh=\"1\" style=\"padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;display:inline-flex;align-items:center;gap:4px;\">" + icon("refresh", 13) + " 查询额度</button>" : "") + (enabled ? "<button data-plan-disable=\"1\" style=\"padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;\">关闭套餐</button>" : "") + "</div></div>";
+	if (!enabled) {
+		const presets = "<div style=\"display:flex;flex-wrap:wrap;gap:6px;\">" + PLAN_PRESETS.map((preset) => "<button data-plan-preset=\"" + preset.id + "\" style=\"padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;\">" + esc$2(preset.label) + "</button>").join("") + "</div>";
+		return "<div style=\"border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;\">" + header + "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);line-height:1.6;\">选择预设后填写额度即可看到「已用 / 剩余 / 重置倒计时」。额度由本地历史按窗口聚合，缺失历史上限会偏低，请以厂商账单为准。</div>" + presets + "</div>";
+	}
+	const remote = renderRemote(wallet);
+	const local = renderLocal(wallet, history);
+	const error = plan?.remoteError ? "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-red);\">远端查询失败：" + esc$2(plan.remoteError) + "</div>" : "";
+	return "<div style=\"border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;\">" + header + error + (remote ? "<div style=\"border:1px solid var(--ds-border);border-radius:8px;padding:8px;display:grid;gap:8px;\">" + remote + "</div>" : "") + "<div style=\"display:grid;gap:8px;\">" + (local || "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">还没有额度窗口，点下方按钮添加</div>") + "</div><div style=\"display:flex;gap:6px;flex-wrap:wrap;\"><button data-plan-add=\"1\" style=\"padding:5px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;\">+ 添加窗口</button>" + (canRemote && !plan?.remoteAt ? "<button data-plan-refresh=\"1\" style=\"padding:5px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;\">查询远端额度</button>" : "") + "</div></div>";
+}
+function bindPlanBlock(doc, walletId, onChange) {
+	const host = doc.querySelector("[data-wallet-card=\"" + walletId + "\"]");
+	if (!host) return;
+	const updatePlan = (mutate) => {
+		repository.updateWallet(walletId, (wallet) => {
+			const plan = wallet.plan && wallet.plan.enabled !== void 0 ? wallet.plan : {
+				enabled: false,
+				windows: []
+			};
+			mutate(plan);
+			wallet.plan = plan;
+		});
+		onChange();
+	};
+	host.querySelectorAll("[data-plan-preset]").forEach((button) => {
+		button.onclick = (event) => {
+			event.stopPropagation();
+			const preset = planPresetById(button.getAttribute("data-plan-preset") || "");
+			if (!preset) return;
+			updatePlan((plan) => {
+				plan.enabled = true;
+				plan.label = preset.label;
+				plan.windows = preset.windows.map((window) => ({ ...window }));
+			});
+		};
+	});
+	host.querySelectorAll("[data-plan-enable]").forEach((button) => {
+		button.onclick = () => updatePlan((plan) => {
+			plan.enabled = true;
+		});
+	});
+	host.querySelectorAll("[data-plan-disable]").forEach((button) => {
+		button.onclick = (event) => {
+			event.stopPropagation();
+			updatePlan((plan) => {
+				plan.enabled = false;
+			});
+		};
+	});
+	host.querySelectorAll("[data-plan-limit]").forEach((input) => {
+		input.onchange = () => {
+			const index = parseInt(input.getAttribute("data-plan-limit") || "-1", 10);
+			const value = parseFloat(String(input.value || ""));
+			updatePlan((plan) => {
+				const window = plan.windows[index];
+				if (!window) return;
+				window.limit = Number.isFinite(value) && value > 0 ? value : 0;
+			});
+		};
+	});
+	host.querySelectorAll("[data-plan-reset]").forEach((button) => {
+		button.onclick = () => {
+			const index = parseInt(button.getAttribute("data-plan-reset") || "-1", 10);
+			updatePlan((plan) => {
+				const window = plan.windows[index];
+				if (!window) return;
+				window.resetMode = window.resetMode === "calendar" ? "rolling" : "calendar";
+			});
+		};
+	});
+	host.querySelectorAll("[data-plan-remove]").forEach((button) => {
+		button.onclick = () => {
+			const index = parseInt(button.getAttribute("data-plan-remove") || "-1", 10);
+			updatePlan((plan) => {
+				plan.windows.splice(index, 1);
+			});
+		};
+	});
+	host.querySelectorAll("[data-plan-add]").forEach((button) => {
+		button.onclick = () => {
+			updatePlan((plan) => {
+				plan.windows.push({
+					id: "custom",
+					label: "",
+					unit: plan.windows[0]?.unit || "token",
+					limit: 0,
+					resetMode: "rolling",
+					hours: 5
+				});
+			});
+		};
+	});
+	host.querySelectorAll("[data-plan-refresh]").forEach((button) => {
+		button.onclick = async (event) => {
+			event.stopPropagation();
+			if (resolveBalanceAdapter(repository.getWallet(walletId)) && !getWalletApiKey(walletId)) {
+				toast("warning", "请先在该钱包填写查询密钥");
+				return;
+			}
+			button.textContent = "查询中…";
+			await queryWalletBalance(walletId, false);
+			onChange();
+		};
+	});
+}
+//#endregion
 //#region src/ui/wallet-view.ts
 function getDoc$2() {
 	return window.parent?.document ?? document;
@@ -10334,7 +10292,33 @@ function renderCatalogPicker(wallet) {
     </div>
     </div>`;
 }
+function renderAdapterPicker(wallet) {
+	const current = BALANCE_ADAPTERS.find((item) => item.id === wallet.balance.adapter);
+	return `
+    <div style="position:relative;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      <button data-wallet-adapter-btn="1" data-wallet-id="${esc$2(wallet.id)}" style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
+        <span style="color:var(--ds-text-2);">查询适配器</span>
+        <span style="font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$2(current?.label || "自动识别")}</span>
+        ${icon("chevron-down", 14)}
+      </button>
+      <input data-wallet-adapter-user-id="1" data-wallet-id="${esc$2(wallet.id)}" value="${esc$2(wallet.balance.userId || "")}" placeholder="用户 ID（new-api 需要）"
+        style="width:150px;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
+      <div id="aus-wallet-adapter-drop-${esc$2(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:36px;left:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;">
+        ${dropdownHtml(wallet.id, "adapter", [{
+		id: "",
+		label: "自动识别",
+		active: !wallet.balance.adapter
+	}, ...BALANCE_ADAPTERS.map((item) => ({
+		id: item.id,
+		label: item.label + (item.experimental ? "（实验）" : ""),
+		active: item.id === wallet.balance.adapter
+	}))])}
+      </div>
+    </div>`;
+}
 function renderWalletCard(wallet, history) {
+	const balanceAdapter = resolveBalanceAdapter(wallet);
+	const supportsAuto = !!balanceAdapter && (balanceAdapter.supports.balance || balanceAdapter.supports.plan);
 	const visibleModels = wallet.models.filter((model) => model.hidden !== true);
 	const hiddenCount = wallet.models.length - visibleModels.length;
 	const vendor = resolveVendor({
@@ -10390,7 +10374,7 @@ function renderWalletCard(wallet, history) {
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
             <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包余额</div><div style="font-size:17px;font-weight:700;color:var(--ds-text);">${esc$2(walletBalanceText(wallet))}</div></div>
             <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:${isOfficial ? "pointer" : "not-allowed"};">
-              <input type="checkbox" data-wallet-auto-balance="1" data-wallet-id="${esc$2(wallet.id)}" ${wallet.balance.mode === "auto" ? "checked" : ""} ${isOfficial ? "" : "disabled"} /> 自动校准
+              <input type="checkbox" data-wallet-auto-balance="1" data-wallet-id="${esc$2(wallet.id)}" ${wallet.balance.mode === "auto" ? "checked" : ""} ${supportsAuto ? "" : "disabled"} /> 自动校准
             </label>
           </div>
           <div style="display:flex;gap:6px;align-items:center;position:relative;">
@@ -10408,7 +10392,7 @@ function renderWalletCard(wallet, history) {
 	}])}
             </div>
           </div>
-          ${isOfficial ? `
+          ${supportsAuto ? `
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;position:relative;">
               ${renderCredentialPicker(wallet)}
               <button data-wallet-calibrate="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:7px 11px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;">立即校准</button>
@@ -10417,9 +10401,11 @@ function renderWalletCard(wallet, history) {
               <input type="password" data-wallet-api-key="1" data-wallet-id="${esc$2(wallet.id)}" value="" placeholder="${getWalletApiKey(wallet.id) ? "已保存钱包校准密钥（留空不修改）" : "填写钱包校准密钥"}" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
               <button data-wallet-save-key="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">保存密钥</button>
             </div>
-            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">自动校准仅支持 DeepSeek 官方，勾选后按设置页的校准间隔自动查询；主密钥：${esc$2(selectedCredential?.label || "未指定")}</div>
+            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">查询方式：${esc$2(balanceAdapter?.label || "无")}${balanceAdapter?.note ? "（" + esc$2(balanceAdapter.note) + "）" : ""}；勾选「自动校准」后按设置页校准间隔轮询；主密钥：${esc$2(selectedCredential?.label || "未指定")}</div>
             <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc$2(item.label)).join("、") : "未识别"}</div>
-          ` : `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">该接入暂不支持自动余额校准，请手工维护余额。</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc$2(item.label)).join("、") : "未识别"}</div>`}
+          ` : `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">该接入暂无可用查询适配器，请手工维护余额；中转站可在「查询适配器」中选择 new-api 后填写系统访问令牌。</div>
+            ${renderAdapterPicker(wallet)}
+            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc$2(item.label)).join("、") : "未识别"}</div>`}
         </div>
 
         <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;position:relative;">
@@ -10448,6 +10434,8 @@ function renderWalletCard(wallet, history) {
           </table>
         </div>
       </div>
+
+      ${renderPlanBlock(wallet, history)}
       </div>
     </section>`;
 }
@@ -10473,6 +10461,8 @@ async function renderWalletView() {
 	const ignored = repository.getIgnoredWalletIds();
 	const ignoredSet = new Set(ignored);
 	const active = wallets.filter((wallet) => !ignoredSet.has(wallet.id));
+	const planWallets = active.filter((wallet) => wallet.plan?.enabled === true);
+	const planRemoteCount = planWallets.filter((wallet) => (wallet.plan?.remote || []).length > 0).length;
 	let balanceCny = 0;
 	let balanceCount = 0;
 	let pending = 0;
@@ -10486,10 +10476,11 @@ async function renderWalletView() {
 	}
 	host.innerHTML = `
     <div style="display:grid;gap:12px;">
-      <div class="ds-card aus-wallet-summary" id="aus-wallet-summary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+      <div class="ds-card aus-wallet-summary" id="aus-wallet-summary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
         <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包余额合计</div><div style="font-size:20px;font-weight:700;color:var(--ds-text);margin-top:4px;">${money(balanceCny, 2)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">${balanceCount} 个钱包已设置余额</div></div>
         <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包数量</div><div style="font-size:20px;font-weight:700;color:var(--ds-text);margin-top:4px;">${active.length}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">已忽略 ${ignored.length} 个</div></div>
         <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">待定价模型</div><div style="font-size:20px;font-weight:700;color:${pending ? "var(--ds-red)" : "var(--ds-green)"};margin-top:4px;">${pending}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">保存价格后自动重算</div></div>
+        <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">套餐额度</div><div style="font-size:20px;font-weight:700;color:var(--ds-text);margin-top:4px;">${planWallets.length}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">${planRemoteCount ? `${planRemoteCount} 个远端真值` : "本地估算，仅展示"}</div></div>
       </div>
       ${active.map((wallet) => renderWalletCard(wallet, history)).join("")}
       <div class="ds-card">
@@ -10560,7 +10551,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-DQEQi8QK.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-yd2ZFi0D.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -10819,6 +10810,26 @@ function bindWalletView(doc) {
 			dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
 		};
 	});
+	doc.querySelectorAll("[data-wallet-adapter-btn]").forEach((button) => {
+		button.onclick = (event) => {
+			event.stopPropagation();
+			const walletId = button.getAttribute("data-wallet-id");
+			const dropdown = doc.getElementById("aus-wallet-adapter-drop-" + walletId);
+			if (!dropdown) return;
+			closeOtherDropdowns(dropdown.id);
+			dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
+		};
+	});
+	doc.querySelectorAll("[data-wallet-adapter-user-id]").forEach((input) => {
+		input.onchange = () => {
+			const walletId = input.getAttribute("data-wallet-id");
+			const value = String(input.value || "").trim();
+			if (!walletId) return;
+			repository.updateWallet(walletId, (wallet) => {
+				wallet.balance.userId = value || null;
+			});
+		};
+	});
 	doc.querySelectorAll("[data-wallet-catalog-btn]").forEach((button) => {
 		button.onclick = (event) => {
 			event.stopPropagation();
@@ -10852,6 +10863,9 @@ function bindWalletView(doc) {
 			else if (kind === "catalog") repository.updateWallet(walletId, (wallet) => {
 				wallet.catalogProvider = value || null;
 			});
+			else if (kind === "adapter") repository.updateWallet(walletId, (wallet) => {
+				wallet.balance.adapter = value || null;
+			});
 			else if (kind === "credential") repository.updateWallet(walletId, (wallet) => {
 				wallet.balance.primaryCredentialId = value || null;
 			});
@@ -10859,11 +10873,14 @@ function bindWalletView(doc) {
 			renderWalletView();
 		};
 	});
+	for (const wallet of repository.getWallets()) bindPlanBlock(doc, wallet.id, () => {
+		renderWalletView();
+	});
 	if (!bindWalletView._outsideBound) {
 		bindWalletView._outsideBound = true;
 		doc.addEventListener("click", (event) => {
 			const target = event.target;
-			if (!target?.closest?.("[data-wallet-dropdown]") && !target?.closest?.("[data-wallet-currency-btn]") && !target?.closest?.("[data-wallet-catalog-btn]") && !target?.closest?.("[data-wallet-credential-btn]")) closeDropdowns();
+			if (!target?.closest?.("[data-wallet-dropdown]") && !target?.closest?.("[data-wallet-currency-btn]") && !target?.closest?.("[data-wallet-catalog-btn]") && !target?.closest?.("[data-wallet-credential-btn]") && !target?.closest?.("[data-wallet-adapter-btn]")) closeDropdowns();
 		});
 	}
 }
@@ -12253,7 +12270,7 @@ function openPanel() {
 	panelOpen = true;
 	refreshUI();
 	try {
-		import("./collector-F_KJsjVA.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-0CHow_vj.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-CZCvbZd5.js").then((m) => m.maybeAutoCheck());
@@ -12473,10 +12490,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-Bvb0Xpuv.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-B7OkhTwG.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-F_KJsjVA.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-0CHow_vj.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -12484,10 +12501,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-Bvb0Xpuv.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-B7OkhTwG.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-F_KJsjVA.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-0CHow_vj.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -12577,13 +12594,13 @@ async function onDelete() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-DQEQi8QK.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-yd2ZFi0D.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CkKG5JR0.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CYpuFVv-.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-CVyzrHKV.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 	try {
@@ -12610,19 +12627,19 @@ async function onDelete() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-Bvb0Xpuv.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-B7OkhTwG.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-F_KJsjVA.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-0CHow_vj.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-DQEQi8QK.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-yd2ZFi0D.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-CYpuFVv-.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-CVyzrHKV.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -12632,10 +12649,10 @@ async function onDisable() {
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-Bvb0Xpuv.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-B7OkhTwG.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-F_KJsjVA.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-0CHow_vj.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -12654,13 +12671,13 @@ async function onDisable() {
 		unwatchSystemTheme();
 	} catch {}
 	try {
-		(await import("./balance-DQEQi8QK.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-yd2ZFi0D.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CkKG5JR0.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CYpuFVv-.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-CVyzrHKV.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -12688,19 +12705,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-DQEQi8QK.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-yd2ZFi0D.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CkKG5JR0.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CYpuFVv-.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-CVyzrHKV.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-F_KJsjVA.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-0CHow_vj.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -12722,7 +12739,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-CYpuFVv-.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-CVyzrHKV.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

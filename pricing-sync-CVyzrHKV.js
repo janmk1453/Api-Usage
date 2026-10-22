@@ -3,7 +3,7 @@ import { r as state } from "./store-BhaWFCjs.js";
 import { a as HIDDEN_PRICING_MODELS, d as PRICING_SYNC_SOURCE, l as PRICING, u as PRICING_SYNC_FALLBACK } from "./pricing-Bc-qEvy8.js";
 import { u as saveHot } from "./persistence-C4IJVd-B.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { _ as normalizeModel, m as isDeepSeekOfficialModel, t as repository, y as cloneWallet } from "./repository-amYRMrqm.js";
+import { _ as normalizeModel, m as isDeepSeekOfficialModel, t as repository, v as cloneWallet } from "./repository-CtjJtPhT.js";
 import { a as getWalletExchangeRate } from "./currency-CkKG5JR0.js";
 /** 已知同义模型名（仅做等价加分，不强绑）：归一化后仍不同但确为同一模型的写法 */
 var MODEL_ALIAS_HINTS = {
@@ -31,7 +31,7 @@ var NEUTRAL_SUFFIX_TOKENS = /* @__PURE__ */ new Set([
 var DATE_SUFFIX_8 = /-\d{8}$/;
 var DATE_SUFFIX_DASHED = /-\d{4}-\d{2}-\d{2}$/;
 var DATE_SUFFIX_4 = /-\d{4}$/;
-var VERSION_SUFFIX = /-v\d+(?::\d+)?$/;
+var VERSION_SUFFIX = /-v\d+:\d+$/;
 /** 归一化模型名：去前缀/供应商路径/日期与版本后缀，统一分隔符与小数点 */
 function normalizeModelName(raw) {
 	let key = String(raw ?? "").trim().toLowerCase();

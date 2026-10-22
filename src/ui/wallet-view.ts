@@ -11,6 +11,8 @@ import { getWalletApiKey, saveWalletApiKey } from '../services/wallet-secrets';
 import { walletSyncStatus } from '../services/pricing-sync';
 import { openWalletSyncPreview } from './wallet-sync-preview';
 import { resolveVendor, vendorInitialFallback } from '../services/provider-registry';
+import { BALANCE_ADAPTERS, resolveBalanceAdapter } from '../services/balance-adapters';
+import { renderPlanBlock, bindPlanBlock } from './wallet-plan';
 import { toast } from '../utils/logger';
 import { esc } from '../utils/date';
 import { CN_HOLIDAY_COVERAGE_LABEL } from '../constants/holidays';
@@ -193,7 +195,29 @@ function renderCatalogPicker(wallet: WalletConfig): string {
     </div>`;
 }
 
+function renderAdapterPicker(wallet: WalletConfig): string {
+  const current = BALANCE_ADAPTERS.find((item) => item.id === wallet.balance.adapter);
+  return `
+    <div style="position:relative;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      <button data-wallet-adapter-btn="1" data-wallet-id="${esc(wallet.id)}" style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
+        <span style="color:var(--ds-text-2);">查询适配器</span>
+        <span style="font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(current?.label || '自动识别')}</span>
+        ${icon('chevron-down', 14)}
+      </button>
+      <input data-wallet-adapter-user-id="1" data-wallet-id="${esc(wallet.id)}" value="${esc(wallet.balance.userId || '')}" placeholder="用户 ID（new-api 需要）"
+        style="width:150px;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
+      <div id="aus-wallet-adapter-drop-${esc(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:36px;left:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;">
+        ${dropdownHtml(wallet.id, 'adapter', [
+          { id: '', label: '自动识别', active: !wallet.balance.adapter },
+          ...BALANCE_ADAPTERS.map((item) => ({ id: item.id, label: item.label + (item.experimental ? '（实验）' : ''), active: item.id === wallet.balance.adapter })),
+        ])}
+      </div>
+    </div>`;
+}
+
 function renderWalletCard(wallet: WalletConfig, history: any[]): string {
+  const balanceAdapter = resolveBalanceAdapter(wallet);
+  const supportsAuto = !!balanceAdapter && (balanceAdapter.supports.balance || balanceAdapter.supports.plan);
   const visibleModels = wallet.models.filter((model) => model.hidden !== true);
   const hiddenCount = wallet.models.length - visibleModels.length;
   // 供应商识别（地址 → 接入类型 → 模型名前缀），失败退回名称首字符
@@ -246,7 +270,7 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
             <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包余额</div><div style="font-size:17px;font-weight:700;color:var(--ds-text);">${esc(walletBalanceText(wallet))}</div></div>
             <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:${isOfficial ? 'pointer' : 'not-allowed'};">
-              <input type="checkbox" data-wallet-auto-balance="1" data-wallet-id="${esc(wallet.id)}" ${wallet.balance.mode === 'auto' ? 'checked' : ''} ${isOfficial ? '' : 'disabled'} /> 自动校准
+              <input type="checkbox" data-wallet-auto-balance="1" data-wallet-id="${esc(wallet.id)}" ${wallet.balance.mode === 'auto' ? 'checked' : ''} ${supportsAuto ? '' : 'disabled'} /> 自动校准
             </label>
           </div>
           <div style="display:flex;gap:6px;align-items:center;position:relative;">
@@ -256,7 +280,7 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
               ${dropdownHtml(wallet.id, 'currency', [{ id: 'CNY', label: 'CNY', active: wallet.balance.currency === 'CNY' }, { id: 'USD', label: 'USD', active: wallet.balance.currency === 'USD' }])}
             </div>
           </div>
-          ${isOfficial ? `
+          ${supportsAuto ? `
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;position:relative;">
               ${renderCredentialPicker(wallet)}
               <button data-wallet-calibrate="1" data-wallet-id="${esc(wallet.id)}" style="padding:7px 11px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;">立即校准</button>
@@ -265,9 +289,11 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
               <input type="password" data-wallet-api-key="1" data-wallet-id="${esc(wallet.id)}" value="" placeholder="${getWalletApiKey(wallet.id) ? '已保存钱包校准密钥（留空不修改）' : '填写钱包校准密钥'}" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
               <button data-wallet-save-key="1" data-wallet-id="${esc(wallet.id)}" style="padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">保存密钥</button>
             </div>
-            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">自动校准仅支持 DeepSeek 官方，勾选后按设置页的校准间隔自动查询；主密钥：${esc(selectedCredential?.label || '未指定')}</div>
+            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">查询方式：${esc(balanceAdapter?.label || '无')}${balanceAdapter?.note ? '（' + esc(balanceAdapter.note) + '）' : ''}；勾选「自动校准」后按设置页校准间隔轮询；主密钥：${esc(selectedCredential?.label || '未指定')}</div>
             <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc(item.label)).join('、') : '未识别'}</div>
-          ` : `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">该接入暂不支持自动余额校准，请手工维护余额。</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc(item.label)).join('、') : '未识别'}</div>`}
+          ` : `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">该接入暂无可用查询适配器，请手工维护余额；中转站可在「查询适配器」中选择 new-api 后填写系统访问令牌。</div>
+            ${renderAdapterPicker(wallet)}
+            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc(item.label)).join('、') : '未识别'}</div>`}
         </div>
 
         <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;position:relative;">
@@ -296,6 +322,8 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
           </table>
         </div>
       </div>
+
+      ${renderPlanBlock(wallet, history)}
       </div>
     </section>`;
 }
@@ -325,6 +353,8 @@ export async function renderWalletView(): Promise<void> {
   const ignored = repository.getIgnoredWalletIds();
   const ignoredSet = new Set(ignored);
   const active = wallets.filter((wallet) => !ignoredSet.has(wallet.id));
+  const planWallets = active.filter((wallet) => wallet.plan?.enabled === true);
+  const planRemoteCount = planWallets.filter((wallet) => (wallet.plan?.remote || []).length > 0).length;
   let balanceCny = 0;
   let balanceCount = 0;
   let pending = 0;
@@ -338,10 +368,11 @@ export async function renderWalletView(): Promise<void> {
   }
   host.innerHTML = `
     <div style="display:grid;gap:12px;">
-      <div class="ds-card aus-wallet-summary" id="aus-wallet-summary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+      <div class="ds-card aus-wallet-summary" id="aus-wallet-summary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
         <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包余额合计</div><div style="font-size:20px;font-weight:700;color:var(--ds-text);margin-top:4px;">${money(balanceCny, 2)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">${balanceCount} 个钱包已设置余额</div></div>
         <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包数量</div><div style="font-size:20px;font-weight:700;color:var(--ds-text);margin-top:4px;">${active.length}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">已忽略 ${ignored.length} 个</div></div>
         <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">待定价模型</div><div style="font-size:20px;font-weight:700;color:${pending ? 'var(--ds-red)' : 'var(--ds-green)'};margin-top:4px;">${pending}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">保存价格后自动重算</div></div>
+        <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">套餐额度</div><div style="font-size:20px;font-weight:700;color:var(--ds-text);margin-top:4px;">${planWallets.length}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">${planRemoteCount ? `${planRemoteCount} 个远端真值` : '本地估算，仅展示'}</div></div>
       </div>
       ${active.map((wallet) => renderWalletCard(wallet, history)).join('')}
       <div class="ds-card">
@@ -669,6 +700,26 @@ function bindWalletView(doc: Document): void {
     };
   });
 
+  doc.querySelectorAll('[data-wallet-adapter-btn]').forEach((button: any) => {
+    button.onclick = (event: Event) => {
+      event.stopPropagation();
+      const walletId = button.getAttribute('data-wallet-id');
+      const dropdown = doc.getElementById('aus-wallet-adapter-drop-' + walletId) as HTMLElement | null;
+      if (!dropdown) return;
+      closeOtherDropdowns(dropdown.id);
+      dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+    };
+  });
+
+  doc.querySelectorAll('[data-wallet-adapter-user-id]').forEach((input: any) => {
+    input.onchange = () => {
+      const walletId = input.getAttribute('data-wallet-id');
+      const value = String(input.value || '').trim();
+      if (!walletId) return;
+      repository.updateWallet(walletId, (wallet) => { wallet.balance.userId = value || null; });
+    };
+  });
+
   doc.querySelectorAll('[data-wallet-catalog-btn]').forEach((button: any) => {
     button.onclick = (event: Event) => {
       event.stopPropagation();
@@ -702,6 +753,8 @@ function bindWalletView(doc: Document): void {
         repository.updateWallet(walletId, (wallet) => { wallet.balance.currency = value as WalletCurrency; });
       } else if (kind === 'catalog') {
         repository.updateWallet(walletId, (wallet) => { wallet.catalogProvider = value || null; });
+      } else if (kind === 'adapter') {
+        repository.updateWallet(walletId, (wallet) => { wallet.balance.adapter = value || null; });
       } else if (kind === 'credential') {
         repository.updateWallet(walletId, (wallet) => { wallet.balance.primaryCredentialId = value || null; });
       }
@@ -710,11 +763,15 @@ function bindWalletView(doc: Document): void {
     };
   });
 
+  for (const wallet of repository.getWallets()) {
+    bindPlanBlock(doc, wallet.id, () => { renderWalletView(); });
+  }
+
   if (!(bindWalletView as any)._outsideBound) {
     (bindWalletView as any)._outsideBound = true;
     doc.addEventListener('click', (event: any) => {
       const target = event.target as HTMLElement;
-      if (!target?.closest?.('[data-wallet-dropdown]') && !target?.closest?.('[data-wallet-currency-btn]') && !target?.closest?.('[data-wallet-catalog-btn]') && !target?.closest?.('[data-wallet-credential-btn]')) {
+      if (!target?.closest?.('[data-wallet-dropdown]') && !target?.closest?.('[data-wallet-currency-btn]') && !target?.closest?.('[data-wallet-catalog-btn]') && !target?.closest?.('[data-wallet-credential-btn]') && !target?.closest?.('[data-wallet-adapter-btn]')) {
         closeDropdowns();
       }
     });
