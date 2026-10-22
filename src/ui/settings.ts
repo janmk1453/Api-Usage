@@ -13,7 +13,7 @@ import { recalcAllCosts } from '../services/interception';
 import { generateDebugBatch } from '../services/debug';
 import { getDisplayCurrency } from '../services/currency';
 import { getPricing as resolvePricing } from '../services/pricing';
-import { syncPricingFromModelsDev, previewSync, fetchModelsDevCatalog, removeSyncedModels, isSyncedCustomModel } from '../services/pricing-sync';
+import { syncPricingFromModelsDev, buildSyncPlan, fetchModelsDevCatalog, removeSyncedModels, isSyncedCustomModel } from '../services/pricing-sync';
 import { fetchLiveRate } from '../services/currency';
 import { toast } from '../utils/logger';
 import { repository } from '../data/repository';
@@ -200,7 +200,7 @@ export function renderSettings(doc: Document) {
       <!-- 模型价格自动同步（models.dev） -->
       <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">模型价格自动同步（models.dev）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-pricing-sync-enabled" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-pricing-sync-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
         <div id="aus-pricing-sync-panel" style="display:${s.pricingSync?.enabled ? 'grid':'none'};margin-top:10px;gap:10px;">
-          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;">开启后所有价格、余额、图表将以 <b style="color:var(--ds-text);">美元 $/USD</b> 展示（按汇率动态换算），自动从 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 拉取模型价格。各钱包在钱包页选择“价格来源供应商”，同步只写入对应钱包；DeepSeek 峰价按谷价 2× 合成。功能默认关闭。<br />钱包中锁定或手工维护的价格受同步模式保护；<b style="color:var(--ds-text);">关闭本开关会移除未锁定的同步价格</b>。</div>
+          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;">开启后所有价格、余额、图表将以 <b style="color:var(--ds-text);">美元 $/USD</b> 展示（按汇率动态换算），并从 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 拉取模型价格。<b style="color:var(--ds-text);">同步只按钱包里已识别的模型名做模糊匹配后写入该模型的价格，不会把供应商目录里的模型整批塞进钱包</b>；各钱包在钱包页选择“价格来源供应商”，DeepSeek 峰价按谷价 2× 合成。功能默认关闭。<br />钱包中锁定或手工维护的价格受同步模式保护；关闭本开关只会清理旧版本全量灌入的残留条目，已同步的价格保留。</div>
           <div style="display:flex;align-items:center;justify-content:space-between;position:relative;"><span style="font-size:var(--aus-fs-base);color:var(--ds-text);">同步模式</span><div id="aus-pricing-sync-mode-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);cursor:pointer;"><span id="aus-pricing-sync-mode-label" style="font-weight:600;color:var(--ds-text);">仅新增</span>${icon('chevron-down', 14)}</div><div id="aus-pricing-sync-mode-dropdown" style="display:none;position:absolute;top:40px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
             <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">汇率 USD→CNY</div><input id="aus-exchange-rate" type="number" step="0.0001" min="0" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div>
@@ -530,8 +530,8 @@ export function renderSettings(doc: Document) {
     const modeBtn = doc.getElementById('aus-pricing-sync-mode-btn') as HTMLElement | null;
     const modeLabel = doc.getElementById('aus-pricing-sync-mode-label') as HTMLElement | null;
     const modeDrop = doc.getElementById('aus-pricing-sync-mode-dropdown') as HTMLElement | null;
-    const modeMap: any = { 'add-missing': '仅新增', 'overwrite-unlocked': '覆盖未锁定', 'overwrite-all': '全部覆盖' };
-    if (modeLabel) modeLabel.textContent = modeMap[ps.mode] || '仅新增';
+    const modeMap: any = { 'add-missing': '只补未定价', 'overwrite-unlocked': '覆盖未锁定', 'overwrite-all': '全部覆盖' };
+    if (modeLabel) modeLabel.textContent = modeMap[ps.mode] || '只补未定价';
     if (modeDrop) {
       modeDrop.innerHTML = Object.entries(modeMap).map(([k, l]: any) => `<div data-mode="${k}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${ps.mode===k?'background:var(--ds-card);font-weight:600;':''}">${l}</div>`).join('');
       modeDrop.querySelectorAll('[data-mode]').forEach((el: any) => {
@@ -583,7 +583,7 @@ export function renderSettings(doc: Document) {
       (state.settings as any).pricingSync.enabled = enabledEl.checked;
       if (slider) slider.style.left = enabledEl.checked ? '23px' : '3px';
       if (panel) panel.style.display = enabledEl.checked ? 'grid' : 'none';
-      // 关闭自动同步时清理同步进来的模型价格（否则会以隐藏态残留，影响计价口径）
+      // 关闭自动同步时只清理旧版本“全量灌入”的残留条目（有 priceMatch 的已同步价格保留）
       let removed = 0;
       if (!enabledEl.checked) {
         try {
@@ -595,7 +595,7 @@ export function renderSettings(doc: Document) {
       }
       saveHot({ settings: state.settings });
       try { import('../services/currency').then(m=> (m as any).restartRateTimer?.()); import('../services/pricing-sync').then(m=> (m as any).restartPricingSyncTimer?.()); } catch {}
-      if (removed) { renderModelsEditor(doc); fillDebugModelSelect(doc); void recalcCostsAndRefresh(); toast('success', `已移除 ${removed} 个同步模型价格`); }
+      if (removed) { renderModelsEditor(doc); fillDebugModelSelect(doc); void recalcCostsAndRefresh(); toast('success', `已清理 ${removed} 个旧版残留同步条目`); }
       try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
       const unitEl = doc.getElementById('aus-model-price-unit') as HTMLElement | null;
       if (unitEl) { try{  unitEl.textContent = getDisplayCurrency().code + '/百万 tokens'; }catch{} }
@@ -632,14 +632,20 @@ export function renderSettings(doc: Document) {
     const previewBtn = doc.getElementById('aus-btn-preview-pricing') as HTMLElement | null;
     const previewHost = doc.getElementById('aus-pricing-sync-preview') as HTMLElement | null;
     if (previewBtn && previewHost) previewBtn.onclick = async () => {
-      previewBtn.textContent='预览中…'; (previewBtn as any).disabled=true;
+      previewBtn.textContent = '预览中…'; (previewBtn as any).disabled = true;
       try {
         const catalog = await fetchModelsDevCatalog();
-        const p = previewSync(catalog);
-        previewHost.style.display='block';
-        previewHost.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">共 ${p.total} 模型 · 新增 ${p.added} 更新 ${p.updated} 跳过 ${p.skipped}</div>` + p.samples.map((s:any)=>`<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--ds-border);padding:4px 0;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;">${esc(s.model)}</span><span>${s.hit.toFixed(4)}/${s.miss.toFixed(4)}/${s.output.toFixed(4)}</span></div>`).join('') + `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">单位 ${getDisplayCurrency().code}/百万 · 峰价为谷价 2×（DeepSeek）</div>`;
-      } catch(e:any){ previewHost.style.display='block'; previewHost.textContent='预览失败：'+(e?.message||e); }
-      finally { previewBtn.textContent='预览'; (previewBtn as any).disabled=false; }
+        const plan = buildSyncPlan(catalog);
+        const summary = plan.summary;
+        const rows = plan.rows.filter((row) => row.catalogModel).slice(0, 8);
+        previewHost.style.display = 'block';
+        previewHost.innerHTML = '<div style="font-weight:600;margin-bottom:6px;">匹配 ' + summary.matched
+          + '（精确 ' + summary.exact + ' / 模糊 ' + summary.fuzzy + (summary.ambiguous ? ' / 歧义 ' + summary.ambiguous : '')
+          + '）· 未匹配 ' + summary.unmatched + ' · 将写入 ' + summary.write + ' · 将更新 ' + summary.update + ' · 跳过 ' + summary.skipped + '</div>'
+          + rows.map((row) => '<div style="display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--ds-border);padding:4px 0;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;" title="' + esc(row.localModel) + '">' + esc(row.localModel) + '</span><span style="color:var(--ds-text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;" title="' + esc(row.catalogModel || '') + '">' + esc(row.catalogModel || '') + '</span><span>' + Math.round(row.score * 100) + '%</span></div>').join('')
+          + '<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">按钱包已识别模型模糊匹配，只写价格不新增模型；到钱包页可逐条勾选后应用。</div>';
+      } catch (e: any) { previewHost.style.display = 'block'; previewHost.textContent = '预览失败：' + (e?.message || e); }
+      finally { previewBtn.textContent = '预览'; (previewBtn as any).disabled = false; }
     };
   } catch {}
 

@@ -423,6 +423,18 @@ function normalizeAliases(raw, current) {
 	}
 	return out;
 }
+function normalizePriceMatch(raw) {
+	if (!raw || typeof raw !== "object") return null;
+	const catalogModel = cleanText(raw.catalogModel);
+	const provider = cleanText(raw.provider);
+	if (!catalogModel || !provider) return null;
+	return {
+		provider,
+		catalogModel,
+		score: finiteNumber(raw.score, 0),
+		matchedAt: finiteNumber(raw.matchedAt, 0)
+	};
+}
 function normalizeWalletModel(raw, now = Date.now()) {
 	if (!raw || typeof raw !== "object") return null;
 	const sourceModel = cleanText(raw.sourceModel || raw.model);
@@ -448,6 +460,8 @@ function normalizeWalletModel(raw, now = Date.now()) {
 		price: normalizeWalletPriceRule(raw.price),
 		source,
 		locked: raw.locked === true,
+		priceMatch: normalizePriceMatch(raw.priceMatch),
+		hidden: raw.hidden === true,
 		discoveredAt,
 		lastSeen: finiteNumber(raw.lastSeen, discoveredAt),
 		updatedAt: finiteNumber(raw.updatedAt, discoveredAt)
@@ -638,7 +652,8 @@ function cloneWallet(wallet) {
 		models: wallet.models.map((item) => ({
 			...item,
 			aliases: [...item.aliases],
-			price: cloneWalletPriceRule(item.price)
+			price: cloneWalletPriceRule(item.price),
+			priceMatch: item.priceMatch ? { ...item.priceMatch } : item.priceMatch ?? null
 		}))
 	};
 }
@@ -732,6 +747,7 @@ function walletBalanceToCny(wallet, exchangeRate) {
 }
 function walletPendingModelCount(wallet) {
 	return (wallet.models || []).filter((model) => {
+		if (model.hidden === true) return false;
 		if (wallet.id === "wallet:deepseek-official" && model.source === "builtin") return false;
 		return model.price.priceConfigured !== true;
 	}).length;
@@ -2143,7 +2159,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && state.settings.pricingSync?.enabled) try {
-						import("./pricing-sync-DUVox4wX.js").then((n) => n.i).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-CYpuFVv-.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;

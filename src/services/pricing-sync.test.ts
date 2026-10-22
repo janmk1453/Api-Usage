@@ -1,27 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { state } from '../store/index';
 import { defaultSettings } from '../types/settings';
-import { createWalletFromConnection } from '../data/wallets';
+import { createWalletFromConnection, observeModel } from '../data/wallets';
 import { defaultCatalogProvider } from '../types/wallet';
-import { previewSync, syncPricingFromModelsDev } from './pricing-sync';
+import { buildSyncPlan, syncPricingFromModelsDev } from './pricing-sync';
 
-function catalogWithPrice(input: number, miss = 1, output = 2) {
+function catalogWithPrice(input: number, cacheRead = 0.2, output = 2) {
   return {
     deepseek: {
       models: {
-        'relay-model': {
-          cost: {
-            input,
-            output,
-            cache_read: miss,
-          },
-        },
+        'relay-model': { cost: { input, output, cache_read: cacheRead } },
+        'unused-model': { cost: { input: 9, output: 9, cache_read: 9 } },
       },
     },
   };
 }
 
-describe('钱包价格同步', () => {
+function currentWallet() {
+  return state.wallets.find((wallet) => wallet.endpointId === 'sync-endpoint')!;
+}
+
+describe('钱包价格同步（模糊匹配写入）', () => {
   beforeEach(() => {
     state.settings = defaultSettings();
     state.settings.pricingSync.enabled = true;
@@ -35,6 +34,7 @@ describe('钱包价格同步', () => {
       credentialLabel: null,
     }, state.settings, 1000)!;
     wallet.catalogProvider = defaultCatalogProvider('deepseek');
+    observeModel(wallet, 'relay-model', 1000);
     state.wallets = [wallet];
     state.walletIgnored = [];
   });
@@ -43,32 +43,63 @@ describe('钱包价格同步', () => {
     vi.unstubAllGlobals();
   });
 
-  it('预览时按钱包统计新增模型', () => {
-    const preview = previewSync(catalogWithPrice(1, 0.2, 2));
-    expect(preview).toMatchObject({ added: 1, total: 1 });
+  it('只为已识别模型匹配价格，不遍历目录全集也不新增模型', () => {
+    const plan = buildSyncPlan(catalogWithPrice(1));
+    expect(plan.summary.catalogModels).toBe(2);
+    expect(plan.rows).toHaveLength(1);
+    expect(plan.rows[0]).toMatchObject({
+      localModel: 'relay-model',
+      catalogModel: 'relay-model',
+      action: 'write',
+      changed: true,
+    });
   });
 
-  it('同步写入钱包并遵守仅新增模式', async () => {
+  it('同步写入钱包价格并留下匹配元数据', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => catalogWithPrice(1, 0.2, 2),
+      json: async () => catalogWithPrice(1),
     }));
 
-    const first = await syncPricingFromModelsDev({ silent: true });
-    expect(first).toMatchObject({ added: 1, total: 1 });
-    const syncedWallet = state.wallets.find((wallet) => wallet.endpointId === 'sync-endpoint')!;
-    const syncedModel = syncedWallet.models.find((model) => model.sourceModel === 'relay-model')!;
-    expect(syncedModel).toMatchObject({
-      sourceModel: 'relay-model',
-      source: 'sync',
-    });
-    expect(syncedModel.price.offpeak).toMatchObject({
-      hit: 1.4,
-      miss: 7,
-      output: 14,
-    });
+    const first = await syncPricingFromModelsDev({ silent: true, force: true });
+    expect(first?.rows[0]?.action).toBe('write');
 
-    const second = await syncPricingFromModelsDev({ silent: true });
-    expect(second).toMatchObject({ added: 1, skipped: 1, total: 2 });
+    const wallet = currentWallet();
+    // 目录里的 unused-model 不得被灌入钱包
+    expect(wallet.models).toHaveLength(1);
+    const synced = wallet.models[0];
+    expect(synced.source).toBe('sync');
+    expect(synced.price.priceConfigured).toBe(true);
+    expect(synced.price.offpeak).toMatchObject({ hit: 1.4, miss: 7, output: 14 });
+    expect(synced.priceMatch).toMatchObject({ provider: 'deepseek', catalogModel: 'relay-model', score: 1 });
+  });
+
+  it('只补未定价模式（add-missing）不覆盖已有价格', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => catalogWithPrice(1),
+    }));
+    await syncPricingFromModelsDev({ silent: true, force: true });
+
+    const second = await syncPricingFromModelsDev({ silent: true, force: true });
+    const row = second?.rows.find((item) => item.localModel === 'relay-model');
+    expect(row?.action).toBe('skip-same');
+    expect(row?.changed).toBe(false);
+  });
+
+  it('覆盖未锁定模式且尊重 locked 保护', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => catalogWithPrice(1),
+    }));
+    await syncPricingFromModelsDev({ silent: true, force: true });
+    const wallet = currentWallet();
+    wallet.models[0].locked = true;
+
+    const plan = buildSyncPlan(catalogWithPrice(3), { mode: 'overwrite-unlocked' });
+    expect(plan.rows.find((item) => item.localModel === 'relay-model')?.action).toBe('skip-locked');
+
+    const forced = buildSyncPlan(catalogWithPrice(3), { mode: 'overwrite-all' });
+    expect(forced.rows.find((item) => item.localModel === 'relay-model')?.action).toBe('update');
   });
 });

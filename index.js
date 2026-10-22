@@ -3,12 +3,12 @@ import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from ".
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { c as saveExtensionSettings, d as historyRecordKey, i as getExtensionSettings, u as saveHot } from "./persistence-C4IJVd-B.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as DEEPSEEK_WALLET_ID, C as findWalletModel, E as walletPendingModelCount, S as findWalletForHistory, T as walletBalanceToCny, _ as normalizeModel, a as decryptKey, b as defaultContextLimitForModel, c as isTruncatedFinish, d as calcCost, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, j as WALLET_CATALOG_PROVIDERS, l as DataEvents, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, w as mergeWalletCollections } from "./repository-wjTo-V4v.js";
+import { A as DEEPSEEK_WALLET_ID, C as findWalletModel, E as walletPendingModelCount, S as findWalletForHistory, T as walletBalanceToCny, _ as normalizeModel, a as decryptKey, b as defaultContextLimitForModel, c as isTruncatedFinish, d as calcCost, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, j as WALLET_CATALOG_PROVIDERS, l as DataEvents, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, w as mergeWalletCollections } from "./repository-amYRMrqm.js";
 import { a as isUnsafeKey$1, c as localDay$1, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay, t as esc$2, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-CkKG5JR0.js";
-import { r as recalcAllCosts, t as installInterception } from "./interception-CxrqO6op.js";
-import { i as saveApiKey, n as queryBalance, r as queryWalletBalance } from "./balance-DEVpZGmD.js";
-import { a as removeSyncedModels, n as isSyncedCustomModel, o as syncPricingFromModelsDev, r as previewSync, t as fetchModelsDevCatalog } from "./pricing-sync-DUVox4wX.js";
+import { r as recalcAllCosts, t as installInterception } from "./interception-Bvb0Xpuv.js";
+import { i as saveApiKey, n as queryBalance, r as queryWalletBalance } from "./balance-DQEQi8QK.js";
+import { c as walletSyncStatus, i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev, t as applySyncPlan } from "./pricing-sync-CYpuFVv-.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -662,7 +662,7 @@ function resolveTheme(mode, win) {
 	if (m === "auto") return systemPrefersDark(win) ? "dark" : "light";
 	return "light";
 }
-function getDoc$11() {
+function getDoc$12() {
 	try {
 		const parentDoc = window.parent?.document;
 		if (parentDoc) return parentDoc;
@@ -677,7 +677,7 @@ function getDoc$11() {
 function paintTheme(mode, resolved) {
 	const r = resolved ?? resolveTheme(mode);
 	try {
-		const doc = getDoc$11();
+		const doc = getDoc$12();
 		const panel = doc.getElementById("aus-panel");
 		if (panel) panel.setAttribute("data-ds-theme", r);
 		const overlay = doc.getElementById("aus-overlay");
@@ -734,7 +734,7 @@ function watchSystemTheme(win) {
 			paintTheme("auto", e?.matches ? "dark" : "light");
 			let hasPanel = false;
 			try {
-				hasPanel = !!getDoc$11().getElementById("aus-panel");
+				hasPanel = !!getDoc$12().getElementById("aus-panel");
 			} catch {}
 			if (hasPanel) repaintDynamic();
 		};
@@ -2224,7 +2224,7 @@ function renderSettings(doc) {
       <!-- 模型价格自动同步（models.dev） -->
       <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">模型价格自动同步（models.dev）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-pricing-sync-enabled" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-pricing-sync-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
         <div id="aus-pricing-sync-panel" style="display:${s.pricingSync?.enabled ? "grid" : "none"};margin-top:10px;gap:10px;">
-          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;">开启后所有价格、余额、图表将以 <b style="color:var(--ds-text);">美元 $/USD</b> 展示（按汇率动态换算），自动从 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 拉取模型价格。各钱包在钱包页选择“价格来源供应商”，同步只写入对应钱包；DeepSeek 峰价按谷价 2× 合成。功能默认关闭。<br />钱包中锁定或手工维护的价格受同步模式保护；<b style="color:var(--ds-text);">关闭本开关会移除未锁定的同步价格</b>。</div>
+          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;">开启后所有价格、余额、图表将以 <b style="color:var(--ds-text);">美元 $/USD</b> 展示（按汇率动态换算），并从 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 拉取模型价格。<b style="color:var(--ds-text);">同步只按钱包里已识别的模型名做模糊匹配后写入该模型的价格，不会把供应商目录里的模型整批塞进钱包</b>；各钱包在钱包页选择“价格来源供应商”，DeepSeek 峰价按谷价 2× 合成。功能默认关闭。<br />钱包中锁定或手工维护的价格受同步模式保护；关闭本开关只会清理旧版本全量灌入的残留条目，已同步的价格保留。</div>
           <div style="display:flex;align-items:center;justify-content:space-between;position:relative;"><span style="font-size:var(--aus-fs-base);color:var(--ds-text);">同步模式</span><div id="aus-pricing-sync-mode-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);cursor:pointer;"><span id="aus-pricing-sync-mode-label" style="font-weight:600;color:var(--ds-text);">仅新增</span>${icon("chevron-down", 14)}</div><div id="aus-pricing-sync-mode-dropdown" style="display:none;position:absolute;top:40px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
             <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">汇率 USD→CNY</div><input id="aus-exchange-rate" type="number" step="0.0001" min="0" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div>
@@ -2464,7 +2464,7 @@ function renderSettings(doc) {
 		state$2.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state$2.settings });
 		try {
-			import("./balance-DEVpZGmD.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-DQEQi8QK.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2509,7 +2509,7 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-wjTo-V4v.js").then((n) => n.n);
+				const { repository } = await import("./repository-amYRMrqm.js").then((n) => n.n);
 				const { state: st } = await import("./store-BhaWFCjs.js").then((n) => n.i);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
@@ -2615,11 +2615,11 @@ function renderSettings(doc) {
 		const modeLabel = doc.getElementById("aus-pricing-sync-mode-label");
 		const modeDrop = doc.getElementById("aus-pricing-sync-mode-dropdown");
 		const modeMap = {
-			"add-missing": "仅新增",
+			"add-missing": "只补未定价",
 			"overwrite-unlocked": "覆盖未锁定",
 			"overwrite-all": "全部覆盖"
 		};
-		if (modeLabel) modeLabel.textContent = modeMap[ps.mode] || "仅新增";
+		if (modeLabel) modeLabel.textContent = modeMap[ps.mode] || "只补未定价";
 		if (modeDrop) {
 			modeDrop.innerHTML = Object.entries(modeMap).map(([k, l]) => `<div data-mode="${k}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${ps.mode === k ? "background:var(--ds-card);font-weight:600;" : ""}">${l}</div>`).join("");
 			modeDrop.querySelectorAll("[data-mode]").forEach((el) => {
@@ -2659,7 +2659,7 @@ function renderSettings(doc) {
 					intervalDrop.style.display = "none";
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-DUVox4wX.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+						import("./pricing-sync-CYpuFVv-.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 						import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};
@@ -2681,7 +2681,7 @@ function renderSettings(doc) {
 			if (panel) panel.style.display = enabledEl.checked ? "grid" : "none";
 			let removed = 0;
 			if (!enabledEl.checked) try {
-				const m = await import("./pricing-sync-DUVox4wX.js").then((n) => n.i);
+				const m = await import("./pricing-sync-CYpuFVv-.js").then((n) => n.a);
 				try {
 					await m.markLegacySyncedModels?.({ skipRerender: true });
 				} catch {}
@@ -2692,13 +2692,13 @@ function renderSettings(doc) {
 			saveHot({ settings: state$2.settings });
 			try {
 				import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
-				import("./pricing-sync-DUVox4wX.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+				import("./pricing-sync-CYpuFVv-.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 			} catch {}
 			if (removed) {
 				renderModelsEditor(doc);
 				fillDebugModelSelect(doc);
 				recalcCostsAndRefresh();
-				toast("success", `已移除 ${removed} 个同步模型价格`);
+				toast("success", `已清理 ${removed} 个旧版残留同步条目`);
 			}
 			try {
 				globalThis.ApiUsageStat?.refreshUI?.();
@@ -2773,9 +2773,11 @@ function renderSettings(doc) {
 			previewBtn.disabled = true;
 			try {
 				const catalog = await fetchModelsDevCatalog();
-				const p = previewSync(catalog);
+				const plan = buildSyncPlan(catalog);
+				const summary = plan.summary;
+				const rows = plan.rows.filter((row) => row.catalogModel).slice(0, 8);
 				previewHost.style.display = "block";
-				previewHost.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">共 ${p.total} 模型 · 新增 ${p.added} 更新 ${p.updated} 跳过 ${p.skipped}</div>` + p.samples.map((s) => `<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--ds-border);padding:4px 0;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;">${esc(s.model)}</span><span>${s.hit.toFixed(4)}/${s.miss.toFixed(4)}/${s.output.toFixed(4)}</span></div>`).join("") + `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">单位 ${getDisplayCurrency().code}/百万 · 峰价为谷价 2×（DeepSeek）</div>`;
+				previewHost.innerHTML = "<div style=\"font-weight:600;margin-bottom:6px;\">匹配 " + summary.matched + "（精确 " + summary.exact + " / 模糊 " + summary.fuzzy + (summary.ambiguous ? " / 歧义 " + summary.ambiguous : "") + "）· 未匹配 " + summary.unmatched + " · 将写入 " + summary.write + " · 将更新 " + summary.update + " · 跳过 " + summary.skipped + "</div>" + rows.map((row) => "<div style=\"display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--ds-border);padding:4px 0;\"><span style=\"overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;\" title=\"" + esc(row.localModel) + "\">" + esc(row.localModel) + "</span><span style=\"color:var(--ds-text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;\" title=\"" + esc(row.catalogModel || "") + "\">" + esc(row.catalogModel || "") + "</span><span>" + Math.round(row.score * 100) + "%</span></div>").join("") + "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;\">按钱包已识别模型模糊匹配，只写价格不新增模型；到钱包页可逐条勾选后应用。</div>";
 			} catch (e) {
 				previewHost.style.display = "block";
 				previewHost.textContent = "预览失败：" + (e?.message || e);
@@ -3178,7 +3180,7 @@ function fillDebugModelSelect(doc) {
 //#region src/ui/compare.ts
 var selOld = null;
 var selNew = null;
-function getDoc$10() {
+function getDoc$11() {
 	return window.parent?.document ?? document;
 }
 function diffMessages(oldMsgs, newMsgs) {
@@ -3192,7 +3194,7 @@ function diffMessages(oldMsgs, newMsgs) {
 	return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${esc$2(a.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-red-bg);color:var(--ds-red);padding:0 2px;border-radius:3px;\">" + esc$2(a.slice(i, i + 200)) + "</span>" + esc$2(a.slice(i + 200, i + 280))}</div><div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${esc$2(b.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-green-bg);color:var(--ds-green);padding:0 2px;border-radius:3px;\">" + esc$2(b.slice(i, i + 200)) + "</span>" + esc$2(b.slice(i + 200, i + 280))}</div></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
 }
 function bindHistoryCompare() {
-	const doc = getDoc$10();
+	const doc = getDoc$11();
 	doc.addEventListener("click", (e) => {
 		const t = e.target;
 		if (!t) return;
@@ -3209,7 +3211,7 @@ function bindHistoryCompare() {
 	});
 }
 function renderDiff() {
-	const host = getDoc$10().getElementById("aus-diff");
+	const host = getDoc$11().getElementById("aus-diff");
 	if (!host) return;
 	if (selOld == null || selNew == null) {
 		host.innerHTML = "<div style=\"text-align:center;padding:16px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">已选 " + (selOld != null ? "旧 " : "") + (selNew != null ? "新 " : "") + "，请在历史中各选一条 旧/新 进行对比</div>";
@@ -4439,18 +4441,18 @@ function computeModelEfficiency(history, options = {}) {
 }
 //#endregion
 //#region src/ui/heatmap.ts
-function getDoc$9() {
+function getDoc$10() {
 	return window.parent?.document ?? document;
 }
 function themeIsDark() {
 	try {
-		return getDoc$9().getElementById("aus-panel")?.getAttribute("data-ds-theme") === "dark";
+		return getDoc$10().getElementById("aus-panel")?.getAttribute("data-ds-theme") === "dark";
 	} catch {
 		return false;
 	}
 }
 function renderHeatmap(filtered) {
-	const doc = getDoc$9();
+	const doc = getDoc$10();
 	const container = doc.getElementById("aus-heatmap-container-overview") || doc.getElementById("aus-heatmap-container");
 	const legendEl = doc.getElementById("aus-heatmap-legend-overview") || doc.getElementById("aus-heatmap-legend");
 	const labelsEl = doc.getElementById("aus-heatmap-labels-overview") || doc.getElementById("aus-heatmap-labels");
@@ -4598,7 +4600,7 @@ function renderHeatmap(filtered) {
 }
 //#endregion
 //#region src/ui/overview.ts
-function getDoc$8() {
+function getDoc$9() {
 	return window.parent?.document ?? document;
 }
 function fmt(n) {
@@ -4833,7 +4835,7 @@ var overviewWalletBound = false;
 var overviewWalletViewportBound = false;
 var overviewAsyncToken = 0;
 function closeOverviewWalletDropdown() {
-	const dropdown = getDoc$8().getElementById("aus-overview-wallet-dropdown");
+	const dropdown = getDoc$9().getElementById("aus-overview-wallet-dropdown");
 	if (dropdown) dropdown.style.display = "none";
 }
 function bindOverviewWalletViewport() {
@@ -4846,12 +4848,12 @@ function bindOverviewWalletViewport() {
 		window.addEventListener("resize", closeOverviewWalletDropdown, { passive: true });
 	} catch {}
 	try {
-		getDoc$8().getElementById("aus-main")?.addEventListener("scroll", closeOverviewWalletDropdown, { passive: true });
+		getDoc$9().getElementById("aus-main")?.addEventListener("scroll", closeOverviewWalletDropdown, { passive: true });
 	} catch {}
 }
 function positionOverviewWalletDropdown(btn, dropdown) {
 	try {
-		const panelRect = getDoc$8().getElementById("aus-panel")?.getBoundingClientRect();
+		const panelRect = getDoc$9().getElementById("aus-panel")?.getBoundingClientRect();
 		const btnRect = btn.getBoundingClientRect();
 		const viewportWidth = window.parent?.innerWidth ?? window.innerWidth;
 		const viewportHeight = window.parent?.innerHeight ?? window.innerHeight;
@@ -5548,12 +5550,12 @@ var state$1 = {
 		pieMode: "token"
 	}
 };
-function getDoc$7() {
+function getDoc$8() {
 	return window.parent?.document ?? document;
 }
 function themeColor$3(name, fallback) {
 	try {
-		const doc = getDoc$7();
+		const doc = getDoc$8();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -5645,7 +5647,7 @@ function renderExtraCharts(filtered) {
 }
 async function renderOne$1(id, filtered) {
 	try {
-		const el = getDoc$7().getElementById(`aus-chart-${id}`);
+		const el = getDoc$8().getElementById(`aus-chart-${id}`);
 		if (!el) return;
 		if (id === "req" && state$1[id].x === "round") state$1[id].x = "day";
 		if (id === "pie") {
@@ -5783,7 +5785,7 @@ async function renderOne$1(id, filtered) {
 		}));
 	} catch (e) {
 		try {
-			const el2 = getDoc$7().getElementById(`aus-chart-${id}`);
+			const el2 = getDoc$8().getElementById(`aus-chart-${id}`);
 			if (el2) el2.innerHTML = "<div style=\"text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);\">图表加载失败: " + (e?.message || e) + "</div>";
 		} catch {}
 		try {
@@ -5999,7 +6001,7 @@ async function drawBarLine(el, id, labels, series) {
 	}
 }
 function initExtraCharts() {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	for (const id of Object.keys(CHART_DEFS)) {
 		if (!CHART_DEFS[id].hasX) continue;
 		const yBtn = doc.getElementById(`aus-extra-y-${id}`);
@@ -6035,7 +6037,7 @@ function initExtraCharts() {
 	});
 }
 function renderExtraY(id) {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	const drop = doc.getElementById(`aus-extra-y-drop-${id}`);
 	const label = doc.getElementById(`aus-extra-y-label-${id}`);
 	if (!drop) return;
@@ -6058,7 +6060,7 @@ function renderExtraY(id) {
 	});
 }
 function renderExtraX(id) {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	const drop = doc.getElementById(`aus-extra-x-drop-${id}`);
 	const label = doc.getElementById(`aus-extra-x-label-${id}`);
 	if (!drop) return;
@@ -6103,12 +6105,12 @@ var state = {
 	token: { x: "day" },
 	req: { x: "day" }
 };
-function getDoc$6() {
+function getDoc$7() {
 	return window.parent?.document ?? document;
 }
 function themeColor$2(name, fallback) {
 	try {
-		const doc = getDoc$6();
+		const doc = getDoc$7();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -6160,7 +6162,7 @@ function renderModelTrends(filtered) {
 }
 async function renderOne(id, filtered) {
 	try {
-		const doc = getDoc$6();
+		const doc = getDoc$7();
 		const el = doc.getElementById(`aus-chart-model-${id}`);
 		if (!el) return;
 		const xKey = state[id].x;
@@ -6347,7 +6349,7 @@ async function renderOne(id, filtered) {
 		}, 60);
 	} catch (e) {
 		try {
-			const el2 = getDoc$6().getElementById(`aus-chart-model-${id}`);
+			const el2 = getDoc$7().getElementById(`aus-chart-model-${id}`);
 			if (el2) el2.innerHTML = "<div style=\"text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);\">图表加载失败</div>";
 		} catch {}
 		try {
@@ -6356,7 +6358,7 @@ async function renderOne(id, filtered) {
 	}
 }
 function initModelTrends() {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	for (const id of ["token", "req"]) {
 		const btn = doc.getElementById(`aus-modeltrends-x-${id}`);
 		const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
@@ -6375,7 +6377,7 @@ function initModelTrends() {
 	});
 }
 function renderXDrop(id) {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
 	const label = doc.getElementById(`aus-modeltrends-x-label-${id}`);
 	if (!drop) return;
@@ -6414,7 +6416,7 @@ var summarySortKey = null;
 var summarySortDir = "desc";
 var lastSummaryFiltered = null;
 function updateSummarySortHeader() {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	doc.querySelectorAll("#aus-model-summary thead th[data-sort-key]").forEach((th) => {
 		th.style.color = "";
 		th.style.fontWeight = "";
@@ -6432,7 +6434,7 @@ function updateSummarySortHeader() {
 	}
 }
 function bindSummarySort() {
-	const ths = getDoc$5().querySelectorAll("#aus-model-summary thead th[data-sort-key]");
+	const ths = getDoc$6().querySelectorAll("#aus-model-summary thead th[data-sort-key]");
 	if (!ths.length) return;
 	if (bindSummarySort._bound) return;
 	bindSummarySort._bound = true;
@@ -6456,12 +6458,12 @@ function bindSummarySort() {
 		});
 	});
 }
-function getDoc$5() {
+function getDoc$6() {
 	return window.parent?.document ?? document;
 }
 function themeColor$1(name, fallback) {
 	try {
-		const doc = getDoc$5();
+		const doc = getDoc$6();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -6576,7 +6578,7 @@ function currentStatsFilter() {
 	};
 }
 function updateRangeHighlight() {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	doc.querySelectorAll("[data-range]").forEach((el) => {
 		if (el.getAttribute("data-range") === currentRange) {
 			el.style.background = "var(--ds-card)";
@@ -6590,7 +6592,7 @@ function updateRangeHighlight() {
 	if (calWrap) calWrap.style.display = currentRange === "custom" ? "block" : "none";
 }
 function renderCalendar() {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const cal = doc.getElementById("aus-date-calendar");
 	if (!cal) return;
 	updateRangeHighlight();
@@ -6625,7 +6627,7 @@ function renderCalendar() {
 	if (applyBtn) applyBtn.onclick = apply;
 }
 function updatePickerLabel() {
-	const label = getDoc$5().getElementById("aus-range-label");
+	const label = getDoc$6().getElementById("aus-range-label");
 	if (!label) return;
 	const map = {
 		all: "全部",
@@ -6642,7 +6644,7 @@ function updatePickerLabel() {
 	updateRangeHighlight();
 }
 function renderModelPicker(modelsHist) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const dropdown = doc.getElementById("aus-model-dropdown");
 	const label = doc.getElementById("aus-model-label");
 	if (!dropdown || !label) return;
@@ -6676,7 +6678,7 @@ function renderModelPicker(modelsHist) {
 	});
 }
 function renderChatPicker(chatHist) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const dropdown = doc.getElementById("aus-chat-dropdown");
 	const label = doc.getElementById("aus-chat-label");
 	if (!dropdown || !label) return;
@@ -6703,7 +6705,7 @@ function renderChatPicker(chatHist) {
 	});
 }
 function renderEndpointPicker(history) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const dropdown = doc.getElementById("aus-endpoint-dropdown");
 	const label = doc.getElementById("aus-endpoint-label");
 	if (!dropdown || !label) return;
@@ -6730,7 +6732,7 @@ function renderEndpointPicker(history) {
 	});
 }
 function renderCredentialPicker$1(history, endpoint = selectedEndpoint) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const dropdown = doc.getElementById("aus-credential-dropdown");
 	const label = doc.getElementById("aus-credential-label");
 	if (!dropdown || !label) return;
@@ -6757,7 +6759,7 @@ function renderCredentialPicker$1(history, endpoint = selectedEndpoint) {
 }
 function positionFilterDropdown(btn, dropdown) {
 	try {
-		const panel = getDoc$5().getElementById("aus-panel");
+		const panel = getDoc$6().getElementById("aus-panel");
 		if (!panel) return;
 		const panelRect = panel.getBoundingClientRect();
 		const btnRect = btn.getBoundingClientRect();
@@ -6772,7 +6774,7 @@ function positionFilterDropdown(btn, dropdown) {
 	} catch {}
 }
 function closeFilterDropdowns(except) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	if (except !== "range") {
 		pickerOpen = false;
 		const el = doc.getElementById("aus-range-dropdown");
@@ -6800,7 +6802,7 @@ function closeFilterDropdowns(except) {
 	}
 }
 function bindPicker() {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const btn = doc.getElementById("aus-range-btn");
 	const dropdown = doc.getElementById("aus-range-dropdown");
 	if (btn && dropdown) {
@@ -6908,7 +6910,7 @@ function bindPicker() {
 var chartYOpen = false;
 var chartXOpen = false;
 function renderChartSelectors() {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const yBtn = doc.getElementById("aus-chart-y-btn");
 	const xBtn = doc.getElementById("aus-chart-x-btn");
 	const yDrop = doc.getElementById("aus-chart-y-dropdown");
@@ -7014,7 +7016,7 @@ function renderChartSelectors() {
 	});
 }
 function bindChartSelectors() {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const yBtn = doc.getElementById("aus-chart-y-btn");
 	const yDrop = doc.getElementById("aus-chart-y-dropdown");
 	const xBtn = doc.getElementById("aus-chart-x-btn");
@@ -7059,7 +7061,7 @@ function bindChartSelectors() {
 }
 var chart = null;
 async function renderChart(filteredRaw) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const el = doc.getElementById("aus-stats-chart");
 	if (!el) return;
 	const { labels, series } = aggregateForChart(filteredRaw, getYSelected(), getXSelected());
@@ -7381,7 +7383,7 @@ async function renderChart(filteredRaw) {
 	}, 60);
 }
 function renderModelSummary(filtered) {
-	const tbody = getDoc$5().getElementById("aus-summary-tbody");
+	const tbody = getDoc$6().getElementById("aus-summary-tbody");
 	if (!tbody) return;
 	lastSummaryFiltered = filtered;
 	try {
@@ -7520,7 +7522,7 @@ async function getHistoryForStats() {
 	return allHistoryPromise;
 }
 async function renderStatsView() {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	if (!getSelectedSave()) return;
 	const allHistory = await getHistoryForStats();
 	lastStatsHistory = allHistory;
@@ -7588,7 +7590,7 @@ var statsFourBound = false;
 function bindStatsFour() {
 	if (statsFourBound) return;
 	statsFourBound = true;
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	doc.addEventListener("click", (e) => {
 		const t = e.target;
 		for (let i = 0; i < 4; i++) {
@@ -7599,7 +7601,7 @@ function bindStatsFour() {
 	});
 }
 function openStatsFourDrop(idx, v) {
-	const drop = getDoc$5().getElementById(`aus-stats-four-drop-${idx}`);
+	const drop = getDoc$6().getElementById(`aus-stats-four-drop-${idx}`);
 	if (!drop) return;
 	const cur = ensureStatsFour()[idx];
 	drop.innerHTML = FOUR_OPTIONS.map((o) => {
@@ -7623,7 +7625,7 @@ function openStatsFourDrop(idx, v) {
 	drop.style.display = drop.style.display === "block" ? "none" : "block";
 }
 function renderStatsFour(filtered) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const host = doc.getElementById("aus-stats-four");
 	if (!host) return;
 	const v = computeStatsFour(filtered || []);
@@ -8011,12 +8013,12 @@ var instances = {};
 var echartsPromise = null;
 var resizeObserver = null;
 var resizeBound = false;
-function getDoc$4() {
+function getDoc$5() {
 	return window.parent?.document ?? document;
 }
 function themeColor(name, fallback) {
 	try {
-		const doc = getDoc$4();
+		const doc = getDoc$5();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -8061,7 +8063,7 @@ function axisMoney(currency, cnyValue) {
 	return currency.symbol + n.toFixed(4);
 }
 async function initChart(id, echarts) {
-	const el = getDoc$4().getElementById(id);
+	const el = getDoc$5().getElementById(id);
 	if (!el) return null;
 	if (!el.clientWidth || !el.clientHeight) return null;
 	if (instances[id]) {
@@ -8081,7 +8083,7 @@ async function initChart(id, echarts) {
 }
 function ensureResizeObserver() {
 	if (resizeObserver || typeof ResizeObserver === "undefined") return;
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	const targets = [
 		"aus-forecast-main-chart",
 		"aus-forecast-hit-chart",
@@ -8809,7 +8811,7 @@ var lastEffectiveHistory = [];
 var lastEfficiencyHistory = [];
 var lastEfficiencyLabel = "全部历史";
 var efficiencySort = null;
-function getDoc$3() {
+function getDoc$4() {
 	return window.parent?.document ?? document;
 }
 function currentChatId() {
@@ -9009,7 +9011,7 @@ function hitSourceText(series) {
 	}
 }
 function closeAllDropdowns() {
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	for (const name of [
 		"chat",
 		"model",
@@ -9023,7 +9025,7 @@ function closeAllDropdowns() {
 	openDropdown = null;
 }
 function toggleDropdown(name) {
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	if (openDropdown === name) {
 		closeAllDropdowns();
 		return;
@@ -9038,7 +9040,7 @@ function bindGlobalClose() {
 	if (globalCloseBound) return;
 	globalCloseBound = true;
 	try {
-		getDoc$3().addEventListener("click", () => closeAllDropdowns());
+		getDoc$4().addEventListener("click", () => closeAllDropdowns());
 	} catch {}
 }
 function dropdownItem(attr, value, label, active, meta = "") {
@@ -9048,7 +9050,7 @@ function dropdownItem(attr, value, label, active, meta = "") {
   </div>`;
 }
 function renderChatDropdown(fullHist) {
-	const dropdown = getDoc$3().getElementById("aus-forecast-chat-dropdown");
+	const dropdown = getDoc$4().getElementById("aus-forecast-chat-dropdown");
 	if (!dropdown) return;
 	const chats = getRecordedChatsForForecast(fullHist);
 	let html = dropdownItem("data-fchat", "__current__", "当前对话", selectedForecastKey === "__current__");
@@ -9070,7 +9072,7 @@ function renderChatDropdown(fullHist) {
 	});
 }
 function renderModelDropdown(options) {
-	const dropdown = getDoc$3().getElementById("aus-forecast-model-dropdown");
+	const dropdown = getDoc$4().getElementById("aus-forecast-model-dropdown");
 	if (!dropdown) return;
 	dropdown.innerHTML = options.map((option) => dropdownItem("data-fmodel", option.model, option.model, selectedForecastModel === option.model, `${option.count} 轮`)).join("") || "<div class=\"aus-forecast-dropdown-empty\">暂无模型</div>";
 	dropdown.querySelectorAll("[data-fmodel]").forEach((el) => {
@@ -9083,7 +9085,7 @@ function renderModelDropdown(options) {
 	});
 }
 function renderHorizonDropdown() {
-	const dropdown = getDoc$3().getElementById("aus-forecast-horizon-dropdown");
+	const dropdown = getDoc$4().getElementById("aus-forecast-horizon-dropdown");
 	if (!dropdown) return;
 	dropdown.innerHTML = HORIZONS.map((value) => dropdownItem("data-fhorizon", String(value), `${value} 轮`, horizon === value, value === 10 ? "默认" : "")).join("");
 	dropdown.querySelectorAll("[data-fhorizon]").forEach((el) => {
@@ -9103,7 +9105,7 @@ function hitModeLabel(mode, globalRate, modelRate) {
 	return globalRate == null ? "全站平均 —" : `全站平均 ${pct(globalRate)}`;
 }
 function renderHitControl(fullHist, model, series, globalRate, modelRate) {
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	const host = doc.getElementById("aus-forecast-hit-control");
 	if (!host) return;
 	if (selectedForecastKey === "__all__" || !model) {
@@ -9168,7 +9170,7 @@ function renderHitControl(fullHist, model, series, globalRate, modelRate) {
 	}
 }
 function renderToolbar(fullHist, effective, modelOptions, model, priceContext, series, globalRate, modelRate) {
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	bindGlobalClose();
 	const chatLabel = doc.getElementById("aus-forecast-chat-label");
 	if (chatLabel) chatLabel.textContent = getForecastLabel(fullHist);
@@ -9232,7 +9234,7 @@ function kpiCard(label, value, sub, tone = "default", title = "") {
   </div>`;
 }
 function renderKpis(series, priceContext, ctxLimit, options, balance) {
-	const host = getDoc$3().getElementById("aus-forecast-kpis");
+	const host = getDoc$4().getElementById("aus-forecast-kpis");
 	if (!host) return;
 	const remaining = balance != null ? simulateRemainingRounds(balance, series, options) : null;
 	const ctxRounds = contextRoundsFor(series, ctxLimit, options.compaction);
@@ -9259,7 +9261,7 @@ function renderKpis(series, priceContext, ctxLimit, options, balance) {
 	].join("");
 }
 function renderHealth(history, model) {
-	const host = getDoc$3().getElementById("aus-forecast-health");
+	const host = getDoc$4().getElementById("aus-forecast-health");
 	if (!host) return;
 	if (!history.length) {
 		host.innerHTML = "<div class=\"aus-forecast-empty\">暂无数据</div>";
@@ -9305,7 +9307,7 @@ function renderHealth(history, model) {
   `;
 }
 function renderCompaction(series, options) {
-	const host = getDoc$3().getElementById("aus-forecast-compaction");
+	const host = getDoc$4().getElementById("aus-forecast-compaction");
 	if (!host) return;
 	const forecast = series.compactionForecast;
 	if (!forecast.detected) {
@@ -9354,7 +9356,7 @@ function sortEfficiencyRows(rows) {
 	});
 }
 function renderEfficiency(history, scopeLabel) {
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	const host = doc.getElementById("aus-forecast-efficiency");
 	const sub = doc.getElementById("aus-forecast-efficiency-sub");
 	const scopeButton = doc.getElementById("aus-forecast-scope-btn");
@@ -9466,7 +9468,7 @@ function chatDisplayNameMap(fullHist) {
 	return map;
 }
 function renderTop(fullHist) {
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	const host = doc.getElementById("aus-forecast-top");
 	const toggle = doc.getElementById("aus-forecast-top-toggle");
 	if (!host || !toggle) return;
@@ -9511,7 +9513,7 @@ function renderTop(fullHist) {
 }
 function clearCharts(message) {
 	disposeForecastCharts();
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	for (const id of [
 		"aus-forecast-main-chart",
 		"aus-forecast-hit-chart",
@@ -9522,7 +9524,7 @@ function clearCharts(message) {
 	}
 }
 function renderNoticeCards(message) {
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	const kpis = doc.getElementById("aus-forecast-kpis");
 	if (kpis) kpis.innerHTML = `<div class="ds-card aus-forecast-notice">${esc$2(message)}</div>`;
 	const health = doc.getElementById("aus-forecast-health");
@@ -9533,17 +9535,17 @@ function renderNoticeCards(message) {
 function renderAllNotice() {
 	renderNoticeCards("当前选择“全部”历史。逐轮预测、压缩与健康度需要单个对话的时间序列；请从上方对话胶囊选择具体对话。下方模型效率对比仍可查看。");
 	clearCharts("请选择单个对话以查看逐轮预测");
-	const mainSub = getDoc$3().getElementById("aus-forecast-main-sub");
+	const mainSub = getDoc$4().getElementById("aus-forecast-main-sub");
 	if (mainSub) mainSub.textContent = "逐轮预测需要指定单个对话";
 }
 function renderNoSeries(message) {
 	renderNoticeCards(message);
 	clearCharts(message);
-	const mainSub = getDoc$3().getElementById("aus-forecast-main-sub");
+	const mainSub = getDoc$4().getElementById("aus-forecast-main-sub");
 	if (mainSub) mainSub.textContent = message;
 }
 function renderMainSub(series, ctxLimit) {
-	const mainSub = getDoc$3().getElementById("aus-forecast-main-sub");
+	const mainSub = getDoc$4().getElementById("aus-forecast-main-sub");
 	if (!mainSub) return;
 	const future = series.future.length;
 	const parts = [
@@ -9630,6 +9632,555 @@ function initForecastView() {
 	bindGlobalClose();
 }
 //#endregion
+//#region src/services/provider-registry.ts
+var VENDORS = [
+	{
+		id: "deepseek",
+		label: "DeepSeek",
+		color: "#4D6BFE",
+		mark: "DS",
+		hosts: ["deepseek.com"],
+		catalog: "deepseek",
+		modelPrefixes: ["deepseek-"]
+	},
+	{
+		id: "openai",
+		label: "OpenAI",
+		color: "#10A37F",
+		mark: "OA",
+		hosts: ["openai.com", "openai.azure.com"],
+		catalog: "openai",
+		modelPrefixes: [
+			"gpt-",
+			"o1",
+			"o3",
+			"o4",
+			"chatgpt-",
+			"codex-"
+		]
+	},
+	{
+		id: "anthropic",
+		label: "Anthropic",
+		color: "#D97757",
+		mark: "A",
+		hosts: ["anthropic.com", "claude.ai"],
+		catalog: "anthropic",
+		modelPrefixes: ["claude-"]
+	},
+	{
+		id: "google",
+		label: "Google Gemini",
+		color: "#4285F4",
+		mark: "G",
+		hosts: [
+			"googleapis.com",
+			"generativelanguage.googleapis.com",
+			"google.com"
+		],
+		catalog: "google",
+		modelPrefixes: [
+			"gemini-",
+			"gemma-",
+			"learnlm-"
+		]
+	},
+	{
+		id: "xai",
+		label: "xAI",
+		color: "#111827",
+		mark: "X",
+		hosts: ["x.ai"],
+		catalog: "xai",
+		modelPrefixes: ["grok-"]
+	},
+	{
+		id: "moonshot",
+		label: "Moonshot / Kimi",
+		color: "#1F1F1F",
+		mark: "K",
+		hosts: [
+			"moonshot.cn",
+			"moonshot.ai",
+			"kimi.com",
+			"kimi.ai"
+		],
+		catalog: "moonshotai",
+		modelPrefixes: ["kimi-", "moonshot-"]
+	},
+	{
+		id: "zhipu",
+		label: "Z.ai / 智谱 GLM",
+		color: "#3859FF",
+		mark: "智",
+		hosts: [
+			"bigmodel.cn",
+			"z.ai",
+			"zhipuai.cn"
+		],
+		catalog: "zai",
+		modelPrefixes: ["glm-", "zai-"]
+	},
+	{
+		id: "minimax",
+		label: "MiniMax",
+		color: "#F23F5D",
+		mark: "MM",
+		hosts: [
+			"minimaxi.com",
+			"minimaxi.io",
+			"minimax.chat",
+			"minimax.io"
+		],
+		catalog: "minimax",
+		modelPrefixes: [
+			"minimax-",
+			"abab",
+			"m2",
+			"hailuo"
+		]
+	},
+	{
+		id: "mistral",
+		label: "Mistral",
+		color: "#FF7000",
+		mark: "MI",
+		hosts: ["mistral.ai"],
+		catalog: "mistral",
+		modelPrefixes: [
+			"mistral-",
+			"codestral-",
+			"pixtral-",
+			"magistral-",
+			"devstral-",
+			"ministral-"
+		]
+	},
+	{
+		id: "cohere",
+		label: "Cohere",
+		color: "#39594D",
+		mark: "C",
+		hosts: ["cohere.ai", "cohere.com"],
+		catalog: "cohere",
+		modelPrefixes: [
+			"command-",
+			"c4ai-",
+			"embed-"
+		]
+	},
+	{
+		id: "openrouter",
+		label: "OpenRouter",
+		color: "#6467F2",
+		mark: "OR",
+		hosts: ["openrouter.ai"],
+		catalog: null,
+		modelPrefixes: []
+	},
+	{
+		id: "siliconflow",
+		label: "硅基流动",
+		color: "#7C3AED",
+		mark: "硅",
+		hosts: ["siliconflow.cn", "siliconflow.com"],
+		catalog: null,
+		modelPrefixes: []
+	},
+	{
+		id: "stepfun",
+		label: "阶跃星辰",
+		color: "#0E7490",
+		mark: "阶",
+		hosts: ["stepfun.com", "stepfun.ai"],
+		catalog: null,
+		modelPrefixes: ["step-"]
+	},
+	{
+		id: "novita",
+		label: "Novita",
+		color: "#0EA5E9",
+		mark: "N",
+		hosts: ["novita.ai"],
+		catalog: null,
+		modelPrefixes: []
+	},
+	{
+		id: "groq",
+		label: "Groq",
+		color: "#F55036",
+		mark: "GQ",
+		hosts: ["groq.com"],
+		catalog: null,
+		modelPrefixes: []
+	},
+	{
+		id: "together",
+		label: "Together",
+		color: "#0F6FFF",
+		mark: "T",
+		hosts: ["together.xyz", "together.ai"],
+		catalog: null,
+		modelPrefixes: []
+	},
+	{
+		id: "fireworks",
+		label: "Fireworks",
+		color: "#F97316",
+		mark: "FW",
+		hosts: ["fireworks.ai"],
+		catalog: null,
+		modelPrefixes: []
+	},
+	{
+		id: "dashscope",
+		label: "阿里云百炼 / 通义",
+		color: "#FF6A00",
+		mark: "通",
+		hosts: [
+			"aliyuncs.com",
+			"dashscope.aliyuncs.com",
+			"aliyun.com"
+		],
+		catalog: null,
+		modelPrefixes: [
+			"qwen",
+			"qwq-",
+			"qvq-"
+		]
+	},
+	{
+		id: "volcengine",
+		label: "火山方舟 / 豆包",
+		color: "#1664FF",
+		mark: "火",
+		hosts: [
+			"volces.com",
+			"volcengine.com",
+			"bytepluses.com"
+		],
+		catalog: null,
+		modelPrefixes: ["doubao-", "ep-"]
+	},
+	{
+		id: "baidu",
+		label: "百度千帆 / 文心",
+		color: "#2932E1",
+		mark: "百",
+		hosts: ["baidubce.com", "baidu.com"],
+		catalog: null,
+		modelPrefixes: ["ernie-"]
+	},
+	{
+		id: "tencent",
+		label: "腾讯混元",
+		color: "#0052D9",
+		mark: "混",
+		hosts: ["tencentcloudapi.com", "tencent.com"],
+		catalog: null,
+		modelPrefixes: ["hunyuan-"]
+	},
+	{
+		id: "xfyun",
+		label: "讯飞星火",
+		color: "#1F7AFF",
+		mark: "讯",
+		hosts: ["xf-yun.com", "xfyun.cn"],
+		catalog: null,
+		modelPrefixes: ["spark-", "generalv"]
+	},
+	{
+		id: "github",
+		label: "GitHub Models",
+		color: "#24292F",
+		mark: "GH",
+		hosts: [
+			"githubcopilot.com",
+			"models.github.ai",
+			"github.com"
+		],
+		catalog: null,
+		modelPrefixes: []
+	},
+	{
+		id: "cursor",
+		label: "Cursor",
+		color: "#111827",
+		mark: "CU",
+		hosts: ["cursor.com", "cursor.sh"],
+		catalog: null,
+		modelPrefixes: []
+	}
+];
+/** 酒馆接入类型 → 供应商 */
+var SOURCE_TYPE_MAP = {
+	deepseek: "deepseek",
+	openai: "openai",
+	claude: "anthropic",
+	makersuite: "google",
+	vertexai: "google",
+	mistralai: "mistral",
+	xai: "xai",
+	moonshot: "moonshot",
+	zai: "zhipu",
+	minimax: "minimax",
+	cohere: "cohere",
+	groq: "groq",
+	together: "together",
+	fireworks: "fireworks",
+	dashscope: "dashscope",
+	volcengine: "volcengine",
+	baidu: "baidu",
+	hunyuan: "tencent",
+	xfyun: "xfyun",
+	openrouter: "openrouter"
+};
+function vendorById(id) {
+	const key = String(id || "").trim().toLowerCase();
+	if (!key) return null;
+	return VENDORS.find((vendor) => vendor.id === key) || null;
+}
+/** 从任意地址/标签文本中提取主机名（无协议亦可） */
+function extractHost(raw) {
+	const text = String(raw ?? "").trim().toLowerCase();
+	if (!text) return "";
+	const host = text.replace(/^[a-z][a-z0-9+.-]*:\/\//, "").split("/")[0].split("?")[0].split("#")[0].split(":")[0].replace(/^www\./, "");
+	return host.includes(".") ? host : "";
+}
+/** 主机名 → 供应商：要求主域精确或子域后缀匹配，避免仿冒域名误判 */
+function vendorFromHost(host) {
+	const target = extractHost(host);
+	if (!target) return null;
+	let best = null;
+	let bestLength = 0;
+	for (const vendor of VENDORS) for (const domain of vendor.hosts) if (target === domain || target.endsWith("." + domain)) {
+		if (domain.length > bestLength) {
+			best = vendor;
+			bestLength = domain.length;
+		}
+	}
+	return best;
+}
+/**
+* 供应商识别四级回退：接入地址 → 接入类型 → 模型名前缀。
+* 全部失败返回 null（UI 退回单字符标识）。
+*/
+function resolveVendor(input) {
+	for (const raw of [
+		input.endpointDisplay,
+		input.endpointLabel,
+		input.endpointId
+	]) {
+		const vendor = vendorFromHost(String(raw ?? ""));
+		if (vendor) return vendor;
+	}
+	const bySource = SOURCE_TYPE_MAP[String(input.sourceType || "").trim().toLowerCase()];
+	if (bySource) return vendorById(bySource) || null;
+	const models = (input.models || []).map((item) => String(item || "").trim().toLowerCase()).filter(Boolean);
+	if (models.length) {
+		const counts = /* @__PURE__ */ new Map();
+		for (const model of models) for (const vendor of VENDORS) {
+			if (!vendor.modelPrefixes.length) continue;
+			if (vendor.modelPrefixes.some((prefix) => model.startsWith(prefix))) counts.set(vendor.id, (counts.get(vendor.id) || 0) + 1);
+		}
+		let winner = null;
+		let winnerCount = 0;
+		for (const [id, count] of counts) if (count > winnerCount) {
+			winner = id;
+			winnerCount = count;
+		}
+		if (winner && winnerCount * 2 >= models.length) return vendorById(winner);
+	}
+	return null;
+}
+/** 未识别时的兜底字标：取名称首个有意义字符（剥离协议与 api./www. 前缀） */
+function vendorInitialFallback(name) {
+	const first = String(name || "").trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/^api\./i, "").replace(/^[^0-9a-zA-Z\u4e00-\u9fa5]+/, "").charAt(0);
+	return first ? first.toUpperCase() : "?";
+}
+//#endregion
+//#region src/ui/wallet-sync-preview.ts
+var OVERLAY_ID = "aus-wallet-sync-overlay";
+var MODE_LABELS = [
+	{
+		id: "add-missing",
+		label: "只补未定价"
+	},
+	{
+		id: "overwrite-unlocked",
+		label: "覆盖未锁定"
+	},
+	{
+		id: "overwrite-all",
+		label: "全部覆盖"
+	}
+];
+function getDoc$3() {
+	return window.parent?.document ?? document;
+}
+function money$1(value) {
+	if (value == null) return "—";
+	try {
+		return formatMoney(value, 6);
+	} catch {
+		return String(value);
+	}
+}
+function scoreLabel(row) {
+	if (row.action === "unmatched") return "<span style=\"color:var(--ds-text-3);\">未匹配</span>";
+	const percent = Math.round(row.score * 100);
+	const exact = row.reason === "exact" || row.reason === "normalized" || row.reason === "alias";
+	const color = exact ? "var(--ds-green)" : row.ambiguous ? "var(--ds-red)" : "var(--ds-orange)";
+	const text = exact ? "精确" : row.ambiguous ? "歧义 " + percent + "%" : "模糊 " + percent + "%";
+	return "<span style=\"color:" + color + ";font-weight:600;\">" + text + "</span>";
+}
+function actionLabel(row) {
+	if (row.action === "write") return "<span style=\"color:var(--ds-red);\">待写入</span>";
+	if (row.action === "update") return "<span style=\"color:var(--ds-orange);\">将更新</span>";
+	if (row.action === "skip-locked") return "<span style=\"color:var(--ds-text-3);\">已锁定</span>";
+	if (row.action === "skip-same") return "<span style=\"color:var(--ds-text-3);\">无变化</span>";
+	return "<span style=\"color:var(--ds-text-3);\">—</span>";
+}
+function tierText(row) {
+	if (!row.next) return "—";
+	const before = row.current ? money$1(row.current.hit) + " / " + money$1(row.current.miss) + " / " + money$1(row.current.output) : "未定价";
+	const after = money$1(row.next.hit) + " / " + money$1(row.next.miss) + " / " + money$1(row.next.output);
+	if (!row.current) return "<span style=\"color:var(--ds-red);\">" + after + "</span>";
+	if (row.current.hit === row.next.hit && row.current.miss === row.next.miss && row.current.output === row.next.output) return "<span style=\"color:var(--ds-text-3);\">" + after + "</span>";
+	return "<span style=\"color:var(--ds-text-3);text-decoration:line-through;\">" + before + "</span> → <b>" + after + "</b>";
+}
+async function openWalletSyncPreview(options = {}) {
+	const doc = getDoc$3();
+	const existing = doc.getElementById(OVERLAY_ID);
+	if (existing) existing.remove();
+	const overlay = doc.createElement("div");
+	overlay.id = OVERLAY_ID;
+	overlay.style.cssText = "position:absolute;inset:0;z-index:140;background:rgba(15,20,25,0.32);display:flex;align-items:center;justify-content:center;padding:16px;";
+	overlay.innerHTML = "<div style=\"width:min(880px,100%);max-height:86%;display:flex;flex-direction:column;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:14px;overflow:hidden;\"><div style=\"display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--ds-border);\"><div style=\"font-weight:600;color:var(--ds-text);\">价格同步预览</div><button data-sync-close=\"1\" style=\"display:flex;align-items:center;gap:4px;padding:5px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;\">" + icon("close", 14) + " 关闭</button></div><div data-sync-body=\"1\" style=\"padding:12px 14px;overflow:auto;display:grid;gap:10px;\"></div></div>";
+	doc.body.appendChild(overlay);
+	const close = () => {
+		overlay.remove();
+		doc.removeEventListener("keydown", onKey);
+	};
+	const onKey = (event) => {
+		if (event?.key === "Escape") close();
+	};
+	doc.addEventListener("keydown", onKey);
+	overlay.addEventListener("click", (event) => {
+		if (event.target === overlay) close();
+	});
+	overlay.querySelector("[data-sync-close]")?.addEventListener("click", close);
+	const body = overlay.querySelector("[data-sync-body]");
+	body.innerHTML = "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-2);\">正在拉取价格目录…</div>";
+	const walletId = options.walletId;
+	const wallet = walletId ? repository.getWallet(walletId) : null;
+	if (walletId && !wallet) {
+		body.textContent = "钱包不存在";
+		return;
+	}
+	if (wallet && !wallet.catalogProvider) {
+		body.innerHTML = "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-2);\">该钱包还没有选择价格来源，请先在「价格来源」中选择供应商。</div>";
+		return;
+	}
+	let catalog = null;
+	try {
+		catalog = await fetchModelsDevCatalog();
+	} catch (error) {
+		body.innerHTML = "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-red);\">价格目录拉取失败：" + esc$2(error?.message || error) + "</div>";
+		return;
+	}
+	wallet && resolveVendor({
+		sourceType: wallet.sourceType,
+		endpointDisplay: wallet.endpointDisplay,
+		endpointLabel: wallet.endpointLabel,
+		endpointId: wallet.endpointId,
+		models: wallet.models.map((item) => item.model)
+	});
+	const providerVendor = wallet?.catalogProvider ? vendorById(wallet.catalogProvider) : null;
+	let mode = "add-missing";
+	let onlyChanged = true;
+	let keyword = "";
+	let plan = buildSyncPlan(catalog, {
+		walletIds: walletId ? [walletId] : void 0,
+		mode
+	});
+	const selected = new Set(plan.rows.filter((row) => row.changed && !row.ambiguous).map((row) => row.key));
+	const render = () => {
+		const rows = plan.rows.filter((row) => {
+			if (onlyChanged && !row.changed) return false;
+			if (!keyword) return true;
+			return (row.localModel + " " + (row.catalogModel || "")).toLowerCase().includes(keyword.toLowerCase());
+		});
+		const actionable = plan.rows.filter((row) => row.changed && !row.ambiguous);
+		const head = "<div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:8px;\"><div style=\"display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);\">" + (providerVendor ? "<span style=\"width:18px;height:18px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;background:" + providerVendor.color + ";color:#fff;font-size:10px;font-weight:700;\">" + esc$2(providerVendor.mark) + "</span>" : "") + "供应商 <b style=\"color:var(--ds-text);\">" + esc$2(plan.providerLabel || "未选择") + "</b></div><div style=\"display:flex;gap:4px;margin-left:auto;\">" + MODE_LABELS.map((item) => "<button data-sync-mode=\"" + item.id + "\" style=\"padding:5px 10px;border:1px solid " + (mode === item.id ? "var(--ds-black)" : "var(--ds-border)") + ";border-radius:999px;background:" + (mode === item.id ? "var(--ds-black)" : "var(--ds-card)") + ";color:" + (mode === item.id ? "var(--ds-black-text)" : "var(--ds-text)") + ";font-size:var(--aus-fs-sm);cursor:pointer;\">" + item.label + "</button>").join("") + "</div></div><div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:8px;\"><input data-sync-search=\"1\" value=\"" + esc$2(keyword) + "\" placeholder=\"搜索模型\" style=\"flex:1;min-width:140px;padding:6px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card);color:var(--ds-text);font-size:var(--aus-fs-sm);\" /><label style=\"display:flex;align-items:center;gap:5px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;\"><input type=\"checkbox\" data-sync-only-changed=\"1\" " + (onlyChanged ? "checked" : "") + " /> 仅看变化</label></div><div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);line-height:1.7;\">按钱包里已识别的模型名，在目录中用模糊匹配找到对应价格后写入该模型（不会新增模型）。 匹配 " + plan.summary.matched + " · 精确 " + plan.summary.exact + " · 模糊 " + plan.summary.fuzzy + (plan.summary.ambiguous ? " · 歧义 " + plan.summary.ambiguous : "") + " · 未匹配 " + plan.summary.unmatched + " · 单位 " + getDisplayCurrency().code + "/百万 tokens</div>";
+		const table = rows.length ? "<div style=\"width:100%;overflow:auto;border:1px solid var(--ds-border);border-radius:10px;\"><table style=\"width:100%;min-width:720px;border-collapse:collapse;font-size:var(--aus-fs-sm);\"><thead><tr style=\"text-align:left;color:var(--ds-text-2);background:var(--ds-card);\"><th style=\"padding:6px;\">选</th><th style=\"padding:6px;\">钱包模型</th><th style=\"padding:6px;\">匹配</th><th style=\"padding:6px;\">目录模型</th><th style=\"padding:6px;\">价格（命中/未命中/输出）</th><th style=\"padding:6px;\">动作</th></tr></thead><tbody>" + rows.map((row) => {
+			const checked = selected.has(row.key);
+			return "<tr style=\"border-top:1px solid var(--ds-border);\"><td style=\"padding:6px;\"><input type=\"checkbox\" data-sync-row=\"" + esc$2(row.key) + "\" " + (checked ? "checked" : "") + " " + (row.changed ? "" : "disabled") + " /></td><td style=\"padding:6px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\" title=\"" + esc$2(row.localModel) + "\">" + esc$2(row.localModel) + "</td><td style=\"padding:6px;white-space:nowrap;\">" + scoreLabel(row) + "</td><td style=\"padding:6px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ds-text-2);\" title=\"" + esc$2(row.catalogModel || "") + "\">" + esc$2(row.catalogModel || "—") + "</td><td style=\"padding:6px;white-space:nowrap;\">" + tierText(row) + "</td><td style=\"padding:6px;white-space:nowrap;\">" + actionLabel(row) + "</td></tr>";
+		}).join("") + "</tbody></table></div>" : "<div style=\"padding:14px;text-align:center;color:var(--ds-text-3);font-size:var(--aus-fs-sm);\">" + (onlyChanged ? "没有需要变化的价格（可关闭「仅看变化」查看全部）" : "没有可展示的模型") + "</div>";
+		const footer = "<div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:8px;\"><div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">已选 " + selected.size + " / 可写入 " + actionable.length + "</div><div style=\"margin-left:auto;display:flex;gap:8px;\"><button data-sync-cancel=\"1\" style=\"padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;\">取消</button><button data-sync-apply=\"1\" style=\"padding:6px 14px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;\">应用所选</button></div></div>";
+		body.innerHTML = head + table + footer;
+		body.querySelectorAll("[data-sync-mode]").forEach((button) => {
+			button.onclick = () => {
+				mode = button.getAttribute("data-sync-mode");
+				plan = buildSyncPlan(catalog, {
+					walletIds: walletId ? [walletId] : void 0,
+					mode
+				});
+				selected.clear();
+				plan.rows.filter((row) => row.changed && !row.ambiguous).forEach((row) => selected.add(row.key));
+				render();
+			};
+		});
+		const search = body.querySelector("[data-sync-search]");
+		if (search) search.oninput = () => {
+			keyword = search.value;
+			const pos = search.selectionStart;
+			render();
+			const next = body.querySelector("[data-sync-search]");
+			if (next) {
+				next.focus();
+				try {
+					next.setSelectionRange(pos ?? 0, pos ?? 0);
+				} catch {}
+			}
+		};
+		const onlyChangedEl = body.querySelector("[data-sync-only-changed]");
+		if (onlyChangedEl) onlyChangedEl.onchange = () => {
+			onlyChanged = onlyChangedEl.checked;
+			render();
+		};
+		body.querySelectorAll("[data-sync-row]").forEach((input) => {
+			input.onchange = () => {
+				const key = input.getAttribute("data-sync-row");
+				if (!key) return;
+				if (input.checked) selected.add(key);
+				else selected.delete(key);
+				render();
+			};
+		});
+		body.querySelector("[data-sync-cancel]")?.addEventListener("click", close);
+		body.querySelector("[data-sync-apply]")?.addEventListener("click", async () => {
+			if (!selected.size) {
+				toast("warning", "没有选中任何条目");
+				return;
+			}
+			const button = body.querySelector("[data-sync-apply]");
+			if (button) {
+				button.disabled = true;
+				button.textContent = "写入中…";
+			}
+			const result = await applySyncPlan(plan, { selectedKeys: Array.from(selected) });
+			close();
+			toast(result.applied ? "success" : "warning", result.applied ? "已写入 " + result.applied + " 个模型价格" : "没有价格被写入");
+			options.onDone?.();
+			try {
+				globalThis.ApiUsageStat?.refreshUI?.();
+			} catch {}
+		});
+	};
+	render();
+}
+//#endregion
 //#region src/ui/wallet-view.ts
 function getDoc$2() {
 	return window.parent?.document ?? document;
@@ -9688,21 +10239,23 @@ function priceField(walletId, modelId, tier, key, value) {
     data-model-id="${esc$2(modelId)}" data-tier="${tier}" data-key="${key}" value="${esc$2(cnyToDisplay(value))}"
     style="width:100%;min-width:72px;padding:5px 6px;border:1px solid var(--ds-border);border-radius:7px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />`;
 }
-function renderModelRows(wallet) {
-	const models = [...wallet.models].sort((a, b) => {
+function renderModelRows(wallet, showHidden = false) {
+	const models = wallet.models.filter((model) => showHidden || model.hidden !== true).sort((a, b) => {
 		return Number(!a.price.priceConfigured) - Number(!b.price.priceConfigured) || a.model.localeCompare(b.model, "zh-CN");
 	});
 	if (!models.length) return "<tr><td colspan=\"7\" style=\"padding:14px;text-align:center;color:var(--ds-text-3);\">尚未识别到模型，可手动添加或等待请求接入</td></tr>";
 	return models.map((model) => {
 		const pending = !model.price.priceConfigured;
 		const canDelete = model.source !== "builtin";
+		const matchLine = model.priceMatch ? "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:3px;\" title=\"来源：" + esc$2(model.priceMatch.provider + " / " + model.priceMatch.catalogModel) + "\">↳ " + esc$2(model.priceMatch.catalogModel) + " · " + Math.round(model.priceMatch.score * 100) + "%</div>" : "";
+		const rowStyle = "border-top:1px solid var(--ds-border);" + (model.hidden === true ? "opacity:0.55;" : "");
 		return `
-      <tr data-wallet-model-row="${esc$2(model.id)}" style="border-top:1px solid var(--ds-border);">
+      <tr data-wallet-model-row="${esc$2(model.id)}" style="${rowStyle}">
         <td style="padding:8px 6px;min-width:180px;">
           <input data-wallet-model-name="1" data-wallet-id="${esc$2(wallet.id)}" data-model-id="${esc$2(model.id)}"
             value="${esc$2(model.model)}"
             style="width:100%;padding:6px 7px;border:1px solid var(--ds-border);border-radius:7px;background:${model.source === "builtin" ? "var(--ds-sidebar-bg)" : "var(--ds-card-inner)"};color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:3px;">${esc$2(model.sourceModel)}${model.aliases.length ? ` · 别名 ${esc$2(model.aliases.join("、"))}` : ""}</div>
+          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:3px;">${esc$2(model.sourceModel)}${model.aliases.length ? ` · 别名 ${esc$2(model.aliases.join("、"))}` : ""}${model.hidden === true ? " · 已隐藏" : ""}</div>
           <label style="display:flex;align-items:center;gap:5px;margin-top:5px;font-size:var(--aus-fs-sm);color:var(--ds-text-3);">
             上下文上限
             <input type="number" min="1" step="1000" data-wallet-context-limit="1" data-wallet-id="${esc$2(wallet.id)}" data-model-id="${esc$2(model.id)}"
@@ -9712,6 +10265,7 @@ function renderModelRows(wallet) {
         </td>
         <td style="padding:8px 6px;white-space:nowrap;">
           <span style="padding:2px 7px;border-radius:999px;background:${pending ? "var(--ds-red-bg)" : model.source === "sync" ? "var(--ds-green-bg)" : "var(--ds-card)"};color:${pending ? "var(--ds-red)" : model.source === "sync" ? "var(--ds-green)" : "var(--ds-text-2)"};font-size:var(--aus-fs-sm);">${sourceLabel(model)}</span>
+          ${matchLine}
         </td>
         <td style="padding:8px 6px;min-width:224px;">
           <div style="display:grid;grid-template-columns:repeat(3,minmax(68px,1fr));gap:4px;">${priceField(wallet.id, model.id, "offpeak", "hit", model.price.offpeak.hit)}${priceField(wallet.id, model.id, "offpeak", "miss", model.price.offpeak.miss)}${priceField(wallet.id, model.id, "offpeak", "output", model.price.offpeak.output)}</div>
@@ -9758,12 +10312,15 @@ function renderCredentialPicker(wallet) {
 }
 function renderCatalogPicker(wallet) {
 	const current = WALLET_CATALOG_PROVIDERS.find((item) => item.id === wallet.catalogProvider);
+	const status = walletSyncStatus(wallet);
 	return `
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
     <button data-wallet-catalog-btn="1" data-wallet-id="${esc$2(wallet.id)}" style="display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
       <span style="color:var(--ds-text-2);">价格来源</span>
       <span style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$2(current?.label || "不自动同步")}</span>
       ${icon("chevron-down", 14)}
     </button>
+    <div style="font-size:var(--aus-fs-sm);color:${status.pending ? "var(--ds-red)" : "var(--ds-text-3)"};max-width:190px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc$2(status.label)}">${esc$2(status.label)}${status.pending ? ` · ${status.pending} 个待匹配` : ""}</div>
     <div id="aus-wallet-catalog-drop-${esc$2(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;right:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:180px;max-height:260px;overflow:auto;">
       ${dropdownHtml(wallet.id, "catalog", [{
 		id: "",
@@ -9774,13 +10331,24 @@ function renderCatalogPicker(wallet) {
 		label: item.label,
 		active: item.id === wallet.catalogProvider
 	}))])}
+    </div>
     </div>`;
 }
 function renderWalletCard(wallet, history) {
-	const avatarLetter = (() => {
-		const first = String(wallet.name || wallet.endpointDisplay || wallet.endpointLabel || "").trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/^api\./i, "").replace(/^[^0-9a-zA-Z\u4e00-\u9fa5]+/, "").charAt(0);
-		return first ? first.toUpperCase() : "?";
-	})();
+	const visibleModels = wallet.models.filter((model) => model.hidden !== true);
+	const hiddenCount = wallet.models.length - visibleModels.length;
+	const vendor = resolveVendor({
+		sourceType: wallet.sourceType,
+		endpointDisplay: wallet.endpointDisplay,
+		endpointLabel: wallet.endpointLabel,
+		endpointId: wallet.endpointId,
+		models: visibleModels.map((model) => model.model)
+	});
+	const avatarLetter = vendorInitialFallback(wallet.name || wallet.endpointDisplay || wallet.endpointLabel || "");
+	let showHidden = false;
+	try {
+		showHidden = window.parent?.localStorage?.getItem("aus_wallet_show_hidden_v1") === "1";
+	} catch {}
 	const pending = walletPendingModelCount(wallet);
 	const isOfficial = wallet.id === DEEPSEEK_WALLET_ID;
 	const selectedCredential = wallet.credentials.find((item) => item.id === wallet.balance.primaryCredentialId);
@@ -9791,17 +10359,17 @@ function renderWalletCard(wallet, history) {
 		title: walletBalanceText(wallet)
 	}, {
 		label: "模型",
-		value: `${wallet.models.length} 个`,
-		title: "已识别模型数量"
+		value: `${visibleModels.length} 个`,
+		title: "已识别模型数量（不含已隐藏的同步条目）"
 	}];
 	return `
     <section class="ds-card" data-wallet-card="${esc$2(wallet.id)}" style="display:grid;gap:12px;">
       <div class="aus-wallet-header">
-        <div class="aus-wallet-avatar" title="${esc$2(wallet.name)}">${esc$2(avatarLetter)}</div>
+        ${vendor ? `<div class="aus-wallet-avatar" title="${esc$2(vendor.label)}" style="background:${vendor.color};color:#FFFFFF;${vendor.mark.length > 1 ? "font-size:12px;" : ""}">${esc$2(vendor.mark)}</div>` : `<div class="aus-wallet-avatar" title="${esc$2(wallet.name)}">${esc$2(avatarLetter)}</div>`}
         <div class="aus-wallet-identity">
           <div class="aus-wallet-name-row">
             <input data-wallet-name="1" data-wallet-id="${esc$2(wallet.id)}" value="${esc$2(wallet.name)}" />
-            <span class="${isOfficial ? "aus-wallet-badge-official" : "aus-wallet-badge-relay"}" style="padding:3px 8px;border-radius:999px;background:${isOfficial ? "var(--ds-green-bg)" : "var(--ds-card-inner)"};color:${isOfficial ? "var(--ds-green)" : "var(--ds-text-2)"};font-size:var(--aus-fs-sm);white-space:nowrap;">${isOfficial ? "DeepSeek 官方" : "中转/自定义"}</span>
+            <span class="${isOfficial ? "aus-wallet-badge-official" : "aus-wallet-badge-relay"}" style="padding:3px 8px;border-radius:999px;background:${isOfficial ? "var(--ds-green-bg)" : "var(--ds-card-inner)"};color:${isOfficial ? "var(--ds-green)" : "var(--ds-text-2)"};font-size:var(--aus-fs-sm);white-space:nowrap;">${isOfficial ? "DeepSeek 官方" : esc$2(vendor?.label || "中转/自定义")}</span>
             ${pending ? `<span style="padding:3px 8px;border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);white-space:nowrap;">${pending} 个待定价</span>` : ""}
           </div>
           <div class="aus-wallet-sub">${esc$2(wallet.endpointDisplay || wallet.endpointLabel || "本机官方接口")} · ${esc$2(wallet.sourceType || "未识别")}</div>
@@ -9811,7 +10379,7 @@ function renderWalletCard(wallet, history) {
         </div>
         <div class="aus-wallet-actions">
           <button class="aus-wallet-icon-btn" data-wallet-toggle="1" data-wallet-id="${esc$2(wallet.id)}" title="${collapsed ? "展开钱包详情" : "收起钱包详情"}" aria-label="${collapsed ? "展开钱包详情" : "收起钱包详情"}">${collapsed ? icon("chevron-down", 16) : icon("chevron-up", 16)}</button>
-          ${wallet.catalogProvider ? `<button class="aus-wallet-icon-btn" data-wallet-sync="1" data-wallet-id="${esc$2(wallet.id)}" title="按价格来源同步模型价格" aria-label="同步价格">${icon("refresh", 16)}</button>` : ""}
+          ${wallet.catalogProvider ? `<button class="aus-wallet-icon-btn" data-wallet-sync="1" data-wallet-id="${esc$2(wallet.id)}" title="预览并应用价格同步（按已识别模型模糊匹配）" aria-label="预览价格同步">${icon("refresh", 16)}</button>` : ""}
           ${isOfficial ? "" : `<button class="aus-wallet-icon-btn is-danger" data-wallet-ignore="1" data-wallet-id="${esc$2(wallet.id)}" title="忽略该钱包（历史与统计保留）" aria-label="忽略钱包">${icon("close", 16)}</button>`}
         </div>
       </div>
@@ -9871,12 +10439,12 @@ function renderWalletCard(wallet, history) {
       <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;overflow:hidden;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
           <div><div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">模型与价格</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">单位 ${getDisplayCurrency().code}/百万 tokens；模型改名会保留旧名别名</div></div>
-          <button data-wallet-add-model="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加模型</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;"><button data-wallet-toggle-hidden="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;display:${hiddenCount ? "inline-flex" : "none"};align-items:center;gap:4px;">${showHidden ? "隐藏" : "显示"} ${hiddenCount} 个隐藏条目</button><button data-wallet-add-model="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加模型</button></div>
         </div>
         <div style="width:100%;overflow-x:auto;">
           <table style="width:100%;min-width:900px;border-collapse:collapse;font-size:var(--aus-fs-sm);">
             <thead><tr style="text-align:center;color:var(--ds-text-2);"><th style="text-align:left;padding:5px 6px;">模型</th><th style="padding:5px 6px;">来源</th><th style="padding:5px 6px;">非峰（命中/未命中/输出）</th><th style="padding:5px 6px;">高峰（命中/未命中/输出）</th><th style="padding:5px 6px;">峰谷</th><th style="padding:5px 6px;">锁定</th><th style="padding:5px 6px;">操作</th></tr></thead>
-            <tbody>${renderModelRows(wallet)}</tbody>
+            <tbody>${renderModelRows(wallet, showHidden)}</tbody>
           </table>
         </div>
       </div>
@@ -9992,7 +10560,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-DEVpZGmD.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-DQEQi8QK.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -10028,9 +10596,24 @@ function bindWalletView(doc) {
 		};
 	});
 	doc.querySelectorAll("[data-wallet-sync]").forEach((button) => {
-		button.onclick = async () => {
-			button.textContent = "同步中…";
-			await syncPricingFromModelsDev({ silent: false });
+		button.onclick = (event) => {
+			event.stopPropagation();
+			openWalletSyncPreview({
+				walletId: button.getAttribute("data-wallet-id") || void 0,
+				onDone: () => {
+					renderWalletView();
+				}
+			}).catch(() => {});
+		};
+	});
+	doc.querySelectorAll("[data-wallet-toggle-hidden]").forEach((button) => {
+		button.onclick = (event) => {
+			event.stopPropagation();
+			try {
+				const storage = window.parent?.localStorage ?? null;
+				const current = storage?.getItem("aus_wallet_show_hidden_v1") === "1";
+				storage?.setItem("aus_wallet_show_hidden_v1", current ? "0" : "1");
+			} catch {}
 			renderWalletView();
 		};
 	});
@@ -11670,7 +12253,7 @@ function openPanel() {
 	panelOpen = true;
 	refreshUI();
 	try {
-		import("./collector-BJ9e-sSf.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-F_KJsjVA.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-CZCvbZd5.js").then((m) => m.maybeAutoCheck());
@@ -11890,10 +12473,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-CxrqO6op.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-Bvb0Xpuv.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-BJ9e-sSf.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-F_KJsjVA.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -11901,10 +12484,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-CxrqO6op.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-Bvb0Xpuv.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-BJ9e-sSf.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-F_KJsjVA.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -11994,13 +12577,13 @@ async function onDelete() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-DEVpZGmD.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-DQEQi8QK.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CkKG5JR0.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DUVox4wX.js").then((n) => n.i)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-CYpuFVv-.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 	try {
@@ -12027,19 +12610,19 @@ async function onDelete() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-CxrqO6op.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-Bvb0Xpuv.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-BJ9e-sSf.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-F_KJsjVA.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-DEVpZGmD.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-DQEQi8QK.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-DUVox4wX.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-CYpuFVv-.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -12049,10 +12632,10 @@ async function onDisable() {
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-CxrqO6op.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-Bvb0Xpuv.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-BJ9e-sSf.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-F_KJsjVA.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -12071,13 +12654,13 @@ async function onDisable() {
 		unwatchSystemTheme();
 	} catch {}
 	try {
-		(await import("./balance-DEVpZGmD.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-DQEQi8QK.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CkKG5JR0.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DUVox4wX.js").then((n) => n.i)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-CYpuFVv-.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -12105,19 +12688,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-DEVpZGmD.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-DQEQi8QK.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CkKG5JR0.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DUVox4wX.js").then((n) => n.i)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-CYpuFVv-.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-BJ9e-sSf.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-F_KJsjVA.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -12139,7 +12722,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-DUVox4wX.js").then((n) => n.i).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-CYpuFVv-.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

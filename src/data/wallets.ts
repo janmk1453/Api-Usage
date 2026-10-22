@@ -153,6 +153,19 @@ function normalizeAliases(raw: unknown, current: string): string[] {
   return out;
 }
 
+function normalizePriceMatch(raw: any): WalletModel['priceMatch'] {
+  if (!raw || typeof raw !== 'object') return null;
+  const catalogModel = cleanText(raw.catalogModel);
+  const provider = cleanText(raw.provider);
+  if (!catalogModel || !provider) return null;
+  return {
+    provider,
+    catalogModel,
+    score: finiteNumber(raw.score, 0),
+    matchedAt: finiteNumber(raw.matchedAt, 0),
+  };
+}
+
 export function normalizeWalletModel(raw: any, now = Date.now()): WalletModel | null {
   if (!raw || typeof raw !== 'object') return null;
   const sourceModel = cleanText(raw.sourceModel || raw.model);
@@ -179,6 +192,8 @@ export function normalizeWalletModel(raw: any, now = Date.now()): WalletModel | 
     price: normalizeWalletPriceRule(raw.price),
     source,
     locked: raw.locked === true,
+    priceMatch: normalizePriceMatch(raw.priceMatch),
+    hidden: raw.hidden === true,
     discoveredAt,
     lastSeen: finiteNumber(raw.lastSeen, discoveredAt),
     updatedAt: finiteNumber(raw.updatedAt, discoveredAt),
@@ -396,6 +411,7 @@ export function cloneWallet(wallet: WalletConfig): WalletConfig {
       ...item,
       aliases: [...item.aliases],
       price: cloneWalletPriceRule(item.price),
+      priceMatch: item.priceMatch ? { ...item.priceMatch } : item.priceMatch ?? null,
     })),
   };
 }
@@ -498,6 +514,7 @@ export function cnyToWalletCurrency(value: number, currency: WalletCurrency, exc
 
 export function walletPendingModelCount(wallet: WalletConfig): number {
   return (wallet.models || []).filter((model) => {
+    if (model.hidden === true) return false;
     if (wallet.id === DEEPSEEK_WALLET_ID && model.source === 'builtin') return false;
     return model.price.priceConfigured !== true;
   }).length;

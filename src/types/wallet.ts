@@ -27,6 +27,15 @@ export type WalletCredentialObservation = {
   label: string;
   lastSeen: number;
 };
+/** 价格同步时命中的供应商目录模型（用于审计「这条价格是哪来的」） */
+export type WalletPriceMatch = {
+  provider: string;
+  catalogModel: string;
+  /** 模糊匹配置信度 0–1，1 表示归一化后完全相等 */
+  score: number;
+  matchedAt: number;
+};
+
 export type WalletModel = {
   id: string;
   sourceModel: string;
@@ -39,6 +48,10 @@ export type WalletModel = {
   price: WalletPriceRule;
   source: WalletModelSource;
   locked: boolean;
+  /** 最近一次价格同步的匹配信息；无则为 null */
+  priceMatch?: WalletPriceMatch | null;
+  /** 旧版本「全量灌入」遗留的同步条目：默认不在列表中显示，可直接删除 */
+  hidden?: boolean;
   discoveredAt: number;
   lastSeen: number;
   updatedAt: number;

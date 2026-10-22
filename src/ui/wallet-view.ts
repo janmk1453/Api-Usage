@@ -8,7 +8,9 @@ import {
 import { formatMoney, getDisplayCurrency, getWalletExchangeRate } from '../services/currency';
 import { queryWalletBalance } from '../services/balance';
 import { getWalletApiKey, saveWalletApiKey } from '../services/wallet-secrets';
-import { syncPricingFromModelsDev } from '../services/pricing-sync';
+import { walletSyncStatus } from '../services/pricing-sync';
+import { openWalletSyncPreview } from './wallet-sync-preview';
+import { resolveVendor, vendorInitialFallback } from '../services/provider-registry';
 import { toast } from '../utils/logger';
 import { esc } from '../utils/date';
 import { CN_HOLIDAY_COVERAGE_LABEL } from '../constants/holidays';
@@ -92,24 +94,33 @@ function priceField(walletId: string, modelId: string, tier: 'offpeak' | 'peak',
     style="width:100%;min-width:72px;padding:5px 6px;border:1px solid var(--ds-border);border-radius:7px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />`;
 }
 
-function renderModelRows(wallet: WalletConfig): string {
-  const models = [...wallet.models].sort((a, b) => {
-    const pending = Number(!a.price.priceConfigured) - Number(!b.price.priceConfigured);
-    return pending || a.model.localeCompare(b.model, 'zh-CN');
-  });
+function renderModelRows(wallet: WalletConfig, showHidden = false): string {
+  const all = wallet.models;
+  const models = all
+    .filter((model) => showHidden || model.hidden !== true)
+    .sort((a, b) => {
+      const pending = Number(!a.price.priceConfigured) - Number(!b.price.priceConfigured);
+      return pending || a.model.localeCompare(b.model, 'zh-CN');
+    });
   if (!models.length) {
     return '<tr><td colspan="7" style="padding:14px;text-align:center;color:var(--ds-text-3);">尚未识别到模型，可手动添加或等待请求接入</td></tr>';
   }
   return models.map((model) => {
     const pending = !model.price.priceConfigured;
     const canDelete = model.source !== 'builtin';
+    const matchLine = model.priceMatch
+      ? '<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:3px;" title="来源：'
+        + esc(model.priceMatch.provider + ' / ' + model.priceMatch.catalogModel)
+        + '">↳ ' + esc(model.priceMatch.catalogModel) + ' · ' + Math.round(model.priceMatch.score * 100) + '%</div>'
+      : '';
+    const rowStyle = 'border-top:1px solid var(--ds-border);' + (model.hidden === true ? 'opacity:0.55;' : '');
     return `
-      <tr data-wallet-model-row="${esc(model.id)}" style="border-top:1px solid var(--ds-border);">
+      <tr data-wallet-model-row="${esc(model.id)}" style="${rowStyle}">
         <td style="padding:8px 6px;min-width:180px;">
           <input data-wallet-model-name="1" data-wallet-id="${esc(wallet.id)}" data-model-id="${esc(model.id)}"
             value="${esc(model.model)}"
             style="width:100%;padding:6px 7px;border:1px solid var(--ds-border);border-radius:7px;background:${model.source === 'builtin' ? 'var(--ds-sidebar-bg)' : 'var(--ds-card-inner)'};color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:3px;">${esc(model.sourceModel)}${model.aliases.length ? ` · 别名 ${esc(model.aliases.join('、'))}` : ''}</div>
+          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:3px;">${esc(model.sourceModel)}${model.aliases.length ? ` · 别名 ${esc(model.aliases.join('、'))}` : ''}${model.hidden === true ? ' · 已隐藏' : ''}</div>
           <label style="display:flex;align-items:center;gap:5px;margin-top:5px;font-size:var(--aus-fs-sm);color:var(--ds-text-3);">
             上下文上限
             <input type="number" min="1" step="1000" data-wallet-context-limit="1" data-wallet-id="${esc(wallet.id)}" data-model-id="${esc(model.id)}"
@@ -119,6 +130,7 @@ function renderModelRows(wallet: WalletConfig): string {
         </td>
         <td style="padding:8px 6px;white-space:nowrap;">
           <span style="padding:2px 7px;border-radius:999px;background:${pending ? 'var(--ds-red-bg)' : model.source === 'sync' ? 'var(--ds-green-bg)' : 'var(--ds-card)'};color:${pending ? 'var(--ds-red)' : model.source === 'sync' ? 'var(--ds-green)' : 'var(--ds-text-2)'};font-size:var(--aus-fs-sm);">${sourceLabel(model)}</span>
+          ${matchLine}
         </td>
         <td style="padding:8px 6px;min-width:224px;">
           <div style="display:grid;grid-template-columns:repeat(3,minmax(68px,1fr));gap:4px;">${priceField(wallet.id, model.id, 'offpeak', 'hit', model.price.offpeak.hit)}${priceField(wallet.id, model.id, 'offpeak', 'miss', model.price.offpeak.miss)}${priceField(wallet.id, model.id, 'offpeak', 'output', model.price.offpeak.output)}</div>
@@ -163,32 +175,38 @@ function renderCredentialPicker(wallet: WalletConfig): string {
 
 function renderCatalogPicker(wallet: WalletConfig): string {
   const current = WALLET_CATALOG_PROVIDERS.find((item) => item.id === wallet.catalogProvider);
+  const status = walletSyncStatus(wallet);
   return `
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
     <button data-wallet-catalog-btn="1" data-wallet-id="${esc(wallet.id)}" style="display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
       <span style="color:var(--ds-text-2);">价格来源</span>
       <span style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(current?.label || '不自动同步')}</span>
       ${icon('chevron-down', 14)}
     </button>
+    <div style="font-size:var(--aus-fs-sm);color:${status.pending ? 'var(--ds-red)' : 'var(--ds-text-3)'};max-width:190px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(status.label)}">${esc(status.label)}${status.pending ? ` · ${status.pending} 个待匹配` : ''}</div>
     <div id="aus-wallet-catalog-drop-${esc(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;right:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:180px;max-height:260px;overflow:auto;">
       ${dropdownHtml(wallet.id, 'catalog', [
         { id: '', label: '不自动同步', active: !wallet.catalogProvider },
         ...WALLET_CATALOG_PROVIDERS.map((item) => ({ id: item.id, label: item.label, active: item.id === wallet.catalogProvider })),
       ])}
+    </div>
     </div>`;
 }
 
 function renderWalletCard(wallet: WalletConfig, history: any[]): string {
-  // 收起态左侧方块标识：取钱包名称中第一个有意义的字符（剥离协议与 api./www. 前缀）
-  const avatarLetter = (() => {
-    const raw = String(wallet.name || wallet.endpointDisplay || wallet.endpointLabel || '').trim();
-    const cleaned = raw
-      .replace(/^https?:\/\//i, '')
-      .replace(/^www\./i, '')
-      .replace(/^api\./i, '')
-      .replace(/^[^0-9a-zA-Z\u4e00-\u9fa5]+/, '');
-    const first = cleaned.charAt(0);
-    return first ? first.toUpperCase() : '?';
-  })();
+  const visibleModels = wallet.models.filter((model) => model.hidden !== true);
+  const hiddenCount = wallet.models.length - visibleModels.length;
+  // 供应商识别（地址 → 接入类型 → 模型名前缀），失败退回名称首字符
+  const vendor = resolveVendor({
+    sourceType: wallet.sourceType,
+    endpointDisplay: wallet.endpointDisplay,
+    endpointLabel: wallet.endpointLabel,
+    endpointId: wallet.endpointId,
+    models: visibleModels.map((model) => model.model),
+  });
+  const avatarLetter = vendorInitialFallback(wallet.name || wallet.endpointDisplay || wallet.endpointLabel || '');
+  let showHidden = false;
+  try { showHidden = (window.parent as any)?.localStorage?.getItem('aus_wallet_show_hidden_v1') === '1'; } catch {}
   const pending = walletPendingModelCount(wallet);
   const isOfficial = wallet.id === DEEPSEEK_WALLET_ID;
   const selectedCredential = wallet.credentials.find((item) => item.id === wallet.balance.primaryCredentialId);
@@ -196,16 +214,18 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
   // 收起态只外显余额与模型数，密钥数/请求数/费用不外显（展开后按需查看）
   const metrics = [
     { label: '余额', value: walletBalanceText(wallet), title: walletBalanceText(wallet) },
-    { label: '模型', value: `${wallet.models.length} 个`, title: '已识别模型数量' },
+    { label: '模型', value: `${visibleModels.length} 个`, title: '已识别模型数量（不含已隐藏的同步条目）' },
   ];
   return `
     <section class="ds-card" data-wallet-card="${esc(wallet.id)}" style="display:grid;gap:12px;">
       <div class="aus-wallet-header">
-        <div class="aus-wallet-avatar" title="${esc(wallet.name)}">${esc(avatarLetter)}</div>
+        ${vendor
+          ? `<div class="aus-wallet-avatar" title="${esc(vendor.label)}" style="background:${vendor.color};color:#FFFFFF;${vendor.mark.length > 1 ? 'font-size:12px;' : ''}">${esc(vendor.mark)}</div>`
+          : `<div class="aus-wallet-avatar" title="${esc(wallet.name)}">${esc(avatarLetter)}</div>`}
         <div class="aus-wallet-identity">
           <div class="aus-wallet-name-row">
             <input data-wallet-name="1" data-wallet-id="${esc(wallet.id)}" value="${esc(wallet.name)}" />
-            <span class="${isOfficial ? 'aus-wallet-badge-official' : 'aus-wallet-badge-relay'}" style="padding:3px 8px;border-radius:999px;background:${isOfficial ? 'var(--ds-green-bg)' : 'var(--ds-card-inner)'};color:${isOfficial ? 'var(--ds-green)' : 'var(--ds-text-2)'};font-size:var(--aus-fs-sm);white-space:nowrap;">${isOfficial ? 'DeepSeek 官方' : '中转/自定义'}</span>
+            <span class="${isOfficial ? 'aus-wallet-badge-official' : 'aus-wallet-badge-relay'}" style="padding:3px 8px;border-radius:999px;background:${isOfficial ? 'var(--ds-green-bg)' : 'var(--ds-card-inner)'};color:${isOfficial ? 'var(--ds-green)' : 'var(--ds-text-2)'};font-size:var(--aus-fs-sm);white-space:nowrap;">${isOfficial ? 'DeepSeek 官方' : esc(vendor?.label || '中转/自定义')}</span>
             ${pending ? `<span style="padding:3px 8px;border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);white-space:nowrap;">${pending} 个待定价</span>` : ''}
           </div>
           <div class="aus-wallet-sub">${esc(wallet.endpointDisplay || wallet.endpointLabel || '本机官方接口')} · ${esc(wallet.sourceType || '未识别')}</div>
@@ -215,7 +235,7 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
         </div>
         <div class="aus-wallet-actions">
           <button class="aus-wallet-icon-btn" data-wallet-toggle="1" data-wallet-id="${esc(wallet.id)}" title="${collapsed ? '展开钱包详情' : '收起钱包详情'}" aria-label="${collapsed ? '展开钱包详情' : '收起钱包详情'}">${collapsed ? icon('chevron-down', 16) : icon('chevron-up', 16)}</button>
-          ${wallet.catalogProvider ? `<button class="aus-wallet-icon-btn" data-wallet-sync="1" data-wallet-id="${esc(wallet.id)}" title="按价格来源同步模型价格" aria-label="同步价格">${icon('refresh', 16)}</button>` : ''}
+          ${wallet.catalogProvider ? `<button class="aus-wallet-icon-btn" data-wallet-sync="1" data-wallet-id="${esc(wallet.id)}" title="预览并应用价格同步（按已识别模型模糊匹配）" aria-label="预览价格同步">${icon('refresh', 16)}</button>` : ''}
           ${isOfficial ? '' : `<button class="aus-wallet-icon-btn is-danger" data-wallet-ignore="1" data-wallet-id="${esc(wallet.id)}" title="忽略该钱包（历史与统计保留）" aria-label="忽略钱包">${icon('close', 16)}</button>`}
         </div>
       </div>
@@ -267,12 +287,12 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
       <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;overflow:hidden;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
           <div><div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">模型与价格</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">单位 ${getDisplayCurrency().code}/百万 tokens；模型改名会保留旧名别名</div></div>
-          <button data-wallet-add-model="1" data-wallet-id="${esc(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加模型</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;"><button data-wallet-toggle-hidden="1" data-wallet-id="${esc(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;display:${hiddenCount ? 'inline-flex' : 'none'};align-items:center;gap:4px;">${showHidden ? '隐藏' : '显示'} ${hiddenCount} 个隐藏条目</button><button data-wallet-add-model="1" data-wallet-id="${esc(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加模型</button></div>
         </div>
         <div style="width:100%;overflow-x:auto;">
           <table style="width:100%;min-width:900px;border-collapse:collapse;font-size:var(--aus-fs-sm);">
             <thead><tr style="text-align:center;color:var(--ds-text-2);"><th style="text-align:left;padding:5px 6px;">模型</th><th style="padding:5px 6px;">来源</th><th style="padding:5px 6px;">非峰（命中/未命中/输出）</th><th style="padding:5px 6px;">高峰（命中/未命中/输出）</th><th style="padding:5px 6px;">峰谷</th><th style="padding:5px 6px;">锁定</th><th style="padding:5px 6px;">操作</th></tr></thead>
-            <tbody>${renderModelRows(wallet)}</tbody>
+            <tbody>${renderModelRows(wallet, showHidden)}</tbody>
           </table>
         </div>
       </div>
@@ -425,9 +445,21 @@ function bindWalletView(doc: Document): void {
   });
 
   doc.querySelectorAll('[data-wallet-sync]').forEach((button: any) => {
-    button.onclick = async () => {
-      button.textContent = '同步中…';
-      await syncPricingFromModelsDev({ silent: false });
+    button.onclick = (event: Event) => {
+      event.stopPropagation();
+      const walletId = button.getAttribute('data-wallet-id') || undefined;
+      openWalletSyncPreview({ walletId, onDone: () => { renderWalletView(); } }).catch(() => {});
+    };
+  });
+
+  doc.querySelectorAll('[data-wallet-toggle-hidden]').forEach((button: any) => {
+    button.onclick = (event: Event) => {
+      event.stopPropagation();
+      try {
+        const storage = (window.parent as any)?.localStorage ?? null;
+        const current = storage?.getItem('aus_wallet_show_hidden_v1') === '1';
+        storage?.setItem('aus_wallet_show_hidden_v1', current ? '0' : '1');
+      } catch {}
       renderWalletView();
     };
   });
