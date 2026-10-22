@@ -1,6 +1,7 @@
 import { icon } from './icons';
 import { repository } from '../data/repository';
 import {
+  cloneWallet,
   defaultContextLimitForModel,
   walletBalanceToCny,
   walletPendingModelCount,
@@ -355,6 +356,32 @@ export async function renderWalletView(): Promise<void> {
   const active = wallets.filter((wallet) => !ignoredSet.has(wallet.id));
   const planWallets = active.filter((wallet) => wallet.plan?.enabled === true);
   const planRemoteCount = planWallets.filter((wallet) => (wallet.plan?.remote || []).length > 0).length;
+  let walletFilter = 'all';
+  let walletQuery = '';
+  try {
+    walletFilter = (window.parent as any)?.localStorage?.getItem('aus_wallet_filter_v1') || 'all';
+    walletQuery = (window.parent as any)?.localStorage?.getItem('aus_wallet_query_v1') || '';
+  } catch {}
+  const filters: Array<{ id: string; label: string; count?: number }> = [
+    { id: 'all', label: '全部', count: active.length },
+    { id: 'pending', label: '有待定价', count: active.filter((wallet) => walletPendingModelCount(wallet) > 0).length },
+    { id: 'plan', label: '有套餐', count: planWallets.length },
+    { id: 'official', label: '官方', count: active.filter((wallet) => wallet.id === DEEPSEEK_WALLET_ID).length },
+  ];
+  const matchesFilter = (wallet: WalletConfig) => {
+    if (walletFilter === 'pending') return walletPendingModelCount(wallet) > 0;
+    if (walletFilter === 'plan') return wallet.plan?.enabled === true;
+    if (walletFilter === 'official') return wallet.id === DEEPSEEK_WALLET_ID;
+    return true;
+  };
+  const toolbar = `
+      <div class="ds-card" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;">
+        <input data-wallet-search="1" value="${esc(walletQuery)}" placeholder="搜索钱包 / 地址 / 模型" style="flex:1;min-width:180px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
+        ${filters.map((item) => '<button data-wallet-filter="' + item.id + '" style="padding:6px 11px;border:1px solid ' + (walletFilter === item.id ? 'var(--ds-black)' : 'var(--ds-border)') + ';border-radius:999px;background:' + (walletFilter === item.id ? 'var(--ds-black)' : 'var(--ds-card-inner)') + ';color:' + (walletFilter === item.id ? 'var(--ds-black-text)' : 'var(--ds-text)') + ';font-size:var(--aus-fs-sm);cursor:pointer;">' + esc(item.label) + (item.count != null ? ' ' + item.count : '') + '</button>').join('')}
+        <button data-wallet-expand-all="1" style="padding:6px 11px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">展开全部</button>
+        <button data-wallet-collapse-all="1" style="padding:6px 11px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">收起全部</button>
+      </div>`;
+  const visibleWallets = active.filter(matchesFilter);
   let balanceCny = 0;
   let balanceCount = 0;
   let pending = 0;
@@ -374,7 +401,10 @@ export async function renderWalletView(): Promise<void> {
         <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">待定价模型</div><div style="font-size:20px;font-weight:700;color:${pending ? 'var(--ds-red)' : 'var(--ds-green)'};margin-top:4px;">${pending}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">保存价格后自动重算</div></div>
         <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">套餐额度</div><div style="font-size:20px;font-weight:700;color:var(--ds-text);margin-top:4px;">${planWallets.length}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">${planRemoteCount ? `${planRemoteCount} 个远端真值` : '本地估算，仅展示'}</div></div>
       </div>
-      ${active.map((wallet) => renderWalletCard(wallet, history)).join('')}
+      ${toolbar}
+      ${visibleWallets.length
+        ? visibleWallets.map((wallet) => renderWalletCard(wallet, history)).join('')
+        : '<div class="ds-card" style="text-align:center;color:var(--ds-text-3);font-size:var(--aus-fs-sm);padding:18px;">没有符合筛选条件的钱包</div>'}
       <div class="ds-card">
         <div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);margin-bottom:2px;">已忽略接入</div>
         ${renderIgnoredWallets(ignored, wallets)}
@@ -759,6 +789,49 @@ function bindWalletView(doc: Document): void {
         repository.updateWallet(walletId, (wallet) => { wallet.balance.primaryCredentialId = value || null; });
       }
       closeDropdowns();
+      renderWalletView();
+    };
+  });
+
+  const searchInput = doc.querySelector('[data-wallet-search]') as HTMLInputElement | null;
+  if (searchInput) {
+    const applySearch = () => {
+      const keyword = String(searchInput.value || '').trim().toLowerCase();
+      try { (window.parent as any)?.localStorage?.setItem('aus_wallet_query_v1', keyword); } catch {}
+      doc.querySelectorAll('[data-wallet-card]').forEach((card: any) => {
+        const walletId = card.getAttribute('data-wallet-card');
+        const wallet = repository.getWallet(walletId);
+        if (!wallet) return;
+        const hay = [wallet.name, wallet.endpointDisplay, wallet.endpointLabel, ...wallet.models.map((model) => model.model)]
+          .filter(Boolean).join(' ').toLowerCase();
+        card.style.display = !keyword || hay.includes(keyword) ? '' : 'none';
+      });
+    };
+    searchInput.oninput = applySearch;
+    if (String(searchInput.value || '').trim()) applySearch();
+  }
+
+  doc.querySelectorAll('[data-wallet-filter]').forEach((button: any) => {
+    button.onclick = () => {
+      try { (window.parent as any)?.localStorage?.setItem('aus_wallet_filter_v1', button.getAttribute('data-wallet-filter') || 'all'); } catch {}
+      renderWalletView();
+    };
+  });
+
+  doc.querySelectorAll('[data-wallet-expand-all]').forEach((button: any) => {
+    button.onclick = () => {
+      const next = repository.getWallets().map((wallet) => cloneWallet(wallet));
+      next.forEach((wallet) => { wallet.collapsed = false; });
+      repository.replaceWallets(next);
+      renderWalletView();
+    };
+  });
+
+  doc.querySelectorAll('[data-wallet-collapse-all]').forEach((button: any) => {
+    button.onclick = () => {
+      const next = repository.getWallets().map((wallet) => cloneWallet(wallet));
+      next.forEach((wallet) => { wallet.collapsed = true; });
+      repository.replaceWallets(next);
       renderWalletView();
     };
   });

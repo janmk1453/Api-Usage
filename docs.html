@@ -1407,7 +1407,8 @@
         <p class="lead">钱包页按接入地址组织余额、密钥、模型和价格。它解决的是“同一接入下的请求花在哪里、余额还有多少、模型费用怎么计算”这几个问题。</p>
 
         <h3 id="wallet-summary">钱包汇总</h3>
-        <p>页面顶部显示钱包余额合计、钱包数量和待定价模型数量。余额合计会使用统一汇率换算，列表中的已忽略钱包不参与合计。</p>
+        <p>页面顶部显示钱包余额合计、钱包数量、待定价模型数量和套餐额度钱包数。余额合计会使用统一汇率换算，列表中的已忽略钱包不参与合计。</p>
+        <p>汇总卡下方的工具栏支持按钱包名称、接入地址或模型名搜索（只过滤当前列表，不重新加载），并可按“有待定价 / 有套餐 / 官方”筛选；右侧“展开全部 / 收起全部”可一次性调整所有钱包的展开状态。</p>
 
         <h3 id="wallet-create">钱包创建与忽略</h3>
         <ul>
@@ -1419,7 +1420,9 @@
         </ul>
 
         <h3 id="wallet-collapse">收起与展开</h3>
-        <p>钱包默认收起，收起状态显示钱包名称、接入地址、余额、密钥数量、模型数量、请求数和费用摘要。点击“展开”后显示余额、峰谷、模型价格和价格来源等详细设置。展开状态会按钱包独立记忆。</p>
+        <p>钱包默认收起，收起状态显示钱包名称、接入地址、余额和模型数量摘要。点击“展开”后会按区块显示余额、峰谷规则、模型价格、套餐额度等详细设置。展开状态会按钱包独立记忆。</p>
+        <p>钱包卡左上角的标识会按接入地址自动识别厂商（DeepSeek、OpenAI、Anthropic、Google、Moonshot、智谱、MiniMax 等）。识别成功时显示该厂商的品牌色字标；识别不到时退回钱包名称首字符，仿冒域名不会被误判。</p>
+        <p>旧版本曾把供应商目录全量写入钱包，这些从未被请求使用过的条目会被标记为“已隐藏同步条目”，默认不显示、也不计入待定价数量，可在“模型与价格”标题右侧展开后手动删除。</p>
 
         <h3 id="wallet-balance">余额与自动校准</h3>
         <div class="table-wrap">
@@ -1427,7 +1430,7 @@
             <thead><tr><th>余额方式</th><th>适用情况</th><th>说明</th></tr></thead>
             <tbody>
               <tr><td>手工余额</td><td>所有钱包</td><td>直接填写当前可用余额，适合代理、兼容接口或不提供余额查询的接入。</td></tr>
-              <tr><td>自动校准</td><td>DeepSeek 官方直连钱包</td><td>需要钱包内校准密钥和全局自动校准开关；查询成功后覆盖钱包余额。</td></tr>
+              <tr><td>自动校准</td><td>有可用查询适配器的钱包</td><td>需要在该钱包“保存密钥”处填写查询密钥；勾选“自动校准”后按设置页的校准间隔轮询，查询成功后覆盖钱包余额。</td></tr>
               <tr><td>钱包币种</td><td>所有钱包</td><td>用于显示和换算；概览显示会按统一汇率折算。</td></tr>
             </tbody>
           </table>
@@ -1464,10 +1467,44 @@
 
         <h3 id="wallet-catalog-sync">价格来源与同步价格</h3>
         <ul>
-          <li>每个钱包可以选择一个第一方模型厂商作为价格来源，例如 DeepSeek、OpenAI、Anthropic、Google、Mistral、xAI 等。</li>
-          <li>可选来源只展示第一方厂商，不展示聚合平台或商业化中转渠道。</li>
-          <li>开启自动同步后，可以从 models.dev 获取模型价格，并按当前钱包的供应商匹配。</li>
-          <li>同步模式包括仅新增、覆盖未锁定和全部覆盖；关闭同步时会移除未锁定的同步价格并重算历史。</li>
+          <li>每个钱包可以选择一个第一方模型厂商作为价格来源，例如 DeepSeek、OpenAI、Anthropic、Google、Mistral、xAI 等；可选来源只展示第一方厂商，不展示聚合平台或商业化中转渠道。</li>
+          <li><strong>同步只按钱包里已经识别到的模型名做模糊匹配</strong>，命中后把价格写入该模型，<strong>不会把供应商目录里的模型整批塞进钱包</strong>。</li>
+          <li>匹配会做归一化（去日期、去版本后缀、统一分隔符）和分层打分：归一化后完全相同视为精确匹配；仅大小写或后缀写法不同视为模糊匹配并显示置信度；版本号不同（如 4 与 4.5）或变体不同（如 mini、lite、flash）会直接判为不匹配，宁可漏配也不错配。</li>
+          <li>匹配到的价格会留下“目录模型 + 置信度”记录，显示在模型表“来源”列下方，便于核对这条价格从哪来。</li>
+          <li>同步模式包括只补未定价、覆盖未锁定和全部覆盖；歧义匹配（多个候选分数接近）默认不写入。</li>
+          <li>点击钱包卡上的同步图标会打开「价格同步预览」浮层，可逐条勾选、切换模式、搜索模型，确认后才会写入并重算该钱包历史费用。</li>
+          <li>自动同步会缓存价格目录 10 分钟，并限制 60 秒内不重复拉取，避免每次请求都下载完整目录。</li>
+        </ul>
+
+        <h3 id="wallet-balance-adapters">余额查询适配器</h3>
+        <p>余额查询采用适配器机制：按接入地址自动识别厂商，也可以在钱包内手动指定“查询适配器”。所有查询都由浏览器直接访问厂商接口，不经过任何第三方服务器。</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>适配器</th><th>可查询内容</th><th>认证方式</th></tr></thead>
+            <tbody>
+              <tr><td>DeepSeek</td><td>账户余额（CNY/USD）</td><td>Bearer API Key</td></tr>
+              <tr><td>Moonshot / Kimi</td><td>账户余额（.cn 为 CNY，.ai 为 USD）</td><td>Bearer API Key</td></tr>
+              <tr><td>硅基流动</td><td>账户余额</td><td>Bearer API Key</td></tr>
+              <tr><td>OpenRouter</td><td>可用额度 = 购买额度 − 已用</td><td>Bearer API Key</td></tr>
+              <tr><td>阶跃星辰</td><td>账户余额</td><td>Bearer API Key</td></tr>
+              <tr><td>Novita</td><td>账户余额</td><td>api-key 头</td></tr>
+              <tr><td>智谱 GLM（套餐）</td><td>5 小时与每周额度占比</td><td>裸 API Key（不加 Bearer 前缀）</td></tr>
+              <tr><td>MiniMax（套餐）</td><td>5 小时与每周剩余次数</td><td>Bearer API Key</td></tr>
+              <tr><td>new-api / one-api 中转（实验）</td><td>订阅额度与已用金额</td><td>系统访问令牌 + 用户 ID（不是 sk- API Key）</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warning"><strong>这些查询做不到，请勿期待：</strong>OpenAI、Anthropic、Google、Mistral、Cohere、Together、Groq、Fireworks、百炼、火山、混元等厂商没有个人余额接口；Claude Code、Codex、OpenCode Zen/Go、GitHub Copilot、Cursor、讯飞星辰等套餐额度也没有公开且允许跨域的接口（多数需要网页 Cookie 或 OAuth 令牌）。这些钱包只能手工维护余额，套餐额度用本地估算。</div>
+        <p>查询失败会区分原因：跨域被拒、密钥无效、接口报错、网络不可达或响应无法解析，并在钱包卡上显示具体提示。跨域被拒说明该站点没有对浏览器开放接口，只能改用手工余额。</p>
+
+        <h3 id="wallet-plan">套餐额度（仅展示）</h3>
+        <p>套餐额度用于展示 CodePlan 类订阅的 5 小时、每周或每月额度消耗，<strong>只在钱包页显示，不参与计费、不进入导出与云同步</strong>。</p>
+        <ul>
+          <li>选择预设（GLM Coding Plan、MiniMax、Kimi For Coding、月度预算）或自定义窗口后，填写额度即可看到“已用 / 剩余 / 占用比例 / 预计耗尽时间”。</li>
+          <li>本地估算按钱包归属的本地历史，在滚动 5 小时、滚动 7 天或自然月窗口内聚合 Token、请求数或金额；历史中缺失的请求不会被计入，因此估算值可能偏低，请以厂商账单为准。</li>
+          <li>滚动窗口没有“整体重置”时刻，界面会标注窗口周期；自然月窗口显示下次重置时间。</li>
+          <li>智谱 GLM 与 MiniMax 会同时查询远端真值，远端结果优先显示并标注来源；查询失败保留本地估算并显示原因。</li>
+          <li>没有公开接口的套餐（Claude Code、Codex、OpenCode、Copilot 等）只提供本地估算。</li>
         </ul>
 
         <h3 id="wallet-overview-link">与概览余额口径的关系</h3>
@@ -1760,14 +1797,14 @@
         <p class="lead">本扩展是纯前端、本地运行的 SillyTavern 原生扩展，完整代码开源（MIT 许可证），可随时审查。本声明基于实际代码行为编写，逐项如实披露本扩展的全部网络请求与敏感操作。</p>
         <p><strong>适用对象：</strong>SillyTavern 扩展「API用量统计」（Api-Usage，仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">janmk1453/Api-Usage</a>）<br>
         <strong>适用版本：</strong>当前发行版本及功能行为一致的后续版本<br>
-        <strong>最后更新：</strong>2026年10月10日</p>
+        <strong>最后更新：</strong>2026年10月22日</p>
 
         <h3 id="privacy-commitments">一、核心承诺</h3>
         <ol class="steps">
           <li>本扩展<strong>不采集、不上传任何可识别个人身份的数据</strong>。唯一会离开设备的，是可在「设置 → 匿名使用统计」一键关闭的匿名使用统计（随机设备标识、环境分桶、页面使用次数、扩展版本与渲染耗时分桶），其中不含聊天内容、模型名、密钥、余额、费用与接口地址，详见第十节。</li>
           <li>本扩展发起的所有网络请求<strong>仅限于本声明第四节列出的域名</strong>，除该清单外不存在任何其他网络访问。</li>
           <li>本扩展<strong>无法获取用户储存在酒馆中的明文 API 密钥</strong>，详见第五节。</li>
-          <li>用户主动填入本扩展的校准密钥<strong>不会被上传到除 DeepSeek 官方余额接口以外的任何位置</strong>，详见第六节。</li>
+          <li>用户主动填入本扩展的校准密钥<strong>不会被上传到除钱包所对应厂商的余额/额度接口以外的任何位置</strong>，且由浏览器直连、不经过任何第三方中转，详见第六节。</li>
         </ol>
 
         <h3 id="privacy-not-doing">二、本扩展明确不做的事</h3>
@@ -1796,7 +1833,8 @@
           <table>
             <thead><tr><th>#</th><th>域名</th><th>资源</th><th>功能</th><th>触发条件</th><th>发送内容</th></tr></thead>
             <tbody>
-              <tr><td>1</td><td><span class="code">api.deepseek.com</span></td><td><span class="code">GET /user/balance</span></td><td>查询 DeepSeek 官方钱包余额（校准）</td><td>仅当钱包为 DeepSeek 官方接入、且用户主动填写校准密钥后：手动校准，或开启「自动校准」后按设定间隔（1–1440 分钟）触发</td><td>仅 <span class="code">Authorization: Bearer &lt;校准密钥&gt;</span> 请求头；不含任何聊天内容或统计数据</td></tr>
+              <tr><td>1</td><td><span class="code">api.deepseek.com</span>、<span class="code">api.moonshot.cn</span>、<span class="code">api.moonshot.ai</span>、<span class="code">api.siliconflow.cn</span>、<span class="code">openrouter.ai</span>、<span class="code">api.stepfun.com</span>、<span class="code">api.novita.ai</span></td><td><span class="code">/user/balance</span>、<span class="code">/v1/users/me/balance</span>、<span class="code">/v1/user/info</span>、<span class="code">/api/v1/credits</span>、<span class="code">/v1/accounts</span>、<span class="code">/v3/user/balance</span></td><td>查询对应厂商钱包余额（校准）</td><td>仅当该钱包被识别为对应厂商（或用户在钱包内手动指定查询适配器）、且用户填写查询密钥后：手动查询，或开启「自动校准」后按设定间隔（1–1440 分钟）触发</td><td>仅 <span class="code">Authorization</span> / <span class="code">api-key</span> 请求头；不含任何聊天内容或统计数据</td></tr>
+              <tr><td>1b</td><td><span class="code">open.bigmodel.cn</span>（海外 <span class="code">api.z.ai</span>）、<span class="code">api.minimaxi.com</span>、<strong>用户自行填写的中转站地址</strong>（new-api / one-api 站点）</td><td><span class="code">/api/monitor/usage/quota/limit</span>、<span class="code">/v1/api/openplatform/coding_plan/remains</span>、<span class="code">/dashboard/billing/subscription</span>、<span class="code">/dashboard/billing/usage</span></td><td>查询套餐额度 / 中转站订阅额度（仅展示）</td><td>仅当用户为钱包选择了对应查询适配器并填写查询密钥（中转站另需用户 ID）后手动查询，或在开启「自动校准」后按设定间隔触发</td><td>仅认证请求头（<span class="code">Authorization</span>，智谱为裸密钥）与 <span class="code">New-Api-User</span> 用户 ID；不含任何聊天内容或统计数据</td></tr>
               <tr><td>2</td><td><span class="code">models.dev</span></td><td><span class="code">/api.json</span>、<span class="code">/catalog.json</span></td><td>模型价格目录同步（「价格来源、自动同步」功能）</td><td><strong>默认关闭</strong>；用户开启后手动或按设定间隔触发</td><td>无用户数据（纯 GET 拉取公开目录）</td></tr>
               <tr><td>3</td><td><span class="code">raw.githubusercontent.com</span></td><td><span class="code">anomalyco/opencode/main/models.json</span></td><td>价格同步的备用数据源</td><td>同上，仅在主源拉取失败时依序尝试</td><td>无用户数据</td></tr>
               <tr><td>4</td><td><span class="code">raw.githubusercontent.com</span></td><td><span class="code">janmk1453/Api-Usage/{main|dev}/manifest.json</span></td><td>检查所选分支的扩展更新</td><td>每小时一次的自动检查（5 秒超时）</td><td>无用户数据</td></tr>
@@ -1823,8 +1861,8 @@
 
         <h3 id="privacy-calibration-key">六、关于用户主动填入的校准密钥</h3>
         <ul>
-          <li>用户在钱包页主动填写的校准密钥是<strong>实际可用</strong>的密钥，且<strong>仅会被用于查询 DeepSeek 官方余额</strong>（<a href="https://api.deepseek.com/user/balance" target="_blank" rel="noreferrer">https://api.deepseek.com/user/balance</a>），该查询不会产生任何扣费或消耗；</li>
-          <li>自动校准仅对该密钥对应的 DeepSeek 官方钱包生效，由<strong>浏览器直接</strong>发送至上述接口，不经过任何第三方；</li>
+          <li>用户在钱包页主动填写的校准密钥是<strong>实际可用</strong>的密钥，且<strong>仅会被用于查询该钱包所对应厂商的余额或套餐额度接口</strong>（域名与路径见第四节第 1、1b 项），这类查询不会产生任何扣费或消耗；</li>
+          <li>查询由<strong>浏览器直接</strong>发送至厂商接口，不经过任何第三方；扩展不提供、也不内置任何余额查询代理服务；对于未开放跨域（CORS）的厂商，查询会在浏览器端直接失败并提示，不会改用其他途径绕过；</li>
           <li>校准密钥仅经 <strong>XOR 混淆</strong>后存放于 SillyTavern 的扩展设置与浏览器本地存储中；</li>
           <li>校准密钥<strong>不进入</strong>历史记录、统计聚合、调试日志、导入导出文件或 WebDAV 同步；</li>
           <li><strong>XOR 不是安全加密</strong>，仅能防止明文直接可见。请使用权限受限的密钥（如仅具只读余额权限的密钥）并自行评估风险。</li>
@@ -1912,12 +1950,20 @@
         <p class="lead">请在安装或使用本扩展前仔细阅读本声明。<strong>一旦安装、启用或使用本扩展，即视为您已阅读、理解并同意本声明的全部内容。</strong>如不同意，请立即停止使用并卸载本扩展。</p>
         <p><strong>适用对象：</strong>SillyTavern 扩展「API用量统计」（Api-Usage，仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">janmk1453/Api-Usage</a>）<br>
         <strong>适用版本：</strong>当前发行版本及功能行为一致的后续版本<br>
-        <strong>最后更新：</strong>2026年10月5日</p>
+        <strong>最后更新：</strong>2026年10月22日</p>
 
         <h3 id="disclaimer-as-is">一、按「现状」提供，不作任何担保</h3>
         <p>本扩展按「现状」（AS IS）提供，开发者以开源社区志愿者的身份尽力维护，但<strong>不对本扩展作出任何形式的明示或默示担保</strong>，包括但不限于对适销性、特定用途适用性、不侵权、无错误或漏洞、不间断运行的担保。本扩展的功能表现可能随 SillyTavern 版本、浏览器环境、上游接口变化而受影响。</p>
 
-        <h3 id="disclaimer-models-dev">二、关于「价格来源」「自动同步」等基于 models.dev 数据的功能</h3>
+        <h3 id="disclaimer-quota">二、关于「余额自动校准」「套餐额度」等第三方接口功能</h3>
+        <ol class="steps">
+          <li>余额与套餐额度查询由<strong>浏览器直接访问厂商接口</strong>，接口地址、字段与鉴权方式由各厂商自行决定，可能随时变更、限流（如 429）或关闭。因接口变更导致查询失败、数值不准或功能不可用，本扩展不承担责任。</li>
+          <li>「套餐额度」中的本地估算基于本扩展记录的历史数据推算，<strong>不包含未经过本扩展的请求</strong>（例如在其他设备、其他客户端或厂商网页端的消耗），因此估算值可能高于实际剩余额度。该数据<strong>仅供展示参考</strong>，不参与计费、导出与云同步，不能作为账单依据，一切以厂商官方账单为准。</li>
+          <li>对于未提供公开接口或未开放跨域的厂商（OpenAI、Anthropic、Google、Mistral、Cohere、Together、Groq、Fireworks、百炼、火山、混元，以及 Claude Code、Codex、OpenCode Zen/Go、GitHub Copilot、Cursor、讯飞星辰等订阅套餐），本扩展<strong>不提供、也不会绕过限制去提供</strong>自动查询，这些钱包请手工维护余额并使用本地估算。</li>
+          <li>用户在中转站（new-api / one-api 等）场景下填写的「系统访问令牌」属于高权限凭据，请自行评估风险并优先使用只读或受限令牌。</li>
+        </ol>
+
+        <h3 id="disclaimer-models-dev">三、关于「价格来源」「自动同步」等基于 models.dev 数据的功能</h3>
         <ol class="steps">
           <li>本扩展的「价格来源」「自动同步」等功能利用 <a href="https://models.dev" target="_blank" rel="noreferrer">models.dev</a> 获取的公开数据在<strong>本地</strong>进行价格展示与费用估算。</li>
           <li>本扩展<strong>不对上述数据中出现或可能出现的任何商业化中转站（中转、代理服务）负责</strong>。我们不建议使用任何商业化中转站。</li>
@@ -1925,7 +1971,7 @@
           <li>本扩展与 models.dev、上述数据涉及的任何供应商或中转站<strong>均无任何商业往来</strong>，不接受赞助分成，不进行流量导购，<strong>坚定不移地反对商业化</strong>。</li>
         </ol>
 
-        <h3 id="disclaimer-key-security">三、密钥安全与数据安全免责</h3>
+        <h3 id="disclaimer-key-security">四、密钥安全与数据安全免责</h3>
         <ol class="steps">
           <li>我们将尽可能维护本扩展的安全和隐私性（XOR 混淆、密钥不落盘到导出与同步、明细自动剥离等，详见隐私声明），但<strong>本扩展不对因酒馆（SillyTavern）或本扩展的安全漏洞、或因其他间接原因导致的任何形式的密钥泄露及由此产生的损失负责</strong>。</li>
           <li>XOR 混淆<strong>不是安全加密</strong>，仅用于避免明文直接可见。用户应自行评估风险，并建议使用权限受限的密钥（如仅具余额只读权限的密钥）。</li>
@@ -1933,7 +1979,7 @@
           <li>请从官方仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">https://github.com/janmk1453/Api-Usage</a> 获取本扩展。经第三方渠道分发、篡改的版本不在本声明保障范围内。</li>
         </ol>
 
-        <h3 id="disclaimer-cost">四、费用与统计估算免责</h3>
+        <h3 id="disclaimer-cost">五、费用与统计估算免责</h3>
         <ol class="steps">
           <li>本扩展展示的费用、余额、峰谷计价、汇率换算等数据均为<strong>基于本地配置与第三方公开数据的估算值</strong>，仅供参考，<strong>不构成任何账单依据</strong>。实际消费请以模型服务商的官方账单为准。</li>
           <li>峰谷时段计价依据 DeepSeek 公开的计费规则，并结合内置的中国法定节假日数据（覆盖 2024–2026 年）合成；超出覆盖范围的年份需用户在设置中自行补充「额外空闲日期」。节假日数据或规则如发生变更（如官方调整计费规则），可能导致估算偏差，本扩展不对该偏差及据此作出的任何决策（如消费预算、用量规划）负责。</li>
@@ -1941,23 +1987,23 @@
           <li>「趋势预测」功能基于历史数据的统计模型，其预测结果不构成任何承诺或建议。</li>
         </ol>
 
-        <h3 id="disclaimer-third-party-apis">五、第三方接口使用免责</h3>
+        <h3 id="disclaimer-third-party-apis">六、第三方接口使用免责</h3>
         <ol class="steps">
           <li>本扩展可在 SillyTavern 支持的范围内记录用户自行配置的各种接口（官方 API、自定义接口、反向代理等）的用量。用户接入何种服务、以何种密钥接入，均为用户自己的决定，<strong>用户应自行遵守相应服务商的服务条款</strong>。</li>
           <li>使用任何第三方接口（包括商业化中转站）所带来的费用风险、封号风险、数据安全风险由用户自行承担，与本扩展无关。</li>
         </ol>
 
-        <h3 id="disclaimer-availability">六、数据与功能可用性免责</h3>
+        <h3 id="disclaimer-availability">七、数据与功能可用性免责</h3>
         <ol class="steps">
           <li>本扩展的统计准确度受限于 SillyTavern 及上游接口返回的用量数据。部分接口不返回标准用量字段、流式响应格式异常或中途断开时，可能出现<strong>漏记、少记或估算偏差</strong>，本扩展不对此负责。</li>
           <li>因浏览器存储配额、隐私模式、用户清理浏览器数据、IndexedDB 写入失败等原因导致的历史数据丢失，本扩展不承担责任。<strong>建议用户定期通过导出功能备份数据。</strong></li>
           <li>因 SillyTavern 版本更新导致扩展功能失效或行为异常的，开发者将尽力适配，但不承诺任何修复时限。</li>
         </ol>
 
-        <h3 id="disclaimer-liability">七、责任限制</h3>
+        <h3 id="disclaimer-liability">八、责任限制</h3>
         <p>在法律允许的最大范围内，对于因使用或无法使用本扩展而产生的任何直接、间接、附带、特殊、惩罚性损失（包括但不限于数据丢失、密钥泄露、费用损失、利润损失、业务中断），本扩展开发者<strong>不承担任何责任</strong>。无论该等损失是否源于本扩展的缺陷、漏洞或本声明所述的任何情形。</p>
 
-        <h3 id="disclaimer-misc">八、其他</h3>
+        <h3 id="disclaimer-misc">九、其他</h3>
         <ol class="steps">
           <li>本扩展完整代码开源（MIT 许可证）并接受公众审查，本声明与源码具有同等的解释参照意义；当描述与实际行为不一致时，以实际代码行为为准，并欢迎通过 Issues 指出，我们将及时修正。</li>
           <li>开发者保留更新本声明的权利，更新后将发布于仓库；重大变更将尽量在发布说明中提示。</li>

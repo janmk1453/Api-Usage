@@ -1556,3 +1556,8 @@
     gap: 6px !important;
   }
 }
+
+/* 钱包页：模型表行悬停反馈（无阴影，仅背景变化，保证锐利） */
+#aus-wallet [data-wallet-model-row]:hover { background: var(--ds-card); }
+#aus-wallet [data-wallet-card] .aus-wallet-icon-btn:focus-visible,
+#aus-wallet [data-wallet-card] button:focus-visible { outline: 2px solid var(--ds-orange); outline-offset: 1px; }
