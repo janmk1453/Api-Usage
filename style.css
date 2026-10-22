@@ -1466,17 +1466,28 @@
     grid-row: 1;
     flex-wrap: nowrap !important;
   }
+  /* 窄屏名称行只保留名称与待定价徽标：官方/中转徽标已由副标题表达，避免挤压导致错位 */
+  #aus-wallet .aus-wallet-badge-official { display: none !important; }
   #aus-wallet .aus-wallet-name-row {
     flex-wrap: nowrap !important;
     min-width: 0;
   }
   #aus-wallet .aus-wallet-name-row [data-wallet-name] {
     flex: 1 1 auto;
+    width: 0;
     min-width: 0 !important;
     max-width: 100% !important;
+    field-sizing: fixed !important;
     text-overflow: ellipsis;
   }
-  #aus-wallet .aus-wallet-name-row > span { flex: 0 0 auto; }
+  #aus-wallet .aus-wallet-name-row > span {
+    flex: 0 1 auto;
+    max-width: 46%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #aus-wallet .aus-wallet-metrics { grid-template-columns: max-content !important; }
   #aus-wallet .aus-wallet-sub {
     white-space: nowrap;
     overflow: hidden;

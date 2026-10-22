@@ -10168,7 +10168,7 @@ function money(cny, digits = 4) {
 function walletBalanceText(wallet) {
 	const amount = wallet.balance.amount == null || wallet.balance.amount === "" ? NaN : parseFloat(String(wallet.balance.amount));
 	if (!Number.isFinite(amount)) return "未设置";
-	return `${wallet.balance.currency === "USD" ? "$" : "¥"}${amount.toFixed(4)} ${wallet.balance.currency}`;
+	return `${wallet.balance.currency === "USD" ? "$" : "¥"}${amount.toFixed(2)} ${wallet.balance.currency}`;
 }
 function displayToCny(value) {
 	const number = typeof value === "number" ? value : parseFloat(String(value));
@@ -10359,10 +10359,6 @@ function renderWalletCard(wallet, history) {
 		label: "余额",
 		value: walletBalanceText(wallet),
 		title: walletBalanceText(wallet)
-	}, {
-		label: "模型",
-		value: `${visibleModels.length} 个`,
-		title: "已识别模型数量（不含已隐藏的同步条目）"
 	}];
 	return `
     <section class="ds-card" data-wallet-card="${esc$2(wallet.id)}" style="display:grid;gap:12px;">

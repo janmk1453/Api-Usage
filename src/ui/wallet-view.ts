@@ -40,7 +40,7 @@ function walletBalanceText(wallet: WalletConfig): string {
     ? NaN
     : parseFloat(String(wallet.balance.amount));
   if (!Number.isFinite(amount)) return '未设置';
-  return `${wallet.balance.currency === 'USD' ? '$' : '¥'}${amount.toFixed(4)} ${wallet.balance.currency}`;
+  return `${wallet.balance.currency === 'USD' ? '$' : '¥'}${amount.toFixed(2)} ${wallet.balance.currency}`;
 }
 
 function displayToCny(value: unknown): number {
@@ -240,10 +240,9 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
   const isOfficial = wallet.id === DEEPSEEK_WALLET_ID;
   const selectedCredential = wallet.credentials.find((item) => item.id === wallet.balance.primaryCredentialId);
   const collapsed = wallet.collapsed !== false;
-  // 收起态只外显余额与模型数，密钥数/请求数/费用不外显（展开后按需查看）
+  // 收起态只外显余额（模型数/密钥数/请求数/费用均在展开后查看）
   const metrics = [
     { label: '余额', value: walletBalanceText(wallet), title: walletBalanceText(wallet) },
-    { label: '模型', value: `${visibleModels.length} 个`, title: '已识别模型数量（不含已隐藏的同步条目）' },
   ];
   return `
     <section class="ds-card" data-wallet-card="${esc(wallet.id)}" style="display:grid;gap:12px;">
