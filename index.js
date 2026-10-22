@@ -7,7 +7,7 @@ import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWa
 import { a as isUnsafeKey$1, c as localDay$1, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay, t as esc$2, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-CkKG5JR0.js";
 import { r as recalcAllCosts, t as installInterception } from "./interception-B7OkhTwG.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, i as saveApiKey, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-yd2ZFi0D.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, i as saveApiKey, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-CjoY_ggh.js";
 import { c as walletSyncStatus, i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev, t as applySyncPlan } from "./pricing-sync-CVyzrHKV.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
@@ -2464,7 +2464,7 @@ function renderSettings(doc) {
 		state$2.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state$2.settings });
 		try {
-			import("./balance-yd2ZFi0D.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-CjoY_ggh.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -10594,7 +10594,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-yd2ZFi0D.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-CjoY_ggh.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -12688,7 +12688,7 @@ async function onDelete() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-yd2ZFi0D.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-CjoY_ggh.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CkKG5JR0.js").then((n) => n.t)).stopRateTimer?.();
@@ -12727,7 +12727,7 @@ function onEnable() {
 		import("./collector-0CHow_vj.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-yd2ZFi0D.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-CjoY_ggh.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
@@ -12765,7 +12765,7 @@ async function onDisable() {
 		unwatchSystemTheme();
 	} catch {}
 	try {
-		(await import("./balance-yd2ZFi0D.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-CjoY_ggh.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CkKG5JR0.js").then((n) => n.t)).stopRateTimer?.();
@@ -12799,7 +12799,7 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-yd2ZFi0D.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-CjoY_ggh.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CkKG5JR0.js").then((n) => n.t)).restartRateTimer?.();

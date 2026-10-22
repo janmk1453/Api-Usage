@@ -83,12 +83,10 @@ export async function queryWalletBalance(walletId: string, silent = false): Prom
         plan.remoteError = null;
         next.plan = plan;
       }) || updated;
-    } else {
+    } else if (wallet.plan?.remoteError) {
       repository.updateWallet(walletId, (next) => {
-        if (!next.plan?.remoteError) return;
-        const plan = next.plan;
-        plan.remoteError = null;
-        next.plan = plan;
+        if (!next.plan) return;
+        next.plan.remoteError = null;
       });
     }
     try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}

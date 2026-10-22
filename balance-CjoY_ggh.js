@@ -718,8 +718,11 @@ function resolveBalanceAdapter(wallet) {
 	const explicit = adapterById(wallet.balance?.adapter || "");
 	if (explicit) return explicit;
 	const host = extractHost(wallet.endpointDisplay || wallet.endpointLabel || "");
-	const byHost = host ? BALANCE_ADAPTERS.find((adapter) => adapter.vendor && adapter.vendor === vendorById(adapter.vendor)?.id && (vendorById(adapter.vendor)?.hosts || []).some((domain) => host === domain || host.endsWith("." + domain))) : null;
-	if (byHost) return byHost;
+	const vendor = host ? vendorFromHost(host) : null;
+	if (vendor) {
+		const byHost = BALANCE_ADAPTERS.find((adapter) => adapter.vendor === vendor.id);
+		if (byHost) return byHost;
+	}
 	const byVendor = VENDOR_ADAPTER[wallet.catalogProvider || ""];
 	if (byVendor && wallet.kind === "official") return adapterById(byVendor);
 	return null;
@@ -822,11 +825,9 @@ async function queryWalletBalance(walletId, silent = false) {
 			plan.remoteError = null;
 			next.plan = plan;
 		}) || updated;
-		else repository.updateWallet(walletId, (next) => {
-			if (!next.plan?.remoteError) return;
-			const plan = next.plan;
-			plan.remoteError = null;
-			next.plan = plan;
+		else if (wallet.plan?.remoteError) repository.updateWallet(walletId, (next) => {
+			if (!next.plan) return;
+			next.plan.remoteError = null;
 		});
 		try {
 			globalThis.ApiUsageStat?.refreshUI?.();

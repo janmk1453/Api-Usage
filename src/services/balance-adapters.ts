@@ -9,7 +9,7 @@
  * 浏览器侧还存在 CORS 与 OAuth 凭据限制，一律走「手工余额 + 本地估算套餐」。
  */
 import type { PlanQuotaSnapshot, WalletConfig } from '../types/wallet';
-import { extractHost, vendorById, type VendorId } from './provider-registry';
+import { extractHost, vendorFromHost, type VendorId } from './provider-registry';
 
 export type AuthStyle = 'bearer' | 'raw' | 'bearer+user-id' | 'api-key-header';
 
@@ -361,9 +361,11 @@ export function resolveBalanceAdapter(wallet: WalletConfig | null | undefined): 
   const explicit = adapterById(wallet.balance?.adapter || '');
   if (explicit) return explicit;
   const host = extractHost(wallet.endpointDisplay || wallet.endpointLabel || '');
-  const byHost = host ? BALANCE_ADAPTERS.find((adapter) => adapter.vendor && adapter.vendor === vendorById(adapter.vendor)?.id
-    && (vendorById(adapter.vendor)?.hosts || []).some((domain) => host === domain || host.endsWith('.' + domain))) : null;
-  if (byHost) return byHost;
+  const vendor = host ? vendorFromHost(host) : null;
+  if (vendor) {
+    const byHost = BALANCE_ADAPTERS.find((adapter) => adapter.vendor === vendor.id);
+    if (byHost) return byHost;
+  }
   const byVendor = VENDOR_ADAPTER[(wallet.catalogProvider || '') as VendorId];
   if (byVendor && wallet.kind === 'official') return adapterById(byVendor);
   return null;
