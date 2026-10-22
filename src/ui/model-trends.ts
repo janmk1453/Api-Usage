@@ -1,6 +1,6 @@
 import { esc, localDay } from '../utils/date';
 import { X_OPTIONS } from './chart-config';
-import { attachChartZoom, detachChartZoom } from './range-zoom';
+import { attachChartZoom, detachChartZoom, getChartRange } from './range-zoom';
 
 type XKey = 'round'|'hour'|'day'|'week'|'month';
 type TrendId = 'token'|'req';
@@ -142,7 +142,7 @@ async function renderOne(id:TrendId, filtered:any[]){
   const minPerLabel = cw < 500 ? 42 : cw < 760 ? 56 : 68;
   const maxLabels = Math.max(8, Math.floor(cw / minPerLabel));
   const xInterval = labels.length <= maxLabels ? 0 : Math.ceil(labels.length / maxLabels) - 1;
-  const needZoom = labels.length > maxLabels;
+  const savedZoom = getChartRange('trend-' + id);
 
   const legendTop = models.length > 4 ? 2 : 0;
   c.setOption({
@@ -176,7 +176,7 @@ async function renderOne(id:TrendId, filtered:any[]){
       itemWidth:10, itemHeight:6,
     },
     grid:{ left:42, right:16, top: 22 + (models.length>4?8:0), bottom: labels.length>12 ? 62 : 46 },
-    dataZoom: labels.length > 1 ? [{ type:'inside', xAxisIndex:0, start: 0, end: 100, zoomOnMouseWheel:false, moveOnMouseMove:true }] : undefined,
+    dataZoom: labels.length > 1 ? [{ type:'inside', xAxisIndex:0, start: savedZoom?.start ?? 0, end: savedZoom?.end ?? 100, zoomOnMouseWheel:false, moveOnMouseMove:true }] : undefined,
     xAxis:{ type:'category', data: labels, boundaryGap:false, axisLine:{lineStyle:{color:cBorder}}, axisLabel:{ color:cText3, fontSize: 12, interval: 'auto', rotate: labels.length>12?30:0, hideOverlap:false } },
     yAxis:{ type:'value', axisLabel:{ color:cText3, fontSize: 12, formatter:(v:number)=> id==='token' ? (v>=1000? (v/1000).toFixed(0)+'k' : String(v)) : String(v) }, splitLine:{lineStyle:{color:cCard}} },
     series: seriesData.map(s=>({
@@ -191,7 +191,7 @@ async function renderOne(id:TrendId, filtered:any[]){
       data: s.data,
     })),
   }, true);
-  attachChartZoom({ doc, chart: c, container: el, left: 42, right: 16, bottom: 2, enabled: labels.length > 1 });
+  attachChartZoom({ doc, chart: c, container: el, left: 42, right: 16, bottom: 2, enabled: labels.length > 1, rangeKey: 'trend-' + id });
   setTimeout(()=>{ try{ c.resize(); }catch{} }, 60);
   } catch(e:any){
   if (charts[id]) { try{ detachChartZoom(charts[id]); }catch{}; try{ charts[id].dispose(); }catch{} charts[id]=null as any; }

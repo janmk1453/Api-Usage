@@ -5594,6 +5594,22 @@ function attachRangeZoom(options) {
 }
 /** 图表实例 → 滑块句柄（用 WeakMap，实例销毁后自动回收） */
 var chartHandles = /* @__PURE__ */ new WeakMap();
+/** 各图表的视窗位置记忆（切换页面时保留；时间维度/筛选变化时整体清空） */
+var storedRanges = /* @__PURE__ */ new Map();
+function getChartRange(key) {
+	return storedRanges.get(key) || null;
+}
+function setChartRange(key, start, end) {
+	if (!key) return;
+	if (!Number.isFinite(start) || !Number.isFinite(end)) return;
+	storedRanges.set(key, {
+		start,
+		end
+	});
+}
+function clearChartRanges() {
+	storedRanges.clear();
+}
 /**
 * 给任意 ECharts 实例挂载视窗滑块，并与 inside dataZoom 双向同步。
 * 同一实例重复调用会先清理旧滑块，避免叠加。
@@ -5602,6 +5618,7 @@ function attachChartZoom(options) {
 	const { chart, container, enabled = true } = options;
 	if (chart) detachChartZoom(chart);
 	if (!chart || !enabled) return null;
+	const rangeKey = options.rangeKey;
 	const handle = attachRangeZoom({
 		doc: options.doc,
 		container,
@@ -5610,6 +5627,7 @@ function attachChartZoom(options) {
 		bottom: options.bottom,
 		minSpan: options.minSpan,
 		onChange: (start, end) => {
+			if (rangeKey) setChartRange(rangeKey, start, end);
 			try {
 				chart.dispatchAction({
 					type: "dataZoom",
@@ -5620,13 +5638,27 @@ function attachChartZoom(options) {
 		}
 	});
 	chartHandles.set(chart, handle);
+	const saved = rangeKey ? getChartRange(rangeKey) : null;
+	if (saved) {
+		handle.setRange(saved.start, saved.end);
+		try {
+			chart.dispatchAction({
+				type: "dataZoom",
+				start: saved.start,
+				end: saved.end
+			});
+		} catch {}
+	}
 	try {
 		chart.off("datazoom");
 		chart.on("datazoom", () => {
 			try {
 				const option = chart.getOption();
 				const dataZoom = option && option.dataZoom && option.dataZoom[0];
-				if (dataZoom) handle.setRange(Number(dataZoom.start ?? 0), Number(dataZoom.end ?? 100));
+				if (dataZoom) {
+					handle.setRange(Number(dataZoom.start ?? 0), Number(dataZoom.end ?? 100));
+					if (rangeKey) setChartRange(rangeKey, Number(dataZoom.start ?? 0), Number(dataZoom.end ?? 100));
+				}
 			} catch {}
 		});
 	} catch {}
@@ -6035,6 +6067,7 @@ async function drawBarLine(el, id, labels, series) {
 			});
 		}
 		const isTokenCost = id === "token" || id === "cost";
+		const savedZoom = getChartRange("extra-" + id);
 		calcXInterval(labels, el);
 		const opts = {
 			backgroundColor: "transparent",
@@ -6073,8 +6106,8 @@ async function drawBarLine(el, id, labels, series) {
 			dataZoom: labels.length > 1 ? [{
 				type: "inside",
 				xAxisIndex: 0,
-				start: 0,
-				end: 100,
+				start: savedZoom?.start ?? 0,
+				end: savedZoom?.end ?? 100,
 				zoomOnMouseWheel: false,
 				moveOnMouseMove: true
 			}] : void 0,
@@ -6210,7 +6243,8 @@ async function drawBarLine(el, id, labels, series) {
 			left: 40,
 			right: 20,
 			bottom: 2,
-			enabled: labels.length > 1
+			enabled: labels.length > 1,
+			rangeKey: "extra-" + id
 		});
 		setTimeout(() => {
 			try {
@@ -6484,7 +6518,7 @@ async function renderOne(id, filtered) {
 		const cw = w || 320;
 		const maxLabels = Math.max(8, Math.floor(cw / (cw < 500 ? 42 : cw < 760 ? 56 : 68)));
 		labels.length <= maxLabels || Math.ceil(labels.length / maxLabels) - 1;
-		labels.length;
+		const savedZoom = getChartRange("trend-" + id);
 		const legendTop = models.length > 4 ? 2 : 0;
 		c.setOption({
 			backgroundColor: "transparent",
@@ -6533,8 +6567,8 @@ async function renderOne(id, filtered) {
 			dataZoom: labels.length > 1 ? [{
 				type: "inside",
 				xAxisIndex: 0,
-				start: 0,
-				end: 100,
+				start: savedZoom?.start ?? 0,
+				end: savedZoom?.end ?? 100,
 				zoomOnMouseWheel: false,
 				moveOnMouseMove: true
 			}] : void 0,
@@ -6585,7 +6619,8 @@ async function renderOne(id, filtered) {
 			left: 42,
 			right: 16,
 			bottom: 2,
-			enabled: labels.length > 1
+			enabled: labels.length > 1,
+			rangeKey: "trend-" + id
 		});
 		setTimeout(() => {
 			try {
@@ -7574,6 +7609,7 @@ async function renderChart(filteredRaw) {
 	const maxLabels = Math.max(8, Math.floor(cw / (cw < 500 ? 42 : cw < 760 ? 56 : 68)));
 	const xInterval = labels.length <= maxLabels ? 0 : Math.ceil(labels.length / maxLabels) - 1;
 	const showZoom = labels.length > 1;
+	const savedZoom = getChartRange("stats-main");
 	const gridLeft = narrow ? 40 : 50;
 	const gridRight = 12 + rightOffset;
 	chart.setOption({
@@ -7617,8 +7653,8 @@ async function renderChart(filteredRaw) {
 		dataZoom: showZoom ? [{
 			type: "inside",
 			xAxisIndex: 0,
-			start: 0,
-			end: 100,
+			start: savedZoom?.start ?? 0,
+			end: savedZoom?.end ?? 100,
 			zoomOnMouseWheel: false,
 			moveOnMouseMove: true
 		}] : void 0,
@@ -7650,7 +7686,8 @@ async function renderChart(filteredRaw) {
 		left: gridLeft,
 		right: gridRight,
 		bottom: narrow ? 2 : 4,
-		enabled: showZoom
+		enabled: showZoom,
+		rangeKey: "stats-main"
 	});
 	setTimeout(() => {
 		try {
@@ -7797,11 +7834,37 @@ async function getHistoryForStats() {
 	})();
 	return allHistoryPromise;
 }
+/** 视窗记忆签名：时间维度/筛选/X/Y/图表类型变化时重置为全量，仅页面切换时保留 */
+var lastZoomSignature = "";
+function currentZoomSignature() {
+	const filter = currentStatsFilter();
+	let chartType = "";
+	try {
+		chartType = getChartType();
+	} catch {}
+	return [
+		currentRange,
+		filter.start || "",
+		filter.end || "",
+		Array.isArray(filter.model) ? filter.model.join(",") : String(filter.model || ""),
+		String(filter.chat || ""),
+		String(filter.endpoint || ""),
+		String(filter.credential || ""),
+		String(getXSelected() || ""),
+		getYSelected().join(","),
+		chartType
+	].join("|");
+}
 async function renderStatsView() {
 	const doc = getDoc$6();
 	if (!getSelectedSave()) return;
 	const allHistory = await getHistoryForStats();
 	lastStatsHistory = allHistory;
+	const zoomSignature = currentZoomSignature();
+	if (zoomSignature !== lastZoomSignature) {
+		lastZoomSignature = zoomSignature;
+		clearChartRanges();
+	}
 	const endpointOptions = getEndpointFilterOptions(allHistory);
 	if (!(/* @__PURE__ */ new Set(["__all__", ...endpointOptions.map((option) => option.id)])).has(selectedEndpoint)) {
 		selectedEndpoint = STATS_FILTER_ALL;

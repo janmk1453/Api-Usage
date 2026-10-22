@@ -3,7 +3,7 @@ import { getSelectedSave, state } from '../store/index';
 import { localDay, esc } from '../utils/date';
 import { Y_OPTIONS, Y_GROUPS, X_OPTIONS, getYSelected, getXSelected, getChartType, setChartType, getAxisLabelMode, setAxisLabelMode, toggleY, setXSelected, aggregateForChart } from './chart-config';
 import { renderExtraCharts } from './extra-charts';
-import { attachChartZoom, detachChartZoom, type RangeZoomHandle } from './range-zoom';
+import { attachChartZoom, clearChartRanges, detachChartZoom, getChartRange, type RangeZoomHandle } from './range-zoom';
 import { renderModelTrends, initModelTrends } from './model-trends';
 import { DataEvents, on as onDataEvent } from '../data/events';
 import {
@@ -767,6 +767,7 @@ async function renderChart(filteredRaw: any[]) {
   // 第一张图表常驻视窗滑块：数据点 ≥2 即显示，可拖中间平移、拖两端缩放。
   // 默认（含切换时间维度、切换 X 维度、改筛选后）都完整展示全部 X 轴数据，由用户自己拉窄放大。
   const showZoom = labels.length > 1;
+  const savedZoom = getChartRange('stats-main');
   const gridLeft = narrow ? 40 : 50;
   const gridRight = 12 + rightOffset;
   chart.setOption({
@@ -801,7 +802,7 @@ async function renderChart(filteredRaw: any[]) {
     grid: { left: gridLeft, right: gridRight, top: 8, bottom: showZoom ? (narrow ? 50 : 54) : 28 },
     // 底部视窗滑块：拖中间平移 X 轴，拖两端改变可视范围（缩放）
     dataZoom: showZoom
-      ? [{ type: 'inside', xAxisIndex: 0, start: 0, end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true }]
+      ? [{ type: 'inside', xAxisIndex: 0, start: savedZoom?.start ?? 0, end: savedZoom?.end ?? 100, zoomOnMouseWheel: false, moveOnMouseMove: true }]
       : undefined,
     // 有视窗滑块时让 ECharts 按当前可视范围自适应标签密度（缩放后不会只剩一两个刻度）
     xAxis: { type:'category', data: labels, axisLine:{lineStyle:{color:cBorder}}, axisLabel:{color:cText3,fontSize: 12,interval: showZoom ? 'auto' : xInterval,rotate: labels.length>12?30:0, hideOverlap: false} },
@@ -817,6 +818,7 @@ async function renderChart(filteredRaw: any[]) {
     right: gridRight,
     bottom: narrow ? 2 : 4,
     enabled: showZoom,
+    rangeKey: 'stats-main',
   });
   setTimeout(()=>{ try{ chart.resize(); }catch{} }, 60);
 }
@@ -927,12 +929,38 @@ async function getHistoryForStats(): Promise<any[]> {
   return allHistoryPromise;
 }
 
+/** 视窗记忆签名：时间维度/筛选/X/Y/图表类型变化时重置为全量，仅页面切换时保留 */
+let lastZoomSignature = '';
+function currentZoomSignature(): string {
+  const filter = currentStatsFilter();
+  let chartType = '';
+  try { chartType = getChartType(); } catch {}
+  return [
+    currentRange,
+    filter.start || '',
+    filter.end || '',
+    Array.isArray(filter.model) ? filter.model.join(',') : String(filter.model || ''),
+    String(filter.chat || ''),
+    String(filter.endpoint || ''),
+    String(filter.credential || ''),
+    String(getXSelected() || ''),
+    (getYSelected() as any[]).join(','),
+    chartType,
+  ].join('|');
+}
+
 export async function renderStatsView() {
   const doc = getDoc();
   const s: any = getSelectedSave();
   if (!s) return;
   const allHistory: any[] = await getHistoryForStats();
   lastStatsHistory = allHistory;
+  const zoomSignature = currentZoomSignature();
+  if (zoomSignature !== lastZoomSignature) {
+    lastZoomSignature = zoomSignature;
+    // 时间维度 / 筛选 / 维度变化：视窗回到全量；切换页面（签名不变）时保留上次缩放位置
+    clearChartRanges();
+  }
   const endpointOptions = getEndpointFilterOptions(allHistory);
   const validEndpoints = new Set([STATS_FILTER_ALL, ...endpointOptions.map((option) => option.id)]);
   if (!validEndpoints.has(selectedEndpoint)) {

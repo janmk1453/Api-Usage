@@ -154,6 +154,23 @@ export function attachRangeZoom(options: RangeZoomOptions): RangeZoomHandle {
 /** 图表实例 → 滑块句柄（用 WeakMap，实例销毁后自动回收） */
 const chartHandles = new WeakMap<object, RangeZoomHandle>();
 
+/** 各图表的视窗位置记忆（切换页面时保留；时间维度/筛选变化时整体清空） */
+const storedRanges = new Map<string, { start: number; end: number }>();
+
+export function getChartRange(key: string): { start: number; end: number } | null {
+  return storedRanges.get(key) || null;
+}
+
+export function setChartRange(key: string, start: number, end: number): void {
+  if (!key) return;
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return;
+  storedRanges.set(key, { start, end });
+}
+
+export function clearChartRanges(): void {
+  storedRanges.clear();
+}
+
 export type ChartZoomOptions = {
   doc: Document;
   chart: any;
@@ -164,6 +181,8 @@ export type ChartZoomOptions = {
   minSpan?: number;
   /** false 时不挂载（并清理旧滑块） */
   enabled?: boolean;
+  /** 视窗位置记忆键：给了就按它保存/恢复 */
+  rangeKey?: string;
 };
 
 /**
@@ -174,6 +193,7 @@ export function attachChartZoom(options: ChartZoomOptions): RangeZoomHandle | nu
   const { chart, container, enabled = true } = options;
   if (chart) detachChartZoom(chart);
   if (!chart || !enabled) return null;
+  const rangeKey = options.rangeKey;
   const handle = attachRangeZoom({
     doc: options.doc,
     container,
@@ -182,17 +202,27 @@ export function attachChartZoom(options: ChartZoomOptions): RangeZoomHandle | nu
     bottom: options.bottom,
     minSpan: options.minSpan,
     onChange: (start: number, end: number) => {
+      if (rangeKey) setChartRange(rangeKey, start, end);
       try { chart.dispatchAction({ type: 'dataZoom', start, end }); } catch {}
     },
   });
   chartHandles.set(chart, handle);
+  // 恢复上次视窗（切换页面回来时保持缩放任位置）
+  const saved = rangeKey ? getChartRange(rangeKey) : null;
+  if (saved) {
+    handle.setRange(saved.start, saved.end);
+    try { chart.dispatchAction({ type: 'dataZoom', start: saved.start, end: saved.end }); } catch {}
+  }
   try {
     chart.off('datazoom');
     chart.on('datazoom', () => {
       try {
         const option = chart.getOption();
         const dataZoom = option && option.dataZoom && option.dataZoom[0];
-        if (dataZoom) handle.setRange(Number(dataZoom.start ?? 0), Number(dataZoom.end ?? 100));
+        if (dataZoom) {
+          handle.setRange(Number(dataZoom.start ?? 0), Number(dataZoom.end ?? 100));
+          if (rangeKey) setChartRange(rangeKey, Number(dataZoom.start ?? 0), Number(dataZoom.end ?? 100));
+        }
       } catch {}
     });
   } catch {}

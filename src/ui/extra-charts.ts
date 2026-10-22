@@ -1,7 +1,7 @@
 import { localDay } from '../utils/date';
 import { Y_OPTIONS, X_OPTIONS, X_OPTIONS_WITHOUT_ROUND, getYSelected as getMainY, getXSelected as getMainX } from './chart-config';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
-import { attachChartZoom, detachChartZoom } from './range-zoom';
+import { attachChartZoom, detachChartZoom, getChartRange } from './range-zoom';
 
 type ChartId = 'token'|'cost'|'hit'|'req'|'dur'|'pie';
 type XKey = 'round'|'hour'|'day'|'week'|'month';
@@ -228,6 +228,7 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
   }
   // 前两张：重叠柱 + 曲线（Token/费用）
   const isTokenCost = id==='token' || id==='cost';
+  const savedZoom = getChartRange('extra-' + id);
   const interval = calcXInterval(labels, el);
   const opts:any = {
     backgroundColor:'transparent',
@@ -237,7 +238,7 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
     xAxis:{ type:'category', data: labels, axisLine:{lineStyle:{color:themeColor('--ds-border','#E5E7EB')}}, axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF'),rotate: labels.length>12?30:0, interval: 'auto', hideOverlap: false} },
     yAxis:{ type:'value', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF')}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F6F7F8')}} },
     // 默认完整展示全部 X 轴数据（与第一张图一致），缩放交给 inside 手势/拖拽
-    dataZoom: labels.length > 1 ? [{ type:'inside', xAxisIndex:0, start: 0, end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : undefined,
+    dataZoom: labels.length > 1 ? [{ type:'inside', xAxisIndex:0, start: savedZoom?.start ?? 0, end: savedZoom?.end ?? 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : undefined,
     series: (() => {
       // 堆叠柱仅最顶段有圆角，中间段直角以无缝衔接
       const barIndices = series.map((s, i) => ({ s, i })).filter(({ s }) => !(isTokenCost && s.name.includes('总'))).map(({ i }) => i);
@@ -274,7 +275,7 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
     }));
   }
   c.setOption(opts, true);
-  attachChartZoom({ doc: getDoc(), chart: c, container: el, left: 40, right: 20, bottom: 2, enabled: labels.length > 1 });
+  attachChartZoom({ doc: getDoc(), chart: c, container: el, left: 40, right: 20, bottom: 2, enabled: labels.length > 1, rangeKey: 'extra-' + id });
   setTimeout(()=>{ try{ c.resize(); }catch{} }, 60);
   } catch(e:any){
     dropChart(id);
