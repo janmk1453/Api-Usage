@@ -224,6 +224,10 @@
   #aus-main { padding: 12px !important; overflow-x: hidden !important; }
   #aus-overview-four { grid-template-columns: repeat(2, 1fr) !important; gap: clamp(8px, 1.5cqi, 10px) !important; }
   #aus-stats-four { grid-template-columns: repeat(2, 1fr) !important; gap: clamp(8px, 1.5cqi, 10px) !important; }
+  /* 统计页三块：消费金额独占一行，API 请求次数与 Tokens 一行两列 */
+  #aus-stats-three { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; }
+  #aus-stats-three > .ds-card { min-width: 0; }
+  #aus-stats-three > .ds-card:first-child { grid-column: 1 / -1; }
   #aus-extra-charts, #aus-model-trends { grid-template-columns: 1fr !important; }
   .aus-wallet-summary { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: clamp(4px, 1.4cqi, 10px) !important; }
   .aus-wallet-summary > div { min-width: 0; }
@@ -329,10 +333,12 @@
 }
 .aus-wallet-metrics {
   display: grid;
-  grid-template-columns: repeat(2, minmax(64px, auto));
-  gap: 8px 18px;
+  grid-template-columns: max-content;
+  gap: 8px;
   min-width: 0;
   flex: 0 1 auto;
+  justify-items: start;
+  text-align: left;
 }
 .aus-wallet-icon-btn {
   width: 30px;
@@ -359,7 +365,7 @@
   background: var(--ds-red-bg);
   color: var(--ds-red);
 }
-.aus-wallet-metric { min-width: 0; }
+.aus-wallet-metric { min-width: 0; text-align: left; }
 .aus-wallet-metric-label {
   font-size:var(--aus-fs-sm);
   color: var(--ds-text-3);
@@ -1567,6 +1573,9 @@
     gap: 6px !important;
   }
 }
+
+/* 钱包卡内文本统一左对齐，避免继承宿主正文居中导致余额/标签居中漂浮 */
+#aus-wallet [data-wallet-card] { text-align: left; }
 
 /* 钱包页：模型表行悬停反馈（无阴影，仅背景变化，保证锐利） */
 #aus-wallet [data-wallet-model-row]:hover { background: var(--ds-card); }
