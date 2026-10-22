@@ -1728,3 +1728,17 @@
   .aus-range-zoom { height: 30px; }
   .aus-range-zoom-handle { width: 20px; height: 20px; margin-top: -10px; }
 }
+
+/* ── 统计页额外图表下拉浮层：补齐阴影/圆角/层级，避免看起来散落在图表上 ── */
+#aus-panel [id^="aus-extra-y-drop-"],
+#aus-panel [id^="aus-extra-x-drop-"] {
+  z-index: 30 !important;
+  background: var(--ds-card-inner) !important;
+  border: 1px solid var(--ds-border) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18) !important;
+  padding: 6px !important;
+  max-height: 260px !important;
+  overflow: auto !important;
+  max-width: calc(100% - 16px) !important;
+}

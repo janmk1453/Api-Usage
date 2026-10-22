@@ -295,14 +295,16 @@ export function initExtraCharts(){
     const xDrop=doc.getElementById(`aus-extra-x-drop-${id}`);
     if (yBtn && yDrop){
       yBtn.onclick=()=>{
-        yDrop.style.display = yDrop.style.display==='block'?'none':'block';
-        if (yDrop.style.display==='block') renderExtraY(id);
+        const willOpen = yDrop.style.display!=='block';
+        yDrop.style.display = willOpen?'block':'none';
+        if (willOpen){ if (xDrop) xDrop.style.display='none'; renderExtraY(id); }
       };
     }
     if (xBtn && xDrop){
       xBtn.onclick=()=>{
-        xDrop.style.display = xDrop.style.display==='block'?'none':'block';
-        if (xDrop.style.display==='block') renderExtraX(id);
+        const willOpen = xDrop.style.display!=='block';
+        xDrop.style.display = willOpen?'block':'none';
+        if (willOpen){ if (yDrop) yDrop.style.display='none'; renderExtraX(id); }
       };
     }
   }
