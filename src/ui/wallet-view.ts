@@ -11,9 +11,10 @@ import { queryWalletBalance } from '../services/balance';
 import { getWalletApiKey, saveWalletApiKey } from '../services/wallet-secrets';
 import { walletSyncStatus } from '../services/pricing-sync';
 import { openWalletSyncPreview } from './wallet-sync-preview';
-import { resolveVendor, vendorInitialFallback } from '../services/provider-registry';
+import { resolveVendor, vendorById, vendorInitialFallback } from '../services/provider-registry';
 import { BALANCE_ADAPTERS, resolveBalanceAdapter } from '../services/balance-adapters';
 import { renderPlanBlock, bindPlanBlock, hasPlanCapability } from './wallet-plan';
+import { vendorIconSvg } from './vendor-icons';
 import { toast } from '../utils/logger';
 import { esc } from '../utils/date';
 import { CN_HOLIDAY_COVERAGE_LABEL } from '../constants/holidays';
@@ -178,11 +179,14 @@ function renderCredentialPicker(wallet: WalletConfig): string {
 
 function renderCatalogPicker(wallet: WalletConfig): string {
   const current = WALLET_CATALOG_PROVIDERS.find((item) => item.id === wallet.catalogProvider);
+  const providerVendor = vendorById(wallet.catalogProvider);
+  const providerIcon = providerVendor ? vendorIconSvg(providerVendor.id, 14) : null;
   const status = walletSyncStatus(wallet);
   return `
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
     <button data-wallet-catalog-btn="1" data-wallet-id="${esc(wallet.id)}" style="display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
       <span style="color:var(--ds-text-2);">价格来源</span>
+      ${providerIcon ? '<span style="display:inline-flex;color:var(--ds-text-2);">' + providerIcon + '</span>' : ''}
       <span style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(current?.label || '不自动同步')}</span>
       ${icon('chevron-down', 14)}
     </button>
@@ -245,7 +249,7 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
     <section class="ds-card" data-wallet-card="${esc(wallet.id)}" style="display:grid;gap:12px;">
       <div class="aus-wallet-header">
         ${vendor
-          ? `<div class="aus-wallet-avatar" title="${esc(vendor.label)}" style="background:${vendor.color};color:#FFFFFF;${vendor.mark.length > 1 ? 'font-size:12px;' : ''}">${esc(vendor.mark)}</div>`
+          ? `<div class="aus-wallet-avatar" title="${esc(vendor.label)}" style="background:${vendor.color};color:#FFFFFF;${vendorIconSvg(vendor.id, 22) ? 'padding:0;' : (vendor.mark.length > 1 ? 'font-size:12px;' : '')}">${vendorIconSvg(vendor.id, 22) || esc(vendor.mark)}</div>`
           : `<div class="aus-wallet-avatar" title="${esc(wallet.name)}">${esc(avatarLetter)}</div>`}
         <div class="aus-wallet-identity">
           <div class="aus-wallet-name-row">

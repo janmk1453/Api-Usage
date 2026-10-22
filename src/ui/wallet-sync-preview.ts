@@ -4,6 +4,7 @@ import { toast } from '../utils/logger';
 import { repository } from '../data/repository';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 import { vendorById, resolveVendor } from '../services/provider-registry';
+import { vendorIconSvg } from './vendor-icons';
 import {
   applySyncPlan,
   buildSyncPlan,
@@ -130,7 +131,7 @@ export async function openWalletSyncPreview(options: { walletId?: string; onDone
     const head =
       '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;">'
       + '<div style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);">'
-      + (providerVendor ? '<span style="width:18px;height:18px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;background:' + providerVendor.color + ';color:#fff;font-size:10px;font-weight:700;">' + esc(providerVendor.mark) + '</span>' : '')
+      + (providerVendor ? '<span style="width:18px;height:18px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;background:' + providerVendor.color + ';color:#fff;font-size:10px;font-weight:700;">' + (vendorIconSvg(providerVendor.id, 12) || esc(providerVendor.mark)) + '</span>' : '')
       + '供应商 <b style="color:var(--ds-text);">' + esc(plan.providerLabel || '未选择') + '</b></div>'
       + '<div style="display:flex;gap:4px;margin-left:auto;">'
       + MODE_LABELS.map((item) => '<button data-sync-mode="' + item.id + '" style="padding:5px 10px;border:1px solid ' + (mode === item.id ? 'var(--ds-black)' : 'var(--ds-border)') + ';border-radius:999px;background:' + (mode === item.id ? 'var(--ds-black)' : 'var(--ds-card)') + ';color:' + (mode === item.id ? 'var(--ds-black-text)' : 'var(--ds-text)') + ';font-size:var(--aus-fs-sm);cursor:pointer;">' + item.label + '</button>').join('')
