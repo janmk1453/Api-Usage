@@ -1,10 +1,10 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { r as state } from "./store-BhaWFCjs.js";
 import { a as HIDDEN_PRICING_MODELS, d as PRICING_SYNC_SOURCE, l as PRICING, u as PRICING_SYNC_FALLBACK } from "./pricing-Bc-qEvy8.js";
-import { u as saveHot } from "./persistence-C4IJVd-B.js";
+import { f as saveHot } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { _ as normalizeModel, m as isDeepSeekOfficialModel, t as repository, v as cloneWallet } from "./repository-CtjJtPhT.js";
-import { a as getWalletExchangeRate } from "./currency-CkKG5JR0.js";
+import { _ as normalizeModel, m as isDeepSeekOfficialModel, t as repository, v as cloneWallet } from "./repository-BotjYXCT.js";
+import { a as getWalletExchangeRate } from "./currency-DYtqS43k.js";
 /** 已知同义模型名（仅做等价加分，不强绑）：归一化后仍不同但确为同一模型的写法 */
 var MODEL_ALIAS_HINTS = {
 	"qwen-max": ["qwen3-max", "qwen-max-latest"],

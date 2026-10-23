@@ -1580,6 +1580,14 @@
           <li>批量生成适合压测图表和表格，但可能重用相同时间戳；它们不会参与真实费用。</li>
           <li>使用完模拟数据后，可以在调试面板中清除。</li>
         </ul>
+
+        <h3 id="settings-storage">存储占用与旧版迁移备份</h3>
+        <ul>
+          <li>设置页的“存储占用”卡片列出本扩展在酒馆设置、浏览器 IndexedDB 与 localStorage 中占用的空间（UTF-8 估算），并单独显示浏览器站点用量与配额（该数值包含酒馆与其它扩展）。</li>
+          <li>其中“<strong>旧版迁移备份</strong>”是升级到当前数据结构时、在改写前留下的一次性快照（升级前的存档、设置、余额等原始字符串），仅供人工找回，程序不会读取或自动恢复它。</li>
+          <li>确认现有历史与金额无误后，可点击该行右侧的“清理”按钮：按钮会先变为“确认清理？再点一次”，<strong>再次点击才真正删除</strong>（5 秒内未确认会自动取消）。</li>
+          <li>清理只删除键名为 <span class="code">migration_backup_&lt;时间戳&gt;</span> 的备份条目（含其 localStorage 降级副本），<strong>不会动冷历史、设置、钱包、密钥与正在使用的降级副本</strong>；删除后会重新统计并刷新占用数字。</li>
+        </ul>
       </section>
 
       <section class="doc-section" id="data-transfer" data-keywords="导入 导出 删除记录 清理 WebDAV 云同步 备份 恢复 合并 覆盖 去重">
@@ -1915,6 +1923,7 @@
           <li><strong>冷数据：</strong>超出热区的历史记录（上限 2000 条，含去重）存于浏览器 IndexedDB；</li>
           <li><strong>明细：</strong>消息与响应快照仅对最近 5 条记录保留，其余自动剥离，且永不导出；</li>
           <li><strong>调试日志：</strong>仅存于本地 localStorage，可随时清除，不含聊天正文；</li>
+          <li><strong>旧版迁移备份：</strong>升级到当前数据结构时会留下一份包含旧版存档、设置、余额与旧密钥字段的原始字符串快照，存于浏览器 IndexedDB（键名 <span class="code">migration_backup_&lt;时间戳&gt;</span>）。程序不会读取它，用户可在设置页“存储占用”中一键清理（二次确认，仅删除该键）；升级前仍想找回旧数据时再保留。</li>
           <li><strong>卸载行为：</strong>卸载扩展会清除酒馆设置中本扩展的数据与上述本地缓存键；但浏览器 IndexedDB 中的冷历史备份<strong>不会随卸载自动删除</strong>，如需彻底清除，请在浏览器「清除站点数据、存储」中一并清理；</li>
           <li>用户可随时通过导出功能取得全部统计数据的明文 JSON 副本。</li>
         </ul>

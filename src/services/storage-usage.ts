@@ -16,6 +16,8 @@
  *  - 统一用 UTF-8 字节数（TextEncoder），不用 .length（UTF-16 码元数会低估中文占用）。
  */
 
+import { isMigrationBackupKey } from '../store/persistence';
+
 const DB_NAME = 'api_usage_stat_db';
 const STORE_NAME = 'kv';
 
@@ -28,6 +30,10 @@ export type StorageItem = {
   bytes: number | null;
   /** 补充说明 */
   detail?: string;
+  /** 可清理项类型：目前只有旧版迁移备份（升级前的一次性快照），其余项一律不可删 */
+  cleanable?: 'migration_backup';
+  /** 可清理项包含的底层条目数（例如多份备份），用于二次确认文案 */
+  itemCount?: number;
 };
 
 export type StorageReport = {
@@ -189,10 +195,23 @@ async function readIndexedDb(doc: Document): Promise<StorageItem[]> {
       setTimeout(() => resolve(out), 800);
     });
     const items: StorageItem[] = [];
+    let backupBytes = 0;
+    let backupCount = 0;
     for (const r of result) {
-      if (r.k === 'cold_history') items.push({ key: 'idb-cold', label: '历史记录（冷数据）', bytes: r.bytes });
-      else if (r.k.startsWith('migration_backup_')) items.push({ key: 'idb-backup', label: '旧版迁移备份', bytes: r.bytes });
-      else items.push({ key: 'idb-' + r.k.replace(/[^\w-]/g, '_'), label: r.k, bytes: r.bytes });
+      if (r.k === 'cold_history') { items.push({ key: 'idb-cold', label: '历史记录（冷数据）', bytes: r.bytes }); continue; }
+      // 严格白名单：只有 migration_backup_<时间戳> 才算旧版迁移备份，可清理
+      if (isMigrationBackupKey(r.k)) { backupBytes += r.bytes; backupCount += 1; continue; }
+      items.push({ key: 'idb-' + r.k.replace(/[^\w-]/g, '_'), label: r.k, bytes: r.bytes });
+    }
+    if (backupCount > 0) {
+      items.push({
+        key: 'idb-backup',
+        label: '旧版迁移备份',
+        bytes: backupBytes,
+        detail: backupCount > 1 ? `${backupCount} 份升级前快照，确认数据无误后可清理` : '升级前的一次性快照，确认数据无误后可清理',
+        cleanable: 'migration_backup',
+        itemCount: backupCount,
+      });
     }
     return items;
   } finally {

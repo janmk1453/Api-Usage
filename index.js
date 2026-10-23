@@ -1,14 +1,14 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from "./store-BhaWFCjs.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
-import { c as saveExtensionSettings, d as historyRecordKey, i as getExtensionSettings, u as saveHot } from "./persistence-C4IJVd-B.js";
+import { a as getExtensionSettings, f as saveHot, o as isMigrationBackupKey, p as historyRecordKey, r as deleteMigrationBackups, u as saveExtensionSettings } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, a as decryptKey, c as isTruncatedFinish, d as calcCost, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-CtjJtPhT.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, a as decryptKey, c as isTruncatedFinish, d as calcCost, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-BotjYXCT.js";
 import { a as isUnsafeKey$1, c as localDay$1, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay, t as esc$2, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
-import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-CkKG5JR0.js";
-import { r as recalcAllCosts, t as installInterception } from "./interception-Bux-4UqM.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, i as saveApiKey, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-CjoY_ggh.js";
-import { c as walletSyncStatus, i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev, t as applySyncPlan } from "./pricing-sync-CVyzrHKV.js";
+import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-DYtqS43k.js";
+import { r as recalcAllCosts, t as installInterception } from "./interception-81akbEw_.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, i as saveApiKey, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-Bkp12Xv2.js";
+import { c as walletSyncStatus, i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev, t as applySyncPlan } from "./pricing-sync-CinAIkTR.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -973,20 +973,35 @@ async function readIndexedDb(doc) {
 			setTimeout(() => resolve(out), 800);
 		});
 		const items = [];
-		for (const r of result) if (r.k === "cold_history") items.push({
-			key: "idb-cold",
-			label: "历史记录（冷数据）",
-			bytes: r.bytes
-		});
-		else if (r.k.startsWith("migration_backup_")) items.push({
+		let backupBytes = 0;
+		let backupCount = 0;
+		for (const r of result) {
+			if (r.k === "cold_history") {
+				items.push({
+					key: "idb-cold",
+					label: "历史记录（冷数据）",
+					bytes: r.bytes
+				});
+				continue;
+			}
+			if (isMigrationBackupKey(r.k)) {
+				backupBytes += r.bytes;
+				backupCount += 1;
+				continue;
+			}
+			items.push({
+				key: "idb-" + r.k.replace(/[^\w-]/g, "_"),
+				label: r.k,
+				bytes: r.bytes
+			});
+		}
+		if (backupCount > 0) items.push({
 			key: "idb-backup",
 			label: "旧版迁移备份",
-			bytes: r.bytes
-		});
-		else items.push({
-			key: "idb-" + r.k.replace(/[^\w-]/g, "_"),
-			label: r.k,
-			bytes: r.bytes
+			bytes: backupBytes,
+			detail: backupCount > 1 ? `${backupCount} 份升级前快照，确认数据无误后可清理` : "升级前的一次性快照，确认数据无误后可清理",
+			cleanable: "migration_backup",
+			itemCount: backupCount
 		});
 		return items;
 	} finally {
@@ -1091,6 +1106,7 @@ function row(item, total, opts = {}) {
     <div style="flex:0 0 auto;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;">
       <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">${formatBytes(item.bytes)}</div>
       ${pct != null ? `<div style="font-size:var(--aus-fs-xs);color:var(--ds-text-3);margin-top:2px;">${pct}%</div>` : ""}
+      ${opts.action ? `<button id="${opts.action.id}" type="button" data-armed="0" title="${esc$1(opts.action.title || "")}" style="margin-top:5px;padding:3px 10px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-xs);cursor:pointer;line-height:1.5;white-space:nowrap;">${esc$1(opts.action.label)}</button>` : ""}
     </div>
   </div>`;
 }
@@ -1115,7 +1131,11 @@ function bodyHtml(r) {
 	else {
 		const major = r.items.filter((i) => (i.bytes ?? 0) >= SMALL_ITEM_BYTES);
 		const minor = r.items.filter((i) => (i.bytes ?? 0) < SMALL_ITEM_BYTES);
-		const rows = major.map((i) => row(i, r.totalBytes));
+		const rows = major.map((i) => row(i, r.totalBytes, i.cleanable === "migration_backup" ? { action: {
+			id: "aus-storage-clean-backup",
+			label: "清理",
+			title: "删除升级前的一次性备份快照"
+		} } : {}));
 		if (minor.length) {
 			const minorTotal = minor.reduce((a, i) => a + (i.bytes || 0), 0);
 			rows.push(row({
@@ -1147,7 +1167,7 @@ function bodyHtml(r) {
     </div>`);
 	}
 	parts.push(`<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:9px;line-height:1.6;">
-    历史记录按最近 50 条保存在酒馆设置中，更早的进入浏览器 IndexedDB；设置为 UTF-8 估算体积，与实际落盘大小可能略有差异。
+    历史记录按最近 50 条保存在酒馆设置中，更早的进入浏览器 IndexedDB；设置为 UTF-8 估算体积，与实际落盘大小可能略有差异。旧版迁移备份是升级前的一次性快照，现有数据已迁移完成，确认无误后可点「清理」删除（不影响历史、设置与钱包）。
   </div>`);
 	return parts.join("");
 }
@@ -1185,6 +1205,42 @@ function bindStorageUsageCard(doc) {
 	if (btn) btn.onclick = () => {
 		refreshStorageUsage(doc);
 	};
+	const cleanBtn = doc.getElementById("aus-storage-clean-backup");
+	if (cleanBtn) {
+		const idleLabel = cleanBtn.textContent || "清理";
+		let armTimer = null;
+		const disarm = () => {
+			cleanBtn.dataset.armed = "0";
+			cleanBtn.textContent = idleLabel;
+			if (armTimer) {
+				clearTimeout(armTimer);
+				armTimer = null;
+			}
+		};
+		cleanBtn.onclick = async () => {
+			if (cleanBtn.dataset.armed !== "1") {
+				cleanBtn.dataset.armed = "1";
+				cleanBtn.textContent = "确认清理？再点一次";
+				if (armTimer) clearTimeout(armTimer);
+				armTimer = setTimeout(disarm, 5e3);
+				return;
+			}
+			disarm();
+			cleanBtn.disabled = true;
+			cleanBtn.textContent = "清理中…";
+			try {
+				const result = await deleteMigrationBackups();
+				if (result.deleted > 0) toast("success", `已清理 ${result.deleted} 份旧版迁移备份`);
+				else if (result.remaining > 0) toast("warning", "旧版迁移备份未能删除，请刷新后重试");
+				else toast("info", "未找到可清理的旧版迁移备份");
+				if (result.remaining > 0 && result.deleted > 0) toast("warning", `仍有 ${result.remaining} 份备份未删除，请刷新后重试`);
+			} catch (e) {
+				toast("error", "清理失败：" + (e?.message || e));
+			} finally {
+				await refreshStorageUsage(doc);
+			}
+		};
+	}
 	const toggle = doc.getElementById("aus-storage-others");
 	const detail = doc.getElementById("aus-storage-others-detail");
 	if (!toggle || !detail) return;
@@ -2464,7 +2520,7 @@ function renderSettings(doc) {
 		state$2.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state$2.settings });
 		try {
-			import("./balance-CjoY_ggh.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-Bkp12Xv2.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2509,7 +2565,7 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-CtjJtPhT.js").then((n) => n.n);
+				const { repository } = await import("./repository-BotjYXCT.js").then((n) => n.n);
 				const { state: st } = await import("./store-BhaWFCjs.js").then((n) => n.i);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
@@ -2659,8 +2715,8 @@ function renderSettings(doc) {
 					intervalDrop.style.display = "none";
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-CVyzrHKV.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
-						import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+						import("./pricing-sync-CinAIkTR.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./currency-DYtqS43k.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};
 			});
@@ -2681,7 +2737,7 @@ function renderSettings(doc) {
 			if (panel) panel.style.display = enabledEl.checked ? "grid" : "none";
 			let removed = 0;
 			if (!enabledEl.checked) try {
-				const m = await import("./pricing-sync-CVyzrHKV.js").then((n) => n.a);
+				const m = await import("./pricing-sync-CinAIkTR.js").then((n) => n.a);
 				try {
 					await m.markLegacySyncedModels?.({ skipRerender: true });
 				} catch {}
@@ -2691,8 +2747,8 @@ function renderSettings(doc) {
 			}
 			saveHot({ settings: state$2.settings });
 			try {
-				import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
-				import("./pricing-sync-CVyzrHKV.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+				import("./currency-DYtqS43k.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+				import("./pricing-sync-CinAIkTR.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 			} catch {}
 			if (removed) {
 				renderModelsEditor(doc);
@@ -2722,7 +2778,7 @@ function renderSettings(doc) {
 			state$2.settings.pricingSync.useLiveRate = liveEl.checked;
 			saveHot({ settings: state$2.settings });
 			try {
-				import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+				import("./currency-DYtqS43k.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 			} catch {}
 		};
 		if (recalcEl) recalcEl.onchange = () => {
@@ -5069,7 +5125,7 @@ function renderChatSummaryOverview(fullHistory) {
 	if (fullHistory) return;
 	(async () => {
 		try {
-			const mod = await import("./persistence-C4IJVd-B.js").then((n) => n.s);
+			const mod = await import("./persistence-CaWdvByH.js").then((n) => n.l);
 			if (!mod.getAllHistory) return;
 			const all = await mod.getAllHistory();
 			if (!all || all.length <= (state$2.history?.length || 0)) return;
@@ -8013,7 +8069,7 @@ async function getHistoryForStats() {
 	if (allHistoryPromise) return allHistoryPromise;
 	allHistoryPromise = (async () => {
 		try {
-			const mod = await import("./persistence-C4IJVd-B.js").then((n) => n.s);
+			const mod = await import("./persistence-CaWdvByH.js").then((n) => n.l);
 			if (mod.getAllHistory) {
 				const result = await mod.getAllHistory() || hot;
 				cachedAllHistory = result;
@@ -11177,7 +11233,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-CjoY_ggh.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-Bkp12Xv2.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -12226,7 +12282,7 @@ function renderHistory(doc, s) {
 	historyLoading = true;
 	(async () => {
 		try {
-			const mod = await import("./persistence-C4IJVd-B.js").then((n) => n.s);
+			const mod = await import("./persistence-CaWdvByH.js").then((n) => n.l);
 			if (!mod.getAllHistory) return;
 			const all = await mod.getAllHistory();
 			if (!all || !all.length) return;
@@ -12947,7 +13003,7 @@ function openPanel() {
 	panelOpen = true;
 	refreshUI();
 	try {
-		import("./collector-0CHow_vj.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-BIe6APid.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-tW9dhmg5.js").then((m) => m.maybeAutoCheck());
@@ -13119,7 +13175,7 @@ function onEscapeKey(e) {
 }
 function onPageHide() {
 	try {
-		import("./persistence-C4IJVd-B.js").then((n) => n.s).then((m) => m.flushSaveHot()).catch(() => {});
+		import("./persistence-CaWdvByH.js").then((n) => n.l).then((m) => m.flushSaveHot()).catch(() => {});
 	} catch {}
 }
 function cleanupRuntimeBindings() {
@@ -13167,10 +13223,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-Bux-4UqM.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-81akbEw_.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-0CHow_vj.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BIe6APid.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -13178,10 +13234,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-Bux-4UqM.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-81akbEw_.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-0CHow_vj.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BIe6APid.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -13244,7 +13300,7 @@ function ensureWandEntry() {
 async function onInstall() {
 	log.debug("installed");
 	try {
-		const { loadHot } = await import("./persistence-C4IJVd-B.js").then((n) => n.s);
+		const { loadHot } = await import("./persistence-CaWdvByH.js").then((n) => n.l);
 		await loadHot();
 	} catch {}
 }
@@ -13254,7 +13310,7 @@ async function onUpdate() {
 async function onDelete() {
 	log.debug("deleted");
 	try {
-		const { flushSaveHot } = await import("./persistence-C4IJVd-B.js").then((n) => n.s);
+		const { flushSaveHot } = await import("./persistence-CaWdvByH.js").then((n) => n.l);
 		flushSaveHot();
 	} catch {}
 	try {
@@ -13271,13 +13327,13 @@ async function onDelete() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-CjoY_ggh.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-Bkp12Xv2.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-CkKG5JR0.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-DYtqS43k.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CVyzrHKV.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-CinAIkTR.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 	try {
@@ -13304,32 +13360,32 @@ async function onDelete() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-Bux-4UqM.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-81akbEw_.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-0CHow_vj.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BIe6APid.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-CjoY_ggh.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-Bkp12Xv2.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
-		import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+		import("./currency-DYtqS43k.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-CVyzrHKV.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-CinAIkTR.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
 	log.debug("disabled");
 	try {
-		const { flushSaveHot } = await import("./persistence-C4IJVd-B.js").then((n) => n.s);
+		const { flushSaveHot } = await import("./persistence-CaWdvByH.js").then((n) => n.l);
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-Bux-4UqM.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-81akbEw_.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-0CHow_vj.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-BIe6APid.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -13348,13 +13404,13 @@ async function onDisable() {
 		unwatchSystemTheme();
 	} catch {}
 	try {
-		(await import("./balance-CjoY_ggh.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-Bkp12Xv2.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-CkKG5JR0.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-DYtqS43k.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CVyzrHKV.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-CinAIkTR.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -13382,19 +13438,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-CjoY_ggh.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-Bkp12Xv2.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-CkKG5JR0.js").then((n) => n.t)).restartRateTimer?.();
+		(await import("./currency-DYtqS43k.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CVyzrHKV.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-CinAIkTR.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-0CHow_vj.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BIe6APid.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -13416,7 +13472,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-CVyzrHKV.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-CinAIkTR.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

@@ -22,6 +22,26 @@ afterEach(() => {
   defineGlobal('document', undefined);
 });
 
+/** 构造一个带真实（假实现）IndexedDB 的 document，用于统计冷数据与迁移备份 */
+async function docWithIndexedDb(entries: Record<string, string>) {
+  const { IDBFactory } = await import('fake-indexeddb');
+  const idb = new IDBFactory();
+  const db: IDBDatabase = await new Promise((resolve, reject) => {
+    const req = idb.open('api_usage_stat_db', 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore('kv'); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(['kv'], 'readwrite');
+    for (const [key, value] of Object.entries(entries)) tx.objectStore('kv').put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+  return { defaultView: { indexedDB: idb, navigator: {} } } as any;
+}
+
 describe('字节计算', () => {
   it('中文按 UTF-8 三字节计，而不是 length 的码元数', () => {
     expect(utf8Bytes('abc')).toBe(3);
@@ -163,6 +183,20 @@ describe('存储报告汇总', () => {
     expect(report.usageBytes).toBe(2048);
     expect(report.quotaBytes).toBe(1024 * 1024 * 10);
     expect(report.persisted).toBe(true);
+  });
+
+  it('旧版迁移备份标记为可清理，冷历史不可清理', async () => {
+    const doc = await docWithIndexedDb({
+      cold_history: '[{"timestamp":1}]',
+      migration_backup_1792590000000: '{"ds_saves":"{}"}',
+    });
+    const report = await collectStorageReport({ doc, hotSettings: null });
+    const backup = report.items.find(i => i.label === '旧版迁移备份');
+    const cold = report.items.find(i => i.label === '历史记录（冷数据）');
+    expect(backup?.cleanable).toBe('migration_backup');
+    expect(backup?.itemCount).toBe(1);
+    expect(backup?.detail).toContain('可清理');
+    expect(cold?.cleanable).toBeUndefined();
   });
 
   it('无 document（极端环境）时仍返回可用结构', async () => {

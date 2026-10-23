@@ -146,6 +146,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 ### 设置
 - 保留全局控制：匿名使用统计（默认开启，可关闭并重置匿名标识，位于设置页顶部）、颜色模式、历史显示范围、自动校准间隔（总开关已移除，改由钱包页逐钱包勾选）、新钱包默认峰谷与额外空闲日期、models.dev 自动同步、调试、峰值圆点、记录数据管理（按范围删除记录）和 WebDAV
 - 旧“新价格机制（峰谷计费）/生效日期”入口已移除：改用内置 `PRICE_HISTORY` 多段价格按记录时间计价，峰谷规则由 `settings.peakHours` + `extraOffDays` + 内置节假日驱动；`calcCost/calcSavings` 不再读取 `settings.useNewPricing/newPricingDate`，统一以 `LEGACY_PEAK_PRICING_DATE`（2026-08-17 北京时间）作为历史默认生效日，保证历史记录按既有口径计费
+- 存储占用卡片（`src/services/storage-usage.ts` + `src/ui/storage-usage-card.ts`）：列出酒馆设置 / IndexedDB / localStorage 占用，**只有键名匹配 `migration_backup_<时间戳>` 的旧版迁移备份可清理**（行尾「清理」按钮两步确认，委托 `persistence.deleteMigrationBackups`，逐条 `dbDelete` + 清 `aus_migration_backup_*` 降级副本，删后复扫确认；禁止 `clear()/deleteDatabase()`，禁止把 `cold_history`/`aus_cold*` 等在用数据标为可清理）
 - 按范围删除记录（`#aus-delete-*`，`bindHistoryDelete`）：支持开始/结束日期、模型（完全匹配）、对话（`chatId` 或 `chatName` 完全匹配），留空表示不限；先“统计匹配记录”预览命中条数，再二次确认执行；底层走 `repository.deleteHistoryByFilter`，同时处理热历史与 IndexedDB 冷历史并 `recalcAll + rebuildAggregates`，删除后刷新全站统计
 - 峰谷规则：`extraOffDays`（`YYYY-MM-DD` 数组，`normalizeSettings` 校验去重）用于补充内置节假日数据未覆盖年份；修改后调用 `recalcCostsAndRefresh` 重算冷热费用。峰值圆点（`peak-dot.ts`）复用 `utils/date` 的 `isWeekendDay/isChinaHoliday/isExtraOffDay/isPeakHour`，法定节假日显示“全天低谷”
 - 已迁出钱包页：API 密钥、手工余额、模型与价格编辑。旧 API 密钥、旧余额和旧 `customModels` 由 `repository.hydrate` 自动迁移到 DeepSeek 官方钱包；隐藏兼容控件不参与新增配置
