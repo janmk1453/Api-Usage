@@ -108,7 +108,7 @@ function bodyHtml(r: StorageReport): string {
     const usagePct = r.usageBytes != null && r.quotaBytes > 0 ? Math.min(100, (r.usageBytes / r.quotaBytes) * 100) : null;
     // 持久化状态不跟数值挤在一行：它读起来会像数字的一部分，挪到下方说明行
     const persistLabel = r.persisted == null ? '' : (r.persisted ? '已启用持久化存储' : '未申请持久化存储');
-    parts.push(`<div style="margin-top:10px;padding:9px 11px;border-radius:10px;background:var(--ds-card-inner);border:1px solid var(--ds-border);">
+    parts.push(`<div style="margin-top:10px;padding:9px 11px;border-radius:10px;background:var(--ds-card-inner);">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;">
         <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">浏览器站点用量</span>
         <span style="font-size:var(--aus-fs-sm);color:var(--ds-text);font-variant-numeric:tabular-nums;white-space:nowrap;">

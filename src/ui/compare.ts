@@ -17,7 +17,7 @@ function diffMessages(oldMsgs: any[], newMsgs: any[]): string {
   const ctx = 80;
   const aCtx = esc(a.slice(Math.max(0, i - ctx), i)) + '<span style="background:var(--ds-red-bg);color:var(--ds-red);padding:0 2px;border-radius:3px;">' + esc(a.slice(i, i + 200)) + '</span>' + esc(a.slice(i + 200, i + 280));
   const bCtx = esc(b.slice(Math.max(0, i - ctx), i)) + '<span style="background:var(--ds-green-bg);color:var(--ds-green);padding:0 2px;border-radius:3px;">' + esc(b.slice(i, i + 200)) + '</span>' + esc(b.slice(i + 200, i + 280));
-  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${aCtx}</div><div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${bCtx}</div></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${aCtx}</div><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${bCtx}</div></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
 }
 
 export function bindHistoryCompare() {

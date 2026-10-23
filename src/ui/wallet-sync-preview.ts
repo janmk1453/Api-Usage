@@ -149,7 +149,7 @@ export async function openWalletSyncPreview(options: { walletId?: string; onDone
       + '</div>';
 
     const table = rows.length
-      ? '<div style="width:100%;overflow:auto;border:1px solid var(--ds-border);border-radius:10px;">'
+      ? '<div style="width:100%;overflow:auto;border-radius:10px;">'
         + '<table style="width:100%;min-width:720px;border-collapse:collapse;font-size:var(--aus-fs-sm);">'
         + '<thead><tr style="text-align:left;color:var(--ds-text-2);background:var(--ds-card);">'
         + '<th style="padding:6px;">选</th><th style="padding:6px;">钱包模型</th><th style="padding:6px;">匹配</th>'

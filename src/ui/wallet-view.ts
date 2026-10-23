@@ -270,7 +270,7 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
 
       <div data-wallet-body="1" style="display:${collapsed ? 'none' : 'grid'};gap:12px;">
       <div class="aus-wallet-two-col" style="display:grid;grid-template-columns:minmax(250px,1fr) minmax(260px,1fr);gap:10px;">
-        <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;">
+        <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;display:grid;gap:8px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
             <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包余额</div><div style="font-size:17px;font-weight:700;color:var(--ds-text);">${esc(walletBalanceText(wallet))}</div></div>
             <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:${supportsAuto ? 'pointer' : 'not-allowed'};">
@@ -300,7 +300,7 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
           <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc(item.label)).join('、') : '未识别'}</div>
         </div>
 
-        <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;position:relative;">
+        <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;display:grid;gap:8px;position:relative;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
             <div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">峰谷规则</div>
             ${renderCatalogPicker(wallet)}
@@ -314,7 +314,7 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
         </div>
       </div>
 
-      <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;overflow:hidden;">
+      <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;overflow:hidden;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
           <div><div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">模型与价格</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">单位 ${getDisplayCurrency().code}/百万 tokens；模型改名会保留旧名别名</div></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;"><button data-wallet-toggle-hidden="1" data-wallet-id="${esc(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;display:${hiddenCount ? 'inline-flex' : 'none'};align-items:center;gap:4px;">${showHidden ? '隐藏' : '显示'} ${hiddenCount} 个隐藏条目</button><button data-wallet-add-model="1" data-wallet-id="${esc(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加模型</button></div>

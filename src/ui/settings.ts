@@ -211,7 +211,7 @@ export function renderSettings(doc: Document) {
           <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" id="aus-recalc-on-sync" class="aus-checkbox" /> 同步后重算历史费用（否则仅新请求生效）</label>
           <div style="display:flex;gap:8px;"><button id="aus-btn-sync-pricing" class="ds-btn-pill" style="flex:1;">立即同步</button><button id="aus-btn-preview-pricing" style="flex:1;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">预览</button></div>
           <div id="aus-pricing-sync-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);"></div>
-          <div id="aus-pricing-sync-preview" style="display:none;max-height:160px;overflow:auto;border:1px solid var(--ds-border);border-radius:8px;padding:8px;background:var(--ds-sidebar-bg);font-size:var(--aus-fs-sm);"></div>
+          <div id="aus-pricing-sync-preview" style="display:none;max-height:160px;overflow:auto;border-radius:8px;padding:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);"></div>
         </div>
       </div>
 
@@ -875,7 +875,7 @@ function modelRow(model: string, p: any, isBuiltin: boolean, usePeak: boolean, s
     return String(Math.round(d*10000)/10000);
   };
   const hit = (v: any) => v !== undefined && v !== '' ? toDisplay(v) : '';
-  return `<div data-model="${esc(model)}" data-builtin="${isBuiltin ? '1':'0'}" data-synced="${synced ? '1':'0'}" style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;background:var(--ds-card-inner);display:grid;gap:8px;">
+  return `<div data-model="${esc(model)}" data-builtin="${isBuiltin ? '1':'0'}" data-synced="${synced ? '1':'0'}" style="border-radius:10px;padding:10px;background:var(--ds-card-inner);display:grid;gap:8px;">
     <div style="display:flex;align-items:center;gap:8px;">
       <input value="${esc(model)}" ${isBuiltin ? 'readonly' : ''} style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:${isBuiltin ? 'var(--ds-sidebar-bg)':'var(--ds-card-inner)'};font-size:var(--aus-fs-base);" />
       ${synced ? '<span title="来自 models.dev 自动同步" style="flex-shrink:0;padding:2px 8px;border-radius:999px;background:var(--ds-green-bg);color:var(--ds-green);font-size:var(--aus-fs-sm);font-weight:600;">已同步</span>' : ''}

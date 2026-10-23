@@ -1153,7 +1153,7 @@ function bodyHtml(r) {
 	if (r.globalAvailable && r.quotaBytes != null) {
 		const usagePct = r.usageBytes != null && r.quotaBytes > 0 ? Math.min(100, r.usageBytes / r.quotaBytes * 100) : null;
 		const persistLabel = r.persisted == null ? "" : r.persisted ? "已启用持久化存储" : "未申请持久化存储";
-		parts.push(`<div style="margin-top:10px;padding:9px 11px;border-radius:10px;background:var(--ds-card-inner);border:1px solid var(--ds-border);">
+		parts.push(`<div style="margin-top:10px;padding:9px 11px;border-radius:10px;background:var(--ds-card-inner);">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;">
         <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">浏览器站点用量</span>
         <span style="font-size:var(--aus-fs-sm);color:var(--ds-text);font-variant-numeric:tabular-nums;white-space:nowrap;">
@@ -2291,7 +2291,7 @@ function renderSettings(doc) {
           <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" id="aus-recalc-on-sync" class="aus-checkbox" /> 同步后重算历史费用（否则仅新请求生效）</label>
           <div style="display:flex;gap:8px;"><button id="aus-btn-sync-pricing" class="ds-btn-pill" style="flex:1;">立即同步</button><button id="aus-btn-preview-pricing" style="flex:1;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">预览</button></div>
           <div id="aus-pricing-sync-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);"></div>
-          <div id="aus-pricing-sync-preview" style="display:none;max-height:160px;overflow:auto;border:1px solid var(--ds-border);border-radius:8px;padding:8px;background:var(--ds-sidebar-bg);font-size:var(--aus-fs-sm);"></div>
+          <div id="aus-pricing-sync-preview" style="display:none;max-height:160px;overflow:auto;border-radius:8px;padding:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);"></div>
         </div>
       </div>
 
@@ -3104,7 +3104,7 @@ function modelRow(model, p, isBuiltin, usePeak, synced = false) {
 		return String(Math.round(d * 1e4) / 1e4);
 	};
 	const hit = (v) => v !== void 0 && v !== "" ? toDisplay(v) : "";
-	return `<div data-model="${esc(model)}" data-builtin="${isBuiltin ? "1" : "0"}" data-synced="${synced ? "1" : "0"}" style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;background:var(--ds-card-inner);display:grid;gap:8px;">
+	return `<div data-model="${esc(model)}" data-builtin="${isBuiltin ? "1" : "0"}" data-synced="${synced ? "1" : "0"}" style="border-radius:10px;padding:10px;background:var(--ds-card-inner);display:grid;gap:8px;">
     <div style="display:flex;align-items:center;gap:8px;">
       <input value="${esc(model)}" ${isBuiltin ? "readonly" : ""} style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:${isBuiltin ? "var(--ds-sidebar-bg)" : "var(--ds-card-inner)"};font-size:var(--aus-fs-base);" />
       ${synced ? "<span title=\"来自 models.dev 自动同步\" style=\"flex-shrink:0;padding:2px 8px;border-radius:999px;background:var(--ds-green-bg);color:var(--ds-green);font-size:var(--aus-fs-sm);font-weight:600;\">已同步</span>" : ""}
@@ -3247,7 +3247,7 @@ function diffMessages(oldMsgs, newMsgs) {
 	while (i < a.length && i < b.length && a[i] === b[i]) i++;
 	if (i === a.length && i === b.length) return "<span style=\"color:var(--ds-text-2);\">两条请求完全一致（缓存命中段完整）</span>";
 	const ctx = 80;
-	return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${esc$2(a.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-red-bg);color:var(--ds-red);padding:0 2px;border-radius:3px;\">" + esc$2(a.slice(i, i + 200)) + "</span>" + esc$2(a.slice(i + 200, i + 280))}</div><div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${esc$2(b.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-green-bg);color:var(--ds-green);padding:0 2px;border-radius:3px;\">" + esc$2(b.slice(i, i + 200)) + "</span>" + esc$2(b.slice(i + 200, i + 280))}</div></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
+	return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${esc$2(a.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-red-bg);color:var(--ds-red);padding:0 2px;border-radius:3px;\">" + esc$2(a.slice(i, i + 200)) + "</span>" + esc$2(a.slice(i + 200, i + 280))}</div><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${esc$2(b.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-green-bg);color:var(--ds-green);padding:0 2px;border-radius:3px;\">" + esc$2(b.slice(i, i + 200)) + "</span>" + esc$2(b.slice(i + 200, i + 280))}</div></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
 }
 function bindHistoryCompare() {
 	const doc = getDoc$11();
@@ -10493,7 +10493,7 @@ async function openWalletSyncPreview(options = {}) {
 		});
 		const actionable = plan.rows.filter((row) => row.changed && !row.ambiguous);
 		const head = "<div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:8px;\"><div style=\"display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);\">" + (providerVendor ? "<span style=\"width:18px;height:18px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;background:" + providerVendor.color + ";color:#fff;font-size:10px;font-weight:700;\">" + (vendorIconSvg(providerVendor.id, 12) || esc$2(providerVendor.mark)) + "</span>" : "") + "供应商 <b style=\"color:var(--ds-text);\">" + esc$2(plan.providerLabel || "未选择") + "</b></div><div style=\"display:flex;gap:4px;margin-left:auto;\">" + MODE_LABELS.map((item) => "<button data-sync-mode=\"" + item.id + "\" style=\"padding:5px 10px;border:1px solid " + (mode === item.id ? "var(--ds-black)" : "var(--ds-border)") + ";border-radius:999px;background:" + (mode === item.id ? "var(--ds-black)" : "var(--ds-card)") + ";color:" + (mode === item.id ? "var(--ds-black-text)" : "var(--ds-text)") + ";font-size:var(--aus-fs-sm);cursor:pointer;\">" + item.label + "</button>").join("") + "</div></div><div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:8px;\"><input data-sync-search=\"1\" value=\"" + esc$2(keyword) + "\" placeholder=\"搜索模型\" style=\"flex:1;min-width:140px;padding:6px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card);color:var(--ds-text);font-size:var(--aus-fs-sm);\" /><label style=\"display:flex;align-items:center;gap:5px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;\"><input type=\"checkbox\" class=\"aus-checkbox\" data-sync-only-changed=\"1\" " + (onlyChanged ? "checked" : "") + " /> 仅看变化</label></div><div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);line-height:1.7;\">按钱包里已识别的模型名，在目录中用模糊匹配找到对应价格后写入该模型（不会新增模型）。 匹配 " + plan.summary.matched + " · 精确 " + plan.summary.exact + " · 模糊 " + plan.summary.fuzzy + (plan.summary.ambiguous ? " · 歧义 " + plan.summary.ambiguous : "") + " · 未匹配 " + plan.summary.unmatched + " · 单位 " + getDisplayCurrency().code + "/百万 tokens</div>";
-		const table = rows.length ? "<div style=\"width:100%;overflow:auto;border:1px solid var(--ds-border);border-radius:10px;\"><table style=\"width:100%;min-width:720px;border-collapse:collapse;font-size:var(--aus-fs-sm);\"><thead><tr style=\"text-align:left;color:var(--ds-text-2);background:var(--ds-card);\"><th style=\"padding:6px;\">选</th><th style=\"padding:6px;\">钱包模型</th><th style=\"padding:6px;\">匹配</th><th style=\"padding:6px;\">目录模型</th><th style=\"padding:6px;\">价格（命中/未命中/输出）</th><th style=\"padding:6px;\">动作</th></tr></thead><tbody>" + rows.map((row) => {
+		const table = rows.length ? "<div style=\"width:100%;overflow:auto;border-radius:10px;\"><table style=\"width:100%;min-width:720px;border-collapse:collapse;font-size:var(--aus-fs-sm);\"><thead><tr style=\"text-align:left;color:var(--ds-text-2);background:var(--ds-card);\"><th style=\"padding:6px;\">选</th><th style=\"padding:6px;\">钱包模型</th><th style=\"padding:6px;\">匹配</th><th style=\"padding:6px;\">目录模型</th><th style=\"padding:6px;\">价格（命中/未命中/输出）</th><th style=\"padding:6px;\">动作</th></tr></thead><tbody>" + rows.map((row) => {
 			const checked = selected.has(row.key);
 			return "<tr style=\"border-top:1px solid var(--ds-border);\"><td style=\"padding:6px;\"><input type=\"checkbox\" class=\"aus-checkbox\" data-sync-row=\"" + esc$2(row.key) + "\" " + (checked ? "checked" : "") + " " + (row.changed ? "" : "disabled") + " /></td><td style=\"padding:6px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\" title=\"" + esc$2(row.localModel) + "\">" + esc$2(row.localModel) + "</td><td style=\"padding:6px;white-space:nowrap;\">" + scoreLabel(row) + "</td><td style=\"padding:6px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ds-text-2);\" title=\"" + esc$2(row.catalogModel || "") + "\">" + esc$2(row.catalogModel || "—") + "</td><td style=\"padding:6px;white-space:nowrap;\">" + tierText(row) + "</td><td style=\"padding:6px;white-space:nowrap;\">" + actionLabel(row) + "</td></tr>";
 		}).join("") + "</tbody></table></div>" : "<div style=\"padding:14px;text-align:center;color:var(--ds-text-3);font-size:var(--aus-fs-sm);\">" + (onlyChanged ? "没有需要变化的价格（可关闭「仅看变化」查看全部）" : "没有可展示的模型") + "</div>";
@@ -10738,7 +10738,7 @@ function resetLabel(window, resetAt) {
 function renderRemote(wallet) {
 	const remote = wallet.plan?.remote || [];
 	if (!remote.length) return "";
-	return "<div style=\"border:1px solid var(--ds-border);border-radius:8px;padding:8px;display:grid;gap:8px;\">" + remote.map((item) => {
+	return "<div style=\"background:var(--ds-card-inner);border-radius:8px;padding:8px;display:grid;gap:8px;\">" + remote.map((item) => {
 		const ratio = item.used != null && item.limit ? Math.min(1, item.used / item.limit) : 0;
 		const percent = Math.round(ratio * 100);
 		const left = item.remaining != null ? formatPlanUnit(item.remaining, item.unit === "percent" ? "percent" : item.unit === "count" ? "count" : item.unit) : formatPlanUnit(Math.max(0, 100 - percent), "percent");
@@ -10775,7 +10775,7 @@ function renderPlanBlock(wallet, history) {
 	const localHtml = localEnabled ? renderLocal(wallet, history) : "";
 	const empty = !remoteHtml && !localHtml ? "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">" + (hasKey ? "点击「查询额度」获取厂商返回的额度与剩余。" : "先在下方填写查询密钥，再点「查询额度」。") + "</div>" : "";
 	const localTools = localEnabled && !remoteHtml ? "<div style=\"display:flex;gap:6px;\"><button data-plan-add=\"1\" style=\"padding:5px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;\">+ 添加本地窗口</button></div>" : "";
-	return "<div style=\"border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;\">" + header + error + empty + (remoteHtml ? "<div style=\"display:grid;gap:8px;\">" + remoteHtml + "</div>" : "") + (localHtml ? "<div style=\"display:grid;gap:8px;\">" + localHtml + "</div>" : "") + localTools + "</div>";
+	return "<div style=\"background:var(--ds-card-inner);border-radius:10px;padding:10px;display:grid;gap:8px;\">" + header + error + empty + (remoteHtml ? "<div style=\"display:grid;gap:8px;\">" + remoteHtml + "</div>" : "") + (localHtml ? "<div style=\"display:grid;gap:8px;\">" + localHtml + "</div>" : "") + localTools + "</div>";
 }
 function bindPlanBlock(doc, walletId, onChange) {
 	const host = doc.querySelector("[data-wallet-card=\"" + walletId + "\"]");
@@ -11100,7 +11100,7 @@ function renderWalletCard(wallet, history) {
 
       <div data-wallet-body="1" style="display:${collapsed ? "none" : "grid"};gap:12px;">
       <div class="aus-wallet-two-col" style="display:grid;grid-template-columns:minmax(250px,1fr) minmax(260px,1fr);gap:10px;">
-        <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;">
+        <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;display:grid;gap:8px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
             <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包余额</div><div style="font-size:17px;font-weight:700;color:var(--ds-text);">${esc$2(walletBalanceText(wallet))}</div></div>
             <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:${supportsAuto ? "pointer" : "not-allowed"};">
@@ -11138,7 +11138,7 @@ function renderWalletCard(wallet, history) {
           <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc$2(item.label)).join("、") : "未识别"}</div>
         </div>
 
-        <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;position:relative;">
+        <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;display:grid;gap:8px;position:relative;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
             <div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">峰谷规则</div>
             ${renderCatalogPicker(wallet)}
@@ -11152,7 +11152,7 @@ function renderWalletCard(wallet, history) {
         </div>
       </div>
 
-      <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;overflow:hidden;">
+      <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;overflow:hidden;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
           <div><div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">模型与价格</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">单位 ${getDisplayCurrency().code}/百万 tokens；模型改名会保留旧名别名</div></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;"><button data-wallet-toggle-hidden="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;display:${hiddenCount ? "inline-flex" : "none"};align-items:center;gap:4px;">${showHidden ? "隐藏" : "显示"} ${hiddenCount} 个隐藏条目</button><button data-wallet-add-model="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加模型</button></div>
@@ -12178,7 +12178,7 @@ function renderHistoryInner(doc, fullHist) {
       </div>
       <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;margin-top:8px;border-top:1px solid var(--ds-border);padding-top:8px;max-height:min(520px,60vh);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;flex-direction:column;gap:8px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
+          <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;">
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">基础信息</div>
             <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:6px;font-size:11px;">
               <div><div style="color:var(--ds-text-2);font-size:10px;">模型</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${esc$2(h.model || "—")}</div></div>
@@ -12189,7 +12189,7 @@ function renderHistoryInner(doc, fullHist) {
               <div><div style="color:var(--ds-text-2);font-size:10px;">时间</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${esc$2(recordTimeText)}</div></div>
             </div>
           </div>
-            <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
+            <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;">
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">性能</div>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;font-size:11px;">
               <div><div style="color:var(--ds-text-2);font-size:10px;">耗时</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${((h.duration || 0) / 1e3).toFixed(1)}s</div></div>
@@ -12206,7 +12206,7 @@ function renderHistoryInner(doc, fullHist) {
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
+          <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;">
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">Token 消耗</div>
             <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:6px;font-size:11px;">
               <div><div style="color:var(--ds-text-2);font-size:10px;">缓存命中</div><div style="font-weight:600;color:var(--ds-green);margin-top:2px;">${(h.cache_hit_tokens || 0).toLocaleString()}</div></div>
@@ -12216,7 +12216,7 @@ function renderHistoryInner(doc, fullHist) {
               <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">思维链 Token</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${h.thinkTokens || 0}</div></div>
             </div>
           </div>
-          <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
+          <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;">
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">费用明细</div>
             <div style="display:grid;gap:6px;margin-top:6px;font-size:11px;">
               <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输入费用</span><span style="font-weight:600;color:var(--ds-text);">${in6}</span></div>

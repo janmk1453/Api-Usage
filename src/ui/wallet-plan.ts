@@ -74,7 +74,7 @@ function renderRemote(wallet: WalletConfig): string {
       + ' · 查询于 ' + esc(item.checkedAt ? new Date(item.checkedAt).toLocaleTimeString('zh-CN') : '—') + '</div>'
       + '</div>';
   }).join('');
-  return '<div style="border:1px solid var(--ds-border);border-radius:8px;padding:8px;display:grid;gap:8px;">' + rows + '</div>';
+  return '<div style="background:var(--ds-card-inner);border-radius:8px;padding:8px;display:grid;gap:8px;">' + rows + '</div>';
 }
 
 /** 本地估算（可选，仅作补充） */
@@ -138,7 +138,7 @@ export function renderPlanBlock(wallet: WalletConfig, history: PlanUsageEntry[])
     ? '<div style="display:flex;gap:6px;"><button data-plan-add="1" style="padding:5px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加本地窗口</button></div>'
     : '';
 
-  return '<div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;">'
+  return '<div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;display:grid;gap:8px;">'
     + header + error + empty
     + (remoteHtml ? '<div style="display:grid;gap:8px;">' + remoteHtml + '</div>' : '')
     + (localHtml ? '<div style="display:grid;gap:8px;">' + localHtml + '</div>' : '')
