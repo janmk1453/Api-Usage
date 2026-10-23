@@ -6,7 +6,7 @@ import { r as toast, t as log } from "./logger-8RGXnvfI.js";
 import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, a as decryptKey, c as isTruncatedFinish, d as calcCost, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-CtjJtPhT.js";
 import { a as isUnsafeKey$1, c as localDay$1, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay, t as esc$2, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-CkKG5JR0.js";
-import { r as recalcAllCosts, t as installInterception } from "./interception-B7OkhTwG.js";
+import { r as recalcAllCosts, t as installInterception } from "./interception-Bux-4UqM.js";
 import { a as BALANCE_ADAPTERS, c as vendorById, i as saveApiKey, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-CjoY_ggh.js";
 import { c as walletSyncStatus, i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev, t as applySyncPlan } from "./pricing-sync-CVyzrHKV.js";
 //#region src/services/import-export.ts
@@ -12945,7 +12945,7 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-B7OkhTwG.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-Bux-4UqM.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
 		import("./collector-0CHow_vj.js").then((m) => m.initAgentUsage()).catch(() => {});
@@ -12956,7 +12956,7 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-B7OkhTwG.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-Bux-4UqM.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
 		import("./collector-0CHow_vj.js").then((m) => m.initAgentUsage()).catch(() => {});
@@ -13082,7 +13082,7 @@ async function onDelete() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-B7OkhTwG.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-Bux-4UqM.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
 		import("./collector-0CHow_vj.js").then((m) => m.initAgentUsage()).catch(() => {});
@@ -13104,7 +13104,7 @@ async function onDisable() {
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-B7OkhTwG.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-Bux-4UqM.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
 		import("./collector-0CHow_vj.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});

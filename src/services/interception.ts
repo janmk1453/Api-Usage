@@ -3,6 +3,7 @@ import { repository } from '../data/repository';
 import { log } from '../utils/logger';
 import { initConnectionIdentity, resolveRuntimeConnectionContext, type HistoryConnection } from './connection-identity';
 import { mergeIncludeUsage } from './include-usage';
+import { createThinkClock, scanThinkChunk, resolveThinkTime, reasoningTextOf, contentTextOf } from './think-timing';
 
 let lastMessages: any[] = [];
 let lastStart = 0;
@@ -14,6 +15,20 @@ let lastFetchConnectionTime = 0;
 let requestSequence = 0;
 let lastRequestId: string | null = null;
 let lastRequestIdTime = 0;
+
+/** 流式测量到的时序快照（TTFT / 思维链耗时 / 真假流式），与 usage 解耦：
+ *  上游不回 usage 时 finish() 也会落一份，避免主路径明明测到了却拿不到。 */
+let lastStreamTiming: { ttft: number; thinkTime: number; streamed: boolean | null; startTime: number; at: number } | null = null;
+
+function recentStreamTiming(maxAge = 60000): typeof lastStreamTiming {
+  try {
+    const st = lastStreamTiming;
+    if (!st) return null;
+    // 同一次请求（startTime 一致）或刚测完 60s 内有效
+    if (st.startTime === lastStart || Date.now() - st.at < maxAge) return st;
+  } catch {}
+  return null;
+}
 
 export function setLastRequest(messages: any[], start: number) {
   lastMessages = messages || [];
@@ -87,18 +102,24 @@ function estimateThinkTokens(text: string, usage: any) {
   const detail = usage.completion_tokens_details;
   if (detail && typeof detail.reasoning_tokens === 'number' && detail.reasoning_tokens > 0) return;
   let thinkChars = 0, contentChars = 0;
-  for (const raw of String(text || '').split('\n')) {
-    const line = raw.trim();
-    if (!line.startsWith('data:')) continue;
-    const payload = line.slice(5).trim();
-    if (!payload || payload === '[DONE]') continue;
-    let chunk: any;
-    try { chunk = JSON.parse(payload); } catch { continue; }
-    const d = chunk?.choices?.[0]?.delta;
-    if (!d) continue;
-    if (typeof d.reasoning_content === 'string') thinkChars += d.reasoning_content.length;
-    else if (typeof d.reasoning === 'string') thinkChars += d.reasoning.length;
-    if (typeof d.content === 'string') contentChars += d.content.length;
+  const collect = (record: any) => {
+    const think = reasoningTextOf(record);
+    if (think) thinkChars += think.length;
+    const body = contentTextOf(record);
+    if (body) contentChars += body.length;
+  };
+  const trimmed = String(text || '').trim();
+  if (trimmed.startsWith('{')) {
+    // 非流式：整段 JSON，思维链在 choices[].message 里
+    try { collect(JSON.parse(trimmed)); } catch {}
+  } else {
+    for (const raw of trimmed.split('\n')) {
+      const line = raw.trim();
+      if (!line.startsWith('data:')) continue;
+      const payload = line.slice(5).trim();
+      if (!payload || payload === '[DONE]') continue;
+      try { collect(JSON.parse(payload)); } catch { continue; }
+    }
   }
   if (thinkChars > 0) {
     const comp = usage.completion_tokens || usage.output_tokens || 0;
@@ -200,28 +221,31 @@ function installFetchCapture() {
             const t0 = (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
             const nowMs = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
             let ttft = 0;
-            let thinkStart = 0, thinkEnd = 0;
             let fullText = '';
+            // 思维链时钟：按 JSON 增量识别「首个非空思维链帧」与「首个非空正文帧」
+            // （口径见 services/think-timing.ts，禁止再用整行 substring 判断）
+            const thinkClock = createThinkClock();
             // 假流式检测：统计承载正文的增量帧数
-            let contentFrames = 0;
             const judgeStreamed = (): boolean | null => {
               // 请求未声明流式：明确非流式
               if (!requestedStream) return false;
               // 未观测到正文帧（可能是纯 usage 帧或异常响应）：未知，交给数值兜底
-              if (!contentFrames) return null;
+              if (!thinkClock.contentFrames) return null;
               // 真正的流式会持续吐出多帧正文；只有一帧说明上游一次性返回全文
-              return contentFrames > 1;
+              return thinkClock.contentFrames > 1;
             };
-            const finish = () => { try { parseAndProcess(fullText, ttft, thinkEnd && thinkStart ? thinkEnd - thinkStart : 0, judgeStreamed()); } catch {} };
+            const finish = () => {
+              try {
+                const endedAt = nowMs() - t0;
+                const thinkTime = resolveThinkTime(thinkClock, endedAt);
+                const streamed = judgeStreamed();
+                if (thinkTime > 0) log.debug('思维链耗时已测量 ' + thinkTime + 'ms');
+                try { lastStreamTiming = { ttft, thinkTime, streamed, startTime, at: Date.now() }; } catch {}
+                parseAndProcess(fullText, ttft, thinkTime, streamed);
+              } catch {}
+            };
             const scanThink = (chunk: string) => {
-              for (const line of chunk.split('\n')) {
-                if (!line.startsWith('data:')) continue;
-                const payload = line.slice(5).trim();
-                if (!payload || payload === '[DONE]') continue;
-                if (!thinkStart && line.indexOf('"reasoning_content"') !== -1) thinkStart = nowMs() - t0;
-                if (thinkStart && !thinkEnd && line.indexOf('"content"') !== -1) thinkEnd = nowMs() - t0;
-                if (line.indexOf('"content"') !== -1 || line.indexOf('"reasoning_content"') !== -1) contentFrames++;
-              }
+              scanThinkChunk(thinkClock, chunk, nowMs() - t0);
             };
             const readStream = async (body: ReadableStream<Uint8Array>) => {
               const reader = body.getReader();
@@ -459,6 +483,16 @@ export function processUsage(usage: any, model: string, messages: any[], startTi
       const est = (fp.usage as any).__think_tokens_est;
       const hasReal = usage?.completion_tokens_details && typeof usage.completion_tokens_details.reasoning_tokens === 'number' && usage.completion_tokens_details.reasoning_tokens > 0;
       if (est && !hasReal && !(usage as any)?.__think_tokens_est) (usage as any).__think_tokens_est = est;
+    }
+  } catch {}
+  // 时序兜底：主路径（GENERATION_ENDED）通常先到，此时 clone 流可能刚结束但还没解析到 usage。
+  // 用流式快照补 TTFT / 思维链耗时 / 真假流式，避免上游不回 usage 时明明测到了却丢失。
+  try {
+    const st = recentStreamTiming();
+    if (st && st.startTime === startTime) {
+      if (!ttft) ttft = st.ttft || 0;
+      if (!thinkTime) thinkTime = st.thinkTime || 0;
+      if (streamed == null) streamed = st.streamed;
     }
   } catch {}
   repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason, connection, requestId, streamed);

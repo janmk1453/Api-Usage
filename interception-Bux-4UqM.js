@@ -88,6 +88,116 @@ function mergeIncludeUsage(raw) {
 	};
 }
 //#endregion
+//#region src/services/think-timing.ts
+/**
+* 思维链耗时口径（单一来源）
+*
+* 背景：思维链耗时只能从流式增量里测——上游不会给出 reasoning 的起止时间，
+* 因此需要按帧判断「思维链开始」与「正文开始」两个时刻。
+*
+* 旧实现用整行 substring 匹配（"reasoning_content" / "content"），有两个致命缺陷：
+*   1. DeepSeek 官方流式在思维链帧里仍带 "content":null，
+*      于是第一个思维链帧就同时命中 content，起止落在同一帧 → 耗时恒为 0；
+*   2. 只认 reasoning_content，不认 reasoning / reasoning_text / thinking
+*      （OpenRouter、部分中转与 Anthropic 风格），思维链根本没被识别 → 耗时恒为 0。
+*
+* 现在按 JSON 解析增量，只认「非空」的思维链文本与「非空」的正文文本，
+* 并补一条兜底：整段回复只有思维链没有正文时，取最后一帧思维链时间作为结束点。
+*/
+/** 思维链字段名（按优先级）；Anthropic 风格另有 delta.type=thinking_delta */
+var REASONING_KEYS = [
+	"reasoning_content",
+	"reasoning",
+	"reasoning_text",
+	"thinking"
+];
+function createThinkClock() {
+	return {
+		startAt: null,
+		endAt: null,
+		lastReasoningAt: null,
+		contentFrames: 0
+	};
+}
+function textOf(value) {
+	return typeof value === "string" ? value : "";
+}
+function frameCarriers(record) {
+	const first = (Array.isArray(record?.choices) ? record.choices : [])[0] || {};
+	return [
+		first.delta,
+		first.message,
+		record?.delta,
+		record?.message
+	];
+}
+/** 取一帧增量里的思维链文本（空字符串视为无思维链） */
+function reasoningTextOf(record) {
+	if (!record || typeof record !== "object") return "";
+	for (const carrier of frameCarriers(record)) {
+		if (!carrier || typeof carrier !== "object") continue;
+		for (const key of REASONING_KEYS) {
+			const text = textOf(carrier[key]);
+			if (text) return text;
+		}
+	}
+	return textOf(record.reasoning_content) || textOf(record.reasoning);
+}
+/** 取一帧增量里的正文文本（空字符串=尚无正文，例如仅带 content:null 的思维链帧） */
+function contentTextOf(record) {
+	if (!record || typeof record !== "object") return "";
+	for (const carrier of frameCarriers(record)) {
+		if (!carrier || typeof carrier !== "object") continue;
+		const direct = textOf(carrier.content);
+		if (direct) return direct;
+		if (carrier.type === "text_delta") {
+			const text = textOf(carrier.text);
+			if (text) return text;
+		}
+	}
+	if (record.type === "text_delta") return textOf(record.text);
+	return "";
+}
+/**
+* 扫一段已是完整行的 SSE 文本（可含多行），更新时钟。
+* @param at 该段数据的相对时刻（ms）；同段内的帧共用同一时刻，粒度足够
+*/
+function scanThinkChunk(clock, chunk, at) {
+	for (const raw of String(chunk || "").split("\n")) {
+		const line = raw.trim();
+		if (!line.startsWith("data:")) continue;
+		const payload = line.slice(5).trim();
+		if (!payload || payload === "[DONE]") continue;
+		let record;
+		try {
+			record = JSON.parse(payload);
+		} catch {
+			continue;
+		}
+		if (!record || typeof record !== "object") continue;
+		if (reasoningTextOf(record)) {
+			if (clock.startAt == null) clock.startAt = at;
+			clock.lastReasoningAt = at;
+		}
+		if (contentTextOf(record)) {
+			clock.contentFrames += 1;
+			if (clock.startAt != null && clock.endAt == null) clock.endAt = at;
+		}
+	}
+}
+/**
+* 结算思维链耗时（ms）。
+* 结束点优先级：首帧正文 → 最后一帧思维链（整段只有思维链）→ 流结束时刻。
+*/
+function resolveThinkTime(clock, endedAt) {
+	if (!clock || clock.startAt == null) return 0;
+	const end = clock.endAt ?? clock.lastReasoningAt ?? endedAt;
+	if (!Number.isFinite(end) || !Number.isFinite(clock.startAt)) return 0;
+	const ms = end - clock.startAt;
+	if (!(ms > 0)) return 0;
+	return Math.round(ms);
+}
+//#endregion
 //#region src/services/interception.ts
 var interception_exports = /* @__PURE__ */ __exportAll({
 	installInterception: () => installInterception,
@@ -106,6 +216,17 @@ var lastFetchConnectionTime = 0;
 var requestSequence = 0;
 var lastRequestId = null;
 var lastRequestIdTime = 0;
+/** 流式测量到的时序快照（TTFT / 思维链耗时 / 真假流式），与 usage 解耦：
+*  上游不回 usage 时 finish() 也会落一份，避免主路径明明测到了却拿不到。 */
+var lastStreamTiming = null;
+function recentStreamTiming(maxAge = 6e4) {
+	try {
+		const st = lastStreamTiming;
+		if (!st) return null;
+		if (st.startTime === lastStart || Date.now() - st.at < maxAge) return st;
+	} catch {}
+	return null;
+}
 function setLastRequest(messages, start) {
 	lastMessages = messages || [];
 	lastStart = start || Date.now();
@@ -167,22 +288,26 @@ function estimateThinkTokens(text, usage) {
 	const detail = usage.completion_tokens_details;
 	if (detail && typeof detail.reasoning_tokens === "number" && detail.reasoning_tokens > 0) return;
 	let thinkChars = 0, contentChars = 0;
-	for (const raw of String(text || "").split("\n")) {
+	const collect = (record) => {
+		const think = reasoningTextOf(record);
+		if (think) thinkChars += think.length;
+		const body = contentTextOf(record);
+		if (body) contentChars += body.length;
+	};
+	const trimmed = String(text || "").trim();
+	if (trimmed.startsWith("{")) try {
+		collect(JSON.parse(trimmed));
+	} catch {}
+	else for (const raw of trimmed.split("\n")) {
 		const line = raw.trim();
 		if (!line.startsWith("data:")) continue;
 		const payload = line.slice(5).trim();
 		if (!payload || payload === "[DONE]") continue;
-		let chunk;
 		try {
-			chunk = JSON.parse(payload);
+			collect(JSON.parse(payload));
 		} catch {
 			continue;
 		}
-		const d = chunk?.choices?.[0]?.delta;
-		if (!d) continue;
-		if (typeof d.reasoning_content === "string") thinkChars += d.reasoning_content.length;
-		else if (typeof d.reasoning === "string") thinkChars += d.reasoning.length;
-		if (typeof d.content === "string") contentChars += d.content.length;
 	}
 	if (thinkChars > 0) {
 		const comp = usage.completion_tokens || usage.output_tokens || 0;
@@ -324,28 +449,33 @@ function installFetchCapture() {
 							const t0 = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
 							const nowMs = () => typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
 							let ttft = 0;
-							let thinkStart = 0, thinkEnd = 0;
 							let fullText = "";
-							let contentFrames = 0;
+							const thinkClock = createThinkClock();
 							const judgeStreamed = () => {
 								if (!requestedStream) return false;
-								if (!contentFrames) return null;
-								return contentFrames > 1;
+								if (!thinkClock.contentFrames) return null;
+								return thinkClock.contentFrames > 1;
 							};
 							const finish = () => {
 								try {
-									parseAndProcess(fullText, ttft, thinkEnd && thinkStart ? thinkEnd - thinkStart : 0, judgeStreamed());
+									const endedAt = nowMs() - t0;
+									const thinkTime = resolveThinkTime(thinkClock, endedAt);
+									const streamed = judgeStreamed();
+									if (thinkTime > 0) log.debug("思维链耗时已测量 " + thinkTime + "ms");
+									try {
+										lastStreamTiming = {
+											ttft,
+											thinkTime,
+											streamed,
+											startTime,
+											at: Date.now()
+										};
+									} catch {}
+									parseAndProcess(fullText, ttft, thinkTime, streamed);
 								} catch {}
 							};
 							const scanThink = (chunk) => {
-								for (const line of chunk.split("\n")) {
-									if (!line.startsWith("data:")) continue;
-									const payload = line.slice(5).trim();
-									if (!payload || payload === "[DONE]") continue;
-									if (!thinkStart && line.indexOf("\"reasoning_content\"") !== -1) thinkStart = nowMs() - t0;
-									if (thinkStart && !thinkEnd && line.indexOf("\"content\"") !== -1) thinkEnd = nowMs() - t0;
-									if (line.indexOf("\"content\"") !== -1 || line.indexOf("\"reasoning_content\"") !== -1) contentFrames++;
-								}
+								scanThinkChunk(thinkClock, chunk, nowMs() - t0);
 							};
 							const readStream = async (body) => {
 								const reader = body.getReader();
@@ -609,6 +739,14 @@ function processUsage(usage, model, messages, startTime, fullRequest = null, ful
 			const est = fp.usage.__think_tokens_est;
 			const hasReal = usage?.completion_tokens_details && typeof usage.completion_tokens_details.reasoning_tokens === "number" && usage.completion_tokens_details.reasoning_tokens > 0;
 			if (est && !hasReal && !usage?.__think_tokens_est) usage.__think_tokens_est = est;
+		}
+	} catch {}
+	try {
+		const st = recentStreamTiming();
+		if (st && st.startTime === startTime) {
+			if (!ttft) ttft = st.ttft || 0;
+			if (!thinkTime) thinkTime = st.thinkTime || 0;
+			if (streamed == null) streamed = st.streamed;
 		}
 	} catch {}
 	repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason, connection, requestId, streamed);
