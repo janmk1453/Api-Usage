@@ -105,6 +105,18 @@
   box-shadow: none;
   filter: none;
 }
+
+/* 用量概览：所有块的描边去掉，只留底色块面。
+   用 transparent 而不是 border:0，避免块尺寸/对齐随描边消失跳动 2px。 */
+[data-view="overview"] .ds-card,
+[data-view="overview"] .aus-overview-balance-card,
+[data-view="overview"] #aus-heatmap-card-overview,
+[data-view="overview"] #aus-chat-summary-overview,
+[data-view="overview"] #aus-overview-history,
+[data-view="overview"] #aus-overview-spend,
+[data-view="overview"] #aus-overview-four .ds-card {
+  border-color: transparent !important;
+}
 [data-extension="api-usage-stat"] .ds-card-title {
   font-size:var(--aus-fs-base);
   font-weight: 500;
