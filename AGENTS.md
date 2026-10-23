@@ -199,6 +199,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **峰谷时段判断异常**：先确认记录时间是否落在内置节假日/周末（`src/constants/holidays.ts` + `utils/date.ts` 的 `isOffpeakDay`），再检查 `settings.extraOffDays`、钱包 `peakHours/weekendOffpeak` 与 `settings.peakHours`；超出内置数据年份的法定节假日需在设置中补充“额外空闲日期”，否则会按普通工作日峰段计价。修改后须重算冷热历史
 - **钱包没有自动创建**：确认请求包含 `endpointId`，且对应 `wallet:<endpointId>` 未被加入 `walletIgnored`；反向代理仅创建按地址区分的钱包，不识别代理密码
 - **钱包展开状态异常**：状态存于 `WalletConfig.collapsed`，默认 `true`，旧数据缺字段也按收起处理；若展开后刷新仍收起，检查热持久化是否覆盖了 `wallets` 字段
+- **价格来源胶囊在个别移动端消失**：`renderCatalogPicker`（`wallet-view.ts`）对每个展开的钱包卡片**无条件**渲染 `[data-wallet-catalog-btn]` 胶囊 + 状态文字（已核对 v3.0.8/v3.1.6/v3.1.7，从未有过「未选来源就不渲染按钮」的分支），状态行 `未配置价格来源 · N 个待匹配` 与胶囊同属一个模板，所以能在截图里看到状态文字就说明按钮在 DOM 里——问题在可见性而不在渲染逻辑。兜底：`style.css` 对 `#aus-wallet .aus-wallet-catalog-picker` / `.aus-wallet-catalog-btn` 用 `!important` 锁 `display/flex/visibility/opacity`，并在 `bindWalletView` 里加了一条「仅当页面可见且胶囊被压成 0 尺寸时 `console.warn`」的诊断；复现时先看控制台该条 warn 与 `parentOverflow`
 - **窄屏汇总错位**：钱包汇总卡必须使用 `repeat(3,minmax(0,1fr))`，内侧文本用省略号或缩小字号，不能退回 `1fr` 三行
 - **下拉被卡片边框遮挡**：概览“余额口径”卡片使用 `.aus-overview-balance-card` 提升独立层叠上下文并保持 `overflow:visible`；钱包卡使用 `[data-wallet-card]:focus-within` 与下拉 `z-index:120`。新增浮层时必须同时检查父卡片层叠上下文，不能只提高下拉自身 `z-index`
 

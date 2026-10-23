@@ -448,6 +448,33 @@
 #aus-wallet [data-wallet-dropdown] {
   z-index: 120 !important;
 }
+/* 价格来源胶囊：兜底可见性。
+   曾有部分移动端反馈该入口整块消失（同一份数据在别的设备正常），
+   排查后按钮本身是无条件渲染的，因此这里用 !important 兜住
+   display / flex-shrink / visibility / opacity——无论宿主、第三方扩展样式
+   还是极端窄屏布局把它压掉，都保证这颗胶囊仍然可见、且不会被压成 0 宽。 */
+#aus-wallet .aus-wallet-catalog-picker {
+  flex: 0 0 auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+#aus-wallet .aus-wallet-catalog-btn {
+  display: inline-flex !important;
+  align-items: center;
+  flex: 0 0 auto !important;
+  min-height: 30px;
+  max-width: 100%;
+  box-sizing: border-box;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+#aus-wallet .aus-wallet-catalog-btn > span {
+  flex: 0 0 auto;
+}
+#aus-wallet .aus-wallet-catalog-btn > span:nth-child(3) {
+  flex: 0 1 auto;
+  min-width: 0;
+}
 /* 表格：全宽横向滚动，不做首列粘性（避免与 ds-card 灰底形成白/灰切割，图1底色问题） */
 #aus-model-summary { background: transparent; }
 #aus-model-summary table { background: transparent; }

@@ -11046,12 +11046,12 @@ function renderCatalogPicker(wallet) {
 	const providerIcon = providerVendor ? vendorIconSvg(providerVendor.id, 14) : null;
 	const status = walletSyncStatus(wallet);
 	return `
-    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
-    <button data-wallet-catalog-btn="1" data-wallet-id="${esc$2(wallet.id)}" style="display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
-      <span style="color:var(--ds-text-2);">价格来源</span>
-      ${providerIcon ? "<span style=\"display:inline-flex;color:var(--ds-text-2);\">" + providerIcon + "</span>" : ""}
-      <span style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$2(current?.label || "不自动同步")}</span>
-      ${icon("chevron-down", 14)}
+    <div class="aus-wallet-catalog-picker" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:0 0 auto;min-width:0;max-width:100%;">
+    <button type="button" class="aus-wallet-catalog-btn" data-wallet-catalog-btn="1" data-wallet-id="${esc$2(wallet.id)}" title="选择价格来源" style="display:flex;align-items:center;gap:7px;flex:0 0 auto;max-width:100%;box-sizing:border-box;min-height:30px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
+      <span style="color:var(--ds-text-2);flex:0 0 auto;">价格来源</span>
+      ${providerIcon ? "<span style=\"display:inline-flex;flex:0 0 auto;color:var(--ds-text-2);\">" + providerIcon + "</span>" : ""}
+      <span style="font-weight:600;min-width:0;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$2(current?.label || "不自动同步")}</span>
+      <span style="display:inline-flex;flex:0 0 auto;">${icon("chevron-down", 14)}</span>
     </button>
     <div style="font-size:var(--aus-fs-sm);color:${status.pending ? "var(--ds-red)" : "var(--ds-text-3)"};max-width:190px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc$2(status.label)}">${esc$2(status.label)}${status.pending ? ` · ${status.pending} 个待匹配` : ""}</div>
     <div id="aus-wallet-catalog-drop-${esc$2(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;right:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:180px;max-height:260px;overflow:auto;">
@@ -11654,6 +11654,25 @@ function bindWalletView(doc) {
 			dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
 		};
 	});
+	try {
+		const win = doc.defaultView || (typeof window !== "undefined" ? window : null);
+		const view = doc.querySelector("[data-view=\"wallet\"]");
+		const viewHidden = view ? win?.getComputedStyle?.(view).display === "none" : false;
+		if (win && !viewHidden) doc.querySelectorAll("[data-wallet-catalog-btn]").forEach((btn) => {
+			const box = btn.getBoundingClientRect();
+			const cs = win.getComputedStyle(btn);
+			if (cs.display === "none" || cs.visibility === "hidden" || Number(cs.opacity) === 0 || box.width < 4 || box.height < 4) console.warn("[Api-Usage] 价格来源胶囊不可见", {
+				walletId: btn.getAttribute("data-wallet-id"),
+				display: cs.display,
+				visibility: cs.visibility,
+				opacity: cs.opacity,
+				width: Math.round(box.width),
+				height: Math.round(box.height),
+				parentDisplay: btn.parentElement ? win.getComputedStyle(btn.parentElement).display : null,
+				parentOverflow: btn.parentElement ? win.getComputedStyle(btn.parentElement).overflow : null
+			});
+		});
+	} catch {}
 	doc.querySelectorAll("[data-wallet-credential-btn]").forEach((button) => {
 		button.onclick = (event) => {
 			event.stopPropagation();
