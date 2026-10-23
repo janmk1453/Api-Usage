@@ -5,7 +5,6 @@
 SillyTavern 原生扩展 `API用量统计`（清单 `api-usage-stat`，版本以 `manifest.json#version` 为准，文档内禁止写死版本号），从 `deepseek-tavern-script` 酒馆助手脚本迁移而来；现提供用量概览、统计、历史、趋势预测、钱包和设置等独立页面。
 
 - **真源**：`D:/Desktop/DeepSeek/Api-Usage`（独立仓库 `https://github.com/janmk1453/Api-Usage`，`main` 稳定 / `dev` 测试 双分支）
-- **归档**：`pr/RE3.0/迁移重构计划.md` 仅作设计归档，不作为开发目录
 - **脚本主线不变**：`pr/DeepSeek使用预测.js` 仍为脚本真源，扩展与脚本数据通过 `deepseek-stat-export v1` 互通，不自动覆盖
 - **版本真源**：`manifest.json#version` 单一来源，`vite.config.ts` 注入 `__APP_VERSION__`，侧边栏/关于/导出/检查更新均取此值，禁止硬编码 `v3.0.x`
 
