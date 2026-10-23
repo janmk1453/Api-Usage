@@ -4,6 +4,7 @@ import { getSelectedSave, state } from '../store/index';
 import { localDay, esc } from '../utils/date';
 import { Y_OPTIONS, Y_GROUPS, X_OPTIONS, getYSelected, getXSelected, getChartType, setChartType, getAxisLabelMode, setAxisLabelMode, toggleY, setXSelected, aggregateForChart } from './chart-config';
 import { renderExtraCharts } from './extra-charts';
+import { BAR_SQUARE, barTopRadius, estimateBarWidth } from './chart-bar';
 import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
 import { attachChartZoom, clearChartRanges, detachChartZoom, getChartRange, type RangeZoomHandle } from './range-zoom';
 import { renderModelTrends, initModelTrends } from './model-trends';
@@ -682,6 +683,9 @@ async function renderChart(filteredRaw: any[]) {
     }
     rightOffset = 0;
   }
+  // 柱宽估算 + 顶部圆角（半径 ≈ 柱宽 1/6，见 chart-bar.ts）
+  const BAR_MAX_WIDTH = 18;
+  const barWidth = estimateBarWidth(w || 320, narrow ? 70 : 104, labels.length, BAR_MAX_WIDTH);
   const tokenSeries = series.filter(s => s.kind === 'token');
   const lastTokenIdx = tokenSeries.length ? series.indexOf(tokenSeries[tokenSeries.length - 1]) : -1;
   const seriesOpt = series.map((s, idx)=>{
@@ -703,9 +707,10 @@ async function renderChart(filteredRaw: any[]) {
       itemStyle: { color: col },
     };
     if (type === 'bar') {
-      base.barMaxWidth = 18;
+      base.barMaxWidth = BAR_MAX_WIDTH;
       if (isStack) { base.stack = 'token'; base.barGap = '-100%'; }
-      base.itemStyle.borderRadius = isStack ? (isTop ? [4,4,0,0] : [0,0,0,0]) : [4,4,0,0];
+      const radius = barTopRadius(barWidth);
+      base.itemStyle.borderRadius = isStack ? (isTop ? radius : BAR_SQUARE) : radius;
     } else {
       base.smooth = true;
       base.symbol = 'circle';

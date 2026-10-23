@@ -5791,6 +5791,43 @@ var CHART_TOOLTIP_SURFACE = {
 	padding: [8, 12]
 };
 //#endregion
+//#region src/ui/chart-bar.ts
+/**
+* 柱状图柱子形状（单一来源）
+*
+* 圆角口径按参考效果定：**圆角半径 ≈ 柱宽的 1/6**（截图实测柱宽 38px、圆角 6px，比例 0.16）。
+* 旧实现写死 `[4,4,0,0]`，柱宽只有 6-8px 时会被夹到半宽，顶部变成"子弹头"，
+* 与参考效果的「圆角矩形」手感差很多；改为按估算柱宽等比换算后，
+* 宽柱(16-18px)≈3px、窄柱(8px)≈2px，任意密度下都是同一个观感。
+* 只给最顶段加圆角，中间段与柱底保持直角（堆叠才无缝）。
+*/
+var BAR_RADIUS_RATIO = 1 / 6;
+/** 堆叠柱的中间段与柱底：直角 */
+var BAR_SQUARE = [
+	0,
+	0,
+	0,
+	0
+];
+/** 按柱宽换算顶部圆角 [左上, 右上, 右下, 左下] */
+function barTopRadius(barWidthPx) {
+	const radius = Math.max(2, Math.min(8, Math.round((Number.isFinite(barWidthPx) ? barWidthPx : 16) * BAR_RADIUS_RATIO)));
+	return [
+		radius,
+		radius,
+		0,
+		0
+	];
+}
+/**
+* 估算单根柱的实际宽度：绘图区宽 ÷ 类目数 × 0.8（ECharts 默认 barCategoryGap 20%），
+* 再与 barMaxWidth 取小。用于给 borderRadius 选一个跟视觉柱宽匹配的半径。
+*/
+function estimateBarWidth(containerWidth, plotReservePx, categoryCount, maxBarWidth) {
+	const band = Math.max(120, containerWidth - plotReservePx) / Math.max(1, categoryCount);
+	return Math.min(maxBarWidth, Math.max(2, band * .8));
+}
+//#endregion
 //#region src/ui/range-zoom.ts
 var clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 function attachRangeZoom(options) {
@@ -6505,6 +6542,8 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 					i
 				})).filter(({ s }) => !(isTokenCost && s.name.includes("总"))).map(({ i }) => i);
 				const topIdx = barIndices.length ? barIndices[barIndices.length - 1] : -1;
+				const BAR_MAX_WIDTH = 16;
+				const topRadius = barTopRadius(estimateBarWidth(el?.clientWidth || 320, 60, labels.length, BAR_MAX_WIDTH));
 				return series.map((s, idx) => {
 					const isTotal = s.name.includes("总");
 					if (isTokenCost && isTotal) return {
@@ -6527,19 +6566,9 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 						data: s.data,
 						itemStyle: {
 							color: s.color,
-							borderRadius: isTop ? [
-								4,
-								4,
-								0,
-								0
-							] : [
-								0,
-								0,
-								0,
-								0
-							]
+							borderRadius: isTop ? topRadius : BAR_SQUARE
 						},
-						barMaxWidth: 16,
+						barMaxWidth: BAR_MAX_WIDTH,
 						barGap: "-100%"
 					};
 				});
@@ -7910,6 +7939,8 @@ async function renderChart(filteredRaw) {
 		}
 		rightOffset = 0;
 	}
+	const BAR_MAX_WIDTH = 18;
+	const barWidth = estimateBarWidth(w || 320, narrow ? 70 : 104, labels.length, BAR_MAX_WIDTH);
 	const tokenSeries = series.filter((s) => s.kind === "token");
 	const lastTokenIdx = tokenSeries.length ? series.indexOf(tokenSeries[tokenSeries.length - 1]) : -1;
 	const seriesOpt = series.map((s, idx) => {
@@ -7931,27 +7962,13 @@ async function renderChart(filteredRaw) {
 			itemStyle: { color: col }
 		};
 		if (type === "bar") {
-			base.barMaxWidth = 18;
+			base.barMaxWidth = BAR_MAX_WIDTH;
 			if (isStack) {
 				base.stack = "token";
 				base.barGap = "-100%";
 			}
-			base.itemStyle.borderRadius = isStack ? isTop ? [
-				4,
-				4,
-				0,
-				0
-			] : [
-				0,
-				0,
-				0,
-				0
-			] : [
-				4,
-				4,
-				0,
-				0
-			];
+			const radius = barTopRadius(barWidth);
+			base.itemStyle.borderRadius = isStack ? isTop ? radius : BAR_SQUARE : radius;
 		} else {
 			base.smooth = true;
 			base.symbol = "circle";

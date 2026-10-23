@@ -1,6 +1,7 @@
 import { localDay } from '../utils/date';
 import { bucketTip, roundTip, rangeTip } from './chart-time';
 import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
+import { BAR_SQUARE, barTopRadius, estimateBarWidth } from './chart-bar';
 import { Y_OPTIONS, X_OPTIONS, X_OPTIONS_WITHOUT_ROUND, getYSelected as getMainY, getXSelected as getMainX } from './chart-config';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 import { attachChartZoom, detachChartZoom, getChartRange } from './range-zoom';
@@ -300,11 +301,15 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
       // 堆叠柱仅最顶段有圆角，中间段直角以无缝衔接
       const barIndices = series.map((s, i) => ({ s, i })).filter(({ s }) => !(isTokenCost && s.name.includes('总'))).map(({ i }) => i);
       const topIdx = barIndices.length ? barIndices[barIndices.length - 1] : -1;
+      // 柱宽估算 → 顶部圆角（半径 ≈ 柱宽 1/6，见 chart-bar.ts）
+      const BAR_MAX_WIDTH = 16;
+      const barWidth = estimateBarWidth((el as HTMLElement)?.clientWidth || 320, 60, labels.length, BAR_MAX_WIDTH);
+      const topRadius = barTopRadius(barWidth);
       return series.map((s, idx)=>{
         const isTotal = s.name.includes('总');
         if (isTokenCost && isTotal) return { name:s.name, type:'line', data:s.data, smooth:true, lineStyle:{color:s.color,width:2}, itemStyle:{color:s.color}, symbolSize:2 };
         const isTop = idx === topIdx;
-        return { name:s.name, type:'bar', stack:'total', data:s.data, itemStyle:{color:s.color,borderRadius: isTop ? [4,4,0,0] as any : [0,0,0,0] as any}, barMaxWidth:16, barGap:'-100%' as any };
+        return { name:s.name, type:'bar', stack:'total', data:s.data, itemStyle:{color:s.color,borderRadius: (isTop ? topRadius : BAR_SQUARE) as any}, barMaxWidth:BAR_MAX_WIDTH, barGap:'-100%' as any };
       });
     })(),
   };
