@@ -4,6 +4,7 @@
  */
 import type { ForecastSeries } from '../stats/forecast-series';
 import { chartDateTime } from './chart-time';
+import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
 
 type CurrencyInfo = { code: string; symbol: string; rate: number };
 
@@ -483,6 +484,7 @@ async function renderMainChart(echarts: any, options: ForecastChartOptions): Pro
       backgroundColor: cardInner,
       borderColor: border,
       borderWidth: 1,
+      ...CHART_TOOLTIP_SURFACE,
       textStyle: { color: text, fontSize: 12 },
       axisPointer: { type: 'line', lineStyle: { color: border } },
       formatter: (params: any) => {
@@ -572,6 +574,7 @@ async function renderHitChart(echarts: any, options: ForecastChartOptions): Prom
       backgroundColor: cardInner,
       borderColor: border,
       borderWidth: 1,
+      ...CHART_TOOLTIP_SURFACE,
       textStyle: { color: text, fontSize: 12 },
       formatter: (params: any) => {
         if (!Array.isArray(params) || !params.length) return '';
@@ -677,6 +680,7 @@ async function renderCostChart(echarts: any, options: ForecastChartOptions): Pro
       backgroundColor: cardInner,
       borderColor: border,
       borderWidth: 1,
+      ...CHART_TOOLTIP_SURFACE,
       textStyle: { color: text, fontSize: 12 },
       formatter: (params: any) => {
         if (!Array.isArray(params) || !params.length) return '';

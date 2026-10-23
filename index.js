@@ -5775,6 +5775,22 @@ function aggregateForChart(entries, yKeys, xKey) {
 	};
 }
 //#endregion
+//#region src/ui/chart-tooltip.ts
+/**
+* 图表悬浮窗（tooltip）统一外观（单一来源）
+*
+* 圆角直接对齐块（.ds-card）的圆角 —— style.css 里 `--ds-radius-card: 14px`，
+* 让 ECharts 浮层与页面卡片用同一套圆角语言；正文内边距同步放大一点，
+* 否则 14px 圆角会把默认 5px 内距里的文字切到弧线上。
+* 需要调整浮层外观时只改这里，禁止各图表自己写 borderRadius。
+*/
+var CHART_TOOLTIP_SURFACE = {
+	/** 与 .ds-card 的 --ds-radius-card 保持一致 */
+	borderRadius: 14,
+	/** 上/下 8、左/右 12：让 14px 圆角内部留出与卡片相近的呼吸感 */
+	padding: [8, 12]
+};
+//#endregion
 //#region src/ui/range-zoom.ts
 var clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 function attachRangeZoom(options) {
@@ -6229,6 +6245,7 @@ async function renderOne$1(id, filtered) {
 				backgroundColor: "transparent",
 				tooltip: {
 					trigger: "item",
+					...CHART_TOOLTIP_SURFACE,
 					backgroundColor: themeColor$3("--ds-card-inner", "#FFFFFF"),
 					borderColor: themeColor$3("--ds-border", "#E5E7EB"),
 					textStyle: {
@@ -6426,6 +6443,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 			backgroundColor: "transparent",
 			tooltip: {
 				trigger: "axis",
+				...CHART_TOOLTIP_SURFACE,
 				backgroundColor: themeColor$3("--ds-card-inner", "#FFFFFF"),
 				borderColor: themeColor$3("--ds-border", "#E5E7EB"),
 				textStyle: { fontSize: 12 },
@@ -6539,6 +6557,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 			};
 			opts.tooltip = {
 				trigger: "axis",
+				...CHART_TOOLTIP_SURFACE,
 				backgroundColor: themeColor$3("--ds-card-inner", "#FFFFFF"),
 				borderColor: themeColor$3("--ds-border", "#E5E7EB"),
 				textStyle: { fontSize: 12 },
@@ -6905,6 +6924,7 @@ async function renderOne(id, filtered) {
 				backgroundColor: cCardInner,
 				borderColor: cBorder,
 				borderWidth: 1,
+				...CHART_TOOLTIP_SURFACE,
 				textStyle: {
 					color: cText,
 					fontSize: 12
@@ -7964,6 +7984,7 @@ async function renderChart(filteredRaw) {
 			backgroundColor: cCardInner,
 			borderColor: cBorder,
 			borderWidth: 1,
+			...CHART_TOOLTIP_SURFACE,
 			textStyle: {
 				color: cText,
 				fontSize: 12
@@ -9175,6 +9196,7 @@ async function renderMainChart(echarts, options) {
 			backgroundColor: cardInner,
 			borderColor: border,
 			borderWidth: 1,
+			...CHART_TOOLTIP_SURFACE,
 			textStyle: {
 				color: text,
 				fontSize: 12
@@ -9274,6 +9296,7 @@ async function renderHitChart(echarts, options) {
 			backgroundColor: cardInner,
 			borderColor: border,
 			borderWidth: 1,
+			...CHART_TOOLTIP_SURFACE,
 			textStyle: {
 				color: text,
 				fontSize: 12
@@ -9403,6 +9426,7 @@ async function renderCostChart(echarts, options) {
 			backgroundColor: cardInner,
 			borderColor: border,
 			borderWidth: 1,
+			...CHART_TOOLTIP_SURFACE,
 			textStyle: {
 				color: text,
 				fontSize: 12

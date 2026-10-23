@@ -4,6 +4,7 @@ import { getSelectedSave, state } from '../store/index';
 import { localDay, esc } from '../utils/date';
 import { Y_OPTIONS, Y_GROUPS, X_OPTIONS, getYSelected, getXSelected, getChartType, setChartType, getAxisLabelMode, setAxisLabelMode, toggleY, setXSelected, aggregateForChart } from './chart-config';
 import { renderExtraCharts } from './extra-charts';
+import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
 import { attachChartZoom, clearChartRanges, detachChartZoom, getChartRange, type RangeZoomHandle } from './range-zoom';
 import { renderModelTrends, initModelTrends } from './model-trends';
 import { DataEvents, on as onDataEvent } from '../data/events';
@@ -736,6 +737,7 @@ async function renderChart(filteredRaw: any[]) {
       backgroundColor: cCardInner,
       borderColor: cBorder,
       borderWidth: 1,
+      ...CHART_TOOLTIP_SURFACE,
       textStyle: { color: cText, fontSize: 12 },
       formatter: (params:any)=>{
         if (!params?.length) return '';

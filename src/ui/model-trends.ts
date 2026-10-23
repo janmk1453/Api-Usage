@@ -1,5 +1,6 @@
 import { esc, localDay } from '../utils/date';
 import { X_OPTIONS } from './chart-config';
+import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
 import { attachChartZoom, detachChartZoom, getChartRange } from './range-zoom';
 
 type XKey = 'round'|'hour'|'day'|'week'|'month';
@@ -152,6 +153,7 @@ async function renderOne(id:TrendId, filtered:any[]){
       backgroundColor:cCardInner,
       borderColor:cBorder,
       borderWidth:1,
+      ...CHART_TOOLTIP_SURFACE,
       textStyle:{ color:cText, fontSize: 12 },
       formatter:(params:any)=>{
         if (!params?.length) return '';
