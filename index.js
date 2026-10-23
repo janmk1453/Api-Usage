@@ -3656,6 +3656,7 @@ function buildHistoryPoints(prepared, compactions) {
 		cumulative += entry.cost;
 		return {
 			round: entry.round,
+			timestamp: entry.timestamp,
 			input: entry.prompt,
 			hit: entry.hit,
 			miss: entry.miss,
@@ -4581,7 +4582,16 @@ function renderHeatmap(filtered) {
 			cd.setDate(startDate.getDate() + w * 7 + d);
 			const t = dayMap[localDay$1(cd.getTime())] || 0;
 			const lv = getLevel(t);
-			const tip = cd.getFullYear() + "年" + (cd.getMonth() + 1) + "月" + cd.getDate() + "日" + (t > 0 ? " · " + t.toLocaleString() + " Token" : " · 无记录");
+			const weekday = [
+				"周日",
+				"周一",
+				"周二",
+				"周三",
+				"周四",
+				"周五",
+				"周六"
+			][cd.getDay()];
+			const tip = cd.getFullYear() + "年" + (cd.getMonth() + 1) + "月" + cd.getDate() + "日 " + weekday + (t > 0 ? " · " + t.toLocaleString() + " Token" : " · 无记录");
 			html += "<td style=\"padding:1px;line-height:0;font-size:0\"><div style=\"width:12px;height:12px;border-radius:2px;background:" + clr[lv] + ";border:1px solid " + borderClr + ";cursor:pointer;box-sizing:border-box;\" title=\"" + tip + "\"></div></td>";
 		}
 		html += "</tr>";
@@ -5069,6 +5079,117 @@ function renderChatSummaryOverview(fullHistory) {
 	})();
 }
 //#endregion
+//#region src/ui/chart-time.ts
+var WEEKDAY = [
+	"周日",
+	"周一",
+	"周二",
+	"周三",
+	"周四",
+	"周五",
+	"周六"
+];
+var pad = (n) => String(n).padStart(2, "0");
+var num = (v) => {
+	const n = Number(v);
+	return Number.isFinite(n) && n > 0 ? n : 0;
+};
+/** 2026-10-23 */
+function chartDate(ts) {
+	const t = num(ts);
+	if (!t) return "";
+	const d = new Date(t);
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+/** 2026-10-23 周五 */
+function chartDateWeek(ts) {
+	const t = num(ts);
+	if (!t) return "";
+	return chartDate(t) + " " + WEEKDAY[new Date(t).getDay()];
+}
+/** 2026-10-23 19:12 */
+function chartDateTime(ts) {
+	const t = num(ts);
+	if (!t) return "";
+	const d = new Date(t);
+	return chartDate(t) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+}
+/** 19:12:33 */
+function chartClock(ts) {
+	const t = num(ts);
+	if (!t) return "";
+	const d = new Date(t);
+	return pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+}
+/** ISO 周键：2026-W43 */
+function isoWeekKey(ts) {
+	const t = num(ts);
+	if (!t) return "";
+	const d = new Date(t);
+	const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+	const dayNum = tmp.getUTCDay() || 7;
+	tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
+	const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+	const weekNo = Math.ceil(((tmp - yearStart) / 864e5 + 1) / 7);
+	return tmp.getUTCFullYear() + "-W" + pad(weekNo);
+}
+/** 单条记录的悬浮标题：2026-10-23 19:12:33 */
+function entryTip(entry) {
+	const ts = num(entry?.timestamp);
+	if (!ts) return "";
+	return chartDate(ts) + " " + chartClock(ts);
+}
+/** 轮次图（X = 轮次）的悬浮标题：#3 · 2026-10-23 19:12:33 */
+function roundTip(round, timestamp) {
+	const head = "#" + (Number(round) || 1);
+	const time = entryTip({ timestamp });
+	return time ? head + " · " + time : head;
+}
+/**
+* 分桶图（X = 每小时/每日/每周/每月）的悬浮标题，带上日期与时间：
+* - 每小时：2026-10-23 周五 14:00–15:00
+* - 每日：2026-10-23 周五
+* - 每周：2026-10-19 周一 ~ 2026-10-25 周日（2026-W43）
+* - 每月：2026 年 10 月
+*/
+function bucketTip(x, firstTs, lastTs) {
+	const first = num(firstTs);
+	if (!first) return "";
+	const last = num(lastTs) || first;
+	if (x === "hour") {
+		const d = new Date(first);
+		const from = pad(d.getHours()) + ":00";
+		const to = pad((d.getHours() + 1) % 24) + ":00";
+		return chartDateWeek(first) + " " + from + "–" + to;
+	}
+	if (x === "day") return chartDateWeek(first);
+	if (x === "week") {
+		const from = chartDateWeek(first);
+		const to = chartDateWeek(last);
+		const week = isoWeekKey(first);
+		return (from === to ? from : from + " ~ " + to) + (week ? "（" + week + "）" : "");
+	}
+	if (x === "month") {
+		const d = new Date(first);
+		return d.getFullYear() + " 年 " + (d.getMonth() + 1) + " 月";
+	}
+	return chartDate(first) + " " + chartClock(first);
+}
+/** 汇总类图表（如模型占比）的悬浮时间范围：2026-10-01 09:12 ~ 2026-10-23 19:20 */
+function rangeTip(entries) {
+	let min = 0;
+	let max = 0;
+	for (const e of entries || []) {
+		const ts = num(e?.timestamp);
+		if (!ts) continue;
+		if (!min || ts < min) min = ts;
+		if (!max || ts > max) max = ts;
+	}
+	if (!min) return "";
+	if (min === max) return chartDateTime(min);
+	return chartDateTime(min) + " ~ " + chartDateTime(max);
+}
+//#endregion
 //#region src/ui/chart-config.ts
 var Y_OPTIONS = [
 	{
@@ -5422,15 +5543,28 @@ function aggregateForChart(entries, yKeys, xKey) {
 	if (!yKeys.length) yKeys = DEFAULT_Y_KEYS;
 	const round = xKey === "round";
 	const labels = [];
+	const tips = [];
 	let buckets = null;
 	let sortedKeys = [];
-	if (round) labels.push(...entries.map((_, i) => `#${i + 1}`));
-	else {
+	if (round) {
+		labels.push(...entries.map((_, i) => `#${i + 1}`));
+		tips.push(...entries.map((e, i) => roundTip(i + 1, e?.timestamp)));
+	} else {
 		buckets = /* @__PURE__ */ new Map();
 		for (const e of entries) {
 			const key = getBucketKey(e, xKey, 0);
-			if (!buckets.has(key)) buckets.set(key, []);
-			buckets.get(key).push(e);
+			const ts = Number(e?.timestamp) || 0;
+			const bucket = buckets.get(key);
+			if (!bucket) buckets.set(key, {
+				list: [e],
+				first: ts,
+				last: ts
+			});
+			else {
+				bucket.list.push(e);
+				if (ts && (!bucket.first || ts < bucket.first)) bucket.first = ts;
+				if (ts > bucket.last) bucket.last = ts;
+			}
 		}
 		sortedKeys = Array.from(buckets.keys()).sort();
 		labels.push(...sortedKeys.map((k) => {
@@ -5438,12 +5572,16 @@ function aggregateForChart(entries, yKeys, xKey) {
 			if (xKey === "day") return k.slice(5).replace("-", "/");
 			return k;
 		}));
+		tips.push(...sortedKeys.map((k) => {
+			const bucket = buckets.get(k);
+			return bucketTip(xKey, bucket.first, bucket.last) || k;
+		}));
 	}
 	return {
 		labels,
 		series: yKeys.map((k) => {
 			const opt = meta.get(k);
-			const data = round ? entries.map((e) => Number(getYValue$1(e, k).toFixed(precisionFor(opt.kind)))) : sortedKeys.map((b) => Number(bucketValue(buckets.get(b), opt).toFixed(precisionFor(opt.kind))));
+			const data = round ? entries.map((e) => Number(getYValue$1(e, k).toFixed(precisionFor(opt.kind)))) : sortedKeys.map((b) => Number(bucketValue(buckets.get(b).list, opt).toFixed(precisionFor(opt.kind))));
 			return {
 				name: opt.label,
 				data,
@@ -5453,7 +5591,8 @@ function aggregateForChart(entries, yKeys, xKey) {
 				group: opt.group,
 				color: opt.color
 			};
-		})
+		}),
+		tips
 	};
 }
 //#endregion
@@ -5916,6 +6055,16 @@ async function renderOne$1(id, filtered) {
 					textStyle: {
 						fontSize: 12,
 						color: themeColor$3("--ds-text", "#111827")
+					},
+					formatter: (p) => {
+						const range = rangeTip(filtered);
+						const val = mode === "token" ? Number(p.value).toLocaleString() + " tokens" : Number(p.value).toLocaleString() + " 次请求";
+						const pct = Number(p.percent || 0).toFixed(1);
+						let html = `<div style="display:flex;align-items:center;gap:6px;font-weight:600;margin-bottom:4px;">${p.marker || ""}${p.name}</div>`;
+						html += `<div style="display:flex;gap:16px;"><span>用量</span><span style="margin-left:auto;font-weight:600;">${val}</span></div>`;
+						html += `<div style="display:flex;gap:16px;"><span>占比</span><span style="margin-left:auto;font-weight:600;">${pct} %</span></div>`;
+						if (range) html += `<div style="margin-top:4px;font-size:11px;color:#9CA3AF;">时间范围 ${range}</div>`;
+						return `<div style="padding:2px 2px;min-width:170px;">${html}</div>`;
 					}
 				},
 				legend: {
@@ -5953,6 +6102,7 @@ async function renderOne$1(id, filtered) {
 		}
 		if (xKey === "round") {
 			const labels = filtered.map((_, i) => `#${i + 1}`);
+			const tips = filtered.map((e, i) => roundTip(i + 1, e?.timestamp));
 			const yMeta = new Map(CHART_DEFS[id].yOpts.map((o) => [o.key, o]));
 			await drawBarLine(el, id, labels, yKeys.map((k) => {
 				const meta = yMeta.get(k) || Y_OPTIONS.find((o) => o.key === k) || {
@@ -5969,17 +6119,31 @@ async function renderOne$1(id, filtered) {
 					color: meta.color,
 					kind: meta.kind || "token"
 				};
-			}));
+			}), tips);
 			return;
 		}
 		const buckets = /* @__PURE__ */ new Map();
 		filtered.forEach((e) => {
 			const key = bucketKey$1(e.timestamp, xKey, 0);
-			if (!buckets.has(key)) buckets.set(key, []);
-			buckets.get(key).push(e);
+			const ts = Number(e?.timestamp) || 0;
+			const bucket = buckets.get(key);
+			if (!bucket) buckets.set(key, {
+				list: [e],
+				first: ts,
+				last: ts
+			});
+			else {
+				bucket.list.push(e);
+				if (ts && (!bucket.first || ts < bucket.first)) bucket.first = ts;
+				if (ts > bucket.last) bucket.last = ts;
+			}
 		});
 		const sortedKeys = Array.from(buckets.keys()).sort();
 		const labels = sortedKeys.map((k) => xKey === "day" ? k.slice(5).replace("-", "/") : xKey === "hour" ? k.slice(5) : k);
+		const tips = sortedKeys.map((k) => {
+			const bucket = buckets.get(k);
+			return bucketTip(xKey, bucket.first, bucket.last) || k;
+		});
 		new Map(CHART_DEFS[id].yOpts.map((o) => [o.key, o]));
 		const fullMap = new Map([...Y_OPTIONS, ...CHART_DEFS[id].yOpts].map((o) => [o.key, o]));
 		await drawBarLine(el, id, labels, yKeys.map((k) => {
@@ -5990,7 +6154,7 @@ async function renderOne$1(id, filtered) {
 			};
 			let data;
 			if (k === "hit_rate") data = sortedKeys.map((key) => {
-				const arr = buckets.get(key);
+				const arr = buckets.get(key).list;
 				let hit = 0, tot = 0;
 				for (const e of arr) {
 					hit += e.cache_hit_tokens || 0;
@@ -5999,19 +6163,19 @@ async function renderOne$1(id, filtered) {
 				return tot ? Number((hit / tot * 100).toFixed(1)) : 0;
 			});
 			else if (k === "duration") data = sortedKeys.map((key) => {
-				const arr = buckets.get(key);
+				const arr = buckets.get(key).list;
 				const avg = arr.reduce((a, c) => a + (c.duration || 0), 0) / arr.length / 1e3;
 				return Number(avg.toFixed(1));
 			});
 			else if (k === "rate") data = sortedKeys.map((key) => {
-				const valid = buckets.get(key).map((c) => c.tokenRate || 0).filter((v) => v > 0);
+				const valid = buckets.get(key).list.map((c) => c.tokenRate || 0).filter((v) => v > 0);
 				if (!valid.length) return 0;
 				const avg = valid.reduce((a, c) => a + c, 0) / valid.length;
 				return Math.round(avg);
 			});
-			else if (k === "req_count") data = sortedKeys.map((key) => buckets.get(key).length);
+			else if (k === "req_count") data = sortedKeys.map((key) => buckets.get(key).list.length);
 			else data = sortedKeys.map((key) => {
-				const arr = buckets.get(key);
+				const arr = buckets.get(key).list;
 				let sum = 0;
 				for (const e of arr) sum += getYValue(e, k);
 				return Number(sum.toFixed(k.includes("cost") ? 2 : 0));
@@ -6022,7 +6186,7 @@ async function renderOne$1(id, filtered) {
 				color: meta.color,
 				kind: meta.kind || "token"
 			};
-		}));
+		}), tips);
 	} catch (e) {
 		dropChart(id);
 		try {
@@ -6040,7 +6204,17 @@ function calcXInterval(labels, el) {
 	if (labels.length <= maxLabels) return 0;
 	return Math.ceil(labels.length / maxLabels) - 1;
 }
-async function drawBarLine(el, id, labels, series) {
+/** 按系列名判断数值单位，悬浮窗据此显示单位（费用按当前显示币种） */
+function seriesUnit(name) {
+	const n = String(name || "");
+	if (n.includes("费用") || n.includes("成本")) return "cost";
+	if (n.includes("率") || n.includes("占比")) return "percent";
+	if (n.includes("速率")) return "rate";
+	if (n.includes("耗时") || n.includes("延迟")) return "duration";
+	if (n.includes("请求")) return "count";
+	return "token";
+}
+async function drawBarLine(el, id, labels, series, tips = []) {
 	try {
 		const curCur = (() => {
 			try {
@@ -6075,7 +6249,24 @@ async function drawBarLine(el, id, labels, series) {
 				trigger: "axis",
 				backgroundColor: themeColor$3("--ds-card-inner", "#FFFFFF"),
 				borderColor: themeColor$3("--ds-border", "#E5E7EB"),
-				textStyle: { fontSize: 12 }
+				textStyle: { fontSize: 12 },
+				formatter: (params) => {
+					const list = Array.isArray(params) ? params : [params];
+					if (!list.length) return "";
+					let html = `<div style="font-weight:600;margin-bottom:6px;">${tips[list[0].dataIndex] || list[0].axisValueLabel || ""}</div>`;
+					for (const p of list) {
+						const unit = seriesUnit(p.seriesName);
+						const v = Number(p.value);
+						let disp;
+						if (unit === "percent") disp = v.toFixed(1) + " %";
+						else if (unit === "rate") disp = Math.round(v).toLocaleString() + " t/s";
+						else if (unit === "duration") disp = v.toFixed(2) + " s";
+						else if (unit === "count") disp = v.toLocaleString() + " 次";
+						else disp = v.toLocaleString() + " tokens";
+						html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${disp}</span></div>`;
+					}
+					return `<div style="padding:4px 2px;min-width:170px;">${html}</div>`;
+				}
 			},
 			grid: {
 				left: 40,
@@ -6173,7 +6364,7 @@ async function drawBarLine(el, id, labels, series) {
 				borderColor: themeColor$3("--ds-border", "#E5E7EB"),
 				textStyle: { fontSize: 12 },
 				formatter: (params) => {
-					let html = `<div style="font-weight:600;margin-bottom:6px;">${params[0]?.axisValueLabel || ""}</div>`;
+					let html = `<div style="font-weight:600;margin-bottom:6px;">${tips[params[0]?.dataIndex ?? 0] || params[0]?.axisValueLabel || ""}</div>`;
 					for (const p of params) html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${curCur.symbol}${Number(p.value).toFixed(4)} ${curCur.code}</span></div>`;
 					return `<div style="padding:4px 2px;min-width:160px;">${html}</div>`;
 				}
@@ -7362,7 +7553,7 @@ async function renderChart(filteredRaw) {
 	const doc = getDoc$6();
 	const el = doc.getElementById("aus-stats-chart");
 	if (!el) return;
-	const { labels, series } = aggregateForChart(filteredRaw, getYSelected(), getXSelected());
+	const { labels, series, tips } = aggregateForChart(filteredRaw, getYSelected(), getXSelected());
 	if (!labels.length) {
 		if (chart) {
 			try {
@@ -7634,7 +7825,7 @@ async function renderChart(filteredRaw) {
 			formatter: (params) => {
 				if (!params?.length) return "";
 				const idx = params[0].dataIndex;
-				const label = labels[idx];
+				const label = tips[idx] || labels[idx];
 				let html = `<div style="font-weight:600;margin-bottom:6px;">${esc$2(label)}</div>`;
 				for (const p of params) {
 					const v = p.value;
@@ -8484,9 +8675,39 @@ function disposeForecastCharts() {
 		resizeObserver = null;
 	}
 }
+/** 历史轮次的中位间隔（ms），用于给预测轮次估个大致时刻 */
+function medianInterval(history) {
+	const diffs = [];
+	for (let i = 1; i < history.length; i += 1) {
+		const prev = Number(history[i - 1]?.timestamp) || 0;
+		const cur = Number(history[i]?.timestamp) || 0;
+		const diff = cur - prev;
+		if (prev > 0 && cur > 0 && diff > 0) diffs.push(diff);
+	}
+	if (!diffs.length) return 0;
+	diffs.sort((a, b) => a - b);
+	return diffs[Math.floor(diffs.length / 2)];
+}
+/**
+* X 轴标签保持 #N 紧凑，tips 给出悬浮窗标题：
+* 历史轮次用真实时间戳，预测轮次按中位间隔推算「预计」时刻。
+*/
 function buildLabels(series) {
+	const labels = [...series.history.map((point) => `#${point.round}`), ...series.future.map((point) => `+${point.round - series.currentRound}`)];
+	const interval = medianInterval(series.history);
+	const lastTs = Number(series.history[series.history.length - 1]?.timestamp) || 0;
+	const historyTips = series.history.map((point) => {
+		const time = chartDateTime(Number(point.timestamp) || 0);
+		return time ? `第 ${point.round} 轮 · ${time}` : `第 ${point.round} 轮`;
+	});
+	const futureTips = series.future.map((point, index) => {
+		const estimated = lastTs && interval ? chartDateTime(lastTs + interval * (index + 1)) : "";
+		const head = `第 ${point.round} 轮（预测）`;
+		return estimated ? `${head} · 预计 ${estimated}` : head;
+	});
 	return {
-		labels: [...series.history.map((point) => `#${point.round}`), ...series.future.map((point) => `+${point.round - series.currentRound}`)],
+		labels,
+		tips: [...historyTips, ...futureTips],
 		historyLength: series.history.length,
 		futureLength: series.future.length
 	};
@@ -8516,7 +8737,7 @@ async function renderMainChart(echarts, options) {
 	const chart = await initChart("aus-forecast-main-chart", echarts);
 	if (!chart) return;
 	const { series, ctxLimit, currency, formatCost } = options;
-	const { labels, historyLength } = buildLabels(series);
+	const { labels, tips, historyLength } = buildLabels(series);
 	if (!labels.length) return;
 	const border = themeColor("--ds-border", "#E5E7EB");
 	const text3 = themeColor("--ds-text-3", "#9CA3AF");
@@ -8820,7 +9041,8 @@ async function renderMainChart(echarts, options) {
 				const index = params[0].dataIndex;
 				const label = labels[index] || "";
 				const isFuture = index >= historyLength;
-				let html = `<div style="font-weight:600;margin-bottom:6px;">第 ${isFuture ? series.currentRound + (index - historyLength) + 1 : index + 1} 轮${isFuture ? "（预测）" : ""}</div>`;
+				const roundNumber = isFuture ? series.currentRound + (index - historyLength) + 1 : index + 1;
+				let html = `<div style="font-weight:600;margin-bottom:6px;">${tips[index] || `第 ${roundNumber} 轮${isFuture ? "（预测）" : ""}`}</div>`;
 				for (const param of params) {
 					if (!param || String(param.seriesName).startsWith("__")) continue;
 					if (param.seriesName === "历史压缩" || param.seriesName === "预测压缩") continue;
@@ -8861,7 +9083,7 @@ async function renderHitChart(echarts, options) {
 	const chart = await initChart("aus-forecast-hit-chart", echarts);
 	if (!chart) return;
 	const { series } = options;
-	const { labels, historyLength } = buildLabels(series);
+	const { labels, tips, historyLength } = buildLabels(series);
 	if (!labels.length) return;
 	const border = themeColor("--ds-border", "#E5E7EB");
 	const text3 = themeColor("--ds-text-3", "#9CA3AF");
@@ -8914,7 +9136,7 @@ async function renderHitChart(echarts, options) {
 				const index = params[0].dataIndex;
 				labels[index];
 				const isFuture = index >= historyLength;
-				let html = `<div style="font-weight:600;margin-bottom:4px;">第 ${isFuture ? series.currentRound + (index - historyLength) + 1 : index + 1} 轮${isFuture ? "（预测）" : ""}</div>`;
+				let html = `<div style="font-weight:600;margin-bottom:4px;">${tips[index] || `第 ${isFuture ? series.currentRound + (index - historyLength) + 1 : index + 1} 轮${isFuture ? "（预测）" : ""}`}</div>`;
 				for (const param of params) {
 					if (!param || String(param.seriesName).startsWith("__")) continue;
 					const value = Array.isArray(param.value) ? param.value[1] : param.value;
@@ -8988,7 +9210,7 @@ async function renderCostChart(echarts, options) {
 	const chart = await initChart("aus-forecast-cost-chart", echarts);
 	if (!chart) return;
 	const { series, currency, formatCost } = options;
-	const { labels, historyLength } = buildLabels(series);
+	const { labels, tips, historyLength } = buildLabels(series);
 	if (!labels.length) return;
 	const border = themeColor("--ds-border", "#E5E7EB");
 	const text3 = themeColor("--ds-text-3", "#9CA3AF");
@@ -9042,7 +9264,7 @@ async function renderCostChart(echarts, options) {
 				if (!Array.isArray(params) || !params.length) return "";
 				const index = params[0].dataIndex;
 				const isFuture = index >= historyLength;
-				let html = `<div style="font-weight:600;margin-bottom:4px;">第 ${isFuture ? series.currentRound + (index - historyLength) + 1 : index + 1} 轮${isFuture ? "（预测）" : ""}</div>`;
+				let html = `<div style="font-weight:600;margin-bottom:4px;">${tips[index] || `第 ${isFuture ? series.currentRound + (index - historyLength) + 1 : index + 1} 轮${isFuture ? "（预测）" : ""}`}</div>`;
 				for (const param of params) {
 					const value = Array.isArray(param.value) ? param.value[1] : param.value;
 					if (value == null || !Number.isFinite(Number(value))) continue;

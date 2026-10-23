@@ -126,6 +126,8 @@ export type CompactionForecast = {
 
 export type HistoryPoint = {
   round: number;
+  /** 该轮请求时间戳（悬浮窗展示完整日期时间用；旧数据可能缺失） */
+  timestamp?: number;
   input: number;
   hit: number;
   miss: number;
@@ -628,6 +630,7 @@ export function buildHistoryPoints(prepared: PreparedEntry[], compactions: Compa
     cumulative += entry.cost;
     return {
       round: entry.round,
+      timestamp: entry.timestamp,
       input: entry.prompt,
       hit: entry.hit,
       miss: entry.miss,

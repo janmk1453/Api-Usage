@@ -1,4 +1,5 @@
 import { localDay } from '../utils/date';
+import { bucketTip, roundTip, rangeTip } from './chart-time';
 import { Y_OPTIONS, X_OPTIONS, X_OPTIONS_WITHOUT_ROUND, getYSelected as getMainY, getXSelected as getMainX } from './chart-config';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 import { attachChartZoom, detachChartZoom, getChartRange } from './range-zoom';
@@ -124,7 +125,18 @@ async function renderOne(id:ChartId, filtered:any[]){
     }
     c.setOption({
       backgroundColor:'transparent',
-      tooltip:{ trigger:'item', backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12, color:themeColor('--ds-text','#111827')} },
+      tooltip:{ trigger:'item', backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12, color:themeColor('--ds-text','#111827')},
+        formatter: (p:any)=>{
+          const range = rangeTip(filtered);
+          const val = mode==='token' ? Number(p.value).toLocaleString() + ' tokens' : Number(p.value).toLocaleString() + ' 次请求';
+          const pct = Number(p.percent || 0).toFixed(1);
+          let html = `<div style="display:flex;align-items:center;gap:6px;font-weight:600;margin-bottom:4px;">${p.marker||''}${p.name}</div>`;
+          html += `<div style="display:flex;gap:16px;"><span>用量</span><span style="margin-left:auto;font-weight:600;">${val}</span></div>`;
+          html += `<div style="display:flex;gap:16px;"><span>占比</span><span style="margin-left:auto;font-weight:600;">${pct} %</span></div>`;
+          if (range) html += `<div style="margin-top:4px;font-size:11px;color:#9CA3AF;">时间范围 ${range}</div>`;
+          return `<div style="padding:2px 2px;min-width:170px;">${html}</div>`;
+        }
+      },
       legend:{ bottom:0, textStyle:{fontSize: 12,color:themeColor('--ds-text-2','#6B7280')} },
       series:[{ type:'pie', radius:['40%','70%'], itemStyle:{borderRadius:6,borderColor:themeColor('--ds-card-inner','#FFFFFF'),borderWidth:2}, label:{fontSize: 12}, data }],
     }, true);
@@ -137,6 +149,8 @@ async function renderOne(id:ChartId, filtered:any[]){
   // 聚合
   if (xKey==='round'){
     const labels = filtered.map((_,i)=>`#${i+1}`);
+    // X 轴保持 #N 紧凑，悬浮窗补完整日期时间
+    const tips = filtered.map((e,i)=> roundTip(i+1, e?.timestamp));
     const yMeta = new Map(CHART_DEFS[id].yOpts.map(o=>[o.key,o] as any));
     // hit/req/duration 需特殊：hit_rate 按单点直接值
     const series = yKeys.map(k=>{
@@ -147,18 +161,29 @@ async function renderOne(id:ChartId, filtered:any[]){
       });
       return { name: meta.label, data, color: meta.color, kind: meta.kind || 'token' };
     });
-    await drawBarLine(el, id, labels, series);
+    await drawBarLine(el, id, labels, series, tips);
     return;
   }
-  // 分桶
-  const buckets = new Map<string, any[]>();
+  // 分桶（同时记录桶内首末时间戳，供悬浮窗显示完整日期时间）
+  type Bucket = { list:any[]; first:number; last:number };
+  const buckets = new Map<string, Bucket>();
   filtered.forEach(e=>{
     const key = bucketKey(e.timestamp, xKey, 0);
-    if (!buckets.has(key)) buckets.set(key, []);
-    buckets.get(key)!.push(e);
+    const ts = Number(e?.timestamp) || 0;
+    const bucket = buckets.get(key);
+    if (!bucket) buckets.set(key, { list:[e], first:ts, last:ts });
+    else {
+      bucket.list.push(e);
+      if (ts && (!bucket.first || ts < bucket.first)) bucket.first = ts;
+      if (ts > bucket.last) bucket.last = ts;
+    }
   });
   const sortedKeys = Array.from(buckets.keys()).sort();
   const labels = sortedKeys.map(k=> xKey==='day'?k.slice(5).replace('-','/'):xKey==='hour'?k.slice(5):k);
+  const tips = sortedKeys.map(k=>{
+    const bucket = buckets.get(k)!;
+    return bucketTip(xKey, bucket.first, bucket.last) || k;
+  });
   const yOptsMap = new Map(CHART_DEFS[id].yOpts.map(o=>[o.key,o] as any));
   // 补充 Y_OPTIONS 中未在 CHART_DEFS 的 hit_rate 等
   const fullMap = new Map([...Y_OPTIONS, ...CHART_DEFS[id].yOpts].map(o=>[o.key,o] as any));
@@ -167,19 +192,19 @@ async function renderOne(id:ChartId, filtered:any[]){
     let data: number[];
     if (k==='hit_rate'){
       data = sortedKeys.map(key=>{
-        const arr=buckets.get(key)!;
+        const arr=buckets.get(key)!.list;
         let hit=0, tot=0; for(const e of arr){ hit+=e.cache_hit_tokens||0; tot+= (e.cache_hit_tokens||0)+(e.cache_miss_tokens||0); }
         return tot? Number((hit/tot*100).toFixed(1)):0;
       });
     } else if (k==='duration'){
       data = sortedKeys.map(key=>{
-        const arr=buckets.get(key)!;
+        const arr=buckets.get(key)!.list;
         const avg = arr.reduce((a:any,c:any)=>a+(c.duration||0),0)/arr.length/1000;
         return Number(avg.toFixed(1));
       });
     } else if (k==='rate'){
       data = sortedKeys.map(key=>{
-        const arr=buckets.get(key)!;
+        const arr=buckets.get(key)!.list;
         // 只统计有效速率样本：非流式/未测速的 0 不参与分母，避免拉低均值
         const valid = arr.map((c:any)=>c.tokenRate||0).filter((v:number)=>v>0);
         if (!valid.length) return 0;
@@ -187,17 +212,17 @@ async function renderOne(id:ChartId, filtered:any[]){
         return Math.round(avg);
       });
     } else if (k==='req_count'){
-      data = sortedKeys.map(key=> buckets.get(key)!.length);
+      data = sortedKeys.map(key=> buckets.get(key)!.list.length);
     } else {
       data = sortedKeys.map(key=>{
-        const arr=buckets.get(key)!;
+        const arr=buckets.get(key)!.list;
         let sum=0; for(const e of arr) sum+=getYValue(e,k);
         return Number(sum.toFixed(k.includes('cost')?2:0));
       });
     }
     return { name: meta.label, data, color: meta.color, kind: meta.kind || 'token' };
   });
-  await drawBarLine(el, id, labels, series);
+  await drawBarLine(el, id, labels, series, tips);
   } catch(e:any){
     dropChart(id);
     try{ const doc2=getDoc(); const el2=doc2.getElementById(`aus-chart-${id}`) as HTMLElement | null; if(el2) el2.innerHTML='<div style="text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);">图表加载失败: '+(e?.message||e)+'</div>'; }catch{}
@@ -213,7 +238,18 @@ function calcXInterval(labels: string[], el: HTMLElement): number {
   return Math.ceil(labels.length / maxLabels) - 1;
 }
 
-async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:Array<{name:string,data:number[],color:string,kind:string}>){
+/** 按系列名判断数值单位，悬浮窗据此显示单位（费用按当前显示币种） */
+function seriesUnit(name:string):'cost'|'percent'|'rate'|'duration'|'count'|'token'{
+  const n = String(name||'');
+  if (n.includes('费用') || n.includes('成本')) return 'cost';
+  if (n.includes('率') || n.includes('占比')) return 'percent';
+  if (n.includes('速率')) return 'rate';
+  if (n.includes('耗时') || n.includes('延迟')) return 'duration';
+  if (n.includes('请求')) return 'count';
+  return 'token';
+}
+
+async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:Array<{name:string,data:number[],color:string,kind:string}>, tips:string[] = []){
   try {
   const curCur = (()=>{ try{  return getDisplayCurrency(); } catch{ return {code:'CNY',symbol:'¥',rate:1} as any; } })();
   // 费用类数据在 USD 模式下需换算为显示币种
@@ -232,7 +268,27 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
   const interval = calcXInterval(labels, el);
   const opts:any = {
     backgroundColor:'transparent',
-    tooltip:{ trigger:'axis', backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12} },
+    tooltip:{ trigger:'axis', backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12},
+      formatter: (params:any)=>{
+        const list = Array.isArray(params) ? params : [params];
+        if (!list.length) return '';
+        const idx = list[0].dataIndex;
+        const title = tips[idx] || list[0].axisValueLabel || '';
+        let html = `<div style="font-weight:600;margin-bottom:6px;">${title}</div>`;
+        for (const p of list){
+          const unit = seriesUnit(p.seriesName);
+          const v = Number(p.value);
+          let disp:string;
+          if (unit==='percent') disp = v.toFixed(1) + ' %';
+          else if (unit==='rate') disp = Math.round(v).toLocaleString() + ' t/s';
+          else if (unit==='duration') disp = v.toFixed(2) + ' s';
+          else if (unit==='count') disp = v.toLocaleString() + ' 次';
+          else disp = v.toLocaleString() + ' tokens';
+          html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${disp}</span></div>`;
+        }
+        return `<div style="padding:4px 2px;min-width:170px;">${html}</div>`;
+      }
+    },
     // 旋转标签 + 底部视窗滑块都需要额外空间，否则标签被裁（表现为「X 轴名称丢失」）
     grid:{ left:40, right:20, top:8, bottom: labels.length>12 ? 62 : 46 },
     xAxis:{ type:'category', data: labels, axisLine:{lineStyle:{color:themeColor('--ds-border','#E5E7EB')}}, axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF'),rotate: labels.length>12?30:0, interval: 'auto', hideOverlap: false} },
@@ -253,7 +309,7 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
   };
   if (id==='cost') {
     opts.yAxis = { type:'value', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF'), formatter:(v:number)=> curCur.symbol + Number(v).toFixed(2)}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F6F7F8')}} } as any;
-    opts.tooltip = { trigger:'axis', backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12}, formatter: (params:any)=>{ let html=`<div style="font-weight:600;margin-bottom:6px;">${params[0]?.axisValueLabel||''}</div>`; for(const p of params){ html+=`<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${curCur.symbol}${Number(p.value).toFixed(4)} ${curCur.code}</span></div>`; } return `<div style="padding:4px 2px;min-width:160px;">${html}</div>`; } } as any;
+    opts.tooltip = { trigger:'axis', backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12}, formatter: (params:any)=>{ const idx = params[0]?.dataIndex ?? 0; const title = tips[idx] || params[0]?.axisValueLabel || ''; let html=`<div style="font-weight:600;margin-bottom:6px;">${title}</div>`; for(const p of params){ html+=`<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${curCur.symbol}${Number(p.value).toFixed(4)} ${curCur.code}</span></div>`; } return `<div style="padding:4px 2px;min-width:160px;">${html}</div>`; } } as any;
   }
   // 命中/请求等单指标改为线+面积更可读
   if (id==='hit'){ opts.series = [{ name:'命中率', type:'line', data: series[0].data, areaStyle:{opacity:0.12,color:series[0].color}, lineStyle:{color:series[0].color}, itemStyle:{color:series[0].color}, smooth:true }]; opts.yAxis={ max:100, axisLabel:{formatter:(v:number)=>v+'%'} } as any; }

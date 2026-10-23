@@ -616,7 +616,7 @@ async function renderChart(filteredRaw: any[]) {
   if (!el) return;
   const yKeys = getYSelected() as any;
   const xKey = getXSelected() as any;
-  const { labels, series } = aggregateForChart(filteredRaw, yKeys, xKey);
+  const { labels, series, tips } = aggregateForChart(filteredRaw, yKeys, xKey);
   if (!labels.length) {
     if (chart) { try { chart.dispose(); } catch {} chart = null; }
     if (chart) { try { detachChartZoom(chart); } catch {} }
@@ -781,7 +781,8 @@ async function renderChart(filteredRaw: any[]) {
       formatter: (params:any)=>{
         if (!params?.length) return '';
         const idx = params[0].dataIndex;
-        const label = labels[idx];
+        // 悬浮窗标题用完整日期时间（X 轴标签是压缩格式，看不清具体时刻）
+        const label = tips[idx] || labels[idx];
         let html = `<div style="font-weight:600;margin-bottom:6px;">${esc(label)}</div>`;
         for (const p of params) {
           const v = p.value;

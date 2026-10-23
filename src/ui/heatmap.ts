@@ -120,7 +120,8 @@ export function renderHeatmap(filtered: any[]) {
       const key = localDay(cd.getTime());
       const t = dayMap[key] || 0;
       const lv = getLevel(t);
-      const tip = cd.getFullYear() + '年' + (cd.getMonth() + 1) + '月' + cd.getDate() + '日' + (t > 0 ? ' · ' + t.toLocaleString() + ' Token' : ' · 无记录');
+      const weekday = ['周日','周一','周二','周三','周四','周五','周六'][cd.getDay()];
+      const tip = cd.getFullYear() + '年' + (cd.getMonth() + 1) + '月' + cd.getDate() + '日 ' + weekday + (t > 0 ? ' · ' + t.toLocaleString() + ' Token' : ' · 无记录');
       html += '<td style="padding:1px;line-height:0;font-size:0"><div style="width:' + cs + 'px;height:' + cs + 'px;border-radius:2px;background:' + clr[lv] + ';border:1px solid ' + borderClr + ';cursor:pointer;box-sizing:border-box;" title="' + tip + '"></div></td>';
     }
     html += '</tr>';
