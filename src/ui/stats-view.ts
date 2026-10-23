@@ -1,4 +1,5 @@
 import { icon } from './icons';
+import { bindSortableHeaders, paintSortHeader, type SortState } from './sort-header';
 import { getSelectedSave, state } from '../store/index';
 import { localDay, esc } from '../utils/date';
 import { Y_OPTIONS, Y_GROUPS, X_OPTIONS, getYSelected, getXSelected, getChartType, setChartType, getAxisLabelMode, setAxisLabelMode, toggleY, setXSelected, aggregateForChart } from './chart-config';
@@ -34,61 +35,19 @@ let selectedCredential: string = STATS_FILTER_ALL;
 let credentialPickerOpen = false;
 let lastStatsHistory: any[] = [];
 
-// 模型汇总表排序：点击表头（除模型外）正序/倒序切换
+// 模型汇总表排序：点击表头（除模型外）正序/倒序切换。
+// 表头交互与箭头指示统一由 sort-header 提供（与概览「按对话统计」同一份实现）。
 type SummarySortKey = 'count' | 'hit' | 'miss' | 'out' | 'total' | 'cost' | 'avgCost' | 'avgDur' | 'avgRate';
-let summarySortKey: SummarySortKey | null = null;
-let summarySortDir: 'asc' | 'desc' = 'desc';
+const summarySort: SortState<SummarySortKey> = { key: null, dir: 'desc' };
 let lastSummaryFiltered: any[] | null = null;
 
 function updateSummarySortHeader() {
-  const doc = getDoc();
-  const ths = doc.querySelectorAll('#aus-model-summary thead th[data-sort-key]');
-  ths.forEach((th: any) => {
-    th.style.color = '';
-    th.style.fontWeight = '';
-    const ind = th.querySelector('.aus-sort-ind');
-    if (ind) ind.textContent = '';
-    // 悬停高亮由 CSS :hover 处理，此处仅重置
-  });
-  if (summarySortKey) {
-    const cur = doc.querySelector(`#aus-model-summary thead th[data-sort-key="${summarySortKey}"]`) as HTMLElement | null;
-    if (cur) {
-      cur.style.color = 'var(--ds-text)';
-      cur.style.fontWeight = '600';
-      const ind = cur.querySelector('.aus-sort-ind') as HTMLElement | null;
-      if (ind) ind.innerHTML = summarySortDir === 'asc' ? icon('chevron-up', 14) : icon('chevron-down', 14);
-    }
-  }
+  paintSortHeader(getDoc(), 'aus-model-summary', summarySort);
 }
 
 function bindSummarySort() {
-  const doc = getDoc();
-  const ths = doc.querySelectorAll('#aus-model-summary thead th[data-sort-key]');
-  if (!ths.length) return;
-  // 避免重复绑定
-  if ((bindSummarySort as any)._bound) return;
-  (bindSummarySort as any)._bound = true;
-  ths.forEach((th: any) => {
-    th.addEventListener('click', () => {
-      const key = th.getAttribute('data-sort-key') as SummarySortKey;
-      if (!key) return;
-      if (summarySortKey === key) {
-        summarySortDir = summarySortDir === 'asc' ? 'desc' : 'asc';
-      } else {
-        summarySortKey = key;
-        summarySortDir = 'desc';
-      }
-      updateSummarySortHeader();
-      if (lastSummaryFiltered) renderModelSummary(lastSummaryFiltered);
-    });
-    th.addEventListener('mouseenter', () => {
-      const k = th.getAttribute('data-sort-key');
-      if (k !== summarySortKey) th.style.color = 'var(--ds-text)';
-    });
-    th.addEventListener('mouseleave', () => {
-      const k = th.getAttribute('data-sort-key');
-      if (k !== summarySortKey) th.style.color = '';
-    });
+  bindSortableHeaders(getDoc(), 'aus-model-summary', summarySort, () => {
+    if (lastSummaryFiltered) renderModelSummary(lastSummaryFiltered);
   });
 }
 
@@ -851,10 +810,11 @@ function renderModelSummary(filtered: any[]) {
     const avgRateStr = e.rateCnt ? Math.round(e.rate / e.rateCnt) + ' t/s' : '—';
     return { m, count: e.count, hit: e.hit, miss: e.miss, out: e.out, total: e.total, cost: e.cost, avgCost, avgDurVal, avgRateVal, avgDurStr, avgRateStr };
   });
-  if (summarySortKey) {
-    const dir = summarySortDir === 'asc' ? 1 : -1;
+  const sortKey = summarySort.key;
+  if (sortKey) {
+    const dir = summarySort.dir === 'asc' ? 1 : -1;
     const getVal = (r: Row): number => {
-      switch (summarySortKey) {
+      switch (sortKey) {
         case 'count': return r.count;
         case 'hit': return r.hit;
         case 'miss': return r.miss;

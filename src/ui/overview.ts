@@ -1,5 +1,6 @@
 import { icon } from './icons';
 import { computeOverview, computeChatStats } from '../data/computed';
+import { renderChatSummaryTable } from './chat-summary-table';
 import { renderHeatmap } from './heatmap';
 import { state } from '../store/index';
 import { saveHot } from '../store/persistence';
@@ -345,35 +346,11 @@ export function renderOverview(fullHistory?: any[]) {
 
 function renderChatSummaryOverview(fullHistory?: any[]) {
   const doc = (window.parent as any)?.document ?? document;
-  const tbody = doc.getElementById('aus-chat-summary-tbody') as HTMLElement | null;
   const card = doc.getElementById('aus-chat-summary-overview') as HTMLElement | null;
   if (!card) return;
-  if (!tbody) return;
-  const renderRows = (rows: ReturnType<typeof computeChatStats>) => {
-    if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr>';
-      return;
-    }
-    tbody.innerHTML = rows.map(r => {
-      const avgRate = r.avgHitRate > 0 ? r.avgHitRate.toFixed(1) + '%' : '—';
-      const colorRate = r.avgHitRate >= 50 ? 'var(--ds-green)' : r.avgHitRate > 0 ? 'var(--ds-text)' : 'var(--ds-text-3)';
-      let costTxt = `¥${r.cost.toFixed(4)}`;
-      try {  costTxt = formatMoney(r.cost, 4); } catch {}
-      return `<tr style="border-bottom:1px solid var(--ds-card);">
-        <td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;" title="${esc(r.chatId || 'null')}">${esc(r.displayName)}</td>
-        <td style="padding:6px 8px;text-align:right;">${r.count}</td>
-        <td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString('zh-CN')}</td>
-        <td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString('zh-CN')}</td>
-        <td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString('zh-CN')}</td>
-        <td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString('zh-CN')}</td>
-        <td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${costTxt}</td>
-        <td style="padding:6px 8px;text-align:right;">${Math.round(r.avgTokens).toLocaleString('zh-CN')}</td>
-        <td style="padding:6px 8px;text-align:right;color:${colorRate};">${avgRate}</td>
-      </tr>`;
-    }).join('');
-  };
+  // 渲染与排序统一走 chat-summary-table（与「模型汇总」共用 sort-header 交互）
   const hotRows = computeChatStats(fullHistory);
-  renderRows(hotRows);
+  renderChatSummaryTable(doc, hotRows);
   if (fullHistory) return;
   // 若存在冷存储全量（IndexedDB），异步补全以确保按对话统计完整（hot 仅 50 条）
   (async () => {
@@ -385,7 +362,7 @@ function renderChatSummaryOverview(fullHistory?: any[]) {
       const fullRows = computeChatStats(all);
       // 避免无变化时重复渲染
       if (fullRows.length !== hotRows.length || fullRows.some((r, i) => r.total !== hotRows[i]?.total)) {
-        renderRows(fullRows);
+        renderChatSummaryTable(doc, fullRows);
       }
     } catch {}
   })();

@@ -4497,6 +4497,156 @@ function computeModelEfficiency(history, options = {}) {
 	return aggregateModelEfficiency(history || [], options);
 }
 //#endregion
+//#region src/ui/sort-header.ts
+/**
+* 表头排序：点击带 data-sort-key 的表头切换排序（同列切换升/降序，换列回到降序）。
+*
+* 用量统计的「模型汇总」与用量概览的「按对话统计」共用这一份实现，
+* 保证交互、指示箭头与悬停高亮完全一致；排序本身由各表自己按业务字段映射。
+*/
+/** 表头容器：只认表头里带 data-sort-key 的列（首列名称列保持不可排序） */
+function sortableHeaders(doc, tableId) {
+	try {
+		const table = doc.getElementById(tableId);
+		if (!table) return [];
+		return Array.from(table.querySelectorAll("thead th[data-sort-key]"));
+	} catch {
+		return [];
+	}
+}
+/** 重绘排序指示（当前排序列加粗 + 箭头，其余列复原） */
+function paintSortHeader(doc, tableId, state) {
+	const ths = sortableHeaders(doc, tableId);
+	for (const th of ths) {
+		th.style.color = "";
+		th.style.fontWeight = "";
+		const ind = th.querySelector(".aus-sort-ind");
+		if (ind) ind.textContent = "";
+	}
+	if (!state.key) return;
+	const cur = ths.find((th) => th.getAttribute("data-sort-key") === state.key);
+	if (!cur) return;
+	cur.style.color = "var(--ds-text)";
+	cur.style.fontWeight = "600";
+	const ind = cur.querySelector(".aus-sort-ind");
+	if (ind) ind.innerHTML = state.dir === "asc" ? icon("chevron-up", 14) : icon("chevron-down", 14);
+}
+/**
+* 绑定表头点击排序（幂等：同一张表只绑一次，表头由首屏模板渲染、不会被重绘）。
+* @param onChange 状态变化后触发重绘，由调用方用最近一次数据重新渲染表体
+*/
+function bindSortableHeaders(doc, tableId, state, onChange) {
+	const table = doc.getElementById(tableId);
+	if (!table || table._ausSortBound) return;
+	const ths = sortableHeaders(doc, tableId);
+	if (!ths.length) return;
+	table._ausSortBound = true;
+	for (const th of ths) {
+		const key = th.getAttribute("data-sort-key");
+		if (!key) continue;
+		th.style.cursor = "pointer";
+		th.style.userSelect = "none";
+		th.addEventListener("click", () => {
+			if (state.key === key) state.dir = state.dir === "asc" ? "desc" : "asc";
+			else {
+				state.key = key;
+				state.dir = "desc";
+			}
+			paintSortHeader(doc, tableId, state);
+			try {
+				onChange();
+			} catch {}
+		});
+		th.addEventListener("mouseenter", () => {
+			if (key !== state.key) th.style.color = "var(--ds-text)";
+		});
+		th.addEventListener("mouseleave", () => {
+			if (key !== state.key) th.style.color = "";
+		});
+	}
+}
+/**
+* 按状态排序：未选列时原样返回；相等值按 tie 文本升序稳定兜底，避免顺序抖动。
+* @param pick 从行里取该列的可比较数值
+*/
+function sortRows(rows, state, pick, tie) {
+	const key = state.key;
+	if (!key) return rows;
+	const dir = state.dir === "asc" ? 1 : -1;
+	return [...rows].sort((a, b) => {
+		const av = Number(pick(a, key)) || 0;
+		const bv = Number(pick(b, key)) || 0;
+		if (av === bv) return tie(a).localeCompare(tie(b));
+		return (av - bv) * dir;
+	});
+}
+//#endregion
+//#region src/ui/chat-summary-table.ts
+/** 排序状态：key 为 null 时保持数据源默认顺序（总 Tokens 倒序） */
+var sortState = {
+	key: null,
+	dir: "desc"
+};
+/** 最近一次渲染的数据，供点击表头时就地重排，避免重新聚合 */
+var lastRows = [];
+var TABLE_ID = "aus-chat-summary-overview";
+var TBODY_ID = "aus-chat-summary-tbody";
+/** 列 → 可比较数值（导出以便单测，保持与表头 data-sort-key 一一对应） */
+function pickChatSortValue(row, key) {
+	switch (key) {
+		case "count": return row.count;
+		case "hit": return row.hit;
+		case "miss": return row.miss;
+		case "out": return row.out;
+		case "total": return row.total;
+		case "cost": return row.cost;
+		case "avgTokens": return row.avgTokens;
+		case "avgHitRate": return row.avgHitRate;
+		default: return 0;
+	}
+}
+/** 绑定表头排序（幂等），点击后按最近一次数据重排重绘 */
+function bindChatSummarySort(doc) {
+	bindSortableHeaders(doc, TABLE_ID, sortState, () => {
+		renderChatSummaryTable(doc, lastRows);
+	});
+	paintSortHeader(doc, TABLE_ID, sortState);
+}
+/** 渲染表体：先按当前排序状态排序，未选列时保持入参顺序 */
+function renderChatSummaryTable(doc, rows) {
+	const tbody = doc.getElementById(TBODY_ID);
+	if (!tbody) return;
+	lastRows = rows || [];
+	try {
+		bindChatSummarySort(doc);
+	} catch {}
+	if (!lastRows.length) {
+		tbody.innerHTML = "<tr><td colspan=\"9\" style=\"text-align:center;padding:16px;color:var(--ds-text-3);\">暂无数据</td></tr>";
+		return;
+	}
+	tbody.innerHTML = sortRows(lastRows, sortState, pickChatSortValue, (row) => row.displayName).map((r) => {
+		const avgRate = r.avgHitRate > 0 ? r.avgHitRate.toFixed(1) + "%" : "—";
+		const colorRate = r.avgHitRate >= 50 ? "var(--ds-green)" : r.avgHitRate > 0 ? "var(--ds-text)" : "var(--ds-text-3)";
+		let costTxt = "¥" + r.cost.toFixed(4);
+		try {
+			costTxt = formatMoney(r.cost, 4);
+		} catch {}
+		return [
+			"<tr style=\"border-bottom:1px solid var(--ds-card);\">",
+			"<td style=\"padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;\" title=\"" + esc$2(r.chatId || "null") + "\">" + esc$2(r.displayName) + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;\">" + r.count + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;color:#0BA25E;\">" + r.hit.toLocaleString("zh-CN") + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;color:#DC2626;\">" + r.miss.toLocaleString("zh-CN") + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;color:#6366F1;\">" + r.out.toLocaleString("zh-CN") + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;font-weight:600;\">" + r.total.toLocaleString("zh-CN") + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;color:var(--ds-text);\">" + costTxt + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;\">" + Math.round(r.avgTokens).toLocaleString("zh-CN") + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;color:" + colorRate + ";\">" + avgRate + "</td>",
+			"</tr>"
+		].join("");
+	}).join("");
+}
+//#endregion
 //#region src/ui/heatmap.ts
 function getDoc$10() {
 	return window.parent?.document ?? document;
@@ -5092,36 +5242,9 @@ function renderOverview(fullHistory) {
 }
 function renderChatSummaryOverview(fullHistory) {
 	const doc = window.parent?.document ?? document;
-	const tbody = doc.getElementById("aus-chat-summary-tbody");
 	if (!doc.getElementById("aus-chat-summary-overview")) return;
-	if (!tbody) return;
-	const renderRows = (rows) => {
-		if (!rows.length) {
-			tbody.innerHTML = "<tr><td colspan=\"9\" style=\"text-align:center;padding:16px;color:var(--ds-text-3);\">暂无数据</td></tr>";
-			return;
-		}
-		tbody.innerHTML = rows.map((r) => {
-			const avgRate = r.avgHitRate > 0 ? r.avgHitRate.toFixed(1) + "%" : "—";
-			const colorRate = r.avgHitRate >= 50 ? "var(--ds-green)" : r.avgHitRate > 0 ? "var(--ds-text)" : "var(--ds-text-3)";
-			let costTxt = `¥${r.cost.toFixed(4)}`;
-			try {
-				costTxt = formatMoney(r.cost, 4);
-			} catch {}
-			return `<tr style="border-bottom:1px solid var(--ds-card);">
-        <td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;" title="${esc$2(r.chatId || "null")}">${esc$2(r.displayName)}</td>
-        <td style="padding:6px 8px;text-align:right;">${r.count}</td>
-        <td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString("zh-CN")}</td>
-        <td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString("zh-CN")}</td>
-        <td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString("zh-CN")}</td>
-        <td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString("zh-CN")}</td>
-        <td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${costTxt}</td>
-        <td style="padding:6px 8px;text-align:right;">${Math.round(r.avgTokens).toLocaleString("zh-CN")}</td>
-        <td style="padding:6px 8px;text-align:right;color:${colorRate};">${avgRate}</td>
-      </tr>`;
-		}).join("");
-	};
 	const hotRows = computeChatStats(fullHistory);
-	renderRows(hotRows);
+	renderChatSummaryTable(doc, hotRows);
 	if (fullHistory) return;
 	(async () => {
 		try {
@@ -5130,7 +5253,7 @@ function renderChatSummaryOverview(fullHistory) {
 			const all = await mod.getAllHistory();
 			if (!all || all.length <= (state$2.history?.length || 0)) return;
 			const fullRows = computeChatStats(all);
-			if (fullRows.length !== hotRows.length || fullRows.some((r, i) => r.total !== hotRows[i]?.total)) renderRows(fullRows);
+			if (fullRows.length !== hotRows.length || fullRows.some((r, i) => r.total !== hotRows[i]?.total)) renderChatSummaryTable(doc, fullRows);
 		} catch {}
 	})();
 }
@@ -6956,50 +7079,17 @@ var endpointPickerOpen = false;
 var selectedCredential = STATS_FILTER_ALL;
 var credentialPickerOpen = false;
 var lastStatsHistory = [];
-var summarySortKey = null;
-var summarySortDir = "desc";
+var summarySort = {
+	key: null,
+	dir: "desc"
+};
 var lastSummaryFiltered = null;
 function updateSummarySortHeader() {
-	const doc = getDoc$6();
-	doc.querySelectorAll("#aus-model-summary thead th[data-sort-key]").forEach((th) => {
-		th.style.color = "";
-		th.style.fontWeight = "";
-		const ind = th.querySelector(".aus-sort-ind");
-		if (ind) ind.textContent = "";
-	});
-	if (summarySortKey) {
-		const cur = doc.querySelector(`#aus-model-summary thead th[data-sort-key="${summarySortKey}"]`);
-		if (cur) {
-			cur.style.color = "var(--ds-text)";
-			cur.style.fontWeight = "600";
-			const ind = cur.querySelector(".aus-sort-ind");
-			if (ind) ind.innerHTML = summarySortDir === "asc" ? icon("chevron-up", 14) : icon("chevron-down", 14);
-		}
-	}
+	paintSortHeader(getDoc$6(), "aus-model-summary", summarySort);
 }
 function bindSummarySort() {
-	const ths = getDoc$6().querySelectorAll("#aus-model-summary thead th[data-sort-key]");
-	if (!ths.length) return;
-	if (bindSummarySort._bound) return;
-	bindSummarySort._bound = true;
-	ths.forEach((th) => {
-		th.addEventListener("click", () => {
-			const key = th.getAttribute("data-sort-key");
-			if (!key) return;
-			if (summarySortKey === key) summarySortDir = summarySortDir === "asc" ? "desc" : "asc";
-			else {
-				summarySortKey = key;
-				summarySortDir = "desc";
-			}
-			updateSummarySortHeader();
-			if (lastSummaryFiltered) renderModelSummary(lastSummaryFiltered);
-		});
-		th.addEventListener("mouseenter", () => {
-			if (th.getAttribute("data-sort-key") !== summarySortKey) th.style.color = "var(--ds-text)";
-		});
-		th.addEventListener("mouseleave", () => {
-			if (th.getAttribute("data-sort-key") !== summarySortKey) th.style.color = "";
-		});
+	bindSortableHeaders(getDoc$6(), "aus-model-summary", summarySort, () => {
+		if (lastSummaryFiltered) renderModelSummary(lastSummaryFiltered);
 	});
 }
 function getDoc$6() {
@@ -8013,10 +8103,11 @@ function renderModelSummary(filtered) {
 			avgRateStr
 		};
 	});
-	if (summarySortKey) {
-		const dir = summarySortDir === "asc" ? 1 : -1;
+	const sortKey = summarySort.key;
+	if (sortKey) {
+		const dir = summarySort.dir === "asc" ? 1 : -1;
 		const getVal = (r) => {
-			switch (summarySortKey) {
+			switch (sortKey) {
 				case "count": return r.count;
 				case "hit": return r.hit;
 				case "miss": return r.miss;
@@ -12486,10 +12577,10 @@ function createPanel() {
             <div id="aus-chat-summary-overview" class="ds-card" style="margin-top:12px;overflow:auto;">
               <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:8px;">按对话统计</div>
               <table style="width:100%;border-collapse:collapse;font-size:var(--aus-fs-sm);white-space:nowrap;min-width:720px;">
-                <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">对话</th><th style="padding:6px 8px;">轮次</th><th style="padding:6px 8px;">命中</th><th style="padding:6px 8px;">未命中</th><th style="padding:6px 8px;">输出</th><th style="padding:6px 8px;">总 Tokens</th><th style="padding:6px 8px;">总费用</th><th style="padding:6px 8px;">平均 Token/轮</th><th style="padding:6px 8px;">平均命中率</th></tr></thead>
+                <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">对话</th><th data-sort-key="count" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">轮次<span class="aus-sort-ind"></span></th><th data-sort-key="hit" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">命中<span class="aus-sort-ind"></span></th><th data-sort-key="miss" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">未命中<span class="aus-sort-ind"></span></th><th data-sort-key="out" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输出<span class="aus-sort-ind"></span></th><th data-sort-key="total" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总 Tokens<span class="aus-sort-ind"></span></th><th data-sort-key="cost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总费用<span class="aus-sort-ind"></span></th><th data-sort-key="avgTokens" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均 Token/轮<span class="aus-sort-ind"></span></th><th data-sort-key="avgHitRate" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均命中率<span class="aus-sort-ind"></span></th></tr></thead>
                 <tbody id="aus-chat-summary-tbody"><tr><td colspan="9" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
               </table>
-              <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">按总 Token 倒序 · 数据来源为全部历史（不受统计页筛选影响）</div>
+              <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">默认按总 Tokens 倒序，点击表头可切换排序 · 数据来源为全部历史（不受统计页筛选影响）</div>
             </div>
             </div>
            <div data-view="stats" style="display:none;">
