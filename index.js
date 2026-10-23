@@ -1,14 +1,14 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from "./store-BhaWFCjs.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
-import { c as saveExtensionSettings, d as historyRecordKey, i as getExtensionSettings, u as saveHot } from "./persistence-C4IJVd-B.js";
+import { a as getExtensionSettings, f as saveHot, o as isMigrationBackupKey, p as historyRecordKey, r as deleteMigrationBackups, u as saveExtensionSettings } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as DEEPSEEK_WALLET_ID, C as findWalletModel, E as walletPendingModelCount, S as findWalletForHistory, T as walletBalanceToCny, _ as normalizeModel, a as decryptKey, b as defaultContextLimitForModel, c as isTruncatedFinish, d as calcCost, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, j as WALLET_CATALOG_PROVIDERS, l as DataEvents, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, w as mergeWalletCollections } from "./repository-wjTo-V4v.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, a as decryptKey, c as isTruncatedFinish, d as calcCost, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-BotjYXCT.js";
 import { a as isUnsafeKey$1, c as localDay$1, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay, t as esc$2, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
-import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-CkKG5JR0.js";
-import { r as recalcAllCosts, t as installInterception } from "./interception-CxrqO6op.js";
-import { i as saveApiKey, n as queryBalance, r as queryWalletBalance } from "./balance-DEVpZGmD.js";
-import { a as removeSyncedModels, n as isSyncedCustomModel, o as syncPricingFromModelsDev, r as previewSync, t as fetchModelsDevCatalog } from "./pricing-sync-DUVox4wX.js";
+import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-DYtqS43k.js";
+import { r as recalcAllCosts, t as installInterception } from "./interception-81akbEw_.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, i as saveApiKey, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-Bkp12Xv2.js";
+import { c as walletSyncStatus, i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev, t as applySyncPlan } from "./pricing-sync-CinAIkTR.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -52,7 +52,7 @@ async function exportHistory() {
 		path: "",
 		proxy: ""
 	};
-	const _appVer = "3.1.6";
+	const _appVer = "3.1.7";
 	let fullHist = [];
 	try {
 		fullHist = await repository.getAllHistory();
@@ -662,7 +662,7 @@ function resolveTheme(mode, win) {
 	if (m === "auto") return systemPrefersDark(win) ? "dark" : "light";
 	return "light";
 }
-function getDoc$11() {
+function getDoc$12() {
 	try {
 		const parentDoc = window.parent?.document;
 		if (parentDoc) return parentDoc;
@@ -677,7 +677,7 @@ function getDoc$11() {
 function paintTheme(mode, resolved) {
 	const r = resolved ?? resolveTheme(mode);
 	try {
-		const doc = getDoc$11();
+		const doc = getDoc$12();
 		const panel = doc.getElementById("aus-panel");
 		if (panel) panel.setAttribute("data-ds-theme", r);
 		const overlay = doc.getElementById("aus-overlay");
@@ -734,7 +734,7 @@ function watchSystemTheme(win) {
 			paintTheme("auto", e?.matches ? "dark" : "light");
 			let hasPanel = false;
 			try {
-				hasPanel = !!getDoc$11().getElementById("aus-panel");
+				hasPanel = !!getDoc$12().getElementById("aus-panel");
 			} catch {}
 			if (hasPanel) repaintDynamic();
 		};
@@ -973,20 +973,35 @@ async function readIndexedDb(doc) {
 			setTimeout(() => resolve(out), 800);
 		});
 		const items = [];
-		for (const r of result) if (r.k === "cold_history") items.push({
-			key: "idb-cold",
-			label: "历史记录（冷数据）",
-			bytes: r.bytes
-		});
-		else if (r.k.startsWith("migration_backup_")) items.push({
+		let backupBytes = 0;
+		let backupCount = 0;
+		for (const r of result) {
+			if (r.k === "cold_history") {
+				items.push({
+					key: "idb-cold",
+					label: "历史记录（冷数据）",
+					bytes: r.bytes
+				});
+				continue;
+			}
+			if (isMigrationBackupKey(r.k)) {
+				backupBytes += r.bytes;
+				backupCount += 1;
+				continue;
+			}
+			items.push({
+				key: "idb-" + r.k.replace(/[^\w-]/g, "_"),
+				label: r.k,
+				bytes: r.bytes
+			});
+		}
+		if (backupCount > 0) items.push({
 			key: "idb-backup",
 			label: "旧版迁移备份",
-			bytes: r.bytes
-		});
-		else items.push({
-			key: "idb-" + r.k.replace(/[^\w-]/g, "_"),
-			label: r.k,
-			bytes: r.bytes
+			bytes: backupBytes,
+			detail: backupCount > 1 ? `${backupCount} 份升级前快照，确认数据无误后可清理` : "升级前的一次性快照，确认数据无误后可清理",
+			cleanable: "migration_backup",
+			itemCount: backupCount
 		});
 		return items;
 	} finally {
@@ -1091,6 +1106,7 @@ function row(item, total, opts = {}) {
     <div style="flex:0 0 auto;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;">
       <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">${formatBytes(item.bytes)}</div>
       ${pct != null ? `<div style="font-size:var(--aus-fs-xs);color:var(--ds-text-3);margin-top:2px;">${pct}%</div>` : ""}
+      ${opts.action ? `<button id="${opts.action.id}" type="button" data-armed="0" title="${esc$1(opts.action.title || "")}" style="margin-top:5px;padding:3px 10px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-xs);cursor:pointer;line-height:1.5;white-space:nowrap;">${esc$1(opts.action.label)}</button>` : ""}
     </div>
   </div>`;
 }
@@ -1115,7 +1131,11 @@ function bodyHtml(r) {
 	else {
 		const major = r.items.filter((i) => (i.bytes ?? 0) >= SMALL_ITEM_BYTES);
 		const minor = r.items.filter((i) => (i.bytes ?? 0) < SMALL_ITEM_BYTES);
-		const rows = major.map((i) => row(i, r.totalBytes));
+		const rows = major.map((i) => row(i, r.totalBytes, i.cleanable === "migration_backup" ? { action: {
+			id: "aus-storage-clean-backup",
+			label: "清理",
+			title: "删除升级前的一次性备份快照"
+		} } : {}));
 		if (minor.length) {
 			const minorTotal = minor.reduce((a, i) => a + (i.bytes || 0), 0);
 			rows.push(row({
@@ -1133,7 +1153,7 @@ function bodyHtml(r) {
 	if (r.globalAvailable && r.quotaBytes != null) {
 		const usagePct = r.usageBytes != null && r.quotaBytes > 0 ? Math.min(100, r.usageBytes / r.quotaBytes * 100) : null;
 		const persistLabel = r.persisted == null ? "" : r.persisted ? "已启用持久化存储" : "未申请持久化存储";
-		parts.push(`<div style="margin-top:10px;padding:9px 11px;border-radius:10px;background:var(--ds-card-inner);border:1px solid var(--ds-border);">
+		parts.push(`<div style="margin-top:10px;padding:9px 11px;border-radius:10px;background:var(--ds-card-inner);">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;">
         <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">浏览器站点用量</span>
         <span style="font-size:var(--aus-fs-sm);color:var(--ds-text);font-variant-numeric:tabular-nums;white-space:nowrap;">
@@ -1147,7 +1167,7 @@ function bodyHtml(r) {
     </div>`);
 	}
 	parts.push(`<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:9px;line-height:1.6;">
-    历史记录按最近 50 条保存在酒馆设置中，更早的进入浏览器 IndexedDB；设置为 UTF-8 估算体积，与实际落盘大小可能略有差异。
+    历史记录按最近 50 条保存在酒馆设置中，更早的进入浏览器 IndexedDB；设置为 UTF-8 估算体积，与实际落盘大小可能略有差异。旧版迁移备份是升级前的一次性快照，现有数据已迁移完成，确认无误后可点「清理」删除（不影响历史、设置与钱包）。
   </div>`);
 	return parts.join("");
 }
@@ -1185,6 +1205,42 @@ function bindStorageUsageCard(doc) {
 	if (btn) btn.onclick = () => {
 		refreshStorageUsage(doc);
 	};
+	const cleanBtn = doc.getElementById("aus-storage-clean-backup");
+	if (cleanBtn) {
+		const idleLabel = cleanBtn.textContent || "清理";
+		let armTimer = null;
+		const disarm = () => {
+			cleanBtn.dataset.armed = "0";
+			cleanBtn.textContent = idleLabel;
+			if (armTimer) {
+				clearTimeout(armTimer);
+				armTimer = null;
+			}
+		};
+		cleanBtn.onclick = async () => {
+			if (cleanBtn.dataset.armed !== "1") {
+				cleanBtn.dataset.armed = "1";
+				cleanBtn.textContent = "确认清理？再点一次";
+				if (armTimer) clearTimeout(armTimer);
+				armTimer = setTimeout(disarm, 5e3);
+				return;
+			}
+			disarm();
+			cleanBtn.disabled = true;
+			cleanBtn.textContent = "清理中…";
+			try {
+				const result = await deleteMigrationBackups();
+				if (result.deleted > 0) toast("success", `已清理 ${result.deleted} 份旧版迁移备份`);
+				else if (result.remaining > 0) toast("warning", "旧版迁移备份未能删除，请刷新后重试");
+				else toast("info", "未找到可清理的旧版迁移备份");
+				if (result.remaining > 0 && result.deleted > 0) toast("warning", `仍有 ${result.remaining} 份备份未删除，请刷新后重试`);
+			} catch (e) {
+				toast("error", "清理失败：" + (e?.message || e));
+			} finally {
+				await refreshStorageUsage(doc);
+			}
+		};
+	}
 	const toggle = doc.getElementById("aus-storage-others");
 	const detail = doc.getElementById("aus-storage-others-detail");
 	if (!toggle || !detail) return;
@@ -1485,7 +1541,7 @@ var inFlight = false;
 var bound = false;
 function appVersion() {
 	try {
-		return String("3.1.6");
+		return String("3.1.7");
 	} catch {
 		return "";
 	}
@@ -2224,18 +2280,18 @@ function renderSettings(doc) {
       <!-- 模型价格自动同步（models.dev） -->
       <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">模型价格自动同步（models.dev）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-pricing-sync-enabled" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-pricing-sync-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
         <div id="aus-pricing-sync-panel" style="display:${s.pricingSync?.enabled ? "grid" : "none"};margin-top:10px;gap:10px;">
-          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;">开启后所有价格、余额、图表将以 <b style="color:var(--ds-text);">美元 $/USD</b> 展示（按汇率动态换算），自动从 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 拉取模型价格。各钱包在钱包页选择“价格来源供应商”，同步只写入对应钱包；DeepSeek 峰价按谷价 2× 合成。功能默认关闭。<br />钱包中锁定或手工维护的价格受同步模式保护；<b style="color:var(--ds-text);">关闭本开关会移除未锁定的同步价格</b>。</div>
+          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;">开启后所有价格、余额、图表将以 <b style="color:var(--ds-text);">美元 $/USD</b> 展示（按汇率动态换算），并从 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 拉取模型价格。<b style="color:var(--ds-text);">同步只按钱包里已识别的模型名做模糊匹配后写入该模型的价格，不会把供应商目录里的模型整批塞进钱包</b>；各钱包在钱包页选择“价格来源供应商”，DeepSeek 峰价按谷价 2× 合成。功能默认关闭。<br />钱包中锁定或手工维护的价格受同步模式保护；关闭本开关只会清理旧版本全量灌入的残留条目，已同步的价格保留。</div>
           <div style="display:flex;align-items:center;justify-content:space-between;position:relative;"><span style="font-size:var(--aus-fs-base);color:var(--ds-text);">同步模式</span><div id="aus-pricing-sync-mode-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);cursor:pointer;"><span id="aus-pricing-sync-mode-label" style="font-weight:600;color:var(--ds-text);">仅新增</span>${icon("chevron-down", 14)}</div><div id="aus-pricing-sync-mode-dropdown" style="display:none;position:absolute;top:40px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
             <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">汇率 USD→CNY</div><input id="aus-exchange-rate" type="number" step="0.0001" min="0" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div>
             <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">自动同步间隔</div><div id="aus-pricing-sync-interval-btn" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);cursor:pointer;"><span id="aus-pricing-sync-interval-label" style="font-weight:600;">仅手动</span>${icon("chevron-down", 14)}</div><div id="aus-pricing-sync-interval-dropdown" style="display:none;position:absolute;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:140px;padding:8px;"></div></div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;"><label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" id="aus-use-live-rate" style="accent-color:var(--ds-text);" /> 每24小时自动联网获取最新汇率</label><button id="aus-fetch-rate" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">立即获取</button></div>
+          <div style="display:flex;align-items:center;gap:8px;"><label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" id="aus-use-live-rate" class="aus-checkbox" /> 每24小时自动联网获取最新汇率</label><button id="aus-fetch-rate" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">立即获取</button></div>
           <div id="aus-rate-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);"></div>
-          <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" id="aus-recalc-on-sync" style="accent-color:var(--ds-text);" /> 同步后重算历史费用（否则仅新请求生效）</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" id="aus-recalc-on-sync" class="aus-checkbox" /> 同步后重算历史费用（否则仅新请求生效）</label>
           <div style="display:flex;gap:8px;"><button id="aus-btn-sync-pricing" class="ds-btn-pill" style="flex:1;">立即同步</button><button id="aus-btn-preview-pricing" style="flex:1;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">预览</button></div>
           <div id="aus-pricing-sync-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);"></div>
-          <div id="aus-pricing-sync-preview" style="display:none;max-height:160px;overflow:auto;border:1px solid var(--ds-border);border-radius:8px;padding:8px;background:var(--ds-sidebar-bg);font-size:var(--aus-fs-sm);"></div>
+          <div id="aus-pricing-sync-preview" style="display:none;max-height:160px;overflow:auto;border-radius:8px;padding:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);"></div>
         </div>
       </div>
 
@@ -2464,7 +2520,7 @@ function renderSettings(doc) {
 		state$2.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state$2.settings });
 		try {
-			import("./balance-DEVpZGmD.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-Bkp12Xv2.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2509,7 +2565,7 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-wjTo-V4v.js").then((n) => n.n);
+				const { repository } = await import("./repository-BotjYXCT.js").then((n) => n.n);
 				const { state: st } = await import("./store-BhaWFCjs.js").then((n) => n.i);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
@@ -2615,11 +2671,11 @@ function renderSettings(doc) {
 		const modeLabel = doc.getElementById("aus-pricing-sync-mode-label");
 		const modeDrop = doc.getElementById("aus-pricing-sync-mode-dropdown");
 		const modeMap = {
-			"add-missing": "仅新增",
+			"add-missing": "只补未定价",
 			"overwrite-unlocked": "覆盖未锁定",
 			"overwrite-all": "全部覆盖"
 		};
-		if (modeLabel) modeLabel.textContent = modeMap[ps.mode] || "仅新增";
+		if (modeLabel) modeLabel.textContent = modeMap[ps.mode] || "只补未定价";
 		if (modeDrop) {
 			modeDrop.innerHTML = Object.entries(modeMap).map(([k, l]) => `<div data-mode="${k}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${ps.mode === k ? "background:var(--ds-card);font-weight:600;" : ""}">${l}</div>`).join("");
 			modeDrop.querySelectorAll("[data-mode]").forEach((el) => {
@@ -2659,8 +2715,8 @@ function renderSettings(doc) {
 					intervalDrop.style.display = "none";
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-DUVox4wX.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
-						import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+						import("./pricing-sync-CinAIkTR.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./currency-DYtqS43k.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};
 			});
@@ -2681,7 +2737,7 @@ function renderSettings(doc) {
 			if (panel) panel.style.display = enabledEl.checked ? "grid" : "none";
 			let removed = 0;
 			if (!enabledEl.checked) try {
-				const m = await import("./pricing-sync-DUVox4wX.js").then((n) => n.i);
+				const m = await import("./pricing-sync-CinAIkTR.js").then((n) => n.a);
 				try {
 					await m.markLegacySyncedModels?.({ skipRerender: true });
 				} catch {}
@@ -2691,14 +2747,14 @@ function renderSettings(doc) {
 			}
 			saveHot({ settings: state$2.settings });
 			try {
-				import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
-				import("./pricing-sync-DUVox4wX.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+				import("./currency-DYtqS43k.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+				import("./pricing-sync-CinAIkTR.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 			} catch {}
 			if (removed) {
 				renderModelsEditor(doc);
 				fillDebugModelSelect(doc);
 				recalcCostsAndRefresh();
-				toast("success", `已移除 ${removed} 个同步模型价格`);
+				toast("success", `已清理 ${removed} 个旧版残留同步条目`);
 			}
 			try {
 				globalThis.ApiUsageStat?.refreshUI?.();
@@ -2722,7 +2778,7 @@ function renderSettings(doc) {
 			state$2.settings.pricingSync.useLiveRate = liveEl.checked;
 			saveHot({ settings: state$2.settings });
 			try {
-				import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+				import("./currency-DYtqS43k.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 			} catch {}
 		};
 		if (recalcEl) recalcEl.onchange = () => {
@@ -2773,9 +2829,11 @@ function renderSettings(doc) {
 			previewBtn.disabled = true;
 			try {
 				const catalog = await fetchModelsDevCatalog();
-				const p = previewSync(catalog);
+				const plan = buildSyncPlan(catalog);
+				const summary = plan.summary;
+				const rows = plan.rows.filter((row) => row.catalogModel).slice(0, 8);
 				previewHost.style.display = "block";
-				previewHost.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">共 ${p.total} 模型 · 新增 ${p.added} 更新 ${p.updated} 跳过 ${p.skipped}</div>` + p.samples.map((s) => `<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--ds-border);padding:4px 0;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;">${esc(s.model)}</span><span>${s.hit.toFixed(4)}/${s.miss.toFixed(4)}/${s.output.toFixed(4)}</span></div>`).join("") + `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">单位 ${getDisplayCurrency().code}/百万 · 峰价为谷价 2×（DeepSeek）</div>`;
+				previewHost.innerHTML = "<div style=\"font-weight:600;margin-bottom:6px;\">匹配 " + summary.matched + "（精确 " + summary.exact + " / 模糊 " + summary.fuzzy + (summary.ambiguous ? " / 歧义 " + summary.ambiguous : "") + "）· 未匹配 " + summary.unmatched + " · 将写入 " + summary.write + " · 将更新 " + summary.update + " · 跳过 " + summary.skipped + "</div>" + rows.map((row) => "<div style=\"display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--ds-border);padding:4px 0;\"><span style=\"overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;\" title=\"" + esc(row.localModel) + "\">" + esc(row.localModel) + "</span><span style=\"color:var(--ds-text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;\" title=\"" + esc(row.catalogModel || "") + "\">" + esc(row.catalogModel || "") + "</span><span>" + Math.round(row.score * 100) + "%</span></div>").join("") + "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;\">按钱包已识别模型模糊匹配，只写价格不新增模型；到钱包页可逐条勾选后应用。</div>";
 			} catch (e) {
 				previewHost.style.display = "block";
 				previewHost.textContent = "预览失败：" + (e?.message || e);
@@ -3046,11 +3104,11 @@ function modelRow(model, p, isBuiltin, usePeak, synced = false) {
 		return String(Math.round(d * 1e4) / 1e4);
 	};
 	const hit = (v) => v !== void 0 && v !== "" ? toDisplay(v) : "";
-	return `<div data-model="${esc(model)}" data-builtin="${isBuiltin ? "1" : "0"}" data-synced="${synced ? "1" : "0"}" style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;background:var(--ds-card-inner);display:grid;gap:8px;">
+	return `<div data-model="${esc(model)}" data-builtin="${isBuiltin ? "1" : "0"}" data-synced="${synced ? "1" : "0"}" style="border-radius:10px;padding:10px;background:var(--ds-card-inner);display:grid;gap:8px;">
     <div style="display:flex;align-items:center;gap:8px;">
       <input value="${esc(model)}" ${isBuiltin ? "readonly" : ""} style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:${isBuiltin ? "var(--ds-sidebar-bg)" : "var(--ds-card-inner)"};font-size:var(--aus-fs-base);" />
       ${synced ? "<span title=\"来自 models.dev 自动同步\" style=\"flex-shrink:0;padding:2px 8px;border-radius:999px;background:var(--ds-green-bg);color:var(--ds-green);font-size:var(--aus-fs-sm);font-weight:600;\">已同步</span>" : ""}
-      <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" class="aus-cm-peak" ${usePeak ? "checked" : ""} /> 峰谷</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" class="aus-cm-peak aus-checkbox" ${usePeak ? "checked" : ""} /> 峰谷</label>
       ${isBuiltin ? "" : "<button data-del=\"1\" style=\"padding:4px 8px;border:1px solid var(--ds-red-border);border-radius:6px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;\">删除</button>"}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
@@ -3178,7 +3236,7 @@ function fillDebugModelSelect(doc) {
 //#region src/ui/compare.ts
 var selOld = null;
 var selNew = null;
-function getDoc$10() {
+function getDoc$11() {
 	return window.parent?.document ?? document;
 }
 function diffMessages(oldMsgs, newMsgs) {
@@ -3189,10 +3247,10 @@ function diffMessages(oldMsgs, newMsgs) {
 	while (i < a.length && i < b.length && a[i] === b[i]) i++;
 	if (i === a.length && i === b.length) return "<span style=\"color:var(--ds-text-2);\">两条请求完全一致（缓存命中段完整）</span>";
 	const ctx = 80;
-	return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${esc$2(a.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-red-bg);color:var(--ds-red);padding:0 2px;border-radius:3px;\">" + esc$2(a.slice(i, i + 200)) + "</span>" + esc$2(a.slice(i + 200, i + 280))}</div><div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${esc$2(b.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-green-bg);color:var(--ds-green);padding:0 2px;border-radius:3px;\">" + esc$2(b.slice(i, i + 200)) + "</span>" + esc$2(b.slice(i + 200, i + 280))}</div></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
+	return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${esc$2(a.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-red-bg);color:var(--ds-red);padding:0 2px;border-radius:3px;\">" + esc$2(a.slice(i, i + 200)) + "</span>" + esc$2(a.slice(i + 200, i + 280))}</div><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${esc$2(b.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-green-bg);color:var(--ds-green);padding:0 2px;border-radius:3px;\">" + esc$2(b.slice(i, i + 200)) + "</span>" + esc$2(b.slice(i + 200, i + 280))}</div></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
 }
 function bindHistoryCompare() {
-	const doc = getDoc$10();
+	const doc = getDoc$11();
 	doc.addEventListener("click", (e) => {
 		const t = e.target;
 		if (!t) return;
@@ -3209,7 +3267,7 @@ function bindHistoryCompare() {
 	});
 }
 function renderDiff() {
-	const host = getDoc$10().getElementById("aus-diff");
+	const host = getDoc$11().getElementById("aus-diff");
 	if (!host) return;
 	if (selOld == null || selNew == null) {
 		host.innerHTML = "<div style=\"text-align:center;padding:16px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">已选 " + (selOld != null ? "旧 " : "") + (selNew != null ? "新 " : "") + "，请在历史中各选一条 旧/新 进行对比</div>";
@@ -3654,6 +3712,7 @@ function buildHistoryPoints(prepared, compactions) {
 		cumulative += entry.cost;
 		return {
 			round: entry.round,
+			timestamp: entry.timestamp,
 			input: entry.prompt,
 			hit: entry.hit,
 			miss: entry.miss,
@@ -4438,19 +4497,169 @@ function computeModelEfficiency(history, options = {}) {
 	return aggregateModelEfficiency(history || [], options);
 }
 //#endregion
+//#region src/ui/sort-header.ts
+/**
+* 表头排序：点击带 data-sort-key 的表头切换排序（同列切换升/降序，换列回到降序）。
+*
+* 用量统计的「模型汇总」与用量概览的「按对话统计」共用这一份实现，
+* 保证交互、指示箭头与悬停高亮完全一致；排序本身由各表自己按业务字段映射。
+*/
+/** 表头容器：只认表头里带 data-sort-key 的列（首列名称列保持不可排序） */
+function sortableHeaders(doc, tableId) {
+	try {
+		const table = doc.getElementById(tableId);
+		if (!table) return [];
+		return Array.from(table.querySelectorAll("thead th[data-sort-key]"));
+	} catch {
+		return [];
+	}
+}
+/** 重绘排序指示（当前排序列加粗 + 箭头，其余列复原） */
+function paintSortHeader(doc, tableId, state) {
+	const ths = sortableHeaders(doc, tableId);
+	for (const th of ths) {
+		th.style.color = "";
+		th.style.fontWeight = "";
+		const ind = th.querySelector(".aus-sort-ind");
+		if (ind) ind.textContent = "";
+	}
+	if (!state.key) return;
+	const cur = ths.find((th) => th.getAttribute("data-sort-key") === state.key);
+	if (!cur) return;
+	cur.style.color = "var(--ds-text)";
+	cur.style.fontWeight = "600";
+	const ind = cur.querySelector(".aus-sort-ind");
+	if (ind) ind.innerHTML = state.dir === "asc" ? icon("chevron-up", 14) : icon("chevron-down", 14);
+}
+/**
+* 绑定表头点击排序（幂等：同一张表只绑一次，表头由首屏模板渲染、不会被重绘）。
+* @param onChange 状态变化后触发重绘，由调用方用最近一次数据重新渲染表体
+*/
+function bindSortableHeaders(doc, tableId, state, onChange) {
+	const table = doc.getElementById(tableId);
+	if (!table || table._ausSortBound) return;
+	const ths = sortableHeaders(doc, tableId);
+	if (!ths.length) return;
+	table._ausSortBound = true;
+	for (const th of ths) {
+		const key = th.getAttribute("data-sort-key");
+		if (!key) continue;
+		th.style.cursor = "pointer";
+		th.style.userSelect = "none";
+		th.addEventListener("click", () => {
+			if (state.key === key) state.dir = state.dir === "asc" ? "desc" : "asc";
+			else {
+				state.key = key;
+				state.dir = "desc";
+			}
+			paintSortHeader(doc, tableId, state);
+			try {
+				onChange();
+			} catch {}
+		});
+		th.addEventListener("mouseenter", () => {
+			if (key !== state.key) th.style.color = "var(--ds-text)";
+		});
+		th.addEventListener("mouseleave", () => {
+			if (key !== state.key) th.style.color = "";
+		});
+	}
+}
+/**
+* 按状态排序：未选列时原样返回；相等值按 tie 文本升序稳定兜底，避免顺序抖动。
+* @param pick 从行里取该列的可比较数值
+*/
+function sortRows(rows, state, pick, tie) {
+	const key = state.key;
+	if (!key) return rows;
+	const dir = state.dir === "asc" ? 1 : -1;
+	return [...rows].sort((a, b) => {
+		const av = Number(pick(a, key)) || 0;
+		const bv = Number(pick(b, key)) || 0;
+		if (av === bv) return tie(a).localeCompare(tie(b));
+		return (av - bv) * dir;
+	});
+}
+//#endregion
+//#region src/ui/chat-summary-table.ts
+/** 排序状态：key 为 null 时保持数据源默认顺序（总 Tokens 倒序） */
+var sortState = {
+	key: null,
+	dir: "desc"
+};
+/** 最近一次渲染的数据，供点击表头时就地重排，避免重新聚合 */
+var lastRows = [];
+var TABLE_ID = "aus-chat-summary-overview";
+var TBODY_ID = "aus-chat-summary-tbody";
+/** 列 → 可比较数值（导出以便单测，保持与表头 data-sort-key 一一对应） */
+function pickChatSortValue(row, key) {
+	switch (key) {
+		case "count": return row.count;
+		case "hit": return row.hit;
+		case "miss": return row.miss;
+		case "out": return row.out;
+		case "total": return row.total;
+		case "cost": return row.cost;
+		case "avgTokens": return row.avgTokens;
+		case "avgHitRate": return row.avgHitRate;
+		default: return 0;
+	}
+}
+/** 绑定表头排序（幂等），点击后按最近一次数据重排重绘 */
+function bindChatSummarySort(doc) {
+	bindSortableHeaders(doc, TABLE_ID, sortState, () => {
+		renderChatSummaryTable(doc, lastRows);
+	});
+	paintSortHeader(doc, TABLE_ID, sortState);
+}
+/** 渲染表体：先按当前排序状态排序，未选列时保持入参顺序 */
+function renderChatSummaryTable(doc, rows) {
+	const tbody = doc.getElementById(TBODY_ID);
+	if (!tbody) return;
+	lastRows = rows || [];
+	try {
+		bindChatSummarySort(doc);
+	} catch {}
+	if (!lastRows.length) {
+		tbody.innerHTML = "<tr><td colspan=\"9\" style=\"text-align:center;padding:16px;color:var(--ds-text-3);\">暂无数据</td></tr>";
+		return;
+	}
+	tbody.innerHTML = sortRows(lastRows, sortState, pickChatSortValue, (row) => row.displayName).map((r) => {
+		const avgRate = r.avgHitRate > 0 ? r.avgHitRate.toFixed(1) + "%" : "—";
+		const colorRate = r.avgHitRate >= 50 ? "var(--ds-green)" : r.avgHitRate > 0 ? "var(--ds-text)" : "var(--ds-text-3)";
+		let costTxt = "¥" + r.cost.toFixed(4);
+		try {
+			costTxt = formatMoney(r.cost, 4);
+		} catch {}
+		return [
+			"<tr style=\"border-bottom:1px solid var(--ds-card);\">",
+			"<td style=\"padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;\" title=\"" + esc$2(r.chatId || "null") + "\">" + esc$2(r.displayName) + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;\">" + r.count + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;color:#0BA25E;\">" + r.hit.toLocaleString("zh-CN") + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;color:#DC2626;\">" + r.miss.toLocaleString("zh-CN") + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;color:#6366F1;\">" + r.out.toLocaleString("zh-CN") + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;font-weight:600;\">" + r.total.toLocaleString("zh-CN") + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;color:var(--ds-text);\">" + costTxt + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;\">" + Math.round(r.avgTokens).toLocaleString("zh-CN") + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;color:" + colorRate + ";\">" + avgRate + "</td>",
+			"</tr>"
+		].join("");
+	}).join("");
+}
+//#endregion
 //#region src/ui/heatmap.ts
-function getDoc$9() {
+function getDoc$10() {
 	return window.parent?.document ?? document;
 }
 function themeIsDark() {
 	try {
-		return getDoc$9().getElementById("aus-panel")?.getAttribute("data-ds-theme") === "dark";
+		return getDoc$10().getElementById("aus-panel")?.getAttribute("data-ds-theme") === "dark";
 	} catch {
 		return false;
 	}
 }
 function renderHeatmap(filtered) {
-	const doc = getDoc$9();
+	const doc = getDoc$10();
 	const container = doc.getElementById("aus-heatmap-container-overview") || doc.getElementById("aus-heatmap-container");
 	const legendEl = doc.getElementById("aus-heatmap-legend-overview") || doc.getElementById("aus-heatmap-legend");
 	const labelsEl = doc.getElementById("aus-heatmap-labels-overview") || doc.getElementById("aus-heatmap-labels");
@@ -4579,7 +4788,16 @@ function renderHeatmap(filtered) {
 			cd.setDate(startDate.getDate() + w * 7 + d);
 			const t = dayMap[localDay$1(cd.getTime())] || 0;
 			const lv = getLevel(t);
-			const tip = cd.getFullYear() + "年" + (cd.getMonth() + 1) + "月" + cd.getDate() + "日" + (t > 0 ? " · " + t.toLocaleString() + " Token" : " · 无记录");
+			const weekday = [
+				"周日",
+				"周一",
+				"周二",
+				"周三",
+				"周四",
+				"周五",
+				"周六"
+			][cd.getDay()];
+			const tip = cd.getFullYear() + "年" + (cd.getMonth() + 1) + "月" + cd.getDate() + "日 " + weekday + (t > 0 ? " · " + t.toLocaleString() + " Token" : " · 无记录");
 			html += "<td style=\"padding:1px;line-height:0;font-size:0\"><div style=\"width:12px;height:12px;border-radius:2px;background:" + clr[lv] + ";border:1px solid " + borderClr + ";cursor:pointer;box-sizing:border-box;\" title=\"" + tip + "\"></div></td>";
 		}
 		html += "</tr>";
@@ -4598,7 +4816,7 @@ function renderHeatmap(filtered) {
 }
 //#endregion
 //#region src/ui/overview.ts
-function getDoc$8() {
+function getDoc$9() {
 	return window.parent?.document ?? document;
 }
 function fmt(n) {
@@ -4833,7 +5051,7 @@ var overviewWalletBound = false;
 var overviewWalletViewportBound = false;
 var overviewAsyncToken = 0;
 function closeOverviewWalletDropdown() {
-	const dropdown = getDoc$8().getElementById("aus-overview-wallet-dropdown");
+	const dropdown = getDoc$9().getElementById("aus-overview-wallet-dropdown");
 	if (dropdown) dropdown.style.display = "none";
 }
 function bindOverviewWalletViewport() {
@@ -4846,12 +5064,12 @@ function bindOverviewWalletViewport() {
 		window.addEventListener("resize", closeOverviewWalletDropdown, { passive: true });
 	} catch {}
 	try {
-		getDoc$8().getElementById("aus-main")?.addEventListener("scroll", closeOverviewWalletDropdown, { passive: true });
+		getDoc$9().getElementById("aus-main")?.addEventListener("scroll", closeOverviewWalletDropdown, { passive: true });
 	} catch {}
 }
 function positionOverviewWalletDropdown(btn, dropdown) {
 	try {
-		const panelRect = getDoc$8().getElementById("aus-panel")?.getBoundingClientRect();
+		const panelRect = getDoc$9().getElementById("aus-panel")?.getBoundingClientRect();
 		const btnRect = btn.getBoundingClientRect();
 		const viewportWidth = window.parent?.innerWidth ?? window.innerWidth;
 		const viewportHeight = window.parent?.innerHeight ?? window.innerHeight;
@@ -4973,19 +5191,19 @@ function renderOverview(fullHistory) {
 	if (histHost) histHost.innerHTML = `
       <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:8px;">历史消耗</div>
       <div style="display:grid;gap:10px;font-size:var(--aus-fs-sm);">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">Token 历史消耗</span><span style="font-weight:600;color:var(--ds-text);">${fmt(v.totalTokens)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输入（命中缓存）</span><span style="font-weight:600;color:var(--ds-green);">${fmt(v.hit)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输入（未命中缓存）</span><span style="font-weight:600;color:var(--ds-red);">${fmt(v.miss)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输出</span><span style="font-weight:600;color:var(--ds-text);">${fmt(v.output)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">Token 历史消耗</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-text);">${fmt(v.totalTokens)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输入（命中缓存）</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-green);">${fmt(v.hit)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输入（未命中缓存）</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-red);">${fmt(v.miss)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输出</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-text);">${fmt(v.output)} tokens</span></div>
       </div>
     `;
 	const spendHost = doc.getElementById("aus-overview-spend");
 	if (spendHost) spendHost.innerHTML = `
       <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:8px;">支出明细</div>
       <div style="display:grid;gap:10px;font-size:var(--aus-fs-sm);">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:var(--ds-text-2);padding-top:2px;">预计节省</span><span style="text-align:right;"><div style="font-weight:600;color:var(--ds-green);">${CNY(v.savings)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:1px;">${fmt(v.hit)} tokens</div></span></div>
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:var(--ds-text-2);padding-top:2px;">支出在输入</span><span style="text-align:right;"><div style="font-weight:600;color:var(--ds-text);">${CNY(v.inputCost)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:1px;">${fmt(v.hit + v.miss)} tokens</div></span></div>
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:var(--ds-text-2);padding-top:2px;">支出在输出</span><span style="text-align:right;"><div style="font-weight:600;color:var(--ds-text);">${CNY(v.outputCost)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:1px;">${fmt(v.output)} tokens</div></span></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:var(--ds-text-2);padding-top:3px;">预计节省</span><span style="text-align:right;"><div style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-green);">${CNY(v.savings)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:1px;">${fmt(v.hit)} tokens</div></span></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:var(--ds-text-2);padding-top:3px;">支出在输入</span><span style="text-align:right;"><div style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-text);">${CNY(v.inputCost)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:1px;">${fmt(v.hit + v.miss)} tokens</div></span></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:var(--ds-text-2);padding-top:3px;">支出在输出</span><span style="text-align:right;"><div style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-text);">${CNY(v.outputCost)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:1px;">${fmt(v.output)} tokens</div></span></div>
       </div>
     `;
 	const fourHost = doc.getElementById("aus-overview-four");
@@ -5024,47 +5242,131 @@ function renderOverview(fullHistory) {
 }
 function renderChatSummaryOverview(fullHistory) {
 	const doc = window.parent?.document ?? document;
-	const tbody = doc.getElementById("aus-chat-summary-tbody");
 	if (!doc.getElementById("aus-chat-summary-overview")) return;
-	if (!tbody) return;
-	const renderRows = (rows) => {
-		if (!rows.length) {
-			tbody.innerHTML = "<tr><td colspan=\"9\" style=\"text-align:center;padding:16px;color:var(--ds-text-3);\">暂无数据</td></tr>";
-			return;
-		}
-		tbody.innerHTML = rows.map((r) => {
-			const avgRate = r.avgHitRate > 0 ? r.avgHitRate.toFixed(1) + "%" : "—";
-			const colorRate = r.avgHitRate >= 50 ? "var(--ds-green)" : r.avgHitRate > 0 ? "var(--ds-text)" : "var(--ds-text-3)";
-			let costTxt = `¥${r.cost.toFixed(4)}`;
-			try {
-				costTxt = formatMoney(r.cost, 4);
-			} catch {}
-			return `<tr style="border-bottom:1px solid var(--ds-card);">
-        <td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;" title="${esc$2(r.chatId || "null")}">${esc$2(r.displayName)}</td>
-        <td style="padding:6px 8px;text-align:right;">${r.count}</td>
-        <td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString("zh-CN")}</td>
-        <td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString("zh-CN")}</td>
-        <td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString("zh-CN")}</td>
-        <td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString("zh-CN")}</td>
-        <td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${costTxt}</td>
-        <td style="padding:6px 8px;text-align:right;">${Math.round(r.avgTokens).toLocaleString("zh-CN")}</td>
-        <td style="padding:6px 8px;text-align:right;color:${colorRate};">${avgRate}</td>
-      </tr>`;
-		}).join("");
-	};
 	const hotRows = computeChatStats(fullHistory);
-	renderRows(hotRows);
+	renderChatSummaryTable(doc, hotRows);
 	if (fullHistory) return;
 	(async () => {
 		try {
-			const mod = await import("./persistence-C4IJVd-B.js").then((n) => n.s);
+			const mod = await import("./persistence-CaWdvByH.js").then((n) => n.l);
 			if (!mod.getAllHistory) return;
 			const all = await mod.getAllHistory();
 			if (!all || all.length <= (state$2.history?.length || 0)) return;
 			const fullRows = computeChatStats(all);
-			if (fullRows.length !== hotRows.length || fullRows.some((r, i) => r.total !== hotRows[i]?.total)) renderRows(fullRows);
+			if (fullRows.length !== hotRows.length || fullRows.some((r, i) => r.total !== hotRows[i]?.total)) renderChatSummaryTable(doc, fullRows);
 		} catch {}
 	})();
+}
+//#endregion
+//#region src/ui/chart-time.ts
+var WEEKDAY = [
+	"周日",
+	"周一",
+	"周二",
+	"周三",
+	"周四",
+	"周五",
+	"周六"
+];
+var pad = (n) => String(n).padStart(2, "0");
+var num = (v) => {
+	const n = Number(v);
+	return Number.isFinite(n) && n > 0 ? n : 0;
+};
+/** 2026-10-23 */
+function chartDate(ts) {
+	const t = num(ts);
+	if (!t) return "";
+	const d = new Date(t);
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+/** 2026-10-23 周五 */
+function chartDateWeek(ts) {
+	const t = num(ts);
+	if (!t) return "";
+	return chartDate(t) + " " + WEEKDAY[new Date(t).getDay()];
+}
+/** 2026-10-23 19:12 */
+function chartDateTime(ts) {
+	const t = num(ts);
+	if (!t) return "";
+	const d = new Date(t);
+	return chartDate(t) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+}
+/** 19:12:33 */
+function chartClock(ts) {
+	const t = num(ts);
+	if (!t) return "";
+	const d = new Date(t);
+	return pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+}
+/** ISO 周键：2026-W43 */
+function isoWeekKey(ts) {
+	const t = num(ts);
+	if (!t) return "";
+	const d = new Date(t);
+	const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+	const dayNum = tmp.getUTCDay() || 7;
+	tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
+	const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+	const weekNo = Math.ceil(((tmp - yearStart) / 864e5 + 1) / 7);
+	return tmp.getUTCFullYear() + "-W" + pad(weekNo);
+}
+/** 单条记录的悬浮标题：2026-10-23 19:12:33 */
+function entryTip(entry) {
+	const ts = num(entry?.timestamp);
+	if (!ts) return "";
+	return chartDate(ts) + " " + chartClock(ts);
+}
+/** 轮次图（X = 轮次）的悬浮标题：#3 · 2026-10-23 19:12:33 */
+function roundTip(round, timestamp) {
+	const head = "#" + (Number(round) || 1);
+	const time = entryTip({ timestamp });
+	return time ? head + " · " + time : head;
+}
+/**
+* 分桶图（X = 每小时/每日/每周/每月）的悬浮标题，带上日期与时间：
+* - 每小时：2026-10-23 周五 14:00–15:00
+* - 每日：2026-10-23 周五
+* - 每周：2026-10-19 周一 ~ 2026-10-25 周日（2026-W43）
+* - 每月：2026 年 10 月
+*/
+function bucketTip(x, firstTs, lastTs) {
+	const first = num(firstTs);
+	if (!first) return "";
+	const last = num(lastTs) || first;
+	if (x === "hour") {
+		const d = new Date(first);
+		const from = pad(d.getHours()) + ":00";
+		const to = pad((d.getHours() + 1) % 24) + ":00";
+		return chartDateWeek(first) + " " + from + "–" + to;
+	}
+	if (x === "day") return chartDateWeek(first);
+	if (x === "week") {
+		const from = chartDateWeek(first);
+		const to = chartDateWeek(last);
+		const week = isoWeekKey(first);
+		return (from === to ? from : from + " ~ " + to) + (week ? "（" + week + "）" : "");
+	}
+	if (x === "month") {
+		const d = new Date(first);
+		return d.getFullYear() + " 年 " + (d.getMonth() + 1) + " 月";
+	}
+	return chartDate(first) + " " + chartClock(first);
+}
+/** 汇总类图表（如模型占比）的悬浮时间范围：2026-10-01 09:12 ~ 2026-10-23 19:20 */
+function rangeTip(entries) {
+	let min = 0;
+	let max = 0;
+	for (const e of entries || []) {
+		const ts = num(e?.timestamp);
+		if (!ts) continue;
+		if (!min || ts < min) min = ts;
+		if (!max || ts > max) max = ts;
+	}
+	if (!min) return "";
+	if (min === max) return chartDateTime(min);
+	return chartDateTime(min) + " ~ " + chartDateTime(max);
 }
 //#endregion
 //#region src/ui/chart-config.ts
@@ -5420,15 +5722,28 @@ function aggregateForChart(entries, yKeys, xKey) {
 	if (!yKeys.length) yKeys = DEFAULT_Y_KEYS;
 	const round = xKey === "round";
 	const labels = [];
+	const tips = [];
 	let buckets = null;
 	let sortedKeys = [];
-	if (round) labels.push(...entries.map((_, i) => `#${i + 1}`));
-	else {
+	if (round) {
+		labels.push(...entries.map((_, i) => `#${i + 1}`));
+		tips.push(...entries.map((e, i) => roundTip(i + 1, e?.timestamp)));
+	} else {
 		buckets = /* @__PURE__ */ new Map();
 		for (const e of entries) {
 			const key = getBucketKey(e, xKey, 0);
-			if (!buckets.has(key)) buckets.set(key, []);
-			buckets.get(key).push(e);
+			const ts = Number(e?.timestamp) || 0;
+			const bucket = buckets.get(key);
+			if (!bucket) buckets.set(key, {
+				list: [e],
+				first: ts,
+				last: ts
+			});
+			else {
+				bucket.list.push(e);
+				if (ts && (!bucket.first || ts < bucket.first)) bucket.first = ts;
+				if (ts > bucket.last) bucket.last = ts;
+			}
 		}
 		sortedKeys = Array.from(buckets.keys()).sort();
 		labels.push(...sortedKeys.map((k) => {
@@ -5436,12 +5751,16 @@ function aggregateForChart(entries, yKeys, xKey) {
 			if (xKey === "day") return k.slice(5).replace("-", "/");
 			return k;
 		}));
+		tips.push(...sortedKeys.map((k) => {
+			const bucket = buckets.get(k);
+			return bucketTip(xKey, bucket.first, bucket.last) || k;
+		}));
 	}
 	return {
 		labels,
 		series: yKeys.map((k) => {
 			const opt = meta.get(k);
-			const data = round ? entries.map((e) => Number(getYValue$1(e, k).toFixed(precisionFor(opt.kind)))) : sortedKeys.map((b) => Number(bucketValue(buckets.get(b), opt).toFixed(precisionFor(opt.kind))));
+			const data = round ? entries.map((e) => Number(getYValue$1(e, k).toFixed(precisionFor(opt.kind)))) : sortedKeys.map((b) => Number(bucketValue(buckets.get(b).list, opt).toFixed(precisionFor(opt.kind))));
 			return {
 				name: opt.label,
 				data,
@@ -5451,8 +5770,279 @@ function aggregateForChart(entries, yKeys, xKey) {
 				group: opt.group,
 				color: opt.color
 			};
-		})
+		}),
+		tips
 	};
+}
+//#endregion
+//#region src/ui/chart-tooltip.ts
+/**
+* 图表悬浮窗（tooltip）统一外观（单一来源）
+*
+* 圆角直接对齐块（.ds-card）的圆角 —— style.css 里 `--ds-radius-card: 14px`，
+* 让 ECharts 浮层与页面卡片用同一套圆角语言；正文内边距同步放大一点，
+* 否则 14px 圆角会把默认 5px 内距里的文字切到弧线上。
+* 需要调整浮层外观时只改这里，禁止各图表自己写 borderRadius。
+*/
+var CHART_TOOLTIP_SURFACE = {
+	/** 与 .ds-card 的 --ds-radius-card 保持一致 */
+	borderRadius: 14,
+	/** 上/下 8、左/右 12：让 14px 圆角内部留出与卡片相近的呼吸感 */
+	padding: [8, 12]
+};
+//#endregion
+//#region src/ui/chart-bar.ts
+/**
+* 柱状图柱子形状（单一来源）
+*
+* 圆角口径按参考效果定：**圆角半径 ≈ 柱宽的 1/6**（截图实测柱宽 38px、圆角 6px，比例 0.16）。
+* 旧实现写死 `[4,4,0,0]`，柱宽只有 6-8px 时会被夹到半宽，顶部变成"子弹头"，
+* 与参考效果的「圆角矩形」手感差很多；改为按估算柱宽等比换算后，
+* 宽柱(16-18px)≈3px、窄柱(8px)≈2px，任意密度下都是同一个观感。
+* 只给最顶段加圆角，中间段与柱底保持直角（堆叠才无缝）。
+*/
+var BAR_RADIUS_RATIO = 1 / 6;
+/** 堆叠柱的中间段与柱底：直角 */
+var BAR_SQUARE = [
+	0,
+	0,
+	0,
+	0
+];
+/** 按柱宽换算顶部圆角 [左上, 右上, 右下, 左下] */
+function barTopRadius(barWidthPx) {
+	const radius = Math.max(2, Math.min(8, Math.round((Number.isFinite(barWidthPx) ? barWidthPx : 16) * BAR_RADIUS_RATIO)));
+	return [
+		radius,
+		radius,
+		0,
+		0
+	];
+}
+/**
+* 估算单根柱的实际宽度：绘图区宽 ÷ 类目数 × 0.8（ECharts 默认 barCategoryGap 20%），
+* 再与 barMaxWidth 取小。用于给 borderRadius 选一个跟视觉柱宽匹配的半径。
+*/
+function estimateBarWidth(containerWidth, plotReservePx, categoryCount, maxBarWidth) {
+	const band = Math.max(120, containerWidth - plotReservePx) / Math.max(1, categoryCount);
+	return Math.min(maxBarWidth, Math.max(2, band * .8));
+}
+//#endregion
+//#region src/ui/range-zoom.ts
+var clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+function attachRangeZoom(options) {
+	const { doc, container, onChange } = options;
+	const left = Math.max(0, options.left);
+	const right = Math.max(0, options.right);
+	const bottom = options.bottom ?? 4;
+	const minSpan = Math.max(2, options.minSpan ?? 4);
+	try {
+		container.style.position = "relative";
+	} catch {}
+	const existing = container.querySelector("[data-range-zoom=\"1\"]");
+	if (existing) existing.remove();
+	const root = doc.createElement("div");
+	root.className = "aus-range-zoom";
+	root.setAttribute("data-range-zoom", "1");
+	root.style.left = left + "px";
+	root.style.right = right + "px";
+	root.style.bottom = bottom + "px";
+	const track = doc.createElement("div");
+	track.className = "aus-range-zoom-track";
+	const win = doc.createElement("div");
+	win.className = "aus-range-zoom-window";
+	win.setAttribute("data-range-window", "1");
+	const handleLeft = doc.createElement("div");
+	handleLeft.className = "aus-range-zoom-handle is-left";
+	handleLeft.setAttribute("data-range-handle", "left");
+	const handleRight = doc.createElement("div");
+	handleRight.className = "aus-range-zoom-handle is-right";
+	handleRight.setAttribute("data-range-handle", "right");
+	win.appendChild(handleLeft);
+	win.appendChild(handleRight);
+	root.appendChild(track);
+	root.appendChild(win);
+	container.appendChild(root);
+	let start = 0;
+	let end = 100;
+	let dragging = null;
+	let dragStartX = 0;
+	let dragStartValue = 0;
+	let dragEndValue = 100;
+	const paint = () => {
+		win.style.left = start + "%";
+		win.style.width = Math.max(0, end - start) + "%";
+	};
+	paint();
+	const width = () => {
+		return root.getBoundingClientRect().width || 1;
+	};
+	const emit = () => {
+		paint();
+		onChange(start, end);
+	};
+	const onPointerDown = (event) => {
+		const target = event.target;
+		const handle = target?.getAttribute?.("data-range-handle");
+		const isWindow = !!target?.getAttribute?.("data-range-window");
+		if (!handle && !isWindow) return;
+		dragging = handle === "left" ? "left" : handle === "right" ? "right" : "move";
+		dragStartX = Number(event.clientX) || 0;
+		dragStartValue = start;
+		dragEndValue = end;
+		root.classList.add("is-dragging");
+		try {
+			root.setPointerCapture(event.pointerId);
+		} catch {}
+		try {
+			event.preventDefault();
+		} catch {}
+		try {
+			event.stopPropagation();
+		} catch {}
+	};
+	const onPointerMove = (event) => {
+		if (!dragging) return;
+		const delta = ((Number(event.clientX) || 0) - dragStartX) / width() * 100;
+		if (dragging === "move") {
+			const span = dragEndValue - dragStartValue;
+			start = clamp(dragStartValue + delta, 0, 100 - span);
+			end = start + span;
+		} else if (dragging === "left") {
+			start = clamp(dragStartValue + delta, 0, dragEndValue - minSpan);
+			end = dragEndValue;
+		} else {
+			start = dragStartValue;
+			end = clamp(dragEndValue + delta, dragStartValue + minSpan, 100);
+		}
+		emit();
+		try {
+			event.preventDefault();
+		} catch {}
+	};
+	const onPointerUp = (event) => {
+		if (!dragging) return;
+		dragging = null;
+		root.classList.remove("is-dragging");
+		try {
+			root.releasePointerCapture(event.pointerId);
+		} catch {}
+	};
+	root.addEventListener("pointerdown", onPointerDown);
+	root.addEventListener("pointermove", onPointerMove);
+	root.addEventListener("pointerup", onPointerUp);
+	root.addEventListener("pointercancel", onPointerUp);
+	root.addEventListener("touchstart", (event) => {
+		try {
+			event.preventDefault();
+		} catch {}
+	}, { passive: false });
+	return {
+		setRange(nextStart, nextEnd) {
+			const s = clamp(Number(nextStart) || 0, 0, 100);
+			const e = clamp(Number(nextEnd) || 0, 0, 100);
+			start = Math.min(s, e);
+			end = Math.max(s, e);
+			if (end - start < minSpan) end = Math.min(100, start + minSpan);
+			paint();
+		},
+		getRange() {
+			return {
+				start,
+				end
+			};
+		},
+		destroy() {
+			root.removeEventListener("pointerdown", onPointerDown);
+			root.removeEventListener("pointermove", onPointerMove);
+			root.removeEventListener("pointerup", onPointerUp);
+			root.removeEventListener("pointercancel", onPointerUp);
+			try {
+				root.remove();
+			} catch {}
+		}
+	};
+}
+/** 图表实例 → 滑块句柄（用 WeakMap，实例销毁后自动回收） */
+var chartHandles = /* @__PURE__ */ new WeakMap();
+/** 各图表的视窗位置记忆（切换页面时保留；时间维度/筛选变化时整体清空） */
+var storedRanges = /* @__PURE__ */ new Map();
+function getChartRange(key) {
+	return storedRanges.get(key) || null;
+}
+function setChartRange(key, start, end) {
+	if (!key) return;
+	if (!Number.isFinite(start) || !Number.isFinite(end)) return;
+	storedRanges.set(key, {
+		start,
+		end
+	});
+}
+function clearChartRanges() {
+	storedRanges.clear();
+}
+/**
+* 给任意 ECharts 实例挂载视窗滑块，并与 inside dataZoom 双向同步。
+* 同一实例重复调用会先清理旧滑块，避免叠加。
+*/
+function attachChartZoom(options) {
+	const { chart, container, enabled = true } = options;
+	if (chart) detachChartZoom(chart);
+	if (!chart || !enabled) return null;
+	const rangeKey = options.rangeKey;
+	const handle = attachRangeZoom({
+		doc: options.doc,
+		container,
+		left: options.left,
+		right: options.right,
+		bottom: options.bottom,
+		minSpan: options.minSpan,
+		onChange: (start, end) => {
+			if (rangeKey) setChartRange(rangeKey, start, end);
+			try {
+				chart.dispatchAction({
+					type: "dataZoom",
+					start,
+					end
+				});
+			} catch {}
+		}
+	});
+	chartHandles.set(chart, handle);
+	const saved = rangeKey ? getChartRange(rangeKey) : null;
+	if (saved) {
+		handle.setRange(saved.start, saved.end);
+		try {
+			chart.dispatchAction({
+				type: "dataZoom",
+				start: saved.start,
+				end: saved.end
+			});
+		} catch {}
+	}
+	try {
+		chart.off("datazoom");
+		chart.on("datazoom", () => {
+			try {
+				const option = chart.getOption();
+				const dataZoom = option && option.dataZoom && option.dataZoom[0];
+				if (dataZoom) {
+					handle.setRange(Number(dataZoom.start ?? 0), Number(dataZoom.end ?? 100));
+					if (rangeKey) setChartRange(rangeKey, Number(dataZoom.start ?? 0), Number(dataZoom.end ?? 100));
+				}
+			} catch {}
+		});
+	} catch {}
+	return handle;
+}
+function detachChartZoom(chart) {
+	if (!chart) return;
+	const handle = chartHandles.get(chart);
+	if (!handle) return;
+	try {
+		handle.destroy();
+	} catch {}
+	chartHandles.delete(chart);
 }
 //#endregion
 //#region src/ui/extra-charts.ts
@@ -5548,12 +6138,12 @@ var state$1 = {
 		pieMode: "token"
 	}
 };
-function getDoc$7() {
+function getDoc$8() {
 	return window.parent?.document ?? document;
 }
 function themeColor$3(name, fallback) {
 	try {
-		const doc = getDoc$7();
+		const doc = getDoc$8();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -5609,9 +6199,9 @@ function getYValue(e, key) {
 	return 0;
 }
 async function getEcharts$1() {
-	const ec = await import("./core-ooVr14Lq.js");
-	const { BarChart, LineChart, PieChart } = await import("./charts-6tQsz9zF.js");
-	const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-jF_EZHLs.js");
+	const ec = await import("./core-fg_o3xmJ.js");
+	const { BarChart, LineChart, PieChart } = await import("./charts-BstuNsfd.js");
+	const { GridComponent, TooltipComponent, LegendComponent, DataZoomInsideComponent } = await import("./components-CpGqNjDG.js");
 	const { CanvasRenderer } = await import("./renderers-DtxFY9_W.js");
 	ec.use([
 		BarChart,
@@ -5620,6 +6210,7 @@ async function getEcharts$1() {
 		GridComponent,
 		TooltipComponent,
 		LegendComponent,
+		DataZoomInsideComponent,
 		CanvasRenderer
 	]);
 	return ec;
@@ -5639,18 +6230,31 @@ function resetChartThemeCache() {
 	}
 }
 var lastFiltered$1 = [];
+/** 容器被文案覆盖时同步销毁实例，否则下次有数据会往已脱离 DOM 的 canvas 上 setOption（表现为图表空白） */
+function dropChart(id) {
+	const c = charts$1[id];
+	if (!c) return;
+	try {
+		detachChartZoom(c);
+	} catch {}
+	try {
+		c.dispose();
+	} catch {}
+	charts$1[id] = null;
+}
 function renderExtraCharts(filtered) {
 	lastFiltered$1 = filtered || [];
 	for (const id of Object.keys(CHART_DEFS)) renderOne$1(id, filtered);
 }
 async function renderOne$1(id, filtered) {
 	try {
-		const el = getDoc$7().getElementById(`aus-chart-${id}`);
+		const el = getDoc$8().getElementById(`aus-chart-${id}`);
 		if (!el) return;
 		if (id === "req" && state$1[id].x === "round") state$1[id].x = "day";
 		if (id === "pie") {
 			const mode = state$1.pie.pieMode;
 			if (!filtered.length) {
+				dropChart(id);
 				el.innerHTML = "<div style=\"text-align:center;padding:40px;color:var(--ds-text-3);\">暂无数据</div>";
 				return;
 			}
@@ -5669,17 +6273,31 @@ async function renderOne$1(id, filtered) {
 			if (!c || c.isDisposed?.()) {
 				el.innerHTML = "";
 				el.style.height = "260px";
-				c = charts$1[id] = ec.init(el);
+				c = charts$1[id] = ec.init(el, void 0, {
+					width: el.clientWidth || 320,
+					height: el.clientHeight || 260
+				});
 			}
 			c.setOption({
 				backgroundColor: "transparent",
 				tooltip: {
 					trigger: "item",
+					...CHART_TOOLTIP_SURFACE,
 					backgroundColor: themeColor$3("--ds-card-inner", "#FFFFFF"),
 					borderColor: themeColor$3("--ds-border", "#E5E7EB"),
 					textStyle: {
 						fontSize: 12,
 						color: themeColor$3("--ds-text", "#111827")
+					},
+					formatter: (p) => {
+						const range = rangeTip(filtered);
+						const val = mode === "token" ? Number(p.value).toLocaleString() + " tokens" : Number(p.value).toLocaleString() + " 次请求";
+						const pct = Number(p.percent || 0).toFixed(1);
+						let html = `<div style="display:flex;align-items:center;gap:6px;font-weight:600;margin-bottom:4px;">${p.marker || ""}${p.name}</div>`;
+						html += `<div style="display:flex;gap:16px;"><span>用量</span><span style="margin-left:auto;font-weight:600;">${val}</span></div>`;
+						html += `<div style="display:flex;gap:16px;"><span>占比</span><span style="margin-left:auto;font-weight:600;">${pct} %</span></div>`;
+						if (range) html += `<div style="margin-top:4px;font-size:11px;color:#9CA3AF;">时间范围 ${range}</div>`;
+						return `<div style="padding:2px 2px;min-width:170px;">${html}</div>`;
 					}
 				},
 				legend: {
@@ -5701,16 +6319,23 @@ async function renderOne$1(id, filtered) {
 					data
 				}]
 			}, true);
+			setTimeout(() => {
+				try {
+					c.resize();
+				} catch {}
+			}, 60);
 			return;
 		}
 		const yKeys = Array.from(state$1[id].y);
 		const xKey = state$1[id].x;
 		if (!yKeys.length) {
+			dropChart(id);
 			el.innerHTML = "<div style=\"text-align:center;padding:30px;color:var(--ds-text-3);font-size:var(--aus-fs-sm);\">请选择 Y 轴</div>";
 			return;
 		}
 		if (xKey === "round") {
 			const labels = filtered.map((_, i) => `#${i + 1}`);
+			const tips = filtered.map((e, i) => roundTip(i + 1, e?.timestamp));
 			const yMeta = new Map(CHART_DEFS[id].yOpts.map((o) => [o.key, o]));
 			await drawBarLine(el, id, labels, yKeys.map((k) => {
 				const meta = yMeta.get(k) || Y_OPTIONS.find((o) => o.key === k) || {
@@ -5727,17 +6352,31 @@ async function renderOne$1(id, filtered) {
 					color: meta.color,
 					kind: meta.kind || "token"
 				};
-			}));
+			}), tips);
 			return;
 		}
 		const buckets = /* @__PURE__ */ new Map();
 		filtered.forEach((e) => {
 			const key = bucketKey$1(e.timestamp, xKey, 0);
-			if (!buckets.has(key)) buckets.set(key, []);
-			buckets.get(key).push(e);
+			const ts = Number(e?.timestamp) || 0;
+			const bucket = buckets.get(key);
+			if (!bucket) buckets.set(key, {
+				list: [e],
+				first: ts,
+				last: ts
+			});
+			else {
+				bucket.list.push(e);
+				if (ts && (!bucket.first || ts < bucket.first)) bucket.first = ts;
+				if (ts > bucket.last) bucket.last = ts;
+			}
 		});
 		const sortedKeys = Array.from(buckets.keys()).sort();
 		const labels = sortedKeys.map((k) => xKey === "day" ? k.slice(5).replace("-", "/") : xKey === "hour" ? k.slice(5) : k);
+		const tips = sortedKeys.map((k) => {
+			const bucket = buckets.get(k);
+			return bucketTip(xKey, bucket.first, bucket.last) || k;
+		});
 		new Map(CHART_DEFS[id].yOpts.map((o) => [o.key, o]));
 		const fullMap = new Map([...Y_OPTIONS, ...CHART_DEFS[id].yOpts].map((o) => [o.key, o]));
 		await drawBarLine(el, id, labels, yKeys.map((k) => {
@@ -5748,7 +6387,7 @@ async function renderOne$1(id, filtered) {
 			};
 			let data;
 			if (k === "hit_rate") data = sortedKeys.map((key) => {
-				const arr = buckets.get(key);
+				const arr = buckets.get(key).list;
 				let hit = 0, tot = 0;
 				for (const e of arr) {
 					hit += e.cache_hit_tokens || 0;
@@ -5757,19 +6396,19 @@ async function renderOne$1(id, filtered) {
 				return tot ? Number((hit / tot * 100).toFixed(1)) : 0;
 			});
 			else if (k === "duration") data = sortedKeys.map((key) => {
-				const arr = buckets.get(key);
+				const arr = buckets.get(key).list;
 				const avg = arr.reduce((a, c) => a + (c.duration || 0), 0) / arr.length / 1e3;
 				return Number(avg.toFixed(1));
 			});
 			else if (k === "rate") data = sortedKeys.map((key) => {
-				const valid = buckets.get(key).map((c) => c.tokenRate || 0).filter((v) => v > 0);
+				const valid = buckets.get(key).list.map((c) => c.tokenRate || 0).filter((v) => v > 0);
 				if (!valid.length) return 0;
 				const avg = valid.reduce((a, c) => a + c, 0) / valid.length;
 				return Math.round(avg);
 			});
-			else if (k === "req_count") data = sortedKeys.map((key) => buckets.get(key).length);
+			else if (k === "req_count") data = sortedKeys.map((key) => buckets.get(key).list.length);
 			else data = sortedKeys.map((key) => {
-				const arr = buckets.get(key);
+				const arr = buckets.get(key).list;
 				let sum = 0;
 				for (const e of arr) sum += getYValue(e, k);
 				return Number(sum.toFixed(k.includes("cost") ? 2 : 0));
@@ -5780,10 +6419,11 @@ async function renderOne$1(id, filtered) {
 				color: meta.color,
 				kind: meta.kind || "token"
 			};
-		}));
+		}), tips);
 	} catch (e) {
+		dropChart(id);
 		try {
-			const el2 = getDoc$7().getElementById(`aus-chart-${id}`);
+			const el2 = getDoc$8().getElementById(`aus-chart-${id}`);
 			if (el2) el2.innerHTML = "<div style=\"text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);\">图表加载失败: " + (e?.message || e) + "</div>";
 		} catch {}
 		try {
@@ -5797,7 +6437,17 @@ function calcXInterval(labels, el) {
 	if (labels.length <= maxLabels) return 0;
 	return Math.ceil(labels.length / maxLabels) - 1;
 }
-async function drawBarLine(el, id, labels, series) {
+/** 按系列名判断数值单位，悬浮窗据此显示单位（费用按当前显示币种） */
+function seriesUnit(name) {
+	const n = String(name || "");
+	if (n.includes("费用") || n.includes("成本")) return "cost";
+	if (n.includes("率") || n.includes("占比")) return "percent";
+	if (n.includes("速率")) return "rate";
+	if (n.includes("耗时") || n.includes("延迟")) return "duration";
+	if (n.includes("请求")) return "count";
+	return "token";
+}
+async function drawBarLine(el, id, labels, series, tips = []) {
 	try {
 		const curCur = (() => {
 			try {
@@ -5817,24 +6467,46 @@ async function drawBarLine(el, id, labels, series) {
 		let c = charts$1[id];
 		if (!c || c.isDisposed?.()) {
 			el.innerHTML = "";
-			el.style.height = "260px";
-			c = charts$1[id] = ec.init(el);
+			el.style.height = "290px";
+			c = charts$1[id] = ec.init(el, void 0, {
+				width: el.clientWidth || 320,
+				height: el.clientHeight || 290
+			});
 		}
 		const isTokenCost = id === "token" || id === "cost";
-		const interval = calcXInterval(labels, el);
+		const savedZoom = getChartRange("extra-" + id);
+		calcXInterval(labels, el);
 		const opts = {
 			backgroundColor: "transparent",
 			tooltip: {
 				trigger: "axis",
+				...CHART_TOOLTIP_SURFACE,
 				backgroundColor: themeColor$3("--ds-card-inner", "#FFFFFF"),
 				borderColor: themeColor$3("--ds-border", "#E5E7EB"),
-				textStyle: { fontSize: 12 }
+				textStyle: { fontSize: 12 },
+				formatter: (params) => {
+					const list = Array.isArray(params) ? params : [params];
+					if (!list.length) return "";
+					let html = `<div style="font-weight:600;margin-bottom:6px;">${tips[list[0].dataIndex] || list[0].axisValueLabel || ""}</div>`;
+					for (const p of list) {
+						const unit = seriesUnit(p.seriesName);
+						const v = Number(p.value);
+						let disp;
+						if (unit === "percent") disp = v.toFixed(1) + " %";
+						else if (unit === "rate") disp = Math.round(v).toLocaleString() + " t/s";
+						else if (unit === "duration") disp = v.toFixed(2) + " s";
+						else if (unit === "count") disp = v.toLocaleString() + " 次";
+						else disp = v.toLocaleString() + " tokens";
+						html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${disp}</span></div>`;
+					}
+					return `<div style="padding:4px 2px;min-width:170px;">${html}</div>`;
+				}
 			},
 			grid: {
 				left: 40,
 				right: 20,
 				top: 8,
-				bottom: 24
+				bottom: labels.length > 12 ? 62 : 46
 			},
 			xAxis: {
 				type: "category",
@@ -5844,7 +6516,7 @@ async function drawBarLine(el, id, labels, series) {
 					fontSize: 12,
 					color: themeColor$3("--ds-text-3", "#9CA3AF"),
 					rotate: labels.length > 12 ? 30 : 0,
-					interval,
+					interval: "auto",
 					hideOverlap: false
 				}
 			},
@@ -5856,11 +6528,11 @@ async function drawBarLine(el, id, labels, series) {
 				},
 				splitLine: { lineStyle: { color: themeColor$3("--ds-card", "#F6F7F8") } }
 			},
-			dataZoom: labels.length > 8 ? [{
+			dataZoom: labels.length > 1 ? [{
 				type: "inside",
 				xAxisIndex: 0,
-				start: Math.max(0, (labels.length - Math.max(8, Math.min(labels.length, Math.floor((el.clientWidth || 320) / 44)))) / labels.length * 100),
-				end: 100,
+				start: savedZoom?.start ?? 0,
+				end: savedZoom?.end ?? 100,
 				zoomOnMouseWheel: false,
 				moveOnMouseMove: true
 			}] : void 0,
@@ -5870,6 +6542,8 @@ async function drawBarLine(el, id, labels, series) {
 					i
 				})).filter(({ s }) => !(isTokenCost && s.name.includes("总"))).map(({ i }) => i);
 				const topIdx = barIndices.length ? barIndices[barIndices.length - 1] : -1;
+				const BAR_MAX_WIDTH = 16;
+				const topRadius = barTopRadius(estimateBarWidth(el?.clientWidth || 320, 60, labels.length, BAR_MAX_WIDTH));
 				return series.map((s, idx) => {
 					const isTotal = s.name.includes("总");
 					if (isTokenCost && isTotal) return {
@@ -5892,19 +6566,9 @@ async function drawBarLine(el, id, labels, series) {
 						data: s.data,
 						itemStyle: {
 							color: s.color,
-							borderRadius: isTop ? [
-								4,
-								4,
-								0,
-								0
-							] : [
-								0,
-								0,
-								0,
-								0
-							]
+							borderRadius: isTop ? topRadius : BAR_SQUARE
 						},
-						barMaxWidth: 16,
+						barMaxWidth: BAR_MAX_WIDTH,
 						barGap: "-100%"
 					};
 				});
@@ -5922,11 +6586,12 @@ async function drawBarLine(el, id, labels, series) {
 			};
 			opts.tooltip = {
 				trigger: "axis",
+				...CHART_TOOLTIP_SURFACE,
 				backgroundColor: themeColor$3("--ds-card-inner", "#FFFFFF"),
 				borderColor: themeColor$3("--ds-border", "#E5E7EB"),
 				textStyle: { fontSize: 12 },
 				formatter: (params) => {
-					let html = `<div style="font-weight:600;margin-bottom:6px;">${params[0]?.axisValueLabel || ""}</div>`;
+					let html = `<div style="font-weight:600;margin-bottom:6px;">${tips[params[0]?.dataIndex ?? 0] || params[0]?.axisValueLabel || ""}</div>`;
 					for (const p of params) html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${curCur.symbol}${Number(p.value).toFixed(4)} ${curCur.code}</span></div>`;
 					return `<div style="padding:4px 2px;min-width:160px;">${html}</div>`;
 				}
@@ -5989,7 +6654,23 @@ async function drawBarLine(el, id, labels, series) {
 			}));
 		}
 		c.setOption(opts, true);
+		attachChartZoom({
+			doc: getDoc$8(),
+			chart: c,
+			container: el,
+			left: 40,
+			right: 20,
+			bottom: 2,
+			enabled: labels.length > 1,
+			rangeKey: "extra-" + id
+		});
+		setTimeout(() => {
+			try {
+				c.resize();
+			} catch {}
+		}, 60);
 	} catch (e) {
+		dropChart(id);
 		try {
 			el.innerHTML = "<div style=\"text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);\">图表渲染失败</div>";
 		} catch {}
@@ -5999,7 +6680,7 @@ async function drawBarLine(el, id, labels, series) {
 	}
 }
 function initExtraCharts() {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	for (const id of Object.keys(CHART_DEFS)) {
 		if (!CHART_DEFS[id].hasX) continue;
 		const yBtn = doc.getElementById(`aus-extra-y-${id}`);
@@ -6007,12 +6688,20 @@ function initExtraCharts() {
 		const xBtn = doc.getElementById(`aus-extra-x-${id}`);
 		const xDrop = doc.getElementById(`aus-extra-x-drop-${id}`);
 		if (yBtn && yDrop) yBtn.onclick = () => {
-			yDrop.style.display = yDrop.style.display === "block" ? "none" : "block";
-			if (yDrop.style.display === "block") renderExtraY(id);
+			const willOpen = yDrop.style.display !== "block";
+			yDrop.style.display = willOpen ? "block" : "none";
+			if (willOpen) {
+				if (xDrop) xDrop.style.display = "none";
+				renderExtraY(id);
+			}
 		};
 		if (xBtn && xDrop) xBtn.onclick = () => {
-			xDrop.style.display = xDrop.style.display === "block" ? "none" : "block";
-			if (xDrop.style.display === "block") renderExtraX(id);
+			const willOpen = xDrop.style.display !== "block";
+			xDrop.style.display = willOpen ? "block" : "none";
+			if (willOpen) {
+				if (yDrop) yDrop.style.display = "none";
+				renderExtraX(id);
+			}
 		};
 	}
 	const pieToggle = doc.getElementById("aus-pie-toggle");
@@ -6035,7 +6724,7 @@ function initExtraCharts() {
 	});
 }
 function renderExtraY(id) {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	const drop = doc.getElementById(`aus-extra-y-drop-${id}`);
 	const label = doc.getElementById(`aus-extra-y-label-${id}`);
 	if (!drop) return;
@@ -6044,7 +6733,7 @@ function renderExtraY(id) {
 	if (label) label.textContent = sel.size ? `${sel.size} 项` : "选择";
 	drop.innerHTML = opts.map((o) => {
 		const checked = sel.has(o.key);
-		return `<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--aus-fs-sm);${checked ? "background:var(--ds-active-bg);" : ""}"><input type="checkbox" data-y="${o.key}" data-chart="${id}" ${checked ? "checked" : ""} style="accent-color:var(--ds-text);" /><span style="width:8px;height:8px;background:${o.color};border-radius:2px;"></span>${o.label}</label>`;
+		return `<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--aus-fs-sm);${checked ? "background:var(--ds-active-bg);" : ""}"><input type="checkbox" data-y="${o.key}" data-chart="${id}" ${checked ? "checked" : ""} class="aus-checkbox" /><span style="width:8px;height:8px;background:${o.color};border-radius:2px;"></span>${o.label}</label>`;
 	}).join("");
 	drop.querySelectorAll("input[data-y]").forEach((el) => {
 		el.onchange = () => {
@@ -6058,7 +6747,7 @@ function renderExtraY(id) {
 	});
 }
 function renderExtraX(id) {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	const drop = doc.getElementById(`aus-extra-x-drop-${id}`);
 	const label = doc.getElementById(`aus-extra-x-label-${id}`);
 	if (!drop) return;
@@ -6103,12 +6792,12 @@ var state = {
 	token: { x: "day" },
 	req: { x: "day" }
 };
-function getDoc$6() {
+function getDoc$7() {
 	return window.parent?.document ?? document;
 }
 function themeColor$2(name, fallback) {
 	try {
-		const doc = getDoc$6();
+		const doc = getDoc$7();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -6138,15 +6827,16 @@ function bucketKey(ts, x, idx) {
 	return localDay$1(ts);
 }
 async function getEcharts() {
-	const ec = await import("./core-ooVr14Lq.js");
-	const { LineChart } = await import("./charts-6tQsz9zF.js");
-	const { GridComponent, TooltipComponent, LegendComponent } = await import("./components-jF_EZHLs.js");
+	const ec = await import("./core-fg_o3xmJ.js");
+	const { LineChart } = await import("./charts-BstuNsfd.js");
+	const { GridComponent, TooltipComponent, LegendComponent, DataZoomInsideComponent } = await import("./components-CpGqNjDG.js");
 	const { CanvasRenderer } = await import("./renderers-DtxFY9_W.js");
 	ec.use([
 		LineChart,
 		GridComponent,
 		TooltipComponent,
 		LegendComponent,
+		DataZoomInsideComponent,
 		CanvasRenderer
 	]);
 	return ec;
@@ -6160,14 +6850,19 @@ function renderModelTrends(filtered) {
 }
 async function renderOne(id, filtered) {
 	try {
-		const doc = getDoc$6();
+		const doc = getDoc$7();
 		const el = doc.getElementById(`aus-chart-model-${id}`);
 		if (!el) return;
 		const xKey = state[id].x;
 		if (!filtered.length) {
-			if (charts[id]) try {
-				charts[id].dispose();
-			} catch {}
+			if (charts[id]) {
+				try {
+					detachChartZoom(charts[id]);
+				} catch {}
+				try {
+					charts[id].dispose();
+				} catch {}
+			}
 			charts[id] = null;
 			el.innerHTML = "<div style=\"text-align:center;padding:40px;color:var(--ds-text-3);font-size:var(--aus-fs-sm);\">暂无数据</div>";
 			return;
@@ -6235,8 +6930,11 @@ async function renderOne(id, filtered) {
 		let c = charts[id];
 		if (!c || c.isDisposed?.()) {
 			el.innerHTML = "";
-			el.style.height = "220px";
-			c = charts[id] = ec.init(el);
+			el.style.height = "250px";
+			c = charts[id] = ec.init(el, void 0, {
+				width: el.clientWidth || 320,
+				height: el.clientHeight || 250
+			});
 		}
 		const cBorder = themeColor$2("--ds-border", "#E5E7EB");
 		const cCard = themeColor$2("--ds-card", "#F6F7F8");
@@ -6245,8 +6943,8 @@ async function renderOne(id, filtered) {
 		const cText = themeColor$2("--ds-text", "#111827");
 		const cw = w || 320;
 		const maxLabels = Math.max(8, Math.floor(cw / (cw < 500 ? 42 : cw < 760 ? 56 : 68)));
-		const xInterval = labels.length <= maxLabels ? 0 : Math.ceil(labels.length / maxLabels) - 1;
-		const needZoom = labels.length > maxLabels;
+		labels.length <= maxLabels || Math.ceil(labels.length / maxLabels) - 1;
+		const savedZoom = getChartRange("trend-" + id);
 		const legendTop = models.length > 4 ? 2 : 0;
 		c.setOption({
 			backgroundColor: "transparent",
@@ -6255,6 +6953,7 @@ async function renderOne(id, filtered) {
 				backgroundColor: cCardInner,
 				borderColor: cBorder,
 				borderWidth: 1,
+				...CHART_TOOLTIP_SURFACE,
 				textStyle: {
 					color: cText,
 					fontSize: 12
@@ -6290,13 +6989,13 @@ async function renderOne(id, filtered) {
 				left: 42,
 				right: 16,
 				top: 22 + (models.length > 4 ? 8 : 0),
-				bottom: 24
+				bottom: labels.length > 12 ? 62 : 46
 			},
-			dataZoom: needZoom ? [{
+			dataZoom: labels.length > 1 ? [{
 				type: "inside",
 				xAxisIndex: 0,
-				start: Math.max(0, (labels.length - maxLabels) / labels.length * 100),
-				end: 100,
+				start: savedZoom?.start ?? 0,
+				end: savedZoom?.end ?? 100,
 				zoomOnMouseWheel: false,
 				moveOnMouseMove: true
 			}] : void 0,
@@ -6308,7 +7007,7 @@ async function renderOne(id, filtered) {
 				axisLabel: {
 					color: cText3,
 					fontSize: 12,
-					interval: xInterval,
+					interval: "auto",
 					rotate: labels.length > 12 ? 30 : 0,
 					hideOverlap: false
 				}
@@ -6340,14 +7039,33 @@ async function renderOne(id, filtered) {
 				data: s.data
 			}))
 		}, true);
+		attachChartZoom({
+			doc,
+			chart: c,
+			container: el,
+			left: 42,
+			right: 16,
+			bottom: 2,
+			enabled: labels.length > 1,
+			rangeKey: "trend-" + id
+		});
 		setTimeout(() => {
 			try {
 				c.resize();
 			} catch {}
 		}, 60);
 	} catch (e) {
+		if (charts[id]) {
+			try {
+				detachChartZoom(charts[id]);
+			} catch {}
+			try {
+				charts[id].dispose();
+			} catch {}
+			charts[id] = null;
+		}
 		try {
-			const el2 = getDoc$6().getElementById(`aus-chart-model-${id}`);
+			const el2 = getDoc$7().getElementById(`aus-chart-model-${id}`);
 			if (el2) el2.innerHTML = "<div style=\"text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);\">图表加载失败</div>";
 		} catch {}
 		try {
@@ -6356,7 +7074,7 @@ async function renderOne(id, filtered) {
 	}
 }
 function initModelTrends() {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	for (const id of ["token", "req"]) {
 		const btn = doc.getElementById(`aus-modeltrends-x-${id}`);
 		const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
@@ -6375,7 +7093,7 @@ function initModelTrends() {
 	});
 }
 function renderXDrop(id) {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
 	const label = doc.getElementById(`aus-modeltrends-x-label-${id}`);
 	if (!drop) return;
@@ -6410,58 +7128,25 @@ var endpointPickerOpen = false;
 var selectedCredential = STATS_FILTER_ALL;
 var credentialPickerOpen = false;
 var lastStatsHistory = [];
-var summarySortKey = null;
-var summarySortDir = "desc";
+var summarySort = {
+	key: null,
+	dir: "desc"
+};
 var lastSummaryFiltered = null;
 function updateSummarySortHeader() {
-	const doc = getDoc$5();
-	doc.querySelectorAll("#aus-model-summary thead th[data-sort-key]").forEach((th) => {
-		th.style.color = "";
-		th.style.fontWeight = "";
-		const ind = th.querySelector(".aus-sort-ind");
-		if (ind) ind.textContent = "";
-	});
-	if (summarySortKey) {
-		const cur = doc.querySelector(`#aus-model-summary thead th[data-sort-key="${summarySortKey}"]`);
-		if (cur) {
-			cur.style.color = "var(--ds-text)";
-			cur.style.fontWeight = "600";
-			const ind = cur.querySelector(".aus-sort-ind");
-			if (ind) ind.innerHTML = summarySortDir === "asc" ? icon("chevron-up", 14) : icon("chevron-down", 14);
-		}
-	}
+	paintSortHeader(getDoc$6(), "aus-model-summary", summarySort);
 }
 function bindSummarySort() {
-	const ths = getDoc$5().querySelectorAll("#aus-model-summary thead th[data-sort-key]");
-	if (!ths.length) return;
-	if (bindSummarySort._bound) return;
-	bindSummarySort._bound = true;
-	ths.forEach((th) => {
-		th.addEventListener("click", () => {
-			const key = th.getAttribute("data-sort-key");
-			if (!key) return;
-			if (summarySortKey === key) summarySortDir = summarySortDir === "asc" ? "desc" : "asc";
-			else {
-				summarySortKey = key;
-				summarySortDir = "desc";
-			}
-			updateSummarySortHeader();
-			if (lastSummaryFiltered) renderModelSummary(lastSummaryFiltered);
-		});
-		th.addEventListener("mouseenter", () => {
-			if (th.getAttribute("data-sort-key") !== summarySortKey) th.style.color = "var(--ds-text)";
-		});
-		th.addEventListener("mouseleave", () => {
-			if (th.getAttribute("data-sort-key") !== summarySortKey) th.style.color = "";
-		});
+	bindSortableHeaders(getDoc$6(), "aus-model-summary", summarySort, () => {
+		if (lastSummaryFiltered) renderModelSummary(lastSummaryFiltered);
 	});
 }
-function getDoc$5() {
+function getDoc$6() {
 	return window.parent?.document ?? document;
 }
 function themeColor$1(name, fallback) {
 	try {
-		const doc = getDoc$5();
+		const doc = getDoc$6();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -6576,7 +7261,7 @@ function currentStatsFilter() {
 	};
 }
 function updateRangeHighlight() {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	doc.querySelectorAll("[data-range]").forEach((el) => {
 		if (el.getAttribute("data-range") === currentRange) {
 			el.style.background = "var(--ds-card)";
@@ -6590,7 +7275,7 @@ function updateRangeHighlight() {
 	if (calWrap) calWrap.style.display = currentRange === "custom" ? "block" : "none";
 }
 function renderCalendar() {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const cal = doc.getElementById("aus-date-calendar");
 	if (!cal) return;
 	updateRangeHighlight();
@@ -6625,7 +7310,7 @@ function renderCalendar() {
 	if (applyBtn) applyBtn.onclick = apply;
 }
 function updatePickerLabel() {
-	const label = getDoc$5().getElementById("aus-range-label");
+	const label = getDoc$6().getElementById("aus-range-label");
 	if (!label) return;
 	const map = {
 		all: "全部",
@@ -6642,7 +7327,7 @@ function updatePickerLabel() {
 	updateRangeHighlight();
 }
 function renderModelPicker(modelsHist) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const dropdown = doc.getElementById("aus-model-dropdown");
 	const label = doc.getElementById("aus-model-label");
 	if (!dropdown || !label) return;
@@ -6652,10 +7337,10 @@ function renderModelPicker(modelsHist) {
 	const allSelected = selectedModels.length === 0;
 	label.textContent = allSelected ? "全部" : selectedModels.length === 1 ? selectedModels[0] : `已选 ${selectedModels.length} 项`;
 	label.title = allSelected ? "全部模型" : selectedModels.join("、");
-	let html = `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${allSelected ? "background:var(--ds-card);font-weight:600;" : ""}"><input type="checkbox" data-model-all ${allSelected ? "checked" : ""} style="accent-color:var(--ds-text);" /><span>全部模型</span></label>`;
+	let html = `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${allSelected ? "background:var(--ds-card);font-weight:600;" : ""}"><input type="checkbox" data-model-all ${allSelected ? "checked" : ""} class="aus-checkbox" /><span>全部模型</span></label>`;
 	for (const m of models) {
 		const checked = selectedModels.includes(m);
-		html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${checked ? "background:var(--ds-card);font-weight:600;" : ""}"><input type="checkbox" data-model="${esc$2(m)}" ${checked ? "checked" : ""} style="accent-color:var(--ds-text);" /><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$2(m)}</span></label>`;
+		html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${checked ? "background:var(--ds-card);font-weight:600;" : ""}"><input type="checkbox" data-model="${esc$2(m)}" ${checked ? "checked" : ""} class="aus-checkbox" /><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$2(m)}</span></label>`;
 	}
 	if (!models.length) html += "<div style=\"padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">暂无模型</div>";
 	dropdown.innerHTML = html;
@@ -6676,7 +7361,7 @@ function renderModelPicker(modelsHist) {
 	});
 }
 function renderChatPicker(chatHist) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const dropdown = doc.getElementById("aus-chat-dropdown");
 	const label = doc.getElementById("aus-chat-label");
 	if (!dropdown || !label) return;
@@ -6703,7 +7388,7 @@ function renderChatPicker(chatHist) {
 	});
 }
 function renderEndpointPicker(history) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const dropdown = doc.getElementById("aus-endpoint-dropdown");
 	const label = doc.getElementById("aus-endpoint-label");
 	if (!dropdown || !label) return;
@@ -6730,7 +7415,7 @@ function renderEndpointPicker(history) {
 	});
 }
 function renderCredentialPicker$1(history, endpoint = selectedEndpoint) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const dropdown = doc.getElementById("aus-credential-dropdown");
 	const label = doc.getElementById("aus-credential-label");
 	if (!dropdown || !label) return;
@@ -6757,7 +7442,7 @@ function renderCredentialPicker$1(history, endpoint = selectedEndpoint) {
 }
 function positionFilterDropdown(btn, dropdown) {
 	try {
-		const panel = getDoc$5().getElementById("aus-panel");
+		const panel = getDoc$6().getElementById("aus-panel");
 		if (!panel) return;
 		const panelRect = panel.getBoundingClientRect();
 		const btnRect = btn.getBoundingClientRect();
@@ -6772,7 +7457,7 @@ function positionFilterDropdown(btn, dropdown) {
 	} catch {}
 }
 function closeFilterDropdowns(except) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	if (except !== "range") {
 		pickerOpen = false;
 		const el = doc.getElementById("aus-range-dropdown");
@@ -6800,7 +7485,7 @@ function closeFilterDropdowns(except) {
 	}
 }
 function bindPicker() {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const btn = doc.getElementById("aus-range-btn");
 	const dropdown = doc.getElementById("aus-range-dropdown");
 	if (btn && dropdown) {
@@ -6908,7 +7593,7 @@ function bindPicker() {
 var chartYOpen = false;
 var chartXOpen = false;
 function renderChartSelectors() {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const yBtn = doc.getElementById("aus-chart-y-btn");
 	const xBtn = doc.getElementById("aus-chart-x-btn");
 	const yDrop = doc.getElementById("aus-chart-y-dropdown");
@@ -6925,7 +7610,7 @@ function renderChartSelectors() {
 		yHtml += `<div style="padding:6px 8px 2px;font-size:var(--aus-fs-xs);color:var(--ds-text-3);font-weight:600;">${group.label}</div>`;
 		for (const opt of opts) {
 			const checked = ySel.includes(opt.key);
-			yHtml += `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--aus-fs-sm);${checked ? "background:var(--ds-card);" : ""}"><input type="checkbox" data-ykey="${opt.key}" ${checked ? "checked" : ""} style="accent-color:var(--ds-text);" /><span style="display:inline-block;width:8px;height:8px;background:${opt.color};border-radius:2px;"></span>${opt.label}<span style="margin-left:auto;color:var(--ds-text-3);font-size:var(--aus-fs-sm);">${opt.unit}</span></label>`;
+			yHtml += `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--aus-fs-sm);${checked ? "background:var(--ds-card);" : ""}"><input type="checkbox" data-ykey="${opt.key}" ${checked ? "checked" : ""} class="aus-checkbox" /><span style="display:inline-block;width:8px;height:8px;background:${opt.color};border-radius:2px;"></span>${opt.label}<span style="margin-left:auto;color:var(--ds-text-3);font-size:var(--aus-fs-sm);">${opt.unit}</span></label>`;
 		}
 	}
 	const typeSel = getChartType();
@@ -7014,7 +7699,7 @@ function renderChartSelectors() {
 	});
 }
 function bindChartSelectors() {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const yBtn = doc.getElementById("aus-chart-y-btn");
 	const yDrop = doc.getElementById("aus-chart-y-dropdown");
 	const xBtn = doc.getElementById("aus-chart-x-btn");
@@ -7058,17 +7743,27 @@ function bindChartSelectors() {
 	});
 }
 var chart = null;
+var rangeZoom = null;
 async function renderChart(filteredRaw) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const el = doc.getElementById("aus-stats-chart");
 	if (!el) return;
-	const { labels, series } = aggregateForChart(filteredRaw, getYSelected(), getXSelected());
+	const { labels, series, tips } = aggregateForChart(filteredRaw, getYSelected(), getXSelected());
 	if (!labels.length) {
 		if (chart) {
 			try {
 				chart.dispose();
 			} catch {}
 			chart = null;
+		}
+		if (chart) try {
+			detachChartZoom(chart);
+		} catch {}
+		if (rangeZoom) {
+			try {
+				rangeZoom.destroy();
+			} catch {}
+			rangeZoom = null;
 		}
 		el.innerHTML = "<div style=\"text-align:center;padding:40px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">该筛选无数据（历史 " + filteredRaw.length + " 条）</div>";
 		return;
@@ -7095,15 +7790,16 @@ async function renderChart(filteredRaw) {
 	renderChart._retryCount = 0;
 	let echarts;
 	try {
-		echarts = await import("./core-ooVr14Lq.js").then(async (ec) => {
-			const { BarChart, LineChart } = await import("./charts-6tQsz9zF.js");
-			const { GridComponent, TooltipComponent } = await import("./components-jF_EZHLs.js");
+		echarts = await import("./core-fg_o3xmJ.js").then(async (ec) => {
+			const { BarChart, LineChart } = await import("./charts-BstuNsfd.js");
+			const { GridComponent, TooltipComponent, DataZoomInsideComponent } = await import("./components-CpGqNjDG.js");
 			const { CanvasRenderer } = await import("./renderers-DtxFY9_W.js");
 			ec.use([
 				BarChart,
 				LineChart,
 				GridComponent,
 				TooltipComponent,
+				DataZoomInsideComponent,
 				CanvasRenderer
 			]);
 			return ec;
@@ -7243,6 +7939,8 @@ async function renderChart(filteredRaw) {
 		}
 		rightOffset = 0;
 	}
+	const BAR_MAX_WIDTH = 18;
+	const barWidth = estimateBarWidth(w || 320, narrow ? 70 : 104, labels.length, BAR_MAX_WIDTH);
 	const tokenSeries = series.filter((s) => s.kind === "token");
 	const lastTokenIdx = tokenSeries.length ? series.indexOf(tokenSeries[tokenSeries.length - 1]) : -1;
 	const seriesOpt = series.map((s, idx) => {
@@ -7264,27 +7962,13 @@ async function renderChart(filteredRaw) {
 			itemStyle: { color: col }
 		};
 		if (type === "bar") {
-			base.barMaxWidth = 18;
+			base.barMaxWidth = BAR_MAX_WIDTH;
 			if (isStack) {
 				base.stack = "token";
 				base.barGap = "-100%";
 			}
-			base.itemStyle.borderRadius = isStack ? isTop ? [
-				4,
-				4,
-				0,
-				0
-			] : [
-				0,
-				0,
-				0,
-				0
-			] : [
-				4,
-				4,
-				0,
-				0
-			];
+			const radius = barTopRadius(barWidth);
+			base.itemStyle.borderRadius = isStack ? isTop ? radius : BAR_SQUARE : radius;
 		} else {
 			base.smooth = true;
 			base.symbol = "circle";
@@ -7306,7 +7990,10 @@ async function renderChart(filteredRaw) {
 	const cw = w || 320;
 	const maxLabels = Math.max(8, Math.floor(cw / (cw < 500 ? 42 : cw < 760 ? 56 : 68)));
 	const xInterval = labels.length <= maxLabels ? 0 : Math.ceil(labels.length / maxLabels) - 1;
-	const needZoom = labels.length > maxLabels;
+	const showZoom = labels.length > 1;
+	const savedZoom = getChartRange("stats-main");
+	const gridLeft = narrow ? 40 : 50;
+	const gridRight = 12 + rightOffset;
 	chart.setOption({
 		backgroundColor: "transparent",
 		tooltip: {
@@ -7314,6 +8001,7 @@ async function renderChart(filteredRaw) {
 			backgroundColor: cCardInner,
 			borderColor: cBorder,
 			borderWidth: 1,
+			...CHART_TOOLTIP_SURFACE,
 			textStyle: {
 				color: cText,
 				fontSize: 12
@@ -7321,7 +8009,7 @@ async function renderChart(filteredRaw) {
 			formatter: (params) => {
 				if (!params?.length) return "";
 				const idx = params[0].dataIndex;
-				const label = labels[idx];
+				const label = tips[idx] || labels[idx];
 				let html = `<div style="font-weight:600;margin-bottom:6px;">${esc$2(label)}</div>`;
 				for (const p of params) {
 					const v = p.value;
@@ -7340,16 +8028,16 @@ async function renderChart(filteredRaw) {
 			}
 		},
 		grid: {
-			left: narrow ? 40 : 50,
-			right: 12 + rightOffset,
+			left: gridLeft,
+			right: gridRight,
 			top: 8,
-			bottom: 28
+			bottom: showZoom ? narrow ? 50 : 54 : 28
 		},
-		dataZoom: needZoom ? [{
+		dataZoom: showZoom ? [{
 			type: "inside",
 			xAxisIndex: 0,
-			start: Math.max(0, (labels.length - maxLabels) / labels.length * 100),
-			end: 100,
+			start: savedZoom?.start ?? 0,
+			end: savedZoom?.end ?? 100,
 			zoomOnMouseWheel: false,
 			moveOnMouseMove: true
 		}] : void 0,
@@ -7360,7 +8048,7 @@ async function renderChart(filteredRaw) {
 			axisLabel: {
 				color: cText3,
 				fontSize: 12,
-				interval: xInterval,
+				interval: showZoom ? "auto" : xInterval,
 				rotate: labels.length > 12 ? 30 : 0,
 				hideOverlap: false
 			}
@@ -7374,6 +8062,16 @@ async function renderChart(filteredRaw) {
 		},
 		series: seriesOpt
 	}, true);
+	rangeZoom = attachChartZoom({
+		doc,
+		chart,
+		container: el,
+		left: gridLeft,
+		right: gridRight,
+		bottom: narrow ? 2 : 4,
+		enabled: showZoom,
+		rangeKey: "stats-main"
+	});
 	setTimeout(() => {
 		try {
 			chart.resize();
@@ -7381,7 +8079,7 @@ async function renderChart(filteredRaw) {
 	}, 60);
 }
 function renderModelSummary(filtered) {
-	const tbody = getDoc$5().getElementById("aus-summary-tbody");
+	const tbody = getDoc$6().getElementById("aus-summary-tbody");
 	if (!tbody) return;
 	lastSummaryFiltered = filtered;
 	try {
@@ -7443,10 +8141,11 @@ function renderModelSummary(filtered) {
 			avgRateStr
 		};
 	});
-	if (summarySortKey) {
-		const dir = summarySortDir === "asc" ? 1 : -1;
+	const sortKey = summarySort.key;
+	if (sortKey) {
+		const dir = summarySort.dir === "asc" ? 1 : -1;
 		const getVal = (r) => {
-			switch (summarySortKey) {
+			switch (sortKey) {
 				case "count": return r.count;
 				case "hit": return r.hit;
 				case "miss": return r.miss;
@@ -7499,7 +8198,7 @@ async function getHistoryForStats() {
 	if (allHistoryPromise) return allHistoryPromise;
 	allHistoryPromise = (async () => {
 		try {
-			const mod = await import("./persistence-C4IJVd-B.js").then((n) => n.s);
+			const mod = await import("./persistence-CaWdvByH.js").then((n) => n.l);
 			if (mod.getAllHistory) {
 				const result = await mod.getAllHistory() || hot;
 				cachedAllHistory = result;
@@ -7519,11 +8218,37 @@ async function getHistoryForStats() {
 	})();
 	return allHistoryPromise;
 }
+/** 视窗记忆签名：时间维度/筛选/X/Y/图表类型变化时重置为全量，仅页面切换时保留 */
+var lastZoomSignature = "";
+function currentZoomSignature() {
+	const filter = currentStatsFilter();
+	let chartType = "";
+	try {
+		chartType = getChartType();
+	} catch {}
+	return [
+		currentRange,
+		filter.start || "",
+		filter.end || "",
+		Array.isArray(filter.model) ? filter.model.join(",") : String(filter.model || ""),
+		String(filter.chat || ""),
+		String(filter.endpoint || ""),
+		String(filter.credential || ""),
+		String(getXSelected() || ""),
+		getYSelected().join(","),
+		chartType
+	].join("|");
+}
 async function renderStatsView() {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	if (!getSelectedSave()) return;
 	const allHistory = await getHistoryForStats();
 	lastStatsHistory = allHistory;
+	const zoomSignature = currentZoomSignature();
+	if (zoomSignature !== lastZoomSignature) {
+		lastZoomSignature = zoomSignature;
+		clearChartRanges();
+	}
 	const endpointOptions = getEndpointFilterOptions(allHistory);
 	if (!(/* @__PURE__ */ new Set(["__all__", ...endpointOptions.map((option) => option.id)])).has(selectedEndpoint)) {
 		selectedEndpoint = STATS_FILTER_ALL;
@@ -7588,7 +8313,7 @@ var statsFourBound = false;
 function bindStatsFour() {
 	if (statsFourBound) return;
 	statsFourBound = true;
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	doc.addEventListener("click", (e) => {
 		const t = e.target;
 		for (let i = 0; i < 4; i++) {
@@ -7599,7 +8324,7 @@ function bindStatsFour() {
 	});
 }
 function openStatsFourDrop(idx, v) {
-	const drop = getDoc$5().getElementById(`aus-stats-four-drop-${idx}`);
+	const drop = getDoc$6().getElementById(`aus-stats-four-drop-${idx}`);
 	if (!drop) return;
 	const cur = ensureStatsFour()[idx];
 	drop.innerHTML = FOUR_OPTIONS.map((o) => {
@@ -7623,7 +8348,7 @@ function openStatsFourDrop(idx, v) {
 	drop.style.display = drop.style.display === "block" ? "none" : "block";
 }
 function renderStatsFour(filtered) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const host = doc.getElementById("aus-stats-four");
 	if (!host) return;
 	const v = computeStatsFour(filtered || []);
@@ -8011,12 +8736,12 @@ var instances = {};
 var echartsPromise = null;
 var resizeObserver = null;
 var resizeBound = false;
-function getDoc$4() {
+function getDoc$5() {
 	return window.parent?.document ?? document;
 }
 function themeColor(name, fallback) {
 	try {
-		const doc = getDoc$4();
+		const doc = getDoc$5();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -8025,9 +8750,9 @@ function themeColor(name, fallback) {
 }
 async function loadECharts() {
 	if (!echartsPromise) echartsPromise = (async () => {
-		const echarts = await import("./core-ooVr14Lq.js");
-		const { LineChart, ScatterChart } = await import("./charts-6tQsz9zF.js");
-		const { GridComponent, TooltipComponent, LegendComponent, MarkLineComponent, MarkPointComponent, GraphicComponent } = await import("./components-jF_EZHLs.js");
+		const echarts = await import("./core-fg_o3xmJ.js");
+		const { LineChart, ScatterChart } = await import("./charts-BstuNsfd.js");
+		const { GridComponent, TooltipComponent, LegendComponent, MarkLineComponent, MarkPointComponent, GraphicComponent } = await import("./components-CpGqNjDG.js");
 		const { CanvasRenderer } = await import("./renderers-DtxFY9_W.js");
 		echarts.use([
 			LineChart,
@@ -8061,7 +8786,7 @@ function axisMoney(currency, cnyValue) {
 	return currency.symbol + n.toFixed(4);
 }
 async function initChart(id, echarts) {
-	const el = getDoc$4().getElementById(id);
+	const el = getDoc$5().getElementById(id);
 	if (!el) return null;
 	if (!el.clientWidth || !el.clientHeight) return null;
 	if (instances[id]) {
@@ -8081,7 +8806,7 @@ async function initChart(id, echarts) {
 }
 function ensureResizeObserver() {
 	if (resizeObserver || typeof ResizeObserver === "undefined") return;
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	const targets = [
 		"aus-forecast-main-chart",
 		"aus-forecast-hit-chart",
@@ -8135,9 +8860,39 @@ function disposeForecastCharts() {
 		resizeObserver = null;
 	}
 }
+/** 历史轮次的中位间隔（ms），用于给预测轮次估个大致时刻 */
+function medianInterval(history) {
+	const diffs = [];
+	for (let i = 1; i < history.length; i += 1) {
+		const prev = Number(history[i - 1]?.timestamp) || 0;
+		const cur = Number(history[i]?.timestamp) || 0;
+		const diff = cur - prev;
+		if (prev > 0 && cur > 0 && diff > 0) diffs.push(diff);
+	}
+	if (!diffs.length) return 0;
+	diffs.sort((a, b) => a - b);
+	return diffs[Math.floor(diffs.length / 2)];
+}
+/**
+* X 轴标签保持 #N 紧凑，tips 给出悬浮窗标题：
+* 历史轮次用真实时间戳，预测轮次按中位间隔推算「预计」时刻。
+*/
 function buildLabels(series) {
+	const labels = [...series.history.map((point) => `#${point.round}`), ...series.future.map((point) => `+${point.round - series.currentRound}`)];
+	const interval = medianInterval(series.history);
+	const lastTs = Number(series.history[series.history.length - 1]?.timestamp) || 0;
+	const historyTips = series.history.map((point) => {
+		const time = chartDateTime(Number(point.timestamp) || 0);
+		return time ? `第 ${point.round} 轮 · ${time}` : `第 ${point.round} 轮`;
+	});
+	const futureTips = series.future.map((point, index) => {
+		const estimated = lastTs && interval ? chartDateTime(lastTs + interval * (index + 1)) : "";
+		const head = `第 ${point.round} 轮（预测）`;
+		return estimated ? `${head} · 预计 ${estimated}` : head;
+	});
 	return {
-		labels: [...series.history.map((point) => `#${point.round}`), ...series.future.map((point) => `+${point.round - series.currentRound}`)],
+		labels,
+		tips: [...historyTips, ...futureTips],
 		historyLength: series.history.length,
 		futureLength: series.future.length
 	};
@@ -8167,7 +8922,7 @@ async function renderMainChart(echarts, options) {
 	const chart = await initChart("aus-forecast-main-chart", echarts);
 	if (!chart) return;
 	const { series, ctxLimit, currency, formatCost } = options;
-	const { labels, historyLength } = buildLabels(series);
+	const { labels, tips, historyLength } = buildLabels(series);
 	if (!labels.length) return;
 	const border = themeColor("--ds-border", "#E5E7EB");
 	const text3 = themeColor("--ds-text-3", "#9CA3AF");
@@ -8458,6 +9213,7 @@ async function renderMainChart(echarts, options) {
 			backgroundColor: cardInner,
 			borderColor: border,
 			borderWidth: 1,
+			...CHART_TOOLTIP_SURFACE,
 			textStyle: {
 				color: text,
 				fontSize: 12
@@ -8471,7 +9227,8 @@ async function renderMainChart(echarts, options) {
 				const index = params[0].dataIndex;
 				const label = labels[index] || "";
 				const isFuture = index >= historyLength;
-				let html = `<div style="font-weight:600;margin-bottom:6px;">第 ${isFuture ? series.currentRound + (index - historyLength) + 1 : index + 1} 轮${isFuture ? "（预测）" : ""}</div>`;
+				const roundNumber = isFuture ? series.currentRound + (index - historyLength) + 1 : index + 1;
+				let html = `<div style="font-weight:600;margin-bottom:6px;">${tips[index] || `第 ${roundNumber} 轮${isFuture ? "（预测）" : ""}`}</div>`;
 				for (const param of params) {
 					if (!param || String(param.seriesName).startsWith("__")) continue;
 					if (param.seriesName === "历史压缩" || param.seriesName === "预测压缩") continue;
@@ -8512,7 +9269,7 @@ async function renderHitChart(echarts, options) {
 	const chart = await initChart("aus-forecast-hit-chart", echarts);
 	if (!chart) return;
 	const { series } = options;
-	const { labels, historyLength } = buildLabels(series);
+	const { labels, tips, historyLength } = buildLabels(series);
 	if (!labels.length) return;
 	const border = themeColor("--ds-border", "#E5E7EB");
 	const text3 = themeColor("--ds-text-3", "#9CA3AF");
@@ -8556,6 +9313,7 @@ async function renderHitChart(echarts, options) {
 			backgroundColor: cardInner,
 			borderColor: border,
 			borderWidth: 1,
+			...CHART_TOOLTIP_SURFACE,
 			textStyle: {
 				color: text,
 				fontSize: 12
@@ -8565,7 +9323,7 @@ async function renderHitChart(echarts, options) {
 				const index = params[0].dataIndex;
 				labels[index];
 				const isFuture = index >= historyLength;
-				let html = `<div style="font-weight:600;margin-bottom:4px;">第 ${isFuture ? series.currentRound + (index - historyLength) + 1 : index + 1} 轮${isFuture ? "（预测）" : ""}</div>`;
+				let html = `<div style="font-weight:600;margin-bottom:4px;">${tips[index] || `第 ${isFuture ? series.currentRound + (index - historyLength) + 1 : index + 1} 轮${isFuture ? "（预测）" : ""}`}</div>`;
 				for (const param of params) {
 					if (!param || String(param.seriesName).startsWith("__")) continue;
 					const value = Array.isArray(param.value) ? param.value[1] : param.value;
@@ -8639,7 +9397,7 @@ async function renderCostChart(echarts, options) {
 	const chart = await initChart("aus-forecast-cost-chart", echarts);
 	if (!chart) return;
 	const { series, currency, formatCost } = options;
-	const { labels, historyLength } = buildLabels(series);
+	const { labels, tips, historyLength } = buildLabels(series);
 	if (!labels.length) return;
 	const border = themeColor("--ds-border", "#E5E7EB");
 	const text3 = themeColor("--ds-text-3", "#9CA3AF");
@@ -8685,6 +9443,7 @@ async function renderCostChart(echarts, options) {
 			backgroundColor: cardInner,
 			borderColor: border,
 			borderWidth: 1,
+			...CHART_TOOLTIP_SURFACE,
 			textStyle: {
 				color: text,
 				fontSize: 12
@@ -8693,7 +9452,7 @@ async function renderCostChart(echarts, options) {
 				if (!Array.isArray(params) || !params.length) return "";
 				const index = params[0].dataIndex;
 				const isFuture = index >= historyLength;
-				let html = `<div style="font-weight:600;margin-bottom:4px;">第 ${isFuture ? series.currentRound + (index - historyLength) + 1 : index + 1} 轮${isFuture ? "（预测）" : ""}</div>`;
+				let html = `<div style="font-weight:600;margin-bottom:4px;">${tips[index] || `第 ${isFuture ? series.currentRound + (index - historyLength) + 1 : index + 1} 轮${isFuture ? "（预测）" : ""}`}</div>`;
 				for (const param of params) {
 					const value = Array.isArray(param.value) ? param.value[1] : param.value;
 					if (value == null || !Number.isFinite(Number(value))) continue;
@@ -8809,7 +9568,7 @@ var lastEffectiveHistory = [];
 var lastEfficiencyHistory = [];
 var lastEfficiencyLabel = "全部历史";
 var efficiencySort = null;
-function getDoc$3() {
+function getDoc$4() {
 	return window.parent?.document ?? document;
 }
 function currentChatId() {
@@ -9009,7 +9768,7 @@ function hitSourceText(series) {
 	}
 }
 function closeAllDropdowns() {
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	for (const name of [
 		"chat",
 		"model",
@@ -9023,7 +9782,7 @@ function closeAllDropdowns() {
 	openDropdown = null;
 }
 function toggleDropdown(name) {
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	if (openDropdown === name) {
 		closeAllDropdowns();
 		return;
@@ -9038,7 +9797,7 @@ function bindGlobalClose() {
 	if (globalCloseBound) return;
 	globalCloseBound = true;
 	try {
-		getDoc$3().addEventListener("click", () => closeAllDropdowns());
+		getDoc$4().addEventListener("click", () => closeAllDropdowns());
 	} catch {}
 }
 function dropdownItem(attr, value, label, active, meta = "") {
@@ -9048,7 +9807,7 @@ function dropdownItem(attr, value, label, active, meta = "") {
   </div>`;
 }
 function renderChatDropdown(fullHist) {
-	const dropdown = getDoc$3().getElementById("aus-forecast-chat-dropdown");
+	const dropdown = getDoc$4().getElementById("aus-forecast-chat-dropdown");
 	if (!dropdown) return;
 	const chats = getRecordedChatsForForecast(fullHist);
 	let html = dropdownItem("data-fchat", "__current__", "当前对话", selectedForecastKey === "__current__");
@@ -9070,7 +9829,7 @@ function renderChatDropdown(fullHist) {
 	});
 }
 function renderModelDropdown(options) {
-	const dropdown = getDoc$3().getElementById("aus-forecast-model-dropdown");
+	const dropdown = getDoc$4().getElementById("aus-forecast-model-dropdown");
 	if (!dropdown) return;
 	dropdown.innerHTML = options.map((option) => dropdownItem("data-fmodel", option.model, option.model, selectedForecastModel === option.model, `${option.count} 轮`)).join("") || "<div class=\"aus-forecast-dropdown-empty\">暂无模型</div>";
 	dropdown.querySelectorAll("[data-fmodel]").forEach((el) => {
@@ -9083,7 +9842,7 @@ function renderModelDropdown(options) {
 	});
 }
 function renderHorizonDropdown() {
-	const dropdown = getDoc$3().getElementById("aus-forecast-horizon-dropdown");
+	const dropdown = getDoc$4().getElementById("aus-forecast-horizon-dropdown");
 	if (!dropdown) return;
 	dropdown.innerHTML = HORIZONS.map((value) => dropdownItem("data-fhorizon", String(value), `${value} 轮`, horizon === value, value === 10 ? "默认" : "")).join("");
 	dropdown.querySelectorAll("[data-fhorizon]").forEach((el) => {
@@ -9103,7 +9862,7 @@ function hitModeLabel(mode, globalRate, modelRate) {
 	return globalRate == null ? "全站平均 —" : `全站平均 ${pct(globalRate)}`;
 }
 function renderHitControl(fullHist, model, series, globalRate, modelRate) {
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	const host = doc.getElementById("aus-forecast-hit-control");
 	if (!host) return;
 	if (selectedForecastKey === "__all__" || !model) {
@@ -9168,7 +9927,7 @@ function renderHitControl(fullHist, model, series, globalRate, modelRate) {
 	}
 }
 function renderToolbar(fullHist, effective, modelOptions, model, priceContext, series, globalRate, modelRate) {
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	bindGlobalClose();
 	const chatLabel = doc.getElementById("aus-forecast-chat-label");
 	if (chatLabel) chatLabel.textContent = getForecastLabel(fullHist);
@@ -9232,7 +9991,7 @@ function kpiCard(label, value, sub, tone = "default", title = "") {
   </div>`;
 }
 function renderKpis(series, priceContext, ctxLimit, options, balance) {
-	const host = getDoc$3().getElementById("aus-forecast-kpis");
+	const host = getDoc$4().getElementById("aus-forecast-kpis");
 	if (!host) return;
 	const remaining = balance != null ? simulateRemainingRounds(balance, series, options) : null;
 	const ctxRounds = contextRoundsFor(series, ctxLimit, options.compaction);
@@ -9259,7 +10018,7 @@ function renderKpis(series, priceContext, ctxLimit, options, balance) {
 	].join("");
 }
 function renderHealth(history, model) {
-	const host = getDoc$3().getElementById("aus-forecast-health");
+	const host = getDoc$4().getElementById("aus-forecast-health");
 	if (!host) return;
 	if (!history.length) {
 		host.innerHTML = "<div class=\"aus-forecast-empty\">暂无数据</div>";
@@ -9305,7 +10064,7 @@ function renderHealth(history, model) {
   `;
 }
 function renderCompaction(series, options) {
-	const host = getDoc$3().getElementById("aus-forecast-compaction");
+	const host = getDoc$4().getElementById("aus-forecast-compaction");
 	if (!host) return;
 	const forecast = series.compactionForecast;
 	if (!forecast.detected) {
@@ -9354,7 +10113,7 @@ function sortEfficiencyRows(rows) {
 	});
 }
 function renderEfficiency(history, scopeLabel) {
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	const host = doc.getElementById("aus-forecast-efficiency");
 	const sub = doc.getElementById("aus-forecast-efficiency-sub");
 	const scopeButton = doc.getElementById("aus-forecast-scope-btn");
@@ -9466,7 +10225,7 @@ function chatDisplayNameMap(fullHist) {
 	return map;
 }
 function renderTop(fullHist) {
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	const host = doc.getElementById("aus-forecast-top");
 	const toggle = doc.getElementById("aus-forecast-top-toggle");
 	if (!host || !toggle) return;
@@ -9511,7 +10270,7 @@ function renderTop(fullHist) {
 }
 function clearCharts(message) {
 	disposeForecastCharts();
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	for (const id of [
 		"aus-forecast-main-chart",
 		"aus-forecast-hit-chart",
@@ -9522,7 +10281,7 @@ function clearCharts(message) {
 	}
 }
 function renderNoticeCards(message) {
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	const kpis = doc.getElementById("aus-forecast-kpis");
 	if (kpis) kpis.innerHTML = `<div class="ds-card aus-forecast-notice">${esc$2(message)}</div>`;
 	const health = doc.getElementById("aus-forecast-health");
@@ -9533,17 +10292,17 @@ function renderNoticeCards(message) {
 function renderAllNotice() {
 	renderNoticeCards("当前选择“全部”历史。逐轮预测、压缩与健康度需要单个对话的时间序列；请从上方对话胶囊选择具体对话。下方模型效率对比仍可查看。");
 	clearCharts("请选择单个对话以查看逐轮预测");
-	const mainSub = getDoc$3().getElementById("aus-forecast-main-sub");
+	const mainSub = getDoc$4().getElementById("aus-forecast-main-sub");
 	if (mainSub) mainSub.textContent = "逐轮预测需要指定单个对话";
 }
 function renderNoSeries(message) {
 	renderNoticeCards(message);
 	clearCharts(message);
-	const mainSub = getDoc$3().getElementById("aus-forecast-main-sub");
+	const mainSub = getDoc$4().getElementById("aus-forecast-main-sub");
 	if (mainSub) mainSub.textContent = message;
 }
 function renderMainSub(series, ctxLimit) {
-	const mainSub = getDoc$3().getElementById("aus-forecast-main-sub");
+	const mainSub = getDoc$4().getElementById("aus-forecast-main-sub");
 	if (!mainSub) return;
 	const future = series.future.length;
 	const parts = [
@@ -9630,6 +10389,528 @@ function initForecastView() {
 	bindGlobalClose();
 }
 //#endregion
+//#region src/ui/vendor-icons.ts
+/**
+* 厂商官方图标（内联 SVG path，24×24 视框，fill: currentColor）。
+*
+* 路径数据取自 simple-icons（其 SVG 数据以 CC0 发布，免费用于个人与商业项目）；
+* 各品牌名称与图形商标归各自所有者，本扩展仅用于标识接入来源，不代表任何关联、合作或背书。
+* 没有收录的厂商（如 Cohere、Groq、Z.AI、硅基流动、阶跃、Novita、讯飞等）自动回退为字标。
+*/
+var VENDOR_ICON_PATHS = {
+	deepseek: "M23.748 4.651c-.254-.124-.364.113-.512.233-.051.04-.094.09-.137.137-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.155-.708-.311-.955-.65-.172-.24-.219-.509-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.094.172.187.129.323-.082.28-.18.553-.266.833-.055.179-.137.218-.328.14a5.5 5.5 0 0 1-1.737-1.179c-.857-.828-1.631-1.743-2.597-2.46a12 12 0 0 0-.689-.47c-.985-.957.13-1.743.387-1.836.27-.098.094-.433-.778-.428-.872.003-1.67.295-2.687.685a3 3 0 0 1-.465.136 9.6 9.6 0 0 0-2.883-.101c-1.885.21-3.39 1.1-4.497 2.622C.082 8.776-.231 10.854.152 13.02c.403 2.284 1.568 4.175 3.36 5.653 1.857 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.132-.284 4.994-1.86.47.234.962.328 1.78.398.629.058 1.235-.031 1.705-.129.735-.155.684-.836.418-.961-2.155-1.004-1.682-.595-2.112-.926 1.095-1.295 2.768-3.598 3.284-6.733.05-.346.115-.834.108-1.114-.004-.171.035-.238.23-.257a4.2 4.2 0 0 0 1.545-.475c1.397-.763 1.96-2.016 2.093-3.517.02-.23-.004-.467-.247-.588M11.58 18.168c-2.088-1.642-3.101-2.183-3.52-2.16-.39.024-.32.472-.234.763.09.288.207.487.371.74.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.168-1.361-.801-2.5-1.86-3.301-3.306-.775-1.393-1.225-2.888-1.299-4.482-.02-.385.094-.522.477-.592a4.7 4.7 0 0 1 1.53-.038c2.131.311 3.946 1.264 5.467 2.774.868.86 1.525 1.887 2.202 2.89.72 1.066 1.494 2.082 2.48 2.915.348.291.626.513.892.677-.802.09-2.14.109-3.055-.615zm1.001-6.44a.306.306 0 0 1 .415-.287.3.3 0 0 1 .113.074.3.3 0 0 1 .086.214c0 .17-.136.307-.308.307a.303.303 0 0 1-.306-.307m3.11 1.596c-.2.081-.4.151-.591.16a1.25 1.25 0 0 1-.798-.254c-.274-.23-.47-.358-.551-.758a1.7 1.7 0 0 1 .015-.588c.07-.327-.007-.537-.238-.727-.188-.156-.426-.199-.689-.199a.6.6 0 0 1-.254-.078.253.253 0 0 1-.114-.358 1 1 0 0 1 .192-.21c.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.392.451.462.576.685.915.176.264.336.536.446.848.066.194-.02.353-.25.45",
+	anthropic: "M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z",
+	google: "M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81",
+	xai: "M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z",
+	mistral: "M17.143 3.429v3.428h-3.429v3.429h-3.428V6.857H6.857V3.43H3.43v13.714H0v3.428h10.286v-3.428H6.857v-3.429h3.429v3.429h3.429v-3.429h3.428v3.429h-3.428v3.428H24v-3.428h-3.43V3.429z",
+	openrouter: "M16.778 1.844v1.919q-.569-.026-1.138-.032-.708-.008-1.415.037c-1.93.126-4.023.728-6.149 2.237-2.911 2.066-2.731 1.95-4.14 2.75-.396.223-1.342.574-2.185.798-.841.225-1.753.333-1.751.333v4.229s.768.108 1.61.333c.842.224 1.789.575 2.185.799 1.41.798 1.228.683 4.14 2.75 2.126 1.509 4.22 2.11 6.148 2.236.88.058 1.716.041 2.555.005v1.918l7.222-4.168-7.222-4.17v2.176c-.86.038-1.611.065-2.278.021-1.364-.09-2.417-.357-3.979-1.465-2.244-1.593-2.866-2.027-3.68-2.508.889-.518 1.449-.906 3.822-2.59 1.56-1.109 2.614-1.377 3.978-1.466.667-.044 1.418-.017 2.278.02v2.176L24 6.014Z",
+	minimax: "M11.43 3.92a.86.86 0 1 0-1.718 0v14.236a1.999 1.999 0 0 1-3.997 0V9.022a.86.86 0 1 0-1.718 0v3.87a1.999 1.999 0 0 1-3.997 0V11.49a.57.57 0 0 1 1.139 0v1.404a.86.86 0 0 0 1.719 0V9.022a1.999 1.999 0 0 1 3.997 0v9.134a.86.86 0 0 0 1.719 0V3.92a1.998 1.998 0 1 1 3.996 0v11.788a.57.57 0 1 1-1.139 0zm10.572 3.105a2 2 0 0 0-1.999 1.997v7.63a.86.86 0 0 1-1.718 0V3.923a1.999 1.999 0 0 0-3.997 0v16.16a.86.86 0 0 1-1.719 0V18.08a.57.57 0 1 0-1.138 0v2a1.998 1.998 0 0 0 3.996 0V3.92a.86.86 0 0 1 1.719 0v12.73a1.999 1.999 0 0 0 3.996 0V9.023a.86.86 0 1 1 1.72 0v6.686a.57.57 0 0 0 1.138 0V9.022a2 2 0 0 0-1.998-1.997",
+	moonshot: "m1.053 16.91 9.538 2.55a21 20.981 0 0 0 .06 2.031l5.956 1.592a12 11.99 0 0 1-15.554-6.172m-1.02-5.79 11.352 3.035a21 20.981 0 0 0-.469 2.01l10.817 2.89a12 11.99 0 0 1-1.845 2.004L.658 15.918a12 11.99 0 0 1-.625-4.796m1.593-5.146L13.573 9.17a21 20.981 0 0 0-1.01 1.874l11.297 3.02a21 20.981 0 0 1-.67 2.362l-11.55-3.087L.125 10.26a12 11.99 0 0 1 1.499-4.285ZM6.067 1.58l11.285 3.016a21 20.981 0 0 0-1.688 1.719l7.824 2.091a21 20.981 0 0 1 .513 2.664L2.107 5.218a12 11.99 0 0 1 3.96-3.638M21.68 4.866 7.222 1.003A12 11.99 0 0 1 21.68 4.866",
+	dashscope: "M23.919 14.545 20.817 9.17l1.47-2.544a.56.56 0 0 0 0-.566l-1.633-2.83a.57.57 0 0 0-.49-.283h-6.207L12.487.402a.57.57 0 0 0-.49-.284H8.732a.56.56 0 0 0-.49.284L5.139 5.775h-2.94a.56.56 0 0 0-.49.284L.077 8.887a.56.56 0 0 0 0 .567L3.18 14.83l-1.47 2.545a.56.56 0 0 0 0 .566l1.634 2.83a.57.57 0 0 0 .49.283h6.205l1.47 2.545a.57.57 0 0 0 .49.284h3.266a.57.57 0 0 0 .49-.284l3.104-5.375h2.94a.57.57 0 0 0 .49-.283l1.634-2.828a.55.55 0 0 0-.004-.568M8.733.686l1.634 2.828-1.634 2.828H21.8L20.164 9.17H7.425L5.63 6.06Zm1.306 19.801-6.205-.002 1.634-2.83h3.265L2.201 6.344h3.267q3.182 5.517 6.367 11.032zm10.124-5.66L18.53 12l-6.532 11.315-1.634-2.83c2.129-3.673 4.25-7.351 6.373-11.028h3.592l3.102 5.374z",
+	baidu: "M9.154 0C7.71 0 6.54 1.658 6.54 3.707c0 2.051 1.171 3.71 2.615 3.71 1.446 0 2.614-1.659 2.614-3.71C11.768 1.658 10.6 0 9.154 0zm7.025.594C14.86.58 13.347 2.589 13.2 3.927c-.187 1.745.25 3.487 2.179 3.735 1.933.25 3.175-1.806 3.422-3.364.252-1.555-.995-3.364-2.362-3.674a1.218 1.218 0 0 0-.261-.03zM3.582 5.535a2.811 2.811 0 0 0-.156.008c-2.118.19-2.428 3.24-2.428 3.24-.287 1.41.686 4.425 3.297 3.864 2.617-.561 2.262-3.68 2.183-4.362-.125-1.018-1.292-2.773-2.896-2.75zm16.534 1.753c-2.308 0-2.617 2.119-2.617 3.616 0 1.43.121 3.425 2.988 3.362 2.867-.063 2.553-3.238 2.553-3.988 0-.745-.62-2.99-2.924-2.99zm-8.264 2.478c-1.424.014-2.708.925-3.323 1.947-1.118 1.868-2.863 3.05-3.112 3.363-.25.309-3.61 2.116-2.864 5.42.746 3.301 3.365 3.237 3.365 3.237s1.93.19 4.171-.31c2.24-.495 4.17.123 4.17.123s5.233 1.748 6.665-1.616c1.43-3.364-.808-5.109-.808-5.109s-2.99-2.306-4.736-4.798c-1.072-1.665-2.348-2.268-3.528-2.257zm-2.234 3.84l1.542.024v8.197H7.758c-1.47-.291-2.055-1.292-2.13-1.462-.072-.173-.488-.976-.268-2.343.635-2.049 2.447-2.196 2.447-2.196h1.81zm3.964 2.39v3.881c.096.413.612.488.612.488h1.614v-4.343h1.689v5.782h-3.915c-1.517-.39-1.59-1.465-1.59-1.465v-4.317zm-5.458 1.147c-.66.197-.978.708-1.05.928-.076.22-.247.78-.1 1.269.294 1.095 1.248 1.144 1.248 1.144h1.37v-3.34z",
+	github: "M23.922 16.997C23.061 18.492 18.063 22.02 12 22.02 5.937 22.02.939 18.492.078 16.997A.641.641 0 0 1 0 16.741v-2.869a.883.883 0 0 1 .053-.22c.372-.935 1.347-2.292 2.605-2.656.167-.429.414-1.055.644-1.517a10.098 10.098 0 0 1-.052-1.086c0-1.331.282-2.499 1.132-3.368.397-.406.89-.717 1.474-.952C7.255 2.937 9.248 1.98 11.978 1.98c2.731 0 4.767.957 6.166 2.093.584.235 1.077.546 1.474.952.85.869 1.132 2.037 1.132 3.368 0 .368-.014.733-.052 1.086.23.462.477 1.088.644 1.517 1.258.364 2.233 1.721 2.605 2.656a.841.841 0 0 1 .053.22v2.869a.641.641 0 0 1-.078.256Zm-11.75-5.992h-.344a4.359 4.359 0 0 1-.355.508c-.77.947-1.918 1.492-3.508 1.492-1.725 0-2.989-.359-3.782-1.259a2.137 2.137 0 0 1-.085-.104L4 11.746v6.585c1.435.779 4.514 2.179 8 2.179 3.486 0 6.565-1.4 8-2.179v-6.585l-.098-.104s-.033.045-.085.104c-.793.9-2.057 1.259-3.782 1.259-1.59 0-2.738-.545-3.508-1.492a4.359 4.359 0 0 1-.355-.508Zm2.328 3.25c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm-5 0c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm3.313-6.185c.136 1.057.403 1.913.878 2.497.442.544 1.134.938 2.344.938 1.573 0 2.292-.337 2.657-.751.384-.435.558-1.15.558-2.361 0-1.14-.243-1.847-.705-2.319-.477-.488-1.319-.862-2.824-1.025-1.487-.161-2.192.138-2.533.529-.269.307-.437.808-.438 1.578v.021c0 .265.021.562.063.893Zm-1.626 0c.042-.331.063-.628.063-.894v-.02c-.001-.77-.169-1.271-.438-1.578-.341-.391-1.046-.69-2.533-.529-1.505.163-2.347.537-2.824 1.025-.462.472-.705 1.179-.705 2.319 0 1.211.175 1.926.558 2.361.365.414 1.084.751 2.657.751 1.21 0 1.902-.394 2.344-.938.475-.584.742-1.44.878-2.497Z",
+	cursor: "M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23",
+	openai: "M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z",
+	tencent: "M21.395 15.035a40 40 0 0 0-.803-2.264l-1.079-2.695c.001-.032.014-.562.014-.836C19.526 4.632 17.351 0 12 0S4.474 4.632 4.474 9.241c0 .274.013.804.014.836l-1.08 2.695a39 39 0 0 0-.802 2.264c-1.021 3.283-.69 4.643-.438 4.673.54.065 2.103-2.472 2.103-2.472 0 1.469.756 3.387 2.394 4.771-.612.188-1.363.479-1.845.835-.434.32-.379.646-.301.778.343.578 5.883.369 7.482.189 1.6.18 7.14.389 7.483-.189.078-.132.132-.458-.301-.778-.483-.356-1.233-.646-1.846-.836 1.637-1.384 2.393-3.302 2.393-4.771 0 0 1.563 2.537 2.103 2.472.251-.03.581-1.39-.438-4.673"
+};
+/** 生成内联 SVG；该厂商没有官方图标时返回 null（调用方回退字标） */
+function vendorIconSvg(id, size = 20) {
+	const path = VENDOR_ICON_PATHS[String(id || "").trim().toLowerCase()];
+	if (!path) return null;
+	return "<svg viewBox=\"0 0 24 24\" width=\"" + size + "\" height=\"" + size + "\" fill=\"currentColor\" aria-hidden=\"true\" focusable=\"false\" style=\"display:block;\"><path d=\"" + path + "\"/></svg>";
+}
+//#endregion
+//#region src/ui/wallet-sync-preview.ts
+var OVERLAY_ID = "aus-wallet-sync-overlay";
+var MODE_LABELS = [
+	{
+		id: "add-missing",
+		label: "只补未定价"
+	},
+	{
+		id: "overwrite-unlocked",
+		label: "覆盖未锁定"
+	},
+	{
+		id: "overwrite-all",
+		label: "全部覆盖"
+	}
+];
+function getDoc$3() {
+	return window.parent?.document ?? document;
+}
+function money$1(value) {
+	if (value == null) return "—";
+	try {
+		return formatMoney(value, 6);
+	} catch {
+		return String(value);
+	}
+}
+function scoreLabel(row) {
+	if (row.action === "unmatched") return "<span style=\"color:var(--ds-text-3);\">未匹配</span>";
+	const percent = Math.round(row.score * 100);
+	const exact = row.reason === "exact" || row.reason === "normalized" || row.reason === "alias";
+	const color = exact ? "var(--ds-green)" : row.ambiguous ? "var(--ds-red)" : "var(--ds-orange)";
+	const text = exact ? "精确" : row.ambiguous ? "歧义 " + percent + "%" : "模糊 " + percent + "%";
+	return "<span style=\"color:" + color + ";font-weight:600;\">" + text + "</span>";
+}
+function actionLabel(row) {
+	if (row.action === "write") return "<span style=\"color:var(--ds-red);\">待写入</span>";
+	if (row.action === "update") return "<span style=\"color:var(--ds-orange);\">将更新</span>";
+	if (row.action === "skip-locked") return "<span style=\"color:var(--ds-text-3);\">已锁定</span>";
+	if (row.action === "skip-same") return "<span style=\"color:var(--ds-text-3);\">无变化</span>";
+	return "<span style=\"color:var(--ds-text-3);\">—</span>";
+}
+function tierText(row) {
+	if (!row.next) return "—";
+	const before = row.current ? money$1(row.current.hit) + " / " + money$1(row.current.miss) + " / " + money$1(row.current.output) : "未定价";
+	const after = money$1(row.next.hit) + " / " + money$1(row.next.miss) + " / " + money$1(row.next.output);
+	if (!row.current) return "<span style=\"color:var(--ds-red);\">" + after + "</span>";
+	if (row.current.hit === row.next.hit && row.current.miss === row.next.miss && row.current.output === row.next.output) return "<span style=\"color:var(--ds-text-3);\">" + after + "</span>";
+	return "<span style=\"color:var(--ds-text-3);text-decoration:line-through;\">" + before + "</span> → <b>" + after + "</b>";
+}
+async function openWalletSyncPreview(options = {}) {
+	const doc = getDoc$3();
+	const existing = doc.getElementById(OVERLAY_ID);
+	if (existing) existing.remove();
+	const overlay = doc.createElement("div");
+	overlay.id = OVERLAY_ID;
+	overlay.style.cssText = "position:absolute;inset:0;z-index:400;background:rgba(15,20,25,0.32);display:flex;align-items:center;justify-content:center;padding:16px;";
+	overlay.innerHTML = "<div style=\"width:min(880px,100%);max-height:86%;display:flex;flex-direction:column;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:14px;overflow:hidden;\"><div style=\"display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--ds-border);\"><div style=\"font-weight:600;color:var(--ds-text);\">价格同步预览</div><button data-sync-close=\"1\" style=\"display:flex;align-items:center;gap:4px;padding:5px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;\">" + icon("close", 14) + " 关闭</button></div><div data-sync-body=\"1\" style=\"padding:12px 14px;overflow:auto;display:grid;gap:10px;\"></div></div>";
+	(doc.getElementById("aus-panel") || doc.getElementById("aus-main") || doc.body).appendChild(overlay);
+	const close = () => {
+		overlay.remove();
+		doc.removeEventListener("keydown", onKey);
+	};
+	const onKey = (event) => {
+		if (event?.key === "Escape") close();
+	};
+	doc.addEventListener("keydown", onKey);
+	overlay.addEventListener("click", (event) => {
+		if (event.target === overlay) close();
+	});
+	overlay.querySelector("[data-sync-close]")?.addEventListener("click", close);
+	const body = overlay.querySelector("[data-sync-body]");
+	body.innerHTML = "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-2);\">正在拉取价格目录（首次约 6 MB，之后走浏览器缓存）…</div>";
+	const walletId = options.walletId;
+	const wallet = walletId ? repository.getWallet(walletId) : null;
+	if (walletId && !wallet) {
+		body.textContent = "钱包不存在";
+		return;
+	}
+	if (wallet && !wallet.catalogProvider) {
+		body.innerHTML = "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-2);\">该钱包还没有选择价格来源，请先在「价格来源」中选择供应商。</div>";
+		return;
+	}
+	let catalog = null;
+	try {
+		catalog = await fetchModelsDevCatalog();
+	} catch (error) {
+		body.innerHTML = "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-red);\">价格目录拉取失败：" + esc$2(error?.message || error) + "</div>";
+		return;
+	}
+	wallet && resolveVendor({
+		sourceType: wallet.sourceType,
+		endpointDisplay: wallet.endpointDisplay,
+		endpointLabel: wallet.endpointLabel,
+		endpointId: wallet.endpointId,
+		models: wallet.models.map((item) => item.model)
+	});
+	const providerVendor = wallet?.catalogProvider ? vendorById(wallet.catalogProvider) : null;
+	let mode = "add-missing";
+	let onlyChanged = true;
+	let keyword = "";
+	let plan = buildSyncPlan(catalog, {
+		walletIds: walletId ? [walletId] : void 0,
+		mode
+	});
+	const selected = new Set(plan.rows.filter((row) => row.changed && !row.ambiguous).map((row) => row.key));
+	const render = () => {
+		const rows = plan.rows.filter((row) => {
+			if (onlyChanged && !row.changed) return false;
+			if (!keyword) return true;
+			return (row.localModel + " " + (row.catalogModel || "")).toLowerCase().includes(keyword.toLowerCase());
+		});
+		const actionable = plan.rows.filter((row) => row.changed && !row.ambiguous);
+		const head = "<div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:8px;\"><div style=\"display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);\">" + (providerVendor ? "<span style=\"width:18px;height:18px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;background:" + providerVendor.color + ";color:#fff;font-size:10px;font-weight:700;\">" + (vendorIconSvg(providerVendor.id, 12) || esc$2(providerVendor.mark)) + "</span>" : "") + "供应商 <b style=\"color:var(--ds-text);\">" + esc$2(plan.providerLabel || "未选择") + "</b></div><div style=\"display:flex;gap:4px;margin-left:auto;\">" + MODE_LABELS.map((item) => "<button data-sync-mode=\"" + item.id + "\" style=\"padding:5px 10px;border:1px solid " + (mode === item.id ? "var(--ds-black)" : "var(--ds-border)") + ";border-radius:999px;background:" + (mode === item.id ? "var(--ds-black)" : "var(--ds-card)") + ";color:" + (mode === item.id ? "var(--ds-black-text)" : "var(--ds-text)") + ";font-size:var(--aus-fs-sm);cursor:pointer;\">" + item.label + "</button>").join("") + "</div></div><div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:8px;\"><input data-sync-search=\"1\" value=\"" + esc$2(keyword) + "\" placeholder=\"搜索模型\" style=\"flex:1;min-width:140px;padding:6px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card);color:var(--ds-text);font-size:var(--aus-fs-sm);\" /><label style=\"display:flex;align-items:center;gap:5px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;\"><input type=\"checkbox\" class=\"aus-checkbox\" data-sync-only-changed=\"1\" " + (onlyChanged ? "checked" : "") + " /> 仅看变化</label></div><div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);line-height:1.7;\">按钱包里已识别的模型名，在目录中用模糊匹配找到对应价格后写入该模型（不会新增模型）。 匹配 " + plan.summary.matched + " · 精确 " + plan.summary.exact + " · 模糊 " + plan.summary.fuzzy + (plan.summary.ambiguous ? " · 歧义 " + plan.summary.ambiguous : "") + " · 未匹配 " + plan.summary.unmatched + " · 单位 " + getDisplayCurrency().code + "/百万 tokens</div>";
+		const table = rows.length ? "<div style=\"width:100%;overflow:auto;border-radius:10px;\"><table style=\"width:100%;min-width:720px;border-collapse:collapse;font-size:var(--aus-fs-sm);\"><thead><tr style=\"text-align:left;color:var(--ds-text-2);background:var(--ds-card);\"><th style=\"padding:6px;\">选</th><th style=\"padding:6px;\">钱包模型</th><th style=\"padding:6px;\">匹配</th><th style=\"padding:6px;\">目录模型</th><th style=\"padding:6px;\">价格（命中/未命中/输出）</th><th style=\"padding:6px;\">动作</th></tr></thead><tbody>" + rows.map((row) => {
+			const checked = selected.has(row.key);
+			return "<tr style=\"border-top:1px solid var(--ds-border);\"><td style=\"padding:6px;\"><input type=\"checkbox\" class=\"aus-checkbox\" data-sync-row=\"" + esc$2(row.key) + "\" " + (checked ? "checked" : "") + " " + (row.changed ? "" : "disabled") + " /></td><td style=\"padding:6px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\" title=\"" + esc$2(row.localModel) + "\">" + esc$2(row.localModel) + "</td><td style=\"padding:6px;white-space:nowrap;\">" + scoreLabel(row) + "</td><td style=\"padding:6px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ds-text-2);\" title=\"" + esc$2(row.catalogModel || "") + "\">" + esc$2(row.catalogModel || "—") + "</td><td style=\"padding:6px;white-space:nowrap;\">" + tierText(row) + "</td><td style=\"padding:6px;white-space:nowrap;\">" + actionLabel(row) + "</td></tr>";
+		}).join("") + "</tbody></table></div>" : "<div style=\"padding:14px;text-align:center;color:var(--ds-text-3);font-size:var(--aus-fs-sm);\">" + (onlyChanged ? "没有需要变化的价格（可关闭「仅看变化」查看全部）" : "没有可展示的模型") + "</div>";
+		const footer = "<div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:8px;\"><div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">已选 " + selected.size + " / 可写入 " + actionable.length + "</div><div style=\"margin-left:auto;display:flex;gap:8px;\"><button data-sync-cancel=\"1\" style=\"padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;\">取消</button><button data-sync-apply=\"1\" style=\"padding:6px 14px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;\">应用所选</button></div></div>";
+		body.innerHTML = head + table + footer;
+		body.querySelectorAll("[data-sync-mode]").forEach((button) => {
+			button.onclick = () => {
+				mode = button.getAttribute("data-sync-mode");
+				plan = buildSyncPlan(catalog, {
+					walletIds: walletId ? [walletId] : void 0,
+					mode
+				});
+				selected.clear();
+				plan.rows.filter((row) => row.changed && !row.ambiguous).forEach((row) => selected.add(row.key));
+				render();
+			};
+		});
+		const search = body.querySelector("[data-sync-search]");
+		if (search) search.oninput = () => {
+			keyword = search.value;
+			const pos = search.selectionStart;
+			render();
+			const next = body.querySelector("[data-sync-search]");
+			if (next) {
+				next.focus();
+				try {
+					next.setSelectionRange(pos ?? 0, pos ?? 0);
+				} catch {}
+			}
+		};
+		const onlyChangedEl = body.querySelector("[data-sync-only-changed]");
+		if (onlyChangedEl) onlyChangedEl.onchange = () => {
+			onlyChanged = onlyChangedEl.checked;
+			render();
+		};
+		body.querySelectorAll("[data-sync-row]").forEach((input) => {
+			input.onchange = () => {
+				const key = input.getAttribute("data-sync-row");
+				if (!key) return;
+				if (input.checked) selected.add(key);
+				else selected.delete(key);
+				render();
+			};
+		});
+		body.querySelector("[data-sync-cancel]")?.addEventListener("click", close);
+		body.querySelector("[data-sync-apply]")?.addEventListener("click", async () => {
+			if (!selected.size) {
+				toast("warning", "没有选中任何条目");
+				return;
+			}
+			const button = body.querySelector("[data-sync-apply]");
+			if (button) {
+				button.disabled = true;
+				button.textContent = "写入中…";
+			}
+			const result = await applySyncPlan(plan, { selectedKeys: Array.from(selected) });
+			close();
+			toast(result.applied ? "success" : "warning", result.applied ? "已写入 " + result.applied + " 个模型价格" : "没有价格被写入");
+			options.onDone?.();
+			try {
+				globalThis.ApiUsageStat?.refreshUI?.();
+			} catch {}
+		});
+	};
+	render();
+}
+//#endregion
+//#region src/services/plan-quota.ts
+var HOUR = 36e5;
+var DAY = 24 * HOUR;
+/** 窗口起点（滚动窗口回溯，自然月按本地时间月初） */
+function planWindowStart(window, now) {
+	if (window.resetMode === "calendar") {
+		const date = new Date(now);
+		date.setDate(1);
+		date.setHours(0, 0, 0, 0);
+		return date.getTime();
+	}
+	if (window.id === "5h") return now - 5 * HOUR;
+	if (window.id === "7d") return now - 7 * DAY;
+	if (window.id === "1m") return now - 30 * DAY;
+	return now - (Number.isFinite(window.hours) && window.hours > 0 ? window.hours : 5) * HOUR;
+}
+/** 窗口周期（毫秒） */
+function planWindowSpan(window) {
+	if (window.id === "5h") return 5 * HOUR;
+	if (window.id === "7d") return 7 * DAY;
+	if (window.id === "1m") return 30 * DAY;
+	return (Number.isFinite(window.hours) && window.hours > 0 ? window.hours : 5) * HOUR;
+}
+/** 整体重置时刻：只有自然月窗口才有（滚动窗口随记录滑出逐步恢复） */
+function planWindowResetAt(window, now) {
+	if (window.resetMode !== "calendar") return null;
+	const date = new Date(now);
+	date.setMonth(date.getMonth() + 1, 1);
+	date.setHours(0, 0, 0, 0);
+	return date.getTime();
+}
+function entryTokens(entry) {
+	const value = entry.total_tokens ?? entry.totalTokens;
+	return Number.isFinite(Number(value)) ? Number(value) : 0;
+}
+function entryCost(entry) {
+	const value = entry.cost ?? entry.total_cost;
+	return Number.isFinite(Number(value)) ? Number(value) : 0;
+}
+function computePlanWindowUsage(window, entries, walletId, now = Date.now()) {
+	const startAt = planWindowStart(window, now);
+	const resetAt = planWindowResetAt(window, now);
+	let used = 0;
+	for (const entry of entries) {
+		if (!entry) continue;
+		if (entry.walletId !== walletId) continue;
+		const ts = Number(entry.timestamp);
+		if (!Number.isFinite(ts) || ts < startAt) continue;
+		if (window.unit === "token") used += entryTokens(entry);
+		else if (window.unit === "cost") used += entryCost(entry);
+		else used += 1;
+	}
+	const limit = Number.isFinite(window.limit) && window.limit > 0 ? window.limit : 0;
+	const remaining = limit > 0 ? Math.max(0, limit - used) : 0;
+	const ratio = limit > 0 ? Math.min(1, used / limit) : 0;
+	return {
+		window,
+		used,
+		limit,
+		remaining,
+		ratio,
+		startAt,
+		resetAt,
+		unit: window.unit
+	};
+}
+function computeAllPlanUsage(windows, entries, walletId, now = Date.now()) {
+	return (windows || []).map((window) => computePlanWindowUsage(window, entries, walletId, now));
+}
+/** 按近期速率估算耗尽时刻；数据不足返回 null */
+function estimateExhaustion(usage, now = Date.now()) {
+	if (!usage.limit || usage.remaining <= 0 || usage.used <= 0) return null;
+	const elapsed = Math.max(1, now - usage.startAt);
+	const rate = usage.used / elapsed;
+	if (!Number.isFinite(rate) || rate <= 0) return null;
+	const eta = now + usage.remaining / rate;
+	if (eta <= now) return null;
+	if (usage.resetAt != null && eta > usage.resetAt) return null;
+	return eta;
+}
+function formatPlanUnit(value, unit) {
+	if (!Number.isFinite(value)) return "—";
+	if (unit === "cost") return value.toFixed(2);
+	if (unit === "percent") return Math.round(value) + "%";
+	if (value >= 1e4) return (value / 1e4).toFixed(1) + " 万";
+	return String(Math.round(value));
+}
+/**
+* 按适配器给出默认窗口：只按该供应商实际存在的额度窗口生成，
+* 不再让用户在多个供应商预设里挑。
+*/
+function planWindowsForAdapter(adapterId) {
+	const id = String(adapterId || "").trim();
+	if (id === "zhipu") return [{
+		id: "5h",
+		label: "5 小时额度",
+		unit: "token",
+		limit: 0,
+		resetMode: "rolling"
+	}, {
+		id: "7d",
+		label: "每周额度",
+		unit: "token",
+		limit: 0,
+		resetMode: "rolling"
+	}];
+	if (id === "minimax") return [{
+		id: "5h",
+		label: "5 小时额度",
+		unit: "request",
+		limit: 0,
+		resetMode: "rolling"
+	}, {
+		id: "7d",
+		label: "每周额度",
+		unit: "request",
+		limit: 0,
+		resetMode: "rolling"
+	}];
+	if (id === "new-api") return [{
+		id: "1m",
+		label: "订阅额度",
+		unit: "cost",
+		limit: 0,
+		resetMode: "calendar"
+	}];
+	return [];
+}
+/** 展示用：窗口标题（含周期说明） */
+function describePlanWindow(window) {
+	if (window.label) return window.label;
+	if (window.id === "5h") return "5 小时额度";
+	if (window.id === "7d") return "每周额度";
+	if (window.id === "1m") return window.resetMode === "calendar" ? "本月额度" : "30 天额度";
+	return (Number.isFinite(window.hours) ? window.hours : 5) + " 小时额度";
+}
+var PLAN_UNIT_LABEL = {
+	token: "tokens",
+	cost: "金额",
+	request: "次请求"
+};
+//#endregion
+//#region src/ui/wallet-plan.ts
+/** 该钱包是否具备「可查询套餐额度」能力（无则整块不显示） */
+function hasPlanCapability(wallet) {
+	return resolveBalanceAdapter(wallet)?.supports.plan === true;
+}
+function bar(ratio, color) {
+	return "<div style=\"height:6px;border-radius:999px;background:var(--ds-border);overflow:hidden;\"><div style=\"height:100%;width:" + Math.max(0, Math.min(100, Math.round(ratio * 100))) + "%;background:" + color + ";\"></div></div>";
+}
+function ratioColor(ratio) {
+	if (ratio >= .85) return "var(--ds-red)";
+	if (ratio >= .6) return "var(--ds-orange)";
+	return "var(--ds-green)";
+}
+function relativeTime(timestamp) {
+	if (!timestamp) return "—";
+	const diff = timestamp - Date.now();
+	if (!Number.isFinite(diff)) return "—";
+	if (diff <= 0) return "已重置";
+	const minutes = Math.round(diff / 6e4);
+	if (minutes < 60) return minutes + " 分钟后";
+	const hours = Math.round(minutes / 60);
+	if (hours < 36) return hours + " 小时后";
+	return Math.round(hours / 24) + " 天后";
+}
+function resetLabel(window, resetAt) {
+	if (!resetAt) {
+		const hours = Math.round(planWindowSpan(window) / 36e5);
+		return "滚动窗口（" + (hours >= 24 ? Math.round(hours / 24) + " 天" : hours + " 小时") + "）";
+	}
+	return "重置 " + relativeTime(resetAt);
+}
+/** 远端真值：查到哪个展示哪个 */
+function renderRemote(wallet) {
+	const remote = wallet.plan?.remote || [];
+	if (!remote.length) return "";
+	return "<div style=\"background:var(--ds-card-inner);border-radius:8px;padding:8px;display:grid;gap:8px;\">" + remote.map((item) => {
+		const ratio = item.used != null && item.limit ? Math.min(1, item.used / item.limit) : 0;
+		const percent = Math.round(ratio * 100);
+		const left = item.remaining != null ? formatPlanUnit(item.remaining, item.unit === "percent" ? "percent" : item.unit === "count" ? "count" : item.unit) : formatPlanUnit(Math.max(0, 100 - percent), "percent");
+		return "<div style=\"display:grid;gap:4px;\"><div style=\"display:flex;justify-content:space-between;gap:8px;font-size:var(--aus-fs-sm);\"><span style=\"color:var(--ds-text-2);\">" + esc$2(item.label) + "</span><span style=\"color:" + ratioColor(ratio) + ";font-weight:600;\">已用 " + percent + "% · 剩余 " + esc$2(left) + "</span></div>" + bar(ratio, ratioColor(ratio)) + "<div style=\"font-size:var(--aus-fs-xs,11px);color:var(--ds-text-3);\">厂商返回 · " + esc$2(resetLabel({
+			id: "custom",
+			label: item.label,
+			unit: "token",
+			limit: 0,
+			resetMode: item.resetAt ? "calendar" : "rolling"
+		}, item.resetAt)) + " · 查询于 " + esc$2(item.checkedAt ? new Date(item.checkedAt).toLocaleTimeString("zh-CN") : "—") + "</div></div>";
+	}).join("") + "</div>";
+}
+/** 本地估算（可选，仅作补充） */
+function renderLocal(wallet, history) {
+	const plan = wallet.plan;
+	if (!plan || !plan.windows.length) return "";
+	return computeAllPlanUsage(plan.windows, history, wallet.id).map((usage, index) => {
+		const window = usage.window;
+		const eta = estimateExhaustion(usage);
+		const hasLimit = usage.limit > 0;
+		return "<div style=\"display:grid;gap:4px;\"><div style=\"display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:space-between;\"><span style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-2);\">" + esc$2(describePlanWindow(window)) + "</span><span style=\"display:flex;align-items:center;gap:4px;font-size:var(--aus-fs-sm);\"><input type=\"number\" min=\"0\" step=\"1000\" data-plan-limit=\"" + index + "\" value=\"" + (window.limit || "") + "\" placeholder=\"额度\" style=\"width:96px;padding:3px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);\" /><span style=\"color:var(--ds-text-3);\">" + esc$2(PLAN_UNIT_LABEL[window.unit]) + "</span><button data-plan-reset=\"" + index + "\" title=\"切换重置方式：滚动窗口 / 自然月\" style=\"padding:2px 7px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;\">" + (window.resetMode === "calendar" ? "自然月" : "滚动") + "</button><button data-plan-remove=\"" + index + "\" title=\"移除该窗口\" style=\"padding:2px 6px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;\">" + icon("close", 12) + "</button></span></div>" + (hasLimit ? bar(usage.ratio, ratioColor(usage.ratio)) : "<div style=\"height:6px;border-radius:999px;background:var(--ds-border);\"></div>") + "<div style=\"font-size:var(--aus-fs-xs,11px);color:var(--ds-text-3);\">本地估算 · 已用 " + esc$2(formatPlanUnit(usage.used, window.unit)) + (hasLimit ? " / " + esc$2(formatPlanUnit(usage.limit, window.unit)) + "（" + Math.round(usage.ratio * 100) + "%）· 剩余 " + esc$2(formatPlanUnit(usage.remaining, window.unit)) : "（填额度后显示比例）") + " · " + resetLabel(window, usage.resetAt) + (eta ? " · 预计 " + esc$2(relativeTime(eta)) + "耗尽" : "") + "</div></div>";
+	}).join("");
+}
+function renderPlanBlock(wallet, history) {
+	const adapter = resolveBalanceAdapter(wallet);
+	if (!adapter?.supports.plan) return "";
+	const plan = wallet.plan;
+	plan?.remote;
+	const localEnabled = plan?.enabled === true && (plan?.windows || []).length > 0;
+	const hasKey = !!getWalletApiKey(wallet.id);
+	const header = "<div style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;\"><div><div style=\"font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);\">套餐额度</div><div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">" + esc$2(adapter.label) + " · 仅供展示参考，不参与计费与导出</div></div><div style=\"display:flex;gap:6px;flex-wrap:wrap;\"><button data-plan-query=\"1\" style=\"padding:6px 11px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;display:inline-flex;align-items:center;gap:4px;\">" + icon("refresh", 13) + " 查询额度</button>" + (localEnabled ? "<button data-plan-disable=\"1\" style=\"padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;\">关闭本地估算</button>" : "<button data-plan-enable=\"1\" style=\"padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;\">启用本地估算</button>") + "</div></div>";
+	const error = plan?.remoteError ? "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-red);\">查询失败：" + esc$2(plan.remoteError) + "</div>" : "";
+	const remoteHtml = renderRemote(wallet);
+	const localHtml = localEnabled ? renderLocal(wallet, history) : "";
+	const empty = !remoteHtml && !localHtml ? "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">" + (hasKey ? "点击「查询额度」获取厂商返回的额度与剩余。" : "先在下方填写查询密钥，再点「查询额度」。") + "</div>" : "";
+	const localTools = localEnabled && !remoteHtml ? "<div style=\"display:flex;gap:6px;\"><button data-plan-add=\"1\" style=\"padding:5px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;\">+ 添加本地窗口</button></div>" : "";
+	return "<div style=\"background:var(--ds-card-inner);border-radius:10px;padding:10px;display:grid;gap:8px;\">" + header + error + empty + (remoteHtml ? "<div style=\"display:grid;gap:8px;\">" + remoteHtml + "</div>" : "") + (localHtml ? "<div style=\"display:grid;gap:8px;\">" + localHtml + "</div>" : "") + localTools + "</div>";
+}
+function bindPlanBlock(doc, walletId, onChange) {
+	const host = doc.querySelector("[data-wallet-card=\"" + walletId + "\"]");
+	if (!host) return;
+	const updatePlan = (mutate) => {
+		repository.updateWallet(walletId, (wallet) => {
+			const plan = wallet.plan || {
+				enabled: false,
+				windows: []
+			};
+			mutate(plan);
+			wallet.plan = plan;
+		});
+		onChange();
+	};
+	host.querySelectorAll("[data-plan-query]").forEach((button) => {
+		button.onclick = async (event) => {
+			event.stopPropagation();
+			const wallet = repository.getWallet(walletId);
+			if (!resolveBalanceAdapter(wallet)?.supports.plan) return;
+			if (!getWalletApiKey(walletId)) {
+				toast("warning", "请先在该钱包填写查询密钥");
+				return;
+			}
+			button.textContent = "查询中…";
+			await queryWalletBalance(walletId, false);
+			onChange();
+		};
+	});
+	host.querySelectorAll("[data-plan-enable]").forEach((button) => {
+		button.onclick = (event) => {
+			event.stopPropagation();
+			const adapter = resolveBalanceAdapter(repository.getWallet(walletId));
+			updatePlan((plan) => {
+				plan.enabled = true;
+				if (!plan.windows.length) plan.windows = planWindowsForAdapter(adapter?.id);
+			});
+		};
+	});
+	host.querySelectorAll("[data-plan-disable]").forEach((button) => {
+		button.onclick = (event) => {
+			event.stopPropagation();
+			updatePlan((plan) => {
+				plan.enabled = false;
+			});
+		};
+	});
+	host.querySelectorAll("[data-plan-limit]").forEach((input) => {
+		input.onchange = () => {
+			const index = parseInt(input.getAttribute("data-plan-limit") || "-1", 10);
+			const value = parseFloat(String(input.value || ""));
+			updatePlan((plan) => {
+				const window = plan.windows[index];
+				if (!window) return;
+				window.limit = Number.isFinite(value) && value > 0 ? value : 0;
+			});
+		};
+	});
+	host.querySelectorAll("[data-plan-reset]").forEach((button) => {
+		button.onclick = () => {
+			const index = parseInt(button.getAttribute("data-plan-reset") || "-1", 10);
+			updatePlan((plan) => {
+				const window = plan.windows[index];
+				if (!window) return;
+				window.resetMode = window.resetMode === "calendar" ? "rolling" : "calendar";
+			});
+		};
+	});
+	host.querySelectorAll("[data-plan-remove]").forEach((button) => {
+		button.onclick = () => {
+			const index = parseInt(button.getAttribute("data-plan-remove") || "-1", 10);
+			updatePlan((plan) => {
+				plan.windows.splice(index, 1);
+			});
+		};
+	});
+	host.querySelectorAll("[data-plan-add]").forEach((button) => {
+		button.onclick = () => {
+			const adapter = resolveBalanceAdapter(repository.getWallet(walletId));
+			updatePlan((plan) => {
+				plan.windows.push({
+					id: "custom",
+					label: "",
+					unit: plan.windows[0]?.unit || "token",
+					limit: 0,
+					resetMode: "rolling",
+					hours: 5
+				});
+				if (adapter) plan.label = adapter.label;
+			});
+		};
+	});
+}
+//#endregion
 //#region src/ui/wallet-view.ts
 function getDoc$2() {
 	return window.parent?.document ?? document;
@@ -9644,7 +10925,7 @@ function money(cny, digits = 4) {
 function walletBalanceText(wallet) {
 	const amount = wallet.balance.amount == null || wallet.balance.amount === "" ? NaN : parseFloat(String(wallet.balance.amount));
 	if (!Number.isFinite(amount)) return "未设置";
-	return `${wallet.balance.currency === "USD" ? "$" : "¥"}${amount.toFixed(4)} ${wallet.balance.currency}`;
+	return `${wallet.balance.currency === "USD" ? "$" : "¥"}${amount.toFixed(2)} ${wallet.balance.currency}`;
 }
 function displayToCny(value) {
 	const number = typeof value === "number" ? value : parseFloat(String(value));
@@ -9688,21 +10969,23 @@ function priceField(walletId, modelId, tier, key, value) {
     data-model-id="${esc$2(modelId)}" data-tier="${tier}" data-key="${key}" value="${esc$2(cnyToDisplay(value))}"
     style="width:100%;min-width:72px;padding:5px 6px;border:1px solid var(--ds-border);border-radius:7px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />`;
 }
-function renderModelRows(wallet) {
-	const models = [...wallet.models].sort((a, b) => {
+function renderModelRows(wallet, showHidden = false) {
+	const models = wallet.models.filter((model) => showHidden || model.hidden !== true).sort((a, b) => {
 		return Number(!a.price.priceConfigured) - Number(!b.price.priceConfigured) || a.model.localeCompare(b.model, "zh-CN");
 	});
 	if (!models.length) return "<tr><td colspan=\"7\" style=\"padding:14px;text-align:center;color:var(--ds-text-3);\">尚未识别到模型，可手动添加或等待请求接入</td></tr>";
 	return models.map((model) => {
 		const pending = !model.price.priceConfigured;
 		const canDelete = model.source !== "builtin";
+		const matchLine = model.priceMatch ? "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:3px;\" title=\"来源：" + esc$2(model.priceMatch.provider + " / " + model.priceMatch.catalogModel) + "\">↳ " + esc$2(model.priceMatch.catalogModel) + " · " + Math.round(model.priceMatch.score * 100) + "%</div>" : "";
+		const rowStyle = "border-top:1px solid var(--ds-border);" + (model.hidden === true ? "opacity:0.55;" : "");
 		return `
-      <tr data-wallet-model-row="${esc$2(model.id)}" style="border-top:1px solid var(--ds-border);">
+      <tr data-wallet-model-row="${esc$2(model.id)}" style="${rowStyle}">
         <td style="padding:8px 6px;min-width:180px;">
           <input data-wallet-model-name="1" data-wallet-id="${esc$2(wallet.id)}" data-model-id="${esc$2(model.id)}"
             value="${esc$2(model.model)}"
             style="width:100%;padding:6px 7px;border:1px solid var(--ds-border);border-radius:7px;background:${model.source === "builtin" ? "var(--ds-sidebar-bg)" : "var(--ds-card-inner)"};color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:3px;">${esc$2(model.sourceModel)}${model.aliases.length ? ` · 别名 ${esc$2(model.aliases.join("、"))}` : ""}</div>
+          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:3px;">${esc$2(model.sourceModel)}${model.aliases.length ? ` · 别名 ${esc$2(model.aliases.join("、"))}` : ""}${model.hidden === true ? " · 已隐藏" : ""}</div>
           <label style="display:flex;align-items:center;gap:5px;margin-top:5px;font-size:var(--aus-fs-sm);color:var(--ds-text-3);">
             上下文上限
             <input type="number" min="1" step="1000" data-wallet-context-limit="1" data-wallet-id="${esc$2(wallet.id)}" data-model-id="${esc$2(model.id)}"
@@ -9712,6 +10995,7 @@ function renderModelRows(wallet) {
         </td>
         <td style="padding:8px 6px;white-space:nowrap;">
           <span style="padding:2px 7px;border-radius:999px;background:${pending ? "var(--ds-red-bg)" : model.source === "sync" ? "var(--ds-green-bg)" : "var(--ds-card)"};color:${pending ? "var(--ds-red)" : model.source === "sync" ? "var(--ds-green)" : "var(--ds-text-2)"};font-size:var(--aus-fs-sm);">${sourceLabel(model)}</span>
+          ${matchLine}
         </td>
         <td style="padding:8px 6px;min-width:224px;">
           <div style="display:grid;grid-template-columns:repeat(3,minmax(68px,1fr));gap:4px;">${priceField(wallet.id, model.id, "offpeak", "hit", model.price.offpeak.hit)}${priceField(wallet.id, model.id, "offpeak", "miss", model.price.offpeak.miss)}${priceField(wallet.id, model.id, "offpeak", "output", model.price.offpeak.output)}</div>
@@ -9719,8 +11003,8 @@ function renderModelRows(wallet) {
         <td style="padding:8px 6px;min-width:224px;opacity:${model.price.usePeakPricing ? "1" : "0.45"};">
           <div style="display:grid;grid-template-columns:repeat(3,minmax(68px,1fr));gap:4px;">${priceField(wallet.id, model.id, "peak", "hit", model.price.peak.hit)}${priceField(wallet.id, model.id, "peak", "miss", model.price.peak.miss)}${priceField(wallet.id, model.id, "peak", "output", model.price.peak.output)}</div>
         </td>
-        <td style="padding:8px 6px;text-align:center;"><input type="checkbox" data-wallet-model-peak="1" data-wallet-id="${esc$2(wallet.id)}" data-model-id="${esc$2(model.id)}" ${model.price.usePeakPricing ? "checked" : ""} /></td>
-        <td style="padding:8px 6px;text-align:center;"><input type="checkbox" data-wallet-model-lock="1" data-wallet-id="${esc$2(wallet.id)}" data-model-id="${esc$2(model.id)}" ${model.locked ? "checked" : ""} /></td>
+        <td style="padding:8px 6px;text-align:center;"><input type="checkbox" class="aus-checkbox" data-wallet-model-peak="1" data-wallet-id="${esc$2(wallet.id)}" data-model-id="${esc$2(model.id)}" ${model.price.usePeakPricing ? "checked" : ""} /></td>
+        <td style="padding:8px 6px;text-align:center;"><input type="checkbox" class="aus-checkbox" data-wallet-model-lock="1" data-wallet-id="${esc$2(wallet.id)}" data-model-id="${esc$2(model.id)}" ${model.locked ? "checked" : ""} /></td>
         <td style="padding:8px 6px;text-align:center;">${canDelete ? `<button data-wallet-model-delete="1" data-wallet-id="${esc$2(wallet.id)}" data-model-id="${esc$2(model.id)}" style="padding:4px 8px;border:1px solid var(--ds-red-border);border-radius:7px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">删除</button>` : "—"}</td>
       </tr>`;
 	}).join("");
@@ -9758,12 +11042,18 @@ function renderCredentialPicker(wallet) {
 }
 function renderCatalogPicker(wallet) {
 	const current = WALLET_CATALOG_PROVIDERS.find((item) => item.id === wallet.catalogProvider);
+	const providerVendor = vendorById(wallet.catalogProvider);
+	const providerIcon = providerVendor ? vendorIconSvg(providerVendor.id, 14) : null;
+	const status = walletSyncStatus(wallet);
 	return `
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
     <button data-wallet-catalog-btn="1" data-wallet-id="${esc$2(wallet.id)}" style="display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
       <span style="color:var(--ds-text-2);">价格来源</span>
+      ${providerIcon ? "<span style=\"display:inline-flex;color:var(--ds-text-2);\">" + providerIcon + "</span>" : ""}
       <span style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$2(current?.label || "不自动同步")}</span>
       ${icon("chevron-down", 14)}
     </button>
+    <div style="font-size:var(--aus-fs-sm);color:${status.pending ? "var(--ds-red)" : "var(--ds-text-3)"};max-width:190px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc$2(status.label)}">${esc$2(status.label)}${status.pending ? ` · ${status.pending} 个待匹配` : ""}</div>
     <div id="aus-wallet-catalog-drop-${esc$2(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;right:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:180px;max-height:260px;overflow:auto;">
       ${dropdownHtml(wallet.id, "catalog", [{
 		id: "",
@@ -9774,13 +11064,50 @@ function renderCatalogPicker(wallet) {
 		label: item.label,
 		active: item.id === wallet.catalogProvider
 	}))])}
+    </div>
+    </div>`;
+}
+function renderAdapterPicker(wallet) {
+	const current = BALANCE_ADAPTERS.find((item) => item.id === wallet.balance.adapter);
+	return `
+    <div style="position:relative;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      <button data-wallet-adapter-btn="1" data-wallet-id="${esc$2(wallet.id)}" style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
+        <span style="color:var(--ds-text-2);">查询适配器</span>
+        <span style="font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$2(current?.label || "自动识别")}</span>
+        ${icon("chevron-down", 14)}
+      </button>
+      <input data-wallet-adapter-user-id="1" data-wallet-id="${esc$2(wallet.id)}" value="${esc$2(wallet.balance.userId || "")}" placeholder="用户 ID（new-api 需要）"
+        style="width:150px;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
+      <div id="aus-wallet-adapter-drop-${esc$2(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:36px;left:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;">
+        ${dropdownHtml(wallet.id, "adapter", [{
+		id: "",
+		label: "自动识别",
+		active: !wallet.balance.adapter
+	}, ...BALANCE_ADAPTERS.map((item) => ({
+		id: item.id,
+		label: item.label + (item.experimental ? "（实验）" : ""),
+		active: item.id === wallet.balance.adapter
+	}))])}
+      </div>
     </div>`;
 }
 function renderWalletCard(wallet, history) {
-	const avatarLetter = (() => {
-		const first = String(wallet.name || wallet.endpointDisplay || wallet.endpointLabel || "").trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/^api\./i, "").replace(/^[^0-9a-zA-Z\u4e00-\u9fa5]+/, "").charAt(0);
-		return first ? first.toUpperCase() : "?";
-	})();
+	const balanceAdapter = resolveBalanceAdapter(wallet);
+	const supportsAuto = !!balanceAdapter && (balanceAdapter.supports.balance || balanceAdapter.supports.plan);
+	const visibleModels = wallet.models.filter((model) => model.hidden !== true);
+	const hiddenCount = wallet.models.length - visibleModels.length;
+	const vendor = resolveVendor({
+		sourceType: wallet.sourceType,
+		endpointDisplay: wallet.endpointDisplay,
+		endpointLabel: wallet.endpointLabel,
+		endpointId: wallet.endpointId,
+		models: visibleModels.map((model) => model.model)
+	});
+	const avatarLetter = vendorInitialFallback(wallet.name || wallet.endpointDisplay || wallet.endpointLabel || "");
+	let showHidden = false;
+	try {
+		showHidden = window.parent?.localStorage?.getItem("aus_wallet_show_hidden_v1") === "1";
+	} catch {}
 	const pending = walletPendingModelCount(wallet);
 	const isOfficial = wallet.id === DEEPSEEK_WALLET_ID;
 	const selectedCredential = wallet.credentials.find((item) => item.id === wallet.balance.primaryCredentialId);
@@ -9789,19 +11116,15 @@ function renderWalletCard(wallet, history) {
 		label: "余额",
 		value: walletBalanceText(wallet),
 		title: walletBalanceText(wallet)
-	}, {
-		label: "模型",
-		value: `${wallet.models.length} 个`,
-		title: "已识别模型数量"
 	}];
 	return `
     <section class="ds-card" data-wallet-card="${esc$2(wallet.id)}" style="display:grid;gap:12px;">
       <div class="aus-wallet-header">
-        <div class="aus-wallet-avatar" title="${esc$2(wallet.name)}">${esc$2(avatarLetter)}</div>
+        ${vendor ? `<div class="aus-wallet-avatar" title="${esc$2(vendor.label)}" style="background:${vendor.color};color:#FFFFFF;${vendorIconSvg(vendor.id, 22) ? "padding:0;" : vendor.mark.length > 1 ? "font-size:12px;" : ""}">${vendorIconSvg(vendor.id, 22) || esc$2(vendor.mark)}</div>` : `<div class="aus-wallet-avatar" title="${esc$2(wallet.name)}">${esc$2(avatarLetter)}</div>`}
         <div class="aus-wallet-identity">
           <div class="aus-wallet-name-row">
             <input data-wallet-name="1" data-wallet-id="${esc$2(wallet.id)}" value="${esc$2(wallet.name)}" />
-            <span class="${isOfficial ? "aus-wallet-badge-official" : "aus-wallet-badge-relay"}" style="padding:3px 8px;border-radius:999px;background:${isOfficial ? "var(--ds-green-bg)" : "var(--ds-card-inner)"};color:${isOfficial ? "var(--ds-green)" : "var(--ds-text-2)"};font-size:var(--aus-fs-sm);white-space:nowrap;">${isOfficial ? "DeepSeek 官方" : "中转/自定义"}</span>
+            <span class="${isOfficial ? "aus-wallet-badge-official" : "aus-wallet-badge-relay"}" style="padding:3px 8px;border-radius:999px;background:${isOfficial ? "var(--ds-green-bg)" : "var(--ds-card-inner)"};color:${isOfficial ? "var(--ds-green)" : "var(--ds-text-2)"};font-size:var(--aus-fs-sm);white-space:nowrap;">${isOfficial ? "DeepSeek 官方" : esc$2(vendor?.label || "中转/自定义")}</span>
             ${pending ? `<span style="padding:3px 8px;border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);white-space:nowrap;">${pending} 个待定价</span>` : ""}
           </div>
           <div class="aus-wallet-sub">${esc$2(wallet.endpointDisplay || wallet.endpointLabel || "本机官方接口")} · ${esc$2(wallet.sourceType || "未识别")}</div>
@@ -9811,18 +11134,18 @@ function renderWalletCard(wallet, history) {
         </div>
         <div class="aus-wallet-actions">
           <button class="aus-wallet-icon-btn" data-wallet-toggle="1" data-wallet-id="${esc$2(wallet.id)}" title="${collapsed ? "展开钱包详情" : "收起钱包详情"}" aria-label="${collapsed ? "展开钱包详情" : "收起钱包详情"}">${collapsed ? icon("chevron-down", 16) : icon("chevron-up", 16)}</button>
-          ${wallet.catalogProvider ? `<button class="aus-wallet-icon-btn" data-wallet-sync="1" data-wallet-id="${esc$2(wallet.id)}" title="按价格来源同步模型价格" aria-label="同步价格">${icon("refresh", 16)}</button>` : ""}
+          <button class="aus-wallet-icon-btn" data-wallet-sync="1" data-wallet-id="${esc$2(wallet.id)}" title="${wallet.catalogProvider ? "预览并应用价格同步（按已识别模型模糊匹配）" : "先选择价格来源，再同步价格"}" aria-label="预览价格同步">${icon("refresh", 16)}</button>
           ${isOfficial ? "" : `<button class="aus-wallet-icon-btn is-danger" data-wallet-ignore="1" data-wallet-id="${esc$2(wallet.id)}" title="忽略该钱包（历史与统计保留）" aria-label="忽略钱包">${icon("close", 16)}</button>`}
         </div>
       </div>
 
       <div data-wallet-body="1" style="display:${collapsed ? "none" : "grid"};gap:12px;">
       <div class="aus-wallet-two-col" style="display:grid;grid-template-columns:minmax(250px,1fr) minmax(260px,1fr);gap:10px;">
-        <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;">
+        <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;display:grid;gap:8px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
             <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包余额</div><div style="font-size:17px;font-weight:700;color:var(--ds-text);">${esc$2(walletBalanceText(wallet))}</div></div>
-            <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:${isOfficial ? "pointer" : "not-allowed"};">
-              <input type="checkbox" data-wallet-auto-balance="1" data-wallet-id="${esc$2(wallet.id)}" ${wallet.balance.mode === "auto" ? "checked" : ""} ${isOfficial ? "" : "disabled"} /> 自动校准
+            <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:${supportsAuto ? "pointer" : "not-allowed"};">
+              <input type="checkbox" class="aus-checkbox" data-wallet-auto-balance="1" data-wallet-id="${esc$2(wallet.id)}" ${wallet.balance.mode === "auto" ? "checked" : ""} ${supportsAuto ? "" : "disabled"} /> 自动校准
             </label>
           </div>
           <div style="display:flex;gap:6px;align-items:center;position:relative;">
@@ -9840,7 +11163,7 @@ function renderWalletCard(wallet, history) {
 	}])}
             </div>
           </div>
-          ${isOfficial ? `
+          ${supportsAuto ? `
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;position:relative;">
               ${renderCredentialPicker(wallet)}
               <button data-wallet-calibrate="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:7px 11px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;">立即校准</button>
@@ -9849,37 +11172,41 @@ function renderWalletCard(wallet, history) {
               <input type="password" data-wallet-api-key="1" data-wallet-id="${esc$2(wallet.id)}" value="" placeholder="${getWalletApiKey(wallet.id) ? "已保存钱包校准密钥（留空不修改）" : "填写钱包校准密钥"}" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
               <button data-wallet-save-key="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">保存密钥</button>
             </div>
-            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">自动校准仅支持 DeepSeek 官方，勾选后按设置页的校准间隔自动查询；主密钥：${esc$2(selectedCredential?.label || "未指定")}</div>
+            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">查询方式：${esc$2(balanceAdapter?.label || "无")}${balanceAdapter?.note ? "（" + esc$2(balanceAdapter.note) + "）" : ""}；勾选「自动校准」后按设置页校准间隔轮询；主密钥：${esc$2(selectedCredential?.label || "未指定")}</div>
             <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc$2(item.label)).join("、") : "未识别"}</div>
-          ` : `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">该接入暂不支持自动余额校准，请手工维护余额。</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc$2(item.label)).join("、") : "未识别"}</div>`}
+          ` : `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">该接入暂无可用查询适配器，可直接手工维护余额；中转站可在下方「查询适配器」中选择 new-api 并填写系统访问令牌与用户 ID。</div>`}
+          ${renderAdapterPicker(wallet)}
+          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc$2(item.label)).join("、") : "未识别"}</div>
         </div>
 
-        <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;display:grid;gap:8px;position:relative;">
+        <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;display:grid;gap:8px;position:relative;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
             <div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">峰谷规则</div>
             ${renderCatalogPicker(wallet)}
           </div>
           <div style="display:grid;gap:6px;">${renderPeakRows(wallet)}</div>
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-            <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" data-wallet-weekend="1" data-wallet-id="${esc$2(wallet.id)}" ${wallet.weekendOffpeak ? "checked" : ""} /> 周末全天按低谷</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" class="aus-checkbox" data-wallet-weekend="1" data-wallet-id="${esc$2(wallet.id)}" ${wallet.weekendOffpeak ? "checked" : ""} /> 周末全天按低谷</label>
             <button data-wallet-add-peak="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:6px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加时段</button>
           </div>
           ${isOfficial ? `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);line-height:1.6;">官方接口按 DeepSeek 规则计费：中国法定节假日全天空闲（内置数据覆盖 ${CN_HOLIDAY_COVERAGE_LABEL}），调休上班的周末同样按空闲计价，可在设置中补充额外空闲日期。</div>` : ""}
         </div>
       </div>
 
-      <div style="border:1px solid var(--ds-border);border-radius:10px;padding:10px;overflow:hidden;">
+      <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;overflow:hidden;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
           <div><div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">模型与价格</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">单位 ${getDisplayCurrency().code}/百万 tokens；模型改名会保留旧名别名</div></div>
-          <button data-wallet-add-model="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加模型</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;"><button data-wallet-toggle-hidden="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;display:${hiddenCount ? "inline-flex" : "none"};align-items:center;gap:4px;">${showHidden ? "隐藏" : "显示"} ${hiddenCount} 个隐藏条目</button><button data-wallet-add-model="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加模型</button></div>
         </div>
         <div style="width:100%;overflow-x:auto;">
           <table style="width:100%;min-width:900px;border-collapse:collapse;font-size:var(--aus-fs-sm);">
             <thead><tr style="text-align:center;color:var(--ds-text-2);"><th style="text-align:left;padding:5px 6px;">模型</th><th style="padding:5px 6px;">来源</th><th style="padding:5px 6px;">非峰（命中/未命中/输出）</th><th style="padding:5px 6px;">高峰（命中/未命中/输出）</th><th style="padding:5px 6px;">峰谷</th><th style="padding:5px 6px;">锁定</th><th style="padding:5px 6px;">操作</th></tr></thead>
-            <tbody>${renderModelRows(wallet)}</tbody>
+            <tbody>${renderModelRows(wallet, showHidden)}</tbody>
           </table>
         </div>
       </div>
+
+      ${hasPlanCapability(wallet) ? renderPlanBlock(wallet, history) : ""}
       </div>
     </section>`;
 }
@@ -9905,6 +11232,50 @@ async function renderWalletView() {
 	const ignored = repository.getIgnoredWalletIds();
 	const ignoredSet = new Set(ignored);
 	const active = wallets.filter((wallet) => !ignoredSet.has(wallet.id));
+	const planCapable = active.filter((wallet) => resolveBalanceAdapter(wallet)?.supports.plan === true);
+	const planRemoteCount = planCapable.filter((wallet) => (wallet.plan?.remote || []).length > 0).length;
+	let walletFilter = "all";
+	let walletQuery = "";
+	try {
+		walletFilter = window.parent?.localStorage?.getItem("aus_wallet_filter_v1") || "all";
+		walletQuery = window.parent?.localStorage?.getItem("aus_wallet_query_v1") || "";
+	} catch {}
+	const filters = [
+		{
+			id: "all",
+			label: "全部",
+			count: active.length
+		},
+		{
+			id: "pending",
+			label: "有待定价",
+			count: active.filter((wallet) => walletPendingModelCount(wallet) > 0).length
+		},
+		{
+			id: "plan",
+			label: "可查套餐",
+			count: planCapable.length
+		},
+		{
+			id: "official",
+			label: "官方",
+			count: active.filter((wallet) => wallet.id === DEEPSEEK_WALLET_ID).length
+		}
+	];
+	const matchesFilter = (wallet) => {
+		if (walletFilter === "pending") return walletPendingModelCount(wallet) > 0;
+		if (walletFilter === "plan") return resolveBalanceAdapter(wallet)?.supports.plan === true;
+		if (walletFilter === "official") return wallet.id === DEEPSEEK_WALLET_ID;
+		return true;
+	};
+	const toolbar = `
+      <div class="ds-card" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;">
+        <input data-wallet-search="1" value="${esc$2(walletQuery)}" placeholder="搜索钱包 / 地址 / 模型" style="flex:1;min-width:180px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
+        ${filters.map((item) => "<button data-wallet-filter=\"" + item.id + "\" style=\"padding:6px 11px;border:1px solid " + (walletFilter === item.id ? "var(--ds-black)" : "var(--ds-border)") + ";border-radius:999px;background:" + (walletFilter === item.id ? "var(--ds-black)" : "var(--ds-card-inner)") + ";color:" + (walletFilter === item.id ? "var(--ds-black-text)" : "var(--ds-text)") + ";font-size:var(--aus-fs-sm);cursor:pointer;\">" + esc$2(item.label) + (item.count != null ? " " + item.count : "") + "</button>").join("")}
+        <button data-wallet-expand-all="1" style="padding:6px 11px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">展开全部</button>
+        <button data-wallet-collapse-all="1" style="padding:6px 11px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">收起全部</button>
+      </div>`;
+	const visibleWallets = active.filter(matchesFilter);
 	let balanceCny = 0;
 	let balanceCount = 0;
 	let pending = 0;
@@ -9918,12 +11289,14 @@ async function renderWalletView() {
 	}
 	host.innerHTML = `
     <div style="display:grid;gap:12px;">
-      <div class="ds-card aus-wallet-summary" id="aus-wallet-summary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+      <div class="ds-card aus-wallet-summary" id="aus-wallet-summary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
         <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包余额合计</div><div style="font-size:20px;font-weight:700;color:var(--ds-text);margin-top:4px;">${money(balanceCny, 2)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">${balanceCount} 个钱包已设置余额</div></div>
         <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包数量</div><div style="font-size:20px;font-weight:700;color:var(--ds-text);margin-top:4px;">${active.length}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">已忽略 ${ignored.length} 个</div></div>
         <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">待定价模型</div><div style="font-size:20px;font-weight:700;color:${pending ? "var(--ds-red)" : "var(--ds-green)"};margin-top:4px;">${pending}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">保存价格后自动重算</div></div>
+        <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">可查套餐</div><div style="font-size:20px;font-weight:700;color:var(--ds-text);margin-top:4px;">${planCapable.length}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;">${planRemoteCount ? `已查到 ${planRemoteCount} 个` : "仅展示可查询的厂商"}</div></div>
       </div>
-      ${active.map((wallet) => renderWalletCard(wallet, history)).join("")}
+      ${toolbar}
+      ${visibleWallets.length ? visibleWallets.map((wallet) => renderWalletCard(wallet, history)).join("") : "<div class=\"ds-card\" style=\"text-align:center;color:var(--ds-text-3);font-size:var(--aus-fs-sm);padding:18px;\">没有符合筛选条件的钱包</div>"}
       <div class="ds-card">
         <div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);margin-bottom:2px;">已忽略接入</div>
         ${renderIgnoredWallets(ignored, wallets)}
@@ -9992,7 +11365,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-DEVpZGmD.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-Bkp12Xv2.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -10028,9 +11401,24 @@ function bindWalletView(doc) {
 		};
 	});
 	doc.querySelectorAll("[data-wallet-sync]").forEach((button) => {
-		button.onclick = async () => {
-			button.textContent = "同步中…";
-			await syncPricingFromModelsDev({ silent: false });
+		button.onclick = (event) => {
+			event.stopPropagation();
+			openWalletSyncPreview({
+				walletId: button.getAttribute("data-wallet-id") || void 0,
+				onDone: () => {
+					renderWalletView();
+				}
+			}).catch(() => {});
+		};
+	});
+	doc.querySelectorAll("[data-wallet-toggle-hidden]").forEach((button) => {
+		button.onclick = (event) => {
+			event.stopPropagation();
+			try {
+				const storage = window.parent?.localStorage ?? null;
+				const current = storage?.getItem("aus_wallet_show_hidden_v1") === "1";
+				storage?.setItem("aus_wallet_show_hidden_v1", current ? "0" : "1");
+			} catch {}
 			renderWalletView();
 		};
 	});
@@ -10236,6 +11624,26 @@ function bindWalletView(doc) {
 			dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
 		};
 	});
+	doc.querySelectorAll("[data-wallet-adapter-btn]").forEach((button) => {
+		button.onclick = (event) => {
+			event.stopPropagation();
+			const walletId = button.getAttribute("data-wallet-id");
+			const dropdown = doc.getElementById("aus-wallet-adapter-drop-" + walletId);
+			if (!dropdown) return;
+			closeOtherDropdowns(dropdown.id);
+			dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
+		};
+	});
+	doc.querySelectorAll("[data-wallet-adapter-user-id]").forEach((input) => {
+		input.onchange = () => {
+			const walletId = input.getAttribute("data-wallet-id");
+			const value = String(input.value || "").trim();
+			if (!walletId) return;
+			repository.updateWallet(walletId, (wallet) => {
+				wallet.balance.userId = value || null;
+			});
+		};
+	});
 	doc.querySelectorAll("[data-wallet-catalog-btn]").forEach((button) => {
 		button.onclick = (event) => {
 			event.stopPropagation();
@@ -10269,6 +11677,9 @@ function bindWalletView(doc) {
 			else if (kind === "catalog") repository.updateWallet(walletId, (wallet) => {
 				wallet.catalogProvider = value || null;
 			});
+			else if (kind === "adapter") repository.updateWallet(walletId, (wallet) => {
+				wallet.balance.adapter = value || null;
+			});
 			else if (kind === "credential") repository.updateWallet(walletId, (wallet) => {
 				wallet.balance.primaryCredentialId = value || null;
 			});
@@ -10276,11 +11687,65 @@ function bindWalletView(doc) {
 			renderWalletView();
 		};
 	});
+	const searchInput = doc.querySelector("[data-wallet-search]");
+	if (searchInput) {
+		const applySearch = () => {
+			const keyword = String(searchInput.value || "").trim().toLowerCase();
+			try {
+				window.parent?.localStorage?.setItem("aus_wallet_query_v1", keyword);
+			} catch {}
+			doc.querySelectorAll("[data-wallet-card]").forEach((card) => {
+				const walletId = card.getAttribute("data-wallet-card");
+				const wallet = repository.getWallet(walletId);
+				if (!wallet) return;
+				const hay = [
+					wallet.name,
+					wallet.endpointDisplay,
+					wallet.endpointLabel,
+					...wallet.models.map((model) => model.model)
+				].filter(Boolean).join(" ").toLowerCase();
+				card.style.display = !keyword || hay.includes(keyword) ? "" : "none";
+			});
+		};
+		searchInput.oninput = applySearch;
+		if (String(searchInput.value || "").trim()) applySearch();
+	}
+	doc.querySelectorAll("[data-wallet-filter]").forEach((button) => {
+		button.onclick = () => {
+			try {
+				window.parent?.localStorage?.setItem("aus_wallet_filter_v1", button.getAttribute("data-wallet-filter") || "all");
+			} catch {}
+			renderWalletView();
+		};
+	});
+	doc.querySelectorAll("[data-wallet-expand-all]").forEach((button) => {
+		button.onclick = () => {
+			const next = repository.getWallets().map((wallet) => cloneWallet(wallet));
+			next.forEach((wallet) => {
+				wallet.collapsed = false;
+			});
+			repository.replaceWallets(next);
+			renderWalletView();
+		};
+	});
+	doc.querySelectorAll("[data-wallet-collapse-all]").forEach((button) => {
+		button.onclick = () => {
+			const next = repository.getWallets().map((wallet) => cloneWallet(wallet));
+			next.forEach((wallet) => {
+				wallet.collapsed = true;
+			});
+			repository.replaceWallets(next);
+			renderWalletView();
+		};
+	});
+	for (const wallet of repository.getWallets()) bindPlanBlock(doc, wallet.id, () => {
+		renderWalletView();
+	});
 	if (!bindWalletView._outsideBound) {
 		bindWalletView._outsideBound = true;
 		doc.addEventListener("click", (event) => {
 			const target = event.target;
-			if (!target?.closest?.("[data-wallet-dropdown]") && !target?.closest?.("[data-wallet-currency-btn]") && !target?.closest?.("[data-wallet-catalog-btn]") && !target?.closest?.("[data-wallet-credential-btn]")) closeDropdowns();
+			if (!target?.closest?.("[data-wallet-dropdown]") && !target?.closest?.("[data-wallet-currency-btn]") && !target?.closest?.("[data-wallet-catalog-btn]") && !target?.closest?.("[data-wallet-credential-btn]") && !target?.closest?.("[data-wallet-adapter-btn]")) closeDropdowns();
 		});
 	}
 }
@@ -10754,7 +12219,7 @@ function renderHistoryInner(doc, fullHist) {
       </div>
       <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;margin-top:8px;border-top:1px solid var(--ds-border);padding-top:8px;max-height:min(520px,60vh);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;flex-direction:column;gap:8px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
+          <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;">
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">基础信息</div>
             <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:6px;font-size:11px;">
               <div><div style="color:var(--ds-text-2);font-size:10px;">模型</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${esc$2(h.model || "—")}</div></div>
@@ -10765,7 +12230,7 @@ function renderHistoryInner(doc, fullHist) {
               <div><div style="color:var(--ds-text-2);font-size:10px;">时间</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${esc$2(recordTimeText)}</div></div>
             </div>
           </div>
-            <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
+            <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;">
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">性能</div>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;font-size:11px;">
               <div><div style="color:var(--ds-text-2);font-size:10px;">耗时</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${((h.duration || 0) / 1e3).toFixed(1)}s</div></div>
@@ -10782,7 +12247,7 @@ function renderHistoryInner(doc, fullHist) {
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
+          <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;">
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">Token 消耗</div>
             <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:6px;font-size:11px;">
               <div><div style="color:var(--ds-text-2);font-size:10px;">缓存命中</div><div style="font-weight:600;color:var(--ds-green);margin-top:2px;">${(h.cache_hit_tokens || 0).toLocaleString()}</div></div>
@@ -10792,7 +12257,7 @@ function renderHistoryInner(doc, fullHist) {
               <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">思维链 Token</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${h.thinkTokens || 0}</div></div>
             </div>
           </div>
-          <div style="background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:10px;">
+          <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;">
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">费用明细</div>
             <div style="display:grid;gap:6px;margin-top:6px;font-size:11px;">
               <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输入费用</span><span style="font-weight:600;color:var(--ds-text);">${in6}</span></div>
@@ -10949,7 +12414,7 @@ function renderHistory(doc, s) {
 	historyLoading = true;
 	(async () => {
 		try {
-			const mod = await import("./persistence-C4IJVd-B.js").then((n) => n.s);
+			const mod = await import("./persistence-CaWdvByH.js").then((n) => n.l);
 			if (!mod.getAllHistory) return;
 			const all = await mod.getAllHistory();
 			if (!all || !all.length) return;
@@ -11090,15 +12555,15 @@ function createPanel() {
     </div>
     <div id="aus-panel-body" style="flex:1;display:flex;flex-direction:row;overflow:hidden;min-height:0;">
     <div id="aus-sidebar" style="width:260px;flex-shrink:0;background:var(--ds-sidebar-bg);border-right:1px solid var(--ds-border);display:flex;flex-direction:column;overflow:hidden;">
-      <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;">
-        <div style="display:flex;align-items:center;gap:12px;min-width:0;" id="aus-brand">
+      <div id="aus-brand-row" style="height:56px;display:flex;align-items:flex-start;justify-content:space-between;padding:0 14px;flex-shrink:0;">
+        <div style="display:flex;align-items:flex-start;gap:12px;min-width:0;margin-top:18px;" id="aus-brand">
           <span class="aus-brand-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--ds-orange);">${icon("brand", 20)}</span>
           <div style="display:flex;flex-direction:column;min-width:0;">
-            <span style="font-size:15px;font-weight:700;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
-            <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);white-space:nowrap;">v3.1.6</span>
+            <span style="font-size:15px;font-weight:700;line-height:20px;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
+            <span style="font-size:var(--aus-fs-sm);line-height:16px;color:var(--ds-text-2);white-space:nowrap;">v3.1.7</span>
           </div>
         </div>
-        <button id="aus-sidebar-toggle" style="width:30px;height:30px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;font-size:var(--aus-fs-base);padding:0;line-height:1;">${icon("chevron-left", 14)}</button>
+        <button id="aus-sidebar-toggle" style="width:30px;height:30px;margin-top:13px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;font-size:var(--aus-fs-base);padding:0;line-height:1;">${icon("chevron-left", 14)}</button>
       </div>
       <div style="flex:1;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:4px;">
         <div class="aus-nav-group" style="display:flex;flex-direction:column;gap:4px;">
@@ -11117,9 +12582,9 @@ function createPanel() {
       </div>
     </div>
     <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--ds-panel-bg);">
-      <div id="aus-page-header" style="flex-shrink:0;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--ds-border);background:var(--ds-card-inner);">
-        <span id="aus-page-title" style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">用量概览</span>
-        <button id="aus-panel-close" style="width:32px;height:32px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:var(--aus-fs-base);">${icon("close", 16)}</button>
+      <div id="aus-page-header" style="flex-shrink:0;height:56px;display:flex;align-items:flex-start;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--ds-border);background:var(--ds-card-inner);">
+        <span id="aus-page-title" style="font-size:var(--aus-fs-base);font-weight:600;line-height:20px;margin-top:18px;color:var(--ds-text);">用量概览</span>
+        <button id="aus-panel-close" style="width:32px;height:32px;margin-top:12px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:var(--aus-fs-base);">${icon("close", 16)}</button>
       </div>
       <div id="aus-content-body" style="flex:1;display:flex;flex-direction:row;overflow:hidden;min-height:0;position:relative;">
       <div id="aus-main" style="flex:1;min-width:0;overflow:auto;padding:20px;background:var(--ds-panel-bg);">
@@ -11153,10 +12618,10 @@ function createPanel() {
             <div id="aus-chat-summary-overview" class="ds-card" style="margin-top:12px;overflow:auto;">
               <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:8px;">按对话统计</div>
               <table style="width:100%;border-collapse:collapse;font-size:var(--aus-fs-sm);white-space:nowrap;min-width:720px;">
-                <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">对话</th><th style="padding:6px 8px;">轮次</th><th style="padding:6px 8px;">命中</th><th style="padding:6px 8px;">未命中</th><th style="padding:6px 8px;">输出</th><th style="padding:6px 8px;">总 Tokens</th><th style="padding:6px 8px;">总费用</th><th style="padding:6px 8px;">平均 Token/轮</th><th style="padding:6px 8px;">平均命中率</th></tr></thead>
+                <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">对话</th><th data-sort-key="count" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">轮次<span class="aus-sort-ind"></span></th><th data-sort-key="hit" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">命中<span class="aus-sort-ind"></span></th><th data-sort-key="miss" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">未命中<span class="aus-sort-ind"></span></th><th data-sort-key="out" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输出<span class="aus-sort-ind"></span></th><th data-sort-key="total" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总 Tokens<span class="aus-sort-ind"></span></th><th data-sort-key="cost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总费用<span class="aus-sort-ind"></span></th><th data-sort-key="avgTokens" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均 Token/轮<span class="aus-sort-ind"></span></th><th data-sort-key="avgHitRate" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均命中率<span class="aus-sort-ind"></span></th></tr></thead>
                 <tbody id="aus-chat-summary-tbody"><tr><td colspan="9" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
               </table>
-              <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">按总 Token 倒序 · 数据来源为全部历史（不受统计页筛选影响）</div>
+              <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">默认按总 Tokens 倒序，点击表头可切换排序 · 数据来源为全部历史（不受统计页筛选影响）</div>
             </div>
             </div>
            <div data-view="stats" style="display:none;">
@@ -11194,7 +12659,7 @@ function createPanel() {
                 <div id="aus-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
             </div>
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+            <div id="aus-stats-three" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
               <div class="ds-card"><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">消费金额</div><div id="aus-stats-cost" style="font-size:22px;font-weight:700;color:var(--ds-text);margin-top:6px;">¥0.00 CNY</div></div>
               <div class="ds-card"><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">API 请求次数</div><div id="aus-stats-req" style="font-size:22px;font-weight:700;color:var(--ds-text);margin-top:6px;">0</div></div>
               <div class="ds-card"><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">Tokens</div><div id="aus-stats-tok" style="font-size:22px;font-weight:700;color:var(--ds-text);margin-top:6px;">0</div></div>
@@ -11209,8 +12674,8 @@ function createPanel() {
             </div>
             <div class="ds-card" style="margin-top:12px;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">自定义图表</span><div style="display:flex;gap:8px;position:relative;"><div id="aus-chart-y-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span style="color:var(--ds-text-2);">Y</span><span id="aus-chart-y-label" style="font-weight:600;color:var(--ds-text);">总费用</span>${icon("chevron-down", 14)}</div><div id="aus-chart-x-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span style="color:var(--ds-text-2);">X</span><span id="aus-chart-x-label" style="font-weight:600;color:var(--ds-text);">每日</span>${icon("chevron-down", 14)}</div><div id="aus-chart-y-dropdown" style="display:none;position:absolute;top:34px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;"></div><div id="aus-chart-x-dropdown" style="display:none;position:absolute;top:34px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:140px;"></div></div></div><div id="aus-stats-chart" style="height:300px;"></div></div>
             <div id="aus-extra-charts" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px;">
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">Token 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-y-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-y-label-token">3 项</span>${icon("chevron-down", 14)}</div><div id="aus-extra-x-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-token">轮次</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-y-drop-token" style="display:none;position:absolute;top:32px;left:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:180px;max-height:200px;overflow:auto;"></div><div id="aus-extra-x-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-token" style="height:220px;"></div></div>
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">费用 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-y-cost" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-y-label-cost">1 项</span>${icon("chevron-down", 14)}</div><div id="aus-extra-x-cost" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-cost">轮次</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-y-drop-cost" style="display:none;position:absolute;top:32px;left:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:180px;max-height:200px;overflow:auto;"></div><div id="aus-extra-x-drop-cost" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-cost" style="height:220px;"></div></div>
+              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">Token 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-y-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-y-label-token">3 项</span>${icon("chevron-down", 14)}</div><div id="aus-extra-x-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-token">轮次</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-y-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:180px;max-height:200px;overflow:auto;"></div><div id="aus-extra-x-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-token" style="height:220px;"></div></div>
+              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">费用 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-y-cost" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-y-label-cost">1 项</span>${icon("chevron-down", 14)}</div><div id="aus-extra-x-cost" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-cost">轮次</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-y-drop-cost" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:180px;max-height:200px;overflow:auto;"></div><div id="aus-extra-x-drop-cost" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-cost" style="height:220px;"></div></div>
               <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">缓存命中 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-x-hit" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-hit">轮次</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-x-drop-hit" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-hit" style="height:220px;"></div></div>
               <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">API请求数 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-x-req" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-req">每日</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-x-drop-req" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-req" style="height:220px;"></div></div>
               <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">耗时与速率 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-x-dur" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-dur">轮次</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-x-drop-dur" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-dur" style="height:220px;"></div></div>
@@ -11334,9 +12799,9 @@ function createPanel() {
           <div data-view="help" style="display:none;">
             <div style="display:grid;gap:12px;">
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#FF6A00;font-weight:600;margin-bottom:6px;">完整使用文档</div><div style="color:var(--ds-text-2);">详细说明各页面、筛选、钱包、定价、同步、隐私与常见问题。</div><a href="https://janmk1453.github.io/Api-Usage/" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;margin-top:10px;padding:8px 14px;border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);text-decoration:none;font-size:var(--aus-fs-base);font-weight:600;">前往完整使用文档</a></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#DC2626;font-weight:600;margin-bottom:6px;">隐私声明（完整版：<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:#DC2626;text-decoration:underline;">https://janmk1453.github.io/Api-Usage/#privacy</a>）</div><div style="color:var(--ds-text-2);display:grid;gap:6px;"><div>本扩展有且只能获得用户在酒馆本身中填写的：密钥条目的编号、用户备注和掩码末三位，仅用于独立区分请求来源，不会且无法读取、保存或上传完整明文密钥。</div><div>用户储存在酒馆本身的密钥是安全的，本扩展无法获取真实密钥。</div><div>用户主动填入本扩展的校准密钥是实际可用的密钥，且仅会被用于查询 DeepSeek 官方余额，不会额外造成扣费或消耗；它仅经 XOR 混淆后存放于 SillyTavern，不进入历史记录、统计、日志、导入导出或 WebDAV。自动校准时仅由浏览器直接发送至 <a href="https://api.deepseek.com/user/balance" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">https://api.deepseek.com/user/balance</a> API 查询。</div><div>XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。</div><div>本扩展完整代码开源可审查。</div><div style="margin-top:2px;padding-top:6px;border-top:1px solid var(--ds-border);font-weight:600;color:#DC2626;">免责声明（完整版见上方链接）</div><div>本扩展不对功能“价格来源”、“自动同步”等利用 <a href="https://models.dev" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 获取的数据中出现或可能出现的商业化中转站负责；我们不建议使用任何商业化中转站，尽管我们已经尽力筛选数据，但由于对大量数据进行完全筛选难以实现，因此我们不对可能出现的任何商业化中转站名称负责，不构成推荐，和 models.dev 或任何中转站没有商业往来，坚定不移的反对商业化。</div><div>我们将尽可能维护扩展的安全和隐私性，但本扩展不对因酒馆/本扩展的安全漏洞或因间接原因导致的任何形式的密钥泄露及产生的损失负责。</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0BA25E;font-weight:600;margin-bottom:6px;">钱包</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 扩展按识别到的接入链接自动创建和汇总钱包，默认始终保留 DeepSeek 官方钱包；同名链接下识别的密钥和模型会归入同一钱包。</div><div>2. 每个钱包可独立维护名称、余额、模型价格、峰谷规则和价格来源；钱包默认收起，展开状态按钱包记忆。价格来源仅展示第一方模型厂商，不展示中转站或聚合平台。</div><div>3. 请求进入后会先匹配所属钱包，再使用该钱包的模型价格和峰谷规则计费，并从对应钱包余额预扣；未配置价格的模型先记零费用，保存或同步价格后自动重算冷热历史。</div><div>4. 自动余额校准仅支持 DeepSeek 官方直连，校准密钥需在钱包内单独填写；其他接入可使用手工余额，多个密钥不会自动相加。</div><div>5. 删除钱包会进入“已忽略接入”，后续请求不会自动重建、不参与余额合计，历史记录仍保留归属，需要时可恢复显示。</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（余额查询仅支持 DeepSeek 官方）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#DC2626;font-weight:600;margin-bottom:6px;">隐私声明（完整版：<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:#DC2626;text-decoration:underline;">https://janmk1453.github.io/Api-Usage/#privacy</a>）</div><div style="color:var(--ds-text-2);display:grid;gap:6px;"><div>本扩展有且只能获得用户在酒馆本身中填写的：密钥条目的编号、用户备注和掩码末三位，仅用于独立区分请求来源，不会且无法读取、保存或上传完整明文密钥。</div><div>用户储存在酒馆本身的密钥是安全的，本扩展无法获取真实密钥。</div><div>用户主动填入本扩展的校准密钥是实际可用的密钥，且仅会被用于查询该钱包所对应厂商的余额或套餐额度接口（DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita、智谱 GLM、MiniMax、以及用户自填的 new-api 中转站），不会额外造成扣费或消耗；它仅经 XOR 混淆后存放于 SillyTavern，不进入历史记录、统计、日志、导入导出或 WebDAV。查询由浏览器直连厂商接口，不经过任何第三方代理；对未开放跨域（CORS）的厂商会直接失败并提示，扩展不会绕过该限制。</div><div>XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。</div><div>本扩展完整代码开源可审查。</div><div style="margin-top:2px;padding-top:6px;border-top:1px solid var(--ds-border);font-weight:600;color:#DC2626;">免责声明（完整版见上方链接）</div><div>本扩展不对功能“价格来源”、“自动同步”等利用 <a href="https://models.dev" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 获取的数据中出现或可能出现的商业化中转站负责；我们不建议使用任何商业化中转站，尽管我们已经尽力筛选数据，但由于对大量数据进行完全筛选难以实现，因此我们不对可能出现的任何商业化中转站名称负责，不构成推荐，和 models.dev 或任何中转站没有商业往来，坚定不移的反对商业化。</div><div>「套餐额度」中的本地估算基于本扩展记录的历史数据推算，不包含其他设备或其他客户端的消耗，可能与实际剩余额度有偏差，仅供展示参考，不参与计费、导出与云同步，不能作为账单依据；对没有公开接口或未开放跨域的厂商（Claude Code、Codex、OpenCode、GitHub Copilot、Cursor、讯飞星辰等），扩展不提供、也不会绕过限制去提供自动查询。</div><div>界面中的厂商图标与名称商标归各自所有者，仅用于标识接入来源，不构成任何关联、合作或背书；图标数据内联自 simple-icons（CC0 发布）。</div><div>我们将尽可能维护扩展的安全和隐私性，但本扩展不对因酒馆/本扩展的安全漏洞或因间接原因导致的任何形式的密钥泄露及产生的损失负责。</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0BA25E;font-weight:600;margin-bottom:6px;">钱包</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 扩展按识别到的接入链接自动创建和汇总钱包，默认始终保留 DeepSeek 官方钱包；同名链接下识别的密钥和模型会归入同一钱包。</div><div>2. 每个钱包可独立维护名称、余额、模型价格、峰谷规则和价格来源；钱包默认收起，展开状态按钱包记忆。价格来源仅展示第一方模型厂商，不展示中转站或聚合平台；同步时只按钱包里已识别的模型名做模糊匹配后写入该模型价格，不会把供应商目录里的模型整批加入钱包。</div><div>3. 请求进入后会先匹配所属钱包，再使用该钱包的模型价格和峰谷规则计费，并从对应钱包余额预扣；未配置价格的模型先记零费用，保存或同步价格后自动重算冷热历史。</div><div>4. 余额查询按「查询适配器」工作：DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita 可查余额，智谱 GLM 与 MiniMax 可查套餐额度，new-api 中转可用「系统访问令牌 + 用户 ID」查订阅额度；密钥在该钱包内单独填写，多个密钥不会自动相加。</div><div>5. 删除钱包会进入“已忽略接入”，后续请求不会自动重建、不参与余额合计，历史记录仍保留归属，需要时可恢复显示。</div><div>6. 「套餐额度」只对能查询到额度的厂商显示，查到哪个展示哪个；本地估算需手动启用，仅作参考，不参与计费。</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（按钱包内的「查询适配器」查询，支持多家厂商）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前（DeepSeek）高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div><div>3. DeepSeek 官方规则：周一至周五（不含中国法定节假日）9:00-12:00、14:00-18:00 为高峰，其余时段（含周末、中国法定节假日全天）为空闲；调休上班的周末同样按空闲计费</div><div>4. 内置中国法定节假日数据覆盖 ${CN_HOLIDAY_COVERAGE_LABEL}，超出范围的年份可在设置中按日期补充“额外空闲日期”</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#DB2777;font-weight:600;margin-bottom:6px;">🔄 消息对比</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中找到想对比的两条消息，前者点“旧”，后者点“新”</div><div>2. 系统并排显示请求消息的文字差异</div><div>3. 差异点即缓存发散起始位置（前 N 条相同为缓存命中段）</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 切换时间、模型（可多选）、对话、接入类型和 API 密钥查看不同范围的统计</div><div>2. 多图表展示多模请求参数，悬浮查看分模型明细</div></div></div>
@@ -11364,7 +12829,7 @@ function createPanel() {
                   </div>
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:var(--aus-fs-sm);">检查更新</button>
                   <button id="aus-run-update" class="ds-btn-pill" style="display:none;padding:6px 14px;font-size:var(--aus-fs-sm);">立即更新</button>
-                  <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">当前 v3.1.6 · 每 1 小时自动检查</span>
+                  <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">当前 v3.1.7 · 每 1 小时自动检查</span>
                 </div>
                 <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">可选择 main（稳定）或 dev（测试）分支获取更新，默认 main；更新完成后自动刷新网页。</div>
               </div>
@@ -11390,7 +12855,7 @@ function createPanel() {
 	doc.body.appendChild(overlay);
 	doc.body.appendChild(panel);
 	try {
-		import("./update-CZCvbZd5.js").then((mod) => mod.syncUpdateIndicators?.());
+		import("./update-tW9dhmg5.js").then((mod) => mod.syncUpdateIndicators?.());
 	} catch {}
 	try {
 		applyTheme(theme);
@@ -11531,7 +12996,7 @@ function createPanel() {
 		initForecastView();
 	} catch {}
 	try {
-		import("./update-CZCvbZd5.js").then((m) => {
+		import("./update-tW9dhmg5.js").then((m) => {
 			const branchBtn = doc.getElementById("aus-update-branch-btn");
 			const branchLabel = doc.getElementById("aus-update-branch-label");
 			const branchDrop = doc.getElementById("aus-update-branch-dropdown");
@@ -11570,7 +13035,7 @@ function createPanel() {
 		if (updBtn) updBtn.onclick = () => {
 			updBtn.textContent = "检查中…";
 			updBtn.setAttribute("disabled", "");
-			import("./update-CZCvbZd5.js").then((m) => m.checkUpdate(true).finally(() => {
+			import("./update-tW9dhmg5.js").then((m) => m.checkUpdate(true).finally(() => {
 				updBtn.textContent = "检查更新";
 				updBtn.removeAttribute("disabled");
 			}));
@@ -11580,7 +13045,7 @@ function createPanel() {
 			if (runUpdBtn.hasAttribute("disabled")) return;
 			runUpdBtn.textContent = "更新中…";
 			runUpdBtn.setAttribute("disabled", "");
-			import("./update-CZCvbZd5.js").then((m) => m.updateSelf()).then((res) => {
+			import("./update-tW9dhmg5.js").then((m) => m.updateSelf()).then((res) => {
 				if (res.ok && res.changed) {
 					const bannerEl = doc.getElementById("aus-update-banner");
 					if (bannerEl) {
@@ -11670,10 +13135,10 @@ function openPanel() {
 	panelOpen = true;
 	refreshUI();
 	try {
-		import("./collector-BJ9e-sSf.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-BIe6APid.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
-		import("./update-CZCvbZd5.js").then((m) => m.maybeAutoCheck());
+		import("./update-tW9dhmg5.js").then((m) => m.maybeAutoCheck());
 	} catch {}
 }
 function closePanel() {
@@ -11842,7 +13307,7 @@ function onEscapeKey(e) {
 }
 function onPageHide() {
 	try {
-		import("./persistence-C4IJVd-B.js").then((n) => n.s).then((m) => m.flushSaveHot()).catch(() => {});
+		import("./persistence-CaWdvByH.js").then((n) => n.l).then((m) => m.flushSaveHot()).catch(() => {});
 	} catch {}
 }
 function cleanupRuntimeBindings() {
@@ -11890,10 +13355,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-CxrqO6op.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-81akbEw_.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-BJ9e-sSf.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BIe6APid.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -11901,10 +13366,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-CxrqO6op.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-81akbEw_.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-BJ9e-sSf.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BIe6APid.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -11967,7 +13432,7 @@ function ensureWandEntry() {
 async function onInstall() {
 	log.debug("installed");
 	try {
-		const { loadHot } = await import("./persistence-C4IJVd-B.js").then((n) => n.s);
+		const { loadHot } = await import("./persistence-CaWdvByH.js").then((n) => n.l);
 		await loadHot();
 	} catch {}
 }
@@ -11977,7 +13442,7 @@ async function onUpdate() {
 async function onDelete() {
 	log.debug("deleted");
 	try {
-		const { flushSaveHot } = await import("./persistence-C4IJVd-B.js").then((n) => n.s);
+		const { flushSaveHot } = await import("./persistence-CaWdvByH.js").then((n) => n.l);
 		flushSaveHot();
 	} catch {}
 	try {
@@ -11994,13 +13459,13 @@ async function onDelete() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-DEVpZGmD.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-Bkp12Xv2.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-CkKG5JR0.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-DYtqS43k.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DUVox4wX.js").then((n) => n.i)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-CinAIkTR.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 	try {
@@ -12027,32 +13492,32 @@ async function onDelete() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-CxrqO6op.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-81akbEw_.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-BJ9e-sSf.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BIe6APid.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-DEVpZGmD.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-Bkp12Xv2.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
-		import("./currency-CkKG5JR0.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+		import("./currency-DYtqS43k.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-DUVox4wX.js").then((n) => n.i).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-CinAIkTR.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
 	log.debug("disabled");
 	try {
-		const { flushSaveHot } = await import("./persistence-C4IJVd-B.js").then((n) => n.s);
+		const { flushSaveHot } = await import("./persistence-CaWdvByH.js").then((n) => n.l);
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-CxrqO6op.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-81akbEw_.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-BJ9e-sSf.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-BIe6APid.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -12071,13 +13536,13 @@ async function onDisable() {
 		unwatchSystemTheme();
 	} catch {}
 	try {
-		(await import("./balance-DEVpZGmD.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-Bkp12Xv2.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-CkKG5JR0.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-DYtqS43k.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DUVox4wX.js").then((n) => n.i)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-CinAIkTR.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -12105,19 +13570,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-DEVpZGmD.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-Bkp12Xv2.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-CkKG5JR0.js").then((n) => n.t)).restartRateTimer?.();
+		(await import("./currency-DYtqS43k.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DUVox4wX.js").then((n) => n.i)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-CinAIkTR.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-BJ9e-sSf.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BIe6APid.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -12139,7 +13604,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-DUVox4wX.js").then((n) => n.i).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-CinAIkTR.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

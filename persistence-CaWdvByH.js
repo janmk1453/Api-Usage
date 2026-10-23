@@ -30,9 +30,12 @@ var persistence_exports = /* @__PURE__ */ __exportAll({
 	HOT_KEEP: () => 50,
 	appendHistoryCold: () => appendHistoryCold,
 	clearHistoryCold: () => clearHistoryCold,
+	deleteMigrationBackups: () => deleteMigrationBackups,
 	flushSaveHot: () => flushSaveHot,
 	getAllHistory: () => getAllHistory,
 	getExtensionSettings: () => getExtensionSettings,
+	isMigrationBackupKey: () => isMigrationBackupKey,
+	listMigrationBackupKeys: () => listMigrationBackupKeys,
 	loadHistoryCold: () => loadHistoryCold,
 	loadHot: () => loadHot,
 	migrateIfNeeded: () => migrateIfNeeded,
@@ -135,6 +138,123 @@ async function dbDelete(key) {
 		} catch {}
 		log.warn("IndexedDB 删除失败，已尝试清理本地降级存储", dbError);
 	}
+}
+/**
+* 旧版迁移备份的键名白名单。
+* 迁移时写入的键固定为 "migration_backup_" + 毫秒时间戳（见 migrateIfNeeded）。
+* 清理逻辑一律先过这道正则：只认这一种形态，冷历史（cold_history）、
+* 冷存档（cold_<name>）以及任何未知键都不会被匹配，杜绝误删。
+*/
+var MIGRATION_BACKUP_KEY_RE = /^migration_backup_\d+$/;
+/** 是否为旧版迁移备份键（纯函数，供清理与统计共用） */
+function isMigrationBackupKey(key) {
+	return typeof key === "string" && MIGRATION_BACKUP_KEY_RE.test(key);
+}
+/**
+* 列出可清理的旧版迁移备份键（只读扫描，不动任何数据）。
+* 额外要求值为字符串：dbSet 只写字符串，类型不符说明是异常数据，交由人工处理。
+*/
+async function listMigrationBackupKeys() {
+	try {
+		const db = await getDB();
+		if (!db.objectStoreNames.contains(STORE_NAME)) return [];
+		return await new Promise((resolve) => {
+			const keys = [];
+			let settled = false;
+			const done = () => {
+				if (!settled) {
+					settled = true;
+					resolve(keys);
+				}
+			};
+			try {
+				const tx = db.transaction([STORE_NAME], "readonly");
+				const req = tx.objectStore(STORE_NAME).openCursor();
+				req.onsuccess = (e) => {
+					const cur = e.target.result;
+					if (!cur) {
+						done();
+						return;
+					}
+					const key = String(cur.key);
+					if (isMigrationBackupKey(key) && typeof cur.value === "string") keys.push(key);
+					try {
+						cur.continue();
+					} catch {
+						done();
+					}
+				};
+				req.onerror = () => done();
+				tx.onabort = () => done();
+			} catch {
+				done();
+			}
+			setTimeout(done, 800);
+		});
+	} catch {
+		return [];
+	}
+}
+/**
+* 清理旧版迁移备份（升级前的数据快照）。
+*
+* 安全约束（缺一不可）：
+*  1. 键名必须完全匹配 migration_backup_<数字>，逐条二次校验，白名单外一律跳过；
+*  2. 只删值为字符串的条目（见 listMigrationBackupKeys），异常数据不动；
+*  3. 只按已知键名逐条 dbDelete，绝不使用 clear()/deleteDatabase()；
+*  4. 删除后再扫描一次确认，返回真实删除数与剩余数，不虚报；
+*  5. 同时清掉 localStorage 降级副本 aus_migration_backup_*（同一份数据的兜底副本），
+*     且只认 aus_ + 合法键名，不触碰 aus_cold*（那是冷历史降级副本，仍在用）。
+*/
+async function deleteMigrationBackups() {
+	const skipped = [];
+	let targets = [];
+	try {
+		targets = (await listMigrationBackupKeys()).filter((key) => isMigrationBackupKey(key));
+	} catch {
+		return {
+			deleted: 0,
+			remaining: 0,
+			skipped
+		};
+	}
+	for (const key of targets) {
+		if (!isMigrationBackupKey(key)) {
+			skipped.push(key);
+			continue;
+		}
+		try {
+			await dbDelete(key);
+			try {
+				localStorage.removeItem("aus_" + key);
+			} catch {}
+		} catch {
+			skipped.push(key);
+		}
+	}
+	try {
+		const ls = globalThis?.localStorage;
+		if (ls && typeof ls.removeItem === "function") {
+			const doomed = [];
+			for (let i = 0; i < ls.length; i++) {
+				const raw = ls.key(i);
+				if (!raw || !raw.startsWith("aus_")) continue;
+				if (isMigrationBackupKey(raw.slice(4))) doomed.push(raw);
+			}
+			for (const raw of doomed) try {
+				ls.removeItem(raw);
+			} catch {}
+		}
+	} catch {}
+	let remaining = 0;
+	try {
+		remaining = (await listMigrationBackupKeys()).length;
+	} catch {}
+	return {
+		deleted: Math.max(0, targets.length - Math.min(targets.length, remaining)),
+		remaining,
+		skipped
+	};
 }
 function loadLegacy(key) {
 	try {
@@ -483,4 +603,4 @@ async function getAllHistory() {
 	return dedup;
 }
 //#endregion
-export { loadHistoryCold as a, saveExtensionSettings as c, historyRecordKey as d, getExtensionSettings as i, saveHistoryCold as l, clearHistoryCold as n, loadHot as o, getAllHistory as r, persistence_exports as s, appendHistoryCold as t, saveHot as u };
+export { getExtensionSettings as a, loadHot as c, saveHistoryCold as d, saveHot as f, getAllHistory as i, persistence_exports as l, clearHistoryCold as n, isMigrationBackupKey as o, historyRecordKey as p, deleteMigrationBackups as r, loadHistoryCold as s, appendHistoryCold as t, saveExtensionSettings as u };

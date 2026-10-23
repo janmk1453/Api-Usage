@@ -5,13 +5,78 @@ import { getWalletExchangeRate } from './currency';
 import { isDeepSeekOfficialModel, normalizeModel } from './pricing';
 import { log, toast } from '../utils/logger';
 import { repository } from '../data/repository';
-import { cloneWallet, findWalletModel } from '../data/wallets';
-import type { WalletConfig, WalletModel } from '../types/wallet';
+import { cloneWallet } from '../data/wallets';
+import { MODEL_MATCH_ACCEPT, matchModelName } from './model-match';
+import type { WalletConfig, WalletPriceTier } from '../types/wallet';
 
-export type SyncPreview = { added: number; updated: number; skipped: number; total: number; samples: Array<{ model: string; hit: number; miss: number; output: number }> };
+export type SyncMode = 'add-missing' | 'overwrite-unlocked' | 'overwrite-all';
 
-/** 同步模型标记迁移版本：递增可让更早版本污染的数据重新识别 */
-export const SYNCED_MARK_VERSION = 1;
+type Tier = { hit: number; miss: number; output: number };
+
+/** 目录中的一条价格（已换算为显示货币体系：以 CNY 为内部计价单位） */
+export type CatalogPrice = {
+  catalogModel: string;
+  usePeakPricing: boolean;
+  offpeak: Tier;
+  peak: Tier;
+};
+
+export type SyncRowAction = 'write' | 'update' | 'skip-locked' | 'skip-same' | 'unmatched';
+
+export type SyncPlanRow = {
+  /** 稳定键：walletId|modelId，供预览浮层勾选 */
+  key: string;
+  walletId: string;
+  walletName: string;
+  provider: string;
+  modelId: string;
+  localModel: string;
+  catalogModel: string | null;
+  score: number;
+  reason: string;
+  ambiguous: boolean;
+  locked: boolean;
+  action: SyncRowAction;
+  changed: boolean;
+  usePeakPricing: boolean;
+  current: Tier | null;
+  next: Tier | null;
+  nextPeak: Tier | null;
+};
+
+export type SyncPlanSummary = {
+  wallets: number;
+  catalogModels: number;
+  matched: number;
+  exact: number;
+  fuzzy: number;
+  ambiguous: number;
+  unmatched: number;
+  write: number;
+  update: number;
+  skipped: number;
+};
+
+export type SyncPlan = {
+  provider: string;
+  providerLabel: string;
+  mode: SyncMode;
+  rate: number;
+  createdAt: number;
+  rows: SyncPlanRow[];
+  summary: SyncPlanSummary;
+};
+
+/** 同步模型标记迁移版本：2 = 只按已识别模型模糊匹配写价（不再全量灌入） */
+export const SYNCED_MARK_VERSION = 2;
+
+/** 目录缓存有效期（内存） */
+const CATALOG_TTL = 10 * 60 * 1000;
+/** 自动同步节流：60s 内不重复拉取目录 */
+const AUTO_SYNC_THROTTLE = 60 * 1000;
+
+let catalogCache: { at: number; data: any } | null = null;
+let lastAutoSync = 0;
 
 /** 是否为 models.dev 同步写入的价格条目（默认不在“模型与价格”列表显示） */
 export function isSyncedCustomModel(entry: any): boolean {
@@ -36,31 +101,16 @@ function priceClose(a: any, b: any, tol = 0.05): boolean {
   return true;
 }
 
-/** 移除全部 models.dev 同步条目（关闭自动同步时调用），返回移除数量 */
-export function removeSyncedModels(): number {
-  const cms: any[] = (state.settings as any).customModels || [];
-  const kept = cms.filter((c: any) => c?.synced !== true);
-  let removed = cms.length - kept.length;
-  (state.settings as any).customModels = kept;
-  const nextWallets = repository.getWallets().map((wallet) => {
-    const next = cloneWallet(wallet);
-    const before = next.models.length;
-    next.models = next.models.filter((model) => !(model.source === 'sync' && !model.locked));
-    removed += before - next.models.length;
-    return next;
-  });
-  if (removed > 0) repository.replaceWallets(nextWallets);
-  try { saveHot({ settings: state.settings }); } catch {}
-  try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
-  log.debug('synced models removed', { removed });
-  return removed;
+function sameTier(a: Tier | null, b: Tier | null): boolean {
+  if (!a || !b) return false;
+  return a.hit === b.hit && a.miss === b.miss && a.output === b.output;
 }
 
 function toCNY(usd: number, rate: number): number {
   return Math.round(usd * rate * 10000) / 10000;
 }
 
-function normalizeCost(c: any): { hit: number; miss: number; output: number } | null {
+function normalizeCost(c: any): Tier | null {
   if (!c || typeof c !== 'object') return null;
   const hitRaw = c.cache_read ?? c.cacheRead ?? c.cached_tokens;
   const missRaw = c.input;
@@ -73,71 +123,35 @@ function normalizeCost(c: any): { hit: number; miss: number; output: number } | 
   return { hit: h, miss, output: out };
 }
 
-async function fetchJson(url: string, timeoutMs = 8000): Promise<any> {
+async function fetchJson(url: string, timeoutMs = 12000): Promise<any> {
   const ctrl = new AbortController();
   const to = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const r = await fetch(url, { signal: ctrl.signal as any, cache: 'no-store' as any });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    // 不加 cache:no-store：目录约 6MB，交给浏览器 HTTP 缓存复用
+    const r = await fetch(url, { signal: ctrl.signal as any });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     return await r.json();
   } finally { clearTimeout(to); }
 }
 
-export async function fetchModelsDevCatalog(): Promise<any> {
-  const urls = [PRICING_SYNC_SOURCE, PRICING_SYNC_FALLBACK, 'https://models.dev/catalog.json'];
+/** 拉取 models.dev 目录（10 分钟内存缓存，force 可绕过） */
+export async function fetchModelsDevCatalog(opts: { force?: boolean } = {}): Promise<any> {
+  if (!opts.force && catalogCache && Date.now() - catalogCache.at < CATALOG_TTL) return catalogCache.data;
+  const urls = [PRICING_SYNC_SOURCE, PRICING_SYNC_FALLBACK];
   let lastErr: any = null;
   for (const u of urls) {
-    try { return await fetchJson(u); } catch (e) { lastErr = e; }
+    try {
+      const data = await fetchJson(u);
+      catalogCache = { at: Date.now(), data };
+      return data;
+    } catch (e) { lastErr = e; }
   }
   throw lastErr || new Error('fetch failed');
 }
 
-function buildCustomModelsFromCatalog(catalog: any, rate: number): Array<{ model: string; usePeakPricing: boolean; offpeak: { hit: number; miss: number; output: number }; peak: { hit: number; miss: number; output: number } }> {
-  const out: any[] = [];
-  if (!catalog || typeof catalog !== 'object') return out;
-  for (const providerId of Object.keys(catalog)) {
-    const provider = catalog[providerId];
-    const models = provider?.models;
-    if (!models || typeof models !== 'object') continue;
-    for (const modelId of Object.keys(models)) {
-      const m = models[modelId];
-      const cost = m?.cost;
-      const norm = normalizeCost(cost);
-      if (!norm) continue;
-      const cnHit = toCNY(norm.hit, rate);
-      const cnMiss = toCNY(norm.miss, rate);
-      const cnOut = toCNY(norm.output, rate);
-      const usePeak = isDeepSeekOfficialModel(modelId);
-      const entry: any = {
-        model: modelId,
-        usePeakPricing: usePeak,
-        offpeak: { hit: cnHit, miss: cnMiss, output: cnOut },
-        peak: usePeak ? { hit: toCNY(norm.hit * 2, 1) ? cnHit * 2 : cnHit * 2, miss: cnMiss * 2, output: cnOut * 2 } : { hit: cnHit, miss: cnMiss, output: cnOut },
-        // 标记来源：默认在“模型与价格”列表中隐藏，仅参与计价
-        synced: true,
-      };
-      // 峰谷合成按 2× 谷，与常量一致
-      if (usePeak) {
-        entry.peak.hit = Math.round(cnHit * 2 * 10000) / 10000;
-        entry.peak.miss = Math.round(cnMiss * 2 * 10000) / 10000;
-        entry.peak.output = Math.round(cnOut * 2 * 10000) / 10000;
-      }
-      out.push(entry);
-    }
-  }
-  return out;
-}
-
-type CatalogPrice = {
-  model: string;
-  usePeakPricing: boolean;
-  offpeak: { hit: number; miss: number; output: number };
-  peak: { hit: number; miss: number; output: number };
-};
-
-function buildProviderModelsFromCatalog(catalog: any, providerId: string, rate: number): CatalogPrice[] {
-  const provider = catalog?.[providerId];
-  const models = provider?.models;
+/** 目录 → 该供应商的价格表（USD/百万 → 内部计价单位） */
+function buildProviderPrices(catalog: any, providerId: string, rate: number): CatalogPrice[] {
+  const models = catalog?.[providerId]?.models;
   if (!models || typeof models !== 'object') return [];
   const out: CatalogPrice[] = [];
   for (const modelId of Object.keys(models)) {
@@ -148,7 +162,7 @@ function buildProviderModelsFromCatalog(catalog: any, providerId: string, rate: 
     const output = toCNY(cost.output, rate);
     const usePeak = isDeepSeekOfficialModel(modelId);
     out.push({
-      model: modelId,
+      catalogModel: modelId,
       usePeakPricing: usePeak,
       offpeak: { hit, miss, output },
       peak: usePeak
@@ -163,147 +177,263 @@ function buildProviderModelsFromCatalog(catalog: any, providerId: string, rate: 
   return out;
 }
 
-function sameCatalogPrice(model: WalletModel, incoming: CatalogPrice): boolean {
-  return model.price.usePeakPricing === incoming.usePeakPricing
-    && model.price.offpeak.hit === incoming.offpeak.hit
-    && model.price.offpeak.miss === incoming.offpeak.miss
-    && model.price.offpeak.output === incoming.offpeak.output
-    && model.price.peak.hit === incoming.peak.hit
-    && model.price.peak.miss === incoming.peak.miss
-    && model.price.peak.output === incoming.peak.output;
+function providerLabel(providerId: string): string {
+  const map: Record<string, string> = {
+    deepseek: 'DeepSeek',
+    openai: 'OpenAI',
+    anthropic: 'Anthropic',
+    google: 'Google',
+    mistral: 'Mistral',
+    xai: 'xAI',
+    moonshotai: 'Moonshot AI',
+    zai: 'Z.AI',
+    minimax: 'MiniMax',
+    cohere: 'Cohere',
+  };
+  return map[providerId] || providerId;
 }
 
-function applyCatalogToWallet(
-  wallet: WalletConfig,
-  incoming: CatalogPrice[],
-  mode: string,
-  counts: { added: number; updated: number; skipped: number },
-  samples: SyncPreview['samples'],
-  affected: Set<string>,
-): WalletConfig {
-  if (!wallet.catalogProvider || !incoming.length) return wallet;
-  const next = cloneWallet(wallet);
-  const now = Date.now();
-  for (const price of incoming) {
-    const existing = findWalletModel(next, price.model);
-    if (!existing) {
-      next.models.push({
-        id: `sync:${wallet.id}:${price.model}`,
-        sourceModel: price.model,
-        model: price.model,
-        aliases: [],
-        price: {
-          usePeakPricing: price.usePeakPricing,
-          offpeak: { ...price.offpeak },
-          peak: { ...price.peak },
-          priceConfigured: true,
-        },
-        source: 'sync',
-        locked: false,
-        discoveredAt: now,
-        lastSeen: now,
-        updatedAt: now,
-      });
-      counts.added++;
-      affected.add(wallet.id);
-      if (samples.length < 6) samples.push({ model: price.model, ...price.offpeak });
-      continue;
-    }
-    if (mode === 'add-missing') {
-      counts.skipped++;
-      continue;
-    }
-    if (existing.locked && mode !== 'overwrite-all') {
-      counts.skipped++;
-      continue;
-    }
-    if (sameCatalogPrice(existing, price)) {
-      if (existing.source !== 'sync') {
-        existing.source = 'sync';
-        existing.updatedAt = now;
-        affected.add(wallet.id);
+/**
+ * 构建同步计划：**只遍历钱包里已识别的模型**，用模糊匹配在供应商目录中找对应价格。
+ * 不新增模型（历史 bug：add-missing 会把整个供应商目录灌进钱包）。
+ */
+export function buildSyncPlan(
+  catalog: any,
+  opts: { walletIds?: string[]; mode?: SyncMode; providerOverride?: string } = {},
+): SyncPlan {
+  const rate = getWalletExchangeRate() || DEFAULT_EXCHANGE_RATE;
+  const settings: any = state.settings as any;
+  const mode: SyncMode = opts.mode || (settings?.pricingSync?.mode as SyncMode) || 'add-missing';
+  const ignored = new Set(state.walletIgnored || []);
+  const only = opts.walletIds && opts.walletIds.length ? new Set(opts.walletIds) : null;
+  const wallets = repository.getWallets().filter((wallet) => {
+    if (ignored.has(wallet.id)) return false;
+    if (only && !only.has(wallet.id)) return false;
+    return true;
+  });
+
+  const rows: SyncPlanRow[] = [];
+  const summary: SyncPlanSummary = {
+    wallets: 0, catalogModels: 0, matched: 0, exact: 0, fuzzy: 0,
+    ambiguous: 0, unmatched: 0, write: 0, update: 0, skipped: 0,
+  };
+  const providers = new Set<string>();
+
+  for (const wallet of wallets) {
+    const provider = opts.providerOverride || wallet.catalogProvider;
+    if (!provider) continue;
+    const prices = buildProviderPrices(catalog, provider, rate);
+    if (!prices.length) continue;
+    summary.wallets += 1;
+    summary.catalogModels += prices.length;
+    providers.add(provider);
+    const catalogModels = prices.map((item) => item.catalogModel);
+    const byModel = new Map(prices.map((item) => [item.catalogModel, item]));
+
+    for (const model of wallet.models) {
+      const localName = String(model.model || model.sourceModel || '').trim();
+      if (!localName) continue;
+      const matched = matchModelName(localName, catalogModels);
+      const base = {
+        key: wallet.id + '|' + model.id,
+        walletId: wallet.id,
+        walletName: wallet.name,
+        provider,
+        modelId: model.id,
+        localModel: localName,
+        locked: model.locked === true,
+      };
+      if (!matched.best) {
+        summary.unmatched += 1;
+        rows.push({
+          ...base, catalogModel: null, score: 0, reason: 'none', ambiguous: false,
+          action: 'unmatched', changed: false,
+          usePeakPricing: model.price.usePeakPricing,
+          current: model.price.priceConfigured ? model.price.offpeak : null,
+          next: null, nextPeak: null,
+        });
+        continue;
       }
-      counts.skipped++;
-      continue;
+      const price = byModel.get(matched.best.model)!;
+      const ambiguous = matched.ambiguous;
+      const usePeakPricing = model.price.usePeakPricing === true;
+      const next = { ...price.offpeak };
+      const nextPeak = usePeakPricing
+        ? {
+            hit: Math.round(next.hit * 2 * 10000) / 10000,
+            miss: Math.round(next.miss * 2 * 10000) / 10000,
+            output: Math.round(next.output * 2 * 10000) / 10000,
+          }
+        : { ...next };
+
+      summary.matched += 1;
+      if (matched.best.reason === 'exact' || matched.best.reason === 'normalized' || matched.best.reason === 'alias') summary.exact += 1;
+      else summary.fuzzy += 1;
+      if (ambiguous) summary.ambiguous += 1;
+
+      let action: SyncRowAction = 'update';
+      if (!model.price.priceConfigured) action = 'write';
+      else if (model.locked && mode !== 'overwrite-all') action = 'skip-locked';
+      else if (mode === 'add-missing') action = 'skip-same';
+      else if (sameTier(model.price.offpeak, next) && sameTier(model.price.peak, nextPeak)) action = 'skip-same';
+
+      if (action === 'write') summary.write += 1;
+      else if (action === 'update') summary.update += 1;
+      else summary.skipped += 1;
+
+      rows.push({
+        ...base,
+        catalogModel: price.catalogModel,
+        score: matched.best.score,
+        reason: matched.best.reason,
+        ambiguous,
+        action,
+        changed: action === 'write' || action === 'update',
+        usePeakPricing,
+        current: model.price.priceConfigured ? { ...model.price.offpeak } : null,
+        next,
+        nextPeak,
+      });
     }
-    existing.price = {
-      usePeakPricing: price.usePeakPricing,
-      offpeak: { ...price.offpeak },
-      peak: { ...price.peak },
+  }
+
+  const provider = Array.from(providers)[0] || '';
+  return {
+    provider,
+    providerLabel: providers.size === 1 ? providerLabel(provider) : providers.size > 1 ? '多供应商' : '',
+    mode,
+    rate,
+    createdAt: Date.now(),
+    rows,
+    summary,
+  };
+}
+
+/**
+ * 应用同步计划。默认**排除歧义行**（分差过小的匹配置信度不足），
+ * 也排除 skip-locked / skip-same / unmatched；selectedKeys 明确给定时以它为准。
+ */
+export async function applySyncPlan(
+  plan: SyncPlan,
+  opts: { selectedKeys?: Iterable<string>; includeAmbiguous?: boolean } = {},
+): Promise<{ applied: number; wallets: string[] }> {
+  const selected = opts.selectedKeys ? new Set(opts.selectedKeys) : null;
+  const targets = plan.rows.filter((row) => {
+    if (row.action !== 'write' && row.action !== 'update') return false;
+    if (!row.catalogModel || !row.next) return false;
+    if (selected) return selected.has(row.key);
+    return opts.includeAmbiguous ? true : !row.ambiguous;
+  });
+  if (!targets.length) return { applied: 0, wallets: [] };
+
+  const nextWallets = repository.getWallets().map((wallet) => cloneWallet(wallet));
+  const affected = new Set<string>();
+  const now = Date.now();
+  for (const row of targets) {
+    const wallet = nextWallets.find((item) => item.id === row.walletId);
+    if (!wallet) continue;
+    const model = wallet.models.find((item) => item.id === row.modelId);
+    if (!model) continue;
+    const catalogModel = row.catalogModel;
+    if (!catalogModel) continue;
+    if (model.locked && plan.mode !== 'overwrite-all' && row.action === 'update') continue;
+    model.price = {
+      usePeakPricing: row.usePeakPricing,
+      offpeak: { ...(row.next as Tier) },
+      peak: { ...(row.nextPeak || row.next as Tier) },
       priceConfigured: true,
     };
-    existing.source = 'sync';
-    existing.updatedAt = now;
-    counts.updated++;
+    model.source = 'sync';
+    model.hidden = false;
+    model.priceMatch = {
+      provider: row.provider,
+      catalogModel,
+      score: row.score,
+      matchedAt: now,
+    };
+    model.updatedAt = now;
     affected.add(wallet.id);
-    if (samples.length < 6) samples.push({ model: price.model, ...price.offpeak });
   }
-  return next;
+  if (!affected.size) return { applied: 0, wallets: [] };
+
+  repository.replaceWallets(nextWallets);
+  const ps: any = (state.settings as any).pricingSync;
+  if (ps) {
+    ps.lastSync = now;
+    ps.lastMatchSummary = {
+      matched: plan.summary.matched,
+      fuzzy: plan.summary.fuzzy,
+      unmatched: plan.summary.unmatched,
+      at: now,
+    };
+  }
+  try { saveHot({ settings: state.settings }); } catch {}
+  if (ps?.recalcOnSync !== false) {
+    for (const walletId of affected) {
+      try { await repository.recalcWallet(walletId); } catch {}
+    }
+  }
+  try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+  log.debug('sync plan applied', { applied: targets.length, wallets: Array.from(affected) });
+  return { applied: targets.length, wallets: Array.from(affected) };
 }
 
-export function previewSync(catalog: any): SyncPreview {
-  const rate = getWalletExchangeRate() || DEFAULT_EXCHANGE_RATE;
-  const mode: string = (state.settings as any).pricingSync?.mode || 'add-missing';
-  const samples: any[] = [];
-  const counts = { added: 0, updated: 0, skipped: 0 };
-  let total = 0;
-  const ignored = new Set(state.walletIgnored || []);
-  for (const wallet of state.wallets || []) {
-    if (ignored.has(wallet.id) || !wallet.catalogProvider) continue;
-    const incoming = buildProviderModelsFromCatalog(catalog, wallet.catalogProvider, rate);
-    total += incoming.length;
-    applyCatalogToWallet(
-      wallet,
-      incoming,
-      mode,
-      counts,
-      samples,
-      new Set(),
-    );
-  }
-  return { added: counts.added, updated: counts.updated, skipped: counts.skipped, total, samples };
-}
-
-export async function syncPricingFromModelsDev(opts?: { silent?: boolean; force?: boolean }): Promise<SyncPreview | null> {
-  const silent = !!opts?.silent;
+/** 按钱包同步价格：构建计划 → 自动应用（排除歧义行） */
+export async function syncPricingFromModelsDev(opts: {
+  silent?: boolean;
+  force?: boolean;
+  walletIds?: string[];
+  mode?: SyncMode;
+  autoApply?: boolean;
+} = {}): Promise<SyncPlan | null> {
+  const silent = !!opts.silent;
   const ps: any = (state.settings as any).pricingSync;
   if (!ps) return null;
+  if (silent && !opts.force && Date.now() - lastAutoSync < AUTO_SYNC_THROTTLE) return null;
+  if (silent) lastAutoSync = Date.now();
   try {
-    const catalog = await fetchModelsDevCatalog();
-    const rate = getWalletExchangeRate() || DEFAULT_EXCHANGE_RATE;
-    const ignored = new Set(state.walletIgnored || []);
-    const counts = { added: 0, updated: 0, skipped: 0 };
-    const samples: SyncPreview['samples'] = [];
-    const affected = new Set<string>();
-    let total = 0;
-    const nextWallets = repository.getWallets().map((wallet) => {
-      if (ignored.has(wallet.id) || !wallet.catalogProvider) return wallet;
-      const incoming = buildProviderModelsFromCatalog(catalog, wallet.catalogProvider, rate);
-      total += incoming.length;
-      return applyCatalogToWallet(wallet, incoming, ps.mode || 'add-missing', counts, samples, affected);
-    });
-    if (!total) {
-      if (!silent) toast('warning', 'models.dev 未返回可用价格');
-      return null;
+    const catalog = await fetchModelsDevCatalog({ force: !!opts.force });
+    const plan = buildSyncPlan(catalog, { walletIds: opts.walletIds, mode: opts.mode });
+    if (!plan.rows.length) {
+      if (!silent) toast('warning', '没有可用于比对的模型：请先为钱包选择价格来源，并等待识别到模型');
+      return plan;
     }
-    repository.replaceWallets(nextWallets);
-    ps.lastSync = Date.now();
-    saveHot({ settings: state.settings });
-    if (ps.recalcOnSync) {
-      for (const walletId of affected) {
-        try { await repository.recalcWallet(walletId); } catch {}
-      }
+    if (opts.autoApply === false) return plan;
+    const result = await applySyncPlan(plan);
+    if (!silent) {
+      const s = plan.summary;
+      toast(
+        result.applied ? 'success' : 'warning',
+        '价格同步：写入 ' + result.applied + ' 个模型（匹配 ' + s.matched + ' / 未匹配 ' + s.unmatched
+          + (s.ambiguous ? ' / 歧义 ' + s.ambiguous : '') + '）',
+      );
     }
-    try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
-    const preview: SyncPreview = { ...counts, total, samples };
-    if (!silent) toast('success', `价格已同步：新增 ${counts.added} 更新 ${counts.updated} 跳过 ${counts.skipped}（共 ${total} 个钱包模型）`);
-    log.debug('pricing sync done', preview);
-    return preview;
+    return plan;
   } catch (e: any) {
     log.error('pricing sync failed', e);
     if (!silent) toast('error', '同步失败：' + (e?.message || e));
     return null;
   }
+}
+
+/** 移除旧版本全量灌入留下的孤儿同步模型（有 priceMatch 的保留） */
+export function removeSyncedModels(): number {
+  const cms: any[] = (state.settings as any).customModels || [];
+  const kept = cms.filter((c: any) => c?.synced !== true);
+  let removed = cms.length - kept.length;
+  (state.settings as any).customModels = kept;
+  const nextWallets = repository.getWallets().map((wallet) => {
+    const next = cloneWallet(wallet);
+    const before = next.models.length;
+    next.models = next.models.filter((model) => !(model.source === 'sync' && !model.locked && !model.priceMatch));
+    removed += before - next.models.length;
+    return next;
+  });
+  if (removed > 0) repository.replaceWallets(nextWallets);
+  try { saveHot({ settings: state.settings }); } catch {}
+  try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+  log.debug('synced models removed', { removed });
+  return removed;
 }
 
 let pricingTimer: any = null;
@@ -319,79 +449,64 @@ export function stopPricingSyncTimer() {
   if (pricingTimer) { try { clearInterval(pricingTimer); } catch {} pricingTimer = null; }
 }
 
+/** 钱包卡上的同步状态摘要 */
+export function walletSyncStatus(wallet: WalletConfig): { label: string; pending: number; synced: number } {
+  const visible = (wallet.models || []).filter((model) => model.hidden !== true);
+  const pending = visible.filter((model) => model.price.priceConfigured !== true).length;
+  const synced = visible.filter((model) => model.priceMatch && model.price.priceConfigured === true).length;
+  if (!wallet.catalogProvider) return { label: '未配置价格来源', pending, synced };
+  return { label: providerLabel(wallet.catalogProvider) + (synced ? ' · 已同步 ' + synced : ''), pending, synced };
+}
+
 /**
- * 迁移：早期版本把 models.dev 全量模型直接写进 customModels 且未加标记，
- * 导致设置页“模型与价格”列表被同步模型刷屏。
- * 这里按 models.dev 目录 + 汇率比对补上 synced 标记，使其从列表中隐藏（价格仍照常参与计价）。
- * 返回 null 表示本次未能完成（网络不可用等），下次启动会重试。
+ * 迁移：旧版本把供应商目录**全量**写进钱包（source=sync 且从未被任何请求命中）。
+ * v2 起把这些孤儿条目置为 hidden（不删除，可手动清理），价格仍保留参与计价。
  */
-export async function markLegacySyncedModels(opts?: { skipRerender?: boolean }): Promise<{ marked: number; scanned: number } | null> {
+export async function markLegacySyncedModels(opts?: { skipRerender?: boolean }): Promise<{ hidden: number; scanned: number } | null> {
   const ps: any = (state.settings as any).pricingSync;
   if (!ps) return null;
-  if (Number(ps.syncedMarkVersion) >= SYNCED_MARK_VERSION) return { marked: 0, scanned: 0 };
-  // 从未同步过的用户不可能存在同步污染：直接落版本号，避免多打一次网络请求
-  if (!ps.enabled && !ps.lastSync) {
-    ps.syncedMarkVersion = SYNCED_MARK_VERSION;
-    try { saveHot({ settings: state.settings }); } catch {}
-    return { marked: 0, scanned: 0 };
-  }
-  const cms: any[] = (state.settings as any).customModels || [];
-  if (!cms.length) {
-    ps.syncedMarkVersion = SYNCED_MARK_VERSION;
-    try { saveHot({ settings: state.settings }); } catch {}
-    return { marked: 0, scanned: 0 };
-  }
-  const builtin = builtinModelKeys();
-  const pending = cms.filter((c: any) => c?.model && c.synced !== true && !builtin.has(c.model));
-  if (!pending.length) {
-    ps.syncedMarkVersion = SYNCED_MARK_VERSION;
-    try { saveHot({ settings: state.settings }); } catch {}
-    return { marked: 0, scanned: 0 };
-  }
+  if (Number(ps.syncedMarkVersion) >= SYNCED_MARK_VERSION) return { hidden: 0, scanned: 0 };
+
+  let history: any[] = [];
+  try { history = await repository.getAllHistory(); } catch { history = state.history || []; }
   const used = new Set<string>();
-  for (const h of (state.history || []) as any[]) {
-    try { if (h?.model) used.add(normalizeModel(h.model)); } catch {}
+  for (const entry of history) {
+    try { if (entry?.model) used.add(normalizeModel(entry.model).toLowerCase()); } catch {}
   }
-  let catalog: any = null;
-  try { catalog = await fetchModelsDevCatalog(); } catch { catalog = null; }
-  let marked = 0;
-  if (catalog) {
-    const rate = getWalletExchangeRate() || DEFAULT_EXCHANGE_RATE;
-    const catalogEntries = buildCustomModelsFromCatalog(catalog, rate);
-    const byName = new Map<string, any>(catalogEntries.map((e: any) => [e.model, e]));
-    for (const c of pending) {
-      const inc = byName.get(c.model);
-      if (inc && priceClose(c.offpeak, inc.offpeak)) { c.synced = true; marked++; }
+
+  let hidden = 0;
+  let scanned = 0;
+  const nextWallets = repository.getWallets().map((wallet) => {
+    const next = cloneWallet(wallet);
+    for (const model of next.models) {
+      if (model.source !== 'sync' || model.locked || model.priceMatch) continue;
+      if (model.hidden === true) continue;
+      scanned += 1;
+      const name = String(model.model || model.sourceModel || '').toLowerCase();
+      if (used.has(name)) continue;
+      model.hidden = true;
+      model.updatedAt = Date.now();
+      hidden += 1;
     }
-    const nextWallets = repository.getWallets().map((wallet) => cloneWallet(wallet));
-    let walletMarked = false;
-    for (const wallet of nextWallets) {
-      for (const model of wallet.models) {
-        if (model.source === 'builtin' || model.locked || model.source === 'sync') continue;
-        const inc = byName.get(model.sourceModel) || byName.get(model.model);
-        if (inc && priceClose(model.price.offpeak, inc.offpeak)) {
-          model.source = 'sync';
-          model.updatedAt = Date.now();
-          walletMarked = true;
-        }
-      }
+    return next;
+  });
+
+  // 旧 customModels 同步污染标记（仅首次）
+  if (!(Number(ps.syncedMarkVersion) >= 1)) {
+    const cms: any[] = (state.settings as any).customModels || [];
+    const builtin = builtinModelKeys();
+    for (const entry of cms) {
+      if (!entry?.model || entry.synced === true) continue;
+      if (builtin.has(entry.model)) continue;
+      if (used.has(String(entry.model).toLowerCase())) continue;
+      entry.synced = true;
     }
-    if (walletMarked) repository.replaceWallets(nextWallets);
-  } else if (pending.length >= 40) {
-    // 离线兜底：出现大量额外模型即同步全量污染特征，仅保留历史使用过的模型
-    for (const c of pending) {
-      try { if (used.has(normalizeModel(c.model))) continue; } catch {}
-      c.synced = true;
-      marked++;
-    }
-  } else {
-    // 网络不可用且无污染特征，保持原状等待下次重试
-    return null;
   }
-  // 联网比对成功才落版本号；离线兜底不落，便于后续联网精确复核剩余条目
-  if (catalog) ps.syncedMarkVersion = SYNCED_MARK_VERSION;
-  if (marked) {
-    try { saveHot({ settings: state.settings }); } catch {}
+
+  if (hidden > 0) repository.replaceWallets(nextWallets);
+  ps.syncedMarkVersion = SYNCED_MARK_VERSION;
+  try { saveHot({ settings: state.settings }); } catch {}
+  if (hidden > 0) {
     try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
     if (!opts?.skipRerender) {
       try {
@@ -400,9 +515,7 @@ export async function markLegacySyncedModels(opts?: { skipRerender?: boolean }):
         if (doc?.getElementById('aus-settings')) renderSettings(doc);
       } catch {}
     }
-  } else if (catalog) {
-    try { saveHot({ settings: state.settings }); } catch {}
   }
-  log.debug('synced model markers migrated', { marked, scanned: pending.length });
-  return { marked, scanned: pending.length };
+  log.debug('legacy synced models hidden', { hidden, scanned });
+  return { hidden, scanned };
 }

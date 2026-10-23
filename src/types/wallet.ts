@@ -15,7 +15,45 @@ export type WalletPriceRule = {
   peak: WalletPriceTier;
   priceConfigured: boolean;
 };
+/** 套餐额度窗口（本地估算口径） */
+export type WalletPlanWindow = {
+  id: '5h' | '7d' | '1m' | 'custom';
+  label: string;
+  unit: 'token' | 'cost' | 'request';
+  limit: number;
+  resetMode: 'rolling' | 'calendar';
+  /** resetMode=rolling 且 id=custom 时的滚动小时数 */
+  hours?: number;
+};
+
+/** 远端查询到的套餐用量快照 */
+export type PlanQuotaSnapshot = {
+  id: string;
+  label: string;
+  unit: 'percent' | 'count' | 'cost' | 'token';
+  used: number | null;
+  limit: number | null;
+  remaining: number | null;
+  resetAt: number | null;
+  source: 'remote';
+  checkedAt: number;
+};
+
+/** 套餐额度（只在钱包页展示，仅供展示参考，不参与计费与导出） */
+export type WalletPlan = {
+  enabled: boolean;
+  label?: string;
+  windows: WalletPlanWindow[];
+  remote?: PlanQuotaSnapshot[];
+  remoteAt?: number | null;
+  remoteError?: string | null;
+};
+
 export type WalletBalance = {
+  /** 余额查询适配器 id；空则由地址自动识别 */
+  adapter?: string | null;
+  /** new-api 等需要的用户 ID（New-Api-User 头） */
+  userId?: string | null;
   mode: WalletBalanceMode;
   amount: string | null;
   currency: WalletCurrency;
@@ -27,6 +65,15 @@ export type WalletCredentialObservation = {
   label: string;
   lastSeen: number;
 };
+/** 价格同步时命中的供应商目录模型（用于审计「这条价格是哪来的」） */
+export type WalletPriceMatch = {
+  provider: string;
+  catalogModel: string;
+  /** 模糊匹配置信度 0–1，1 表示归一化后完全相等 */
+  score: number;
+  matchedAt: number;
+};
+
 export type WalletModel = {
   id: string;
   sourceModel: string;
@@ -39,6 +86,10 @@ export type WalletModel = {
   price: WalletPriceRule;
   source: WalletModelSource;
   locked: boolean;
+  /** 最近一次价格同步的匹配信息；无则为 null */
+  priceMatch?: WalletPriceMatch | null;
+  /** 旧版本「全量灌入」遗留的同步条目：默认不在列表中显示，可直接删除 */
+  hidden?: boolean;
   discoveredAt: number;
   lastSeen: number;
   updatedAt: number;
@@ -57,6 +108,8 @@ export type WalletConfig = {
   weekendOffpeak: boolean;
   credentials: WalletCredentialObservation[];
   models: WalletModel[];
+  /** 套餐额度（CodePlan 类），仅展示用 */
+  plan?: WalletPlan;
   collapsed: boolean;
   createdAt: number;
   updatedAt: number;

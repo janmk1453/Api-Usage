@@ -3,6 +3,8 @@
  * 统一在此管理 ECharts 实例、主题取色、resize 与 dispose。
  */
 import type { ForecastSeries } from '../stats/forecast-series';
+import { chartDateTime } from './chart-time';
+import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
 
 type CurrencyInfo = { code: string; symbol: string; rate: number };
 
@@ -151,12 +153,41 @@ export function disposeForecastCharts(): void {
   }
 }
 
-function buildLabels(series: ForecastSeries): { labels: string[]; historyLength: number; futureLength: number } {
+/** 历史轮次的中位间隔（ms），用于给预测轮次估个大致时刻 */
+function medianInterval(history: ForecastSeries['history']): number {
+  const diffs: number[] = [];
+  for (let i = 1; i < history.length; i += 1) {
+    const prev = Number(history[i - 1]?.timestamp) || 0;
+    const cur = Number(history[i]?.timestamp) || 0;
+    const diff = cur - prev;
+    if (prev > 0 && cur > 0 && diff > 0) diffs.push(diff);
+  }
+  if (!diffs.length) return 0;
+  diffs.sort((a, b) => a - b);
+  return diffs[Math.floor(diffs.length / 2)];
+}
+
+/**
+ * X 轴标签保持 #N 紧凑，tips 给出悬浮窗标题：
+ * 历史轮次用真实时间戳，预测轮次按中位间隔推算「预计」时刻。
+ */
+function buildLabels(series: ForecastSeries): { labels: string[]; tips: string[]; historyLength: number; futureLength: number } {
   const labels = [
     ...series.history.map((point) => `#${point.round}`),
     ...series.future.map((point) => `+${point.round - series.currentRound}`),
   ];
-  return { labels, historyLength: series.history.length, futureLength: series.future.length };
+  const interval = medianInterval(series.history);
+  const lastTs = Number(series.history[series.history.length - 1]?.timestamp) || 0;
+  const historyTips = series.history.map((point) => {
+    const time = chartDateTime(Number(point.timestamp) || 0);
+    return time ? `第 ${point.round} 轮 · ${time}` : `第 ${point.round} 轮`;
+  });
+  const futureTips = series.future.map((point, index) => {
+    const estimated = lastTs && interval ? chartDateTime(lastTs + interval * (index + 1)) : '';
+    const head = `第 ${point.round} 轮（预测）`;
+    return estimated ? `${head} · 预计 ${estimated}` : head;
+  });
+  return { labels, tips: [...historyTips, ...futureTips], historyLength: series.history.length, futureLength: series.future.length };
 }
 
 function futureOnlySeries(
@@ -187,7 +218,7 @@ async function renderMainChart(echarts: any, options: ForecastChartOptions): Pro
   const chart = await initChart('aus-forecast-main-chart', echarts);
   if (!chart) return;
   const { series, ctxLimit, currency, formatCost } = options;
-  const { labels, historyLength } = buildLabels(series);
+  const { labels, tips, historyLength } = buildLabels(series);
   if (!labels.length) return;
   const border = themeColor('--ds-border', '#E5E7EB');
   const text3 = themeColor('--ds-text-3', '#9CA3AF');
@@ -453,6 +484,7 @@ async function renderMainChart(echarts: any, options: ForecastChartOptions): Pro
       backgroundColor: cardInner,
       borderColor: border,
       borderWidth: 1,
+      ...CHART_TOOLTIP_SURFACE,
       textStyle: { color: text, fontSize: 12 },
       axisPointer: { type: 'line', lineStyle: { color: border } },
       formatter: (params: any) => {
@@ -463,7 +495,8 @@ async function renderMainChart(echarts: any, options: ForecastChartOptions): Pro
         const roundNumber = isFuture
           ? series.currentRound + (index - historyLength) + 1
           : index + 1;
-        let html = `<div style="font-weight:600;margin-bottom:6px;">第 ${roundNumber} 轮${isFuture ? '（预测）' : ''}</div>`;
+        // 标题带完整日期时间（预测轮次为估算时刻）
+        let html = `<div style="font-weight:600;margin-bottom:6px;">${tips[index] || `第 ${roundNumber} 轮${isFuture ? '（预测）' : ''}`}</div>`;
         for (const param of params) {
           if (!param || String(param.seriesName).startsWith('__')) continue;
           if (param.seriesName === '历史压缩' || param.seriesName === '预测压缩') continue;
@@ -499,7 +532,7 @@ async function renderHitChart(echarts: any, options: ForecastChartOptions): Prom
   const chart = await initChart('aus-forecast-hit-chart', echarts);
   if (!chart) return;
   const { series } = options;
-  const { labels, historyLength } = buildLabels(series);
+  const { labels, tips, historyLength } = buildLabels(series);
   if (!labels.length) return;
   const border = themeColor('--ds-border', '#E5E7EB');
   const text3 = themeColor('--ds-text-3', '#9CA3AF');
@@ -541,13 +574,14 @@ async function renderHitChart(echarts: any, options: ForecastChartOptions): Prom
       backgroundColor: cardInner,
       borderColor: border,
       borderWidth: 1,
+      ...CHART_TOOLTIP_SURFACE,
       textStyle: { color: text, fontSize: 12 },
       formatter: (params: any) => {
         if (!Array.isArray(params) || !params.length) return '';
         const index = params[0].dataIndex;
         const label = labels[index] || '';
         const isFuture = index >= historyLength;
-        let html = `<div style="font-weight:600;margin-bottom:4px;">第 ${isFuture ? series.currentRound + (index - historyLength) + 1 : index + 1} 轮${isFuture ? '（预测）' : ''}</div>`;
+        let html = `<div style="font-weight:600;margin-bottom:4px;">${tips[index] || `第 ${isFuture ? series.currentRound + (index - historyLength) + 1 : index + 1} 轮${isFuture ? '（预测）' : ''}`}</div>`;
         for (const param of params) {
           if (!param || String(param.seriesName).startsWith('__')) continue;
           const value = Array.isArray(param.value) ? param.value[1] : param.value;
@@ -604,7 +638,7 @@ async function renderCostChart(echarts: any, options: ForecastChartOptions): Pro
   const chart = await initChart('aus-forecast-cost-chart', echarts);
   if (!chart) return;
   const { series, currency, formatCost } = options;
-  const { labels, historyLength } = buildLabels(series);
+  const { labels, tips, historyLength } = buildLabels(series);
   if (!labels.length) return;
   const border = themeColor('--ds-border', '#E5E7EB');
   const text3 = themeColor('--ds-text-3', '#9CA3AF');
@@ -646,12 +680,13 @@ async function renderCostChart(echarts: any, options: ForecastChartOptions): Pro
       backgroundColor: cardInner,
       borderColor: border,
       borderWidth: 1,
+      ...CHART_TOOLTIP_SURFACE,
       textStyle: { color: text, fontSize: 12 },
       formatter: (params: any) => {
         if (!Array.isArray(params) || !params.length) return '';
         const index = params[0].dataIndex;
         const isFuture = index >= historyLength;
-        let html = `<div style="font-weight:600;margin-bottom:4px;">第 ${isFuture ? series.currentRound + (index - historyLength) + 1 : index + 1} 轮${isFuture ? '（预测）' : ''}</div>`;
+        let html = `<div style="font-weight:600;margin-bottom:4px;">${tips[index] || `第 ${isFuture ? series.currentRound + (index - historyLength) + 1 : index + 1} 轮${isFuture ? '（预测）' : ''}`}</div>`;
         for (const param of params) {
           const value = Array.isArray(param.value) ? param.value[1] : param.value;
           if (value == null || !Number.isFinite(Number(value))) continue;

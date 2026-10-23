@@ -1,6 +1,6 @@
-import { $t as noop, At as extend, Bt as isFunction, D as parse, Et as defaults, Ft as indexOf, Gt as isString, I as TRANSFORMABLE_PROPS, Jt as keys, Lt as isArray, O as stringify, Ot as each$2, Pt as hasOwn, Qt as mixin, Rt as isArrayLike, St as clone$1, Tt as curry$1, Ut as isNumber, Wt as isObject, Xt as map, Zt as merge, _t as translate, c as ZRImage, ct as sub, dt as create, fn as __extends, gt as rotate, h as Displayable, jt as filter, nn as retrieve, ot as normalize, q as getBoundingRect, rn as retrieve2, sn as trim, tn as reduce, u as Path, wt as createHashMap, x as cloneValue, xt as bind$1, yt as env, zt as isDom } from "./graphic-BAx7jeh4.js";
-import { At as normalizeSymbolSize, Bi as parsePercent, Bn as getLabelStatesModels, Br as enterBlur, Bt as LOCATION_PARAMS, Di as isNullableNumberFinite, F as getVisualFromData, Fi as mathMin, Ft as getPaddingFromTooltipModel, H as createOrUpdate, Hn as setLabelStyle, Hr as leaveBlur, Ht as copyLayoutParams, I as ComponentView, Ir as Group$2, It as tokens, Jt as mergeLayoutParam, Kn as applyTransform, Kr as toggleHoverEmphasis, Kt as getLayoutParams, Ln as Model, Lt as DataFormatMixin, Mt as TooltipMarkupStyleCreator, N as createOrUpdatePatternFromDecal, Nt as buildTooltipMarkup, Or as BezierCurve, Ot as createSymbol$1, P as findEventDispatcher, Pi as mathMax, Pt as createTooltipMarkup, Qr as convertOptionIdName, Qt as convertToColorString, R as normalizeEvent, Rr as SPECIAL_STATES, Rt as normalizeTooltipFormatResult, Ti as getPrecision, Tn as parseDataValue, Ur as leaveEmphasis, Ut as createBoxLayoutReference, V as clear, Vr as enterEmphasis, Vt as box, Xi as Rect, Xr as getECData, Y as calcBandWidth, Yi as ZRText, Yn as createIcon, Yt as positionElement, _r as initProps, di as normalizeToArray, dn as transformLocalCoordClear, dr as retrieveZInfo, ei as createSimpleOverallStageHandler2, en as formatTpl, fi as preParseFinder, fn as inheritDefaultOption, fr as setTooltipConfig, gr as getAnimationConfig, hi as queryReferringComponents, hn as isDimensionStacked, hr as traverseUpdateZ, i as use, ii as getTooltipRenderMode, in as format, kr as Line$1, kt as normalizeSymbolOffset, li as makeInner, ln as encodeHTML, mi as queryDataIndex, mn as getStackedDimension, mr as traverseElements, nn as normalizeCssArray, ot as getAxisRawValue, qi as round, qt as getLayoutRect, rn as toCamelCase, rr as graphic_exports, si as isNameSpecified, ti as defaultEmphasis, tr as getShapeClass, ui as mappingToExists, un as transformLocalCoord, vi as throwError, xr as updateProps$1, yn as SeriesData, z as stop, zn as createTextStyle, zr as enableHoverEmphasis, zt as ComponentModel } from "./axisNiceTicks-C_GC5fUj.js";
-import { a as makeKey, c as layout, f as isCoordinateSystemType, i as getAxisInfo$1, l as AxisBuilder, n as AxisView, p as SymbolDraw, r as collect, t as install$9 } from "./installSimple-D03HZlVo.js";
+import { $t as noop, At as extend, Bt as isFunction, D as parse, Et as defaults, Ft as indexOf, Gt as isString, I as TRANSFORMABLE_PROPS, Jt as keys, Lt as isArray, O as stringify, Ot as each$2, Pt as hasOwn, Qt as mixin, Rt as isArrayLike, St as clone$1, Tt as curry$1, Ut as isNumber, Wt as isObject, Xt as map, Zt as merge, _t as translate, c as ZRImage, ct as sub, dt as create, fn as __extends, gt as rotate, h as Displayable, jt as filter, nn as retrieve, ot as normalize, q as getBoundingRect, rn as retrieve2, sn as trim, tn as reduce, u as Path, wt as createHashMap, x as cloneValue, xt as bind$1, y as Eventful, yt as env, zt as isDom } from "./graphic-BAx7jeh4.js";
+import { $r as MULTIPLE_REFERRING, Ai as getPrecision, Ar as BezierCurve, At as createSymbol$1, B as stop, Bi as mathMin, Br as SPECIAL_STATES, Bt as normalizeTooltipFormatResult, Cr as updateProps$1, Dn as parseDataValue, Ei as getAcceptableTickPrecision, F as getVisualFromData, Fi as linearMap, Ft as buildTooltipMarkup, Gi as parsePercent, Gr as leaveEmphasis, Gt as createBoxLayoutReference, H as clear, Hn as getLabelStatesModels, Hr as enterBlur, Ht as LOCATION_PARAMS, I as ComponentView, Ii as mathAbs, It as createTooltipMarkup, Jn as applyTransform, Jr as toggleHoverEmphasis, Jt as getLayoutParams, Li as mathCeil, Lt as getPaddingFromTooltipModel, Mi as isNullableNumberFinite, Mt as normalizeSymbolSize, N as createOrUpdatePatternFromDecal, P as findEventDispatcher, Pt as TooltipMarkupStyleCreator, Qi as round, Qr as getECData, R as isMiddleOrRightButtonOnMouseUpDown, Ri as mathFloor, Rr as Group$2, Rt as tokens, Si as throwError, Ti as asc, Tt as isTimeScale, U as createOrUpdate, Ur as enterEmphasis, Ut as box, Vn as createTextStyle, Vr as enableHoverEmphasis, Vt as ComponentModel, Wn as setLabelStyle, Wr as leaveBlur, Wt as copyLayoutParams, X as calcBandWidth, Xt as mergeLayoutParam, Yt as getLayoutRect, Zn as createIcon, Zt as positionElement, _ as registerAction, _n as isDimensionStacked, _r as traverseUpdateZ, ai as ensureExtentAscSimply, an as toCamelCase, ar as graphic_exports, ci as getTooltipRenderMode, ct as getAxisRawValue, di as isNameSpecified, dn as encodeHTML, ea as ZRText, ei as SINGLE_REFERRING, en as convertToColorString, fi as makeCallOnlyOnce, fn as transformLocalCoord, gi as preParseFinder, gn as getStackedDimension, gr as traverseElements, hi as normalizeToArray, i as use, ii as defaultEmphasis, in as normalizeCssArray, jr as Line$1, jt as normalizeSymbolOffset, mi as mappingToExists, mn as inheritDefaultOption, mr as setTooltipConfig, nn as formatTpl, on as format, pi as makeInner, pn as transformLocalCoordClear, pr as retrieveZInfo, q as scaleRawExtentInfoCreate, ri as createSimpleOverallStageHandler2, rr as getShapeClass, rt as getCachePerECPrepare, ta as Rect, ti as convertOptionIdName, vi as queryDataIndex, vr as getAnimationConfig, wi as addSafe, wt as isOrdinalScale, xn as SeriesData, yi as queryReferringComponents, yr as initProps, z as normalizeEvent, zi as mathMax, zn as Model, zt as DataFormatMixin } from "./axisNiceTicks-ea3QyOO7.js";
+import { a as makeKey, c as layout, f as isCoordinateSystemType, i as getAxisInfo$1, l as AxisBuilder, n as AxisView, p as SymbolDraw, r as collect, t as install$10 } from "./installSimple-DDZrei-8.js";
 //#region node_modules/echarts/lib/util/styleCompat.js
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
@@ -78,6 +78,337 @@ function convertEC4CompatibleRichItem(out, richItem) {
 	hasOwn(richItem, "textBoxShadowBlur") && (out.shadowBlur = richItem.textBoxShadowBlur);
 	hasOwn(richItem, "textBoxShadowOffsetX") && (out.shadowOffsetX = richItem.textBoxShadowOffsetX);
 	hasOwn(richItem, "textBoxShadowOffsetY") && (out.shadowOffsetY = richItem.textBoxShadowOffsetY);
+}
+//#endregion
+//#region node_modules/echarts/lib/component/helper/interactionMutex.js
+/**
+* AUTO-GENERATED FILE. DO NOT MODIFY.
+*/
+var inner$8 = makeInner();
+function isTaken(zr, resourceKey) {
+	return !!inner$8(zr)[resourceKey];
+}
+/**
+* payload: {
+*     type: 'takeGlobalCursor',
+*     key: 'dataZoomSelect', or 'brush', or ...,
+*         If no userKey, release global cursor.
+* }
+*/
+registerAction({
+	type: "takeGlobalCursor",
+	event: "globalCursorTaken",
+	update: "update"
+}, noop);
+//#endregion
+//#region node_modules/echarts/lib/component/helper/cursorHelper.js
+/**
+* AUTO-GENERATED FILE. DO NOT MODIFY.
+*/
+var IRRELEVANT_EXCLUDES = {
+	"axisPointer": 1,
+	"tooltip": 1,
+	"brush": 1
+};
+/**
+* Used on roam/brush triggering determination.
+* This is to avoid that: mouse clicking on an elements that is over geo or graph,
+* but roam is triggered unexpectedly.
+*/
+function onIrrelevantElement(e, api, targetComponent) {
+	var eventElComponent = api.getComponentByElement(e.topTarget);
+	if (!eventElComponent || eventElComponent === targetComponent || IRRELEVANT_EXCLUDES.hasOwnProperty(eventElComponent.mainType)) return false;
+	var eventElCoordSys = eventElComponent.coordinateSystem;
+	if (!eventElCoordSys || eventElCoordSys.model === targetComponent) return false;
+	var eventElCmptZInfo = retrieveZInfo(eventElComponent);
+	var targetCmptZInfo = retrieveZInfo(targetComponent);
+	if ((eventElCmptZInfo.zlevel - targetCmptZInfo.zlevel || eventElCmptZInfo.z - targetCmptZInfo.z) <= 0) return false;
+	return true;
+}
+//#endregion
+//#region node_modules/echarts/lib/component/helper/RoamController.js
+/**
+* AUTO-GENERATED FILE. DO NOT MODIFY.
+*/
+/**
+* An manager of zoom and pan(darg) hehavior.
+* But it is not responsible for updating the view, since view updates vary and can
+* not be handled in a uniform way.
+*
+* Note: regarding view updates:
+*  - Transformabe views typically use `coord/View` (e.g., geo and series.graph roaming).
+*    Some commonly used view update logic has been organized into `roamHelper.ts`.
+*  - Non-transformable views handle updates themselves, possibly involving re-layout,
+*    (e.g., treemap).
+*  - Some scenarios do not require transformation (e.g., dataZoom roaming for cartesian,
+*    brush component).
+*/
+var RoamController = function(_super) {
+	__extends(RoamController, _super);
+	function RoamController(zr) {
+		var _this = _super.call(this) || this;
+		_this._zr = zr;
+		var mousedownHandler = bind$1(_this._mousedownHandler, _this);
+		var mousemoveHandler = bind$1(_this._mousemoveHandler, _this);
+		var mouseupHandler = bind$1(_this._mouseupHandler, _this);
+		var mousewheelHandler = bind$1(_this._mousewheelHandler, _this);
+		var pinchHandler = bind$1(_this._pinchHandler, _this);
+		/**
+		* Notice:
+		*  - only enable needed types. For example, if 'zoom'
+		*    is not needed, 'zoom' should not be enabled, otherwise
+		*    default mousewheel behaviour (scroll page) will be disabled.
+		*  - This method is idempotent.
+		*/
+		_this.enable = function(controlType, rawOpt) {
+			var zInfo = rawOpt.zInfo;
+			var _a = retrieveZInfo(zInfo.component), z = _a.z, zlevel = _a.zlevel;
+			var zInfoParsed = {
+				component: zInfo.component,
+				z,
+				zlevel,
+				z2: retrieve2(zInfo.z2, -Infinity)
+			};
+			var triggerInfo = extend({}, rawOpt.triggerInfo);
+			this._opt = defaults(extend({}, rawOpt), {
+				zoomOnMouseWheel: true,
+				moveOnMouseMove: true,
+				moveOnMouseWheel: false,
+				preventDefaultMouseMove: true,
+				zInfoParsed,
+				triggerInfo,
+				cursorGrab: "grab",
+				cursorGrabbing: "grabbing"
+			});
+			if (controlType == null) controlType = true;
+			if (!this._enabled || this._controlType !== controlType) {
+				this.disable();
+				this._enabled = true;
+				if (controlType === true || controlType === "move" || controlType === "pan") {
+					addRoamZrListener(zr, "mousedown", mousedownHandler, zInfoParsed);
+					addRoamZrListener(zr, "mousemove", mousemoveHandler, zInfoParsed);
+					addRoamZrListener(zr, "mouseup", mouseupHandler, zInfoParsed);
+				}
+				if (controlType === true || controlType === "scale" || controlType === "zoom") {
+					addRoamZrListener(zr, "mousewheel", mousewheelHandler, zInfoParsed);
+					addRoamZrListener(zr, "pinch", pinchHandler, zInfoParsed);
+				}
+			}
+		};
+		_this.disable = function() {
+			if (this._enabled) {
+				this._enabled = false;
+				removeRoamZrListener(zr, "mousedown", mousedownHandler);
+				removeRoamZrListener(zr, "mousemove", mousemoveHandler);
+				removeRoamZrListener(zr, "mouseup", mouseupHandler);
+				removeRoamZrListener(zr, "mousewheel", mousewheelHandler);
+				removeRoamZrListener(zr, "pinch", pinchHandler);
+			}
+		};
+		return _this;
+	}
+	RoamController.prototype.isDragging = function() {
+		return this._dragging;
+	};
+	RoamController.prototype.isPinching = function() {
+		return this._pinching;
+	};
+	RoamController.prototype._checkPointer = function(e, x, y) {
+		var opt = this._opt;
+		var zInfoParsed = opt.zInfoParsed;
+		if (onIrrelevantElement(e, opt.api, zInfoParsed.component)) return false;
+		var triggerInfo = opt.triggerInfo;
+		var roamTrigger = triggerInfo.roamTrigger;
+		var inArea = false;
+		if (roamTrigger === "global") inArea = true;
+		if (!inArea) inArea = triggerInfo.isInSelf(e, x, y);
+		if (inArea && triggerInfo.isInClip && !triggerInfo.isInClip(e, x, y)) inArea = false;
+		return inArea;
+	};
+	RoamController.prototype._decideCursorStyle = function(e, x, y, forReverse) {
+		var target = e.target;
+		if (!target && this._checkPointer(e, x, y)) return this._opt.cursorGrab;
+		if (forReverse) return target && target.cursor || "default";
+	};
+	RoamController.prototype.dispose = function() {
+		this.disable();
+	};
+	RoamController.prototype._mousedownHandler = function(e) {
+		if (isMiddleOrRightButtonOnMouseUpDown(e) || eventConsumed(e)) return;
+		var el = e.target;
+		while (el) {
+			if (el.draggable) return;
+			el = el.__hostTarget || el.parent;
+		}
+		var x = e.offsetX;
+		var y = e.offsetY;
+		if (this._checkPointer(e, x, y)) {
+			this._x = x;
+			this._y = y;
+			this._dragging = true;
+		}
+	};
+	RoamController.prototype._mousemoveHandler = function(e) {
+		var zr = this._zr;
+		if (e.gestureEvent === "pinch" || isTaken(zr, "globalPan") || eventConsumed(e)) return;
+		var x = e.offsetX;
+		var y = e.offsetY;
+		if (!this._dragging || !isAvailableBehavior("moveOnMouseMove", e, this._opt)) {
+			var cursorStyle = this._decideCursorStyle(e, x, y, false);
+			if (cursorStyle) zr.setCursorStyle(cursorStyle);
+			return;
+		}
+		zr.setCursorStyle(this._opt.cursorGrabbing);
+		var oldX = this._x;
+		var oldY = this._y;
+		var dx = x - oldX;
+		var dy = y - oldY;
+		this._x = x;
+		this._y = y;
+		if (this._opt.preventDefaultMouseMove) stop(e.event);
+		e.__ecRoamConsumed = true;
+		trigger(this, "pan", "moveOnMouseMove", e, {
+			dx,
+			dy,
+			oldX,
+			oldY,
+			newX: x,
+			newY: y,
+			isAvailableBehavior: null
+		});
+	};
+	RoamController.prototype._mouseupHandler = function(e) {
+		if (eventConsumed(e)) return;
+		var zr = this._zr;
+		if (!isMiddleOrRightButtonOnMouseUpDown(e)) {
+			this._dragging = false;
+			var cursorStyle = this._decideCursorStyle(e, e.offsetX, e.offsetY, true);
+			if (cursorStyle) zr.setCursorStyle(cursorStyle);
+		}
+	};
+	RoamController.prototype._mousewheelHandler = function(e) {
+		if (eventConsumed(e)) return;
+		var shouldZoom = isAvailableBehavior("zoomOnMouseWheel", e, this._opt);
+		var shouldMove = isAvailableBehavior("moveOnMouseWheel", e, this._opt);
+		var wheelDelta = e.wheelDelta;
+		var absWheelDeltaDelta = Math.abs(wheelDelta);
+		var originX = e.offsetX;
+		var originY = e.offsetY;
+		if (wheelDelta === 0 || !shouldZoom && !shouldMove) return;
+		if (shouldZoom) {
+			var factor = absWheelDeltaDelta > 3 ? 1.4 : absWheelDeltaDelta > 1 ? 1.2 : 1.1;
+			var scale = wheelDelta > 0 ? factor : 1 / factor;
+			this._checkTriggerMoveZoom(this, "zoom", "zoomOnMouseWheel", e, {
+				scale,
+				originX,
+				originY,
+				isAvailableBehavior: null
+			});
+		}
+		if (shouldMove) {
+			var absDelta = Math.abs(wheelDelta);
+			var scrollDelta = (wheelDelta > 0 ? 1 : -1) * (absDelta > 3 ? .4 : absDelta > 1 ? .15 : .05);
+			this._checkTriggerMoveZoom(this, "scrollMove", "moveOnMouseWheel", e, {
+				scrollDelta,
+				originX,
+				originY,
+				isAvailableBehavior: null
+			});
+		}
+	};
+	RoamController.prototype._pinchHandler = function(e) {
+		if (isTaken(this._zr, "globalPan") || eventConsumed(e)) return;
+		var scale = e.pinchScale > 1 ? 1.1 : 1 / 1.1;
+		this._checkTriggerMoveZoom(this, "zoom", null, e, {
+			scale,
+			originX: e.pinchX,
+			originY: e.pinchY,
+			isAvailableBehavior: null
+		});
+	};
+	RoamController.prototype._checkTriggerMoveZoom = function(controller, eventName, behaviorToCheck, e, contollerEvent) {
+		if (controller._checkPointer(e, contollerEvent.originX, contollerEvent.originY)) {
+			stop(e.event);
+			e.__ecRoamConsumed = true;
+			trigger(controller, eventName, behaviorToCheck, e, contollerEvent);
+		}
+	};
+	return RoamController;
+}(Eventful);
+function eventConsumed(e) {
+	return e.__ecRoamConsumed;
+}
+var innerZrStore = makeInner();
+function ensureZrStore(zr) {
+	var store = innerZrStore(zr);
+	store.roam = store.roam || {};
+	store.uniform = store.uniform || {};
+	return store;
+}
+/**
+* Listeners are sorted by z2/z/zlevel in descending order.
+* This decides the precedence between different roam controllers if they are overlapped.
+*
+* [MEMO]: It's not easy to perfectly reconcile the conflicts caused by overlap.
+*  - Consider cases:
+*    - Multiple roam controllers overlapped.
+*      - Usually only the topmost can trigger roam.
+*    - Roam controllers overlap with other zr elements:
+*      - zr elements are relevant or irrelevent to the host of the roam controller. e.g., axis split line
+*        or series elements is relevant to a cartesian and should trigger roam.
+*      - zr elements is above or below the roam controller host, which affects the precedence of interaction.
+*      - zr elements may not silent only for triggering tooltip by hovering, which is available to roam;
+*        or may not silent for click, where roam is not preferable.
+*  - Approach - `addRoamZrListener+pointerChecker+onIrrelevantElement` (currently used):
+*    - Resolve the precedence between different roam controllers
+*    - But cannot prevent the handling on other zr elements that under the roam controller in z-order.
+*  - Approach - "use an invisible zr elements to receive the zr events to trigger roam":
+*    - More complicated in impl.
+*    - May cause bad cases where zr event cannot be receive due to other non-silient zr elements covering it.
+*/
+function addRoamZrListener(zr, eventType, listener, zInfoParsed) {
+	var roam = ensureZrStore(zr).roam;
+	var listenerList = roam[eventType] = roam[eventType] || [];
+	var idx = 0;
+	for (; idx < listenerList.length; idx++) {
+		var currZInfo = listenerList[idx].zInfoParsed;
+		if ((currZInfo.zlevel - zInfoParsed.zlevel || currZInfo.z - zInfoParsed.z || currZInfo.z2 - zInfoParsed.z2) <= 0) break;
+	}
+	listenerList.splice(idx, 0, {
+		listener,
+		zInfoParsed
+	});
+	ensureUniformListener(zr, eventType);
+}
+function removeRoamZrListener(zr, eventType, listener) {
+	var listenerList = ensureZrStore(zr).roam[eventType] || [];
+	for (var idx = 0; idx < listenerList.length; idx++) if (listenerList[idx].listener === listener) {
+		listenerList.splice(idx, 1);
+		if (!listenerList.length) removeUniformListener(zr, eventType);
+		return;
+	}
+}
+function ensureUniformListener(zr, eventType) {
+	var store = ensureZrStore(zr);
+	if (!store.uniform[eventType]) zr.on(eventType, store.uniform[eventType] = function(event) {
+		var listenerList = store.roam[eventType];
+		if (listenerList) for (var i = 0; i < listenerList.length; i++) listenerList[i].listener(event);
+	});
+}
+function removeUniformListener(zr, eventType) {
+	var uniform = ensureZrStore(zr).uniform;
+	if (uniform[eventType]) {
+		zr.off(eventType, uniform[eventType]);
+		uniform[eventType] = null;
+	}
+}
+function trigger(controller, eventName, behaviorToCheck, e, contollerEvent) {
+	contollerEvent.isAvailableBehavior = bind$1(isAvailableBehavior, null, behaviorToCheck, e);
+	controller.trigger(eventName, contollerEvent);
+}
+function isAvailableBehavior(behaviorToCheck, e, settings) {
+	var setting = settings[behaviorToCheck];
+	return !behaviorToCheck || setting && (!isString(setting) || e.event[setting + "Key"]);
 }
 //#endregion
 //#region node_modules/echarts/lib/chart/helper/LinePath.js
@@ -569,6 +900,69 @@ function lineNeedsDraw(pts) {
 	return pts && !isPointNaN(pts[0]) && !isPointNaN(pts[1]);
 }
 //#endregion
+//#region node_modules/echarts/lib/component/helper/sliderMove.js
+/**
+* AUTO-GENERATED FILE. DO NOT MODIFY.
+*/
+/**
+* Calculate slider move result.
+* Usage:
+* (1) If both handle0 and handle1 are needed to be moved, set minSpan the same as
+* maxSpan and the same as `Math.abs(handleEnd[1] - handleEnds[0])`.
+* (2) If handle0 is forbidden to cross handle1, set minSpan as `0`.
+*
+* [CAVEAT]
+*  This method is inefficient due to the use of `addSafe`.
+*
+* @param delta Move length.
+* @param handleEnds handleEnds[0] can be bigger then handleEnds[1].
+*              handleEnds will be modified in this method.
+* @param extent handleEnds is restricted by extent.
+*              extent[0] should less or equals than extent[1].
+* @param handleIndex Can be 'all', means that both move the two handleEnds.
+* @param minSpan The range of dataZoom can not be smaller than that.
+*              If not set, handle0 and cross handle1. If set as a non-negative
+*              number (including `0`), handles will push each other when reaching
+*              the minSpan.
+* @param maxSpan The range of dataZoom can not be larger than that.
+* @return The input handleEnds.
+*/
+function sliderMove(delta, handleEnds, extent, handleIndex, minSpan, maxSpan) {
+	delta = delta || 0;
+	var extentSpan = addSafe(extent[1], -extent[0]);
+	if (minSpan != null) minSpan = restrict(minSpan, [0, extentSpan]);
+	if (maxSpan != null) maxSpan = Math.max(maxSpan, minSpan != null ? minSpan : 0);
+	if (handleIndex === "all") {
+		var handleSpan = Math.abs(addSafe(handleEnds[1], -handleEnds[0]));
+		handleSpan = restrict(handleSpan, [0, extentSpan]);
+		minSpan = maxSpan = restrict(handleSpan, [minSpan, maxSpan]);
+		handleIndex = 0;
+	}
+	handleEnds[0] = restrict(handleEnds[0], extent);
+	handleEnds[1] = restrict(handleEnds[1], extent);
+	var originalDistSign = getSpanSign(handleEnds, handleIndex);
+	handleEnds[handleIndex] += delta;
+	var extentMinSpan = minSpan || 0;
+	var realExtent = extent.slice();
+	originalDistSign.sign < 0 ? realExtent[0] = addSafe(realExtent[0], extentMinSpan) : realExtent[1] = addSafe(realExtent[1], -extentMinSpan);
+	handleEnds[handleIndex] = restrict(handleEnds[handleIndex], realExtent);
+	var currDistSign = getSpanSign(handleEnds, handleIndex);
+	if (minSpan != null && (currDistSign.sign !== originalDistSign.sign || currDistSign.span < minSpan)) handleEnds[1 - handleIndex] = addSafe(handleEnds[handleIndex], originalDistSign.sign * minSpan);
+	currDistSign = getSpanSign(handleEnds, handleIndex);
+	if (maxSpan != null && currDistSign.span > maxSpan) handleEnds[1 - handleIndex] = addSafe(handleEnds[handleIndex], currDistSign.sign * maxSpan);
+	return handleEnds;
+}
+function getSpanSign(handleEnds, handleIndex) {
+	var dist = handleEnds[handleIndex] - handleEnds[1 - handleIndex];
+	return {
+		span: Math.abs(dist),
+		sign: dist > 0 ? -1 : dist < 0 ? 1 : handleIndex ? -1 : 1
+	};
+}
+function restrict(value, extend) {
+	return Math.min(extend[1] != null ? extend[1] : Infinity, Math.max(extend[0] != null ? extend[0] : -Infinity, value));
+}
+//#endregion
 //#region node_modules/echarts/lib/animation/customGraphicTransition.js
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
@@ -949,7 +1343,7 @@ function applyKeyframeAnimation(el, animationOpts, animatableModel) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-var inner$6 = makeInner();
+var inner$7 = makeInner();
 var clone = clone$1;
 var bind = bind$1;
 /**
@@ -1048,7 +1442,7 @@ var BaseAxisPointer = function() {
 	BaseAxisPointer.prototype.createPointerEl = function(group, elOption, axisModel, axisPointerModel) {
 		var pointerOption = elOption.pointer;
 		if (pointerOption) {
-			var pointerEl = inner$6(group).pointerEl = new graphic_exports[pointerOption.type](clone(elOption.pointer));
+			var pointerEl = inner$7(group).pointerEl = new graphic_exports[pointerOption.type](clone(elOption.pointer));
 			group.add(pointerEl);
 		}
 	};
@@ -1057,7 +1451,7 @@ var BaseAxisPointer = function() {
 	*/
 	BaseAxisPointer.prototype.createLabelEl = function(group, elOption, axisModel, axisPointerModel) {
 		if (elOption.label) {
-			var labelEl = inner$6(group).labelEl = new ZRText(clone(elOption.label));
+			var labelEl = inner$7(group).labelEl = new ZRText(clone(elOption.label));
 			group.add(labelEl);
 			updateLabelShowHide(labelEl, axisPointerModel);
 		}
@@ -1066,7 +1460,7 @@ var BaseAxisPointer = function() {
 	* @protected
 	*/
 	BaseAxisPointer.prototype.updatePointerEl = function(group, elOption, updateProps) {
-		var pointerEl = inner$6(group).pointerEl;
+		var pointerEl = inner$7(group).pointerEl;
 		if (pointerEl && elOption.pointer) {
 			pointerEl.setStyle(elOption.pointer.style);
 			updateProps(pointerEl, { shape: elOption.pointer.shape });
@@ -1076,7 +1470,7 @@ var BaseAxisPointer = function() {
 	* @protected
 	*/
 	BaseAxisPointer.prototype.updateLabelEl = function(group, elOption, updateProps, axisPointerModel) {
-		var labelEl = inner$6(group).labelEl;
+		var labelEl = inner$7(group).labelEl;
 		if (labelEl) {
 			labelEl.setStyle(elOption.label.style);
 			updateProps(labelEl, {
@@ -1145,7 +1539,7 @@ var BaseAxisPointer = function() {
 		this._payloadInfo = trans;
 		handle.stopAnimation();
 		handle.attr(getHandleTransProps(trans));
-		inner$6(handle).lastProp = null;
+		inner$7(handle).lastProp = null;
 		this._doDispatchAxisPointer();
 	};
 	/**
@@ -1208,8 +1602,8 @@ var BaseAxisPointer = function() {
 	return BaseAxisPointer;
 }();
 function updateProps(animationModel, moveAnimation, el, props) {
-	if (!propsEqual(inner$6(el).lastProp, props)) {
-		inner$6(el).lastProp = props;
+	if (!propsEqual(inner$7(el).lastProp, props)) {
+		inner$7(el).lastProp = props;
 		moveAnimation ? updateProps$1(el, props, animationModel) : (el.stopAnimation(), el.attr(props));
 	}
 }
@@ -1537,19 +1931,19 @@ var AxisPointerModel = function(_super) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-var inner$5 = makeInner();
+var inner$6 = makeInner();
 var each$1 = each$2;
 function register(key, api, handler) {
 	if (env.node) return;
 	var zr = api.getZr();
-	inner$5(zr).records || (inner$5(zr).records = {});
+	inner$6(zr).records || (inner$6(zr).records = {});
 	initGlobalListeners(zr, api);
-	var record = inner$5(zr).records[key] || (inner$5(zr).records[key] = {});
+	var record = inner$6(zr).records[key] || (inner$6(zr).records[key] = {});
 	record.handler = handler;
 }
 function initGlobalListeners(zr, api) {
-	if (inner$5(zr).initialized) return;
-	inner$5(zr).initialized = true;
+	if (inner$6(zr).initialized) return;
+	inner$6(zr).initialized = true;
 	useHandler("click", curry$1(doEnter, "click"));
 	useHandler("mousemove", curry$1(doEnter, "mousemove"));
 	useHandler("mousewheel", curry$1(doEnter, "mousewheel"));
@@ -1557,7 +1951,7 @@ function initGlobalListeners(zr, api) {
 	function useHandler(eventType, cb) {
 		zr.on(eventType, function(e) {
 			var dis = makeDispatchAction$1(api);
-			each$1(inner$5(zr).records, function(record) {
+			each$1(inner$6(zr).records, function(record) {
 				record && cb(record, e, dis.dispatchAction);
 			});
 			dispatchTooltipFinally(dis.pendings, api);
@@ -1602,7 +1996,7 @@ function makeDispatchAction$1(api) {
 function unregister(key, api) {
 	if (env.node) return;
 	var zr = api.getZr();
-	if ((inner$5(zr).records || {})[key]) inner$5(zr).records[key] = null;
+	if ((inner$6(zr).records || {})[key]) inner$6(zr).records[key] = null;
 }
 //#endregion
 //#region node_modules/echarts/lib/component/axisPointer/AxisPointerView.js
@@ -1687,7 +2081,7 @@ function findPointFromSeries(finder, ecModel) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-var inner$4 = makeInner();
+var inner$5 = makeInner();
 /**
 * Basic logic: check all axis, if they do not demand show/highlight,
 * then hide/downplay them.
@@ -1889,8 +2283,8 @@ function dispatchTooltipActually(dataByCoordSys, point, payload, dispatchAction)
 function dispatchHighDownActually(axesInfo, dispatchAction, api) {
 	var zr = api.getZr();
 	var highDownKey = "axisPointerLastHighlights";
-	var lastHighlights = inner$4(zr)[highDownKey] || {};
-	var newHighlights = inner$4(zr)[highDownKey] = {};
+	var lastHighlights = inner$5(zr)[highDownKey] || {};
+	var newHighlights = inner$5(zr)[highDownKey] = {};
 	each$2(axesInfo, function(axisInfo, key) {
 		var option = axisInfo.axisPointerModel.option;
 		option.status === "show" && axisInfo.triggerEmphasis && each$2(option.seriesDataIndices, function(batchItem) {
@@ -1947,7 +2341,7 @@ function illegalPoint(point) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-function install$8(registers) {
+function install$9(registers) {
 	AxisView.registerAxisPointerClass("CartesianAxisPointer", CartesianAxisPointer);
 	registers.registerComponentModel(AxisPointerModel);
 	registers.registerComponentView(AxisPointerView);
@@ -1972,9 +2366,9 @@ function install$8(registers) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-function install$1(registers) {
+function install$2(registers) {
+	use(install$10);
 	use(install$9);
-	use(install$8);
 }
 //#endregion
 //#region node_modules/echarts/lib/component/graphic/GraphicModel.js
@@ -2130,7 +2524,7 @@ var nonShapeGraphicElements = {
 	image: ZRImage,
 	text: ZRText
 };
-var inner$3 = makeInner();
+var inner$4 = makeInner();
 var GraphicComponentView = function(_super) {
 	__extends(GraphicComponentView, _super);
 	function GraphicComponentView() {
@@ -2183,7 +2577,7 @@ var GraphicComponentView = function(_super) {
 				var el_1 = elExisting;
 				if (isInit) el_1 = createEl(id, targetElParent, elOption.type, elMap);
 				else {
-					el_1 && (inner$3(el_1).isNew = false);
+					el_1 && (inner$4(el_1).isNew = false);
 					stopPreviousKeyframeAnimationAndRestore(el_1);
 				}
 				if (el_1) {
@@ -2216,7 +2610,7 @@ var GraphicComponentView = function(_super) {
 					var isInit = false;
 					if (isMerge) {
 						var oldClipPath = el.getClipPath();
-						isInit = !oldClipPath || inner$3(oldClipPath).type !== clipPathType;
+						isInit = !oldClipPath || inner$4(oldClipPath).type !== clipPathType;
 						clipPath = isInit ? newEl(clipPathType) : oldClipPath;
 					} else if (isReplace) {
 						isInit = true;
@@ -2226,7 +2620,7 @@ var GraphicComponentView = function(_super) {
 					applyUpdateTransition(clipPath, clipPathOption, graphicModel, { isInit });
 					applyKeyframeAnimation(clipPath, clipPathOption.keyframeAnimation, graphicModel);
 				}
-				var elInner = inner$3(el);
+				var elInner = inner$4(el);
 				el.setTextConfig(textConfig);
 				elInner.option = elOption;
 				setEventData(el, graphicModel, elOption);
@@ -2257,8 +2651,8 @@ var GraphicComponentView = function(_super) {
 			if (!el || !el.isGroup) continue;
 			var parentEl = el.parent;
 			var isParentRoot = parentEl === rootGroup;
-			var elInner = inner$3(el);
-			var parentElInner = inner$3(parentEl);
+			var elInner = inner$4(el);
+			var parentElInner = inner$4(parentEl);
 			elInner.width = parsePercent(elInner.option.width, isParentRoot ? apiWidth : parentElInner.width) || 0;
 			elInner.height = parsePercent(elInner.option.height, isParentRoot ? apiHeight : parentElInner.height) || 0;
 		}
@@ -2268,7 +2662,7 @@ var GraphicComponentView = function(_super) {
 			var el = id != null ? elMap.get(id) : null;
 			if (!el) continue;
 			var parentEl = el.parent;
-			var parentElInner = inner$3(parentEl);
+			var parentElInner = inner$4(parentEl);
 			var containerInfo = parentEl === rootGroup ? {
 				width: apiWidth,
 				height: apiHeight
@@ -2281,7 +2675,7 @@ var GraphicComponentView = function(_super) {
 				hv: elOption.hv,
 				boundingMode: elOption.bounding
 			}, layoutPos);
-			if (!inner$3(el).isNew && layouted) {
+			if (!inner$4(el).isNew && layouted) {
 				var transition = elOption.transition;
 				var animatePos = {};
 				for (var k = 0; k < xy.length; k++) {
@@ -2301,7 +2695,7 @@ var GraphicComponentView = function(_super) {
 		var _this = this;
 		var elMap = this._elMap;
 		elMap.each(function(el) {
-			removeEl(el, inner$3(el).option, elMap, _this._lastGraphicModel);
+			removeEl(el, inner$4(el).option, elMap, _this._lastGraphicModel);
 		});
 		this._elMap = createHashMap();
 	};
@@ -2313,15 +2707,15 @@ var GraphicComponentView = function(_super) {
 }(ComponentView);
 function newEl(graphicType) {
 	var el = new (hasOwn(nonShapeGraphicElements, graphicType) ? nonShapeGraphicElements[graphicType] : getShapeClass(graphicType))({});
-	inner$3(el).type = graphicType;
+	inner$4(el).type = graphicType;
 	return el;
 }
 function createEl(id, targetElParent, graphicType, elMap) {
 	var el = newEl(graphicType);
 	targetElParent.add(el);
 	elMap.set(id, el);
-	inner$3(el).id = id;
-	inner$3(el).isNew = true;
+	inner$4(el).id = id;
+	inner$4(el).isNew = true;
 	return el;
 }
 function removeEl(elExisting, elOption, elMap, graphicModel) {
@@ -2330,7 +2724,7 @@ function removeEl(elExisting, elOption, elMap, graphicModel) {
 			removeEl(el, elOption, elMap, graphicModel);
 		});
 		applyLeaveTransition(elExisting, elOption, graphicModel);
-		elMap.removeKey(inner$3(elExisting).id);
+		elMap.removeKey(inner$4(elExisting).id);
 	}
 }
 function updateCommonAttrs(el, elOption, defaultZ, defaultZlevel) {
@@ -2383,7 +2777,7 @@ function setEventData(el, graphicModel, elOption) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-function install(registers) {
+function install$1(registers) {
 	registers.registerComponentModel(GraphicComponentModel);
 	registers.registerComponentView(GraphicComponentView);
 	registers.registerPreprocessor(function(option) {
@@ -2392,6 +2786,782 @@ function install(registers) {
 			if (!graphicOption[0] || !graphicOption[0].elements) option.graphic = [{ elements: graphicOption }];
 			else option.graphic = [option.graphic[0]];
 		} else if (graphicOption && !graphicOption.elements) option.graphic = [{ elements: [graphicOption] }];
+	});
+}
+//#endregion
+//#region node_modules/echarts/lib/component/dataZoom/helper.js
+/**
+* AUTO-GENERATED FILE. DO NOT MODIFY.
+*/
+var DATA_ZOOM_AXIS_DIMENSIONS = [
+	"x",
+	"y",
+	"radius",
+	"angle",
+	"single"
+];
+var ecModelCacheInner = makeInner();
+var SERIES_COORDS = [
+	"cartesian2d",
+	"polar",
+	"singleAxis"
+];
+function isCoordSupported(seriesModel) {
+	var coordType = seriesModel.get("coordinateSystem");
+	return indexOf(SERIES_COORDS, coordType) >= 0;
+}
+function getAxisMainType(axisDim) {
+	return axisDim + "Axis";
+}
+/**
+* If two dataZoomModels has the same axis controlled, we say that they are 'linked'.
+* This function finds all linked dataZoomModels start from the given payload.
+*/
+function findEffectedDataZooms(ecModel, payload) {
+	var axisRecords = createHashMap();
+	var effectedModels = [];
+	var effectedModelMap = createHashMap();
+	ecModel.eachComponent({
+		mainType: "dataZoom",
+		query: payload
+	}, function(dataZoomModel) {
+		if (!effectedModelMap.get(dataZoomModel.uid)) addToEffected(dataZoomModel);
+	});
+	var foundNewLink;
+	do {
+		foundNewLink = false;
+		ecModel.eachComponent("dataZoom", processSingle);
+	} while (foundNewLink);
+	function processSingle(dataZoomModel) {
+		if (!effectedModelMap.get(dataZoomModel.uid) && isLinked(dataZoomModel)) {
+			addToEffected(dataZoomModel);
+			foundNewLink = true;
+		}
+	}
+	function addToEffected(dataZoom) {
+		effectedModelMap.set(dataZoom.uid, true);
+		effectedModels.push(dataZoom);
+		markAxisControlled(dataZoom);
+	}
+	function isLinked(dataZoomModel) {
+		var isLink = false;
+		dataZoomModel.eachTargetAxis(function(axisDim, axisIndex) {
+			var axisIdxArr = axisRecords.get(axisDim);
+			if (axisIdxArr && axisIdxArr[axisIndex]) isLink = true;
+		});
+		return isLink;
+	}
+	function markAxisControlled(dataZoomModel) {
+		dataZoomModel.eachTargetAxis(function(axisDim, axisIndex) {
+			(axisRecords.get(axisDim) || axisRecords.set(axisDim, []))[axisIndex] = true;
+		});
+	}
+	return effectedModels;
+}
+/**
+* Find the first target coordinate system.
+* Available after model built.
+*
+* @return Like {
+*                  grid: [
+*                      {model: coord0, axisModels: [axis1, axis3], coordIndex: 1},
+*                      {model: coord1, axisModels: [axis0, axis2], coordIndex: 0},
+*                      ...
+*                  ],  // cartesians must not be null/undefined.
+*                  polar: [
+*                      {model: coord0, axisModels: [axis4], coordIndex: 0},
+*                      ...
+*                  ],  // polars must not be null/undefined.
+*                  singleAxis: [
+*                      {model: coord0, axisModels: [], coordIndex: 0}
+*                  ]
+*              }
+*/
+function collectReferCoordSysModelInfo(dataZoomModel) {
+	var ecModel = dataZoomModel.ecModel;
+	var coordSysInfoWrap = {
+		infoList: [],
+		infoMap: createHashMap()
+	};
+	dataZoomModel.eachTargetAxis(function(axisDim, axisIndex) {
+		var axisModel = ecModel.getComponent(getAxisMainType(axisDim), axisIndex);
+		if (!axisModel) return;
+		var coordSysModel = axisModel.getCoordSysModel();
+		if (!coordSysModel) return;
+		var coordSysUid = coordSysModel.uid;
+		var coordSysInfo = coordSysInfoWrap.infoMap.get(coordSysUid);
+		if (!coordSysInfo) {
+			coordSysInfo = {
+				model: coordSysModel,
+				axisModels: []
+			};
+			coordSysInfoWrap.infoList.push(coordSysInfo);
+			coordSysInfoWrap.infoMap.set(coordSysUid, coordSysInfo);
+		}
+		coordSysInfo.axisModels.push(axisModel);
+	});
+	return coordSysInfoWrap;
+}
+function ensureAxisProxyMap(ecModel) {
+	var store = ecModelCacheInner(getCachePerECPrepare(ecModel));
+	return store.axisProxyMap || (store.axisProxyMap = createHashMap());
+}
+function getAxisProxyFromModel(axisModel) {
+	if (!axisModel) return;
+	return ensureAxisProxyMap(axisModel.ecModel).get(axisModel.uid);
+}
+function setAxisProxyToModel(axisModel, axisProxy) {
+	ensureAxisProxyMap(axisModel.ecModel).set(axisModel.uid, axisProxy);
+}
+/**
+* NOTICE: If `axis_a` aligns to `axis_b`, but they are not controlled by
+* the same `dataZoom`, do not consider `axis_b` as `alignTo` and
+* then do not input it into `AxisProxy#reset`.
+*/
+function getAlignTo(dataZoomModel, axisProxy) {
+	var alignToAxis = axisProxy.getAxisModel().axis.__alignTo;
+	return alignToAxis && dataZoomModel.getAxisProxy(alignToAxis.dim, alignToAxis.model.componentIndex) ? getAxisProxyFromModel(alignToAxis.model) : null;
+}
+//#endregion
+//#region node_modules/echarts/lib/component/dataZoom/DataZoomModel.js
+/**
+* AUTO-GENERATED FILE. DO NOT MODIFY.
+*/
+var DataZoomAxisInfo = function() {
+	function DataZoomAxisInfo() {
+		this.indexList = [];
+		this.indexMap = [];
+	}
+	DataZoomAxisInfo.prototype.add = function(axisCmptIdx) {
+		if (!this.indexMap[axisCmptIdx]) {
+			this.indexList.push(axisCmptIdx);
+			this.indexMap[axisCmptIdx] = true;
+		}
+	};
+	return DataZoomAxisInfo;
+}();
+var DataZoomModel = function(_super) {
+	__extends(DataZoomModel, _super);
+	function DataZoomModel() {
+		var _this = _super !== null && _super.apply(this, arguments) || this;
+		_this.type = DataZoomModel.type;
+		_this._autoThrottle = true;
+		_this._noTarget = true;
+		/**
+		* It is `[rangeModeForMin, rangeModeForMax]`.
+		* The optional values for `rangeMode`:
+		* + `'value'` mode: the axis extent will always be determined by
+		*     `dataZoom.startValue` and `dataZoom.endValue`, despite
+		*     how data like and how `axis.min` and `axis.max` are.
+		* + `'percent'` mode: `100` represents 100% of the `[dMin, dMax]`,
+		*     where `dMin` is `axis.min` if `axis.min` specified, otherwise `data.extent[0]`,
+		*     and `dMax` is `axis.max` if `axis.max` specified, otherwise `data.extent[1]`.
+		*     Axis extent will be determined by the result of the percent of `[dMin, dMax]`.
+		*
+		* For example, when users are using dynamic data (update data periodically via `setOption`),
+		* if in `'value`' mode, the window will be kept in a fixed value range despite how
+		* data are appended, while if in `'percent'` mode, whe window range will be changed alone with
+		* the appended data (suppose `axis.min` and `axis.max` are not specified).
+		*/
+		_this._rangePropMode = ["percent", "percent"];
+		return _this;
+	}
+	DataZoomModel.prototype.init = function(option, parentModel, ecModel) {
+		var inputRawOption = retrieveRawOption(option);
+		/**
+		* Suppose a "main process" start at the point that model prepared (that is,
+		* model initialized or merged or method called in `action`).
+		* We should keep the `main process` idempotent, that is, given a set of values
+		* on `option`, we get the same result.
+		*
+		* But sometimes, values on `option` will be updated for providing users
+		* a "final calculated value" (`dataZoomProcessor` will do that). Those value
+		* should not be the base/input of the `main process`.
+		*
+		* So in that case we should save and keep the input of the `main process`
+		* separately, called `settledOption`.
+		*
+		* For example, consider the case:
+		* (Step_1) brush zoom the grid by `toolbox.dataZoom`,
+		*     where the original input `option.startValue`, `option.endValue` are earsed by
+		*     calculated value.
+		* (Step)2) click the legend to hide and show a series,
+		*     where the new range is calculated by the earsed `startValue` and `endValue`,
+		*     which brings incorrect result.
+		*/
+		this.settledOption = inputRawOption;
+		this.mergeDefaultAndTheme(option, ecModel);
+		this._doInit(inputRawOption);
+	};
+	DataZoomModel.prototype.mergeOption = function(newOption) {
+		var inputRawOption = retrieveRawOption(newOption);
+		merge(this.option, newOption, true);
+		merge(this.settledOption, inputRawOption, true);
+		this._doInit(inputRawOption);
+	};
+	DataZoomModel.prototype._doInit = function(inputRawOption) {
+		var thisOption = this.option;
+		this._setDefaultThrottle(inputRawOption);
+		this._updateRangeUse(inputRawOption);
+		var settledOption = this.settledOption;
+		each$2([["start", "startValue"], ["end", "endValue"]], function(names, index) {
+			if (this._rangePropMode[index] === "value") thisOption[names[0]] = settledOption[names[0]] = null;
+		}, this);
+		this._resetTarget();
+	};
+	DataZoomModel.prototype._resetTarget = function() {
+		var optionOrient = this.get("orient", true);
+		var targetAxisIndexMap = this._targetAxisInfoMap = createHashMap();
+		if (this._fillSpecifiedTargetAxis(targetAxisIndexMap)) this._orient = optionOrient || this._makeAutoOrientByTargetAxis();
+		else {
+			this._orient = optionOrient || "horizontal";
+			this._fillAutoTargetAxisByOrient(targetAxisIndexMap, this._orient);
+		}
+		this._noTarget = true;
+		targetAxisIndexMap.each(function(axisInfo) {
+			if (axisInfo.indexList.length) this._noTarget = false;
+		}, this);
+	};
+	DataZoomModel.prototype._fillSpecifiedTargetAxis = function(targetAxisIndexMap) {
+		var hasAxisSpecified = false;
+		each$2(DATA_ZOOM_AXIS_DIMENSIONS, function(axisDim) {
+			var refering = this.getReferringComponents(getAxisMainType(axisDim), MULTIPLE_REFERRING);
+			if (!refering.specified) return;
+			hasAxisSpecified = true;
+			var axisInfo = new DataZoomAxisInfo();
+			each$2(refering.models, function(axisModel) {
+				axisInfo.add(axisModel.componentIndex);
+			});
+			targetAxisIndexMap.set(axisDim, axisInfo);
+		}, this);
+		return hasAxisSpecified;
+	};
+	DataZoomModel.prototype._fillAutoTargetAxisByOrient = function(targetAxisIndexMap, orient) {
+		var ecModel = this.ecModel;
+		var needAuto = true;
+		if (needAuto) {
+			var axisDim = orient === "vertical" ? "y" : "x";
+			var axisModels = ecModel.findComponents({ mainType: axisDim + "Axis" });
+			setParallelAxis(axisModels, axisDim);
+		}
+		if (needAuto) {
+			var axisModels = ecModel.findComponents({
+				mainType: "singleAxis",
+				filter: function(axisModel) {
+					return axisModel.get("orient", true) === orient;
+				}
+			});
+			setParallelAxis(axisModels, "single");
+		}
+		function setParallelAxis(axisModels, axisDim) {
+			var axisModel = axisModels[0];
+			if (!axisModel) return;
+			var axisInfo = new DataZoomAxisInfo();
+			axisInfo.add(axisModel.componentIndex);
+			targetAxisIndexMap.set(axisDim, axisInfo);
+			needAuto = false;
+			if (axisDim === "x" || axisDim === "y") {
+				var gridModel_1 = axisModel.getReferringComponents("grid", SINGLE_REFERRING).models[0];
+				gridModel_1 && each$2(axisModels, function(axModel) {
+					if (axisModel.componentIndex !== axModel.componentIndex && gridModel_1 === axModel.getReferringComponents("grid", SINGLE_REFERRING).models[0]) axisInfo.add(axModel.componentIndex);
+				});
+			}
+		}
+		if (needAuto) each$2(DATA_ZOOM_AXIS_DIMENSIONS, function(axisDim) {
+			if (!needAuto) return;
+			var axisModels = ecModel.findComponents({
+				mainType: getAxisMainType(axisDim),
+				filter: function(axisModel) {
+					return axisModel.get("type", true) === "category";
+				}
+			});
+			if (axisModels[0]) {
+				var axisInfo = new DataZoomAxisInfo();
+				axisInfo.add(axisModels[0].componentIndex);
+				targetAxisIndexMap.set(axisDim, axisInfo);
+				needAuto = false;
+			}
+		}, this);
+	};
+	DataZoomModel.prototype._makeAutoOrientByTargetAxis = function() {
+		var dim;
+		this.eachTargetAxis(function(axisDim) {
+			!dim && (dim = axisDim);
+		}, this);
+		return dim === "y" ? "vertical" : "horizontal";
+	};
+	DataZoomModel.prototype._setDefaultThrottle = function(inputRawOption) {
+		if (inputRawOption.hasOwnProperty("throttle")) this._autoThrottle = false;
+		if (this._autoThrottle) {
+			var globalOption = this.ecModel.option;
+			this.option.throttle = globalOption.animation && globalOption.animationDurationUpdate > 0 ? 100 : 20;
+		}
+	};
+	DataZoomModel.prototype._updateRangeUse = function(inputRawOption) {
+		var rangePropMode = this._rangePropMode;
+		var rangeModeInOption = this.get("rangeMode");
+		each$2([["start", "startValue"], ["end", "endValue"]], function(names, index) {
+			var percentSpecified = inputRawOption[names[0]] != null;
+			var valueSpecified = inputRawOption[names[1]] != null;
+			if (percentSpecified && !valueSpecified) rangePropMode[index] = "percent";
+			else if (!percentSpecified && valueSpecified) rangePropMode[index] = "value";
+			else if (rangeModeInOption) rangePropMode[index] = rangeModeInOption[index];
+			else if (percentSpecified) rangePropMode[index] = "percent";
+		});
+	};
+	DataZoomModel.prototype.noTarget = function() {
+		return this._noTarget;
+	};
+	DataZoomModel.prototype.getFirstTargetAxisModel = function() {
+		var firstAxisModel;
+		this.eachTargetAxis(function(axisDim, axisIndex) {
+			if (firstAxisModel == null) firstAxisModel = this.ecModel.getComponent(getAxisMainType(axisDim), axisIndex);
+		}, this);
+		return firstAxisModel;
+	};
+	/**
+	* @param {Function} callback param: axisModel, dimNames, axisIndex, dataZoomModel, ecModel
+	*/
+	DataZoomModel.prototype.eachTargetAxis = function(callback, context) {
+		this._targetAxisInfoMap.each(function(axisInfo, axisDim) {
+			each$2(axisInfo.indexList, function(axisIndex) {
+				callback.call(context, axisDim, axisIndex);
+			});
+		});
+	};
+	/**
+	* @return If not found, return null/undefined.
+	*/
+	DataZoomModel.prototype.getAxisProxy = function(axisDim, axisIndex) {
+		return getAxisProxyFromModel(this.getAxisModel(axisDim, axisIndex));
+	};
+	/**
+	* @return If not found, return null/undefined.
+	*/
+	DataZoomModel.prototype.getAxisModel = function(axisDim, axisIndex) {
+		var axisInfo = this._targetAxisInfoMap.get(axisDim);
+		if (axisInfo && axisInfo.indexMap[axisIndex]) return this.ecModel.getComponent(getAxisMainType(axisDim), axisIndex);
+	};
+	/**
+	* If not specified, set to undefined.
+	*/
+	DataZoomModel.prototype.setRawRange = function(opt) {
+		var thisOption = this.option;
+		var settledOption = this.settledOption;
+		each$2([["start", "startValue"], ["end", "endValue"]], function(names) {
+			if (opt[names[0]] != null || opt[names[1]] != null) {
+				thisOption[names[0]] = settledOption[names[0]] = opt[names[0]];
+				thisOption[names[1]] = settledOption[names[1]] = opt[names[1]];
+			}
+		}, this);
+		this._updateRangeUse(opt);
+	};
+	DataZoomModel.prototype.setCalculatedRange = function(opt) {
+		var option = this.option;
+		each$2([
+			"start",
+			"startValue",
+			"end",
+			"endValue"
+		], function(name) {
+			option[name] = opt[name];
+		});
+	};
+	DataZoomModel.prototype.getPercentRange = function() {
+		var axisProxy = this.findRepresentativeAxisProxy();
+		if (axisProxy) return axisProxy.getWindow().percent;
+	};
+	/**
+	* For example, chart.getModel().getComponent('dataZoom').getValueRange('y', 0);
+	*
+	* @return [startValue, endValue] value can only be '-' or finite number.
+	*/
+	DataZoomModel.prototype.getValueRange = function(axisDim, axisIndex) {
+		if (axisDim == null && axisIndex == null) {
+			var axisProxy = this.findRepresentativeAxisProxy();
+			if (axisProxy) return axisProxy.getWindow().value;
+		} else return this.getAxisProxy(axisDim, axisIndex).getWindow().value;
+	};
+	/**
+	* @param axisModel If axisModel given, find axisProxy
+	*      corresponding to the axisModel
+	*/
+	DataZoomModel.prototype.findRepresentativeAxisProxy = function(axisModel) {
+		if (axisModel) return getAxisProxyFromModel(axisModel);
+		var firstProxy;
+		var axisDimList = this._targetAxisInfoMap.keys();
+		for (var i = 0; i < axisDimList.length; i++) {
+			var axisDim = axisDimList[i];
+			var axisInfo = this._targetAxisInfoMap.get(axisDim);
+			for (var j = 0; j < axisInfo.indexList.length; j++) {
+				var proxy = this.getAxisProxy(axisDim, axisInfo.indexList[j]);
+				if (proxy.hostedBy(this)) return proxy;
+				if (!firstProxy) firstProxy = proxy;
+			}
+		}
+		return firstProxy;
+	};
+	DataZoomModel.prototype.getRangePropMode = function() {
+		return this._rangePropMode.slice();
+	};
+	DataZoomModel.prototype.getOrient = function() {
+		return this._orient;
+	};
+	DataZoomModel.type = "dataZoom";
+	DataZoomModel.dependencies = [
+		"xAxis",
+		"yAxis",
+		"radiusAxis",
+		"angleAxis",
+		"singleAxis",
+		"series",
+		"toolbox"
+	];
+	DataZoomModel.defaultOption = {
+		z: 4,
+		filterMode: "filter",
+		start: 0,
+		end: 100
+	};
+	return DataZoomModel;
+}(ComponentModel);
+/**
+* Retrieve those raw params from option, which will be cached separately,
+* because they will be overwritten by normalized/calculated values in the main
+* process.
+*/
+function retrieveRawOption(option) {
+	var ret = {};
+	each$2([
+		"start",
+		"end",
+		"startValue",
+		"endValue",
+		"throttle"
+	], function(name) {
+		option.hasOwnProperty(name) && (ret[name] = option[name]);
+	});
+	return ret;
+}
+//#endregion
+//#region node_modules/echarts/lib/component/dataZoom/DataZoomView.js
+/**
+* AUTO-GENERATED FILE. DO NOT MODIFY.
+*/
+var DataZoomView = function(_super) {
+	__extends(DataZoomView, _super);
+	function DataZoomView() {
+		var _this = _super !== null && _super.apply(this, arguments) || this;
+		_this.type = DataZoomView.type;
+		return _this;
+	}
+	DataZoomView.prototype.render = function(dataZoomModel, ecModel, api, payload) {
+		this.dataZoomModel = dataZoomModel;
+		this.ecModel = ecModel;
+		this.api = api;
+	};
+	DataZoomView.type = "dataZoom";
+	return DataZoomView;
+}(ComponentView);
+//#endregion
+//#region node_modules/echarts/lib/component/dataZoom/AxisProxy.js
+/**
+* AUTO-GENERATED FILE. DO NOT MODIFY.
+*/
+/**
+* Operate single axis.
+* One axis can only operated by one axis operator.
+* Different dataZoomModels may be defined to operate the same axis.
+* (i.e. 'inside' data zoom and 'slider' data zoom components)
+* So dataZoomModels share one axisProxy in that case.
+*/
+var AxisProxy = function() {
+	function AxisProxy(dimName, axisIndex, dataZoomModel, ecModel) {
+		this._dimName = dimName;
+		this._axisIndex = axisIndex;
+		this.ecModel = ecModel;
+		this._dataZoomModel = dataZoomModel;
+	}
+	/**
+	* Whether the axisProxy is hosted by dataZoomModel.
+	*/
+	AxisProxy.prototype.hostedBy = function(dataZoomModel) {
+		return this._dataZoomModel === dataZoomModel;
+	};
+	/**
+	* @return `getWindow().value` can only have NaN or finite value.
+	*/
+	AxisProxy.prototype.getWindow = function() {
+		return clone$1(this._window);
+	};
+	AxisProxy.prototype.getTargetSeriesModels = function() {
+		var seriesModels = [];
+		this.ecModel.eachSeries(function(seriesModel) {
+			if (isCoordSupported(seriesModel)) {
+				var axisMainType = getAxisMainType(this._dimName);
+				var axisModel = seriesModel.getReferringComponents(axisMainType, SINGLE_REFERRING).models[0];
+				if (axisModel && this._axisIndex === axisModel.componentIndex) seriesModels.push(seriesModel);
+			}
+		}, this);
+		return seriesModels;
+	};
+	AxisProxy.prototype.getAxisModel = function() {
+		return this.ecModel.getComponent(this._dimName + "Axis", this._axisIndex);
+	};
+	AxisProxy.prototype.getMinMaxSpan = function() {
+		return clone$1(this._minMaxSpan);
+	};
+	/**
+	* [CAVEAT] Keep this method pure, so that it can be called multiple times.
+	*/
+	AxisProxy.prototype.calculateDataWindow = function(opt) {
+		var dataExtent = this._extent;
+		var axis = this.getAxisModel().axis;
+		var scale = axis.scale;
+		var rangePropMode = this._dataZoomModel.getRangePropMode();
+		var percentExtent = [0, 100];
+		var percentWindow = [];
+		var valueWindow = [];
+		var hasPropModeValue;
+		var needRound = [false, false];
+		each$2(["start", "end"], function(prop, idx) {
+			var boundPercent = opt[prop];
+			var boundValue = opt[prop + "Value"];
+			if (rangePropMode[idx] === "percent") {
+				boundPercent ?? (boundPercent = percentExtent[idx]);
+				boundValue = linearMap(boundPercent, percentExtent, dataExtent);
+				needRound[idx] = true;
+			} else {
+				hasPropModeValue = true;
+				if (boundValue == null) boundValue = dataExtent[idx];
+				else {
+					boundValue = scale.parse(boundValue);
+					if (scale.sanitize) boundValue = scale.sanitize(boundValue, dataExtent);
+				}
+				boundPercent = linearMap(boundValue, dataExtent, percentExtent);
+			}
+			valueWindow[idx] = boundValue == null || isNaN(boundValue) ? dataExtent[idx] : boundValue;
+			percentWindow[idx] = boundPercent == null || isNaN(boundPercent) ? percentExtent[idx] : boundPercent;
+		});
+		asc(valueWindow);
+		asc(percentWindow);
+		var spans = this._minMaxSpan;
+		hasPropModeValue ? restrictSet(valueWindow, percentWindow, dataExtent, percentExtent, false) : restrictSet(percentWindow, valueWindow, percentExtent, dataExtent, true);
+		function restrictSet(fromWindow, toWindow, fromExtent, toExtent, toValue) {
+			var suffix = toValue ? "Span" : "ValueSpan";
+			sliderMove(0, fromWindow, fromExtent, "all", spans["min" + suffix], spans["max" + suffix]);
+			for (var i = 0; i < 2; i++) {
+				toWindow[i] = linearMap(fromWindow[i], fromExtent, toExtent, true);
+				if (toValue) {
+					toWindow[i] = toWindow[i];
+					needRound[i] = true;
+				}
+			}
+			ensureExtentAscSimply(toWindow);
+		}
+		var isScaleOrdinalOrTime = isOrdinalScale(scale) || isTimeScale(scale);
+		var pxExtent = axis.getExtent();
+		var pxSpan = mathAbs(pxExtent[1] - pxExtent[0]);
+		var precision = isScaleOrdinalOrTime ? 0 : getAcceptableTickPrecision(valueWindow, pxSpan, .5);
+		each$2([[0, mathCeil], [1, mathFloor]], function(_a) {
+			var idx = _a[0], ceilOrFloor = _a[1];
+			if (!needRound[idx] || !isFinite(precision)) return;
+			valueWindow[idx] = round(valueWindow[idx], precision);
+			valueWindow[idx] = mathMin(dataExtent[1], mathMax(dataExtent[0], valueWindow[idx]));
+			if (percentWindow[idx] === percentExtent[idx]) {
+				valueWindow[idx] = dataExtent[idx];
+				if (isScaleOrdinalOrTime) valueWindow[idx] = ceilOrFloor(valueWindow[idx]);
+			}
+		});
+		ensureExtentAscSimply(valueWindow);
+		var percentInvertedWindow = [linearMap(valueWindow[0], dataExtent, percentExtent, true), linearMap(valueWindow[1], dataExtent, percentExtent, true)];
+		ensureExtentAscSimply(percentInvertedWindow);
+		return {
+			value: valueWindow,
+			percent: percentWindow,
+			percentInverted: percentInvertedWindow,
+			valuePrecision: precision
+		};
+	};
+	/**
+	* Notice: reset should not be called before series.restoreData() is called,
+	* so it is recommended to be called in "process stage" but not "model init
+	* stage".
+	*/
+	AxisProxy.prototype.reset = function(dataZoomModel, alignToPercentInverted) {
+		if (!this.hostedBy(dataZoomModel)) return;
+		var axis = this.getAxisModel().axis;
+		scaleRawExtentInfoCreate(axis, 2);
+		var rawExtentInfo = axis.scale.rawExtentInfo;
+		this._extent = rawExtentInfo.makeNoZoom();
+		this._updateMinMaxSpan();
+		var opt = dataZoomModel.settledOption;
+		if (alignToPercentInverted) opt = defaults({
+			start: alignToPercentInverted[0],
+			end: alignToPercentInverted[1]
+		}, opt);
+		var _a = this._window = this.calculateDataWindow(opt), percent = _a.percent, value = _a.value;
+		if (percent[0] !== 0) rawExtentInfo.setZoomMM(0, value[0]);
+		if (percent[1] !== 100) rawExtentInfo.setZoomMM(1, value[1]);
+	};
+	AxisProxy.prototype.filterData = function(dataZoomModel, api) {
+		if (!this.hostedBy(dataZoomModel)) return;
+		var axisDim = this._dimName;
+		var seriesModels = this.getTargetSeriesModels();
+		var filterMode = dataZoomModel.get("filterMode");
+		var valueWindow = this._window.value;
+		if (filterMode === "none") return;
+		each$2(seriesModels, function(seriesModel) {
+			var seriesData = seriesModel.getData();
+			var dataDims = seriesData.mapDimensionsAll(axisDim);
+			if (!dataDims.length) return;
+			if (filterMode === "weakFilter") {
+				var store_1 = seriesData.getStore();
+				var dataDimIndices_1 = map(dataDims, function(dim) {
+					return seriesData.getDimensionIndex(dim);
+				}, seriesData);
+				seriesData.filterSelf(function(dataIndex) {
+					var leftOut;
+					var rightOut;
+					var hasValue;
+					for (var i = 0; i < dataDims.length; i++) {
+						var value = store_1.get(dataDimIndices_1[i], dataIndex);
+						var thisHasValue = !isNaN(value);
+						var thisLeftOut = value < valueWindow[0];
+						var thisRightOut = value > valueWindow[1];
+						if (thisHasValue && !thisLeftOut && !thisRightOut) return true;
+						thisHasValue && (hasValue = true);
+						thisLeftOut && (leftOut = true);
+						thisRightOut && (rightOut = true);
+					}
+					return hasValue && leftOut && rightOut;
+				});
+			} else each$2(dataDims, function(dim) {
+				if (filterMode === "empty") seriesModel.setData(seriesData = seriesData.map(dim, function(value) {
+					return !isInWindow(value) ? NaN : value;
+				}));
+				else {
+					var range = {};
+					range[dim] = valueWindow;
+					seriesData.selectRange(range);
+				}
+			});
+			each$2(dataDims, function(dim) {
+				seriesData.setApproximateExtent(valueWindow, dim);
+			});
+		});
+		function isInWindow(value) {
+			return value >= valueWindow[0] && value <= valueWindow[1];
+		}
+	};
+	AxisProxy.prototype._updateMinMaxSpan = function() {
+		var minMaxSpan = this._minMaxSpan = {};
+		var dataZoomModel = this._dataZoomModel;
+		var dataExtent = this._extent;
+		each$2(["min", "max"], function(minMax) {
+			var percentSpan = dataZoomModel.get(minMax + "Span");
+			var valueSpan = dataZoomModel.get(minMax + "ValueSpan");
+			valueSpan != null && (valueSpan = this.getAxisModel().axis.scale.parse(valueSpan));
+			if (valueSpan != null) percentSpan = linearMap(dataExtent[0] + valueSpan, dataExtent, [0, 100], true);
+			else if (percentSpan != null) valueSpan = linearMap(percentSpan, [0, 100], dataExtent, true) - dataExtent[0];
+			minMaxSpan[minMax + "Span"] = percentSpan;
+			minMaxSpan[minMax + "ValueSpan"] = valueSpan;
+		}, this);
+	};
+	return AxisProxy;
+}();
+//#endregion
+//#region node_modules/echarts/lib/component/dataZoom/dataZoomProcessor.js
+/**
+* AUTO-GENERATED FILE. DO NOT MODIFY.
+*/
+var dataZoomProcessor = {
+	dirtyOnOverallProgress: true,
+	getTargetSeries: function(ecModel) {
+		function eachAxisModel(cb) {
+			ecModel.eachComponent("dataZoom", function(dataZoomModel) {
+				dataZoomModel.eachTargetAxis(function(axisDim, axisIndex) {
+					cb(axisDim, axisIndex, ecModel.getComponent(getAxisMainType(axisDim), axisIndex), dataZoomModel);
+				});
+			});
+		}
+		var proxyList = [];
+		eachAxisModel(function(axisDim, axisIndex, axisModel, dataZoomModel) {
+			if (!getAxisProxyFromModel(axisModel)) {
+				var axisProxy = new AxisProxy(axisDim, axisIndex, dataZoomModel, ecModel);
+				proxyList.push(axisProxy);
+				setAxisProxyToModel(axisModel, axisProxy);
+			}
+		});
+		var seriesModelMap = createHashMap();
+		each$2(proxyList, function(axisProxy) {
+			each$2(axisProxy.getTargetSeriesModels(), function(seriesModel) {
+				seriesModelMap.set(seriesModel.uid, seriesModel);
+			});
+		});
+		return seriesModelMap;
+	},
+	overallReset: function(ecModel, api) {
+		ecModel.eachComponent("dataZoom", function(dataZoomModel) {
+			var axisProxyNeedAlign = [];
+			dataZoomModel.eachTargetAxis(function(axisDim, axisIndex) {
+				var axisProxy = dataZoomModel.getAxisProxy(axisDim, axisIndex);
+				var alignToAxisProxy = getAlignTo(dataZoomModel, axisProxy);
+				if (alignToAxisProxy) axisProxyNeedAlign.push([axisProxy, alignToAxisProxy]);
+				else axisProxy.reset(dataZoomModel, null);
+			});
+			each$2(axisProxyNeedAlign, function(item) {
+				item[0].reset(dataZoomModel, item[1].getWindow().percentInverted);
+			});
+			dataZoomModel.eachTargetAxis(function(axisDim, axisIndex) {
+				dataZoomModel.getAxisProxy(axisDim, axisIndex).filterData(dataZoomModel, api);
+			});
+		});
+		ecModel.eachComponent("dataZoom", function(dataZoomModel) {
+			var axisProxy = dataZoomModel.findRepresentativeAxisProxy();
+			if (axisProxy) {
+				var _a = axisProxy.getWindow(), percent = _a.percent, value = _a.value;
+				dataZoomModel.setCalculatedRange({
+					start: percent[0],
+					end: percent[1],
+					startValue: value[0],
+					endValue: value[1]
+				});
+			}
+		});
+	}
+};
+//#endregion
+//#region node_modules/echarts/lib/component/dataZoom/dataZoomAction.js
+/**
+* AUTO-GENERATED FILE. DO NOT MODIFY.
+*/
+function installDataZoomAction(registers) {
+	registers.registerAction("dataZoom", function(payload, ecModel) {
+		var effectedModels = findEffectedDataZooms(ecModel, payload);
+		each$2(effectedModels, function(dataZoomModel) {
+			dataZoomModel.setRawRange({
+				start: payload.start,
+				end: payload.end,
+				startValue: payload.startValue,
+				endValue: payload.endValue
+			});
+		});
+	});
+}
+//#endregion
+//#region node_modules/echarts/lib/component/dataZoom/installCommon.js
+/**
+* AUTO-GENERATED FILE. DO NOT MODIFY.
+*/
+var callOnlyOnce = makeCallOnlyOnce();
+function installCommon(registers) {
+	callOnlyOnce(registers, function() {
+		registers.registerProcessor(registers.PRIORITY.PROCESSOR.FILTER, dataZoomProcessor);
+		installDataZoomAction(registers);
+		registers.registerSubTypeDefaulter("dataZoom", function() {
+			return "slider";
+		});
 	});
 }
 //#endregion
@@ -3579,8 +4749,8 @@ function findComponentReference(payload, ecModel, api) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-function install$5(registers) {
-	use(install$8);
+function install$6(registers) {
+	use(install$9);
 	registers.registerComponentModel(TooltipModel);
 	registers.registerComponentView(TooltipView);
 	/**
@@ -3621,7 +4791,7 @@ function checkMarkerInSeries(seriesOpts, markerType) {
 function fillLabel(opt) {
 	defaultEmphasis(opt, "label", ["show"]);
 }
-var inner$2 = makeInner();
+var inner$3 = makeInner();
 var MarkerModel = function(_super) {
 	__extends(MarkerModel, _super);
 	function MarkerModel() {
@@ -3656,9 +4826,9 @@ var MarkerModel = function(_super) {
 		var componentType = this.mainType;
 		if (!createdBySelf) ecModel.eachSeries(function(seriesModel) {
 			var markerOpt = seriesModel.get(this.mainType, true);
-			var markerModel = inner$2(seriesModel)[componentType];
+			var markerModel = inner$3(seriesModel)[componentType];
 			if (!markerOpt || !markerOpt.data) {
-				inner$2(seriesModel)[componentType] = null;
+				inner$3(seriesModel)[componentType] = null;
 				return;
 			}
 			if (!markerModel) {
@@ -3678,7 +4848,7 @@ var MarkerModel = function(_super) {
 				});
 				markerModel.__hostSeries = seriesModel;
 			} else markerModel._mergeOption(markerOpt, ecModel, true);
-			inner$2(seriesModel)[componentType] = markerModel;
+			inner$3(seriesModel)[componentType] = markerModel;
 		}, this);
 	};
 	MarkerModel.prototype.formatTooltip = function(dataIndex, multipleSeries, dataType) {
@@ -3712,7 +4882,7 @@ var MarkerModel = function(_super) {
 		return params;
 	};
 	MarkerModel.getMarkerModelFromSeries = function(seriesModel, componentType) {
-		return inner$2(seriesModel)[componentType];
+		return inner$3(seriesModel)[componentType];
 	};
 	MarkerModel.type = "marker";
 	MarkerModel.dependencies = [
@@ -3871,7 +5041,7 @@ function numCalculate(data, valueDataDim, type) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-var inner$1 = makeInner();
+var inner$2 = makeInner();
 var MarkerView = function(_super) {
 	__extends(MarkerView, _super);
 	function MarkerView() {
@@ -3886,19 +5056,19 @@ var MarkerView = function(_super) {
 		var _this = this;
 		var markerGroupMap = this.markerGroupMap;
 		markerGroupMap.each(function(item) {
-			inner$1(item).keep = false;
+			inner$2(item).keep = false;
 		});
 		ecModel.eachSeries(function(seriesModel) {
 			var markerModel = MarkerModel.getMarkerModelFromSeries(seriesModel, _this.type);
 			markerModel && _this.renderSeries(seriesModel, markerModel, ecModel, api);
 		});
 		markerGroupMap.each(function(item) {
-			!inner$1(item).keep && _this.group.remove(item.group);
+			!inner$2(item).keep && _this.group.remove(item.group);
 		});
 		updateZ(ecModel, markerGroupMap, this.type);
 	};
 	MarkerView.prototype.markKeep = function(drawGroup) {
-		inner$1(drawGroup).keep = true;
+		inner$2(drawGroup).keep = true;
 	};
 	MarkerView.prototype.toggleBlurSeries = function(seriesModelList, isBlur) {
 		var _this = this;
@@ -4047,7 +5217,7 @@ function createData(coordSys, seriesModel, mpModel) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-function install$4(registers) {
+function install$5(registers) {
 	registers.registerComponentModel(MarkPointModel);
 	registers.registerComponentView(MarkPointView);
 	registers.registerPreprocessor(function(opt) {
@@ -4096,7 +5266,7 @@ var MarkLineModel = function(_super) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-var inner = makeInner();
+var inner$1 = makeInner();
 var markLineTransform = function(seriesModel, coordSys, mlModel, item) {
 	var data = seriesModel.getData();
 	var itemArray;
@@ -4200,8 +5370,8 @@ var MarkLineView = function(_super) {
 			var mlModel = MarkerModel.getMarkerModelFromSeries(seriesModel, "markLine");
 			if (mlModel) {
 				var mlData_1 = mlModel.getData();
-				var fromData_1 = inner(mlModel).from;
-				var toData_1 = inner(mlModel).to;
+				var fromData_1 = inner$1(mlModel).from;
+				var toData_1 = inner$1(mlModel).to;
 				fromData_1.each(function(idx) {
 					updateSingleMarkerEndLayout(fromData_1, idx, true, seriesModel, api);
 					updateSingleMarkerEndLayout(toData_1, idx, false, seriesModel, api);
@@ -4224,8 +5394,8 @@ var MarkLineView = function(_super) {
 		var fromData = mlData.from;
 		var toData = mlData.to;
 		var lineData = mlData.line;
-		inner(mlModel).from = fromData;
-		inner(mlModel).to = toData;
+		inner$1(mlModel).from = fromData;
+		inner$1(mlModel).to = toData;
 		mlModel.setData(lineData);
 		var symbolType = mlModel.get("symbol");
 		var symbolSize = mlModel.get("symbolSize");
@@ -4328,7 +5498,7 @@ function createList(coordSys, seriesModel, mlModel) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-function install$3(registers) {
+function install$4(registers) {
 	registers.registerComponentModel(MarkLineModel);
 	registers.registerComponentView(MarkLineView);
 	registers.registerPreprocessor(function(opt) {
@@ -5041,7 +6211,7 @@ function legendFilter(ecModel) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-function install$7(registers) {
+function install$8(registers) {
 	registers.registerComponentModel(LegendModel);
 	registers.registerComponentView(LegendView);
 	registers.registerProcessor(registers.PRIORITY.PROCESSOR.SERIES_FILTER, legendFilterStageHandler);
@@ -5404,8 +6574,8 @@ function installScrollableLegendAction(registers) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-function install$6(registers) {
-	use(install$7);
+function install$7(registers) {
+	use(install$8);
 	registers.registerComponentModel(ScrollableLegendModel);
 	registers.registerComponentView(ScrollableLegendView);
 	installScrollableLegendAction(registers);
@@ -5415,9 +6585,336 @@ function install$6(registers) {
 /**
 * AUTO-GENERATED FILE. DO NOT MODIFY.
 */
-function install$2(registers) {
+function install$3(registers) {
+	use(install$8);
 	use(install$7);
-	use(install$6);
 }
 //#endregion
-export { install as GraphicComponent, install$1 as GridComponent, install$2 as LegendComponent, install$3 as MarkLineComponent, install$4 as MarkPointComponent, install$5 as TooltipComponent };
+//#region node_modules/echarts/lib/component/dataZoom/InsideZoomModel.js
+/**
+* AUTO-GENERATED FILE. DO NOT MODIFY.
+*/
+var InsideZoomModel = function(_super) {
+	__extends(InsideZoomModel, _super);
+	function InsideZoomModel() {
+		var _this = _super !== null && _super.apply(this, arguments) || this;
+		_this.type = InsideZoomModel.type;
+		return _this;
+	}
+	InsideZoomModel.type = "dataZoom.inside";
+	InsideZoomModel.defaultOption = inheritDefaultOption(DataZoomModel.defaultOption, {
+		disabled: false,
+		zoomLock: false,
+		zoomOnMouseWheel: true,
+		moveOnMouseMove: true,
+		moveOnMouseWheel: false,
+		preventDefaultMouseMove: true
+	});
+	return InsideZoomModel;
+}(DataZoomModel);
+//#endregion
+//#region node_modules/echarts/lib/component/dataZoom/roams.js
+/**
+* AUTO-GENERATED FILE. DO NOT MODIFY.
+*/
+var inner = makeInner();
+function setViewInfoToCoordSysRecord(api, dataZoomModel, getRange) {
+	inner(api).coordSysRecordMap.each(function(coordSysRecord) {
+		var dzInfo = coordSysRecord.dataZoomInfoMap.get(dataZoomModel.uid);
+		if (dzInfo) dzInfo.getRange = getRange;
+	});
+}
+function disposeCoordSysRecordIfNeeded(api, dataZoomModel) {
+	var coordSysRecordMap = inner(api).coordSysRecordMap;
+	var coordSysKeyArr = coordSysRecordMap.keys();
+	for (var i = 0; i < coordSysKeyArr.length; i++) {
+		var coordSysKey = coordSysKeyArr[i];
+		var coordSysRecord = coordSysRecordMap.get(coordSysKey);
+		var dataZoomInfoMap = coordSysRecord.dataZoomInfoMap;
+		if (dataZoomInfoMap) {
+			var dzUid = dataZoomModel.uid;
+			if (dataZoomInfoMap.get(dzUid)) {
+				dataZoomInfoMap.removeKey(dzUid);
+				if (!dataZoomInfoMap.keys().length) disposeCoordSysRecord(coordSysRecordMap, coordSysRecord);
+			}
+		}
+	}
+}
+function disposeCoordSysRecord(coordSysRecordMap, coordSysRecord) {
+	if (coordSysRecord) {
+		coordSysRecordMap.removeKey(coordSysRecord.model.uid);
+		var controller = coordSysRecord.controller;
+		controller && controller.dispose();
+	}
+}
+function createCoordSysRecord(api, coordSysModel) {
+	var coordSysRecord = {
+		model: coordSysModel,
+		containsPoint: curry$1(containsPoint, coordSysModel),
+		dispatchAction: curry$1(dispatchAction, api),
+		dataZoomInfoMap: null,
+		controller: null
+	};
+	var controller = coordSysRecord.controller = new RoamController(api.getZr());
+	each$2([
+		"pan",
+		"zoom",
+		"scrollMove"
+	], function(eventName) {
+		controller.on(eventName, function(event) {
+			var batch = [];
+			coordSysRecord.dataZoomInfoMap.each(function(dzInfo) {
+				if (!event.isAvailableBehavior(dzInfo.model.option)) return;
+				var method = (dzInfo.getRange || {})[eventName];
+				var range = method && method(dzInfo.dzReferCoordSysInfo, coordSysRecord.model.mainType, coordSysRecord.controller, event);
+				!dzInfo.model.get("disabled", true) && range && batch.push({
+					dataZoomId: dzInfo.model.id,
+					start: range[0],
+					end: range[1]
+				});
+			});
+			batch.length && coordSysRecord.dispatchAction(batch);
+		});
+	});
+	return coordSysRecord;
+}
+/**
+* This action will be throttled.
+*/
+function dispatchAction(api, batch) {
+	if (!api.isDisposed()) api.dispatchAction({
+		type: "dataZoom",
+		animation: {
+			easing: "cubicOut",
+			duration: 100
+		},
+		batch
+	});
+}
+function containsPoint(coordSysModel, e, x, y) {
+	return coordSysModel.coordinateSystem.containPoint([x, y]);
+}
+/**
+* Merge roamController settings when multiple dataZooms share one roamController.
+*/
+function mergeControllerParams(dataZoomInfoMap, coordSysRecord, api) {
+	var controlType;
+	var prefix = "type_";
+	var typePriority = {
+		"type_true": 2,
+		"type_move": 1,
+		"type_false": 0,
+		"type_undefined": -1
+	};
+	var preventDefaultMouseMove = true;
+	var cursorGrab;
+	var cursorGrabbing;
+	dataZoomInfoMap.each(function(dataZoomInfo) {
+		var dataZoomModel = dataZoomInfo.model;
+		var oneType = dataZoomModel.get("disabled", true) ? false : dataZoomModel.get("zoomLock", true) ? "move" : true;
+		if (typePriority[prefix + oneType] > typePriority[prefix + controlType]) controlType = oneType;
+		preventDefaultMouseMove = preventDefaultMouseMove && dataZoomModel.get("preventDefaultMouseMove", true);
+		cursorGrab = retrieve2(dataZoomModel.get("cursorGrab", true), cursorGrab);
+		cursorGrabbing = retrieve2(dataZoomModel.get("cursorGrabbing", true), cursorGrabbing);
+	});
+	return {
+		controlType,
+		opt: {
+			zoomOnMouseWheel: true,
+			moveOnMouseMove: true,
+			moveOnMouseWheel: true,
+			preventDefaultMouseMove: !!preventDefaultMouseMove,
+			api,
+			zInfo: { component: coordSysRecord.model },
+			triggerInfo: {
+				roamTrigger: null,
+				isInSelf: coordSysRecord.containsPoint
+			},
+			cursorGrab,
+			cursorGrabbing
+		}
+	};
+}
+function installDataZoomRoamProcessor(registers) {
+	registers.registerUpdateLifecycle("coordsys:aftercreate", function(ecModel, api) {
+		var apiInner = inner(api);
+		var coordSysRecordMap = apiInner.coordSysRecordMap || (apiInner.coordSysRecordMap = createHashMap());
+		coordSysRecordMap.each(function(coordSysRecord) {
+			coordSysRecord.dataZoomInfoMap = null;
+		});
+		ecModel.eachComponent({
+			mainType: "dataZoom",
+			subType: "inside"
+		}, function(dataZoomModel) {
+			var dzReferCoordSysWrap = collectReferCoordSysModelInfo(dataZoomModel);
+			each$2(dzReferCoordSysWrap.infoList, function(dzCoordSysInfo) {
+				var coordSysUid = dzCoordSysInfo.model.uid;
+				var coordSysRecord = coordSysRecordMap.get(coordSysUid) || coordSysRecordMap.set(coordSysUid, createCoordSysRecord(api, dzCoordSysInfo.model));
+				(coordSysRecord.dataZoomInfoMap || (coordSysRecord.dataZoomInfoMap = createHashMap())).set(dataZoomModel.uid, {
+					dzReferCoordSysInfo: dzCoordSysInfo,
+					model: dataZoomModel,
+					getRange: null
+				});
+			});
+		});
+		coordSysRecordMap.each(function(coordSysRecord) {
+			var controller = coordSysRecord.controller;
+			var firstDzInfo;
+			var dataZoomInfoMap = coordSysRecord.dataZoomInfoMap;
+			if (dataZoomInfoMap) {
+				var firstDzKey = dataZoomInfoMap.keys()[0];
+				if (firstDzKey != null) firstDzInfo = dataZoomInfoMap.get(firstDzKey);
+			}
+			if (!firstDzInfo) {
+				disposeCoordSysRecord(coordSysRecordMap, coordSysRecord);
+				return;
+			}
+			var controllerParams = mergeControllerParams(dataZoomInfoMap, coordSysRecord, api);
+			controller.enable(controllerParams.controlType, controllerParams.opt);
+			createOrUpdate(coordSysRecord, "dispatchAction", firstDzInfo.model.get("throttle", true), "fixRate");
+		});
+	});
+}
+//#endregion
+//#region node_modules/echarts/lib/component/dataZoom/InsideZoomView.js
+/**
+* AUTO-GENERATED FILE. DO NOT MODIFY.
+*/
+var InsideZoomView = function(_super) {
+	__extends(InsideZoomView, _super);
+	function InsideZoomView() {
+		var _this = _super !== null && _super.apply(this, arguments) || this;
+		_this.type = "dataZoom.inside";
+		return _this;
+	}
+	InsideZoomView.prototype.render = function(dataZoomModel, ecModel, api) {
+		_super.prototype.render.apply(this, arguments);
+		if (dataZoomModel.noTarget()) {
+			this._clear();
+			return;
+		}
+		this.range = dataZoomModel.getPercentRange();
+		setViewInfoToCoordSysRecord(api, dataZoomModel, {
+			pan: bind$1(getRangeHandlers.pan, this),
+			zoom: bind$1(getRangeHandlers.zoom, this),
+			scrollMove: bind$1(getRangeHandlers.scrollMove, this)
+		});
+	};
+	InsideZoomView.prototype.dispose = function() {
+		this._clear();
+		_super.prototype.dispose.apply(this, arguments);
+	};
+	InsideZoomView.prototype._clear = function() {
+		disposeCoordSysRecordIfNeeded(this.api, this.dataZoomModel);
+		this.range = null;
+	};
+	InsideZoomView.type = "dataZoom.inside";
+	return InsideZoomView;
+}(DataZoomView);
+var getRangeHandlers = {
+	zoom: function(coordSysInfo, coordSysMainType, controller, e) {
+		var lastRange = this.range;
+		var range = lastRange.slice();
+		var axisModel = coordSysInfo.axisModels[0];
+		if (!axisModel) return;
+		var directionInfo = getDirectionInfo[coordSysMainType](null, [e.originX, e.originY], axisModel, controller, coordSysInfo);
+		var percentPoint = (directionInfo.signal > 0 ? directionInfo.pixelStart + directionInfo.pixelLength - directionInfo.pixel : directionInfo.pixel - directionInfo.pixelStart) / directionInfo.pixelLength * (range[1] - range[0]) + range[0];
+		var scale = Math.max(1 / e.scale, 0);
+		range[0] = (range[0] - percentPoint) * scale + percentPoint;
+		range[1] = (range[1] - percentPoint) * scale + percentPoint;
+		var minMaxSpan = this.dataZoomModel.findRepresentativeAxisProxy().getMinMaxSpan();
+		sliderMove(0, range, [0, 100], 0, minMaxSpan.minSpan, minMaxSpan.maxSpan);
+		this.range = range;
+		if (lastRange[0] !== range[0] || lastRange[1] !== range[1]) return range;
+	},
+	pan: makeMover(function(range, axisModel, coordSysInfo, coordSysMainType, controller, e) {
+		var directionInfo = getDirectionInfo[coordSysMainType]([e.oldX, e.oldY], [e.newX, e.newY], axisModel, controller, coordSysInfo);
+		return directionInfo.signal * (range[1] - range[0]) * directionInfo.pixel / directionInfo.pixelLength;
+	}),
+	scrollMove: makeMover(function(range, axisModel, coordSysInfo, coordSysMainType, controller, e) {
+		return getDirectionInfo[coordSysMainType]([0, 0], [e.scrollDelta, e.scrollDelta], axisModel, controller, coordSysInfo).signal * (range[1] - range[0]) * e.scrollDelta;
+	})
+};
+function makeMover(getPercentDelta) {
+	return function(coordSysInfo, coordSysMainType, controller, e) {
+		var lastRange = this.range;
+		var range = lastRange.slice();
+		var axisModel = coordSysInfo.axisModels[0];
+		if (!axisModel) return;
+		sliderMove(getPercentDelta(range, axisModel, coordSysInfo, coordSysMainType, controller, e), range, [0, 100], "all");
+		this.range = range;
+		if (lastRange[0] !== range[0] || lastRange[1] !== range[1]) return range;
+	};
+}
+var getDirectionInfo = {
+	grid: function(oldPoint, newPoint, axisModel, controller, coordSysInfo) {
+		var axis = axisModel.axis;
+		var ret = {};
+		var rect = coordSysInfo.model.coordinateSystem.getRect();
+		oldPoint = oldPoint || [0, 0];
+		if (axis.dim === "x") {
+			ret.pixel = newPoint[0] - oldPoint[0];
+			ret.pixelLength = rect.width;
+			ret.pixelStart = rect.x;
+			ret.signal = axis.inverse ? 1 : -1;
+		} else {
+			ret.pixel = newPoint[1] - oldPoint[1];
+			ret.pixelLength = rect.height;
+			ret.pixelStart = rect.y;
+			ret.signal = axis.inverse ? -1 : 1;
+		}
+		return ret;
+	},
+	polar: function(oldPoint, newPoint, axisModel, controller, coordSysInfo) {
+		var axis = axisModel.axis;
+		var ret = {};
+		var polar = coordSysInfo.model.coordinateSystem;
+		var radiusExtent = polar.getRadiusAxis().getExtent();
+		var angleExtent = polar.getAngleAxis().getExtent();
+		oldPoint = oldPoint ? polar.pointToCoord(oldPoint) : [0, 0];
+		newPoint = polar.pointToCoord(newPoint);
+		if (axisModel.mainType === "radiusAxis") {
+			ret.pixel = newPoint[0] - oldPoint[0];
+			ret.pixelLength = radiusExtent[1] - radiusExtent[0];
+			ret.pixelStart = radiusExtent[0];
+			ret.signal = axis.inverse ? 1 : -1;
+		} else {
+			ret.pixel = newPoint[1] - oldPoint[1];
+			ret.pixelLength = angleExtent[1] - angleExtent[0];
+			ret.pixelStart = angleExtent[0];
+			ret.signal = axis.inverse ? -1 : 1;
+		}
+		return ret;
+	},
+	singleAxis: function(oldPoint, newPoint, axisModel, controller, coordSysInfo) {
+		var axis = axisModel.axis;
+		var rect = coordSysInfo.model.coordinateSystem.getRect();
+		var ret = {};
+		oldPoint = oldPoint || [0, 0];
+		if (axis.orient === "horizontal") {
+			ret.pixel = newPoint[0] - oldPoint[0];
+			ret.pixelLength = rect.width;
+			ret.pixelStart = rect.x;
+			ret.signal = axis.inverse ? 1 : -1;
+		} else {
+			ret.pixel = newPoint[1] - oldPoint[1];
+			ret.pixelLength = rect.height;
+			ret.pixelStart = rect.y;
+			ret.signal = axis.inverse ? -1 : 1;
+		}
+		return ret;
+	}
+};
+//#endregion
+//#region node_modules/echarts/lib/component/dataZoom/installDataZoomInside.js
+/**
+* AUTO-GENERATED FILE. DO NOT MODIFY.
+*/
+function install(registers) {
+	installCommon(registers);
+	registers.registerComponentModel(InsideZoomModel);
+	registers.registerComponentView(InsideZoomView);
+	installDataZoomRoamProcessor(registers);
+}
+//#endregion
+export { install as DataZoomInsideComponent, install$1 as GraphicComponent, install$2 as GridComponent, install$3 as LegendComponent, install$4 as MarkLineComponent, install$5 as MarkPointComponent, install$6 as TooltipComponent };

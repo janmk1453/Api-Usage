@@ -6,7 +6,8 @@
  */
 import { icon } from './icons';
 import { collectStorageReport, formatBytes, type StorageReport } from '../services/storage-usage';
-import { getExtensionSettings } from '../store/persistence';
+import { getExtensionSettings, deleteMigrationBackups } from '../store/persistence';
+import { toast } from '../utils/logger';
 
 const MODULE = 'api_usage_stat';
 /** 小于该体积的条目归入「其他」，避免十几个几十字节的小项把列表撑长 */
@@ -21,10 +22,12 @@ type RowOpts = {
   sub?: boolean;
   /** 可点击展开的聚合行 */
   toggle?: { id: string; expanded: boolean };
+  /** 行尾操作按钮（目前只有旧版迁移备份的「清理」，需要二次确认） */
+  action?: { id: string; label: string; title?: string };
 };
 
 /** 单项行：名称 + 数值，数值用等宽数字避免跳动 */
-function row(item: { label: string; bytes: number | null; detail?: string }, total: number, opts: RowOpts = {}) {
+function row(item: { label: string; bytes: number | null; detail?: string; cleanable?: string; itemCount?: number }, total: number, opts: RowOpts = {}) {
   const pctRaw = total > 0 && item.bytes != null ? (item.bytes / total) * 100 : null;
   // 明细行（「其他」展开出来的子项）都在 1KB 以下，占比必然显示为 0%，是纯噪音，不显示
   const showPct = pctRaw != null && !opts.sub && pctRaw >= 0.5;
@@ -52,6 +55,7 @@ function row(item: { label: string; bytes: number | null; detail?: string }, tot
     <div style="flex:0 0 auto;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;">
       <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">${formatBytes(item.bytes)}</div>
       ${pct != null ? `<div style="font-size:var(--aus-fs-xs);color:var(--ds-text-3);margin-top:2px;">${pct}%</div>` : ''}
+      ${opts.action ? `<button id="${opts.action.id}" type="button" data-armed="0" title="${esc(opts.action.title || '')}" style="margin-top:5px;padding:3px 10px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-xs);cursor:pointer;line-height:1.5;white-space:nowrap;">${esc(opts.action.label)}</button>` : ''}
     </div>
   </div>`;
 }
@@ -83,7 +87,10 @@ function bodyHtml(r: StorageReport): string {
   } else {
     const major = r.items.filter(i => (i.bytes ?? 0) >= SMALL_ITEM_BYTES);
     const minor = r.items.filter(i => (i.bytes ?? 0) < SMALL_ITEM_BYTES);
-    const rows = major.map(i => row(i, r.totalBytes));
+    // 只有旧版迁移备份是可清理项（其余条目如冷历史、设置、密钥一律不给删除入口）
+    const rows = major.map(i => row(i, r.totalBytes, i.cleanable === 'migration_backup'
+      ? { action: { id: 'aus-storage-clean-backup', label: '清理', title: '删除升级前的一次性备份快照' } }
+      : {}));
     if (minor.length) {
       const minorTotal = minor.reduce((a, i) => a + (i.bytes || 0), 0);
       rows.push(row(
@@ -101,7 +108,7 @@ function bodyHtml(r: StorageReport): string {
     const usagePct = r.usageBytes != null && r.quotaBytes > 0 ? Math.min(100, (r.usageBytes / r.quotaBytes) * 100) : null;
     // 持久化状态不跟数值挤在一行：它读起来会像数字的一部分，挪到下方说明行
     const persistLabel = r.persisted == null ? '' : (r.persisted ? '已启用持久化存储' : '未申请持久化存储');
-    parts.push(`<div style="margin-top:10px;padding:9px 11px;border-radius:10px;background:var(--ds-card-inner);border:1px solid var(--ds-border);">
+    parts.push(`<div style="margin-top:10px;padding:9px 11px;border-radius:10px;background:var(--ds-card-inner);">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;">
         <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">浏览器站点用量</span>
         <span style="font-size:var(--aus-fs-sm);color:var(--ds-text);font-variant-numeric:tabular-nums;white-space:nowrap;">
@@ -117,7 +124,7 @@ function bodyHtml(r: StorageReport): string {
 
   // 说明
   parts.push(`<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:9px;line-height:1.6;">
-    历史记录按最近 50 条保存在酒馆设置中，更早的进入浏览器 IndexedDB；设置为 UTF-8 估算体积，与实际落盘大小可能略有差异。
+    历史记录按最近 50 条保存在酒馆设置中，更早的进入浏览器 IndexedDB；设置为 UTF-8 估算体积，与实际落盘大小可能略有差异。旧版迁移备份是升级前的一次性快照，现有数据已迁移完成，确认无误后可点「清理」删除（不影响历史、设置与钱包）。
   </div>`);
 
   return parts.join('');
@@ -152,6 +159,43 @@ export async function refreshStorageUsage(doc: Document): Promise<void> {
 export function bindStorageUsageCard(doc: Document): void {
   const btn = doc.getElementById('aus-storage-refresh');
   if (btn) (btn as HTMLElement).onclick = () => { void refreshStorageUsage(doc); };
+
+  // 旧版迁移备份清理：两步确认（第一次只“上膛”，5 秒内再点才真正执行）。
+  // 真正删除只走 persistence.deleteMigrationBackups，键名白名单校验在那里统一把关。
+  const cleanBtn = doc.getElementById('aus-storage-clean-backup') as HTMLButtonElement | null;
+  if (cleanBtn) {
+    const idleLabel = cleanBtn.textContent || '清理';
+    let armTimer: any = null;
+    const disarm = () => {
+      cleanBtn.dataset.armed = '0';
+      cleanBtn.textContent = idleLabel;
+      if (armTimer) { clearTimeout(armTimer); armTimer = null; }
+    };
+    cleanBtn.onclick = async () => {
+      if (cleanBtn.dataset.armed !== '1') {
+        cleanBtn.dataset.armed = '1';
+        cleanBtn.textContent = '确认清理？再点一次';
+        if (armTimer) clearTimeout(armTimer);
+        armTimer = setTimeout(disarm, 5000);
+        return;
+      }
+      disarm();
+      cleanBtn.disabled = true;
+      cleanBtn.textContent = '清理中…';
+      try {
+        const result = await deleteMigrationBackups();
+        if (result.deleted > 0) toast('success', `已清理 ${result.deleted} 份旧版迁移备份`);
+        else if (result.remaining > 0) toast('warning', '旧版迁移备份未能删除，请刷新后重试');
+        else toast('info', '未找到可清理的旧版迁移备份');
+        if (result.remaining > 0 && result.deleted > 0) toast('warning', `仍有 ${result.remaining} 份备份未删除，请刷新后重试`);
+      } catch (e: any) {
+        toast('error', '清理失败：' + (e?.message || e));
+      } finally {
+        // 重算存储占用并重绘（按钮随之重建为未上膛状态）
+        await refreshStorageUsage(doc);
+      }
+    };
+  }
 
   // 「其他」行的展开/收起：键盘 Enter / Space 同样可用（与酒馆一致的无障碍处理）
   const toggle = doc.getElementById('aus-storage-others');

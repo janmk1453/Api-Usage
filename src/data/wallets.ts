@@ -11,6 +11,7 @@ import {
   type WalletCredentialObservation,
   type WalletCurrency,
   type WalletModel,
+  type WalletPlan,
   type WalletPriceRule,
   type WalletPriceTier,
 } from '../types/wallet';
@@ -153,6 +154,19 @@ function normalizeAliases(raw: unknown, current: string): string[] {
   return out;
 }
 
+function normalizePriceMatch(raw: any): WalletModel['priceMatch'] {
+  if (!raw || typeof raw !== 'object') return null;
+  const catalogModel = cleanText(raw.catalogModel);
+  const provider = cleanText(raw.provider);
+  if (!catalogModel || !provider) return null;
+  return {
+    provider,
+    catalogModel,
+    score: finiteNumber(raw.score, 0),
+    matchedAt: finiteNumber(raw.matchedAt, 0),
+  };
+}
+
 export function normalizeWalletModel(raw: any, now = Date.now()): WalletModel | null {
   if (!raw || typeof raw !== 'object') return null;
   const sourceModel = cleanText(raw.sourceModel || raw.model);
@@ -179,6 +193,8 @@ export function normalizeWalletModel(raw: any, now = Date.now()): WalletModel | 
     price: normalizeWalletPriceRule(raw.price),
     source,
     locked: raw.locked === true,
+    priceMatch: normalizePriceMatch(raw.priceMatch),
+    hidden: raw.hidden === true,
     discoveredAt,
     lastSeen: finiteNumber(raw.lastSeen, discoveredAt),
     updatedAt: finiteNumber(raw.updatedAt, discoveredAt),
@@ -206,6 +222,50 @@ function normalizePeakHours(raw: unknown, fallback: Settings['peakHours']): Sett
     if (/^\d{2}:\d{2}$/.test(start) && /^\d{2}:\d{2}$/.test(end)) out.push({ start, end });
   }
   return out.length ? out : fallback.map((item) => ({ ...item }));
+}
+
+function normalizePlan(raw: any): WalletConfig['plan'] {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const windows = Array.isArray(raw.windows) ? raw.windows.map((item: any) => {
+    if (!item || typeof item !== 'object') return null;
+    const id = ['5h', '7d', '1m', 'custom'].includes(item.id) ? item.id : '5h';
+    const unit = ['token', 'cost', 'request'].includes(item.unit) ? item.unit : 'token';
+    const resetMode = item.resetMode === 'calendar' ? 'calendar' : 'rolling';
+    const limit = finiteNumber(item.limit, 0);
+    return {
+      id,
+      label: cleanText(item.label) || '',
+      unit,
+      limit: limit > 0 ? limit : 0,
+      resetMode,
+      hours: item.hours == null ? undefined : Math.max(1, finiteNumber(item.hours, 5)),
+    };
+  }).filter(Boolean) as WalletPlan['windows'] : [];
+  const remote = Array.isArray(raw.remote) ? raw.remote.map((item: any) => {
+    if (!item || typeof item !== 'object') return null;
+    const id = cleanText(item.id);
+    if (!id) return null;
+    const num = (value: any) => (value == null || value === '' || !Number.isFinite(Number(value)) ? null : Number(value));
+    return {
+      id,
+      label: cleanText(item.label) || id,
+      unit: ['percent', 'count', 'cost', 'token'].includes(item.unit) ? item.unit : 'percent',
+      used: num(item.used),
+      limit: num(item.limit),
+      remaining: num(item.remaining),
+      resetAt: num(item.resetAt),
+      source: 'remote' as const,
+      checkedAt: finiteNumber(item.checkedAt, 0),
+    };
+  }).filter(Boolean) as WalletPlan['remote'] : [];
+  return {
+    enabled: raw.enabled === true,
+    label: cleanText(raw.label) || undefined,
+    windows,
+    remote: remote && remote.length ? remote : undefined,
+    remoteAt: raw.remoteAt == null ? null : finiteNumber(raw.remoteAt, 0),
+    remoteError: cleanText(raw.remoteError) || null,
+  };
 }
 
 export function normalizeWallet(raw: any, settings: Settings, now = Date.now()): WalletConfig | null {
@@ -245,12 +305,15 @@ export function normalizeWallet(raw: any, settings: Settings, now = Date.now()):
     endpointDisplay: cleanText(raw.endpointDisplay || raw.endpointLabel) || null,
     catalogProvider: isFirstPartyCatalogProvider(rawCatalogProvider) ? rawCatalogProvider : null,
     balance: {
+      adapter: cleanText(balanceRaw.adapter) || null,
+      userId: cleanText(balanceRaw.userId) || null,
       mode: balanceRaw.mode === 'auto' ? 'auto' : 'manual',
       amount: balanceRaw.amount == null || balanceRaw.amount === '' ? null : String(balanceRaw.amount),
       currency: walletCurrencyOrDefault(balanceRaw.currency),
       primaryCredentialId: cleanText(balanceRaw.primaryCredentialId) || null,
       lastCalibrated: balanceRaw.lastCalibrated == null ? null : finiteNumber(balanceRaw.lastCalibrated, 0),
     },
+    plan: normalizePlan(raw.plan),
     peakHours: normalizePeakHours(raw.peakHours, settings.peakHours?.length ? settings.peakHours : DEFAULT_PEAK_HOURS),
     weekendOffpeak: raw.weekendOffpeak !== false,
     credentials: Array.from(credentialMap.values()),
@@ -396,6 +459,7 @@ export function cloneWallet(wallet: WalletConfig): WalletConfig {
       ...item,
       aliases: [...item.aliases],
       price: cloneWalletPriceRule(item.price),
+      priceMatch: item.priceMatch ? { ...item.priceMatch } : item.priceMatch ?? null,
     })),
   };
 }
@@ -498,6 +562,7 @@ export function cnyToWalletCurrency(value: number, currency: WalletCurrency, exc
 
 export function walletPendingModelCount(wallet: WalletConfig): number {
   return (wallet.models || []).filter((model) => {
+    if (model.hidden === true) return false;
     if (wallet.id === DEEPSEEK_WALLET_ID && model.source === 'builtin') return false;
     return model.price.priceConfigured !== true;
   }).length;

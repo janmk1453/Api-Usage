@@ -1,6 +1,10 @@
 import { localDay } from '../utils/date';
+import { bucketTip, roundTip, rangeTip } from './chart-time';
+import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
+import { BAR_SQUARE, barTopRadius, estimateBarWidth } from './chart-bar';
 import { Y_OPTIONS, X_OPTIONS, X_OPTIONS_WITHOUT_ROUND, getYSelected as getMainY, getXSelected as getMainX } from './chart-config';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
+import { attachChartZoom, detachChartZoom, getChartRange } from './range-zoom';
 
 type ChartId = 'token'|'cost'|'hit'|'req'|'dur'|'pie';
 type XKey = 'round'|'hour'|'day'|'week'|'month';
@@ -64,9 +68,9 @@ function getYValue(e:any, key:string):number {
 async function getEcharts(){
   const ec:any = await import('echarts/core');
   const { BarChart, LineChart, PieChart } = await import('echarts/charts');
-  const { GridComponent, TooltipComponent, LegendComponent } = await import('echarts/components');
+  const { GridComponent, TooltipComponent, LegendComponent, DataZoomInsideComponent } = await import('echarts/components');
   const { CanvasRenderer } = await import('echarts/renderers');
-  ec.use([BarChart, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
+  ec.use([BarChart, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent, DataZoomInsideComponent, CanvasRenderer]);
   return ec;
 }
 
@@ -85,6 +89,15 @@ export function resetChartThemeCache(): void {
 }
 let lastFiltered: any[] = [];
 
+/** 容器被文案覆盖时同步销毁实例，否则下次有数据会往已脱离 DOM 的 canvas 上 setOption（表现为图表空白） */
+function dropChart(id: ChartId){
+  const c = (charts as any)[id];
+  if (!c) return;
+  try { detachChartZoom(c); } catch {}
+  try { c.dispose(); } catch {}
+  (charts as any)[id] = null;
+}
+
 export function renderExtraCharts(filtered:any[]){
   lastFiltered = filtered || [];
   for (const id of Object.keys(CHART_DEFS) as ChartId[]){
@@ -101,7 +114,7 @@ async function renderOne(id:ChartId, filtered:any[]){
   // pie special
   if (id==='pie'){
     const mode = state.pie.pieMode;
-    if (!filtered.length){ el.innerHTML='<div style="text-align:center;padding:40px;color:var(--ds-text-3);">暂无数据</div>'; return; }
+    if (!filtered.length){ dropChart(id); el.innerHTML='<div style="text-align:center;padding:40px;color:var(--ds-text-3);">暂无数据</div>'; return; }
     const map: Record<string, number> = {};
     for (const e of filtered){ const m=e.model||'unknown'; const v = mode==='token' ? (e.total_tokens||0) : 1; map[m]=(map[m]||0)+v; }
     const data = Object.entries(map).map(([name,value])=>({name, value}));
@@ -109,22 +122,37 @@ async function renderOne(id:ChartId, filtered:any[]){
     let c = charts[id];
     if (!c || (c as any).isDisposed?.()) {
       el.innerHTML=''; (el as any).style.height='260px';
-      c = charts[id]=ec.init(el);
+      // 兜底尺寸：容器尚不可见时 clientWidth 为 0，ECharts 会画出 0 宽空白（表现为「图表无法加载」）
+    c = charts[id]=ec.init(el, undefined, { width: el.clientWidth || 320, height: el.clientHeight || 260 });
     }
     c.setOption({
       backgroundColor:'transparent',
-      tooltip:{ trigger:'item', backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12, color:themeColor('--ds-text','#111827')} },
+      tooltip:{ trigger:'item', ...CHART_TOOLTIP_SURFACE, backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12, color:themeColor('--ds-text','#111827')},
+        formatter: (p:any)=>{
+          const range = rangeTip(filtered);
+          const val = mode==='token' ? Number(p.value).toLocaleString() + ' tokens' : Number(p.value).toLocaleString() + ' 次请求';
+          const pct = Number(p.percent || 0).toFixed(1);
+          let html = `<div style="display:flex;align-items:center;gap:6px;font-weight:600;margin-bottom:4px;">${p.marker||''}${p.name}</div>`;
+          html += `<div style="display:flex;gap:16px;"><span>用量</span><span style="margin-left:auto;font-weight:600;">${val}</span></div>`;
+          html += `<div style="display:flex;gap:16px;"><span>占比</span><span style="margin-left:auto;font-weight:600;">${pct} %</span></div>`;
+          if (range) html += `<div style="margin-top:4px;font-size:11px;color:#9CA3AF;">时间范围 ${range}</div>`;
+          return `<div style="padding:2px 2px;min-width:170px;">${html}</div>`;
+        }
+      },
       legend:{ bottom:0, textStyle:{fontSize: 12,color:themeColor('--ds-text-2','#6B7280')} },
       series:[{ type:'pie', radius:['40%','70%'], itemStyle:{borderRadius:6,borderColor:themeColor('--ds-card-inner','#FFFFFF'),borderWidth:2}, label:{fontSize: 12}, data }],
     }, true);
+    setTimeout(()=>{ try{ c.resize(); }catch{} }, 60);
     return;
   }
   const yKeys = Array.from(state[id].y);
   const xKey = state[id].x;
-  if (!yKeys.length){ el.innerHTML='<div style="text-align:center;padding:30px;color:var(--ds-text-3);font-size:var(--aus-fs-sm);">请选择 Y 轴</div>'; return; }
+  if (!yKeys.length){ dropChart(id); el.innerHTML='<div style="text-align:center;padding:30px;color:var(--ds-text-3);font-size:var(--aus-fs-sm);">请选择 Y 轴</div>'; return; }
   // 聚合
   if (xKey==='round'){
     const labels = filtered.map((_,i)=>`#${i+1}`);
+    // X 轴保持 #N 紧凑，悬浮窗补完整日期时间
+    const tips = filtered.map((e,i)=> roundTip(i+1, e?.timestamp));
     const yMeta = new Map(CHART_DEFS[id].yOpts.map(o=>[o.key,o] as any));
     // hit/req/duration 需特殊：hit_rate 按单点直接值
     const series = yKeys.map(k=>{
@@ -135,18 +163,29 @@ async function renderOne(id:ChartId, filtered:any[]){
       });
       return { name: meta.label, data, color: meta.color, kind: meta.kind || 'token' };
     });
-    await drawBarLine(el, id, labels, series);
+    await drawBarLine(el, id, labels, series, tips);
     return;
   }
-  // 分桶
-  const buckets = new Map<string, any[]>();
+  // 分桶（同时记录桶内首末时间戳，供悬浮窗显示完整日期时间）
+  type Bucket = { list:any[]; first:number; last:number };
+  const buckets = new Map<string, Bucket>();
   filtered.forEach(e=>{
     const key = bucketKey(e.timestamp, xKey, 0);
-    if (!buckets.has(key)) buckets.set(key, []);
-    buckets.get(key)!.push(e);
+    const ts = Number(e?.timestamp) || 0;
+    const bucket = buckets.get(key);
+    if (!bucket) buckets.set(key, { list:[e], first:ts, last:ts });
+    else {
+      bucket.list.push(e);
+      if (ts && (!bucket.first || ts < bucket.first)) bucket.first = ts;
+      if (ts > bucket.last) bucket.last = ts;
+    }
   });
   const sortedKeys = Array.from(buckets.keys()).sort();
   const labels = sortedKeys.map(k=> xKey==='day'?k.slice(5).replace('-','/'):xKey==='hour'?k.slice(5):k);
+  const tips = sortedKeys.map(k=>{
+    const bucket = buckets.get(k)!;
+    return bucketTip(xKey, bucket.first, bucket.last) || k;
+  });
   const yOptsMap = new Map(CHART_DEFS[id].yOpts.map(o=>[o.key,o] as any));
   // 补充 Y_OPTIONS 中未在 CHART_DEFS 的 hit_rate 等
   const fullMap = new Map([...Y_OPTIONS, ...CHART_DEFS[id].yOpts].map(o=>[o.key,o] as any));
@@ -155,19 +194,19 @@ async function renderOne(id:ChartId, filtered:any[]){
     let data: number[];
     if (k==='hit_rate'){
       data = sortedKeys.map(key=>{
-        const arr=buckets.get(key)!;
+        const arr=buckets.get(key)!.list;
         let hit=0, tot=0; for(const e of arr){ hit+=e.cache_hit_tokens||0; tot+= (e.cache_hit_tokens||0)+(e.cache_miss_tokens||0); }
         return tot? Number((hit/tot*100).toFixed(1)):0;
       });
     } else if (k==='duration'){
       data = sortedKeys.map(key=>{
-        const arr=buckets.get(key)!;
+        const arr=buckets.get(key)!.list;
         const avg = arr.reduce((a:any,c:any)=>a+(c.duration||0),0)/arr.length/1000;
         return Number(avg.toFixed(1));
       });
     } else if (k==='rate'){
       data = sortedKeys.map(key=>{
-        const arr=buckets.get(key)!;
+        const arr=buckets.get(key)!.list;
         // 只统计有效速率样本：非流式/未测速的 0 不参与分母，避免拉低均值
         const valid = arr.map((c:any)=>c.tokenRate||0).filter((v:number)=>v>0);
         if (!valid.length) return 0;
@@ -175,18 +214,19 @@ async function renderOne(id:ChartId, filtered:any[]){
         return Math.round(avg);
       });
     } else if (k==='req_count'){
-      data = sortedKeys.map(key=> buckets.get(key)!.length);
+      data = sortedKeys.map(key=> buckets.get(key)!.list.length);
     } else {
       data = sortedKeys.map(key=>{
-        const arr=buckets.get(key)!;
+        const arr=buckets.get(key)!.list;
         let sum=0; for(const e of arr) sum+=getYValue(e,k);
         return Number(sum.toFixed(k.includes('cost')?2:0));
       });
     }
     return { name: meta.label, data, color: meta.color, kind: meta.kind || 'token' };
   });
-  await drawBarLine(el, id, labels, series);
+  await drawBarLine(el, id, labels, series, tips);
   } catch(e:any){
+    dropChart(id);
     try{ const doc2=getDoc(); const el2=doc2.getElementById(`aus-chart-${id}`) as HTMLElement | null; if(el2) el2.innerHTML='<div style="text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);">图表加载失败: '+(e?.message||e)+'</div>'; }catch{}
     try{ console.error('[Api-Usage] renderOne failed', id, e); }catch{}
   }
@@ -200,7 +240,18 @@ function calcXInterval(labels: string[], el: HTMLElement): number {
   return Math.ceil(labels.length / maxLabels) - 1;
 }
 
-async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:Array<{name:string,data:number[],color:string,kind:string}>){
+/** 按系列名判断数值单位，悬浮窗据此显示单位（费用按当前显示币种） */
+function seriesUnit(name:string):'cost'|'percent'|'rate'|'duration'|'count'|'token'{
+  const n = String(name||'');
+  if (n.includes('费用') || n.includes('成本')) return 'cost';
+  if (n.includes('率') || n.includes('占比')) return 'percent';
+  if (n.includes('速率')) return 'rate';
+  if (n.includes('耗时') || n.includes('延迟')) return 'duration';
+  if (n.includes('请求')) return 'count';
+  return 'token';
+}
+
+async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:Array<{name:string,data:number[],color:string,kind:string}>, tips:string[] = []){
   try {
   const curCur = (()=>{ try{  return getDisplayCurrency(); } catch{ return {code:'CNY',symbol:'¥',rate:1} as any; } })();
   // 费用类数据在 USD 模式下需换算为显示币种
@@ -210,34 +261,61 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
   const ec = await getEcharts();
   let c = charts[id];
   if (!c || (c as any).isDisposed?.()) {
-    el.innerHTML=''; (el as any).style.height='260px';
-    c = charts[id]=ec.init(el);
+    el.innerHTML=''; (el as any).style.height='290px';
+    c = charts[id]=ec.init(el, undefined, { width: el.clientWidth || 320, height: el.clientHeight || 290 });
   }
   // 前两张：重叠柱 + 曲线（Token/费用）
   const isTokenCost = id==='token' || id==='cost';
+  const savedZoom = getChartRange('extra-' + id);
   const interval = calcXInterval(labels, el);
   const opts:any = {
     backgroundColor:'transparent',
-    tooltip:{ trigger:'axis', backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12} },
-    grid:{ left:40, right:20, top:8, bottom:24 },
-    xAxis:{ type:'category', data: labels, axisLine:{lineStyle:{color:themeColor('--ds-border','#E5E7EB')}}, axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF'),rotate: labels.length>12?30:0, interval: interval, hideOverlap: false} },
+    tooltip:{ trigger:'axis', ...CHART_TOOLTIP_SURFACE, backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12},
+      formatter: (params:any)=>{
+        const list = Array.isArray(params) ? params : [params];
+        if (!list.length) return '';
+        const idx = list[0].dataIndex;
+        const title = tips[idx] || list[0].axisValueLabel || '';
+        let html = `<div style="font-weight:600;margin-bottom:6px;">${title}</div>`;
+        for (const p of list){
+          const unit = seriesUnit(p.seriesName);
+          const v = Number(p.value);
+          let disp:string;
+          if (unit==='percent') disp = v.toFixed(1) + ' %';
+          else if (unit==='rate') disp = Math.round(v).toLocaleString() + ' t/s';
+          else if (unit==='duration') disp = v.toFixed(2) + ' s';
+          else if (unit==='count') disp = v.toLocaleString() + ' 次';
+          else disp = v.toLocaleString() + ' tokens';
+          html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${disp}</span></div>`;
+        }
+        return `<div style="padding:4px 2px;min-width:170px;">${html}</div>`;
+      }
+    },
+    // 旋转标签 + 底部视窗滑块都需要额外空间，否则标签被裁（表现为「X 轴名称丢失」）
+    grid:{ left:40, right:20, top:8, bottom: labels.length>12 ? 62 : 46 },
+    xAxis:{ type:'category', data: labels, axisLine:{lineStyle:{color:themeColor('--ds-border','#E5E7EB')}}, axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF'),rotate: labels.length>12?30:0, interval: 'auto', hideOverlap: false} },
     yAxis:{ type:'value', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF')}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F6F7F8')}} },
-    dataZoom: labels.length > 8 ? [{ type:'inside', xAxisIndex:0, start: Math.max(0, (labels.length - Math.max(8, Math.min(labels.length, Math.floor((el.clientWidth||320)/44)))) / labels.length * 100), end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : undefined,
+    // 默认完整展示全部 X 轴数据（与第一张图一致），缩放交给 inside 手势/拖拽
+    dataZoom: labels.length > 1 ? [{ type:'inside', xAxisIndex:0, start: savedZoom?.start ?? 0, end: savedZoom?.end ?? 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : undefined,
     series: (() => {
       // 堆叠柱仅最顶段有圆角，中间段直角以无缝衔接
       const barIndices = series.map((s, i) => ({ s, i })).filter(({ s }) => !(isTokenCost && s.name.includes('总'))).map(({ i }) => i);
       const topIdx = barIndices.length ? barIndices[barIndices.length - 1] : -1;
+      // 柱宽估算 → 顶部圆角（半径 ≈ 柱宽 1/6，见 chart-bar.ts）
+      const BAR_MAX_WIDTH = 16;
+      const barWidth = estimateBarWidth((el as HTMLElement)?.clientWidth || 320, 60, labels.length, BAR_MAX_WIDTH);
+      const topRadius = barTopRadius(barWidth);
       return series.map((s, idx)=>{
         const isTotal = s.name.includes('总');
         if (isTokenCost && isTotal) return { name:s.name, type:'line', data:s.data, smooth:true, lineStyle:{color:s.color,width:2}, itemStyle:{color:s.color}, symbolSize:2 };
         const isTop = idx === topIdx;
-        return { name:s.name, type:'bar', stack:'total', data:s.data, itemStyle:{color:s.color,borderRadius: isTop ? [4,4,0,0] as any : [0,0,0,0] as any}, barMaxWidth:16, barGap:'-100%' as any };
+        return { name:s.name, type:'bar', stack:'total', data:s.data, itemStyle:{color:s.color,borderRadius: (isTop ? topRadius : BAR_SQUARE) as any}, barMaxWidth:BAR_MAX_WIDTH, barGap:'-100%' as any };
       });
     })(),
   };
   if (id==='cost') {
     opts.yAxis = { type:'value', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF'), formatter:(v:number)=> curCur.symbol + Number(v).toFixed(2)}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F6F7F8')}} } as any;
-    opts.tooltip = { trigger:'axis', backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12}, formatter: (params:any)=>{ let html=`<div style="font-weight:600;margin-bottom:6px;">${params[0]?.axisValueLabel||''}</div>`; for(const p of params){ html+=`<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${curCur.symbol}${Number(p.value).toFixed(4)} ${curCur.code}</span></div>`; } return `<div style="padding:4px 2px;min-width:160px;">${html}</div>`; } } as any;
+    opts.tooltip = { trigger:'axis', ...CHART_TOOLTIP_SURFACE, backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12}, formatter: (params:any)=>{ const idx = params[0]?.dataIndex ?? 0; const title = tips[idx] || params[0]?.axisValueLabel || ''; let html=`<div style="font-weight:600;margin-bottom:6px;">${title}</div>`; for(const p of params){ html+=`<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${curCur.symbol}${Number(p.value).toFixed(4)} ${curCur.code}</span></div>`; } return `<div style="padding:4px 2px;min-width:160px;">${html}</div>`; } } as any;
   }
   // 命中/请求等单指标改为线+面积更可读
   if (id==='hit'){ opts.series = [{ name:'命中率', type:'line', data: series[0].data, areaStyle:{opacity:0.12,color:series[0].color}, lineStyle:{color:series[0].color}, itemStyle:{color:series[0].color}, smooth:true }]; opts.yAxis={ max:100, axisLabel:{formatter:(v:number)=>v+'%'} } as any; }
@@ -259,7 +337,10 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
     }));
   }
   c.setOption(opts, true);
+  attachChartZoom({ doc: getDoc(), chart: c, container: el, left: 40, right: 20, bottom: 2, enabled: labels.length > 1, rangeKey: 'extra-' + id });
+  setTimeout(()=>{ try{ c.resize(); }catch{} }, 60);
   } catch(e:any){
+    dropChart(id);
     try{ el.innerHTML='<div style="text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);">图表渲染失败</div>'; }catch{}
     try{ console.error('[Api-Usage] drawBarLine failed', id, e); }catch{}
   }
@@ -276,14 +357,16 @@ export function initExtraCharts(){
     const xDrop=doc.getElementById(`aus-extra-x-drop-${id}`);
     if (yBtn && yDrop){
       yBtn.onclick=()=>{
-        yDrop.style.display = yDrop.style.display==='block'?'none':'block';
-        if (yDrop.style.display==='block') renderExtraY(id);
+        const willOpen = yDrop.style.display!=='block';
+        yDrop.style.display = willOpen?'block':'none';
+        if (willOpen){ if (xDrop) xDrop.style.display='none'; renderExtraY(id); }
       };
     }
     if (xBtn && xDrop){
       xBtn.onclick=()=>{
-        xDrop.style.display = xDrop.style.display==='block'?'none':'block';
-        if (xDrop.style.display==='block') renderExtraX(id);
+        const willOpen = xDrop.style.display!=='block';
+        xDrop.style.display = willOpen?'block':'none';
+        if (willOpen){ if (yDrop) yDrop.style.display='none'; renderExtraX(id); }
       };
     }
   }
@@ -320,7 +403,7 @@ function renderExtraY(id:ChartId){
   if (label) label.textContent = sel.size? `${sel.size} 项` : '选择';
   drop.innerHTML = opts.map(o=>{
     const checked = sel.has(o.key);
-    return `<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--aus-fs-sm);${checked?'background:var(--ds-active-bg);':''}"><input type="checkbox" data-y="${o.key}" data-chart="${id}" ${checked?'checked':''} style="accent-color:var(--ds-text);" /><span style="width:8px;height:8px;background:${o.color};border-radius:2px;"></span>${o.label}</label>`;
+    return `<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--aus-fs-sm);${checked?'background:var(--ds-active-bg);':''}"><input type="checkbox" data-y="${o.key}" data-chart="${id}" ${checked?'checked':''} class="aus-checkbox" /><span style="width:8px;height:8px;background:${o.color};border-radius:2px;"></span>${o.label}</label>`;
   }).join('');
   drop.querySelectorAll('input[data-y]').forEach((el:any)=>{
     el.onchange=()=>{

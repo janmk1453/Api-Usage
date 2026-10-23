@@ -1,5 +1,7 @@
 import { esc, localDay } from '../utils/date';
 import { X_OPTIONS } from './chart-config';
+import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
+import { attachChartZoom, detachChartZoom, getChartRange } from './range-zoom';
 
 type XKey = 'round'|'hour'|'day'|'week'|'month';
 type TrendId = 'token'|'req';
@@ -37,9 +39,9 @@ function bucketKey(ts:number, x:XKey, idx:number):string {
 async function getEcharts(){
   const ec:any = await import('echarts/core');
   const { LineChart } = await import('echarts/charts');
-  const { GridComponent, TooltipComponent, LegendComponent } = await import('echarts/components');
+  const { GridComponent, TooltipComponent, LegendComponent, DataZoomInsideComponent } = await import('echarts/components');
   const { CanvasRenderer } = await import('echarts/renderers');
-  ec.use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
+  ec.use([LineChart, GridComponent, TooltipComponent, LegendComponent, DataZoomInsideComponent, CanvasRenderer]);
   return ec;
 }
 
@@ -60,7 +62,7 @@ async function renderOne(id:TrendId, filtered:any[]){
   const xKey = state[id].x;
 
   if (!filtered.length){
-    if (charts[id]) try{ charts[id].dispose(); }catch{} charts[id]=null;
+    if (charts[id]) { try{ detachChartZoom(charts[id]); }catch{}; try{ charts[id].dispose(); }catch{} } charts[id]=null;
     el.innerHTML='<div style="text-align:center;padding:40px;color:var(--ds-text-3);font-size:var(--aus-fs-sm);">暂无数据</div>';
     return;
   }
@@ -127,8 +129,8 @@ async function renderOne(id:TrendId, filtered:any[]){
   const ec = await getEcharts();
   let c = charts[id];
   if (!c || (c as any).isDisposed?.()) {
-    el.innerHTML=''; (el as any).style.height='220px';
-    c = charts[id]=ec.init(el);
+    el.innerHTML=''; (el as any).style.height='250px';
+    c = charts[id]=ec.init(el, undefined, { width: el.clientWidth || 320, height: el.clientHeight || 250 });
   }
 
   const cBorder = themeColor('--ds-border','#E5E7EB');
@@ -141,7 +143,7 @@ async function renderOne(id:TrendId, filtered:any[]){
   const minPerLabel = cw < 500 ? 42 : cw < 760 ? 56 : 68;
   const maxLabels = Math.max(8, Math.floor(cw / minPerLabel));
   const xInterval = labels.length <= maxLabels ? 0 : Math.ceil(labels.length / maxLabels) - 1;
-  const needZoom = labels.length > maxLabels;
+  const savedZoom = getChartRange('trend-' + id);
 
   const legendTop = models.length > 4 ? 2 : 0;
   c.setOption({
@@ -151,6 +153,7 @@ async function renderOne(id:TrendId, filtered:any[]){
       backgroundColor:cCardInner,
       borderColor:cBorder,
       borderWidth:1,
+      ...CHART_TOOLTIP_SURFACE,
       textStyle:{ color:cText, fontSize: 12 },
       formatter:(params:any)=>{
         if (!params?.length) return '';
@@ -174,9 +177,9 @@ async function renderOne(id:TrendId, filtered:any[]){
       pageTextStyle:{ color:cText3 },
       itemWidth:10, itemHeight:6,
     },
-    grid:{ left:42, right:16, top: 22 + (models.length>4?8:0), bottom: 24 },
-    dataZoom: needZoom ? [{ type:'inside', xAxisIndex:0, start: Math.max(0, (labels.length - maxLabels)/labels.length*100), end:100, zoomOnMouseWheel:false, moveOnMouseMove:true }] : undefined,
-    xAxis:{ type:'category', data: labels, boundaryGap:false, axisLine:{lineStyle:{color:cBorder}}, axisLabel:{ color:cText3, fontSize: 12, interval: xInterval, rotate: labels.length>12?30:0, hideOverlap:false } },
+    grid:{ left:42, right:16, top: 22 + (models.length>4?8:0), bottom: labels.length>12 ? 62 : 46 },
+    dataZoom: labels.length > 1 ? [{ type:'inside', xAxisIndex:0, start: savedZoom?.start ?? 0, end: savedZoom?.end ?? 100, zoomOnMouseWheel:false, moveOnMouseMove:true }] : undefined,
+    xAxis:{ type:'category', data: labels, boundaryGap:false, axisLine:{lineStyle:{color:cBorder}}, axisLabel:{ color:cText3, fontSize: 12, interval: 'auto', rotate: labels.length>12?30:0, hideOverlap:false } },
     yAxis:{ type:'value', axisLabel:{ color:cText3, fontSize: 12, formatter:(v:number)=> id==='token' ? (v>=1000? (v/1000).toFixed(0)+'k' : String(v)) : String(v) }, splitLine:{lineStyle:{color:cCard}} },
     series: seriesData.map(s=>({
       name: s.name,
@@ -190,8 +193,10 @@ async function renderOne(id:TrendId, filtered:any[]){
       data: s.data,
     })),
   }, true);
+  attachChartZoom({ doc, chart: c, container: el, left: 42, right: 16, bottom: 2, enabled: labels.length > 1, rangeKey: 'trend-' + id });
   setTimeout(()=>{ try{ c.resize(); }catch{} }, 60);
   } catch(e:any){
+  if (charts[id]) { try{ detachChartZoom(charts[id]); }catch{}; try{ charts[id].dispose(); }catch{} charts[id]=null as any; }
     try{ const doc2=getDoc(); const el2=doc2.getElementById(`aus-chart-model-${id}`) as HTMLElement | null; if(el2) el2.innerHTML='<div style="text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);">图表加载失败</div>'; }catch{}
     try{ console.error('[Api-Usage] renderModelTrends failed', id, e); }catch{}
   }

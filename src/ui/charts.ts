@@ -1,4 +1,5 @@
 import { getSelectedSave } from '../store/index';
+import { barTopRadius } from './chart-bar';
 import { localDay } from '../utils/date';
 
 let chart: any = null;
@@ -49,7 +50,7 @@ export async function renderCharts() {
     tooltip: { trigger: 'axis', backgroundColor: 'var(--ds-text)', textStyle: { color: 'var(--ds-card-inner)', fontSize: 12 }, borderWidth: 0 },
     xAxis: { type: 'category', data: days, axisLine: { lineStyle: { color: 'var(--ds-border)' } }, axisLabel: { color: 'var(--ds-text-3)', fontSize: 12 }, axisTick: { show: false } },
     yAxis: { type: 'value', axisLine: { show: false }, splitLine: { lineStyle: { color: 'var(--ds-border)' } }, axisLabel: { color: 'var(--ds-text-3)', fontSize: 12 } },
-    series: [{ type: 'bar', data: costs, itemStyle: { color: '#FF6A00', borderRadius: [4, 4, 0, 0] }, barWidth: 14, emphasis: { itemStyle: { color: '#FF7A00' } } }],
+    series: [{ type: 'bar', data: costs, itemStyle: { color: '#FF6A00', borderRadius: barTopRadius(14) }, barWidth: 14, emphasis: { itemStyle: { color: '#FF7A00' } } }],
   });
 
   // 热力图（简化：按日 tokens 强度条）

@@ -1,4 +1,5 @@
 import { localDay } from '../utils/date';
+import { bucketTip, roundTip } from './chart-time';
 
 export type YKind = 'token' | 'cost' | 'count' | 'duration' | 'rate' | 'percent';
 export type YAgg = 'sum' | 'avg' | 'ratio';
@@ -209,21 +210,33 @@ export type ChartSeries = {
   color: string;
 };
 
-export function aggregateForChart(entries: any[], yKeys: YKey[], xKey: XKey): { labels: string[]; series: ChartSeries[] } {
+/** 分桶：键 → 记录列表 + 首末时间戳（首末时间用于悬浮窗的完整日期时间标题） */
+type Bucket = { list: any[]; first: number; last: number };
+
+export function aggregateForChart(entries: any[], yKeys: YKey[], xKey: XKey): { labels: string[]; series: ChartSeries[]; tips: string[] } {
   const meta = new Map<YKey, YOption>(Y_OPTIONS.map(o => [o.key, o] as [YKey, YOption]));
   if (!yKeys.length) yKeys = DEFAULT_Y_KEYS;
   const round = xKey === 'round';
   const labels: string[] = [];
-  let buckets: Map<string, any[]> | null = null;
+  const tips: string[] = [];
+  let buckets: Map<string, Bucket> | null = null;
   let sortedKeys: string[] = [];
   if (round) {
     labels.push(...entries.map((_, i) => `#${i + 1}`));
+    // X 轴用 #N 保持紧凑，悬浮窗补上该轮的完整日期时间
+    tips.push(...entries.map((e, i) => roundTip(i + 1, (e as any)?.timestamp)));
   } else {
     buckets = new Map();
     for (const e of entries) {
       const key = getBucketKey(e, xKey, 0);
-      if (!buckets.has(key)) buckets.set(key, []);
-      buckets.get(key)!.push(e);
+      const ts = Number((e as any)?.timestamp) || 0;
+      const bucket = buckets.get(key);
+      if (!bucket) buckets.set(key, { list: [e], first: ts, last: ts });
+      else {
+        bucket.list.push(e);
+        if (ts && (!bucket.first || ts < bucket.first)) bucket.first = ts;
+        if (ts > bucket.last) bucket.last = ts;
+      }
     }
     sortedKeys = Array.from(buckets.keys()).sort();
     labels.push(...sortedKeys.map(k => {
@@ -231,13 +244,17 @@ export function aggregateForChart(entries: any[], yKeys: YKey[], xKey: XKey): { 
       if (xKey === 'day') return k.slice(5).replace('-', '/');
       return k;
     }));
+    tips.push(...sortedKeys.map(k => {
+      const bucket = (buckets as Map<string, Bucket>).get(k)!;
+      return bucketTip(xKey, bucket.first, bucket.last) || k;
+    }));
   }
   const series: ChartSeries[] = yKeys.map(k => {
     const opt = meta.get(k)!;
     const data = round
       ? entries.map(e => Number(getYValue(e, k).toFixed(precisionFor(opt.kind))))
-      : sortedKeys.map(b => Number(bucketValue((buckets as Map<string, any[]>).get(b)!, opt).toFixed(precisionFor(opt.kind))));
+      : sortedKeys.map(b => Number(bucketValue((buckets as Map<string, Bucket>).get(b)!.list, opt).toFixed(precisionFor(opt.kind))));
     return { name: opt.label, data, kind: opt.kind, agg: opt.agg, unit: opt.unit, group: opt.group, color: opt.color };
   });
-  return { labels, series };
+  return { labels, series, tips };
 }

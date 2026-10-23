@@ -87,4 +87,27 @@ describe('自定义图表聚合', () => {
     const keys = new Set(Y_OPTIONS.map(o => o.key));
     for (const k of DEFAULT_Y_KEYS) expect(keys.has(k)).toBe(true);
   });
+
+  it('悬浮窗标题带完整日期时间（轮次维度取记录时间）', () => {
+    const es = [
+      entry({ timestamp: new Date(2026, 9, 23, 19, 12, 33).getTime() }),
+      entry({ timestamp: new Date(2026, 9, 23, 19, 20, 5).getTime() }),
+    ];
+    const { tips } = aggregateForChart(es, ['total_token'], 'round');
+    expect(tips[0]).toBe('#1 · 2026-10-23 19:12:33');
+    expect(tips[1]).toBe('#2 · 2026-10-23 19:20:05');
+  });
+
+  it('悬浮窗标题带完整日期时间（分桶维度带日期，不只有月日）', () => {
+    const es = [
+      entry({ timestamp: new Date(2026, 9, 23, 14, 5, 0).getTime() }),
+      entry({ timestamp: new Date(2026, 9, 23, 14, 40, 0).getTime() }),
+    ];
+    const byHour = aggregateForChart(es, ['total_token'], 'hour');
+    expect(byHour.tips[0]).toContain('2026-10-23');
+    expect(byHour.tips[0]).toContain('14:00–15:00');
+    const byDay = aggregateForChart(es, ['total_token'], 'day');
+    expect(byDay.tips[0]).toContain('2026-10-23');
+    expect(byDay.tips).toHaveLength(byDay.labels.length);
+  });
 });

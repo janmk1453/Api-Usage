@@ -1,8 +1,12 @@
 import { icon } from './icons';
+import { bindSortableHeaders, paintSortHeader, type SortState } from './sort-header';
 import { getSelectedSave, state } from '../store/index';
 import { localDay, esc } from '../utils/date';
 import { Y_OPTIONS, Y_GROUPS, X_OPTIONS, getYSelected, getXSelected, getChartType, setChartType, getAxisLabelMode, setAxisLabelMode, toggleY, setXSelected, aggregateForChart } from './chart-config';
 import { renderExtraCharts } from './extra-charts';
+import { BAR_SQUARE, barTopRadius, estimateBarWidth } from './chart-bar';
+import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
+import { attachChartZoom, clearChartRanges, detachChartZoom, getChartRange, type RangeZoomHandle } from './range-zoom';
 import { renderModelTrends, initModelTrends } from './model-trends';
 import { DataEvents, on as onDataEvent } from '../data/events';
 import {
@@ -33,61 +37,19 @@ let selectedCredential: string = STATS_FILTER_ALL;
 let credentialPickerOpen = false;
 let lastStatsHistory: any[] = [];
 
-// 模型汇总表排序：点击表头（除模型外）正序/倒序切换
+// 模型汇总表排序：点击表头（除模型外）正序/倒序切换。
+// 表头交互与箭头指示统一由 sort-header 提供（与概览「按对话统计」同一份实现）。
 type SummarySortKey = 'count' | 'hit' | 'miss' | 'out' | 'total' | 'cost' | 'avgCost' | 'avgDur' | 'avgRate';
-let summarySortKey: SummarySortKey | null = null;
-let summarySortDir: 'asc' | 'desc' = 'desc';
+const summarySort: SortState<SummarySortKey> = { key: null, dir: 'desc' };
 let lastSummaryFiltered: any[] | null = null;
 
 function updateSummarySortHeader() {
-  const doc = getDoc();
-  const ths = doc.querySelectorAll('#aus-model-summary thead th[data-sort-key]');
-  ths.forEach((th: any) => {
-    th.style.color = '';
-    th.style.fontWeight = '';
-    const ind = th.querySelector('.aus-sort-ind');
-    if (ind) ind.textContent = '';
-    // 悬停高亮由 CSS :hover 处理，此处仅重置
-  });
-  if (summarySortKey) {
-    const cur = doc.querySelector(`#aus-model-summary thead th[data-sort-key="${summarySortKey}"]`) as HTMLElement | null;
-    if (cur) {
-      cur.style.color = 'var(--ds-text)';
-      cur.style.fontWeight = '600';
-      const ind = cur.querySelector('.aus-sort-ind') as HTMLElement | null;
-      if (ind) ind.innerHTML = summarySortDir === 'asc' ? icon('chevron-up', 14) : icon('chevron-down', 14);
-    }
-  }
+  paintSortHeader(getDoc(), 'aus-model-summary', summarySort);
 }
 
 function bindSummarySort() {
-  const doc = getDoc();
-  const ths = doc.querySelectorAll('#aus-model-summary thead th[data-sort-key]');
-  if (!ths.length) return;
-  // 避免重复绑定
-  if ((bindSummarySort as any)._bound) return;
-  (bindSummarySort as any)._bound = true;
-  ths.forEach((th: any) => {
-    th.addEventListener('click', () => {
-      const key = th.getAttribute('data-sort-key') as SummarySortKey;
-      if (!key) return;
-      if (summarySortKey === key) {
-        summarySortDir = summarySortDir === 'asc' ? 'desc' : 'asc';
-      } else {
-        summarySortKey = key;
-        summarySortDir = 'desc';
-      }
-      updateSummarySortHeader();
-      if (lastSummaryFiltered) renderModelSummary(lastSummaryFiltered);
-    });
-    th.addEventListener('mouseenter', () => {
-      const k = th.getAttribute('data-sort-key');
-      if (k !== summarySortKey) th.style.color = 'var(--ds-text)';
-    });
-    th.addEventListener('mouseleave', () => {
-      const k = th.getAttribute('data-sort-key');
-      if (k !== summarySortKey) th.style.color = '';
-    });
+  bindSortableHeaders(getDoc(), 'aus-model-summary', summarySort, () => {
+    if (lastSummaryFiltered) renderModelSummary(lastSummaryFiltered);
   });
 }
 
@@ -224,11 +186,11 @@ function renderModelPicker(modelsHist?: any[]) {
   const allSelected = selectedModels.length === 0;
   label.textContent = allSelected ? '全部' : selectedModels.length === 1 ? selectedModels[0] : `已选 ${selectedModels.length} 项`;
   label.title = allSelected ? '全部模型' : selectedModels.join('、');
-  let html = `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${allSelected?'background:var(--ds-card);font-weight:600;':''}"><input type="checkbox" data-model-all ${allSelected?'checked':''} style="accent-color:var(--ds-text);" /><span>全部模型</span></label>`;
+  let html = `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${allSelected?'background:var(--ds-card);font-weight:600;':''}"><input type="checkbox" data-model-all ${allSelected?'checked':''} class="aus-checkbox" /><span>全部模型</span></label>`;
   for (const m of models) {
     const checked = selectedModels.includes(m);
     const active = checked ? 'background:var(--ds-card);font-weight:600;' : '';
-    html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}"><input type="checkbox" data-model="${esc(m)}" ${checked?'checked':''} style="accent-color:var(--ds-text);" /><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m)}</span></label>`;
+    html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}"><input type="checkbox" data-model="${esc(m)}" ${checked?'checked':''} class="aus-checkbox" /><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m)}</span></label>`;
   }
   if (!models.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);">暂无模型</div>';
   dropdown.innerHTML = html;
@@ -526,7 +488,7 @@ function renderChartSelectors() {
     yHtml += `<div style="padding:6px 8px 2px;font-size:var(--aus-fs-xs);color:var(--ds-text-3);font-weight:600;">${group.label}</div>`;
     for (const opt of opts) {
       const checked = ySel.includes(opt.key);
-      yHtml += `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--aus-fs-sm);${checked?'background:var(--ds-card);':''}"><input type="checkbox" data-ykey="${opt.key}" ${checked?'checked':''} style="accent-color:var(--ds-text);" /><span style="display:inline-block;width:8px;height:8px;background:${opt.color};border-radius:2px;"></span>${opt.label}<span style="margin-left:auto;color:var(--ds-text-3);font-size:var(--aus-fs-sm);">${opt.unit}</span></label>`;
+      yHtml += `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--aus-fs-sm);${checked?'background:var(--ds-card);':''}"><input type="checkbox" data-ykey="${opt.key}" ${checked?'checked':''} class="aus-checkbox" /><span style="display:inline-block;width:8px;height:8px;background:${opt.color};border-radius:2px;"></span>${opt.label}<span style="margin-left:auto;color:var(--ds-text-3);font-size:var(--aus-fs-sm);">${opt.unit}</span></label>`;
     }
   }
   const typeSel = getChartType();
@@ -608,15 +570,18 @@ function bindChartSelectors() {
 
 // 可配置图表（Y多选 X单选，双轴）
 let chart: any = null;
+let rangeZoom: RangeZoomHandle | null = null;
 async function renderChart(filteredRaw: any[]) {
   const doc = getDoc();
   const el = doc.getElementById('aus-stats-chart') as HTMLElement | null;
   if (!el) return;
   const yKeys = getYSelected() as any;
   const xKey = getXSelected() as any;
-  const { labels, series } = aggregateForChart(filteredRaw, yKeys, xKey);
+  const { labels, series, tips } = aggregateForChart(filteredRaw, yKeys, xKey);
   if (!labels.length) {
     if (chart) { try { chart.dispose(); } catch {} chart = null; }
+    if (chart) { try { detachChartZoom(chart); } catch {} }
+    if (rangeZoom) { try { rangeZoom.destroy(); } catch {} rangeZoom = null; }
     el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--ds-text-3);font-size:var(--aus-fs-base);">该筛选无数据（历史 ' + filteredRaw.length + ' 条）</div>';
     return;
   }
@@ -643,9 +608,9 @@ async function renderChart(filteredRaw: any[]) {
   try {
     echarts = await import('echarts/core').then(async (ec: any) => {
       const { BarChart, LineChart } = await import('echarts/charts');
-      const { GridComponent, TooltipComponent } = await import('echarts/components');
+      const { GridComponent, TooltipComponent, DataZoomInsideComponent } = await import('echarts/components');
       const { CanvasRenderer } = await import('echarts/renderers');
-      ec.use([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
+      ec.use([BarChart, LineChart, GridComponent, TooltipComponent, DataZoomInsideComponent, CanvasRenderer]);
       return ec;
     });
   } catch (e) {
@@ -718,6 +683,9 @@ async function renderChart(filteredRaw: any[]) {
     }
     rightOffset = 0;
   }
+  // 柱宽估算 + 顶部圆角（半径 ≈ 柱宽 1/6，见 chart-bar.ts）
+  const BAR_MAX_WIDTH = 18;
+  const barWidth = estimateBarWidth(w || 320, narrow ? 70 : 104, labels.length, BAR_MAX_WIDTH);
   const tokenSeries = series.filter(s => s.kind === 'token');
   const lastTokenIdx = tokenSeries.length ? series.indexOf(tokenSeries[tokenSeries.length - 1]) : -1;
   const seriesOpt = series.map((s, idx)=>{
@@ -739,9 +707,10 @@ async function renderChart(filteredRaw: any[]) {
       itemStyle: { color: col },
     };
     if (type === 'bar') {
-      base.barMaxWidth = 18;
+      base.barMaxWidth = BAR_MAX_WIDTH;
       if (isStack) { base.stack = 'token'; base.barGap = '-100%'; }
-      base.itemStyle.borderRadius = isStack ? (isTop ? [4,4,0,0] : [0,0,0,0]) : [4,4,0,0];
+      const radius = barTopRadius(barWidth);
+      base.itemStyle.borderRadius = isStack ? (isTop ? radius : BAR_SQUARE) : radius;
     } else {
       base.smooth = true;
       base.symbol = 'circle';
@@ -760,7 +729,12 @@ async function renderChart(filteredRaw: any[]) {
   const minPerLabel = cw < 500 ? 42 : cw < 760 ? 56 : 68;
   const maxLabels = Math.max(8, Math.floor(cw / minPerLabel));
   const xInterval = labels.length <= maxLabels ? 0 : Math.ceil(labels.length / maxLabels) - 1;
-  const needZoom = labels.length > maxLabels;
+  // 第一张图表常驻视窗滑块：数据点 ≥2 即显示，可拖中间平移、拖两端缩放。
+  // 默认（含切换时间维度、切换 X 维度、改筛选后）都完整展示全部 X 轴数据，由用户自己拉窄放大。
+  const showZoom = labels.length > 1;
+  const savedZoom = getChartRange('stats-main');
+  const gridLeft = narrow ? 40 : 50;
+  const gridRight = 12 + rightOffset;
   chart.setOption({
     backgroundColor: 'transparent',
     tooltip: {
@@ -768,11 +742,13 @@ async function renderChart(filteredRaw: any[]) {
       backgroundColor: cCardInner,
       borderColor: cBorder,
       borderWidth: 1,
+      ...CHART_TOOLTIP_SURFACE,
       textStyle: { color: cText, fontSize: 12 },
       formatter: (params:any)=>{
         if (!params?.length) return '';
         const idx = params[0].dataIndex;
-        const label = labels[idx];
+        // 悬浮窗标题用完整日期时间（X 轴标签是压缩格式，看不清具体时刻）
+        const label = tips[idx] || labels[idx];
         let html = `<div style="font-weight:600;margin-bottom:6px;">${esc(label)}</div>`;
         for (const p of params) {
           const v = p.value;
@@ -790,12 +766,27 @@ async function renderChart(filteredRaw: any[]) {
         return `<div style="padding:4px 2px;min-width:180px;">${html}</div>`;
       }
     },
-    grid: { left: narrow ? 40 : 50, right: 12 + rightOffset, top: 8, bottom: 28 },
-    dataZoom: needZoom ? [{ type:'inside', xAxisIndex:0, start: Math.max(0, (labels.length - maxLabels) / labels.length * 100), end: 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : undefined,
-    xAxis: { type:'category', data: labels, axisLine:{lineStyle:{color:cBorder}}, axisLabel:{color:cText3,fontSize: 12,interval: xInterval,rotate: labels.length>12?30:0, hideOverlap: false} },
+    grid: { left: gridLeft, right: gridRight, top: 8, bottom: showZoom ? (narrow ? 50 : 54) : 28 },
+    // 底部视窗滑块：拖中间平移 X 轴，拖两端改变可视范围（缩放）
+    dataZoom: showZoom
+      ? [{ type: 'inside', xAxisIndex: 0, start: savedZoom?.start ?? 0, end: savedZoom?.end ?? 100, zoomOnMouseWheel: false, moveOnMouseMove: true }]
+      : undefined,
+    // 有视窗滑块时让 ECharts 按当前可视范围自适应标签密度（缩放后不会只剩一两个刻度）
+    xAxis: { type:'category', data: labels, axisLine:{lineStyle:{color:cBorder}}, axisLabel:{color:cText3,fontSize: 12,interval: showZoom ? 'auto' : xInterval,rotate: labels.length>12?30:0, hideOverlap: false} },
     yAxis: yAxis.length?yAxis:{ type:'value', axisLabel:{color:cText3,fontSize: 12} },
     series: seriesOpt,
   }, true);
+  // 自绘视窗滑块（与 inside dataZoom 双向同步，触屏可拖）
+  rangeZoom = attachChartZoom({
+    doc,
+    chart,
+    container: el,
+    left: gridLeft,
+    right: gridRight,
+    bottom: narrow ? 2 : 4,
+    enabled: showZoom,
+    rangeKey: 'stats-main',
+  });
   setTimeout(()=>{ try{ chart.resize(); }catch{} }, 60);
 }
 
@@ -826,10 +817,11 @@ function renderModelSummary(filtered: any[]) {
     const avgRateStr = e.rateCnt ? Math.round(e.rate / e.rateCnt) + ' t/s' : '—';
     return { m, count: e.count, hit: e.hit, miss: e.miss, out: e.out, total: e.total, cost: e.cost, avgCost, avgDurVal, avgRateVal, avgDurStr, avgRateStr };
   });
-  if (summarySortKey) {
-    const dir = summarySortDir === 'asc' ? 1 : -1;
+  const sortKey = summarySort.key;
+  if (sortKey) {
+    const dir = summarySort.dir === 'asc' ? 1 : -1;
     const getVal = (r: Row): number => {
-      switch (summarySortKey) {
+      switch (sortKey) {
         case 'count': return r.count;
         case 'hit': return r.hit;
         case 'miss': return r.miss;
@@ -905,12 +897,38 @@ async function getHistoryForStats(): Promise<any[]> {
   return allHistoryPromise;
 }
 
+/** 视窗记忆签名：时间维度/筛选/X/Y/图表类型变化时重置为全量，仅页面切换时保留 */
+let lastZoomSignature = '';
+function currentZoomSignature(): string {
+  const filter = currentStatsFilter();
+  let chartType = '';
+  try { chartType = getChartType(); } catch {}
+  return [
+    currentRange,
+    filter.start || '',
+    filter.end || '',
+    Array.isArray(filter.model) ? filter.model.join(',') : String(filter.model || ''),
+    String(filter.chat || ''),
+    String(filter.endpoint || ''),
+    String(filter.credential || ''),
+    String(getXSelected() || ''),
+    (getYSelected() as any[]).join(','),
+    chartType,
+  ].join('|');
+}
+
 export async function renderStatsView() {
   const doc = getDoc();
   const s: any = getSelectedSave();
   if (!s) return;
   const allHistory: any[] = await getHistoryForStats();
   lastStatsHistory = allHistory;
+  const zoomSignature = currentZoomSignature();
+  if (zoomSignature !== lastZoomSignature) {
+    lastZoomSignature = zoomSignature;
+    // 时间维度 / 筛选 / 维度变化：视窗回到全量；切换页面（签名不变）时保留上次缩放位置
+    clearChartRanges();
+  }
   const endpointOptions = getEndpointFilterOptions(allHistory);
   const validEndpoints = new Set([STATS_FILTER_ALL, ...endpointOptions.map((option) => option.id)]);
   if (!validEndpoints.has(selectedEndpoint)) {

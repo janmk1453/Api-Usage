@@ -1,10 +1,10 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { a as defaultSettings, n as getSelectedSave, r as state } from "./store-BhaWFCjs.js";
 import { a as HIDDEN_PRICING_MODELS, c as PRICE_HISTORY, l as PRICING, r as DEFAULT_PEAK_HOURS, s as MAX_HISTORY, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
-import { a as loadHistoryCold, c as saveExtensionSettings, d as historyRecordKey, i as getExtensionSettings, l as saveHistoryCold, n as clearHistoryCold, o as loadHot, r as getAllHistory, t as appendHistoryCold, u as saveHot } from "./persistence-C4IJVd-B.js";
+import { a as getExtensionSettings, c as loadHot, d as saveHistoryCold, f as saveHot, i as getAllHistory, n as clearHistoryCold, p as historyRecordKey, s as loadHistoryCold, t as appendHistoryCold, u as saveExtensionSettings } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
 import { a as isUnsafeKey, c as localDay, i as isPeakHour$1, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay } from "./date-BJI2m6dS.js";
-import { a as getWalletExchangeRate } from "./currency-CkKG5JR0.js";
+import { a as getWalletExchangeRate } from "./currency-DYtqS43k.js";
 //#region src/types/wallet.ts
 var DEEPSEEK_WALLET_ID = "wallet:deepseek-official";
 var WALLET_CATALOG_PROVIDERS = [
@@ -423,6 +423,18 @@ function normalizeAliases(raw, current) {
 	}
 	return out;
 }
+function normalizePriceMatch(raw) {
+	if (!raw || typeof raw !== "object") return null;
+	const catalogModel = cleanText(raw.catalogModel);
+	const provider = cleanText(raw.provider);
+	if (!catalogModel || !provider) return null;
+	return {
+		provider,
+		catalogModel,
+		score: finiteNumber(raw.score, 0),
+		matchedAt: finiteNumber(raw.matchedAt, 0)
+	};
+}
 function normalizeWalletModel(raw, now = Date.now()) {
 	if (!raw || typeof raw !== "object") return null;
 	const sourceModel = cleanText(raw.sourceModel || raw.model);
@@ -448,6 +460,8 @@ function normalizeWalletModel(raw, now = Date.now()) {
 		price: normalizeWalletPriceRule(raw.price),
 		source,
 		locked: raw.locked === true,
+		priceMatch: normalizePriceMatch(raw.priceMatch),
+		hidden: raw.hidden === true,
 		discoveredAt,
 		lastSeen: finiteNumber(raw.lastSeen, discoveredAt),
 		updatedAt: finiteNumber(raw.updatedAt, discoveredAt)
@@ -476,6 +490,63 @@ function normalizePeakHours(raw, fallback) {
 		});
 	}
 	return out.length ? out : fallback.map((item) => ({ ...item }));
+}
+function normalizePlan(raw) {
+	if (!raw || typeof raw !== "object") return void 0;
+	const windows = Array.isArray(raw.windows) ? raw.windows.map((item) => {
+		if (!item || typeof item !== "object") return null;
+		const id = [
+			"5h",
+			"7d",
+			"1m",
+			"custom"
+		].includes(item.id) ? item.id : "5h";
+		const unit = [
+			"token",
+			"cost",
+			"request"
+		].includes(item.unit) ? item.unit : "token";
+		const resetMode = item.resetMode === "calendar" ? "calendar" : "rolling";
+		const limit = finiteNumber(item.limit, 0);
+		return {
+			id,
+			label: cleanText(item.label) || "",
+			unit,
+			limit: limit > 0 ? limit : 0,
+			resetMode,
+			hours: item.hours == null ? void 0 : Math.max(1, finiteNumber(item.hours, 5))
+		};
+	}).filter(Boolean) : [];
+	const remote = Array.isArray(raw.remote) ? raw.remote.map((item) => {
+		if (!item || typeof item !== "object") return null;
+		const id = cleanText(item.id);
+		if (!id) return null;
+		const num = (value) => value == null || value === "" || !Number.isFinite(Number(value)) ? null : Number(value);
+		return {
+			id,
+			label: cleanText(item.label) || id,
+			unit: [
+				"percent",
+				"count",
+				"cost",
+				"token"
+			].includes(item.unit) ? item.unit : "percent",
+			used: num(item.used),
+			limit: num(item.limit),
+			remaining: num(item.remaining),
+			resetAt: num(item.resetAt),
+			source: "remote",
+			checkedAt: finiteNumber(item.checkedAt, 0)
+		};
+	}).filter(Boolean) : [];
+	return {
+		enabled: raw.enabled === true,
+		label: cleanText(raw.label) || void 0,
+		windows,
+		remote: remote && remote.length ? remote : void 0,
+		remoteAt: raw.remoteAt == null ? null : finiteNumber(raw.remoteAt, 0),
+		remoteError: cleanText(raw.remoteError) || null
+	};
 }
 function normalizeWallet(raw, settings, now = Date.now()) {
 	if (!raw || typeof raw !== "object") return null;
@@ -508,12 +579,15 @@ function normalizeWallet(raw, settings, now = Date.now()) {
 		endpointDisplay: cleanText(raw.endpointDisplay || raw.endpointLabel) || null,
 		catalogProvider: isFirstPartyCatalogProvider(rawCatalogProvider) ? rawCatalogProvider : null,
 		balance: {
+			adapter: cleanText(balanceRaw.adapter) || null,
+			userId: cleanText(balanceRaw.userId) || null,
 			mode: balanceRaw.mode === "auto" ? "auto" : "manual",
 			amount: balanceRaw.amount == null || balanceRaw.amount === "" ? null : String(balanceRaw.amount),
 			currency: walletCurrencyOrDefault(balanceRaw.currency),
 			primaryCredentialId: cleanText(balanceRaw.primaryCredentialId) || null,
 			lastCalibrated: balanceRaw.lastCalibrated == null ? null : finiteNumber(balanceRaw.lastCalibrated, 0)
 		},
+		plan: normalizePlan(raw.plan),
 		peakHours: normalizePeakHours(raw.peakHours, settings.peakHours?.length ? settings.peakHours : DEFAULT_PEAK_HOURS),
 		weekendOffpeak: raw.weekendOffpeak !== false,
 		credentials: Array.from(credentialMap.values()),
@@ -638,7 +712,8 @@ function cloneWallet(wallet) {
 		models: wallet.models.map((item) => ({
 			...item,
 			aliases: [...item.aliases],
-			price: cloneWalletPriceRule(item.price)
+			price: cloneWalletPriceRule(item.price),
+			priceMatch: item.priceMatch ? { ...item.priceMatch } : item.priceMatch ?? null
 		}))
 	};
 }
@@ -732,6 +807,7 @@ function walletBalanceToCny(wallet, exchangeRate) {
 }
 function walletPendingModelCount(wallet) {
 	return (wallet.models || []).filter((model) => {
+		if (model.hidden === true) return false;
 		if (wallet.id === "wallet:deepseek-official" && model.source === "builtin") return false;
 		return model.price.priceConfigured !== true;
 	}).length;
@@ -2143,7 +2219,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && state.settings.pricingSync?.enabled) try {
-						import("./pricing-sync-DUVox4wX.js").then((n) => n.i).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-CinAIkTR.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
@@ -2982,4 +3058,4 @@ var repository = {
 	}
 };
 //#endregion
-export { DEEPSEEK_WALLET_ID as A, findWalletModel as C, buildEndpointContext as D, walletPendingModelCount as E, initConnectionIdentity as O, findWalletForHistory as S, walletBalanceToCny as T, normalizeModel as _, decryptKey as a, defaultContextLimitForModel as b, isTruncatedFinish as c, calcCost as d, calcSavings as f, isWalletPeakHour as g, isPeakHour as h, saveWalletApiKey as i, WALLET_CATALOG_PROVIDERS as j, resolveRuntimeConnectionContext as k, DataEvents as l, isDeepSeekOfficialModel as m, repository_exports as n, encryptKey as o, getPricing as p, getWalletApiKey as r, sanitizeHistoryTiming as s, repository as t, on as u, DEEPSEEK_OFFICIAL_ENDPOINT_ID as v, mergeWalletCollections as w, findWalletForConnection as x, cloneWallet as y };
+export { WALLET_CATALOG_PROVIDERS as A, mergeWalletCollections as C, initConnectionIdentity as D, buildEndpointContext as E, resolveRuntimeConnectionContext as O, findWalletModel as S, walletPendingModelCount as T, normalizeModel as _, decryptKey as a, findWalletForConnection as b, isTruncatedFinish as c, calcCost as d, calcSavings as f, isWalletPeakHour as g, isPeakHour as h, saveWalletApiKey as i, DEEPSEEK_WALLET_ID as k, DataEvents as l, isDeepSeekOfficialModel as m, repository_exports as n, encryptKey as o, getPricing as p, getWalletApiKey as r, sanitizeHistoryTiming as s, repository as t, on as u, cloneWallet as v, walletBalanceToCny as w, findWalletForHistory as x, defaultContextLimitForModel as y };

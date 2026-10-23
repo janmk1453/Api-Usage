@@ -1,7 +1,7 @@
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
 import { t as esc } from "./date-BJI2m6dS.js";
 //#region src/services/update.ts
-var CURRENT_VERSION = "3.1.6";
+var CURRENT_VERSION = "3.1.7";
 var REPO = "janmk1453/Api-Usage";
 var EXTENSION_FOLDER = "Api-Usage";
 var INTERVAL_MS = 36e5;
@@ -443,7 +443,7 @@ async function checkUpdate(manual = false) {
 				setUpdateButtonVisible(true);
 				setNavBadge(true);
 			} else {
-				toast("info", `已是最新版本（${localLabel}，目标 ${targetBranch}）`);
+				if (manual) toast("info", `已是最新版本（${localLabel}，目标 ${targetBranch}）`);
 				hideBanner();
 				setUpdateButtonVisible(false);
 				setNavBadge(false);
@@ -482,7 +482,7 @@ async function checkUpdate(manual = false) {
 			setUpdateButtonVisible(!isNonGitInstall);
 			setNavBadge(true);
 		} else {
-			toast("info", `已是最新版本 v${CURRENT_VERSION}（目标 ${targetBranch}）`);
+			if (manual) toast("info", `已是最新版本 v${CURRENT_VERSION}（目标 ${targetBranch}）`);
 			hideBanner();
 			setUpdateButtonVisible(false);
 			setNavBadge(false);

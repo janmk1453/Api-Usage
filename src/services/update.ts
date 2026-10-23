@@ -406,7 +406,8 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
         setUpdateButtonVisible(true);
         setNavBadge(true);
       } else {
-        toast('info', `已是最新版本（${localLabel}，目标 ${targetBranch}）`);
+        // 自动检查发现已是最新版本属静默结果（每次打开面板都会跑），只在手动检查时提示
+        if (manual) toast('info', `已是最新版本（${localLabel}，目标 ${targetBranch}）`);
         hideBanner();
         setUpdateButtonVisible(false);
         setNavBadge(false);
@@ -442,7 +443,8 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
       // 非 Git 安装也能看到徽标：点进去在关于页按提示走「管理扩展程序」
       setNavBadge(true);
     } else {
-      toast('info', `已是最新版本 v${CURRENT_VERSION}（目标 ${targetBranch}）`);
+      // 同上：自动检查已是最新版本不打扰用户
+      if (manual) toast('info', `已是最新版本 v${CURRENT_VERSION}（目标 ${targetBranch}）`);
       hideBanner();
       setUpdateButtonVisible(false);
       setNavBadge(false);

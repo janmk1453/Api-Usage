@@ -3,7 +3,7 @@ import { repository } from '../data/repository';
 import { log, toast } from '../utils/logger';
 import { getWalletApiKey, saveWalletApiKey } from './wallet-secrets';
 import { DEEPSEEK_WALLET_ID, type WalletConfig } from '../types/wallet';
-import { DEEPSEEK_OFFICIAL_ENDPOINT_ID } from '../data/wallets';
+import { probeWallet, resolveBalanceAdapter } from './balance-adapters';
 
 export function getApiKey(): string {
   return getWalletApiKey(DEEPSEEK_WALLET_ID);
@@ -13,67 +13,93 @@ export function saveApiKey(key: string): void {
   saveWalletApiKey(DEEPSEEK_WALLET_ID, key);
 }
 
-function canAutoCalibrate(wallet: WalletConfig): boolean {
-  return wallet.id === DEEPSEEK_WALLET_ID
-    && wallet.sourceType === 'deepseek'
-    && wallet.endpointId === DEEPSEEK_OFFICIAL_ENDPOINT_ID;
+/** 是否支持自动查询（余额或套餐任一） */
+export function canAutoCalibrate(wallet: WalletConfig): boolean {
+  return resolveBalanceAdapter(wallet) !== null;
 }
 
 function walletCurrencyLabel(wallet: WalletConfig): string {
-  return `${wallet.balance.currency === 'USD' ? '$' : '¥'}${wallet.balance.amount || '0'} ${wallet.balance.currency}`;
+  return (wallet.balance.currency === 'USD' ? '$' : '¥') + (wallet.balance.amount || '0') + ' ' + wallet.balance.currency;
 }
 
+const FAIL_REASON_LABEL: Record<string, string> = {
+  cors: '该站点未开放浏览器跨域，请改用通用方式或手工填写',
+  auth: '密钥/令牌无效或类型不符',
+  http: '接口返回错误状态',
+  network: '网络不可达',
+  parse: '响应格式无法解析',
+  'missing-key': '请先填写该钱包的查询密钥',
+  'no-endpoint': '钱包没有可用接入地址',
+};
+
 const balanceInFlight = new Set<string>();
-export async function queryWalletBalance(walletId: string, silent = false): Promise<any> {
+
+/**
+ * 查询钱包余额与套餐额度。
+ * 余额写入 wallet.balance；套餐快照写入 wallet.plan.remote（仅展示，不参与计费）。
+ */
+export async function queryWalletBalance(walletId: string, silent = false): Promise<WalletConfig | null> {
   const wallet = repository.getWallet(walletId);
   if (!wallet) {
     if (!silent) toast('error', '钱包不存在');
     return null;
   }
-  if (!canAutoCalibrate(wallet)) {
-    if (!silent) toast('warning', '当前接入不支持自动校准，请使用手工余额');
+  const adapter = resolveBalanceAdapter(wallet);
+  if (!adapter) {
+    if (!silent) toast('warning', '当前接入没有可用的自动查询适配器，请使用手工余额');
     return null;
   }
   if (balanceInFlight.has(walletId)) return null;
   balanceInFlight.add(walletId);
   try {
     const key = getWalletApiKey(walletId);
-    if (!key) {
-      if (!silent) toast('error', '请先在该钱包填写 API 密钥');
+    const probe = await probeWallet(wallet, key, { userId: (wallet.balance as any)?.userId || '' });
+    if (!probe) return null;
+    const now = Date.now();
+    if (!probe.ok) {
+      const message = FAIL_REASON_LABEL[probe.reason || 'network'] || probe.message || '查询失败';
+      repository.updateWallet(walletId, (next) => {
+        const plan = next.plan || { enabled: false, windows: [] };
+        plan.remoteError = message;
+        next.plan = plan;
+      });
+      if (!silent) toast('error', adapter.label + '：' + message + (probe.message && probe.reason === 'http' ? '（' + probe.message + '）' : ''));
       return null;
     }
-    const ctrl = new AbortController();
-    const to = setTimeout(() => { try { ctrl.abort(); } catch {} }, 15000);
-    const response = await fetch('https://api.deepseek.com/user/balance', {
-      method: 'GET',
-      headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
-      signal: ctrl.signal as any,
-    });
-    clearTimeout(to);
-    const data: any = await response.json();
-    if (data.is_available && data.balance_infos?.length) {
-      const info = data.balance_infos[0];
-      const amount = String(info.total_balance ?? '0');
-      const currency = String(info.currency || '').toUpperCase() === 'USD' ? 'USD' : 'CNY';
-      const updated = repository.setWalletBalance(walletId, amount, currency, true);
+    let updated: WalletConfig | null = wallet;
+    if (probe.balance) {
+      const amount = String(probe.balance.amount);
+      const currency = probe.balance.currency;
+      updated = repository.setWalletBalance(walletId, amount, currency, true);
       if (walletId === DEEPSEEK_WALLET_ID) {
-        state.balance = {
-          balance: amount,
-          currency,
-          available: data.is_available,
-          timestamp: Date.now(),
-        };
-        try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+        state.balance = { balance: amount, currency, available: true, timestamp: now };
       }
-      if (!silent && updated) toast('success', '余额已更新 ' + walletCurrencyLabel(updated));
-      return updated;
     }
-    if (!silent) toast('error', data.error?.message || '查询失败');
-    return null;
+    if (probe.quotas && probe.quotas.length) {
+      updated = repository.updateWallet(walletId, (next) => {
+        const plan = next.plan || { enabled: false, windows: [] };
+        plan.remote = probe.quotas;
+        plan.remoteAt = now;
+        plan.remoteError = null;
+        next.plan = plan;
+      }) || updated;
+    } else if (wallet.plan?.remoteError) {
+      repository.updateWallet(walletId, (next) => {
+        if (!next.plan) return;
+        next.plan.remoteError = null;
+      });
+    }
+    try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+    if (!silent) {
+      const parts: string[] = [];
+      if (probe.balance) parts.push('余额 ' + (probe.balance.currency === 'USD' ? '$' : '¥') + probe.balance.amount);
+      if (probe.quotas?.length) parts.push('套餐 ' + probe.quotas.length + ' 个窗口');
+      toast('success', (updated || wallet).name + '：' + (parts.join(' · ') || '已更新'));
+    }
+    return updated || null;
   } catch (error: any) {
-    const message = error?.name === 'AbortError' ? '查询超时(15s)' : (error?.message || error);
     log.error('余额查询失败', error);
-    if (!silent) toast('error', '网络错误: ' + message);
+    if (!silent) toast('error', '查询失败：' + (error?.message || error));
     return null;
   } finally {
     balanceInFlight.delete(walletId);
@@ -94,16 +120,20 @@ export function restartBalanceTimer(): void {
     balanceTimer = null;
   }
   const settings: any = state.settings;
-  // 校准由钱包页的「自动校准」勾选直接决定（全局开关已移除）：
-  // 只要有一个未忽略的钱包勾了自动校准就启动轮询，否则不占用定时器。
   const ignored = new Set(state.walletIgnored || []);
-  const autoWallets = (state.wallets || []).filter((wallet) => !ignored.has(wallet.id) && wallet.balance.mode === 'auto');
+  // 勾了「自动校准」的钱包，或启用了本地套餐估算且有可用适配器的钱包
+  const autoWallets = (state.wallets || []).filter((wallet) => {
+    if (ignored.has(wallet.id)) return false;
+    if (!canAutoCalibrate(wallet)) return false;
+    return wallet.balance.mode === 'auto' || wallet.plan?.enabled === true;
+  });
   if (!autoWallets.length) return;
   const minutes = Math.min(Math.max(parseInt(settings.balanceInterval) || 10, 1), 1440);
   balanceTimer = setInterval(() => {
     const currentIgnored = new Set(state.walletIgnored || []);
     for (const wallet of state.wallets || []) {
-      if (currentIgnored.has(wallet.id) || wallet.balance.mode !== 'auto') continue;
+      if (currentIgnored.has(wallet.id) || !canAutoCalibrate(wallet)) continue;
+      if (wallet.balance.mode !== 'auto' && wallet.plan?.enabled !== true) continue;
       queryWalletBalance(wallet.id, true).catch(() => {});
     }
   }, minutes * 60 * 1000);
