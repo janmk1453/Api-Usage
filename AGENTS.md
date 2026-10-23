@@ -157,7 +157,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 
 - 变量：`--ds-bg:#FFFFFF --ds-card:#F6F7F8 --ds-text:#111827 --ds-border:#E5E7EB --ds-black:#111827 --ds-orange:#FF6A00 --ds-green-bg:#E6F8EC --ds-green:#0BA25E --ds-radius-card:14px --ds-radius-pill:999px`，深色 `data-ds-theme="dark"` 同名覆盖（`--ds-bg:#0F1419/--ds-card:#1E242E/--ds-text:#E5E7EB` 高对比，`ECharts` 经 `themeColor()` 动态取变量保证可读性）
 - 选择器统一：所有选择类 UI 必须使用用量统计·模型选择同款胶囊下拉（`#xxx-btn` 胶囊 `999px` + `#xxx-dropdown` 绝对定位 `12px` 圆角 `box-shadow`），禁止原生 `select`，选中态 `background:var(--ds-card)` 加粗
-- 块面与浮层层级：**任何块（`.ds-card`、钱包二级面板、详情子块、存储/同步预览面板）都不画 `1px` 描边**，只靠 `--ds-card`（灰）/`--ds-card-inner`（白）底色分层；块内二级面板必须自带 `background:var(--ds-card-inner)`，否则去描边后会与灰底融合。输入框、胶囊按钮、复选框、表格行分割线、语义色告警块（黄/红）与浮层菜单描边**保持原样**
+- 块面与浮层层级：**任何块（`.ds-card`、钱包二级面板、详情子块、存储/同步预览面板）都不画 `1px` 描边**，只靠 `--ds-card`（灰）/`--ds-card-inner`（白）底色分层；块内二级面板必须自带 `background:var(--ds-card-inner)`，否则去描边后会与灰底融合。输入框、胶囊按钮、复选框、表格行分割线、语义色告警块（黄/红）与浮层菜单描边**保持原样**；**唯一例外是统计页 `#aus-model-summary`（模型汇总表）——该块背景透明且表格全宽横滑，去描边后会完全失去块边界，故单独 `border-color: var(--ds-border)` 保留描边**
 - 下拉动画：`style.css` 用纯 CSS 给所有浮层菜单统一开合过渡——选择器为 `#aus-panel [id$="-dropdown"], #aus-panel [id*="-drop-"], #aus-panel [data-wallet-dropdown], #aus-panel .aus-forecast-dropdown`，`transition: opacity/transform/display 150ms allow-discrete` + `@starting-style` 提供进入起始态（从按钮下方淡入 + `scale(0.97)`），关闭时先淡出再真正 `display:none`；`[style*="display: none"]` 同时置 `pointer-events:none` 防残影吃点击。**新增下拉必须沿用 `-dropdown`/`-drop-` 命名或 `data-wallet-dropdown` 属性**才会自动获得动画，JS 仍只管写 inline `display`，不要改成 class 切换；旧内核不支持上述特性时自动退化为瞬时开关
 - 魔法棒悬停：`background: transparent !important`
 - 文字：`Microsoft YaHei`，无 `antialiased/optimizeLegibility` 干预

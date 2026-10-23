@@ -451,6 +451,9 @@
 /* 表格：全宽横向滚动，不做首列粘性（避免与 ds-card 灰底形成白/灰切割，图1底色问题） */
 #aus-model-summary { background: transparent; }
 #aus-model-summary table { background: transparent; }
+/* 例外：模型汇总表块面透明 + 表格全宽横滑，去描边后会彻底失去块的边界，
+   因此这一块单独把 1px 描边要回来（只改颜色，宽度沿用 .ds-card 的 1px，尺寸不变）。 */
+#aus-model-summary { border-color: var(--ds-border); }
 /* 安全区（全面屏底部） */
 #aus-main { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
 /* 触控目标 */
