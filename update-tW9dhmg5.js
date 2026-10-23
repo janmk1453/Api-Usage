@@ -443,7 +443,7 @@ async function checkUpdate(manual = false) {
 				setUpdateButtonVisible(true);
 				setNavBadge(true);
 			} else {
-				toast("info", `已是最新版本（${localLabel}，目标 ${targetBranch}）`);
+				if (manual) toast("info", `已是最新版本（${localLabel}，目标 ${targetBranch}）`);
 				hideBanner();
 				setUpdateButtonVisible(false);
 				setNavBadge(false);
@@ -482,7 +482,7 @@ async function checkUpdate(manual = false) {
 			setUpdateButtonVisible(!isNonGitInstall);
 			setNavBadge(true);
 		} else {
-			toast("info", `已是最新版本 v${CURRENT_VERSION}（目标 ${targetBranch}）`);
+			if (manual) toast("info", `已是最新版本 v${CURRENT_VERSION}（目标 ${targetBranch}）`);
 			hideBanner();
 			setUpdateButtonVisible(false);
 			setNavBadge(false);
