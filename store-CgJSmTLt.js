@@ -50,7 +50,6 @@ var defaultSettings = () => ({
 	],
 	modelsPricingCollapsed: true,
 	pricingSync: {
-		enabled: false,
 		mode: "add-missing",
 		exchangeRate: 7.2,
 		useLiveRate: true,

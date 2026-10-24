@@ -1,14 +1,14 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from "./store-BhaWFCjs.js";
+import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from "./store-CgJSmTLt.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { a as getExtensionSettings, f as saveHot, o as isMigrationBackupKey, p as historyRecordKey, r as deleteMigrationBackups, u as saveExtensionSettings } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, a as decryptKey, c as isTruncatedFinish, d as calcCost, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-BotjYXCT.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, a as decryptKey, c as isTruncatedFinish, d as calcCost, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-BW-r59iw.js";
 import { a as isUnsafeKey$1, c as localDay$1, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay, t as esc$2, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
-import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-DYtqS43k.js";
-import { r as recalcAllCosts, t as installInterception } from "./interception-81akbEw_.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, i as saveApiKey, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-Bkp12Xv2.js";
-import { c as walletSyncStatus, i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev, t as applySyncPlan } from "./pricing-sync-CinAIkTR.js";
+import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-DgeH8MPr.js";
+import { r as recalcAllCosts, t as installInterception } from "./interception-BsHkDurZ.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, i as saveApiKey, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-CvgCg-F3.js";
+import { c as walletSyncStatus, i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev, t as applySyncPlan } from "./pricing-sync-DuNUqgL8.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -2277,10 +2277,10 @@ function renderSettings(doc) {
       <!-- 模型与价格（可折叠，默认收起） -->
       <div class="ds-card" style="display:none;"><div id="aus-models-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">模型与价格（<span id="aus-model-price-unit">${getDisplayCurrency().code}/百万 tokens</span>）</span><div style="display:flex;align-items:center;gap:8px;"><button id="aus-btn-clear-custom-models" style="padding:6px 10px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">清空自定义模型</button><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">+ 自定义模型</button><span id="aus-models-toggle" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;user-select:none;line-height:1;">${icon("chevron-down", 14)} 展开</span></div></div><div id="aus-models-sync-note" style="display:none;margin-top:8px;padding:8px 10px;border:1px dashed var(--ds-border);border-radius:10px;background:var(--ds-sidebar-bg);font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;"></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
 
-      <!-- 模型价格自动同步（models.dev） -->
-      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">模型价格自动同步（models.dev）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-pricing-sync-enabled" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-pricing-sync-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
-        <div id="aus-pricing-sync-panel" style="display:${s.pricingSync?.enabled ? "grid" : "none"};margin-top:10px;gap:10px;">
-          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;">开启后所有价格、余额、图表将以 <b style="color:var(--ds-text);">美元 $/USD</b> 展示（按汇率动态换算），并从 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 拉取模型价格。<b style="color:var(--ds-text);">同步只按钱包里已识别的模型名做模糊匹配后写入该模型的价格，不会把供应商目录里的模型整批塞进钱包</b>；各钱包在钱包页选择“价格来源供应商”，DeepSeek 峰价按谷价 2× 合成。功能默认关闭。<br />钱包中锁定或手工维护的价格受同步模式保护；关闭本开关只会清理旧版本全量灌入的残留条目，已同步的价格保留。</div>
+      <!-- 汇率与价格同步（models.dev）：无总开关，同步与币种都由各钱包自己的设置决定 -->
+      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">汇率与价格同步（models.dev）</span></div>
+        <div id="aus-pricing-sync-panel" style="display:grid;margin-top:10px;gap:10px;">
+          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;"><b style="color:var(--ds-text);">价格同步没有总开关</b>：在钱包页为某个钱包选定「价格来源」后，该钱包里已识别的模型才会按 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 价格同步；未选来源的钱包不参与，也不会联网。同步只按模型名模糊匹配写入该模型的价格，不会把供应商目录整批塞进钱包；DeepSeek 峰价按谷价 2× 合成。<br /><b style="color:var(--ds-text);">显示币种同样由钱包决定</b>：未忽略的钱包全部为美元时全站按 $ 显示（按下方汇率换算），否则按 ¥ CNY；内部计价单位始终是人民币。下表开关只是同步行为与汇率参数，钱包中锁定或手工维护的价格受同步模式保护。</div>
           <div style="display:flex;align-items:center;justify-content:space-between;position:relative;"><span style="font-size:var(--aus-fs-base);color:var(--ds-text);">同步模式</span><div id="aus-pricing-sync-mode-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);cursor:pointer;"><span id="aus-pricing-sync-mode-label" style="font-weight:600;color:var(--ds-text);">仅新增</span>${icon("chevron-down", 14)}</div><div id="aus-pricing-sync-mode-dropdown" style="display:none;position:absolute;top:40px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
             <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">汇率 USD→CNY</div><input id="aus-exchange-rate" type="number" step="0.0001" min="0" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div>
@@ -2520,7 +2520,7 @@ function renderSettings(doc) {
 		state$2.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state$2.settings });
 		try {
-			import("./balance-Bkp12Xv2.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-CvgCg-F3.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2565,8 +2565,8 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-BotjYXCT.js").then((n) => n.n);
-				const { state: st } = await import("./store-BhaWFCjs.js").then((n) => n.i);
+				const { repository } = await import("./repository-BW-r59iw.js").then((n) => n.n);
+				const { state: st } = await import("./store-CgJSmTLt.js").then((n) => n.i);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
 				await repository.rebuildAggregates();
@@ -2661,12 +2661,6 @@ function renderSettings(doc) {
 	doc.getElementById("aus-webdav-sync").onclick = () => doSyncNow();
 	try {
 		const ps = state$2.settings.pricingSync || {};
-		const enabledEl = doc.getElementById("aus-pricing-sync-enabled");
-		const slider = doc.getElementById("aus-pricing-sync-slider");
-		const panel = doc.getElementById("aus-pricing-sync-panel");
-		if (enabledEl) enabledEl.checked = !!ps.enabled;
-		if (slider) slider.style.left = ps.enabled ? "23px" : "3px";
-		if (panel) panel.style.display = ps.enabled ? "grid" : "none";
 		const modeBtn = doc.getElementById("aus-pricing-sync-mode-btn");
 		const modeLabel = doc.getElementById("aus-pricing-sync-mode-label");
 		const modeDrop = doc.getElementById("aus-pricing-sync-mode-dropdown");
@@ -2715,8 +2709,8 @@ function renderSettings(doc) {
 					intervalDrop.style.display = "none";
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-CinAIkTR.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
-						import("./currency-DYtqS43k.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+						import("./pricing-sync-DuNUqgL8.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./currency-DgeH8MPr.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};
 			});
@@ -2731,39 +2725,6 @@ function renderSettings(doc) {
 		}
 		const syncStatus = doc.getElementById("aus-pricing-sync-status");
 		if (syncStatus) syncStatus.textContent = `上次同步：${ps.lastSync ? new Date(ps.lastSync).toLocaleString("zh-CN") : "未同步"} · 模式：${modeMap[ps.mode] || ps.mode}`;
-		if (enabledEl) enabledEl.onchange = async () => {
-			state$2.settings.pricingSync.enabled = enabledEl.checked;
-			if (slider) slider.style.left = enabledEl.checked ? "23px" : "3px";
-			if (panel) panel.style.display = enabledEl.checked ? "grid" : "none";
-			let removed = 0;
-			if (!enabledEl.checked) try {
-				const m = await import("./pricing-sync-CinAIkTR.js").then((n) => n.a);
-				try {
-					await m.markLegacySyncedModels?.({ skipRerender: true });
-				} catch {}
-				removed = m.removeSyncedModels ? m.removeSyncedModels() : 0;
-			} catch {
-				removed = 0;
-			}
-			saveHot({ settings: state$2.settings });
-			try {
-				import("./currency-DYtqS43k.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
-				import("./pricing-sync-CinAIkTR.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
-			} catch {}
-			if (removed) {
-				renderModelsEditor(doc);
-				fillDebugModelSelect(doc);
-				recalcCostsAndRefresh();
-				toast("success", `已清理 ${removed} 个旧版残留同步条目`);
-			}
-			try {
-				globalThis.ApiUsageStat?.refreshUI?.();
-			} catch {}
-			const unitEl = doc.getElementById("aus-model-price-unit");
-			if (unitEl) try {
-				unitEl.textContent = getDisplayCurrency().code + "/百万 tokens";
-			} catch {}
-		};
 		if (rateEl) rateEl.onchange = () => {
 			const v = parseFloat(rateEl.value);
 			if (!isFinite(v) || v <= 0) return;
@@ -2778,7 +2739,7 @@ function renderSettings(doc) {
 			state$2.settings.pricingSync.useLiveRate = liveEl.checked;
 			saveHot({ settings: state$2.settings });
 			try {
-				import("./currency-DYtqS43k.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+				import("./currency-DgeH8MPr.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 			} catch {}
 		};
 		if (recalcEl) recalcEl.onchange = () => {
@@ -11365,7 +11326,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-Bkp12Xv2.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-CvgCg-F3.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -13154,7 +13115,7 @@ function openPanel() {
 	panelOpen = true;
 	refreshUI();
 	try {
-		import("./collector-BIe6APid.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-DJ0dScs1.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-tW9dhmg5.js").then((m) => m.maybeAutoCheck());
@@ -13374,10 +13335,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-81akbEw_.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-BsHkDurZ.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-BIe6APid.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-DJ0dScs1.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -13385,10 +13346,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-81akbEw_.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-BsHkDurZ.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-BIe6APid.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-DJ0dScs1.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -13478,13 +13439,13 @@ async function onDelete() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-Bkp12Xv2.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-CvgCg-F3.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-DYtqS43k.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-DgeH8MPr.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CinAIkTR.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-DuNUqgL8.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 	try {
@@ -13511,19 +13472,19 @@ async function onDelete() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-81akbEw_.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-BsHkDurZ.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-BIe6APid.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-DJ0dScs1.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-Bkp12Xv2.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-CvgCg-F3.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
-		import("./currency-DYtqS43k.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+		import("./currency-DgeH8MPr.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-CinAIkTR.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-DuNUqgL8.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -13533,10 +13494,10 @@ async function onDisable() {
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-81akbEw_.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-BsHkDurZ.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-BIe6APid.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-DJ0dScs1.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -13555,13 +13516,13 @@ async function onDisable() {
 		unwatchSystemTheme();
 	} catch {}
 	try {
-		(await import("./balance-Bkp12Xv2.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-CvgCg-F3.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-DYtqS43k.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-DgeH8MPr.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CinAIkTR.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-DuNUqgL8.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -13589,19 +13550,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-Bkp12Xv2.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-CvgCg-F3.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-DYtqS43k.js").then((n) => n.t)).restartRateTimer?.();
+		(await import("./currency-DgeH8MPr.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CinAIkTR.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-DuNUqgL8.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-BIe6APid.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-DJ0dScs1.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -13623,7 +13584,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-CinAIkTR.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-DuNUqgL8.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

@@ -197,10 +197,10 @@ export function renderSettings(doc: Document) {
       <!-- 模型与价格（可折叠，默认收起） -->
       <div class="ds-card" style="display:none;"><div id="aus-models-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">模型与价格（<span id="aus-model-price-unit">${getDisplayCurrency().code}/百万 tokens</span>）</span><div style="display:flex;align-items:center;gap:8px;"><button id="aus-btn-clear-custom-models" style="padding:6px 10px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">清空自定义模型</button><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">+ 自定义模型</button><span id="aus-models-toggle" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;user-select:none;line-height:1;">${icon('chevron-down', 14)} 展开</span></div></div><div id="aus-models-sync-note" style="display:none;margin-top:8px;padding:8px 10px;border:1px dashed var(--ds-border);border-radius:10px;background:var(--ds-sidebar-bg);font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;"></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
 
-      <!-- 模型价格自动同步（models.dev） -->
-      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">模型价格自动同步（models.dev）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-pricing-sync-enabled" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-pricing-sync-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
-        <div id="aus-pricing-sync-panel" style="display:${s.pricingSync?.enabled ? 'grid':'none'};margin-top:10px;gap:10px;">
-          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;">开启后所有价格、余额、图表将以 <b style="color:var(--ds-text);">美元 $/USD</b> 展示（按汇率动态换算），并从 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 拉取模型价格。<b style="color:var(--ds-text);">同步只按钱包里已识别的模型名做模糊匹配后写入该模型的价格，不会把供应商目录里的模型整批塞进钱包</b>；各钱包在钱包页选择“价格来源供应商”，DeepSeek 峰价按谷价 2× 合成。功能默认关闭。<br />钱包中锁定或手工维护的价格受同步模式保护；关闭本开关只会清理旧版本全量灌入的残留条目，已同步的价格保留。</div>
+      <!-- 汇率与价格同步（models.dev）：无总开关，同步与币种都由各钱包自己的设置决定 -->
+      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">汇率与价格同步（models.dev）</span></div>
+        <div id="aus-pricing-sync-panel" style="display:grid;margin-top:10px;gap:10px;">
+          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;"><b style="color:var(--ds-text);">价格同步没有总开关</b>：在钱包页为某个钱包选定「价格来源」后，该钱包里已识别的模型才会按 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 价格同步；未选来源的钱包不参与，也不会联网。同步只按模型名模糊匹配写入该模型的价格，不会把供应商目录整批塞进钱包；DeepSeek 峰价按谷价 2× 合成。<br /><b style="color:var(--ds-text);">显示币种同样由钱包决定</b>：未忽略的钱包全部为美元时全站按 $ 显示（按下方汇率换算），否则按 ¥ CNY；内部计价单位始终是人民币。下表开关只是同步行为与汇率参数，钱包中锁定或手工维护的价格受同步模式保护。</div>
           <div style="display:flex;align-items:center;justify-content:space-between;position:relative;"><span style="font-size:var(--aus-fs-base);color:var(--ds-text);">同步模式</span><div id="aus-pricing-sync-mode-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);cursor:pointer;"><span id="aus-pricing-sync-mode-label" style="font-weight:600;color:var(--ds-text);">仅新增</span>${icon('chevron-down', 14)}</div><div id="aus-pricing-sync-mode-dropdown" style="display:none;position:absolute;top:40px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
             <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">汇率 USD→CNY</div><input id="aus-exchange-rate" type="number" step="0.0001" min="0" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div>
@@ -521,12 +521,6 @@ export function renderSettings(doc: Document) {
   // 模型价格自动同步（models.dev）
   try {
     const ps: any = (state.settings as any).pricingSync || {};
-    const enabledEl = doc.getElementById('aus-pricing-sync-enabled') as HTMLInputElement | null;
-    const slider = doc.getElementById('aus-pricing-sync-slider') as HTMLElement | null;
-    const panel = doc.getElementById('aus-pricing-sync-panel') as HTMLElement | null;
-    if (enabledEl) enabledEl.checked = !!ps.enabled;
-    if (slider) slider.style.left = ps.enabled ? '23px' : '3px';
-    if (panel) panel.style.display = ps.enabled ? 'grid' : 'none';
     const modeBtn = doc.getElementById('aus-pricing-sync-mode-btn') as HTMLElement | null;
     const modeLabel = doc.getElementById('aus-pricing-sync-mode-label') as HTMLElement | null;
     const modeDrop = doc.getElementById('aus-pricing-sync-mode-dropdown') as HTMLElement | null;
@@ -579,27 +573,6 @@ export function renderSettings(doc: Document) {
       const lastSync = ps.lastSync ? new Date(ps.lastSync).toLocaleString('zh-CN') : '未同步';
       syncStatus.textContent = `上次同步：${lastSync} · 模式：${modeMap[ps.mode]||ps.mode}`;
     }
-    if (enabledEl) enabledEl.onchange = async () => {
-      (state.settings as any).pricingSync.enabled = enabledEl.checked;
-      if (slider) slider.style.left = enabledEl.checked ? '23px' : '3px';
-      if (panel) panel.style.display = enabledEl.checked ? 'grid' : 'none';
-      // 关闭自动同步时只清理旧版本“全量灌入”的残留条目（有 priceMatch 的已同步价格保留）
-      let removed = 0;
-      if (!enabledEl.checked) {
-        try {
-          const m: any = await import('../services/pricing-sync');
-          // 先补做旧数据识别（避免未标记的残留项漏删），再统一移除同步条目
-          try { await m.markLegacySyncedModels?.({ skipRerender: true }); } catch {}
-          removed = m.removeSyncedModels ? m.removeSyncedModels() : 0;
-        } catch { removed = 0; }
-      }
-      saveHot({ settings: state.settings });
-      try { import('../services/currency').then(m=> (m as any).restartRateTimer?.()); import('../services/pricing-sync').then(m=> (m as any).restartPricingSyncTimer?.()); } catch {}
-      if (removed) { renderModelsEditor(doc); fillDebugModelSelect(doc); void recalcCostsAndRefresh(); toast('success', `已清理 ${removed} 个旧版残留同步条目`); }
-      try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
-      const unitEl = doc.getElementById('aus-model-price-unit') as HTMLElement | null;
-      if (unitEl) { try{  unitEl.textContent = getDisplayCurrency().code + '/百万 tokens'; }catch{} }
-    };
     if (rateEl) rateEl.onchange = () => {
       const v = parseFloat(rateEl.value);
       if (!isFinite(v) || v <= 0) return;

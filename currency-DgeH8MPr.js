@@ -1,5 +1,5 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { r as state } from "./store-BhaWFCjs.js";
+import { r as state } from "./store-CgJSmTLt.js";
 import { i as EXCHANGE_RATE_FETCH_INTERVAL, n as DEFAULT_EXCHANGE_RATE } from "./pricing-Bc-qEvy8.js";
 import { f as saveHot } from "./persistence-CaWdvByH.js";
 //#region src/services/currency.ts
@@ -11,12 +11,23 @@ var currency_exports = /* @__PURE__ */ __exportAll({
 	getEffectiveRate: () => getEffectiveRate,
 	getWalletExchangeRate: () => getWalletExchangeRate,
 	restartRateTimer: () => restartRateTimer,
-	stopRateTimer: () => stopRateTimer
+	stopRateTimer: () => stopRateTimer,
+	walletDrivenCurrency: () => walletDrivenCurrency
 });
+/**
+* 显示币种由钱包驱动：未忽略钱包**全部**为 USD 时全站按美元展示，否则一律按 CNY。
+* 内部计价单位始终是 CNY，这里只决定展示换算方式；已移除全局币种开关。
+*/
+function walletDrivenCurrency() {
+	const ignored = new Set(state.walletIgnored || []);
+	const wallets = (state.wallets || []).filter((wallet) => wallet && !ignored.has(wallet.id));
+	if (!wallets.length) return "CNY";
+	return wallets.every((wallet) => String(wallet?.balance?.currency || "CNY").toUpperCase() === "USD") ? "USD" : "CNY";
+}
+/** USD→CNY 汇率（配置值，兜底 7.2）：用于钱包余额换算与 models.dev 价格换算 */
 function getEffectiveRate() {
 	const ps = state.settings?.pricingSync;
-	if (!ps?.enabled) return 1;
-	const r = parseFloat(String(ps.exchangeRate));
+	const r = parseFloat(String(ps?.exchangeRate));
 	if (!isFinite(r) || r <= 0) return DEFAULT_EXCHANGE_RATE;
 	return r;
 }
@@ -27,7 +38,7 @@ function getWalletExchangeRate() {
 	return isFinite(r) && r > 0 ? r : DEFAULT_EXCHANGE_RATE;
 }
 function getDisplayCurrency() {
-	if ((state.settings?.pricingSync)?.enabled) return {
+	if (walletDrivenCurrency() === "USD") return {
 		code: "USD",
 		symbol: "$",
 		rate: getEffectiveRate()
@@ -84,7 +95,7 @@ function restartRateTimer() {
 		rateTimer = null;
 	}
 	const ps = state.settings?.pricingSync;
-	if (!ps?.enabled || !ps?.useLiveRate) return;
+	if (!ps?.useLiveRate) return;
 	rateTimer = setInterval(() => {
 		fetchLiveRate(false).catch(() => {});
 	}, EXCHANGE_RATE_FETCH_INTERVAL);

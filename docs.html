@@ -1475,7 +1475,7 @@
           <li>匹配到的价格会留下“目录模型 + 置信度”记录，显示在模型表“来源”列下方，便于核对这条价格从哪来。</li>
           <li>同步模式包括只补未定价、覆盖未锁定和全部覆盖；歧义匹配（多个候选分数接近）默认不写入。</li>
           <li>点击钱包卡上的同步图标会打开「价格同步预览」浮层，可逐条勾选、切换模式、搜索模型，确认后才会写入并重算该钱包历史费用。</li>
-          <li>自动同步会缓存价格目录 10 分钟，并限制 60 秒内不重复拉取，避免每次请求都下载完整目录。</li>
+          <li><strong>同步跟随各钱包自己的「价格来源」设置，没有全局开关</strong>：钱包选了来源才会把该钱包里已识别的模型送去匹配；未选来源的钱包不参与同步，也不会触发任何联网拉取。价格目录会缓存 10 分钟，并限制 60 秒内不重复拉取，避免每次请求都下载完整目录。</li>
         </ul>
 
         <h3 id="wallet-balance-adapters">余额查询适配器</h3>
@@ -1556,19 +1556,25 @@
           <li>修改价格或峰谷规则后，相关钱包的冷热历史会重新计算费用。</li>
         </ul>
 
-        <h3 id="settings-modelsdev">模型价格自动同步</h3>
-        <p>开启后，扩展可以从 models.dev 获取模型价格，并把同步结果写入各钱包的价格规则。同步页还提供同步模式、汇率、自动同步间隔、实时汇率和同步后重算历史费用等选项。</p>
+        <h3 id="settings-modelsdev">汇率与价格同步（models.dev）</h3>
+        <p>这里<strong>没有“自动同步”总开关</strong>：价格同步由<strong>各钱包自己的「价格来源」</strong>决定，显示币种由<strong>各钱包自己的货币单位</strong>决定。本卡片只保留汇率、同步模式、同步节奏等技术参数。</p>
+        <ul>
+          <li><strong>价格同步</strong>：某钱包在钱包页选定了价格来源后，扩展才会把该钱包里已识别到的模型名拿去 models.dev 匹配并写价；没有选定来源的钱包既不参与同步，也不会联网。同步只写已有模型的价格，不会把供应商目录整批塞进钱包。</li>
+          <li><strong>显示币种</strong>：未忽略的钱包<strong>全部</strong>设置为美元时，全站金额按 <span class="code">$</span> 显示并按下方汇率换算；只要有一个钱包是人民币，就统一按 <span class="code">¥ CNY</span> 显示。内部计价单位始终是人民币，改钱包币种不会改变历史记录的费用数值。</li>
+          <li>同步结果会写入该钱包的模型价格并留下匹配记录；汇率同时用于把 models.dev 的美元价格换算成内部人民币价格。</li>
+        </ul>
         <div class="table-wrap">
           <table>
             <thead><tr><th>选项</th><th>作用</th></tr></thead>
             <tbody>
               <tr><td>同步模式</td><td>决定只补充缺失价格、覆盖未锁定价格，还是覆盖全部可同步价格。</td></tr>
-              <tr><td>汇率</td><td>用于把美元价格和其他币种统一换算为显示币种。</td></tr>
-              <tr><td>自动同步间隔</td><td>可以选择仅手动或按设定周期自动更新。</td></tr>
+              <tr><td>汇率</td><td>美元与人民币的换算比例，用于价格同步、钱包余额换算，以及钱包全部为美元时的全站展示。</td></tr>
+              <tr><td>自动同步间隔</td><td>选择仅手动或按设定周期更新；周期性同步只处理已选价格来源的钱包，没有可同步钱包时不会联网。</td></tr>
               <tr><td>同步后重算</td><td>开启后，价格同步会更新已有历史费用；关闭后主要影响后续请求。</td></tr>
               <tr><td>预览</td><td>在正式同步前查看新增、更新、跳过和待定价数量。</td></tr>
             </tbody>
           </table>
+        </div>
         </div>
 
         <h3 id="settings-peak-dot">峰值提示圆点</h3>
@@ -1845,7 +1851,7 @@
             <tbody>
               <tr><td>1</td><td><span class="code">api.deepseek.com</span>、<span class="code">api.moonshot.cn</span>、<span class="code">api.moonshot.ai</span>、<span class="code">api.siliconflow.cn</span>、<span class="code">openrouter.ai</span>、<span class="code">api.stepfun.com</span>、<span class="code">api.novita.ai</span></td><td><span class="code">/user/balance</span>、<span class="code">/v1/users/me/balance</span>、<span class="code">/v1/user/info</span>、<span class="code">/api/v1/credits</span>、<span class="code">/v1/accounts</span>、<span class="code">/v3/user/balance</span></td><td>查询对应厂商钱包余额（校准）</td><td>仅当该钱包被识别为对应厂商（或用户在钱包内手动指定查询适配器）、且用户填写查询密钥后：手动查询，或开启「自动校准」后按设定间隔（1–1440 分钟）触发</td><td>仅 <span class="code">Authorization</span> / <span class="code">api-key</span> 请求头；不含任何聊天内容或统计数据</td></tr>
               <tr><td>1b</td><td><span class="code">open.bigmodel.cn</span>（海外 <span class="code">api.z.ai</span>）、<span class="code">api.minimaxi.com</span>、<strong>用户自行填写的中转站地址</strong>（new-api / one-api 站点）</td><td><span class="code">/api/monitor/usage/quota/limit</span>、<span class="code">/v1/api/openplatform/coding_plan/remains</span>、<span class="code">/dashboard/billing/subscription</span>、<span class="code">/dashboard/billing/usage</span></td><td>查询套餐额度 / 中转站订阅额度（仅展示）</td><td>仅当用户为钱包选择了对应查询适配器并填写查询密钥（中转站另需用户 ID）后手动查询，或在开启「自动校准」后按设定间隔触发</td><td>仅认证请求头（<span class="code">Authorization</span>，智谱为裸密钥）与 <span class="code">New-Api-User</span> 用户 ID；不含任何聊天内容或统计数据</td></tr>
-              <tr><td>2</td><td><span class="code">models.dev</span></td><td><span class="code">/api.json</span>、<span class="code">/catalog.json</span></td><td>模型价格目录同步（「价格来源、自动同步」功能）</td><td><strong>默认关闭</strong>；用户开启后手动或按设定间隔触发</td><td>无用户数据（纯 GET 拉取公开目录）</td></tr>
+              <tr><td>2</td><td><span class="code">models.dev</span></td><td><span class="code">/api.json</span>、<span class="code">/catalog.json</span></td><td>模型价格目录同步（各钱包的「价格来源」功能）</td><td><strong>默认不请求</strong>；仅在钱包选定价格来源后手动或按设定间隔触发</td><td>无用户数据（纯 GET 拉取公开目录）</td></tr>
               <tr><td>3</td><td><span class="code">raw.githubusercontent.com</span></td><td><span class="code">anomalyco/opencode/main/models.json</span></td><td>价格同步的备用数据源</td><td>同上，仅在主源拉取失败时依序尝试</td><td>无用户数据</td></tr>
               <tr><td>4</td><td><span class="code">raw.githubusercontent.com</span></td><td><span class="code">janmk1453/Api-Usage/{main|dev}/manifest.json</span></td><td>检查所选分支的扩展更新</td><td>每小时一次的自动检查（5 秒超时）</td><td>无用户数据</td></tr>
               <tr><td>5</td><td><span class="code">api.github.com</span></td><td><span class="code">repos/janmk1453/Api-Usage/compare/.../{main|dev}</span></td><td>检查所选分支的扩展更新（提交比对）</td><td>同上，仅在本地版本与清单版本不一致时</td><td>无用户数据（仅比较目标与缓存破坏时间戳）</td></tr>

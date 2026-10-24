@@ -23,7 +23,6 @@ export type ThemeMode = 'light' | 'dark' | 'auto';
 
 export type PricingSyncMode = 'add-missing' | 'overwrite-unlocked' | 'overwrite-all';
 export type PricingSyncSettings = {
-  enabled: boolean;
   mode: PricingSyncMode;
   exchangeRate: number;
   useLiveRate: boolean;
@@ -106,7 +105,6 @@ export const defaultSettings = (): Settings => ({
   statsFour: ['avg_cost', 'avg_tokens', 'avg_think_ratio', 'truncation_rate'],
   modelsPricingCollapsed: true,
   pricingSync: {
-    enabled: false,
     mode: 'add-missing',
     exchangeRate: 7.2,
     useLiveRate: true,

@@ -1,10 +1,10 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { a as defaultSettings, n as getSelectedSave, r as state } from "./store-BhaWFCjs.js";
+import { a as defaultSettings, n as getSelectedSave, r as state } from "./store-CgJSmTLt.js";
 import { a as HIDDEN_PRICING_MODELS, c as PRICE_HISTORY, l as PRICING, r as DEFAULT_PEAK_HOURS, s as MAX_HISTORY, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { a as getExtensionSettings, c as loadHot, d as saveHistoryCold, f as saveHot, i as getAllHistory, n as clearHistoryCold, p as historyRecordKey, s as loadHistoryCold, t as appendHistoryCold, u as saveExtensionSettings } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
 import { a as isUnsafeKey, c as localDay, i as isPeakHour$1, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay } from "./date-BJI2m6dS.js";
-import { a as getWalletExchangeRate } from "./currency-DYtqS43k.js";
+import { a as getWalletExchangeRate } from "./currency-DgeH8MPr.js";
 //#region src/types/wallet.ts
 var DEEPSEEK_WALLET_ID = "wallet:deepseek-official";
 var WALLET_CATALOG_PROVIDERS = [
@@ -1902,6 +1902,7 @@ function normalizeSettings(incoming) {
 	};
 	if (!isFinite(parseFloat(String(merged.pricingSync.exchangeRate))) || parseFloat(String(merged.pricingSync.exchangeRate)) <= 0) merged.pricingSync.exchangeRate = 7.2;
 	if (typeof merged.pricingSync.showSyncedModels !== "boolean") merged.pricingSync.showSyncedModels = false;
+	if ("enabled" in merged.pricingSync) delete merged.pricingSync.enabled;
 	if (!isFinite(parseFloat(String(merged.pricingSync.syncedMarkVersion)))) merged.pricingSync.syncedMarkVersion = 0;
 	if (!Array.isArray(merged.peakHours) || !merged.peakHours.length) merged.peakHours = def.peakHours;
 	merged.extraOffDays = Array.isArray(merged.extraOffDays) ? Array.from(new Set(merged.extraOffDays.filter((day) => isValidDayKey(day)))).sort() : def.extraOffDays;
@@ -2218,8 +2219,8 @@ var repository = {
 				if (shouldTrackWalletModel(wallet, model)) {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
-					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && state.settings.pricingSync?.enabled) try {
-						import("./pricing-sync-CinAIkTR.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && !!wallet.catalogProvider) try {
+						import("./pricing-sync-DuNUqgL8.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
@@ -2953,7 +2954,6 @@ var repository = {
 		} catch {}
 		if (!state.settings.pricingSync) {
 			state.settings.pricingSync = {
-				enabled: false,
 				mode: "add-missing",
 				exchangeRate: 7.2,
 				useLiveRate: true,

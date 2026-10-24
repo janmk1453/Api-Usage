@@ -63,7 +63,7 @@ Api-Usage/
 │   │   ├── computed.ts    # 唯一算入口：computeOverview(余额口径)/computeStats/getFilteredHistory/computeStatsFour/filterStatsHistory/getEndpointFilterOptions/getCredentialFilterOptions + computeWalletStats/computeChatStats/getRecordedChats；全部平均值类指标统一走 averagePositive（忽略单轮 0/空值，从分母剔除）
 │   │   └── events.ts      # DataEvents.UPDATED/HISTORY_ADDED/SETTINGS_CHANGED
 │   ├── store/index.ts, persistence.ts # 单一历史聚合（已废弃多存档，saves 仅作迁移兼容；append/getAllHistory 指纹去重 timestamp|model|total）
-│   ├── services/pricing.ts, interception.ts(fetch透传+TTFT/思维链/截断解析+请求开始快照连接身份，GENERATION_ENDED主路径，install/uninstall幂等), think-timing.ts(思维链耗时口径：按 JSON 增量识别首个「非空思维链帧」与首个「非空正文帧」，流式时序快照与 usage 解耦), connection-identity.ts(接入地址规范化/官方名称/酒馆密钥条目映射/严格隐私模式，不读取 proxy_password 与 custom_include_headers), wallet-secrets.ts(钱包校准密钥 XOR 存取与旧 apiKey 迁移), balance.ts(钱包余额手工/DeepSeek 官方自动校准和定时器), import-export.ts(单一历史+钱包配置+清洗，不导出密钥), sync.ts(单一历史+钱包合并+清洗), debug.ts, theme.ts(applyTheme 同步 overlay), update.ts(检查更新，目标分支 main/dev 可选且默认 main、提交哈希与服务端仓库状态优先、失败回退目标分支 manifest 版本对比，跨分支先 /api/extensions/switch 再调用 /api/extensions/update 扩展内一键更新并刷新，自动检查 1h 节流), currency.ts(USD↔CNY 动态换算、getDisplayCurrency/formatMoney/getWalletExchangeRate/fetchLiveRate 双源 24h), pricing-sync.ts(按钱包 catalogProvider 从 models.dev 拉取、USD→CNY*rate、add-missing/overwrite-unlocked/overwrite-all 和锁定保护)
+│   ├── services/pricing.ts, interception.ts(fetch透传+TTFT/思维链/截断解析+请求开始快照连接身份，GENERATION_ENDED主路径，install/uninstall幂等), think-timing.ts(思维链耗时口径：按 JSON 增量识别首个「非空思维链帧」与首个「非空正文帧」，流式时序快照与 usage 解耦), connection-identity.ts(接入地址规范化/官方名称/酒馆密钥条目映射/严格隐私模式，不读取 proxy_password 与 custom_include_headers), wallet-secrets.ts(钱包校准密钥 XOR 存取与旧 apiKey 迁移), balance.ts(钱包余额手工/DeepSeek 官方自动校准和定时器), import-export.ts(单一历史+钱包配置+清洗，不导出密钥), sync.ts(单一历史+钱包合并+清洗), debug.ts, theme.ts(applyTheme 同步 overlay), update.ts(检查更新，目标分支 main/dev 可选且默认 main、提交哈希与服务端仓库状态优先、失败回退目标分支 manifest 版本对比，跨分支先 /api/extensions/switch 再调用 /api/extensions/update 扩展内一键更新并刷新，自动检查 1h 节流), currency.ts(USD↔CNY 动态换算、walletDrivenCurrency 钱包驱动显示币种/getDisplayCurrency/formatMoney/getWalletExchangeRate/fetchLiveRate 双源 24h), pricing-sync.ts(按钱包 catalogProvider 从 models.dev 拉取、无全局开关、hasSyncableWallet 无来源不联网、USD→CNY*rate、add-missing/overwrite-unlocked/overwrite-all 和锁定保护)
 │   ├── stats/forecast.ts, forecast-series.ts, model-efficiency.ts, energyScore.ts # 预测核心：兼容旧分段回归/二次方程求 R；新序列核心负责压缩识别、增长拟合、命中率回退、成本/余额逐轮模拟与模型效率聚合；能耗评分 A-G
 │   ├── utils/date.ts, crypto.ts(XOR+UTF-8), logger.ts
 │   ├── **/*.test.ts       # Vitest 核心纯逻辑测试，不进入 Vite 入口构建
@@ -98,7 +98,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 ## 页面与数据
 
 ### 用量概览（overview）
-- **双余额卡**：充值余额（默认 DeepSeek 官方钱包，胶囊下拉可切换全部钱包合计或其他钱包；仅此选择影响余额和剩余轮次预测，其他概览指标仍按全量历史。旧 `all` 默认值一次性迁移到官方钱包，用户手动选择后由 `overviewWalletManuallySet` 保护）+ 累计消费（动态币种 `¥ CNY ↔ $ USD` 按 `pricingSync.enabled` 切换，`formatMoney(cny)` 经 `getDisplayCurrency()` 换算）+ `tokens`。累计消费与 `tokens` 由 `computeOverview(activeWalletId, fullHistory)` 传入热+冷全量历史逐条累加，**不跟随余额口径**，也与用量统计“全部”同源
+- **双余额卡**：充值余额（默认 DeepSeek 官方钱包，胶囊下拉可切换全部钱包合计或其他钱包；仅此选择影响余额和剩余轮次预测，其他概览指标仍按全量历史。旧 `all` 默认值一次性迁移到官方钱包，用户手动选择后由 `overviewWalletManuallySet` 保护）+ 累计消费（显示币种由钱包驱动 `walletDrivenCurrency`，`formatMoney(cny)` 经 `getDisplayCurrency()` 换算）+ `tokens`。累计消费与 `tokens` 由 `computeOverview(activeWalletId, fullHistory)` 传入热+冷全量历史逐条累加，**不跟随余额口径**，也与用量统计“全部”同源
 - **双明细**：历史消耗（Token 历史/命中/未命中/输出，`gap:10px + 行内 padding:4px` 与右侧对齐）与支出明细（预计节省/支出输入/输出，分两行，副行 `token` 灰 `var(--aus-fs-sm)` `var(--ds-text-3)`，金额均经 `CNY()/moneyHtml()` 按币种换算）并列；**两块的主数值统一 `var(--aus-fs-base)`（14px）+ `font-weight:600` + `font-variant-numeric:tabular-nums`**，标签仍 `var(--aus-fs-sm)`，形成「数值 > 标签」层级且右列数字等宽对齐
 - **四小块→八小块**：默认 8 块 `repeat(4,1fr)`，`≤760px` 与 `≤480px` 保持 `repeat(2,1fr)` 两列（`gap 10px→8px`，卡片 `10px 12px`），支持 `overviewFour` 自定义 `18` 指标（`computeOverview` 单源，含 `avg_ttft 平均首字延迟`，费用类经 `moneyHtml()` 动态 `CNY/USD`，通用兜底排除 `#aus-overview-four`）；所有 `avg_*` 平均值统一走 `averagePositive`，单轮为 `0` 或空值时从分子分母同时剔除，不拉低均值
 - **热力图**：`Token 使用量热力图`（GitHub 风格，近 2 年按日聚合，5 级绿阶 `EBEDF0→216E39/161b22→aceebb`，`#aus-heatmap-card-overview` 块不超出、内部 `overflow-x:auto` 横向滑动，与 `模型汇总` 块一致，悬停显示日期+Token，渲染于 `overview.ts → heatmap.ts`，数据源 `state.history` 全量）
@@ -137,20 +137,20 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **计价优先级**：钱包规则优先；DeepSeek 官方钱包无覆盖时使用内置 `PRICE_HISTORY` 多段价格；其他钱包无价格时标记待定价并计零费用。旧全局 `customModels` 复制到官方钱包并继续作为旧记录/未映射记录只读兜底
 - **旧数据同名校验价**：一次迁移中，若旧热/冷记录按当前钱包规则为 `unpriced`，且任意未忽略钱包存在模型名与记录完全相同的已配置价格，则给该历史条目写入 `legacyPricingWalletId/legacyPricingModel` 并以该钱包价格重算，`pricingSource=legacy-match`。新版本之后产生的请求不带该标记，仍按所属钱包原规则保持待定价
 - **待定价重算**：保存模型价格、修改峰谷、修改周末规则或同步价格后调用 `repository.recalcWallet(walletId)`，同时处理热历史和 IndexedDB 冷历史，并修正累计费用
-- **models.dev**：每个钱包配置 `catalogProvider`。价格来源胶囊只展示第一方模型厂商（DeepSeek/OpenAI/Anthropic/Google/Mistral/xAI/Moonshot AI/Z.AI/MiniMax/Cohere），不展示 OpenRouter、Groq、SiliconFlow、Fireworks 等聚合或托管渠道；旧第三方来源在标准化时归为 `null`（不自动同步）。开启同步后支持 `add-missing/overwrite-unlocked/overwrite-all`，锁定规则仅允许全部覆盖模式修改。关闭同步会移除未锁定的同步价格并重算
+- **models.dev**：每个钱包配置 `catalogProvider`，这就是同步的唯一开关（无全局总开关，旧 `pricingSync.enabled` 已删除）。价格来源胶囊只展示第一方模型厂商（DeepSeek/OpenAI/Anthropic/Google/Mistral/xAI/Moonshot AI/Z.AI/MiniMax/Cohere），不展示 OpenRouter、Groq、SiliconFlow、Fireworks 等聚合或托管渠道；旧第三方来源在标准化时归为 `null`（不自动同步）。开启同步后支持 `add-missing/overwrite-unlocked/overwrite-all`，锁定规则仅允许全部覆盖模式修改。关闭同步会移除未锁定的同步价格并重算
 - **忽略与恢复**：删除钱包改为加入 `walletIgnored`，后续请求不自动重建、不参与余额合计，历史仍保留 `walletId`；钱包页可恢复显示。DeepSeek 官方钱包不可忽略
 - **响应式**：钱包汇总卡在所有宽度保持一行三列，仅压缩字号和间距；`≤760px` 时钱包卡整体紧凑化——标识缩到 `36px`（字号 `15px`、圆角 `10px`）、名称 `14px`、余额/模型两项指标与图标操作并排同一行（宽度不足时自动折行）、卡片内外间距收到 `8px`、隐藏冗余的“中转/自定义”类型徽标（副标题已含类型与来源，官方徽标与待定价徽标保留），单卡高度从约 `159px` 压到约 `99px`；钱包双栏区域改为单列。钱包卡内容使用边框面板，不嵌套 `.ds-card`
 - **使用说明**：帮助页必须保留隐私声明、免责声明和钱包说明。隐私声明需明确区分酒馆密钥识别信息与用户主动填写的钱包校准密钥；免责声明需说明不对 models.dev 数据中的商业化中转站名称或推荐关系负责。
 
 ### 设置
-- 保留全局控制：匿名使用统计（默认开启，可关闭并重置匿名标识，位于设置页顶部）、颜色模式、历史显示范围、自动校准间隔（总开关已移除，改由钱包页逐钱包勾选）、新钱包默认峰谷与额外空闲日期、models.dev 自动同步、调试、峰值圆点、记录数据管理（按范围删除记录）和 WebDAV
+- 保留全局控制：匿名使用统计（默认开启，可关闭并重置匿名标识，位于设置页顶部）、颜色模式、历史显示范围、自动校准间隔（总开关已移除，改由钱包页逐钱包勾选）、新钱包默认峰谷与额外空闲日期、汇率与价格同步参数（**无总开关**：同步由各钱包 catalogProvider 决定、显示币种由各钱包 balance.currency 决定）、调试、峰值圆点、记录数据管理（按范围删除记录）和 WebDAV
 - 旧“新价格机制（峰谷计费）/生效日期”入口已移除：改用内置 `PRICE_HISTORY` 多段价格按记录时间计价，峰谷规则由 `settings.peakHours` + `extraOffDays` + 内置节假日驱动；`calcCost/calcSavings` 不再读取 `settings.useNewPricing/newPricingDate`，统一以 `LEGACY_PEAK_PRICING_DATE`（2026-08-17 北京时间）作为历史默认生效日，保证历史记录按既有口径计费
 - 存储占用卡片（`src/services/storage-usage.ts` + `src/ui/storage-usage-card.ts`）：列出酒馆设置 / IndexedDB / localStorage 占用，**只有键名匹配 `migration_backup_<时间戳>` 的旧版迁移备份可清理**（行尾「清理」按钮两步确认，委托 `persistence.deleteMigrationBackups`，逐条 `dbDelete` + 清 `aus_migration_backup_*` 降级副本，删后复扫确认；禁止 `clear()/deleteDatabase()`，禁止把 `cold_history`/`aus_cold*` 等在用数据标为可清理）
 - 按范围删除记录（`#aus-delete-*`，`bindHistoryDelete`）：支持开始/结束日期、模型（完全匹配）、对话（`chatId` 或 `chatName` 完全匹配），留空表示不限；先“统计匹配记录”预览命中条数，再二次确认执行；底层走 `repository.deleteHistoryByFilter`，同时处理热历史与 IndexedDB 冷历史并 `recalcAll + rebuildAggregates`，删除后刷新全站统计
 - 峰谷规则：`extraOffDays`（`YYYY-MM-DD` 数组，`normalizeSettings` 校验去重）用于补充内置节假日数据未覆盖年份；修改后调用 `recalcCostsAndRefresh` 重算冷热费用。峰值圆点（`peak-dot.ts`）复用 `utils/date` 的 `isWeekendDay/isChinaHoliday/isExtraOffDay/isPeakHour`，法定节假日显示“全天低谷”
 - 已迁出钱包页：API 密钥、手工余额、模型与价格编辑。旧 API 密钥、旧余额和旧 `customModels` 由 `repository.hydrate` 自动迁移到 DeepSeek 官方钱包；隐藏兼容控件不参与新增配置
-- `models.dev` 同步已改为逐钱包写入，预览和状态显示总新增/更新/跳过/待定价数量；全局开关关闭时只移除未锁定的同步规则
-- 货币切换仍通过 `formatMoney/getDisplayCurrency` 全站即时换算；钱包余额汇总固定使用 `pricingSync.exchangeRate`，不因关闭美元展示而错误回退为 `1`
+- `models.dev` 同步已改为逐钱包写入，预览和状态显示总新增/更新/跳过/待定价数量；**不存在全局同步开关**（旧 pricingSync.enabled 已删除）：是否同步只看该钱包有没有选价格来源，hasSyncableWallet 为假时静默跳过且不联网
+- 显示币种由钱包驱动：`currency.ts#walletDrivenCurrency` 在「未忽略钱包全部为 USD」时返回 USD，否则返回 CNY（`getDisplayCurrency` 据此选美元或人民币符号），改钱包币种即刻全站生效，没有独立币种开关；钱包余额汇总固定使用 `pricingSync.exchangeRate`（`getWalletExchangeRate`），与展示币种解耦，永不回退为 1
 
 ## 样式规范（DeepSeek 截图定版）
 
