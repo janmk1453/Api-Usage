@@ -145,6 +145,8 @@
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 14px; align-items: stretch; }
   .grid.single { grid-template-columns: 1fr; }
   #grid-profile { grid-template-columns: repeat(auto-fit, minmax(min(100%, 288px), 1fr)); }
+  /* 「增长与活跃趋势」6 图：桌面端电脑固定一行 3 个（正好两行铺满），中等宽度降 2 列，窄屏单列 */
+  #grid-trend { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .panel {
     display: flex; flex-direction: column;
     background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg);
@@ -188,8 +190,12 @@
   footer li { margin-bottom: 4px; }
 
   /* ---------------------------------- 移动端 ---------------------------------- */
+  /* 窄屏/平板：趋势区先降两列再由 860px 断点回到单列（ID 选择器特异性高于 .grid，必须逐断点声明） */
+  @media (max-width: 1180px) {
+    #grid-trend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
   @media (max-width: 860px) {
-    .grid, #grid-profile { grid-template-columns: 1fr; }
+    .grid, #grid-profile, #grid-trend { grid-template-columns: 1fr; }
     .chart { height: 244px; }
     .chart.tall { height: 286px; }
   }
@@ -323,7 +329,7 @@
   const HOUR_RANGE_HOURS = 24;
   const HOUR_MS = 60 * 60 * 1000;
   /** 看板构建标识：每次改动看板后更新，便于确认浏览器拿到的是否为最新页面 */
-  const BUILD_ID = '2026-10-21.5';
+  const BUILD_ID = '2026-10-24.1';
   /**
    * 图表库来源：**仅自托管**（Worker 同源的 `/vendor/echarts.js`），不使用任何第三方 CDN。
    * 这样看板不会向外部站点发起请求，也就不会被广告拦截类扩展或网络策略误伤；
