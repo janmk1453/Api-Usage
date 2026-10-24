@@ -466,7 +466,7 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
       <div class="aus-history-card-head" style="display:flex;justify-content:space-between;align-items:center;">
         <div class="aus-history-card-main" style="min-width:0;flex:1;">
           <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${originBadge}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(h.model)} · ${esc(localTimeHM(h.timestamp))}</span></div>
-          <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · ${h.duration || 0}ms · ${(h.tokenRate||0)>0 ? h.tokenRate+' t/s' : '未测速'}</div>
+          <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · ${(h.tokenRate||0)>0 ? h.tokenRate+' t/s' : '未测速'}</div>
         </div>
         <div class="aus-history-card-actions" style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
           <div class="aus-history-card-cost">
