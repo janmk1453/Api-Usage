@@ -769,7 +769,7 @@ async function renderChart(filteredRaw: any[]) {
     grid: { left: gridLeft, right: gridRight, top: 8, bottom: showZoom ? (narrow ? 50 : 54) : 28 },
     // 底部视窗滑块：拖中间平移 X 轴，拖两端改变可视范围（缩放）
     dataZoom: showZoom
-      ? [{ type: 'inside', xAxisIndex: 0, start: savedZoom?.start ?? 0, end: savedZoom?.end ?? 100, zoomOnMouseWheel: false, moveOnMouseMove: true }]
+      ? [{ type: 'inside', xAxisIndex: 0, start: savedZoom?.start ?? 0, end: savedZoom?.end ?? 100, zoomOnMouseWheel: false, moveOnMouseMove: true, zoomLock: true }]
       : undefined,
     // 有视窗滑块时让 ECharts 按当前可视范围自适应标签密度（缩放后不会只剩一两个刻度）
     xAxis: { type:'category', data: labels, axisLine:{lineStyle:{color:cBorder}}, axisLabel:{color:cText3,fontSize: 12,interval: showZoom ? 'auto' : xInterval,rotate: labels.length>12?30:0, hideOverlap: false} },

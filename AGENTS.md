@@ -254,6 +254,7 @@ git push origin main --tags
 
 ## 其他经验
 
+- **图表吞滚轮坑**：任何挂了 `dataZoom: [{ type: 'inside' }]` 的 ECharts 图表，都会把落在绘图区上的滚轮事件无条件 `preventDefault`（`roams.js#mergeControllerParams` 把 `zoomOnMouseWheel/moveOnMouseWheel` 写死为 `true`），表现为「鼠标停在图表上滚不动页面」，写 `zoomOnMouseWheel: false` 无效（实测无头 Edge：带 inside 时 `scrollTop` 恒为 0，去掉后正常滚动 300px）；**必须同时写 `zoomLock: true`**，它把 roam 降级为纯 move、不再注册 wheel 监听，滚动恢复且拖动平移保留。现存三处：`stats-view.ts`、`extra-charts.ts`、`model-trends.ts`。
 - **动态分包 404 坑**：`import('../services/update')` 等动态 `import()` 会使 `Vite lib` 输出额外 `index-*.js`，`index.js` 仅为 re-export 存根；若漏提交新 hash 文件，扩展激活时 `GET .../index-*.js 404` → `Could not activate extension [object Event]` 并阻断后续扩展加载，属全站故障
 - **TTFT/思维链为 0 坑**：`GENERATION_ENDED` 主路径不带 `ttft`，需在 `onGenerationEnded` 中合并最近 `lastFetchUsage.ttft/thinkTime/finishReason/streamed`（5s 内有效），否则 `tokenRate` 失真且详情为 0
 - **思维链耗时永远为 0 坑（2026-10 修复）**：旧实现在 SSE 里用整行 substring 匹配 `"reasoning_content"` 与 `"content"`，DeepSeek 官方思维链帧自带 `"content":null`，第一帧就同时命中两者 → 起止同一帧、耗时恒 0；且只认 `reasoning_content`，OpenRouter 等用 `reasoning`/`reasoning_text`/`thinking` 的接入首帧都识别不到。现口径统一在 `src/services/think-timing.ts`（纯函数 + `think-timing.test.ts`）：按 JSON 解析增量，只认**非空**思维链文本与非空正文文本，无正文时回退最后一帧思维链，禁止再用 substring 判断；`contentFrames` 也只计正文帧（假流式判定更准）。另新增 `lastStreamTiming` 时序快照，`finish()` 不论是否解析到 usage 都会落一份，主路径经 `processUsage` 按 `startTime` 匹配后补齐 `ttft/thinkTime/streamed`，避免上游不回 usage 时测到了却丢失

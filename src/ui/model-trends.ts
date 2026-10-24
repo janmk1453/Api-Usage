@@ -178,7 +178,7 @@ async function renderOne(id:TrendId, filtered:any[]){
       itemWidth:10, itemHeight:6,
     },
     grid:{ left:42, right:16, top: 22 + (models.length>4?8:0), bottom: labels.length>12 ? 62 : 46 },
-    dataZoom: labels.length > 1 ? [{ type:'inside', xAxisIndex:0, start: savedZoom?.start ?? 0, end: savedZoom?.end ?? 100, zoomOnMouseWheel:false, moveOnMouseMove:true }] : undefined,
+    dataZoom: labels.length > 1 ? [{ type:'inside', xAxisIndex:0, start: savedZoom?.start ?? 0, end: savedZoom?.end ?? 100, zoomOnMouseWheel:false, moveOnMouseMove:true, zoomLock: true }] : undefined,
     xAxis:{ type:'category', data: labels, boundaryGap:false, axisLine:{lineStyle:{color:cBorder}}, axisLabel:{ color:cText3, fontSize: 12, interval: 'auto', rotate: labels.length>12?30:0, hideOverlap:false } },
     yAxis:{ type:'value', axisLabel:{ color:cText3, fontSize: 12, formatter:(v:number)=> id==='token' ? (v>=1000? (v/1000).toFixed(0)+'k' : String(v)) : String(v) }, splitLine:{lineStyle:{color:cCard}} },
     series: seriesData.map(s=>({

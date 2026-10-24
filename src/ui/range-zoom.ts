@@ -1,6 +1,12 @@
 /**
  * 自绘 X 轴视窗滑块（长条 + 两端圆点）。
  *
+ * 另外：ECharts 的 inside dataZoom 会把落在绘图区上的滚轮事件无条件 preventDefault
+ * （RoamController 内部把 zoomOnMouseWheel/moveOnMouseWheel 写死为 true），
+ * 即使写 zoomOnMouseWheel:false 也会导致「鼠标停在图表上滚不动页面」。
+ * 所有挂 inside dataZoom 的图表必须同时写 zoomLock: true —— 它把 roam 降级为纯 move，
+ * 不再注册 wheel 监听，页面滚动恢复正常，同时保留拖动平移。
+ *
  * 为什么不用 ECharts 的 dataZoom.slider：它的手柄只监听 mousedown，
  * 触屏设备上抓不住；这里改成 Pointer Events + setPointerCapture，
  * 鼠标/触屏/手写笔一套逻辑，且可以自己控制尺寸与命中区域。

@@ -6495,7 +6495,8 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 				start: savedZoom?.start ?? 0,
 				end: savedZoom?.end ?? 100,
 				zoomOnMouseWheel: false,
-				moveOnMouseMove: true
+				moveOnMouseMove: true,
+				zoomLock: true
 			}] : void 0,
 			series: (() => {
 				const barIndices = series.map((s, i) => ({
@@ -6958,7 +6959,8 @@ async function renderOne(id, filtered) {
 				start: savedZoom?.start ?? 0,
 				end: savedZoom?.end ?? 100,
 				zoomOnMouseWheel: false,
-				moveOnMouseMove: true
+				moveOnMouseMove: true,
+				zoomLock: true
 			}] : void 0,
 			xAxis: {
 				type: "category",
@@ -8000,7 +8002,8 @@ async function renderChart(filteredRaw) {
 			start: savedZoom?.start ?? 0,
 			end: savedZoom?.end ?? 100,
 			zoomOnMouseWheel: false,
-			moveOnMouseMove: true
+			moveOnMouseMove: true,
+			zoomLock: true
 		}] : void 0,
 		xAxis: {
 			type: "category",
