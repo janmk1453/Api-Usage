@@ -1816,3 +1816,58 @@
   overflow: auto !important;
   max-width: calc(100% - 16px) !important;
 }
+
+/* ── 关于页「更新日志」块 ───────────────────────────────────────────────────────
+   外层 .ds-card 为灰面，版本条目是块内二级面板（--ds-card-inner 白面），层级只靠底色，
+   与全站「块面无描边」一致；数据源 src/constants/changelog.ts，渲染与交互 src/ui/changelog.ts。 */
+#aus-changelog { display: grid; gap: 10px; }
+.aus-changelog-header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.aus-changelog-title { font-size: var(--aus-fs-base); font-weight: 600; color: var(--ds-text); }
+.aus-changelog-count { font-size: var(--aus-fs-sm); color: var(--ds-text-3); }
+.aus-changelog-list { display: grid; gap: 8px; }
+.aus-changelog-entry { background: var(--ds-card-inner); border-radius: 12px; overflow: hidden; }
+.aus-changelog-head {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 9px 12px; border: 0; background: transparent;
+  color: var(--ds-text); font-family: inherit; font-size: var(--aus-fs-base);
+  text-align: left; cursor: pointer;
+}
+.aus-changelog-head:hover { background: var(--ds-card-hover); }
+.aus-changelog-head:focus-visible { outline: 2px solid var(--ds-orange); outline-offset: -2px; }
+.aus-changelog-version {
+  flex-shrink: 0; padding: 1px 10px; border-radius: 999px;
+  background: rgba(255, 106, 0, 0.12); color: var(--ds-orange);
+  font-size: var(--aus-fs-sm); font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.aus-changelog-meta {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
+  color: var(--ds-text-3); font-size: var(--aus-fs-sm);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.aus-changelog-latest {
+  flex-shrink: 0; padding: 0 7px; border-radius: 999px; line-height: 16px;
+  background: rgba(255, 106, 0, 0.16); color: var(--ds-orange);
+  font-size: var(--aus-fs-xs); font-weight: 600;
+}
+.aus-changelog-caret { display: inline-flex; flex-shrink: 0; color: var(--ds-text-3); }
+.aus-changelog-head:hover .aus-changelog-caret { color: var(--ds-text-2); }
+.aus-changelog-body { display: grid; gap: 10px; padding: 2px 12px 12px; }
+.aus-changelog-section { display: grid; gap: 6px; }
+.aus-changelog-kind {
+  justify-self: start; padding: 1px 8px; border-radius: 999px; line-height: 16px;
+  font-size: var(--aus-fs-xs); font-weight: 600;
+}
+.aus-changelog-items { display: grid; gap: 5px; }
+.aus-changelog-item {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: var(--aus-fs-base); line-height: 1.65; color: var(--ds-text-2);
+}
+.aus-changelog-dot { width: 5px; height: 5px; margin-top: 8px; border-radius: 50%; flex-shrink: 0; }
+.aus-changelog-footer { font-size: var(--aus-fs-sm); line-height: 1.6; color: var(--ds-text-3); }
+.aus-changelog-footer a { color: var(--ds-text-2); text-decoration: underline; }
+/* 窄屏：收紧内距，条目字号降到次要档，避免长文案把卡片撑高 */
+@media (max-width: 760px) {
+  .aus-changelog-head { padding: 8px 10px; gap: 6px; }
+  .aus-changelog-body { padding: 2px 10px 10px; }
+  .aus-changelog-item { font-size: var(--aus-fs-sm); }
+}

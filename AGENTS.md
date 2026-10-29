@@ -1,5 +1,7 @@
 # AGENTS.md — API用量统计（Api-Usage）
 
+当压缩提醒要求调用 compress 工具、但顶层只看到 run_code 时，直接在 run_code 中执行 await tools.compress({ content: [{ startId, endId, summary }] })——它已注册在 tools 里，不要说没有该工具。
+
 ## 概览
 
 SillyTavern 原生扩展 `API用量统计`（清单 `api-usage-stat`，版本以 `manifest.json#version` 为准，文档内禁止写死版本号），从 `deepseek-tavern-script` 酒馆助手脚本迁移而来；现提供用量概览、统计、历史、趋势预测、钱包和设置等独立页面。
@@ -9,6 +11,8 @@ SillyTavern 原生扩展 `API用量统计`（清单 `api-usage-stat`，版本以
 - **版本真源**：`manifest.json#version` 单一来源，`vite.config.ts` 注入 `__APP_VERSION__`，侧边栏/关于/导出/检查更新均取此值，禁止硬编码 `v3.0.x`
 
 **规则：所有有关重构迁移版的修改一律在 `Api-Usage` 下进行，所有产物亦在此。禁止在 `pr/RE3.0` 继续开发。后续构建与提交均以 `Api-Usage` 为准，`RE3.0` 仅同步产物备份。**
+
+**规则：每彻底完成一项用户可感知的新增 / 改进 / 修复，必须在本轮同一次提交里往 `src/constants/changelog.ts` 追加一条更新日志（详见「更新日志维护」）。缺这条日志视为改动未完成，不得提交推送。**
 
 ## 技术栈（已确认）
 
@@ -54,6 +58,7 @@ Api-Usage/
 │   ├── index.ts           # 入口：repository.hydrate + 魔法棒注入 + 全屏面板 + 峰值圆点（ST 未就绪时轮询重试 installInterception）+ 汇率/定价格式同步定时器（24h）+ 延迟自动检查更新
 │   ├── constants/pricing.ts  # PRICING/DEFAULT_PEAK_HOURS/MAX_HISTORY/DETAIL_KEEP/STORAGE_KEYS + PRICING_SYNC_SOURCE/FALLBACK/DEFAULT_EXCHANGE_RATE + PRICE_HISTORY/PriceSegment + FLASH_PRICE_CUTOFF(2026-09-10 12:00)（内置模型多段价格历史：deepseek-v4-flash 新旧两段、deepseek-v4-pro 持续定价单段、deepseek-flash 单段；V4.1 Flash 现役模型名为 deepseek-flash，V4 Pro 继续提供调用并保持现价）
 │   ├── constants/holidays.ts # 中国法定节假日放假日内置数据（2024-2026，源自国务院办公厅通知）：isChinaHolidayDate/hasChinaHolidayData + CN_HOLIDAY_DATA_YEARS/CN_HOLIDAY_COVERAGE_LABEL；只收录放假日，调休上班的周末无需维护（周末本身即空闲）
+│   ├── constants/changelog.ts # 关于页「更新日志」唯一数据源（手动维护，最新版本在前）：ChangelogEntry/ChangelogSection/ChangelogSectionKind + CHANGELOG/CHANGELOG_ENTRY_LIMIT/getRecentChangelog；只放面向用户的文案，禁止 commit hash / 文件路径 / 内部实现；每完成一项用户可感知改动都必须追加条目（见「更新日志维护」）
 │   ├── types/save.ts, settings.ts, wallet.ts # HistoryEntry 含 sourceType/endpointId/endpointLabel/credentialId/credentialLabel/walletId/pricingSource；settings 含 overviewWalletId/overviewWalletManuallySet 与 PricingSyncSettings；wallet.ts 定义 WalletConfig/WalletModel/WalletPriceRule/币种与 catalogProvider 映射
 │   ├── data/              # ★ 统一数据框架（所有存/取/算/展的唯一通路）
 │   │   ├── types.ts       # Snapshot/Aggregated/TimeRange/OverviewView/StatsView
@@ -67,7 +72,7 @@ Api-Usage/
 │   ├── stats/forecast.ts, forecast-series.ts, model-efficiency.ts, energyScore.ts # 预测核心：兼容旧分段回归/二次方程求 R；新序列核心负责压缩识别、增长拟合、命中率回退、成本/余额逐轮模拟与模型效率聚合；能耗评分 A-G
 │   ├── utils/date.ts, crypto.ts(XOR+UTF-8), logger.ts
 │   ├── **/*.test.ts       # Vitest 核心纯逻辑测试，不进入 Vite 入口构建
-│   ├── ui/icons.ts(全站内联 SVG 图标集：导航 8 个 + 通用 chevron-up/down/left/right、refresh、close、menu、brand，Lucide 线性路径 + stroke=currentColor，随主题与选中态自动变色、不依赖宿主字体), panel.ts(全屏+absolute定位+DeepSeek式侧边栏display切换+汉堡+钱包入口+history 模型/对话/接入类型/API密钥四维筛选+详情右侧/底部窗口+forecast 对话选择), overview.ts(余额钱包口径+双明细+8块2列+热力图+按对话统计表 cold 异步补全、动态币种), wallet-view.ts(多钱包列表、默认收起/独立记忆、余额、密钥、价格来源、模型价格、独立峰谷、忽略恢复), stats-view.ts(直输日期+五维度 time∩model∩chat∩endpoint∩credential+4小块+图表Y/X配置+费用轴按币种换算+对话/密钥选项按最近时间排序), chart-config.ts(Y 8×X 5 聚合 + X_OPTIONS_WITHOUT_ROUND + `aggregateForChart` 同时返回 `tips` 悬浮窗标题), chart-time.ts(图表悬浮窗时间口径单一来源：chartDate/chartDateTime/chartClock/chartDateWeek/isoWeekKey/entryTip/roundTip/bucketTip/rangeTip), heatmap.ts(GitHub风格近2年Token热力图，块内横向滑动), forecast-view.ts(趋势预测：对话/计价模型/视界胶囊、8 数据块、三图、压缩卡、模型效率表、能耗与 Top；命中率自动测算、无数据时才回退), forecast-chart.ts(三图 ECharts 实例/主题/resize/dispose), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情费用按币种), settings.ts(全局设置 + 按范围删除记录，钱包相关编辑入口已迁出，旧“新价格机制”入口已移除), extra-charts.ts(额外 6 图费用轴按币种换算，API请求数趋势 X 无轮次), chat-summary-table.ts(概览按对话统计：渲染 + 表头排序), sort-header.ts(表头排序单一实现：bindSortableHeaders/paintSortHeader/sortRows), peak-dot.ts, customize.ts
+│   ├── ui/icons.ts(全站内联 SVG 图标集：导航 8 个 + 通用 chevron-up/down/left/right、refresh、close、menu、brand，Lucide 线性路径 + stroke=currentColor，随主题与选中态自动变色、不依赖宿主字体), panel.ts(全屏+absolute定位+DeepSeek式侧边栏display切换+汉堡+钱包入口+history 模型/对话/接入类型/API密钥四维筛选+详情右侧/底部窗口+forecast 对话选择), overview.ts(余额钱包口径+双明细+8块2列+热力图+按对话统计表 cold 异步补全、动态币种), wallet-view.ts(多钱包列表、默认收起/独立记忆、余额、密钥、价格来源、模型价格、独立峰谷、忽略恢复), stats-view.ts(直输日期+五维度 time∩model∩chat∩endpoint∩credential+4小块+图表Y/X配置+费用轴按币种换算+对话/密钥选项按最近时间排序), chart-config.ts(Y 8×X 5 聚合 + X_OPTIONS_WITHOUT_ROUND + `aggregateForChart` 同时返回 `tips` 悬浮窗标题), chart-time.ts(图表悬浮窗时间口径单一来源：chartDate/chartDateTime/chartClock/chartDateWeek/isoWeekKey/entryTip/roundTip/bucketTip/rangeTip), heatmap.ts(GitHub风格近2年Token热力图，块内横向滑动), forecast-view.ts(趋势预测：对话/计价模型/视界胶囊、8 数据块、三图、压缩卡、模型效率表、能耗与 Top；命中率自动测算、无数据时才回退), forecast-chart.ts(三图 ECharts 实例/主题/resize/dispose), stats.ts(旧统计卡), charts.ts(旧), compare.ts(内联详情费用按币种), settings.ts(全局设置 + 按范围删除记录，钱包相关编辑入口已迁出，旧“新价格机制”入口已移除), extra-charts.ts(额外 6 图费用轴按币种换算，API请求数趋势 X 无轮次), chat-summary-table.ts(概览按对话统计：渲染 + 表头排序), sort-header.ts(表头排序单一实现：bindSortableHeaders/paintSortHeader/sortRows), peak-dot.ts, customize.ts, changelog.ts(关于页更新日志块：renderChangelogCard 渲染 + bindChangelog 展开收起 + formatChangelogDate 日期展示，数据全部来自 constants/changelog.ts)
 ├── README.md
 └── LICENSE
 ```
@@ -169,6 +174,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 ## 常见任务
 
 - **改定价/峰谷**：内置价看 `src/constants/pricing.ts` + `src/services/pricing.ts`；节假日规则看 `src/constants/holidays.ts` + `src/utils/date.ts`（`isPeakHour/isOffpeakDay/isChinaHoliday`）；钱包价和独立峰谷看 `src/data/wallets.ts` + `src/ui/wallet-view.ts`；`calcCost/calcSavings/getPricing/hasPriceForModel` 均支持可选钱包上下文，未传钱包时保持旧行为
+- **改更新日志**：数据看 `src/constants/changelog.ts`（`CHANGELOG` 按时间倒序，`sections[].kind` 只允许 `feature/improve/fix`，`version` 与 `manifest.json#version` 对应、可带 `r` 前缀，`date` 为北京时间 `YYYY-MM-DD`）；渲染与交互看 `src/ui/changelog.ts`（`renderChangelogCard` 生成 HTML、`bindChangelog` 事件委托展开收起、`formatChangelogDate` 同年只显示 `M/D`）+ `style.css` 的 `#aus-changelog` / `.aus-changelog-*`；关于页只展示 `CHANGELOG_ENTRY_LIMIT` 条，最新条目默认展开、其余点击表头展开。新增日志**只追加 items 文案**，不要改渲染层；条目结构变化需同步 `src/ui/changelog.test.ts`
 - **加价格段（多段定价）**：`PRICE_HISTORY[模型].push({since: 生效时间戳, offpeak, peak, usePeakPricing?, peakHours?, label?})`（按 `since` 升序，命中 `timestamp>=since` 最后一段，未来段同样写法）；内置段按记录时间查询，钱包手工/同步规则覆盖后不分段；改价后按钱包执行冷热重算
 - **改面板/导航**：`src/ui/panel.ts`（全屏+`positionPanel` 定位置换+`applyCollapsed`+详情窗口 `#aus-content-body` 桌面右侧/移动端底部）+ `style.css`（`#aus-mobile-header` 汉堡 + `display` 切换，无过渡；改动钱包 header 响应式时必须保持覆盖规则优先级高于通用网格规则；按钮高度不要改回 `34/40px`）
 - **改概览/统计**：`src/ui/overview.ts` + `src/ui/stats-view.ts`（五维度 time∩model∩chat∩endpoint∩credential 过滤）+ `src/data/computed.ts`（`computeChatStats` / `filterStatsHistory` / 接入与密钥选项单源）+ `src/ui/heatmap.ts`（概览热力图，GitHub 风格，近 2 年，块内滑动）
@@ -247,6 +253,7 @@ git push origin main --tags
 
 - **自动提交规则**：完整完成一项独立修改后必须立即执行提交推送，无需等待用户二次确认。单项定义：通过 `typecheck + test + build + node --check + verify:ci` 且满足用户当轮需求即视为完成。提交需包含 `src/` 源码与 `index.js/style.css` 产物，`commit` 信息遵循 `fix/feat/docs:` 前缀并简述本次变更点。该自动提交仅限 `dev` 的常规提交，不含版本号推进、合并 `main` 与打标签。
 - **提交时机（强制）**：所有修改必须在完整完成并验证通过后最后统一提交，禁止边改边提、分步提交或提前推送。提交前必须依次通过 `npm run typecheck`、`npm test`、`npm run build`、`node --check index.js`、`npm run verify:ci`，且 `index.js/style.css` 与源码保持一致后，一次性添加源码、测试、CI 配置与产物并推送，单轮需求仅产生一次提交。同样禁止在未获明确要求时改动版本号字段。
+- **更新日志维护（强制）**：每彻底完成一项用户可感知的新增 / 改进 / 修复（含用户当轮提出的需求），必须在同一次提交里往 `src/constants/changelog.ts` 的 `CHANGELOG` 当前版本条目对应分类（`feature` 新增 / `improve` 改进 / `fix` 修复）追加一条文案；版本号推进（`manifest.json#version` 变化）时才在数组头部新建条目并把 `date` 写成当天北京时间 `YYYY-MM-DD`。文案面向用户——只写「能做什么 / 修好了什么」，不写 commit hash、文件路径、内部实现细节，句末不堆标点；一个版本只允许一个条目，同一分类内按重要性从高到低排。缺少该条目视为改动未完成，不得提交推送；纯内部重构且用户无感时写「改进」下的一条说明或按需省略
 - **预览包本地验证**：可用 `node scripts/preview-package.mjs <输出目录> HEAD` 复现 `main` 预览包；脚本只读取指定提交，通过 `git archive` 生成压缩包，并校验清单、入口、引用链、允许文件集合、压缩包结构和 SHA-256。可用 `node scripts/preview-notes.mjs <输出文件> HEAD` 复现更新日志，生成时优先读取上一个 `preview-*`（首次回退最近正式标签）到当前提交的全部提交。不得修改源码或提交产物后再打包。
 - **预览包 import 扫描**：`preview-package.mjs` 与 `verify-ci.mjs` 一致，匹配 `import/from/import()` 前先经 `stripCommentsForImportScan` 剥离注释；ECharts 等分包内注释含示例 `import './XxxModel.js'`，若不剥离会被误判为缺失依赖并使 `main` 预览作业失败（曾发生）。
 - 产物入口存根 `index.js` + `ECharts` 等 hash 分包随仓库提交以保离线加载，`style.css` 直出，勿手改产物；`vite.config.ts` 已 `define: { process.env.NODE_ENV, __APP_VERSION__ }` 防浏览器 `process` 报错且实现版本单源化

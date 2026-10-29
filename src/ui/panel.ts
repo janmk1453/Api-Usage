@@ -14,6 +14,7 @@ import { initExtraCharts, renderExtraCharts, resetChartThemeCache } from './extr
 import { renderForecastView, initForecastView } from './forecast-view';
 import { disposeForecastCharts } from './forecast-chart';
 import { renderWalletView } from './wallet-view';
+import { bindChangelog, renderChangelogCard } from './changelog';
 import { applyTheme } from '../services/theme';
 import { DataEvents, on as onDataEvent } from '../data/events';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
@@ -1045,6 +1046,7 @@ export function createPanel() {
                 </div>
                 <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">可选择 main（稳定）或 dev（测试）分支获取更新，默认 main；更新完成后自动刷新网页。</div>
               </div>
+              ${renderChangelogCard()}
             </div>
           </div>
         </div>
@@ -1185,6 +1187,7 @@ export function createPanel() {
   bindImportExport(doc);
   renderSettings(doc);
   bindHistoryCompare();
+  bindChangelog(doc);
   initStatsView();
   initExtraCharts();
   try { initForecastView(); } catch {}

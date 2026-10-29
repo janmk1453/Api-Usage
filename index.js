@@ -11732,6 +11732,120 @@ function bindWalletView(doc) {
 		});
 	}
 }
+/** 更新日志（最新在前） */
+var CHANGELOG = [{
+	version: "r3.1.7",
+	date: "2026-10-23",
+	sections: [
+		{
+			kind: "feature",
+			items: [
+				"重做钱包价格自动识别填充，现在可以通过选择价格来源并点击更新实现自动识别填充价格",
+				"余额自动校准支持多家供应商：DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita；套餐额度支持智谱 GLM、MiniMax",
+				"钱包卡新增自动识别厂商官方图标",
+				"钱包页新增工具栏",
+				"所有统计图表底部新增视窗滑块：拖中间平移、拖两端缩放",
+				"关于页新增「更新日志」块，按版本展示最近几次更新的新增、改进与修复，最新条目默认展开"
+			]
+		},
+		{
+			kind: "improve",
+			items: [
+				"改进钱包和统计页的部分 UI",
+				"优化滚动条视觉效果",
+				"在 tooltip 中显示时间和更多信息",
+				"部分图表现在支持排序",
+				"设置 - 储存 中现在支持清理缓存",
+				"改进了很多 UI 效果，验证性的加入了少量过渡动画"
+			]
+		},
+		{
+			kind: "fix",
+			items: [
+				"修复移动端钱包页文字与按钮错位",
+				"修复潜在的图表不可用问题",
+				"修复无法统计思维链耗时"
+			]
+		}
+	]
+}];
+/** 取最近若干个版本（默认 CHANGELOG_ENTRY_LIMIT 条） */
+function getRecentChangelog(limit = 3) {
+	const n = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : 3;
+	return CHANGELOG.slice(0, n);
+}
+//#endregion
+//#region src/ui/changelog.ts
+/** 分类样式：新增=绿、改进=蓝、修复=橙，与全站语义色一致 */
+var KIND_STYLE = {
+	feature: {
+		label: "新增",
+		color: "var(--ds-green)",
+		bg: "var(--ds-green-bg)"
+	},
+	improve: {
+		label: "改进",
+		color: "var(--ds-blue, #2563EB)",
+		bg: "rgba(37,99,235,0.12)"
+	},
+	fix: {
+		label: "修复",
+		color: "var(--ds-orange)",
+		bg: "rgba(255,106,0,0.12)"
+	}
+};
+/** 更新日期展示：同年只显示 M/D，跨年补上年份；非法格式原样返回 */
+function formatChangelogDate(date, now = Date.now()) {
+	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || "").trim());
+	if (!m) return String(date || "");
+	const year = Number(m[1]);
+	const month = Number(m[2]);
+	const day = Number(m[3]);
+	return year === new Date(now).getFullYear() ? `${month}/${day}` : `${year}/${month}/${day}`;
+}
+function sectionHtml(section) {
+	const style = KIND_STYLE[section.kind] || KIND_STYLE.feature;
+	const items = section.items.map((text) => `<div class="aus-changelog-item"><span class="aus-changelog-dot" style="background:${style.color};"></span><span>${esc$2(text)}</span></div>`).join("");
+	return `<div class="aus-changelog-section"><span class="aus-changelog-kind" style="color:${style.color};background:${style.bg};">${style.label}</span><div class="aus-changelog-items">${items}</div></div>`;
+}
+function entryHtml(entry, open, isLatest) {
+	const dateText = formatChangelogDate(entry.date);
+	const meta = [dateText ? `${esc$2(dateText)} 更新` : ""].concat(isLatest ? ["<span class=\"aus-changelog-latest\">最新</span>"] : []).filter(Boolean).join("");
+	const sections = entry.sections.filter((s) => s && s.items && s.items.length).map(sectionHtml).join("");
+	return "<div class=\"aus-changelog-entry\" data-changelog-entry data-open=\"" + (open ? "1" : "0") + `"><button type="button" class="aus-changelog-head" data-changelog-toggle aria-expanded="${open ? "true" : "false"}"><span class="aus-changelog-version">${esc$2(entry.version)}</span><span class="aus-changelog-meta">${meta}</span><span class="aus-changelog-caret">${icon(open ? "chevron-up" : "chevron-down", 16)}</span></button><div class="aus-changelog-body"${open ? "" : " style=\"display:none;\""}>${sections}</div></div>`;
+}
+/**
+* 关于页底部的「更新日志」块：默认只展开最新版本，其余版本点击表头展开/收起。
+* 数据全部来自 constants/changelog.ts，这里只负责渲染与交互，不写死任何版本内容。
+*/
+function renderChangelogCard() {
+	const entries = getRecentChangelog();
+	if (!entries.length) return "";
+	const total = CHANGELOG.length;
+	const countText = total > entries.length ? `共 ${total} 个版本 · 显示最近 ${entries.length} 个` : `共 ${total} 个版本`;
+	const list = entries.map((e, i) => entryHtml(e, i === 0, i === 0)).join("");
+	return `<div class="ds-card" id="aus-changelog"><div class="aus-changelog-header"><span class="aus-changelog-title">更新日志</span><span class="aus-changelog-count">${esc$2(countText)}</span></div><div class="aus-changelog-list">${list}</div><div class="aus-changelog-footer">更新日志由作者手动维护，更早的版本请看仓库提交记录：<a href="https://github.com/janmk1453/Api-Usage/commits/main" target="_blank" rel="noreferrer">janmk1453/Api-Usage</a></div></div>`;
+}
+/** 绑定展开/收起（事件委托，只绑一次；表头是原生 button，键盘回车/空格同样可用） */
+function bindChangelog(doc) {
+	const root = doc.getElementById("aus-changelog");
+	if (!root || root.getAttribute("data-bound") === "1") return;
+	root.setAttribute("data-bound", "1");
+	root.addEventListener("click", (ev) => {
+		const target = ev.target;
+		const head = target && target.closest ? target.closest("[data-changelog-toggle]") : null;
+		if (!head || !root.contains(head)) return;
+		const entry = head.closest("[data-changelog-entry]");
+		const body = entry ? entry.querySelector(".aus-changelog-body") : null;
+		if (!entry || !body) return;
+		const open = head.getAttribute("aria-expanded") === "true";
+		head.setAttribute("aria-expanded", open ? "false" : "true");
+		entry.setAttribute("data-open", open ? "0" : "1");
+		body.style.display = open ? "none" : "grid";
+		const caret = head.querySelector(".aus-changelog-caret");
+		if (caret) caret.innerHTML = icon(open ? "chevron-down" : "chevron-up", 16);
+	});
+}
 //#endregion
 //#region src/ui/panel.ts
 /** 面板首帧渲染耗时的起点（用于匿名统计里的渲染耗时分桶） */
@@ -12816,6 +12930,7 @@ function createPanel() {
                 </div>
                 <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">可选择 main（稳定）或 dev（测试）分支获取更新，默认 main；更新完成后自动刷新网页。</div>
               </div>
+              ${renderChangelogCard()}
             </div>
           </div>
         </div>
@@ -12973,6 +13088,7 @@ function createPanel() {
 	bindImportExport(doc);
 	renderSettings(doc);
 	bindHistoryCompare();
+	bindChangelog(doc);
 	initStatsView();
 	initExtraCharts();
 	try {
