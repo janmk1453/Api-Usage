@@ -6,7 +6,7 @@ import { icon } from './icons';
 /** 分类样式：新增=绿、改进=蓝、修复=橙，与全站语义色一致 */
 const KIND_STYLE: Record<ChangelogSectionKind, { label: string; color: string; bg: string }> = {
   feature: { label: '新增', color: 'var(--ds-green)', bg: 'var(--ds-green-bg)' },
-  improve: { label: '改进', color: 'var(--ds-blue, #2563EB)', bg: 'rgba(37,99,235,0.12)' },
+  improve: { label: '改进', color: 'var(--ds-blue, #2563EB)', bg: 'var(--ds-blue-bg, rgba(37,99,235,0.12))' },
   fix: { label: '修复', color: 'var(--ds-orange)', bg: 'rgba(255,106,0,0.12)' },
 };
 

@@ -38,6 +38,11 @@
   --ds-orange-light: #FF7A00;
   --ds-green-bg: #E6F8EC;
   --ds-green: #0BA25E;
+  /* 语义蓝（更新日志「改进」分类等），深色同名覆盖提亮保证可读 */
+  --ds-blue: #2563EB;
+  --ds-blue-bg: rgba(37,99,235,0.12);
+  --ds-orange-bg: rgba(255,106,0,0.12);
+  --ds-orange-bg-strong: rgba(255,106,0,0.16);
   --ds-green-soft: #DCFCE7;
   --ds-red: #DC2626;
   --ds-red-bg: #FEF2F2;
@@ -54,45 +59,50 @@
   color: var(--ds-text);
 }
 
-/* 深色主题 — 高对比度保证可读性，WCAG AA */
+/* 深色主题 — 对齐 DeepSeek 平台深色观感：页面近黑、块面明显更亮、正文更白，
+   靠「页面底色 ↔ 块面 ↔ 块内二级面板」三级明度差保证块内容可读（不用描边）。 */
 [data-extension="api-usage-stat"][data-ds-theme="dark"] {
-  --ds-bg: #0F1419;
-  --ds-panel-bg: #111827;
-  --ds-sidebar-bg: #0F1419;
-  --ds-card: #1E242E;
-  --ds-card-inner: #242B36;
-  --ds-card-hover: #252D3A;
-  --ds-border: #2A3342;
-  --ds-border-strong: #334155;
-  --ds-text: #E5E7EB;
-  --ds-text-2: #9CA3AF;
-  --ds-text-3: #6B7280;
-  --ds-black: #E5E7EB;
-  --ds-black-text: #111827;
-  --ds-input-bg: #1E242E;
-  --ds-input-border: #2A3342;
-  --ds-hover-bg: #242B36;
-  --ds-active-bg: #252D3A;
+  --ds-bg: #151517;
+  --ds-panel-bg: #1B1B1C;
+  --ds-sidebar-bg: #1B1B1C;
+  --ds-card: #303134;
+  --ds-card-inner: #3A3B3E;
+  --ds-card-hover: #434447;
+  --ds-border: #45464A;
+  --ds-border-strong: #55565B;
+  --ds-text: #F5F6F7;
+  --ds-text-2: #C0C2C6;
+  --ds-text-3: #9A9CA1;
+  --ds-black: #E8E9EB;
+  --ds-black-text: #17181A;
+  --ds-input-bg: #303134;
+  --ds-input-border: #45464A;
+  --ds-hover-bg: #3A3B3E;
+  --ds-active-bg: #434447;
   /* 侧边栏导航选中态（深色）：保持与窄屏深色覆盖同值 */
-  --ds-nav-active-bg: #2A3342;
-  --ds-overlay: rgba(0,0,0,0.65);
-  --ds-scrollbar: #2A3342;
+  --ds-nav-active-bg: #3C3D41;
+  --ds-overlay: rgba(0,0,0,0.7);
+  --ds-scrollbar: #4A4B4F;
   --ds-orange: #FF7A3D;
   --ds-orange-light: #FF8C42;
-  --ds-green-bg: #0A2E1F;
-  --ds-green: #34D399;
-  --ds-green-soft: #064E3B;
-  --ds-red: #F87171;
-  --ds-red-bg: #2A1515;
-  --ds-red-border: #7F1D1D;
-  --ds-purple: #818CF8;
+  --ds-blue: #7EA6FF;
+  --ds-blue-bg: rgba(126,166,255,0.16);
+  --ds-orange-bg: rgba(255,122,61,0.18);
+  --ds-orange-bg-strong: rgba(255,122,61,0.28);
+  --ds-green-bg: #10362A;
+  --ds-green: #3ED598;
+  --ds-green-soft: #0B4B38;
+  --ds-red: #FF8A85;
+  --ds-red-bg: #3A1C1C;
+  --ds-red-border: #7F2626;
+  --ds-purple: #9AA4FF;
   --ds-purple-bg: #4F46E5;
-  --ds-yellow-bg: #1F1A0A;
-  --ds-yellow-border: #92400E;
+  --ds-yellow-bg: #2C2410;
+  --ds-yellow-border: #8A6A1F;
   --ds-radius-card: 14px;
   --ds-radius-pill: 999px;
   --ds-gap: 12px;
-  --ds-shadow: 0 1px 8px rgba(0,0,0,0.4);
+  --ds-shadow: 0 1px 8px rgba(0,0,0,0.45);
   background: var(--ds-bg);
   color: var(--ds-text);
 }
@@ -573,7 +583,7 @@
   #aus-sidebar .aus-nav-item { justify-content:flex-start !important; padding:8px 10px !important; gap:10px !important; font-size:12px !important; border-radius:8px !important; }
   /* 窄屏选中态加深，避免 #F9FAFB 侧栏与 #F6F7F8 选中态均为近白导致“都是白底” */
   .aus-nav-item.active { background: #E5E7EB !important; }
-  [data-extension="api-usage-stat"][data-ds-theme="dark"] .aus-nav-item.active { background: #2A3342 !important; }
+  [data-extension="api-usage-stat"][data-ds-theme="dark"] .aus-nav-item.active { background: var(--ds-nav-active-bg) !important; }
   #aus-main { padding: 12px !important; overflow-x: hidden !important; }
   #aus-main > div { max-width: 1100px !important; width: 100% !important; margin: 0 auto !important; box-sizing: border-box !important; min-width: 0 !important; }
   /* 视图容器不裁剪下拉：原 overflow-x:hidden 会把胶囊下拉裁进 UI 底下；需配合 min-width:0 防止 720px 表撑开整个视图导致块超出屏幕 */
@@ -1836,7 +1846,7 @@
 .aus-changelog-head:focus-visible { outline: 2px solid var(--ds-orange); outline-offset: -2px; }
 .aus-changelog-version {
   flex-shrink: 0; padding: 1px 10px; border-radius: 999px;
-  background: rgba(255, 106, 0, 0.12); color: var(--ds-orange);
+  background: var(--ds-orange-bg); color: var(--ds-orange);
   font-size: var(--aus-fs-sm); font-weight: 600; font-variant-numeric: tabular-nums;
 }
 .aus-changelog-meta {
@@ -1846,7 +1856,7 @@
 }
 .aus-changelog-latest {
   flex-shrink: 0; padding: 0 7px; border-radius: 999px; line-height: 16px;
-  background: rgba(255, 106, 0, 0.16); color: var(--ds-orange);
+  background: var(--ds-orange-bg-strong); color: var(--ds-orange);
   font-size: var(--aus-fs-xs); font-weight: 600;
 }
 .aus-changelog-caret { display: inline-flex; flex-shrink: 0; color: var(--ds-text-3); }

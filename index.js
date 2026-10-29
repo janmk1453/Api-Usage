@@ -52,7 +52,7 @@ async function exportHistory() {
 		path: "",
 		proxy: ""
 	};
-	const _appVer = "3.1.7";
+	const _appVer = "3.1.8";
 	let fullHist = [];
 	try {
 		fullHist = await repository.getAllHistory();
@@ -1541,7 +1541,7 @@ var inFlight = false;
 var bound = false;
 function appVersion() {
 	try {
-		return String("3.1.7");
+		return String("3.1.8");
 	} catch {
 		return "";
 	}
@@ -11734,6 +11734,16 @@ function bindWalletView(doc) {
 }
 /** 更新日志（最新在前） */
 var CHANGELOG = [{
+	version: "r3.1.8",
+	date: "2026-10-29",
+	sections: [{
+		kind: "feature",
+		items: ["关于页新增「更新日志」块：按版本折叠展示最近几次更新的新增、改进与修复，最新版本默认展开"]
+	}, {
+		kind: "improve",
+		items: ["优化深色模式显示效果：页面更暗、块面更亮，块内正文与次要文字亮度提升，块内容的可读性明显改善", "深色模式下的选中态、边框、语义色（绿/红/黄）同步提亮，图表坐标轴与悬浮窗跟随新配色"]
+	}]
+}, {
 	version: "r3.1.7",
 	date: "2026-10-23",
 	sections: [
@@ -11744,8 +11754,7 @@ var CHANGELOG = [{
 				"余额自动校准支持多家供应商：DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita；套餐额度支持智谱 GLM、MiniMax",
 				"钱包卡新增自动识别厂商官方图标",
 				"钱包页新增工具栏",
-				"所有统计图表底部新增视窗滑块：拖中间平移、拖两端缩放",
-				"关于页新增「更新日志」块，按版本展示最近几次更新的新增、改进与修复，最新条目默认展开"
+				"所有统计图表底部新增视窗滑块：拖中间平移、拖两端缩放"
 			]
 		},
 		{
@@ -11786,7 +11795,7 @@ var KIND_STYLE = {
 	improve: {
 		label: "改进",
 		color: "var(--ds-blue, #2563EB)",
-		bg: "rgba(37,99,235,0.12)"
+		bg: "var(--ds-blue-bg, rgba(37,99,235,0.12))"
 	},
 	fix: {
 		label: "修复",
@@ -12657,7 +12666,7 @@ function createPanel() {
           <span class="aus-brand-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--ds-orange);">${icon("brand", 20)}</span>
           <div style="display:flex;flex-direction:column;min-width:0;">
             <span style="font-size:15px;font-weight:700;line-height:20px;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
-            <span style="font-size:var(--aus-fs-sm);line-height:16px;color:var(--ds-text-2);white-space:nowrap;">v3.1.7</span>
+            <span style="font-size:var(--aus-fs-sm);line-height:16px;color:var(--ds-text-2);white-space:nowrap;">v3.1.8</span>
           </div>
         </div>
         <button id="aus-sidebar-toggle" style="width:30px;height:30px;margin-top:13px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;font-size:var(--aus-fs-base);padding:0;line-height:1;">${icon("chevron-left", 14)}</button>
@@ -12926,7 +12935,7 @@ function createPanel() {
                   </div>
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:var(--aus-fs-sm);">检查更新</button>
                   <button id="aus-run-update" class="ds-btn-pill" style="display:none;padding:6px 14px;font-size:var(--aus-fs-sm);">立即更新</button>
-                  <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">当前 v3.1.7 · 每 1 小时自动检查</span>
+                  <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">当前 v3.1.8 · 每 1 小时自动检查</span>
                 </div>
                 <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">可选择 main（稳定）或 dev（测试）分支获取更新，默认 main；更新完成后自动刷新网页。</div>
               </div>
@@ -12953,7 +12962,7 @@ function createPanel() {
 	doc.body.appendChild(overlay);
 	doc.body.appendChild(panel);
 	try {
-		import("./update-tW9dhmg5.js").then((mod) => mod.syncUpdateIndicators?.());
+		import("./update-DQfgo-Si.js").then((mod) => mod.syncUpdateIndicators?.());
 	} catch {}
 	try {
 		applyTheme(theme);
@@ -13095,7 +13104,7 @@ function createPanel() {
 		initForecastView();
 	} catch {}
 	try {
-		import("./update-tW9dhmg5.js").then((m) => {
+		import("./update-DQfgo-Si.js").then((m) => {
 			const branchBtn = doc.getElementById("aus-update-branch-btn");
 			const branchLabel = doc.getElementById("aus-update-branch-label");
 			const branchDrop = doc.getElementById("aus-update-branch-dropdown");
@@ -13134,7 +13143,7 @@ function createPanel() {
 		if (updBtn) updBtn.onclick = () => {
 			updBtn.textContent = "检查中…";
 			updBtn.setAttribute("disabled", "");
-			import("./update-tW9dhmg5.js").then((m) => m.checkUpdate(true).finally(() => {
+			import("./update-DQfgo-Si.js").then((m) => m.checkUpdate(true).finally(() => {
 				updBtn.textContent = "检查更新";
 				updBtn.removeAttribute("disabled");
 			}));
@@ -13144,7 +13153,7 @@ function createPanel() {
 			if (runUpdBtn.hasAttribute("disabled")) return;
 			runUpdBtn.textContent = "更新中…";
 			runUpdBtn.setAttribute("disabled", "");
-			import("./update-tW9dhmg5.js").then((m) => m.updateSelf()).then((res) => {
+			import("./update-DQfgo-Si.js").then((m) => m.updateSelf()).then((res) => {
 				if (res.ok && res.changed) {
 					const bannerEl = doc.getElementById("aus-update-banner");
 					if (bannerEl) {
@@ -13237,7 +13246,7 @@ function openPanel() {
 		import("./collector-DJ0dScs1.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
-		import("./update-tW9dhmg5.js").then((m) => m.maybeAutoCheck());
+		import("./update-DQfgo-Si.js").then((m) => m.maybeAutoCheck());
 	} catch {}
 }
 function closePanel() {
