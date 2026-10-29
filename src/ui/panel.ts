@@ -500,12 +500,16 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
         </div>
       </div>
       <div style="background:var(--ds-border);border-radius:999px;height:6px;overflow:hidden;margin-top:8px;display:flex;">
-        <div style="background:var(--ds-green);width:${hp}%;height:100%;"></div>
-        <div style="background:var(--ds-red-border);width:${mp}%;height:100%;"></div>
-        <div style="background:var(--ds-purple-bg);width:${op}%;height:100%;"></div>
+        <div style="background:var(--aus-token-hit);width:${hp}%;height:100%;"></div>
+        <div style="background:var(--aus-token-miss);width:${mp}%;height:100%;"></div>
+        <div style="background:var(--aus-token-output);width:${op}%;height:100%;"></div>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:var(--aus-fs-sm);margin-top:4px;">
-        <div style="display:flex;gap:8px;"><span style="color:var(--ds-green);font-weight:500;">${hps}% 命中</span><span style="color:var(--ds-red);font-weight:500;">${mps}% 未命中</span><span style="color:var(--ds-purple);font-weight:500;">${ops}% 输出</span></div>
+        <div style="display:flex;gap:10px;align-items:center;color:var(--ds-text-2);">
+          <span style="display:inline-flex;align-items:center;gap:4px;"><span class="aus-token-dot" style="background:var(--aus-token-hit);"></span><b style="color:var(--ds-text);font-weight:600;">${hps}%</b> 命中</span>
+          <span style="display:inline-flex;align-items:center;gap:4px;"><span class="aus-token-dot" style="background:var(--aus-token-miss);"></span><b style="color:var(--ds-text);font-weight:600;">${mps}%</b> 未命中</span>
+          <span style="display:inline-flex;align-items:center;gap:4px;"><span class="aus-token-dot" style="background:var(--aus-token-output);"></span><b style="color:var(--ds-text);font-weight:600;">${ops}%</b> 输出</span>
+        </div>
         <span style="color:var(--ds-text-2);">${total.toLocaleString()}t</span>
       </div>
       <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;margin-top:8px;border-top:1px solid var(--ds-border);padding-top:8px;max-height:min(520px,60vh);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;flex-direction:column;gap:8px;">

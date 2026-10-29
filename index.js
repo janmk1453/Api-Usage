@@ -5415,6 +5415,37 @@ var TOKEN_SERIES_COLORS = {
 	miss: "#60B3FE",
 	output: "#0C70F3"
 };
+/** 堆叠柱自下而上的叠放次序：输出最深压底，命中最浅置顶（与「上浅下深」的读图习惯一致） */
+var TOKEN_STACK_RANK = {
+	output_token: 0,
+	input_miss_token: 1,
+	input_hit_token: 2
+};
+/**
+* 调整 Token 三段的绘制顺序：ECharts 堆叠按 series 数组顺序自下而上叠放，
+* 因此把命中最浅的一段放到数组末尾（最上层）、输出最深的一段放到最前（最底层）。
+* 只重排 input_hit_token / input_miss_token / output_token 这三个键，其余系列位置不变。
+*/
+function tokenStackDrawOrder(series) {
+	const slots = [];
+	for (let i = 0; i < series.length; i++) {
+		const key = series[i]?.key;
+		if (key && key in TOKEN_STACK_RANK) slots.push(i);
+	}
+	if (slots.length < 2) return series;
+	const picked = slots.map((i) => series[i]).sort((a, b) => (TOKEN_STACK_RANK[a.key] ?? 9) - (TOKEN_STACK_RANK[b.key] ?? 9));
+	const out = series.slice();
+	slots.forEach((pos, i) => {
+		out[pos] = picked[i];
+	});
+	return out;
+}
+/** 悬浮窗条目按 Y 选项顺序（命中 → 未命中 → 输出）排列，稳定排序，未命中的条目保持原相对次序 */
+function sortTooltipParams(params) {
+	const order = new Map(Y_OPTIONS.map((o, i) => [o.label, i]));
+	const rank = (p) => order.get(p?.seriesName || "") ?? 999;
+	return params.slice().sort((a, b) => rank(a) - rank(b));
+}
 var Y_OPTIONS = [
 	{
 		key: "input_hit_token",
@@ -5830,6 +5861,7 @@ function aggregateForChart(entries, yKeys, xKey) {
 			const opt = meta.get(k);
 			const data = round ? entries.map((e) => Number(getYValue$1(e, k).toFixed(precisionFor(opt.kind)))) : sortedKeys.map((b) => Number(bucketValue(buckets.get(b).list, opt).toFixed(precisionFor(opt.kind))));
 			return {
+				key: k,
 				name: opt.label,
 				data,
 				kind: opt.kind,
@@ -6443,6 +6475,7 @@ async function renderOne$1(id, filtered) {
 					return Number(v.toFixed(k.includes("cost") || k === "hit_rate" ? 2 : 0));
 				});
 				return {
+					key: k,
 					name: meta.label,
 					data,
 					color: meta.color,
@@ -6510,6 +6543,7 @@ async function renderOne$1(id, filtered) {
 				return Number(sum.toFixed(k.includes("cost") ? 2 : 0));
 			});
 			return {
+				key: k,
 				name: meta.label,
 				data,
 				color: meta.color,
@@ -6584,7 +6618,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 					const list = Array.isArray(params) ? params : [params];
 					if (!list.length) return "";
 					let html = `<div style="font-weight:600;margin-bottom:6px;">${tips[list[0].dataIndex] || list[0].axisValueLabel || ""}</div>`;
-					for (const p of list) {
+					for (const p of sortTooltipParams(list)) {
 						const unit = seriesUnit(p.seriesName);
 						const v = Number(p.value);
 						let disp;
@@ -6634,14 +6668,15 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 				zoomLock: true
 			}] : void 0,
 			series: (() => {
-				const barIndices = series.map((s, i) => ({
+				const drawSeries = tokenStackDrawOrder(series);
+				const barIndices = drawSeries.map((s, i) => ({
 					s,
 					i
 				})).filter(({ s }) => !(isTokenCost && s.name.includes("总"))).map(({ i }) => i);
 				const topIdx = barIndices.length ? barIndices[barIndices.length - 1] : -1;
 				const BAR_MAX_WIDTH = 16;
 				const topRadius = barTopRadius(estimateBarWidth(el?.clientWidth || 320, 60, labels.length, BAR_MAX_WIDTH));
-				return series.map((s, idx) => {
+				return drawSeries.map((s, idx) => {
 					const isTotal = s.name.includes("总");
 					if (isTokenCost && isTotal) return {
 						name: s.name,
@@ -6689,7 +6724,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 				textStyle: { fontSize: 12 },
 				formatter: (params) => {
 					let html = `<div style="font-weight:600;margin-bottom:6px;">${tips[params[0]?.dataIndex ?? 0] || params[0]?.axisValueLabel || ""}</div>`;
-					for (const p of params) html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${curCur.symbol}${Number(p.value).toFixed(4)} ${curCur.code}</span></div>`;
+					for (const p of sortTooltipParams(Array.isArray(params) ? params : [params])) html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${curCur.symbol}${Number(p.value).toFixed(4)} ${curCur.code}</span></div>`;
 					return `<div style="padding:4px 2px;min-width:160px;">${html}</div>`;
 				}
 			};
@@ -8202,9 +8237,10 @@ async function renderChart(filteredRaw) {
 	}
 	const BAR_MAX_WIDTH = 18;
 	const barWidth = estimateBarWidth(w || 320, narrow ? 70 : 104, labels.length, BAR_MAX_WIDTH);
-	const tokenSeries = series.filter((s) => s.kind === "token");
-	const lastTokenIdx = tokenSeries.length ? series.indexOf(tokenSeries[tokenSeries.length - 1]) : -1;
-	const seriesOpt = series.map((s, idx) => {
+	const drawSeries = tokenStackDrawOrder(series);
+	const tokenSeries = drawSeries.filter((s) => s.kind === "token");
+	const lastTokenIdx = tokenSeries.length ? drawSeries.indexOf(tokenSeries[tokenSeries.length - 1]) : -1;
+	const seriesOpt = drawSeries.map((s, idx) => {
 		const kind = s.kind;
 		let type;
 		if (chartType === "bar") type = "bar";
@@ -8272,7 +8308,7 @@ async function renderChart(filteredRaw) {
 				const idx = params[0].dataIndex;
 				const label = tips[idx] || labels[idx];
 				let html = `<div style="font-weight:600;margin-bottom:6px;">${esc$2(label)}</div>`;
-				for (const p of params) {
+				for (const p of sortTooltipParams(params)) {
 					const v = p.value;
 					const meta = Y_OPTIONS.find((o) => o.label === p.seriesName);
 					const kind = meta?.kind;
@@ -9305,6 +9341,21 @@ async function renderMainChart(echarts, options) {
 	});
 	const seriesOption = [
 		{
+			name: "历史输入(未命中)",
+			type: "line",
+			stack: "input",
+			data: historyMiss,
+			smooth: false,
+			showSymbol: false,
+			lineStyle: {
+				width: 1,
+				color: TOKEN_SERIES_COLORS.miss
+			},
+			itemStyle: { color: TOKEN_SERIES_COLORS.miss },
+			areaStyle: { color: "rgba(96, 179, 254, 0.32)" },
+			sampling: "lttb"
+		},
+		{
 			name: "历史输入(命中)",
 			type: "line",
 			stack: "input",
@@ -9324,21 +9375,6 @@ async function renderMainChart(echarts, options) {
 				data: markLineData
 			} : void 0,
 			markArea
-		},
-		{
-			name: "历史输入(未命中)",
-			type: "line",
-			stack: "input",
-			data: historyMiss,
-			smooth: false,
-			showSymbol: false,
-			lineStyle: {
-				width: 1,
-				color: TOKEN_SERIES_COLORS.miss
-			},
-			itemStyle: { color: TOKEN_SERIES_COLORS.miss },
-			areaStyle: { color: "rgba(96, 179, 254, 0.32)" },
-			sampling: "lttb"
 		},
 		{
 			name: "历史输出",
@@ -12048,7 +12084,9 @@ var CHANGELOG = [{
 			"用量统计页与历史记录页的筛选条件会被记住：时间维度（含「全部」与自定义日期）、模型、对话、接入类型与 API 密钥刷新后保持上次选择，不会自动回到默认",
 			"所有下拉胶囊悬停时轻微提亮、展开时箭头翻转，下拉关闭更快更跟手",
 			"浅色模式下块面底色微调，块、块内白色面板与页面底色的层次更协调",
-			"图表中「输入（命中缓存）」「输入（未命中缓存）」与「输出」改用同一色系的三档蓝色，三段堆叠柱与折线图配色更统一"
+			"图表中「输入（命中缓存）」「输入（未命中缓存）」与「输出」改用同一色系的三档蓝色，三段堆叠柱与折线图配色更统一",
+			"三段 Token 的堆叠顺序改为「输出最深压底、命中最浅置顶」，自下而上由深到浅，与图例读图习惯一致（悬浮窗条目顺序不变）",
+			"历史记录卡片的 Token 占比条改用与图表一致的三档蓝色，图例改为色点 + 中性文字，比原来的绿/粉/靛蓝更清爽"
 		]
 	}]
 }, {
@@ -12769,12 +12807,16 @@ function renderHistoryInner(doc, fullHist) {
         </div>
       </div>
       <div style="background:var(--ds-border);border-radius:999px;height:6px;overflow:hidden;margin-top:8px;display:flex;">
-        <div style="background:var(--ds-green);width:${hp}%;height:100%;"></div>
-        <div style="background:var(--ds-red-border);width:${mp}%;height:100%;"></div>
-        <div style="background:var(--ds-purple-bg);width:${op}%;height:100%;"></div>
+        <div style="background:var(--aus-token-hit);width:${hp}%;height:100%;"></div>
+        <div style="background:var(--aus-token-miss);width:${mp}%;height:100%;"></div>
+        <div style="background:var(--aus-token-output);width:${op}%;height:100%;"></div>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:var(--aus-fs-sm);margin-top:4px;">
-        <div style="display:flex;gap:8px;"><span style="color:var(--ds-green);font-weight:500;">${hps}% 命中</span><span style="color:var(--ds-red);font-weight:500;">${mps}% 未命中</span><span style="color:var(--ds-purple);font-weight:500;">${ops}% 输出</span></div>
+        <div style="display:flex;gap:10px;align-items:center;color:var(--ds-text-2);">
+          <span style="display:inline-flex;align-items:center;gap:4px;"><span class="aus-token-dot" style="background:var(--aus-token-hit);"></span><b style="color:var(--ds-text);font-weight:600;">${hps}%</b> 命中</span>
+          <span style="display:inline-flex;align-items:center;gap:4px;"><span class="aus-token-dot" style="background:var(--aus-token-miss);"></span><b style="color:var(--ds-text);font-weight:600;">${mps}%</b> 未命中</span>
+          <span style="display:inline-flex;align-items:center;gap:4px;"><span class="aus-token-dot" style="background:var(--aus-token-output);"></span><b style="color:var(--ds-text);font-weight:600;">${ops}%</b> 输出</span>
+        </div>
         <span style="color:var(--ds-text-2);">${total.toLocaleString()}t</span>
       </div>
       <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;margin-top:8px;border-top:1px solid var(--ds-border);padding-top:8px;max-height:min(520px,60vh);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;flex-direction:column;gap:8px;">

@@ -30,6 +30,40 @@ export const TOKEN_SERIES_COLORS = {
   output: '#0C70F3',
 } as const;
 
+/** 堆叠柱自下而上的叠放次序：输出最深压底，命中最浅置顶（与「上浅下深」的读图习惯一致） */
+const TOKEN_STACK_RANK: Record<string, number> = {
+  output_token: 0,
+  input_miss_token: 1,
+  input_hit_token: 2,
+};
+
+/**
+ * 调整 Token 三段的绘制顺序：ECharts 堆叠按 series 数组顺序自下而上叠放，
+ * 因此把命中最浅的一段放到数组末尾（最上层）、输出最深的一段放到最前（最底层）。
+ * 只重排 input_hit_token / input_miss_token / output_token 这三个键，其余系列位置不变。
+ */
+export function tokenStackDrawOrder<T extends { key?: string }>(series: T[]): T[] {
+  const slots: number[] = [];
+  for (let i = 0; i < series.length; i++) {
+    const key = series[i]?.key;
+    if (key && key in TOKEN_STACK_RANK) slots.push(i);
+  }
+  if (slots.length < 2) return series;
+  const picked = slots
+    .map(i => series[i])
+    .sort((a, b) => (TOKEN_STACK_RANK[(a as any).key] ?? 9) - (TOKEN_STACK_RANK[(b as any).key] ?? 9));
+  const out = series.slice();
+  slots.forEach((pos, i) => { out[pos] = picked[i]; });
+  return out;
+}
+
+/** 悬浮窗条目按 Y 选项顺序（命中 → 未命中 → 输出）排列，稳定排序，未命中的条目保持原相对次序 */
+export function sortTooltipParams<T extends Record<string, any>>(params: T[]): T[] {
+  const order = new Map<string, number>(Y_OPTIONS.map((o, i) => [o.label, i] as [string, number]));
+  const rank = (p: T) => order.get((p?.seriesName as string) || '') ?? 999;
+  return params.slice().sort((a, b) => rank(a) - rank(b));
+}
+
 export const Y_OPTIONS: YOption[] = [
   // Token
   { key: 'input_hit_token', label: '输入(命中) token', unit: 'tokens', kind: 'token', agg: 'sum', group: 'token', color: TOKEN_SERIES_COLORS.hit },
@@ -230,6 +264,7 @@ function precisionFor(kind: YKind): number {
 }
 
 export type ChartSeries = {
+  key: YKey;
   name: string;
   data: number[];
   kind: YKind;
@@ -283,7 +318,7 @@ export function aggregateForChart(entries: any[], yKeys: YKey[], xKey: XKey): { 
     const data = round
       ? entries.map(e => Number(getYValue(e, k).toFixed(precisionFor(opt.kind))))
       : sortedKeys.map(b => Number(bucketValue((buckets as Map<string, Bucket>).get(b)!.list, opt).toFixed(precisionFor(opt.kind))));
-    return { name: opt.label, data, kind: opt.kind, agg: opt.agg, unit: opt.unit, group: opt.group, color: opt.color };
+    return { key: k, name: opt.label, data, kind: opt.kind, agg: opt.agg, unit: opt.unit, group: opt.group, color: opt.color };
   });
   return { labels, series, tips };
 }

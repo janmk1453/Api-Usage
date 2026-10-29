@@ -2,7 +2,7 @@ import { localDay } from '../utils/date';
 import { bucketTip, roundTip, rangeTip } from './chart-time';
 import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
 import { BAR_SQUARE, barTopRadius, estimateBarWidth } from './chart-bar';
-import { Y_OPTIONS, X_OPTIONS, X_OPTIONS_WITHOUT_ROUND, getYSelected as getMainY, getXSelected as getMainX } from './chart-config';
+import { Y_OPTIONS, X_OPTIONS, X_OPTIONS_WITHOUT_ROUND, getYSelected as getMainY, getXSelected as getMainX, tokenStackDrawOrder, sortTooltipParams } from './chart-config';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 import { attachChartZoom, detachChartZoom, getChartRange } from './range-zoom';
 import { readChartPrefs, writeChartPrefs } from './chart-prefs';
@@ -186,7 +186,7 @@ async function renderOne(id:ChartId, filtered:any[]){
         const v=getYValue(e,k);
         return Number(v.toFixed(k.includes('cost')||k==='hit_rate'?2:0));
       });
-      return { name: meta.label, data, color: meta.color, kind: meta.kind || 'token' };
+      return { key: k, name: meta.label, data, color: meta.color, kind: meta.kind || 'token' };
     });
     await drawBarLine(el, id, labels, series, tips);
     return;
@@ -247,7 +247,7 @@ async function renderOne(id:ChartId, filtered:any[]){
         return Number(sum.toFixed(k.includes('cost')?2:0));
       });
     }
-    return { name: meta.label, data, color: meta.color, kind: meta.kind || 'token' };
+    return { key: k, name: meta.label, data, color: meta.color, kind: meta.kind || 'token' };
   });
   await drawBarLine(el, id, labels, series, tips);
   } catch(e:any){
@@ -276,7 +276,7 @@ function seriesUnit(name:string):'cost'|'percent'|'rate'|'duration'|'count'|'tok
   return 'token';
 }
 
-async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:Array<{name:string,data:number[],color:string,kind:string}>, tips:string[] = []){
+async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:Array<{key?:string,name:string,data:number[],color:string,kind:string}>, tips:string[] = []){
   try {
   const curCur = (()=>{ try{  return getDisplayCurrency(); } catch{ return {code:'CNY',symbol:'¥',rate:1} as any; } })();
   // 费用类数据在 USD 模式下需换算为显示币种
@@ -302,7 +302,8 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
         const idx = list[0].dataIndex;
         const title = tips[idx] || list[0].axisValueLabel || '';
         let html = `<div style="font-weight:600;margin-bottom:6px;">${title}</div>`;
-        for (const p of list){
+        // 悬浮窗条目按 Y 选项顺序（命中 → 未命中 → 输出）展示
+        for (const p of sortTooltipParams(list)){
           const unit = seriesUnit(p.seriesName);
           const v = Number(p.value);
           let disp:string;
@@ -323,14 +324,16 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
     // 默认完整展示全部 X 轴数据（与第一张图一致），缩放交给 inside 手势/拖拽
     dataZoom: labels.length > 1 ? [{ type:'inside', xAxisIndex:0, start: savedZoom?.start ?? 0, end: savedZoom?.end ?? 100, zoomOnMouseWheel: false, moveOnMouseMove: true, zoomLock: true }] : undefined,
     series: (() => {
+      // 堆叠次序：输出最深压底、命中最浅置顶（与主图表一致）
+      const drawSeries = tokenStackDrawOrder(series);
       // 堆叠柱仅最顶段有圆角，中间段直角以无缝衔接
-      const barIndices = series.map((s, i) => ({ s, i })).filter(({ s }) => !(isTokenCost && s.name.includes('总'))).map(({ i }) => i);
+      const barIndices = drawSeries.map((s, i) => ({ s, i })).filter(({ s }) => !(isTokenCost && s.name.includes('总'))).map(({ i }) => i);
       const topIdx = barIndices.length ? barIndices[barIndices.length - 1] : -1;
       // 柱宽估算 → 顶部圆角（半径 ≈ 柱宽 1/6，见 chart-bar.ts）
       const BAR_MAX_WIDTH = 16;
       const barWidth = estimateBarWidth((el as HTMLElement)?.clientWidth || 320, 60, labels.length, BAR_MAX_WIDTH);
       const topRadius = barTopRadius(barWidth);
-      return series.map((s, idx)=>{
+      return drawSeries.map((s, idx)=>{
         const isTotal = s.name.includes('总');
         if (isTokenCost && isTotal) return { name:s.name, type:'line', data:s.data, smooth:true, lineStyle:{color:s.color,width:2}, itemStyle:{color:s.color}, symbolSize:2 };
         const isTop = idx === topIdx;
@@ -340,7 +343,7 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
   };
   if (id==='cost') {
     opts.yAxis = { type:'value', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF'), formatter:(v:number)=> curCur.symbol + Number(v).toFixed(2)}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F5F6F7')}} } as any;
-    opts.tooltip = { trigger:'axis', ...CHART_TOOLTIP_SURFACE, backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12}, formatter: (params:any)=>{ const idx = params[0]?.dataIndex ?? 0; const title = tips[idx] || params[0]?.axisValueLabel || ''; let html=`<div style="font-weight:600;margin-bottom:6px;">${title}</div>`; for(const p of params){ html+=`<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${curCur.symbol}${Number(p.value).toFixed(4)} ${curCur.code}</span></div>`; } return `<div style="padding:4px 2px;min-width:160px;">${html}</div>`; } } as any;
+    opts.tooltip = { trigger:'axis', ...CHART_TOOLTIP_SURFACE, backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12}, formatter: (params:any)=>{ const idx = params[0]?.dataIndex ?? 0; const title = tips[idx] || params[0]?.axisValueLabel || ''; let html=`<div style="font-weight:600;margin-bottom:6px;">${title}</div>`; for(const p of sortTooltipParams(Array.isArray(params)?params:[params])){ html+=`<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${curCur.symbol}${Number(p.value).toFixed(4)} ${curCur.code}</span></div>`; } return `<div style="padding:4px 2px;min-width:160px;">${html}</div>`; } } as any;
   }
   // 命中/请求等单指标改为线+面积更可读
   if (id==='hit'){ opts.series = [{ name:'命中率', type:'line', data: series[0].data, areaStyle:{opacity:0.12,color:series[0].color}, lineStyle:{color:series[0].color}, itemStyle:{color:series[0].color}, smooth:true }]; opts.yAxis={ max:100, axisLabel:{formatter:(v:number)=>v+'%'} } as any; }

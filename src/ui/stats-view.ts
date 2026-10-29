@@ -2,7 +2,7 @@ import { icon } from './icons';
 import { bindSortableHeaders, paintSortHeader, type SortState } from './sort-header';
 import { getSelectedSave, state } from '../store/index';
 import { localDay, esc } from '../utils/date';
-import { Y_OPTIONS, Y_GROUPS, X_OPTIONS, getYSelected, getXSelected, getChartType, setChartType, getAxisLabelMode, setAxisLabelMode, toggleY, setXSelected, aggregateForChart } from './chart-config';
+import { Y_OPTIONS, Y_GROUPS, X_OPTIONS, getYSelected, getXSelected, getChartType, setChartType, getAxisLabelMode, setAxisLabelMode, toggleY, setXSelected, aggregateForChart, tokenStackDrawOrder, sortTooltipParams } from './chart-config';
 import { renderExtraCharts } from './extra-charts';
 import { BAR_SQUARE, barTopRadius, estimateBarWidth } from './chart-bar';
 import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
@@ -714,9 +714,11 @@ async function renderChart(filteredRaw: any[]) {
   // 柱宽估算 + 顶部圆角（半径 ≈ 柱宽 1/6，见 chart-bar.ts）
   const BAR_MAX_WIDTH = 18;
   const barWidth = estimateBarWidth(w || 320, narrow ? 70 : 104, labels.length, BAR_MAX_WIDTH);
-  const tokenSeries = series.filter(s => s.kind === 'token');
-  const lastTokenIdx = tokenSeries.length ? series.indexOf(tokenSeries[tokenSeries.length - 1]) : -1;
-  const seriesOpt = series.map((s, idx)=>{
+  // 堆叠次序按「输出最深压底、命中最浅置顶」重排（只影响绘制顺序，不改变 Y 选择顺序）
+  const drawSeries = tokenStackDrawOrder(series);
+  const tokenSeries = drawSeries.filter(s => s.kind === 'token');
+  const lastTokenIdx = tokenSeries.length ? drawSeries.indexOf(tokenSeries[tokenSeries.length - 1]) : -1;
+  const seriesOpt = drawSeries.map((s, idx)=>{
     const kind = s.kind;
     let type: 'bar' | 'line';
     if (chartType === 'bar') type = 'bar';
@@ -778,7 +780,8 @@ async function renderChart(filteredRaw: any[]) {
         // 悬浮窗标题用完整日期时间（X 轴标签是压缩格式，看不清具体时刻）
         const label = tips[idx] || labels[idx];
         let html = `<div style="font-weight:600;margin-bottom:6px;">${esc(label)}</div>`;
-        for (const p of params) {
+        // 悬浮窗条目按 Y 选项顺序（命中 → 未命中 → 输出）展示，与读图习惯一致
+        for (const p of sortTooltipParams(params)) {
           const v = p.value;
           const meta = Y_OPTIONS.find((o:any)=>o.label===p.seriesName);
           const kind = meta?.kind;

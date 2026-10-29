@@ -333,6 +333,19 @@ async function renderMainChart(echarts: any, options: ForecastChartOptions): Pro
   }
 
   const seriesOption: any[] = [
+    // 堆叠自下而上：未命中（中间调）压底、命中（最浅）置顶，与柱状图「上浅下深」一致
+    {
+      name: '历史输入(未命中)',
+      type: 'line',
+      stack: 'input',
+      data: historyMiss,
+      smooth: false,
+      showSymbol: false,
+      lineStyle: { width: 1, color: TOKEN_SERIES_COLORS.miss },
+      itemStyle: { color: TOKEN_SERIES_COLORS.miss },
+      areaStyle: { color: 'rgba(96, 179, 254, 0.32)' },
+      sampling: 'lttb',
+    },
     {
       name: '历史输入(命中)',
       type: 'line',
@@ -346,18 +359,6 @@ async function renderMainChart(echarts: any, options: ForecastChartOptions): Pro
       sampling: 'lttb',
       markLine: markLineData.length ? { silent: true, symbol: 'none', data: markLineData } : undefined,
       markArea,
-    },
-    {
-      name: '历史输入(未命中)',
-      type: 'line',
-      stack: 'input',
-      data: historyMiss,
-      smooth: false,
-      showSymbol: false,
-      lineStyle: { width: 1, color: TOKEN_SERIES_COLORS.miss },
-      itemStyle: { color: TOKEN_SERIES_COLORS.miss },
-      areaStyle: { color: 'rgba(96, 179, 254, 0.32)' },
-      sampling: 'lttb',
     },
     {
       name: '历史输出',
