@@ -130,9 +130,9 @@
   transform: none;
   transform-origin: top center;
   transition:
-    opacity 150ms ease,
-    transform 150ms cubic-bezier(0.2, 0.8, 0.3, 1),
-    display 150ms allow-discrete;
+    opacity 90ms ease,
+    transform 90ms cubic-bezier(0.2, 0.8, 0.3, 1),
+    display 90ms allow-discrete;
 }
 @starting-style {
   #aus-panel [id$="-dropdown"],
@@ -151,11 +151,43 @@
 #aus-panel .aus-forecast-dropdown[style*="display: none"] {
   pointer-events: none;
 }
+/* 展开态由 src/ui/pill.ts 打标：打开用更慢的 140ms，关闭沿用上面的 90ms */
+#aus-panel [data-aus-drop-open="1"] {
+  transition-duration: 140ms;
+}
 @media (prefers-reduced-motion: reduce) {
   #aus-panel [id$="-dropdown"],
   #aus-panel [id*="-drop-"],
   #aus-panel [data-wallet-dropdown],
   #aus-panel .aus-forecast-dropdown {
+    transition: none;
+  }
+}
+
+/* ── 胶囊触发器：悬停反馈 + 展开箭头旋转（状态由 src/ui/pill.ts 标注）────────────
+   悬停用半透明叠层（background-image）而不是 filter，既不改变布局也不影响块面纯色；
+   箭头只转胶囊里最后一个 svg（钱包价格来源胶囊前面还有供应商品牌图标）。 */
+#aus-panel [data-aus-pill="1"] {
+  transition: background-image 120ms ease, transform 120ms ease;
+}
+#aus-panel [data-aus-pill="1"]:hover {
+  background-image: linear-gradient(rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.05));
+}
+[data-extension="api-usage-stat"][data-ds-theme="dark"] #aus-panel [data-aus-pill="1"]:hover {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.08));
+}
+#aus-panel [data-aus-pill="1"]:active {
+  transform: scale(0.98);
+}
+#aus-panel [data-aus-pill="1"] svg:last-of-type {
+  transition: transform 140ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+#aus-panel [data-aus-pill="1"][data-aus-open="1"] svg:last-of-type {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  #aus-panel [data-aus-pill="1"],
+  #aus-panel [data-aus-pill="1"] svg:last-of-type {
     transition: none;
   }
 }

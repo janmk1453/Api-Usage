@@ -21,6 +21,7 @@ import {
 import { FOUR_OPTIONS, getFourDisplay } from './overview';
 import { historyRecordKey } from '../utils/history-key';
 import { toast } from '../utils/logger';
+import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
 
 type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom' | 'all';
 let currentRange: RangeKey = '30d';
@@ -36,6 +37,31 @@ let endpointPickerOpen = false;
 let selectedCredential: string = STATS_FILTER_ALL;
 let credentialPickerOpen = false;
 let lastStatsHistory: any[] = [];
+
+// 五维筛选跨刷新记忆：时间维度/模型/对话/接入/密钥写入 localStorage，
+// 下次打开面板时还原（记录里已不存在的选项仍由 renderStatsView 的校验剔除）。
+const restoredStatsPrefs = readFilterPrefs().stats;
+if (restoredStatsPrefs.range) currentRange = restoredStatsPrefs.range;
+if (typeof restoredStatsPrefs.customStart === 'string') customStart = restoredStatsPrefs.customStart;
+if (typeof restoredStatsPrefs.customEnd === 'string') customEnd = restoredStatsPrefs.customEnd;
+if (restoredStatsPrefs.models) selectedModels = restoredStatsPrefs.models.slice();
+if (restoredStatsPrefs.chat) selectedChat = restoredStatsPrefs.chat;
+if (restoredStatsPrefs.endpoint) selectedEndpoint = restoredStatsPrefs.endpoint;
+if (restoredStatsPrefs.credential) selectedCredential = restoredStatsPrefs.credential;
+
+function persistStatsFilters() {
+  writeFilterPrefs({
+    stats: {
+      range: currentRange,
+      customStart,
+      customEnd,
+      models: selectedModels.slice(),
+      chat: selectedChat,
+      endpoint: selectedEndpoint,
+      credential: selectedCredential,
+    },
+  });
+}
 
 // 模型汇总表排序：点击表头（除模型外）正序/倒序切换。
 // 表头交互与箭头指示统一由 sort-header 提供（与概览「按对话统计」同一份实现）。
@@ -967,6 +993,8 @@ export async function renderStatsView() {
   } else {
     try { const { log } = await import('../utils/logger'); log.debug('stats 隐藏，跳过图表初始化'); } catch {}
   }
+  // 本页五维筛选是纯展示偏好，每次渲染后落盘（含校验剔除后的值），供下次打开还原
+  persistStatsFilters();
 }
 
 // 统计页 4 小块（响应时间+模型双维度筛选）

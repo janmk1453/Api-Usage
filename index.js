@@ -5343,10 +5343,10 @@ function rangeTip(entries) {
 * 这样改其中一张图不会覆盖另一张图已保存的配置。
 */
 var CHART_PREFS_KEY = "aus_stats_chart_prefs_v1";
-function isPlainObject(value) {
+function isPlainObject$1(value) {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function storage() {
+function storage$1() {
 	try {
 		const store = globalThis.localStorage;
 		return store && typeof store.getItem === "function" && typeof store.setItem === "function" ? store : null;
@@ -5356,21 +5356,21 @@ function storage() {
 }
 function normalizeExtra(value) {
 	const out = {};
-	if (!isPlainObject(value)) return out;
-	for (const [id, section] of Object.entries(value)) if (isPlainObject(section)) out[id] = section;
+	if (!isPlainObject$1(value)) return out;
+	for (const [id, section] of Object.entries(value)) if (isPlainObject$1(section)) out[id] = section;
 	return out;
 }
 /** 读取全部图表配置；损坏数据或不可用存储统一回退为空对象（调用方按默认值处理） */
 function readChartPrefs() {
-	const store = storage();
+	const store = storage$1();
 	if (store) try {
 		const raw = store.getItem(CHART_PREFS_KEY);
 		if (raw) {
 			const parsed = JSON.parse(raw);
-			if (isPlainObject(parsed)) return {
-				main: isPlainObject(parsed.main) ? parsed.main : {},
+			if (isPlainObject$1(parsed)) return {
+				main: isPlainObject$1(parsed.main) ? parsed.main : {},
 				extra: normalizeExtra(parsed.extra),
-				pie: isPlainObject(parsed.pie) ? parsed.pie : {}
+				pie: isPlainObject$1(parsed.pie) ? parsed.pie : {}
 			};
 		}
 	} catch {}
@@ -5382,7 +5382,7 @@ function readChartPrefs() {
 }
 /** 按块合并写入（只覆盖 patch 里出现的字段与图表，其余保持不变） */
 function writeChartPrefs(patch) {
-	const store = storage();
+	const store = storage$1();
 	if (!store) return;
 	try {
 		const current = readChartPrefs();
@@ -5398,7 +5398,7 @@ function writeChartPrefs(patch) {
 			}
 		};
 		for (const [id, section] of Object.entries(patch.extra || {})) {
-			if (!isPlainObject(section)) continue;
+			if (!isPlainObject$1(section)) continue;
 			next.extra[id] = {
 				...next.extra[id] || {},
 				...section
@@ -7217,6 +7217,138 @@ function renderXDrop(id) {
 	});
 }
 //#endregion
+//#region src/ui/filter-prefs.ts
+/**
+* 统计页 / 历史记录页筛选状态的持久化（时间维度、模型、对话、接入类型、API 密钥）。
+*
+* 为什么放 localStorage 而不是 settings：与 `chart-prefs.ts`、`aus_forecast_prefs_v1`
+* 同一定位——纯展示偏好，不进导出、不参与 WebDAV 同步、不污染 `extensionSettings`。
+* 读写全部包在 try/catch 内，宿主禁用存储或隐私模式时静默退化为内存态，
+* 页面行为退回到「每次打开都是默认筛选」，不影响功能可用性。
+*
+* 只做「整段读、按分片合并写」：stats 与 history 各自一片，
+* 这样改统计页筛选不会覆盖历史页已保存的筛选。
+*/
+var FILTER_PREFS_KEY = "aus_filter_prefs_v1";
+var STATS_RANGE_KEYS = [
+	"today",
+	"yesterday",
+	"7d",
+	"30d",
+	"month",
+	"lastMonth",
+	"custom",
+	"all"
+];
+var DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+var HISTORY_KEYS = [
+	"model",
+	"chat",
+	"endpoint",
+	"credential"
+];
+function isPlainObject(value) {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function storage() {
+	try {
+		const store = globalThis.localStorage;
+		return store && typeof store.getItem === "function" && typeof store.setItem === "function" ? store : null;
+	} catch {
+		return null;
+	}
+}
+/** 时间维度白名单校验；非法值返回 undefined（调用方保留默认值） */
+function normalizeRange(value) {
+	return typeof value === "string" && STATS_RANGE_KEYS.includes(value) ? value : void 0;
+}
+/** 自定义日期校验：空串合法（未填写），非空必须 YYYY-MM-DD */
+function normalizeDate(value) {
+	if (typeof value !== "string") return void 0;
+	if (value === "") return "";
+	return DATE_RE.test(value) ? value : void 0;
+}
+function normalizeText(value) {
+	return typeof value === "string" && value ? value : void 0;
+}
+function normalizeModels(value) {
+	if (!Array.isArray(value)) return void 0;
+	const out = [];
+	for (const item of value) {
+		if (typeof item !== "string" || !item) continue;
+		if (!out.includes(item)) out.push(item);
+	}
+	return out;
+}
+function normalizeStatsPrefs(value) {
+	const out = {};
+	if (!isPlainObject(value)) return out;
+	const range = normalizeRange(value.range);
+	if (range) out.range = range;
+	const start = normalizeDate(value.customStart);
+	if (start !== void 0) out.customStart = start;
+	const end = normalizeDate(value.customEnd);
+	if (end !== void 0) out.customEnd = end;
+	const models = normalizeModels(value.models);
+	if (models) out.models = models;
+	const chat = normalizeText(value.chat);
+	if (chat) out.chat = chat;
+	const endpoint = normalizeText(value.endpoint);
+	if (endpoint) out.endpoint = endpoint;
+	const credential = normalizeText(value.credential);
+	if (credential) out.credential = credential;
+	return out;
+}
+function normalizeHistoryPrefs(value) {
+	const out = {};
+	if (!isPlainObject(value)) return out;
+	for (const key of HISTORY_KEYS) {
+		const text = normalizeText(value[key]);
+		if (text) out[key] = text;
+	}
+	return out;
+}
+/** 读取全部筛选偏好；损坏数据或不可用存储统一回退为空对象（调用方按默认值处理） */
+function readFilterPrefs() {
+	const store = storage();
+	if (store) try {
+		const raw = store.getItem(FILTER_PREFS_KEY);
+		if (raw) {
+			const parsed = JSON.parse(raw);
+			if (isPlainObject(parsed)) return {
+				stats: normalizeStatsPrefs(parsed.stats),
+				history: normalizeHistoryPrefs(parsed.history)
+			};
+		}
+	} catch {}
+	return {
+		stats: {},
+		history: {}
+	};
+}
+/** 按分片合并写入（只覆盖 patch 里出现的字段与分片，其余保持不变；内容无变化时跳过写入） */
+function writeFilterPrefs(patch) {
+	const store = storage();
+	if (!store) return;
+	try {
+		const raw = store.getItem(FILTER_PREFS_KEY);
+		const current = readFilterPrefs();
+		const next = {
+			stats: {
+				...current.stats,
+				...normalizeStatsPrefs(patch.stats)
+			},
+			history: {
+				...current.history,
+				...normalizeHistoryPrefs(patch.history)
+			}
+		};
+		const serialized = JSON.stringify(next);
+		if (raw === serialized) return;
+		store.setItem(FILTER_PREFS_KEY, serialized);
+	} catch {}
+}
+//#endregion
 //#region src/ui/stats-view.ts
 var currentRange = "30d";
 var customStart = "";
@@ -7231,6 +7363,25 @@ var endpointPickerOpen = false;
 var selectedCredential = STATS_FILTER_ALL;
 var credentialPickerOpen = false;
 var lastStatsHistory = [];
+var restoredStatsPrefs = readFilterPrefs().stats;
+if (restoredStatsPrefs.range) currentRange = restoredStatsPrefs.range;
+if (typeof restoredStatsPrefs.customStart === "string") customStart = restoredStatsPrefs.customStart;
+if (typeof restoredStatsPrefs.customEnd === "string") customEnd = restoredStatsPrefs.customEnd;
+if (restoredStatsPrefs.models) selectedModels = restoredStatsPrefs.models.slice();
+if (restoredStatsPrefs.chat) selectedChat = restoredStatsPrefs.chat;
+if (restoredStatsPrefs.endpoint) selectedEndpoint = restoredStatsPrefs.endpoint;
+if (restoredStatsPrefs.credential) selectedCredential = restoredStatsPrefs.credential;
+function persistStatsFilters() {
+	writeFilterPrefs({ stats: {
+		range: currentRange,
+		customStart,
+		customEnd,
+		models: selectedModels.slice(),
+		chat: selectedChat,
+		endpoint: selectedEndpoint,
+		credential: selectedCredential
+	} });
+}
 var summarySort = {
 	key: null,
 	dir: "desc"
@@ -8394,6 +8545,7 @@ async function renderStatsView() {
 		const { log } = await import("./logger-8RGXnvfI.js").then((n) => n.n);
 		log.debug("stats 隐藏，跳过图表初始化");
 	} catch {}
+	persistStatsFilters();
 }
 function ensureStatsFour() {
 	const def = [
@@ -11886,7 +12038,9 @@ var CHANGELOG = [{
 			"优化深色模式显示效果：页面更暗、块面更亮，块内正文与次要文字亮度提升，块内容的可读性明显改善",
 			"深色模式下的选中态、边框、语义色（绿/红/黄）同步提亮，图表坐标轴与悬浮窗跟随新配色",
 			"顶栏底色与页面背景统一，不再比内容区更亮，切换页面时视觉更连贯",
-			"用量统计页的图表设置会被记住：自定义与扩展图表的 X/Y 轴、展示方式、轴标签在刷新后保持不变，不用每次重配"
+			"用量统计页的图表设置会被记住：自定义与扩展图表的 X/Y 轴、展示方式、轴标签在刷新后保持不变，不用每次重配",
+			"用量统计页与历史记录页的筛选条件会被记住：时间维度（含「全部」与自定义日期）、模型、对话、接入类型与 API 密钥刷新后保持上次选择，不会自动回到默认",
+			"所有下拉胶囊悬停时轻微提亮、展开时箭头翻转，下拉关闭更快更跟手"
 		]
 	}]
 }, {
@@ -12000,6 +12154,141 @@ function bindChangelog(doc) {
 		const caret = head.querySelector(".aus-changelog-caret");
 		if (caret) caret.innerHTML = icon(open ? "chevron-down" : "chevron-up", 16);
 	});
+}
+//#endregion
+//#region src/ui/pill.ts
+/**
+* 全站胶囊下拉的「打开状态」标记。
+*
+* 面板里所有下拉胶囊的开关逻辑都是手写 inline `style.display`（`block` / `none`），
+* 没有统一的状态类。为了让胶囊能在展开时把箭头转 180°、并在悬停时有一点反馈，
+* 这里用 MutationObserver 监听 `#aus-panel` 内的 style 变化，按「下拉当前是否可见」
+* 给对应触发器打 `data-aus-open`，视觉全部交给 `style.css`，不干预任何开关逻辑。
+*
+* 配对规则（与既有命名约定一致，无需逐个登记）：
+*  - `aus-xxx-btn`      ↔ `aus-xxx-dropdown`（如 aus-range-btn / aus-chart-y-btn）
+*  - `aus-xxx-btn-<后缀>` ↔ `aus-xxx-drop-<后缀>`（如 aus-four-btn-0 / aus-extra-y-btn-token）
+*  - 钱包卡触发器 `[data-wallet-<kind>-btn][data-wallet-id]` ↔ `aus-wallet-<kind>-drop-<钱包 id>`
+*
+* 各页 innerHTML 重绘会换掉按钮节点，所以扫描是幂等的：每次变化都重新标注一遍，
+* 找不到下拉的按钮直接跳过，不影响任何现有交互。
+*/
+var PILL_ATTR = "data-aus-pill";
+var OPEN_ATTR = "data-aus-open";
+var DROP_OPEN_ATTR = "data-aus-drop-open";
+var WALLET_KINDS = [
+	"credential",
+	"catalog",
+	"adapter",
+	"currency"
+];
+var TRIGGER_SELECTOR = [
+	"[id$=\"-btn\"]",
+	"[id*=\"-btn-\"]",
+	...WALLET_KINDS.map((kind) => `[data-wallet-${kind}-btn]`)
+].join(", ");
+var observer = null;
+var observedPanel = null;
+function dropdownFor(button, doc) {
+	const id = button.id || "";
+	if (id.includes("-btn")) {
+		const candidates = [id.replace("-btn", "-dropdown"), id.replace("-btn", "-drop")];
+		for (const candidate of candidates) {
+			const el = doc.getElementById(candidate);
+			if (el) return el;
+		}
+	}
+	for (const kind of WALLET_KINDS) {
+		if (!button.hasAttribute(`data-wallet-${kind}-btn`)) continue;
+		const walletId = button.getAttribute("data-wallet-id") || "";
+		const el = doc.getElementById(`aus-wallet-${kind}-drop-${walletId}`);
+		if (el) return el;
+	}
+	return null;
+}
+/** 下拉是否处于展开状态：先看 inline display（绝大多数），再看计算样式（趋势预测写在 class 里） */
+function isOpen(drop) {
+	const inline = drop.style.display;
+	if (inline === "none") return false;
+	if (inline) return true;
+	try {
+		const view = drop.ownerDocument?.defaultView;
+		if (!view) return false;
+		return view.getComputedStyle(drop).display !== "none";
+	} catch {
+		return false;
+	}
+}
+function syncPillState() {
+	const panel = observedPanel;
+	if (!panel || !panel.isConnected) return;
+	const doc = panel.ownerDocument;
+	const buttons = Array.from(panel.querySelectorAll(TRIGGER_SELECTOR));
+	for (const button of buttons) {
+		const drop = dropdownFor(button, doc);
+		if (!drop) {
+			if (button.hasAttribute(PILL_ATTR)) {
+				button.removeAttribute(PILL_ATTR);
+				button.removeAttribute(OPEN_ATTR);
+			}
+			continue;
+		}
+		if (button.getAttribute(PILL_ATTR) !== "1") button.setAttribute(PILL_ATTR, "1");
+		if (isOpen(drop)) {
+			if (button.getAttribute(OPEN_ATTR) !== "1") button.setAttribute(OPEN_ATTR, "1");
+			if (drop.getAttribute(DROP_OPEN_ATTR) !== "1") drop.setAttribute(DROP_OPEN_ATTR, "1");
+		} else {
+			if (button.hasAttribute(OPEN_ATTR)) button.removeAttribute(OPEN_ATTR);
+			if (drop.hasAttribute(DROP_OPEN_ATTR)) drop.removeAttribute(DROP_OPEN_ATTR);
+		}
+	}
+}
+/** 绑定面板（幂等）：同一 panel 重复调用只补一次扫描，换面板则重建监听 */
+function initPillState(doc) {
+	const panel = doc.getElementById("aus-panel");
+	if (!panel) return;
+	if (observer && observedPanel === panel) {
+		syncPillState();
+		return;
+	}
+	disposePillState();
+	observedPanel = panel;
+	const View = doc.defaultView || window;
+	if (!View || typeof View.MutationObserver !== "function") return;
+	try {
+		const local = new View.MutationObserver((records) => {
+			let need = false;
+			for (const record of records) {
+				if (record.type === "childList") {
+					need = true;
+					break;
+				}
+				const target = record.target;
+				if (target && target !== panel) {
+					need = true;
+					break;
+				}
+			}
+			if (need) syncPillState();
+		});
+		local.observe(panel, {
+			subtree: true,
+			childList: true,
+			attributes: true,
+			attributeFilter: ["style"]
+		});
+		observer = local;
+	} catch {
+		observer = null;
+	}
+	syncPillState();
+}
+function disposePillState() {
+	try {
+		observer?.disconnect();
+	} catch {}
+	observer = null;
+	observedPanel = null;
 }
 //#endregion
 //#region src/ui/panel.ts
@@ -12134,6 +12423,11 @@ var historyFilters = {
 	endpoint: STATS_FILTER_ALL,
 	credential: STATS_FILTER_ALL
 };
+var restoredHistoryPrefs = readFilterPrefs().history;
+if (restoredHistoryPrefs.model) historyFilters.model = restoredHistoryPrefs.model;
+if (restoredHistoryPrefs.chat) historyFilters.chat = restoredHistoryPrefs.chat;
+if (restoredHistoryPrefs.endpoint) historyFilters.endpoint = restoredHistoryPrefs.endpoint;
+if (restoredHistoryPrefs.credential) historyFilters.credential = restoredHistoryPrefs.credential;
 var historyFilterBase = [];
 try {
 	on(DataEvents.HISTORY_ADDED, invalidateHistoryCache);
@@ -12262,6 +12556,12 @@ function renderHistoryFilters(history) {
 		closeHistoryFilterDropdowns();
 		renderHistory(doc, getSelectedSave());
 	});
+	writeFilterPrefs({ history: {
+		model: historyFilters.model,
+		chat: historyFilters.chat,
+		endpoint: historyFilters.endpoint,
+		credential: historyFilters.credential
+	} });
 }
 function filteredHistoryForDisplay(history) {
 	return filterStatsHistory(history, {
@@ -12686,6 +12986,9 @@ function renderHistory(doc, s) {
 function bindPanel(doc) {
 	const q = doc.getElementById("aus-btn-query-balance");
 	if (q) q.onclick = () => queryBalance();
+	try {
+		initPillState(doc);
+	} catch {}
 }
 function switchView(view) {
 	const prevView = currentView;

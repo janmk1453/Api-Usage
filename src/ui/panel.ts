@@ -15,6 +15,8 @@ import { renderForecastView, initForecastView } from './forecast-view';
 import { disposeForecastCharts } from './forecast-chart';
 import { renderWalletView } from './wallet-view';
 import { bindChangelog, renderChangelogCard } from './changelog';
+import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
+import { initPillState } from './pill';
 import { applyTheme } from '../services/theme';
 import { DataEvents, on as onDataEvent } from '../data/events';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
@@ -141,6 +143,14 @@ const historyFilters = {
   endpoint: STATS_FILTER_ALL,
   credential: STATS_FILTER_ALL,
 };
+
+// 四维筛选跨刷新记忆（与统计页共用 aus_filter_prefs_v1，分片存储互不覆盖）；
+// 记录里已不存在的选项仍由 renderHistoryFilters 的校验剔除。
+const restoredHistoryPrefs = readFilterPrefs().history;
+if (restoredHistoryPrefs.model) historyFilters.model = restoredHistoryPrefs.model;
+if (restoredHistoryPrefs.chat) historyFilters.chat = restoredHistoryPrefs.chat;
+if (restoredHistoryPrefs.endpoint) historyFilters.endpoint = restoredHistoryPrefs.endpoint;
+if (restoredHistoryPrefs.credential) historyFilters.credential = restoredHistoryPrefs.credential;
 let historyFilterBase: any[] = [];
 try {
   onDataEvent(DataEvents.HISTORY_ADDED, invalidateHistoryCache);
@@ -289,6 +299,15 @@ function renderHistoryFilters(history: any[]) {
     historyPage = 1;
     closeHistoryFilterDropdowns();
     renderHistory(doc, getSelectedSave());
+  });
+  // 纯展示偏好：每次渲染筛选器后落盘（含校验剔除后的值），供下次打开还原
+  writeFilterPrefs({
+    history: {
+      model: historyFilters.model,
+      chat: historyFilters.chat,
+      endpoint: historyFilters.endpoint,
+      credential: historyFilters.credential,
+    },
   });
 }
 
@@ -665,6 +684,8 @@ function renderHistory(doc: Document, s: any) {
 export function bindPanel(doc: Document) {
   const q = doc.getElementById('aus-btn-query-balance') as HTMLButtonElement | null;
   if (q) q.onclick = () => queryBalance();
+  // 胶囊下拉的打开状态（箭头旋转 / 开合时长）统一由 pill.ts 跟随 DOM 变化标注
+  try { initPillState(doc); } catch {}
 }
 
 function switchView(view: typeof currentView) {
