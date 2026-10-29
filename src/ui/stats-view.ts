@@ -566,6 +566,8 @@ function bindChartSelectors() {
     if (chartYOpen && !t.closest('#aus-chart-y-dropdown') && !t.closest('#aus-chart-y-btn')) { chartYOpen=false; const d=doc.getElementById('aus-chart-y-dropdown'); if(d) d.style.display='none'; }
     if (chartXOpen && !t.closest('#aus-chart-x-dropdown') && !t.closest('#aus-chart-x-btn')) { chartXOpen=false; const d=doc.getElementById('aus-chart-x-dropdown'); if(d) d.style.display='none'; }
   });
+  // 初始化即按已保存配置刷新胶囊文案（Y 项数、X 维度），刷新后不必点开下拉才对
+  renderChartSelectors();
 }
 
 // 可配置图表（Y多选 X单选，双轴）

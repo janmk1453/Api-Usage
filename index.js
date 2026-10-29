@@ -5330,6 +5330,84 @@ function rangeTip(entries) {
 	return chartDateTime(min) + " ~ " + chartDateTime(max);
 }
 //#endregion
+//#region src/ui/chart-prefs.ts
+/**
+* 用量统计页图表配置的持久化（Y 轴多选、X 轴维度、展示方式、轴标签、占比模式）。
+*
+* 为什么放 localStorage 而不是 settings：这些是纯展示偏好，
+* 与趋势预测的 aus_forecast_prefs_v1 同一定位——不进导出、不参与 WebDAV 同步、
+* 不污染 `extensionSettings`。读写全部包在 try/catch 内，
+* 宿主禁用存储或隐私模式时静默退化为内存态，不影响图表本身。
+*
+* 只做「整段读、按块合并写」：main 是自定义图表，extra 按图表 id 分片，
+* 这样改其中一张图不会覆盖另一张图已保存的配置。
+*/
+var CHART_PREFS_KEY = "aus_stats_chart_prefs_v1";
+function isPlainObject(value) {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function storage() {
+	try {
+		const store = globalThis.localStorage;
+		return store && typeof store.getItem === "function" && typeof store.setItem === "function" ? store : null;
+	} catch {
+		return null;
+	}
+}
+function normalizeExtra(value) {
+	const out = {};
+	if (!isPlainObject(value)) return out;
+	for (const [id, section] of Object.entries(value)) if (isPlainObject(section)) out[id] = section;
+	return out;
+}
+/** 读取全部图表配置；损坏数据或不可用存储统一回退为空对象（调用方按默认值处理） */
+function readChartPrefs() {
+	const store = storage();
+	if (store) try {
+		const raw = store.getItem(CHART_PREFS_KEY);
+		if (raw) {
+			const parsed = JSON.parse(raw);
+			if (isPlainObject(parsed)) return {
+				main: isPlainObject(parsed.main) ? parsed.main : {},
+				extra: normalizeExtra(parsed.extra),
+				pie: isPlainObject(parsed.pie) ? parsed.pie : {}
+			};
+		}
+	} catch {}
+	return {
+		main: {},
+		extra: {},
+		pie: {}
+	};
+}
+/** 按块合并写入（只覆盖 patch 里出现的字段与图表，其余保持不变） */
+function writeChartPrefs(patch) {
+	const store = storage();
+	if (!store) return;
+	try {
+		const current = readChartPrefs();
+		const next = {
+			main: {
+				...current.main,
+				...patch.main || {}
+			},
+			extra: { ...current.extra },
+			pie: {
+				...current.pie,
+				...patch.pie || {}
+			}
+		};
+		for (const [id, section] of Object.entries(patch.extra || {})) {
+			if (!isPlainObject(section)) continue;
+			next.extra[id] = {
+				...next.extra[id] || {},
+				...section
+			};
+		}
+		store.setItem(CHART_PREFS_KEY, JSON.stringify(next));
+	} catch {}
+}
+//#endregion
 //#region src/ui/chart-config.ts
 var Y_OPTIONS = [
 	{
@@ -5542,6 +5620,25 @@ var ySelected = new Set(DEFAULT_Y_KEYS);
 var axisLabelMode = DEFAULT_AXIS_LABEL_MODE;
 var xSelected = DEFAULT_X_KEY;
 var chartType = DEFAULT_CHART_TYPE;
+/** 从 localStorage 恢复上次的配置（刷新后 Y/X/展示方式/轴标签保持不变）；非法值逐项丢弃回退默认 */
+function restoreChartPrefs() {
+	const { main } = readChartPrefs();
+	const y = Array.isArray(main.y) ? main.y.filter((k) => Y_OPTIONS.some((o) => o.key === k)) : [];
+	if (y.length) ySelected = new Set(y);
+	if (X_OPTIONS.some((o) => o.key === main.x)) xSelected = main.x;
+	if (main.type === "bar" || main.type === "line" || main.type === "area" || main.type === "auto") chartType = main.type;
+	if (main.axisLabel === "all" || main.axisLabel === "hide" || main.axisLabel === "auto") axisLabelMode = main.axisLabel;
+}
+restoreChartPrefs();
+/** 任一 setter 都要落盘，保证刷新后与界面一致 */
+function persistChartPrefs() {
+	writeChartPrefs({ main: {
+		y: Array.from(ySelected),
+		x: xSelected,
+		type: chartType,
+		axisLabel: axisLabelMode
+	} });
+}
 function getYSelected() {
 	return Array.from(ySelected);
 }
@@ -5553,20 +5650,24 @@ function getChartType() {
 }
 function setXSelected(k) {
 	xSelected = k;
+	persistChartPrefs();
 }
 function setChartType(t) {
 	chartType = t === "bar" || t === "line" || t === "area" ? t : "auto";
+	persistChartPrefs();
 }
 function getAxisLabelMode() {
 	return axisLabelMode;
 }
 function setAxisLabelMode(m) {
 	axisLabelMode = m === "all" || m === "hide" ? m : "auto";
+	persistChartPrefs();
 }
 function toggleY(key) {
 	if (ySelected.has(key)) {
 		if (ySelected.size > 1) ySelected.delete(key);
 	} else ySelected.add(key);
+	persistChartPrefs();
 }
 function toHourKey(ts) {
 	const d = new Date(ts);
@@ -6099,6 +6200,34 @@ var state$1 = {
 		pieMode: "token"
 	}
 };
+/** 从 localStorage 恢复各图上次的 Y/X 与占比模式（刷新后保持不变）；非法键逐项丢弃回退默认 */
+function restoreExtraPrefs() {
+	const { extra, pie } = readChartPrefs();
+	for (const id of Object.keys(state$1)) {
+		const saved = extra[id];
+		if (!saved) continue;
+		if (Array.isArray(saved.y)) {
+			const allowed = CHART_DEFS[id].yOpts.map((o) => o.key);
+			const y = saved.y.filter((k) => typeof k === "string" && allowed.includes(k));
+			if (y.length) state$1[id].y = new Set(y);
+		}
+		const options = id === "req" ? X_OPTIONS_WITHOUT_ROUND : X_OPTIONS;
+		if (typeof saved.x === "string" && options.some((o) => o.key === saved.x)) state$1[id].x = saved.x;
+	}
+	if (pie.mode === "count" || pie.mode === "token") state$1.pie.pieMode = pie.mode;
+}
+restoreExtraPrefs();
+/** 改动即落盘：按图表 id 分片写入，不会覆盖其他图已保存的配置 */
+function persistExtraPrefs(id) {
+	if (id === "pie") {
+		writeChartPrefs({ pie: { mode: state$1.pie.pieMode } });
+		return;
+	}
+	writeChartPrefs({ extra: { [id]: {
+		y: Array.from(state$1[id].y),
+		x: state$1[id].x
+	} } });
+}
 function getDoc$8() {
 	return window.parent?.document ?? document;
 }
@@ -6645,6 +6774,11 @@ function initExtraCharts() {
 	const doc = getDoc$8();
 	for (const id of Object.keys(CHART_DEFS)) {
 		if (!CHART_DEFS[id].hasX) continue;
+		renderExtraY(id);
+		renderExtraX(id);
+	}
+	for (const id of Object.keys(CHART_DEFS)) {
+		if (!CHART_DEFS[id].hasX) continue;
 		const yBtn = doc.getElementById(`aus-extra-y-${id}`);
 		const yDrop = doc.getElementById(`aus-extra-y-drop-${id}`);
 		const xBtn = doc.getElementById(`aus-extra-x-${id}`);
@@ -6667,11 +6801,15 @@ function initExtraCharts() {
 		};
 	}
 	const pieToggle = doc.getElementById("aus-pie-toggle");
-	if (pieToggle) pieToggle.onclick = () => {
-		state$1.pie.pieMode = state$1.pie.pieMode === "token" ? "count" : "token";
+	if (pieToggle) {
 		pieToggle.textContent = state$1.pie.pieMode === "token" ? "Token" : "次数";
-		renderOne$1("pie", lastFiltered$1);
-	};
+		pieToggle.onclick = () => {
+			state$1.pie.pieMode = state$1.pie.pieMode === "token" ? "count" : "token";
+			pieToggle.textContent = state$1.pie.pieMode === "token" ? "Token" : "次数";
+			persistExtraPrefs("pie");
+			renderOne$1("pie", lastFiltered$1);
+		};
+	}
 	doc.addEventListener("click", (e) => {
 		const t = e.target;
 		for (const id of Object.keys(CHART_DEFS)) {
@@ -6703,6 +6841,7 @@ function renderExtraY(id) {
 			if (el.checked) state$1[cid].y.add(k);
 			else if (state$1[cid].y.size > 1) state$1[cid].y.delete(k);
 			else el.checked = true;
+			persistExtraPrefs(cid);
 			renderExtraY(cid);
 			renderOne$1(cid, lastFiltered$1);
 		};
@@ -6724,6 +6863,7 @@ function renderExtraX(id) {
 		el.onclick = () => {
 			const k = el.getAttribute("data-x"), cid = el.getAttribute("data-chart");
 			state$1[cid].x = k;
+			persistExtraPrefs(cid);
 			drop.style.display = "none";
 			renderExtraX(cid);
 			renderOne$1(cid, lastFiltered$1);
@@ -7704,6 +7844,7 @@ function bindChartSelectors() {
 			if (d) d.style.display = "none";
 		}
 	});
+	renderChartSelectors();
 }
 var chart = null;
 var rangeZoom = null;
@@ -11744,7 +11885,8 @@ var CHANGELOG = [{
 		items: [
 			"优化深色模式显示效果：页面更暗、块面更亮，块内正文与次要文字亮度提升，块内容的可读性明显改善",
 			"深色模式下的选中态、边框、语义色（绿/红/黄）同步提亮，图表坐标轴与悬浮窗跟随新配色",
-			"顶栏底色与页面背景统一，不再比内容区更亮，切换页面时视觉更连贯"
+			"顶栏底色与页面背景统一，不再比内容区更亮，切换页面时视觉更连贯",
+			"用量统计页的图表设置会被记住：自定义与扩展图表的 X/Y 轴、展示方式、轴标签在刷新后保持不变，不用每次重配"
 		]
 	}]
 }, {
@@ -12782,7 +12924,7 @@ function createPanel() {
                 <tbody id="aus-summary-tbody"><tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
               </table>
             </div>
-            <div class="ds-card" style="margin-top:12px;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">自定义图表</span><div style="display:flex;gap:8px;position:relative;"><div id="aus-chart-y-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span style="color:var(--ds-text-2);">Y</span><span id="aus-chart-y-label" style="font-weight:600;color:var(--ds-text);">总费用</span>${icon("chevron-down", 14)}</div><div id="aus-chart-x-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span style="color:var(--ds-text-2);">X</span><span id="aus-chart-x-label" style="font-weight:600;color:var(--ds-text);">每日</span>${icon("chevron-down", 14)}</div><div id="aus-chart-y-dropdown" style="display:none;position:absolute;top:34px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;"></div><div id="aus-chart-x-dropdown" style="display:none;position:absolute;top:34px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:140px;"></div></div></div><div id="aus-stats-chart" style="height:300px;"></div></div>
+            <div class="ds-card" style="margin-top:12px;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">自定义图表</span><div style="display:flex;gap:8px;position:relative;"><div id="aus-chart-y-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span style="color:var(--ds-text-2);">Y</span><span id="aus-chart-y-label" style="font-weight:600;color:var(--ds-text);">5 项</span>${icon("chevron-down", 14)}</div><div id="aus-chart-x-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span style="color:var(--ds-text-2);">X</span><span id="aus-chart-x-label" style="font-weight:600;color:var(--ds-text);">轮次</span>${icon("chevron-down", 14)}</div><div id="aus-chart-y-dropdown" style="display:none;position:absolute;top:34px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;"></div><div id="aus-chart-x-dropdown" style="display:none;position:absolute;top:34px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:140px;"></div></div></div><div id="aus-stats-chart" style="height:300px;"></div></div>
             <div id="aus-extra-charts" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px;">
               <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">Token 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-y-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-y-label-token">3 项</span>${icon("chevron-down", 14)}</div><div id="aus-extra-x-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-token">轮次</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-y-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:180px;max-height:200px;overflow:auto;"></div><div id="aus-extra-x-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-token" style="height:220px;"></div></div>
               <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">费用 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-y-cost" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-y-label-cost">1 项</span>${icon("chevron-down", 14)}</div><div id="aus-extra-x-cost" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-cost">轮次</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-y-drop-cost" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:180px;max-height:200px;overflow:auto;"></div><div id="aus-extra-x-drop-cost" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-cost" style="height:220px;"></div></div>

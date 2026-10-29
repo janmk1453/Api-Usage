@@ -5,6 +5,7 @@ import { BAR_SQUARE, barTopRadius, estimateBarWidth } from './chart-bar';
 import { Y_OPTIONS, X_OPTIONS, X_OPTIONS_WITHOUT_ROUND, getYSelected as getMainY, getXSelected as getMainX } from './chart-config';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 import { attachChartZoom, detachChartZoom, getChartRange } from './range-zoom';
+import { readChartPrefs, writeChartPrefs } from './chart-prefs';
 
 type ChartId = 'token'|'cost'|'hit'|'req'|'dur'|'pie';
 type XKey = 'round'|'hour'|'day'|'week'|'month';
@@ -27,6 +28,30 @@ const state: Record<ChartId, {y:Set<string>,x:XKey,pieMode:'token'|'count'}> = {
   dur: { y: new Set(['duration','rate']), x:'round', pieMode:'token' },
   pie: { y: new Set([]), x:'day', pieMode:'token' },
 };
+
+/** 从 localStorage 恢复各图上次的 Y/X 与占比模式（刷新后保持不变）；非法键逐项丢弃回退默认 */
+function restoreExtraPrefs(): void {
+  const { extra, pie } = readChartPrefs();
+  for (const id of Object.keys(state) as ChartId[]) {
+    const saved = extra[id];
+    if (!saved) continue;
+    if (Array.isArray(saved.y)) {
+      const allowed = CHART_DEFS[id].yOpts.map(o => o.key);
+      const y = (saved.y as unknown[]).filter((k): k is string => typeof k === 'string' && allowed.includes(k));
+      if (y.length) state[id].y = new Set(y);
+    }
+    const options = id === 'req' ? X_OPTIONS_WITHOUT_ROUND : X_OPTIONS;
+    if (typeof saved.x === 'string' && options.some(o => o.key === saved.x)) state[id].x = saved.x as XKey;
+  }
+  if (pie.mode === 'count' || pie.mode === 'token') state.pie.pieMode = pie.mode;
+}
+restoreExtraPrefs();
+
+/** 改动即落盘：按图表 id 分片写入，不会覆盖其他图已保存的配置 */
+function persistExtraPrefs(id: ChartId): void {
+  if (id === 'pie') { writeChartPrefs({ pie: { mode: state.pie.pieMode } }); return; }
+  writeChartPrefs({ extra: { [id]: { y: Array.from(state[id].y), x: state[id].x } } });
+}
 
 function getDoc(){ return (window.parent as any)?.document ?? document; }
 function themeColor(name: string, fallback: string) {
@@ -348,6 +373,12 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
 
 export function initExtraCharts(){
   const doc=getDoc();
+  // 先把恢复出来的配置画到胶囊上（不依赖用户点开下拉，刷新后文案即为上次选择）
+  for (const id of Object.keys(CHART_DEFS) as ChartId[]){
+    if (!CHART_DEFS[id].hasX) continue;
+    renderExtraY(id);
+    renderExtraX(id);
+  }
   // 绑定每图 Y/X
   for (const id of Object.keys(CHART_DEFS) as ChartId[]){
     if (!CHART_DEFS[id].hasX) continue;
@@ -373,9 +404,11 @@ export function initExtraCharts(){
   // pie 模式切换：复用已过滤的 lastFiltered，避免丢失时间/模型筛选
   const pieToggle = doc.getElementById('aus-pie-toggle');
   if (pieToggle){
+    (pieToggle as any).textContent = state.pie.pieMode==='token' ? 'Token' : '次数';
     pieToggle.onclick = ()=>{
       state.pie.pieMode = state.pie.pieMode==='token'?'count':'token';
       (pieToggle as any).textContent = state.pie.pieMode==='token'?'Token':'次数';
+      persistExtraPrefs('pie');
       renderOne('pie', lastFiltered);
     };
   }
@@ -409,6 +442,7 @@ function renderExtraY(id:ChartId){
     el.onchange=()=>{
       const k=el.getAttribute('data-y'), cid=el.getAttribute('data-chart') as ChartId;
       if (el.checked) state[cid].y.add(k); else { if (state[cid].y.size>1) state[cid].y.delete(k); else el.checked=true; }
+      persistExtraPrefs(cid);
       renderExtraY(cid);
       renderOne(cid, lastFiltered);
     };
@@ -431,6 +465,7 @@ function renderExtraX(id:ChartId){
     el.onclick=()=>{
       const k=el.getAttribute('data-x') as XKey, cid=el.getAttribute('data-chart') as ChartId;
       state[cid].x = k;
+      persistExtraPrefs(cid);
       drop.style.display='none';
       renderExtraX(cid);
       renderOne(cid, lastFiltered);
