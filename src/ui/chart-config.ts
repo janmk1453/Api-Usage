@@ -23,11 +23,18 @@ export type YOption = {
   color: string;
 };
 
+/** Token 三段配色（命中 / 未命中 / 输出，浅 → 深蓝，取自设计稿图例）：全站图表统一引用 */
+export const TOKEN_SERIES_COLORS = {
+  hit: '#A0DCFD',
+  miss: '#60B3FE',
+  output: '#0C70F3',
+} as const;
+
 export const Y_OPTIONS: YOption[] = [
   // Token
-  { key: 'input_hit_token', label: '输入(命中) token', unit: 'tokens', kind: 'token', agg: 'sum', group: 'token', color: '#0BA25E' },
-  { key: 'input_miss_token', label: '输入(未命中) token', unit: 'tokens', kind: 'token', agg: 'sum', group: 'token', color: '#F87171' },
-  { key: 'output_token', label: '输出 token', unit: 'tokens', kind: 'token', agg: 'sum', group: 'token', color: '#6366F1' },
+  { key: 'input_hit_token', label: '输入(命中) token', unit: 'tokens', kind: 'token', agg: 'sum', group: 'token', color: TOKEN_SERIES_COLORS.hit },
+  { key: 'input_miss_token', label: '输入(未命中) token', unit: 'tokens', kind: 'token', agg: 'sum', group: 'token', color: TOKEN_SERIES_COLORS.miss },
+  { key: 'output_token', label: '输出 token', unit: 'tokens', kind: 'token', agg: 'sum', group: 'token', color: TOKEN_SERIES_COLORS.output },
   { key: 'total_token', label: '总 Token', unit: 'tokens', kind: 'token', agg: 'sum', group: 'token', color: '#111827' },
   { key: 'avg_tokens', label: '平均每轮 Token', unit: 'tokens', kind: 'token', agg: 'avg', group: 'token', color: '#0EA5E9' },
   // 费用

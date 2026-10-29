@@ -5409,6 +5409,12 @@ function writeChartPrefs(patch) {
 }
 //#endregion
 //#region src/ui/chart-config.ts
+/** Token 三段配色（命中 / 未命中 / 输出，浅 → 深蓝，取自设计稿图例）：全站图表统一引用 */
+var TOKEN_SERIES_COLORS = {
+	hit: "#A0DCFD",
+	miss: "#60B3FE",
+	output: "#0C70F3"
+};
 var Y_OPTIONS = [
 	{
 		key: "input_hit_token",
@@ -5417,7 +5423,7 @@ var Y_OPTIONS = [
 		kind: "token",
 		agg: "sum",
 		group: "token",
-		color: "#0BA25E"
+		color: TOKEN_SERIES_COLORS.hit
 	},
 	{
 		key: "input_miss_token",
@@ -5426,7 +5432,7 @@ var Y_OPTIONS = [
 		kind: "token",
 		agg: "sum",
 		group: "token",
-		color: "#F87171"
+		color: TOKEN_SERIES_COLORS.miss
 	},
 	{
 		key: "output_token",
@@ -5435,7 +5441,7 @@ var Y_OPTIONS = [
 		kind: "token",
 		agg: "sum",
 		group: "token",
-		color: "#6366F1"
+		color: TOKEN_SERIES_COLORS.output
 	},
 	{
 		key: "total_token",
@@ -9307,10 +9313,10 @@ async function renderMainChart(echarts, options) {
 			showSymbol: false,
 			lineStyle: {
 				width: 1,
-				color: "#0BA25E"
+				color: TOKEN_SERIES_COLORS.hit
 			},
-			itemStyle: { color: "#0BA25E" },
-			areaStyle: { color: "rgba(11, 162, 94, 0.28)" },
+			itemStyle: { color: TOKEN_SERIES_COLORS.hit },
+			areaStyle: { color: "rgba(160, 220, 253, 0.38)" },
 			sampling: "lttb",
 			markLine: markLineData.length ? {
 				silent: true,
@@ -9328,10 +9334,10 @@ async function renderMainChart(echarts, options) {
 			showSymbol: false,
 			lineStyle: {
 				width: 1,
-				color: "#F87171"
+				color: TOKEN_SERIES_COLORS.miss
 			},
-			itemStyle: { color: "#F87171" },
-			areaStyle: { color: "rgba(248, 113, 113, 0.26)" },
+			itemStyle: { color: TOKEN_SERIES_COLORS.miss },
+			areaStyle: { color: "rgba(96, 179, 254, 0.32)" },
 			sampling: "lttb"
 		},
 		{
@@ -9342,9 +9348,9 @@ async function renderMainChart(echarts, options) {
 			showSymbol: false,
 			lineStyle: {
 				width: 1.6,
-				color: "#6366F1"
+				color: TOKEN_SERIES_COLORS.output
 			},
-			itemStyle: { color: "#6366F1" },
+			itemStyle: { color: TOKEN_SERIES_COLORS.output },
 			sampling: "lttb"
 		}
 	];
@@ -9356,10 +9362,10 @@ async function renderMainChart(echarts, options) {
 		showSymbol: false,
 		lineStyle: {
 			width: 1.8,
-			color: "#0BA25E",
+			color: TOKEN_SERIES_COLORS.hit,
 			type: "dashed"
 		},
-		itemStyle: { color: "#0BA25E" }
+		itemStyle: { color: TOKEN_SERIES_COLORS.hit }
 	}, {
 		name: "预测输出",
 		type: "line",
@@ -9368,10 +9374,10 @@ async function renderMainChart(echarts, options) {
 		showSymbol: false,
 		lineStyle: {
 			width: 1.4,
-			color: "#8B5CF6",
+			color: TOKEN_SERIES_COLORS.output,
 			type: "dashed"
 		},
-		itemStyle: { color: "#8B5CF6" }
+		itemStyle: { color: TOKEN_SERIES_COLORS.output }
 	}, {
 		name: "__bandLow",
 		type: "line",
@@ -12041,7 +12047,8 @@ var CHANGELOG = [{
 			"用量统计页的图表设置会被记住：自定义与扩展图表的 X/Y 轴、展示方式、轴标签在刷新后保持不变，不用每次重配",
 			"用量统计页与历史记录页的筛选条件会被记住：时间维度（含「全部」与自定义日期）、模型、对话、接入类型与 API 密钥刷新后保持上次选择，不会自动回到默认",
 			"所有下拉胶囊悬停时轻微提亮、展开时箭头翻转，下拉关闭更快更跟手",
-			"浅色模式下块面底色微调，块、块内白色面板与页面底色的层次更协调"
+			"浅色模式下块面底色微调，块、块内白色面板与页面底色的层次更协调",
+			"图表中「输入（命中缓存）」「输入（未命中缓存）」与「输出」改用同一色系的三档蓝色，三段堆叠柱与折线图配色更统一"
 		]
 	}]
 }, {
