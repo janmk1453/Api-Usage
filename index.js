@@ -6616,7 +6616,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 					fontSize: 12,
 					color: themeColor$3("--ds-text-3", "#9CA3AF")
 				},
-				splitLine: { lineStyle: { color: themeColor$3("--ds-card", "#F6F7F8") } }
+				splitLine: { lineStyle: { color: themeColor$3("--ds-card", "#F5F6F7") } }
 			},
 			dataZoom: labels.length > 1 ? [{
 				type: "inside",
@@ -6673,7 +6673,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 					color: themeColor$3("--ds-text-3", "#9CA3AF"),
 					formatter: (v) => curCur.symbol + Number(v).toFixed(2)
 				},
-				splitLine: { lineStyle: { color: themeColor$3("--ds-card", "#F6F7F8") } }
+				splitLine: { lineStyle: { color: themeColor$3("--ds-card", "#F5F6F7") } }
 			};
 			opts.tooltip = {
 				trigger: "axis",
@@ -6715,7 +6715,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 					fontSize: 12,
 					color: themeColor$3("--ds-text-3", "#9CA3AF")
 				},
-				splitLine: { lineStyle: { color: themeColor$3("--ds-card", "#F6F7F8") } }
+				splitLine: { lineStyle: { color: themeColor$3("--ds-card", "#F5F6F7") } }
 			}, {
 				type: "value",
 				name: "速率 t/s",
@@ -7039,7 +7039,7 @@ async function renderOne(id, filtered) {
 			});
 		}
 		const cBorder = themeColor$2("--ds-border", "#E5E7EB");
-		const cCard = themeColor$2("--ds-card", "#F6F7F8");
+		const cCard = themeColor$2("--ds-card", "#F5F6F7");
 		const cText3 = themeColor$2("--ds-text-3", "#9CA3AF");
 		const cCardInner = themeColor$2("--ds-card-inner", "#FFFFFF");
 		const cText = themeColor$2("--ds-text", "#111827");
@@ -8077,7 +8077,7 @@ async function renderChart(filteredRaw) {
 	const hasPercent = kinds.has("percent");
 	const chartType = getChartType();
 	const cBorder = themeColor$1("--ds-border", "#E5E7EB");
-	const cCard = themeColor$1("--ds-card", "#F6F7F8");
+	const cCard = themeColor$1("--ds-card", "#F5F6F7");
 	const cText3 = themeColor$1("--ds-text-3", "#9CA3AF");
 	const curCur = (() => {
 		try {
@@ -12040,7 +12040,8 @@ var CHANGELOG = [{
 			"顶栏底色与页面背景统一，不再比内容区更亮，切换页面时视觉更连贯",
 			"用量统计页的图表设置会被记住：自定义与扩展图表的 X/Y 轴、展示方式、轴标签在刷新后保持不变，不用每次重配",
 			"用量统计页与历史记录页的筛选条件会被记住：时间维度（含「全部」与自定义日期）、模型、对话、接入类型与 API 密钥刷新后保持上次选择，不会自动回到默认",
-			"所有下拉胶囊悬停时轻微提亮、展开时箭头翻转，下拉关闭更快更跟手"
+			"所有下拉胶囊悬停时轻微提亮、展开时箭头翻转，下拉关闭更快更跟手",
+			"浅色模式下块面底色微调，块、块内白色面板与页面底色的层次更协调"
 		]
 	}]
 }, {

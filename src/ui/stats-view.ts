@@ -660,7 +660,7 @@ async function renderChart(filteredRaw: any[]) {
   const hasPercent = kinds.has('percent');
   const chartType = getChartType();
   const cBorder = themeColor('--ds-border', '#E5E7EB');
-  const cCard = themeColor('--ds-card', '#F6F7F8');
+  const cCard = themeColor('--ds-card', '#F5F6F7');
   const cText3 = themeColor('--ds-text-3', '#9CA3AF');
   const curCur = (()=>{ try{  return getDisplayCurrency(); } catch{ return {code:'CNY',symbol:'¥',rate:1} as any; } })();
   if (hasCost) {

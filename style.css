@@ -16,7 +16,7 @@
   --ds-bg: #FFFFFF;
   --ds-panel-bg: #FFFFFF;
   --ds-sidebar-bg: #F9FAFB;
-  --ds-card: #F6F7F8;
+  --ds-card: #F5F6F7;
   --ds-card-inner: #FFFFFF;
   --ds-card-hover: #EEF0F2;
   --ds-border: #E5E7EB;
@@ -613,7 +613,7 @@
   /* 窄屏隐藏冗余的类型徽标（副标题已含类型与来源），避免名称行折行拉高卡片 */
   #aus-wallet .aus-wallet-badge-relay { display: none !important; }
   #aus-sidebar .aus-nav-item { justify-content:flex-start !important; padding:8px 10px !important; gap:10px !important; font-size:12px !important; border-radius:8px !important; }
-  /* 窄屏选中态加深，避免 #F9FAFB 侧栏与 #F6F7F8 选中态均为近白导致“都是白底” */
+  /* 窄屏选中态加深，避免 #F9FAFB 侧栏与近白块面（--ds-card #F5F6F7）导致“都是白底” */
   .aus-nav-item.active { background: #E5E7EB !important; }
   [data-extension="api-usage-stat"][data-ds-theme="dark"] .aus-nav-item.active { background: var(--ds-nav-active-bg) !important; }
   #aus-main { padding: 12px !important; overflow-x: hidden !important; }

@@ -134,7 +134,7 @@ async function renderOne(id:TrendId, filtered:any[]){
   }
 
   const cBorder = themeColor('--ds-border','#E5E7EB');
-  const cCard = themeColor('--ds-card','#F6F7F8');
+  const cCard = themeColor('--ds-card','#F5F6F7');
   const cText3 = themeColor('--ds-text-3','#9CA3AF');
   const cCardInner = themeColor('--ds-card-inner','#FFFFFF');
   const cText = themeColor('--ds-text','#111827');

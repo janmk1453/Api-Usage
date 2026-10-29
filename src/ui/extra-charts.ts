@@ -319,7 +319,7 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
     // 旋转标签 + 底部视窗滑块都需要额外空间，否则标签被裁（表现为「X 轴名称丢失」）
     grid:{ left:40, right:20, top:8, bottom: labels.length>12 ? 62 : 46 },
     xAxis:{ type:'category', data: labels, axisLine:{lineStyle:{color:themeColor('--ds-border','#E5E7EB')}}, axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF'),rotate: labels.length>12?30:0, interval: 'auto', hideOverlap: false} },
-    yAxis:{ type:'value', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF')}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F6F7F8')}} },
+    yAxis:{ type:'value', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF')}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F5F6F7')}} },
     // 默认完整展示全部 X 轴数据（与第一张图一致），缩放交给 inside 手势/拖拽
     dataZoom: labels.length > 1 ? [{ type:'inside', xAxisIndex:0, start: savedZoom?.start ?? 0, end: savedZoom?.end ?? 100, zoomOnMouseWheel: false, moveOnMouseMove: true, zoomLock: true }] : undefined,
     series: (() => {
@@ -339,14 +339,14 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
     })(),
   };
   if (id==='cost') {
-    opts.yAxis = { type:'value', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF'), formatter:(v:number)=> curCur.symbol + Number(v).toFixed(2)}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F6F7F8')}} } as any;
+    opts.yAxis = { type:'value', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF'), formatter:(v:number)=> curCur.symbol + Number(v).toFixed(2)}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F5F6F7')}} } as any;
     opts.tooltip = { trigger:'axis', ...CHART_TOOLTIP_SURFACE, backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12}, formatter: (params:any)=>{ const idx = params[0]?.dataIndex ?? 0; const title = tips[idx] || params[0]?.axisValueLabel || ''; let html=`<div style="font-weight:600;margin-bottom:6px;">${title}</div>`; for(const p of params){ html+=`<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${curCur.symbol}${Number(p.value).toFixed(4)} ${curCur.code}</span></div>`; } return `<div style="padding:4px 2px;min-width:160px;">${html}</div>`; } } as any;
   }
   // 命中/请求等单指标改为线+面积更可读
   if (id==='hit'){ opts.series = [{ name:'命中率', type:'line', data: series[0].data, areaStyle:{opacity:0.12,color:series[0].color}, lineStyle:{color:series[0].color}, itemStyle:{color:series[0].color}, smooth:true }]; opts.yAxis={ max:100, axisLabel:{formatter:(v:number)=>v+'%'} } as any; }
   if (id==='dur'){
     opts.yAxis=[
-      {type:'value', name:'耗时 s', position:'left', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF')}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F6F7F8')}}},
+      {type:'value', name:'耗时 s', position:'left', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF')}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F5F6F7')}}},
       {type:'value', name:'速率 t/s', position:'right', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF')}, splitLine:{show:false}}
     ] as any;
     opts.series = series.map(s=>({
