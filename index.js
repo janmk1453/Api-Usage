@@ -11741,7 +11741,11 @@ var CHANGELOG = [{
 		items: ["关于页新增「更新日志」块：按版本折叠展示最近几次更新的新增、改进与修复，最新版本默认展开"]
 	}, {
 		kind: "improve",
-		items: ["优化深色模式显示效果：页面更暗、块面更亮，块内正文与次要文字亮度提升，块内容的可读性明显改善", "深色模式下的选中态、边框、语义色（绿/红/黄）同步提亮，图表坐标轴与悬浮窗跟随新配色"]
+		items: [
+			"优化深色模式显示效果：页面更暗、块面更亮，块内正文与次要文字亮度提升，块内容的可读性明显改善",
+			"深色模式下的选中态、边框、语义色（绿/红/黄）同步提亮，图表坐标轴与悬浮窗跟随新配色",
+			"顶栏底色与页面背景统一，不再比内容区更亮，切换页面时视觉更连贯"
+		]
 	}]
 }, {
 	version: "r3.1.7",
@@ -12653,7 +12657,7 @@ function createPanel() {
 	panel.setAttribute("data-ds-theme", theme);
 	panel.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:'Microsoft YaHei','微软雅黑',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;";
 	panel.innerHTML = `
-    <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;border-bottom:1px solid var(--ds-border);background:var(--ds-card-inner);">
+    <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;border-bottom:1px solid var(--ds-border);background:var(--ds-panel-bg);">
       <button id="aus-hamburger-btn" title="菜单" style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);font-size:18px;line-height:1;padding:0;">${icon("menu", 20)}</button>
       <span style="margin-left:12px;font-size:var(--aus-fs-base);font-weight:700;color:var(--ds-text);white-space:nowrap;flex-shrink:0;">API用量统计</span>
       <span id="aus-mobile-page-title" style="margin-left:10px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text-2);">用量概览</span>
@@ -12688,7 +12692,7 @@ function createPanel() {
       </div>
     </div>
     <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--ds-panel-bg);">
-      <div id="aus-page-header" style="flex-shrink:0;height:56px;display:flex;align-items:flex-start;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--ds-border);background:var(--ds-card-inner);">
+      <div id="aus-page-header" style="flex-shrink:0;height:56px;display:flex;align-items:flex-start;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--ds-border);background:var(--ds-panel-bg);">
         <span id="aus-page-title" style="font-size:var(--aus-fs-base);font-weight:600;line-height:20px;margin-top:18px;color:var(--ds-text);">用量概览</span>
         <button id="aus-panel-close" style="width:32px;height:32px;margin-top:12px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:var(--aus-fs-base);">${icon("close", 16)}</button>
       </div>
