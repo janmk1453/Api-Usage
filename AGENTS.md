@@ -12,7 +12,7 @@ SillyTavern 原生扩展 `API用量统计`（清单 `api-usage-stat`，版本以
 
 **规则：所有有关重构迁移版的修改一律在 `Api-Usage` 下进行，所有产物亦在此。禁止在 `pr/RE3.0` 继续开发。后续构建与提交均以 `Api-Usage` 为准，`RE3.0` 仅同步产物备份。**
 
-**规则：每彻底完成一项用户可感知的新增 / 改进 / 修复，必须在本轮同一次提交里往 `src/constants/changelog.ts` 追加一条更新日志（详见「更新日志维护」）。缺这条日志视为改动未完成，不得提交推送。**
+**规则：每彻底完成一项用户可感知的新增 / 改进 / 修复，必须在本轮同一次提交里往 `src/constants/changelog.ts` 追加日志（详见「更新日志维护」；**文案必须照 `r3.1.7` 的手写范本：口语、一句话一件事、合并同类项、宁少不多**）。缺这条日志视为改动未完成，不得提交推送。**
 
 ## 技术栈（已确认）
 
@@ -175,7 +175,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 ## 常见任务
 
 - **改定价/峰谷**：内置价看 `src/constants/pricing.ts` + `src/services/pricing.ts`；节假日规则看 `src/constants/holidays.ts` + `src/utils/date.ts`（`isPeakHour/isOffpeakDay/isChinaHoliday`）；钱包价和独立峰谷看 `src/data/wallets.ts` + `src/ui/wallet-view.ts`；`calcCost/calcSavings/getPricing/hasPriceForModel` 均支持可选钱包上下文，未传钱包时保持旧行为
-- **改更新日志**：数据看 `src/constants/changelog.ts`（`CHANGELOG` 按时间倒序，`sections[].kind` 只允许 `feature/improve/fix`，`version` 与 `manifest.json#version` 对应、可带 `r` 前缀，`date` 为北京时间 `YYYY-MM-DD`）；渲染与交互看 `src/ui/changelog.ts`（`renderChangelogCard` 生成 HTML、`bindChangelog` 事件委托展开收起、`formatChangelogDate` 同年只显示 `M/D`）+ `style.css` 的 `#aus-changelog` / `.aus-changelog-*`；关于页只展示 `CHANGELOG_ENTRY_LIMIT` 条，最新条目默认展开、其余点击表头展开。新增日志**只追加 items 文案**，不要改渲染层；条目结构变化需同步 `src/ui/changelog.test.ts`
+- **改更新日志**：数据看 `src/constants/changelog.ts`（`CHANGELOG` 按时间倒序，`sections[].kind` 只允许 `feature/improve/fix`，`version` 与 `manifest.json#version` 对应、可带 `r` 前缀，`date` 为北京时间 `YYYY-MM-DD`）；渲染与交互看 `src/ui/changelog.ts`（`renderChangelogCard` 生成 HTML、`bindChangelog` 事件委托展开收起、`formatChangelogDate` 同年只显示 `M/D`）+ `style.css` 的 `#aus-changelog` / `.aus-changelog-*`；关于页只展示 `CHANGELOG_ENTRY_LIMIT` 条，最新条目默认展开、其余点击表头展开。新增日志**只追加 items 文案**，不要改渲染层；文案风格照 `r3.1.7` 范本（口语、一句话、合并同类项），不写文件名/色值/内部实现；条目结构变化需同步 `src/ui/changelog.test.ts`
 - **加价格段（多段定价）**：`PRICE_HISTORY[模型].push({since: 生效时间戳, offpeak, peak, usePeakPricing?, peakHours?, label?})`（按 `since` 升序，命中 `timestamp>=since` 最后一段，未来段同样写法）；内置段按记录时间查询，钱包手工/同步规则覆盖后不分段；改价后按钱包执行冷热重算
 - **改面板/导航**：`src/ui/panel.ts`（全屏+`positionPanel` 定位置换+`applyCollapsed`+详情窗口 `#aus-content-body` 桌面右侧/移动端底部）+ `style.css`（`#aus-mobile-header` 汉堡 + `display` 切换，无过渡；改动钱包 header 响应式时必须保持覆盖规则优先级高于通用网格规则；按钮高度不要改回 `34/40px`）
 - **改概览/统计**：`src/ui/overview.ts` + `src/ui/stats-view.ts`（五维度 time∩model∩chat∩endpoint∩credential 过滤）+ `src/data/computed.ts`（`computeChatStats` / `filterStatsHistory` / 接入与密钥选项单源）+ `src/ui/heatmap.ts`（概览热力图，GitHub 风格，近 2 年，块内滑动）
@@ -257,7 +257,11 @@ git push origin main --tags
 
 - **自动提交规则**：完整完成一项独立修改后必须立即执行提交推送，无需等待用户二次确认。单项定义：通过 `typecheck + test + build + node --check + verify:ci` 且满足用户当轮需求即视为完成。提交需包含 `src/` 源码与 `index.js/style.css` 产物，`commit` 信息遵循 `fix/feat/docs:` 前缀并简述本次变更点。该自动提交仅限 `dev` 的常规提交，不含版本号推进、合并 `main` 与打标签。
 - **提交时机（强制）**：所有修改必须在完整完成并验证通过后最后统一提交，禁止边改边提、分步提交或提前推送。提交前必须依次通过 `npm run typecheck`、`npm test`、`npm run build`、`node --check index.js`、`npm run verify:ci`，且 `index.js/style.css` 与源码保持一致后，一次性添加源码、测试、CI 配置与产物并推送，单轮需求仅产生一次提交。同样禁止在未获明确要求时改动版本号字段。
-- **更新日志维护（强制）**：每彻底完成一项用户可感知的新增 / 改进 / 修复（含用户当轮提出的需求），必须在同一次提交里往 `src/constants/changelog.ts` 的 `CHANGELOG` 当前版本条目对应分类（`feature` 新增 / `improve` 改进 / `fix` 修复）追加一条文案；版本号推进（`manifest.json#version` 变化）时才在数组头部新建条目并把 `date` 写成当天北京时间 `YYYY-MM-DD`。文案面向用户——只写「能做什么 / 修好了什么」，不写 commit hash、文件路径、内部实现细节，句末不堆标点；一个版本只允许一个条目，同一分类内按重要性从高到低排。缺少该条目视为改动未完成，不得提交推送；纯内部重构且用户无感时写「改进」下的一条说明或按需省略
+- **更新日志维护（强制）**：每彻底完成一项用户可感知的新增 / 改进 / 修复（含用户当轮提出的需求），必须在同一次提交里往 `src/constants/changelog.ts` 的 `CHANGELOG` 当前版本条目对应分类（`feature` 新增 / `improve` 改进 / `fix` 修复）追加文案；版本号推进（`manifest.json#version` 变化）时才在数组头部新建条目并把 `date` 写成当天北京时间 `YYYY-MM-DD`；一个版本只允许一个条目。缺少该条目视为改动未完成，不得提交推送。
+  - **文案风格（照 `r3.1.7` 用户手写范本，最高优先级）**：口语、极简、一句话说完一件事，名词/动词短语开头，**不加句号**，不堆形容词，不自夸效果（「明显改善」「更清爽」「更跟手」这类评价词一律删掉），不写文件名、色值、控件 id、commit hash、内部实现细节；像「部分选项的选择现在会在刷新网页后留存」「图表和历史记录中的输入输出配色对齐 DeepSeek 官网」这种用户视角的平实说法。
+  - **宁少不多**：同一主题的多处改动合并成一条（深浅色模式的整批调色、若干处配色对齐各算一条）；每个分类通常 1～3 条、整版合计不超过 8 条；禁止把本轮提交清单逐条搬进日志，禁止为一个细节单独开一条。
+  - **只写用户能直接感知的行为/视觉变化**：纯内部重构、变量改名、打包配置、文档与 CI 调整、微调到看不出来的像素级修正一律不写（用户无感时可整版不新增条目）。
+
 - **预览包本地验证**：可用 `node scripts/preview-package.mjs <输出目录> HEAD` 复现 `main` 预览包；脚本只读取指定提交，通过 `git archive` 生成压缩包，并校验清单、入口、引用链、允许文件集合、压缩包结构和 SHA-256。可用 `node scripts/preview-notes.mjs <输出文件> HEAD` 复现更新日志，生成时优先读取上一个 `preview-*`（首次回退最近正式标签）到当前提交的全部提交。不得修改源码或提交产物后再打包。
 - **预览包 import 扫描**：`preview-package.mjs` 与 `verify-ci.mjs` 一致，匹配 `import/from/import()` 前先经 `stripCommentsForImportScan` 剥离注释；ECharts 等分包内注释含示例 `import './XxxModel.js'`，若不剥离会被误判为缺失依赖并使 `main` 预览作业失败（曾发生）。
 - 产物入口存根 `index.js` + `ECharts` 等 hash 分包随仓库提交以保离线加载，`style.css` 直出，勿手改产物；`vite.config.ts` 已 `define: { process.env.NODE_ENV, __APP_VERSION__ }` 防浏览器 `process` 报错且实现版本单源化
