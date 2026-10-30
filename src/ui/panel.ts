@@ -849,7 +849,7 @@ export function createPanel() {
     <div id="aus-sidebar" style="width:260px;flex-shrink:0;background:var(--ds-sidebar-bg);border-right:1px solid var(--ds-border);display:flex;flex-direction:column;overflow:hidden;">
       <div id="aus-brand-row" style="height:56px;display:flex;align-items:flex-start;justify-content:space-between;padding:0 14px;flex-shrink:0;">
         <div style="display:flex;align-items:flex-start;gap:12px;min-width:0;margin-top:18px;" id="aus-brand">
-          <span class="aus-brand-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--ds-orange);">${icon('brand', 20)}</span>
+          <span class="aus-brand-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--ds-orange);">${icon('brand', 18)}</span>
           <div style="display:flex;flex-direction:column;min-width:0;">
             <span style="font-size:15px;font-weight:700;line-height:20px;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
             <span style="font-size:var(--aus-fs-sm);line-height:16px;color:var(--ds-text-2);white-space:nowrap;">v${typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : ''}</span>

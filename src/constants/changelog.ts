@@ -60,7 +60,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       {
         kind: 'fix',
         items: [
-          '右上角的关闭按钮图标没居中',
+          '右上角的关闭按钮图标没居中，侧边栏顶部的图标和文字也没对齐',
         ],
       },
     ],

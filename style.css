@@ -305,6 +305,10 @@
 /* 品牌区：图标与导航图标同列（左边缘 22px），标题文字仍与导航项文字同列（54px）——
    图标列 22 = 品牌行内距 14 + padding-left 8；文字列 54 = 22 + 图标 20 + 间距 12 */
 #aus-sidebar #aus-brand { padding-left: 8px; }
+
+/* 品牌区图标：18px 的可见体量对齐 15px 粗体标题，再下移 1px 补偿中文字形光学中心比行盒中心略低 */
+#aus-sidebar #aus-brand .aus-brand-icon { margin-top: 1px; }
+#aus-sidebar #aus-brand .aus-brand-icon svg { display: block; }
 #aus-panel { position: fixed; } /* 使 absolute 侧栏以面板为 containing block，覆盖含 mobile-header 的全高度 */
 #aus-panel-body { display:flex; flex-direction:row; flex:1; min-height:0; overflow:hidden; container-type: inline-size; container-name: ausbody; /* 去 relative：让移动端抽屉覆盖 header，避免顶部缺口 */ }
 .aus-stats-filter { position: relative; min-width: 0; }
