@@ -2091,3 +2091,23 @@
   color: var(--ds-text) !important;
   transition-duration: 0ms;
 }
+
+/* 窄屏（≤760px）：工具栏里的「重置筛选」收成圆形图标按钮，紧跟最后一个筛选胶囊，
+   不再因 margin-left:auto 独占一整行；文案在窄屏隐藏，桌面端保持胶囊形态 */
+@container ausbody (max-width: 760px) {
+  #aus-panel .aus-filter-reset {
+    width: 36px;
+    height: 36px;
+    padding: 0 !important;
+    gap: 0 !important;
+    justify-content: center;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+  }
+  #aus-panel .aus-filter-reset span { display: none; }
+  #aus-panel .aus-filter-reset svg { width: 16px; height: 16px; }
+}
+@container ausbody (max-width: 420px) {
+  #aus-panel .aus-filter-reset { width: 32px; height: 32px; }
+  #aus-panel .aus-filter-reset svg { width: 15px; height: 15px; }
+}
