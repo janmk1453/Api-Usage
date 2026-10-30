@@ -1175,7 +1175,7 @@ export function createPanel() {
       if (v) switchView(v as any);
     });
   });
-  // DeepSeek 方案：窄屏覆盖式抽屉 + 遮罩点外关闭，宽屏 60/260 折叠；无动画瞬时切换
+  // 窄屏覆盖式抽屉（滑动动画由 style.css 末尾的 transform/opacity 过渡提供）+ 遮罩点外关闭，宽屏 60/260 折叠（瞬时切换）
   let mobileOpen = false;
   const isMobile = () => {
     try {

@@ -56,6 +56,7 @@ export const CHANGELOG: ChangelogEntry[] = [
           '图表/历史记录的输入输出和部分 UI 配色与样式对齐 DeepSeek 官网',
           '部分选项的选择现在会在刷新网页后留存',
           '调整移动端 UI',
+          '移动端侧边栏打开和关闭加入了滑动动画',
         ],
       },
       {
@@ -69,7 +70,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
-version: 'r3.1.7',
+    version: 'r3.1.7',
     date: '2026-10-23',
     sections: [
       {

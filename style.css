@@ -623,7 +623,7 @@
 #aus-overlay input::placeholder,
 [data-extension="api-usage-stat"]#aus-panel input::placeholder { color: var(--ds-text-3); }
 
-/* 移动端自适应 — 760 为分界，复刻 DeepSeek 官网：侧边栏 display 切换 + 汉堡按钮 */
+/* 移动端自适应 — 760 为分界，复刻 DeepSeek 官网：侧边栏改覆盖式抽屉（滑动动画见文件末尾） + 汉堡按钮 */
 @media (max-width: 760px) {
   #aus-panel { flex-direction: column !important; width:100% !important; max-width:100% !important; left:0 !important; right:0 !important; box-sizing:border-box !important; }
   #aus-overlay { width:100% !important; max-width:100% !important; }
@@ -2110,4 +2110,85 @@
 @container ausbody (max-width: 420px) {
   #aus-panel .aus-filter-reset { width: 32px; height: 32px; }
   #aus-panel .aus-filter-reset svg { width: 15px; height: 15px; }
+}
+
+/* ── 移动端侧栏抽屉动画 ──
+   关闭态不再用 display:none（display 之间无法过渡），改为常驻 flex + translateX(-100%) 藏到面板外，
+   由 is-open 滑入；visibility 在收起动画结束后才置 hidden，既不挡点击也不参与 Tab 焦点。
+   遮罩同理改为常驻块，靠 opacity + pointer-events 淡入淡出。 */
+@container ausbody (max-width: 760px) {
+  #aus-panel #aus-sidebar {
+    display: flex !important;
+    position: absolute !important;
+    left: 0; top: 0; bottom: 0;
+    z-index: 30 !important;
+    width: 240px !important; min-width: 240px !important; max-width: 240px !important;
+    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18) !important;
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1), visibility 0ms linear 180ms;
+  }
+  #aus-panel #aus-sidebar.is-open {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1), visibility 0ms linear 0ms;
+  }
+  #aus-panel #aus-sidebar-overlay {
+    display: block !important;
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 20 !important;
+    background: var(--ds-overlay) !important;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+  }
+  #aus-panel #aus-sidebar-overlay.is-open {
+    opacity: 1;
+    pointer-events: auto;
+    transition-duration: 200ms;
+  }
+}
+/* 不支持容器查询的旧内核：用视口断点给出同一套动画（两套规则保持同步） */
+@media (max-width: 760px) {
+  #aus-panel #aus-sidebar {
+    display: flex !important;
+    position: absolute !important;
+    left: 0; top: 0; bottom: 0;
+    z-index: 30 !important;
+    width: 240px !important; min-width: 240px !important; max-width: 240px !important;
+    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18) !important;
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1), visibility 0ms linear 180ms;
+  }
+  #aus-panel #aus-sidebar.is-open {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1), visibility 0ms linear 0ms;
+  }
+  #aus-panel #aus-sidebar-overlay {
+    display: block !important;
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 20 !important;
+    background: var(--ds-overlay) !important;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+  }
+  #aus-panel #aus-sidebar-overlay.is-open {
+    opacity: 1;
+    pointer-events: auto;
+    transition-duration: 200ms;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #aus-panel #aus-sidebar,
+  #aus-panel #aus-sidebar.is-open,
+  #aus-panel #aus-sidebar-overlay,
+  #aus-panel #aus-sidebar-overlay.is-open {
+    transition-duration: 0ms !important;
+    transition-delay: 0ms !important;
+  }
 }
