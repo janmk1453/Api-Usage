@@ -12,7 +12,7 @@ SillyTavern 原生扩展 `API用量统计`（清单 `api-usage-stat`，版本以
 
 **规则：所有有关重构迁移版的修改一律在 `Api-Usage` 下进行，所有产物亦在此。禁止在 `pr/RE3.0` 继续开发。后续构建与提交均以 `Api-Usage` 为准，`RE3.0` 仅同步产物备份。**
 
-**规则：每彻底完成一项用户可感知的新增 / 改进 / 修复，必须在本轮同一次提交里往 `src/constants/changelog.ts` 追加日志（详见「更新日志维护」；**文案必须照 `r3.1.7` 的手写范本：口语、一句话一件事、合并同类项、宁少不多**）。缺这条日志视为改动未完成，不得提交推送。**
+**规则（暂时挂起）：更新日志目前由用户手动维护，`src/constants/changelog.ts` 视为用户专有内容——未经用户当轮明确要求，一律不得增删改任何条目。原先「每完成一项改动必须追加日志」的强制要求自用户通知起暂停执行，待用户再次明确解禁后恢复（恢复范本：照 `r3.1.7` 手写风格，口语、一句话一件事、合并同类项、宁少不多）。**
 
 ## 技术栈（已确认）
 
@@ -58,7 +58,7 @@ Api-Usage/
 │   ├── index.ts           # 入口：repository.hydrate + 魔法棒注入 + 全屏面板 + 峰值圆点（ST 未就绪时轮询重试 installInterception）+ 汇率/定价格式同步定时器（24h）+ 延迟自动检查更新
 │   ├── constants/pricing.ts  # PRICING/DEFAULT_PEAK_HOURS/MAX_HISTORY/DETAIL_KEEP/STORAGE_KEYS + PRICING_SYNC_SOURCE/FALLBACK/DEFAULT_EXCHANGE_RATE + PRICE_HISTORY/PriceSegment + FLASH_PRICE_CUTOFF(2026-09-10 12:00)（内置模型多段价格历史：deepseek-v4-flash 新旧两段、deepseek-v4-pro 持续定价单段、deepseek-flash 单段；V4.1 Flash 现役模型名为 deepseek-flash，V4 Pro 继续提供调用并保持现价）
 │   ├── constants/holidays.ts # 中国法定节假日放假日内置数据（2024-2026，源自国务院办公厅通知）：isChinaHolidayDate/hasChinaHolidayData + CN_HOLIDAY_DATA_YEARS/CN_HOLIDAY_COVERAGE_LABEL；只收录放假日，调休上班的周末无需维护（周末本身即空闲）
-│   ├── constants/changelog.ts # 关于页「更新日志」唯一数据源（手动维护，最新版本在前）：ChangelogEntry/ChangelogSection/ChangelogSectionKind + CHANGELOG/CHANGELOG_ENTRY_LIMIT/getRecentChangelog；只放面向用户的文案，禁止 commit hash / 文件路径 / 内部实现；每完成一项用户可感知改动都必须追加条目（见「更新日志维护」）
+│   ├── constants/changelog.ts # 关于页「更新日志」唯一数据源（手动维护，最新版本在前）：ChangelogEntry/ChangelogSection/ChangelogSectionKind + CHANGELOG/CHANGELOG_ENTRY_LIMIT/getRecentChangelog；只放面向用户的文案，禁止 commit hash / 文件路径 / 内部实现；当前由用户手动维护，未经用户当轮明确要求不得增删条目
 │   ├── types/save.ts, settings.ts, wallet.ts # HistoryEntry 含 sourceType/endpointId/endpointLabel/credentialId/credentialLabel/walletId/pricingSource；settings 含 overviewWalletId/overviewWalletManuallySet 与 PricingSyncSettings；wallet.ts 定义 WalletConfig/WalletModel/WalletPriceRule/币种与 catalogProvider 映射
 │   ├── data/              # ★ 统一数据框架（所有存/取/算/展的唯一通路）
 │   │   ├── types.ts       # Snapshot/Aggregated/TimeRange/OverviewView/StatsView
