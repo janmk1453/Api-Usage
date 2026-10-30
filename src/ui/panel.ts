@@ -713,6 +713,27 @@ function bindTopbarScroll(doc: Document): void {
   } catch {}
 }
 
+// 移动端「菜单」按钮按压反馈：触屏没有 hover，反馈只能靠 pointerdown 在同一帧打上
+// data-pressed（不等 click、也不等抽屉展开）。松手时移除，CSS 侧 120ms 回弹。
+function bindPressFeedback(doc: Document): void {
+  try {
+    const btn = doc.getElementById('aus-hamburger-btn') as HTMLElement | null;
+    if (!btn || btn.getAttribute('data-press-bound') === '1') return;
+    btn.setAttribute('data-press-bound', '1');
+    const press = (on: boolean) => {
+      if (on) btn.setAttribute('data-pressed', '1');
+      else btn.removeAttribute('data-pressed');
+    };
+    btn.addEventListener('pointerdown', () => press(true), { passive: true });
+    btn.addEventListener('pointerup', () => press(false), { passive: true });
+    btn.addEventListener('pointercancel', () => press(false), { passive: true });
+    btn.addEventListener('pointerleave', () => press(false), { passive: true });
+    // 键盘触发与旧内核兜底：保证点击结束后不残留按压态
+    btn.addEventListener('click', () => press(false));
+    btn.addEventListener('blur', () => press(false));
+  } catch {}
+}
+
 export function bindPanel(doc: Document) {
   const q = doc.getElementById('aus-btn-query-balance') as HTMLButtonElement | null;
   if (q) q.onclick = () => queryBalance();
@@ -720,6 +741,8 @@ export function bindPanel(doc: Document) {
   try { initPillState(doc); } catch {}
   // 顶栏毛玻璃的滚动联动（幂等，重复调用只补一次监听）
   bindTopbarScroll(doc);
+  // 移动端菜单按钮的按压反馈（幂等）
+  bindPressFeedback(doc);
 }
 
 function switchView(view: typeof currentView) {

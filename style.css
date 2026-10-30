@@ -560,7 +560,10 @@
 }
 #aus-mobile-header { display:none; height:56px; align-items:center; padding:0 16px; flex-shrink:0; }
 #aus-hamburger-btn { width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);font-size:18px;line-height:1;padding:0; }
-#aus-hamburger-btn:hover { opacity:0.7; }
+@media (hover: hover) {
+  /* 仅鼠标设备才走 hover 淡化；触屏的反馈见文件末尾「菜单按钮按压反馈」 */
+  #aus-hamburger-btn:hover { opacity: 0.72; }
+}
 .aus-nav-item { transition: none; color: var(--ds-text-2); }
 .aus-nav-item:hover { background: var(--ds-hover-bg) !important; }
 .aus-nav-item.active { background: var(--ds-nav-active-bg, var(--ds-active-bg)) !important; color: var(--ds-text) !important; font-weight: 600; }
@@ -2018,4 +2021,33 @@
 @media (max-width: 420px) {
   #aus-wallet [data-wallet-filter],
   #aus-wallet [data-wallet-toggle-all] { padding: 5px 8px !important; font-size: var(--aus-fs-xs) !important; }
+}
+
+/* ===== 移动端「菜单」按钮按压反馈 =====
+   触屏没有 hover，反馈只能来自 pointerdown 打上的 [data-pressed] 与 :active。
+   按下 0ms 立即变色 + 缩小（不等过渡），松手 120ms 回弹，避免「点了没反应」的迟滞感。
+   touch-action:manipulation 同时消掉移动端 300ms 点击延迟与双击缩放等待。 */
+#aus-hamburger-btn,
+#aus-panel .aus-nav-item {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+#aus-hamburger-btn {
+  border-radius: 9px;
+  transition: background-color 120ms ease, transform 120ms ease, opacity 120ms ease;
+}
+#aus-hamburger-btn[data-pressed="1"],
+#aus-hamburger-btn:active {
+  background: var(--ds-card-hover) !important;
+  transform: scale(0.88);
+  opacity: 1 !important;
+  transition-duration: 0ms;
+}
+@media (hover: hover) {
+  #aus-hamburger-btn:hover:not([data-pressed="1"]) { opacity: 0.72; transition-duration: 120ms; }
+}
+/* 抽屉里的导航项按下同样给即时底色（选中项按下也变亮，落点立刻有响应） */
+#aus-panel .aus-nav-item:active {
+  background: var(--ds-card-hover) !important;
+  transition-duration: 0ms;
 }

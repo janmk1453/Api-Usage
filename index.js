@@ -12122,6 +12122,7 @@ var CHANGELOG = [{
 				"模型用量占比图在模型很多时不再挤成一团",
 				"钱包页工具栏在手机上不再挤成三行",
 				"手机上侧边栏的导航按钮变大、间距变松",
+				"手机上点菜单按钮立刻有反馈，不再像没点上",
 				"顶部栏改成半透明模糊效果，内容会从下面滑过"
 			]
 		},
@@ -13101,6 +13102,23 @@ function bindTopbarScroll(doc) {
 		syncTopbarState(doc);
 	} catch {}
 }
+function bindPressFeedback(doc) {
+	try {
+		const btn = doc.getElementById("aus-hamburger-btn");
+		if (!btn || btn.getAttribute("data-press-bound") === "1") return;
+		btn.setAttribute("data-press-bound", "1");
+		const press = (on) => {
+			if (on) btn.setAttribute("data-pressed", "1");
+			else btn.removeAttribute("data-pressed");
+		};
+		btn.addEventListener("pointerdown", () => press(true), { passive: true });
+		btn.addEventListener("pointerup", () => press(false), { passive: true });
+		btn.addEventListener("pointercancel", () => press(false), { passive: true });
+		btn.addEventListener("pointerleave", () => press(false), { passive: true });
+		btn.addEventListener("click", () => press(false));
+		btn.addEventListener("blur", () => press(false));
+	} catch {}
+}
 function bindPanel(doc) {
 	const q = doc.getElementById("aus-btn-query-balance");
 	if (q) q.onclick = () => queryBalance();
@@ -13108,6 +13126,7 @@ function bindPanel(doc) {
 		initPillState(doc);
 	} catch {}
 	bindTopbarScroll(doc);
+	bindPressFeedback(doc);
 }
 function switchView(view) {
 	const prevView = currentView;
