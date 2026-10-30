@@ -1,4 +1,4 @@
-import { localDay } from '../utils/date';
+import { localDay, esc } from '../utils/date';
 import { bucketTip, roundTip, rangeTip } from './chart-time';
 import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
 import { BAR_SQUARE, barTopRadius, estimateBarWidth } from './chart-bar';
@@ -130,6 +130,12 @@ export function renderExtraCharts(filtered:any[]){
   }
 }
 
+// 饼图/图例用的模型名截断：完整名字在悬浮窗里给出，图面上只留可辨认的前缀
+function shortModelName(name: string, max = 16): string {
+  const s = String(name || '');
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+
 async function renderOne(id:ChartId, filtered:any[]){
   try {
   const doc=getDoc();
@@ -142,7 +148,20 @@ async function renderOne(id:ChartId, filtered:any[]){
     if (!filtered.length){ dropChart(id); el.innerHTML='<div style="text-align:center;padding:40px;color:var(--ds-text-3);">暂无数据</div>'; return; }
     const map: Record<string, number> = {};
     for (const e of filtered){ const m=e.model||'unknown'; const v = mode==='token' ? (e.total_tokens||0) : 1; map[m]=(map[m]||0)+v; }
-    const data = Object.entries(map).map(([name,value])=>({name, value}));
+    // 模型多时逐项画扇区会让外置标签与底部图例互相压盖（移动端尤甚）：
+    // 按用量倒序，只画前 N 大，其余合并成「其他 N 个模型」，被合并的全名放进悬浮窗
+    const sorted = Object.entries(map).sort((a,b)=> b[1]-a[1]);
+    const cw = el.clientWidth || doc.documentElement.clientWidth || 320;
+    const narrow = cw < 560;
+    const maxSlices = narrow ? 5 : 8;
+    let others: string[] = [];
+    let data = sorted.map(([name,value])=>({name, value}));
+    if (sorted.length > maxSlices + 1){
+      const rest = sorted.slice(maxSlices);
+      others = rest.map(([n])=>n);
+      data = sorted.slice(0, maxSlices).map(([name,value])=>({name, value}));
+      data.push({ name:`其他 ${rest.length} 个模型`, value: rest.reduce((s,[,v])=>s+v,0) });
+    }
     const ec = await getEcharts();
     let c = charts[id];
     if (!c || (c as any).isDisposed?.()) {
@@ -160,12 +179,20 @@ async function renderOne(id:ChartId, filtered:any[]){
           let html = `<div style="display:flex;align-items:center;gap:6px;font-weight:600;margin-bottom:4px;">${p.marker||''}${p.name}</div>`;
           html += `<div style="display:flex;gap:16px;"><span>用量</span><span style="margin-left:auto;font-weight:600;">${val}</span></div>`;
           html += `<div style="display:flex;gap:16px;"><span>占比</span><span style="margin-left:auto;font-weight:600;">${pct} %</span></div>`;
+          if (others.length && String(p.name||'').startsWith('其他')) html += `<div style="margin-top:4px;font-size:11px;color:${themeColor('--ds-text-3','#9CA3AF')};max-width:220px;white-space:normal;">含 ${others.map((n)=>esc(n)).join('、')}</div>`;
           if (range) html += `<div style="margin-top:4px;font-size:11px;color:#9CA3AF;">时间范围 ${range}</div>`;
           return `<div style="padding:2px 2px;min-width:170px;">${html}</div>`;
         }
       },
-      legend:{ bottom:0, textStyle:{fontSize: 12,color:themeColor('--ds-text-2','#6B7280')} },
-      series:[{ type:'pie', radius:['40%','70%'], itemStyle:{borderRadius:6,borderColor:themeColor('--ds-card-inner','#FFFFFF'),borderWidth:2}, label:{fontSize: 12}, data }],
+      legend:{ type:'scroll', bottom:0, icon:'circle', itemWidth:8, itemHeight:8, itemGap: narrow?8:12,
+        textStyle:{fontSize: 12,color:themeColor('--ds-text-2','#6B7280')},
+        pageIconSize:10, pageTextStyle:{fontSize:11,color:themeColor('--ds-text-3','#9CA3AF')},
+        formatter:(name:string)=> shortModelName(name, narrow?12:18) },
+      series:[{ type:'pie', radius: narrow?['30%','54%']:['38%','64%'], center:['50%', narrow?'45%':'43%'], avoidLabelOverlap:true,
+        itemStyle:{borderRadius:6,borderColor:themeColor('--ds-card-inner','#FFFFFF'),borderWidth:2},
+        label: narrow? { show:false } : { show:true, fontSize:12, color:themeColor('--ds-text-2','#6B7280'), formatter:(p:any)=> shortModelName(String(p?.name||''), 14) },
+        labelLine: narrow? { show:false } : { show:true, length:8, length2:10, lineStyle:{color:themeColor('--ds-border','#E5E7EB')} },
+        data }],
     }, true);
     setTimeout(()=>{ try{ c.resize(); }catch{} }, 60);
     return;

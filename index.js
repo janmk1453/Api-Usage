@@ -6374,9 +6374,14 @@ function renderExtraCharts(filtered) {
 	lastFiltered$1 = filtered || [];
 	for (const id of Object.keys(CHART_DEFS)) renderOne$1(id, filtered);
 }
+function shortModelName(name, max = 16) {
+	const s = String(name || "");
+	return s.length > max ? s.slice(0, max - 1) + "…" : s;
+}
 async function renderOne$1(id, filtered) {
 	try {
-		const el = getDoc$8().getElementById(`aus-chart-${id}`);
+		const doc = getDoc$8();
+		const el = doc.getElementById(`aus-chart-${id}`);
 		if (!el) return;
 		if (id === "req" && state$1[id].x === "round") state$1[id].x = "day";
 		if (id === "pie") {
@@ -6392,10 +6397,26 @@ async function renderOne$1(id, filtered) {
 				const v = mode === "token" ? e.total_tokens || 0 : 1;
 				map[m] = (map[m] || 0) + v;
 			}
-			const data = Object.entries(map).map(([name, value]) => ({
+			const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]);
+			const narrow = (el.clientWidth || doc.documentElement.clientWidth || 320) < 560;
+			const maxSlices = narrow ? 5 : 8;
+			let others = [];
+			let data = sorted.map(([name, value]) => ({
 				name,
 				value
 			}));
+			if (sorted.length > maxSlices + 1) {
+				const rest = sorted.slice(maxSlices);
+				others = rest.map(([n]) => n);
+				data = sorted.slice(0, maxSlices).map(([name, value]) => ({
+					name,
+					value
+				}));
+				data.push({
+					name: `其他 ${rest.length} 个模型`,
+					value: rest.reduce((s, [, v]) => s + v, 0)
+				});
+			}
 			const ec = await getEcharts$1();
 			let c = charts$1[id];
 			if (!c || c.isDisposed?.()) {
@@ -6424,26 +6445,51 @@ async function renderOne$1(id, filtered) {
 						let html = `<div style="display:flex;align-items:center;gap:6px;font-weight:600;margin-bottom:4px;">${p.marker || ""}${p.name}</div>`;
 						html += `<div style="display:flex;gap:16px;"><span>用量</span><span style="margin-left:auto;font-weight:600;">${val}</span></div>`;
 						html += `<div style="display:flex;gap:16px;"><span>占比</span><span style="margin-left:auto;font-weight:600;">${pct} %</span></div>`;
+						if (others.length && String(p.name || "").startsWith("其他")) html += `<div style="margin-top:4px;font-size:11px;color:${themeColor$3("--ds-text-3", "#9CA3AF")};max-width:220px;white-space:normal;">含 ${others.map((n) => esc$2(n)).join("、")}</div>`;
 						if (range) html += `<div style="margin-top:4px;font-size:11px;color:#9CA3AF;">时间范围 ${range}</div>`;
 						return `<div style="padding:2px 2px;min-width:170px;">${html}</div>`;
 					}
 				},
 				legend: {
+					type: "scroll",
 					bottom: 0,
+					icon: "circle",
+					itemWidth: 8,
+					itemHeight: 8,
+					itemGap: narrow ? 8 : 12,
 					textStyle: {
 						fontSize: 12,
 						color: themeColor$3("--ds-text-2", "#6B7280")
-					}
+					},
+					pageIconSize: 10,
+					pageTextStyle: {
+						fontSize: 11,
+						color: themeColor$3("--ds-text-3", "#9CA3AF")
+					},
+					formatter: (name) => shortModelName(name, narrow ? 12 : 18)
 				},
 				series: [{
 					type: "pie",
-					radius: ["40%", "70%"],
+					radius: narrow ? ["30%", "54%"] : ["38%", "64%"],
+					center: ["50%", narrow ? "45%" : "43%"],
+					avoidLabelOverlap: true,
 					itemStyle: {
 						borderRadius: 6,
 						borderColor: themeColor$3("--ds-card-inner", "#FFFFFF"),
 						borderWidth: 2
 					},
-					label: { fontSize: 12 },
+					label: narrow ? { show: false } : {
+						show: true,
+						fontSize: 12,
+						color: themeColor$3("--ds-text-2", "#6B7280"),
+						formatter: (p) => shortModelName(String(p?.name || ""), 14)
+					},
+					labelLine: narrow ? { show: false } : {
+						show: true,
+						length: 8,
+						length2: 10,
+						lineStyle: { color: themeColor$3("--ds-border", "#E5E7EB") }
+					},
 					data
 				}]
 			}, true);
@@ -12071,17 +12117,25 @@ function bindWalletView(doc) {
 var CHANGELOG = [{
 	version: "r3.1.8",
 	date: "2026-10-29",
-	sections: [{
-		kind: "feature",
-		items: ["关于页新增「更新日志」", "新增一些动画效果"]
-	}, {
-		kind: "improve",
-		items: [
-			"优化深浅色模式显示效果，提高可读性",
-			"部分选项的选择现在会在刷新网页后留存",
-			"图表和历史记录中的输入输出配色对齐 DeepSeek 官网"
-		]
-	}]
+	sections: [
+		{
+			kind: "feature",
+			items: ["关于页新增「更新日志」", "新增一些动画效果"]
+		},
+		{
+			kind: "improve",
+			items: [
+				"优化深浅色模式显示效果，提高可读性",
+				"部分选项的选择现在会在刷新网页后留存",
+				"图表和历史记录中的输入输出配色对齐 DeepSeek 官网",
+				"模型用量占比图在模型很多时不再挤成一团"
+			]
+		},
+		{
+			kind: "fix",
+			items: ["右上角的关闭按钮图标没居中"]
+		}
+	]
 }, {
 	version: "r3.1.7",
 	date: "2026-10-23",
@@ -13149,7 +13203,7 @@ function createPanel() {
       <button id="aus-hamburger-btn" title="菜单" style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);font-size:18px;line-height:1;padding:0;">${icon("menu", 20)}</button>
       <span style="margin-left:12px;font-size:var(--aus-fs-base);font-weight:700;color:var(--ds-text);white-space:nowrap;flex-shrink:0;">API用量统计</span>
       <span id="aus-mobile-page-title" style="margin-left:10px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text-2);">用量概览</span>
-      <button id="aus-mobile-panel-close" title="关闭" style="margin-left:auto;width:32px;height:32px;flex-shrink:0;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:var(--aus-fs-base);">${icon("close", 16)}</button>
+      <button id="aus-mobile-panel-close" title="关闭" style="margin-left:auto;width:32px;height:32px;padding:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:var(--aus-fs-base);">${icon("close", 16)}</button>
     </div>
     <div id="aus-panel-body" style="flex:1;display:flex;flex-direction:row;overflow:hidden;min-height:0;">
     <div id="aus-sidebar" style="width:260px;flex-shrink:0;background:var(--ds-sidebar-bg);border-right:1px solid var(--ds-border);display:flex;flex-direction:column;overflow:hidden;">
@@ -13182,7 +13236,7 @@ function createPanel() {
     <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--ds-panel-bg);">
       <div id="aus-page-header" style="flex-shrink:0;height:56px;display:flex;align-items:flex-start;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--ds-border);background:var(--ds-panel-bg);">
         <span id="aus-page-title" style="font-size:var(--aus-fs-base);font-weight:600;line-height:20px;margin-top:18px;color:var(--ds-text);">用量概览</span>
-        <button id="aus-panel-close" style="width:32px;height:32px;margin-top:12px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:var(--aus-fs-base);">${icon("close", 16)}</button>
+        <button id="aus-panel-close" style="width:32px;height:32px;margin-top:12px;padding:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;line-height:1;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:var(--aus-fs-base);">${icon("close", 16)}</button>
       </div>
       <div id="aus-content-body" style="flex:1;display:flex;flex-direction:row;overflow:hidden;min-height:0;position:relative;">
       <div id="aus-main" style="flex:1;min-width:0;overflow:auto;padding:20px;background:var(--ds-panel-bg);">
@@ -13439,7 +13493,7 @@ function createPanel() {
       <aside id="aus-history-detail" style="display:none;flex-direction:column;width:25%;min-width:300px;max-width:480px;flex-shrink:0;border-left:1px solid var(--ds-border);background:var(--ds-card-inner);overflow:hidden;">
         <div style="flex-shrink:0;height:48px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 12px;border-bottom:1px solid var(--ds-border);">
           <span id="aus-history-detail-title" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">记录详情</span>
-          <button id="aus-history-detail-close" title="关闭" style="width:28px;height:28px;flex-shrink:0;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card);color:var(--ds-text-2);cursor:pointer;line-height:1;display:inline-flex;align-items:center;justify-content:center;">${icon("close", 16)}</button>
+          <button id="aus-history-detail-close" title="关闭" style="width:28px;height:28px;flex-shrink:0;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card);color:var(--ds-text-2);cursor:pointer;line-height:1;padding:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;">${icon("close", 16)}</button>
         </div>
         <div id="aus-history-detail-body" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:12px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;"></div>
       </aside>
