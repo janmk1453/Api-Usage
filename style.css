@@ -1787,38 +1787,47 @@
   background: var(--ds-text-3);
 }
 
-/* ── 统一复选框外观：自绘方框（不再依赖 accent-color，避免深/浅色下变黑块与错位） ── */
+/* ── 统一复选框外观：原生 input 只做语义与点击载体，勾形用内联 SVG 画（不依赖伪元素几何与 accent-color） ── */
 #aus-panel input[type="checkbox"].aus-checkbox {
   appearance: none;
   -webkit-appearance: none;
   width: 16px;
   height: 16px;
+  box-sizing: border-box;
   flex: 0 0 auto;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--ds-border-strong);
+  border: 1px solid var(--ds-border-strong) !important;
   border-radius: 4px;
-  background: var(--ds-card-inner);
-  display: inline-grid;
-  place-content: center;
+  background-color: var(--ds-card-inner) !important;
+  background-image: none !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: 12px 12px !important;
   cursor: pointer;
   vertical-align: middle;
+  transition: background-color 120ms ease, border-color 120ms ease;
 }
-#aus-panel input[type="checkbox"].aus-checkbox::after {
-  content: '';
-  width: 9px;
-  height: 5px;
-  margin-top: -2px;
-  border-left: 2px solid var(--ds-bg);
-  border-bottom: 2px solid var(--ds-bg);
-  transform: rotate(-45deg);
-  opacity: 0;
-}
+/* 选中态：深底 + 固定 16 视框的勾，随盒子居中，不受字体与行高影响 */
 #aus-panel input[type="checkbox"].aus-checkbox:checked {
-  background: var(--ds-text);
-  border-color: var(--ds-text);
+  background-color: var(--ds-text) !important;
+  border-color: var(--ds-text) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.6 8.5 6.5 11.4 12.4 4.9' fill='none' stroke='%23FFFFFF' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
 }
-#aus-panel input[type="checkbox"].aus-checkbox:checked::after { opacity: 1; }
+/* 深色主题：选中底为近白，勾改用近黑色 */
+[data-extension="api-usage-stat"][data-ds-theme="dark"] #aus-panel input[type="checkbox"].aus-checkbox:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.6 8.5 6.5 11.4 12.4 4.9' fill='none' stroke='%23151517' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+}
+/* 清空宿主或旧规则可能残留的伪元素墨迹（曾经的 border 勾会溢出 16px 盒子） */
+#aus-panel input[type="checkbox"].aus-checkbox::before,
+#aus-panel input[type="checkbox"].aus-checkbox::after {
+  content: none !important;
+  display: none !important;
+}
+@media (hover: hover) {
+  #aus-panel input[type="checkbox"].aus-checkbox:hover { border-color: var(--ds-text-3) !important; }
+  #aus-panel input[type="checkbox"].aus-checkbox:checked:hover { border-color: var(--ds-text) !important; }
+}
 #aus-panel input[type="checkbox"].aus-checkbox:focus-visible {
   outline: 2px solid var(--ds-orange);
   outline-offset: 1px;

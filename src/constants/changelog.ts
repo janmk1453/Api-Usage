@@ -62,6 +62,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         items: [
           '调整细节',
           '模型占比图在大量模型时挤成一团',
+          '勾选框里的勾没对齐',
         ],
       },
     ],
