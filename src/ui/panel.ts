@@ -685,11 +685,41 @@ function renderHistory(doc: Document, s: any) {
   })();
 }
 
+// 顶栏毛玻璃：内容从顶栏底部穿过，滚到顶部之外时才补一条分隔线。
+// 只写 data-scrolled 属性，滚动回调走 rAF 节流，避免每帧重排/重绘模糊层。
+function syncTopbarState(doc: Document): void {
+  try {
+    const main = doc.getElementById('aus-main') as HTMLElement | null;
+    if (!main) return;
+    const on = main.scrollTop > 4 ? '1' : '0';
+    for (const id of ['aus-page-header', 'aus-mobile-header']) {
+      const bar = doc.getElementById(id);
+      if (bar && bar.getAttribute('data-scrolled') !== on) bar.setAttribute('data-scrolled', on);
+    }
+  } catch {}
+}
+
+function bindTopbarScroll(doc: Document): void {
+  try {
+    const main = doc.getElementById('aus-main') as HTMLElement | null;
+    if (!main || main.getAttribute('data-topbar-bound') === '1') return;
+    main.setAttribute('data-topbar-bound', '1');
+    let raf = 0;
+    main.addEventListener('scroll', () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => { raf = 0; syncTopbarState(doc); });
+    }, { passive: true });
+    syncTopbarState(doc);
+  } catch {}
+}
+
 export function bindPanel(doc: Document) {
   const q = doc.getElementById('aus-btn-query-balance') as HTMLButtonElement | null;
   if (q) q.onclick = () => queryBalance();
   // 胶囊下拉的打开状态（箭头旋转 / 开合时长）统一由 pill.ts 跟随 DOM 变化标注
   try { initPillState(doc); } catch {}
+  // 顶栏毛玻璃的滚动联动（幂等，重复调用只补一次监听）
+  bindTopbarScroll(doc);
 }
 
 function switchView(view: typeof currentView) {
@@ -720,6 +750,7 @@ function switchView(view: typeof currentView) {
       scroller.scrollLeft = 0;
     }
   } catch {}
+  syncTopbarState(doc);
   doc.querySelectorAll('.aus-nav-item').forEach((el: any) => {
     const v = el.getAttribute('data-nav');
     if (v === view) el.classList.add('active');
@@ -785,7 +816,7 @@ export function createPanel() {
   panel.setAttribute('data-ds-theme', theme);
   panel.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:\'Microsoft YaHei\',\'微软雅黑\',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;';
   panel.innerHTML = `
-    <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;border-bottom:1px solid var(--ds-border);background:var(--ds-panel-bg);">
+    <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;">
       <button id="aus-hamburger-btn" title="菜单" style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);font-size:18px;line-height:1;padding:0;">${icon('menu', 20)}</button>
       <span style="margin-left:12px;font-size:var(--aus-fs-base);font-weight:700;color:var(--ds-text);white-space:nowrap;flex-shrink:0;">API用量统计</span>
       <span id="aus-mobile-page-title" style="margin-left:10px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text-2);">用量概览</span>
@@ -819,8 +850,8 @@ export function createPanel() {
         </div>
       </div>
     </div>
-    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--ds-panel-bg);">
-      <div id="aus-page-header" style="flex-shrink:0;height:56px;display:flex;align-items:flex-start;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--ds-border);background:var(--ds-panel-bg);">
+    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--ds-panel-bg);position:relative;">
+      <div id="aus-page-header" style="flex-shrink:0;height:56px;display:flex;align-items:flex-start;justify-content:space-between;padding:0 20px;">
         <span id="aus-page-title" style="font-size:var(--aus-fs-base);font-weight:600;line-height:20px;margin-top:18px;color:var(--ds-text);">用量概览</span>
         <button id="aus-panel-close" style="width:32px;height:32px;margin-top:12px;padding:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;line-height:1;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:var(--aus-fs-base);">${icon('close', 16)}</button>
       </div>

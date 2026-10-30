@@ -12128,7 +12128,8 @@ var CHANGELOG = [{
 				"优化深浅色模式显示效果，提高可读性",
 				"部分选项的选择现在会在刷新网页后留存",
 				"图表和历史记录中的输入输出配色对齐 DeepSeek 官网",
-				"模型用量占比图在模型很多时不再挤成一团"
+				"模型用量占比图在模型很多时不再挤成一团",
+				"顶部栏改成半透明模糊效果，内容会从下面滑过"
 			]
 		},
 		{
@@ -13080,12 +13081,40 @@ function renderHistory(doc, s) {
 		}
 	})();
 }
+function syncTopbarState(doc) {
+	try {
+		const main = doc.getElementById("aus-main");
+		if (!main) return;
+		const on = main.scrollTop > 4 ? "1" : "0";
+		for (const id of ["aus-page-header", "aus-mobile-header"]) {
+			const bar = doc.getElementById(id);
+			if (bar && bar.getAttribute("data-scrolled") !== on) bar.setAttribute("data-scrolled", on);
+		}
+	} catch {}
+}
+function bindTopbarScroll(doc) {
+	try {
+		const main = doc.getElementById("aus-main");
+		if (!main || main.getAttribute("data-topbar-bound") === "1") return;
+		main.setAttribute("data-topbar-bound", "1");
+		let raf = 0;
+		main.addEventListener("scroll", () => {
+			if (raf) return;
+			raf = requestAnimationFrame(() => {
+				raf = 0;
+				syncTopbarState(doc);
+			});
+		}, { passive: true });
+		syncTopbarState(doc);
+	} catch {}
+}
 function bindPanel(doc) {
 	const q = doc.getElementById("aus-btn-query-balance");
 	if (q) q.onclick = () => queryBalance();
 	try {
 		initPillState(doc);
 	} catch {}
+	bindTopbarScroll(doc);
 }
 function switchView(view) {
 	const prevView = currentView;
@@ -13114,6 +13143,7 @@ function switchView(view) {
 			scroller.scrollLeft = 0;
 		}
 	} catch {}
+	syncTopbarState(doc);
 	doc.querySelectorAll(".aus-nav-item").forEach((el) => {
 		if (el.getAttribute("data-nav") === view) el.classList.add("active");
 		else el.classList.remove("active");
@@ -13199,7 +13229,7 @@ function createPanel() {
 	panel.setAttribute("data-ds-theme", theme);
 	panel.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:'Microsoft YaHei','微软雅黑',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;";
 	panel.innerHTML = `
-    <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;border-bottom:1px solid var(--ds-border);background:var(--ds-panel-bg);">
+    <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;">
       <button id="aus-hamburger-btn" title="菜单" style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);font-size:18px;line-height:1;padding:0;">${icon("menu", 20)}</button>
       <span style="margin-left:12px;font-size:var(--aus-fs-base);font-weight:700;color:var(--ds-text);white-space:nowrap;flex-shrink:0;">API用量统计</span>
       <span id="aus-mobile-page-title" style="margin-left:10px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text-2);">用量概览</span>
@@ -13233,8 +13263,8 @@ function createPanel() {
         </div>
       </div>
     </div>
-    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--ds-panel-bg);">
-      <div id="aus-page-header" style="flex-shrink:0;height:56px;display:flex;align-items:flex-start;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--ds-border);background:var(--ds-panel-bg);">
+    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--ds-panel-bg);position:relative;">
+      <div id="aus-page-header" style="flex-shrink:0;height:56px;display:flex;align-items:flex-start;justify-content:space-between;padding:0 20px;">
         <span id="aus-page-title" style="font-size:var(--aus-fs-base);font-weight:600;line-height:20px;margin-top:18px;color:var(--ds-text);">用量概览</span>
         <button id="aus-panel-close" style="width:32px;height:32px;margin-top:12px;padding:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;line-height:1;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:var(--aus-fs-base);">${icon("close", 16)}</button>
       </div>
