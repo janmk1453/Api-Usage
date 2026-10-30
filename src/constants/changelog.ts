@@ -45,6 +45,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         items: [
           '关于页新增「更新日志」',
           '新增一些动画和模糊效果',
+          '新增重置筛选',
         ],
       },
       {
@@ -54,7 +55,6 @@ export const CHANGELOG: ChangelogEntry[] = [
           '图表/历史记录的输入输出和部分 UI 配色与样式对齐 DeepSeek 官网',
           '部分选项的选择现在会在刷新网页后留存',
           '调整移动端 UI',
-          '用量统计和历史记录页新增一键重置筛选',
         ],
       },
       {
@@ -62,13 +62,12 @@ export const CHANGELOG: ChangelogEntry[] = [
         items: [
           '调整细节',
           '模型占比图在大量模型时挤成一团',
-          '勾选框里的勾没对齐',
         ],
       },
     ],
   },
   {
-    version: 'r3.1.7',
+version: 'r3.1.7',
     date: '2026-10-23',
     sections: [
       {
