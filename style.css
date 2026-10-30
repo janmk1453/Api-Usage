@@ -325,7 +325,9 @@
   #aus-sidebar-toggle { display: none !important; }
   #aus-page-header { display: none !important; }
   /* 窄容器抽屉同样保持紧凑导航尺寸（与 ≤760px 视口一致） */
-  #aus-sidebar .aus-nav-item { justify-content: flex-start !important; padding: 8px 10px !important; gap: 10px !important; font-size: 12px !important; border-radius: 8px !important; }
+  #aus-sidebar .aus-nav-item { justify-content: flex-start !important; padding: 11px 12px !important; gap: 12px !important; font-size: var(--aus-fs-base) !important; border-radius: 10px !important; }
+  /* 窄容器抽屉：导航按钮之间留出更明显的间距（内联 gap:4px 需 !important） */
+  #aus-sidebar .aus-nav-group { gap: 8px !important; }
   /* 窄容器抽屉的导航项文字起点同步左移（内距 10 + 10 + 图标 20 + 间距 10 − 品牌区内距 14 = 36） */
   #aus-sidebar #aus-brand { padding-left: 6px !important; gap: 10px !important; }
   #aus-main { padding: 12px !important; overflow-x: hidden !important; }
@@ -557,7 +559,7 @@
   max-width: min(320px, calc(100vw - 24px));
 }
 #aus-mobile-header { display:none; height:56px; align-items:center; padding:0 16px; flex-shrink:0; }
-#aus-hamburger-btn { width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);font-size:18px;line-height:1;padding:0; }
+#aus-hamburger-btn { width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);font-size:18px;line-height:1;padding:0; }
 #aus-hamburger-btn:hover { opacity:0.7; }
 .aus-nav-item { transition: none; color: var(--ds-text-2); }
 .aus-nav-item:hover { background: var(--ds-hover-bg) !important; }
@@ -633,7 +635,9 @@
   #aus-sidebar .aus-nav-label { display:inline !important; }
   /* 窄屏隐藏冗余的类型徽标（副标题已含类型与来源），避免名称行折行拉高卡片 */
   #aus-wallet .aus-wallet-badge-relay { display: none !important; }
-  #aus-sidebar .aus-nav-item { justify-content:flex-start !important; padding:8px 10px !important; gap:10px !important; font-size:12px !important; border-radius:8px !important; }
+  #aus-sidebar .aus-nav-item { justify-content:flex-start !important; padding:11px 12px !important; gap:12px !important; font-size:var(--aus-fs-base) !important; border-radius:10px !important; }
+  /* 窄屏抽屉：导航按钮间距放宽（内联 gap:4px 需 !important） */
+  #aus-sidebar .aus-nav-group { gap:8px !important; }
   /* 窄屏选中态加深，避免 #F9FAFB 侧栏与近白块面（--ds-card #F5F6F7）导致“都是白底” */
   .aus-nav-item.active { background: #E5E7EB !important; }
   [data-extension="api-usage-stat"][data-ds-theme="dark"] .aus-nav-item.active { background: var(--ds-nav-active-bg) !important; }
