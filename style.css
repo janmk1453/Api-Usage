@@ -60,7 +60,7 @@
   --ds-gap: 12px;
   --ds-shadow: 0 1px 2px rgba(0,0,0,0.06);
   /* 顶栏毛玻璃（唯一允许的模糊层）：半透明底色 + 滚动时出现的分隔线 */
-  --aus-glass-bg: rgba(255,255,255,0.72);
+  --aus-glass-bg: rgba(255,255,255,0.80);
   --aus-glass-border: rgba(17,24,39,0.08);
   --aus-glass-shadow: rgba(17,24,39,0.06);
   background: var(--ds-bg);
@@ -112,7 +112,7 @@
   --ds-yellow-bg: #2C2410;
   --ds-yellow-border: #8A6A1F;
   /* 顶栏毛玻璃（深色）：更低的底色不透明度 + 更弱的高光分隔线 */
-  --aus-glass-bg: rgba(21,21,23,0.62);
+  --aus-glass-bg: rgba(27,27,28,0.70);
   --aus-glass-border: rgba(255,255,255,0.10);
   --aus-glass-shadow: rgba(0,0,0,0.45);
   --ds-radius-card: 14px;
@@ -287,8 +287,13 @@
 #aus-panel * {
   text-shadow: none !important;
   filter: none !important;
-  backdrop-filter: none !important;
   will-change: auto !important;
+}
+/* 唯一例外：两条顶栏要保留毛玻璃的 backdrop-filter（见文件末尾「顶栏毛玻璃」），
+   其余后代的 backdrop-filter 一律清空，避免宿主 SmartTheme 滤镜渗入 */
+#aus-panel *:not(#aus-page-header):not(#aus-mobile-header) {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
 #aus-sidebar { background: var(--ds-sidebar-bg) !important; border-right: 1px solid var(--ds-border) !important; }
 /* 品牌区：图标与导航图标同列（左边缘 22px），标题文字仍与导航项文字同列（54px）——
@@ -1944,7 +1949,9 @@
    页面内容从顶栏底部穿过并被实时模糊；两者同一时刻只有一条可见，模糊层最多只有一个。
    静止在顶部时不画任何分隔线，滚出顶部后才淡出一条 hairline + 极淡投影。
    性能取舍：不做 backdrop-filter 过渡、不写 will-change、滚动回调 rAF 节流，
-   只改 border-color / box-shadow，避免每帧重绘模糊层。 */
+   只改 border-color / box-shadow，避免每帧重绘模糊层。
+   注意：上方 `#aus-panel *:not(#aus-page-header):not(#aus-mobile-header)` 的隔离规则
+   会给其它后代写 backdrop-filter: none !important，所以这里必须带 !important 才生效。 */
 #aus-panel { --aus-topbar-h: 56px; }
 #aus-panel #aus-page-header,
 #aus-panel #aus-mobile-header {
@@ -1957,8 +1964,8 @@
   z-index: 30;
   background: var(--aus-glass-bg, var(--ds-panel-bg));
   border-bottom: 1px solid transparent;
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
-  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
+  backdrop-filter: blur(20px) saturate(140%) !important;
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 /* 移动端顶栏压在侧边抽屉（30）与遮罩（20）之下，抽屉拉开时整条顶栏一起变暗 */
