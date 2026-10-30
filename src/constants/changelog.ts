@@ -43,7 +43,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       {
         kind: 'feature',
         items: [
-          '关于页新增「更新日志」',
+          '关于页新增更新日志',
           '新增一些动画和模糊效果',
           '新增重置筛选',
         ],
@@ -51,6 +51,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       {
         kind: 'improve',
         items: [
+          '移除了一些旧有设置',
           '优化深浅色模式显示效果，提高可读性',
           '图表/历史记录的输入输出和部分 UI 配色与样式对齐 DeepSeek 官网',
           '部分选项的选择现在会在刷新网页后留存',
@@ -60,6 +61,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       {
         kind: 'fix',
         items: [
+          '鼠标滚轮无法在图表上滚动',
           '调整细节',
           '模型占比图在大量模型时挤成一团',
         ],
