@@ -2002,3 +2002,16 @@
     backdrop-filter: none;
   }
 }
+
+/* ══ 钱包页顶部工具栏（窄屏保持两行）══
+   第一行：搜索框 + 「全部 N」；第二行：其余筛选胶囊 + 「展开全部 / 收起全部」。
+   窄屏把搜索框压成可收缩（min-width:0）并把胶囊内距收紧，避免 filter 胶囊被挤到第三行。 */
+@media (max-width: 760px) {
+  #aus-wallet [data-wallet-search] { min-width: 0 !important; flex: 1 1 110px !important; }
+  #aus-wallet [data-wallet-filter],
+  #aus-wallet [data-wallet-toggle-all] { padding: 5px 9px !important; }
+}
+@media (max-width: 420px) {
+  #aus-wallet [data-wallet-filter],
+  #aus-wallet [data-wallet-toggle-all] { padding: 5px 8px !important; font-size: var(--aus-fs-xs) !important; }
+}
