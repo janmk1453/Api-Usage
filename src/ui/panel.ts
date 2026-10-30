@@ -340,6 +340,15 @@ function bindHistoryFilters(doc: Document) {
       positionFilterDropdown(button, dropdown);
     };
   }
+  // 顶部筛选「重置筛选」：四维恢复为全部、分页回第一页，并随 renderHistoryFilters 落盘
+  const historyResetBtn = doc.getElementById('aus-history-filter-reset');
+  if (historyResetBtn) {
+    historyResetBtn.onclick = () => {
+      resetHistoryFilters();
+      closeHistoryFilterDropdowns();
+      renderHistory(doc, getSelectedSave());
+    };
+  }
   doc.addEventListener('click', (event: any) => {
     const target = event.target as HTMLElement;
     if (!target.closest('#aus-history-filter-host')) closeHistoryFilterDropdowns();
@@ -950,6 +959,7 @@ export function createPanel() {
                 <div id="aus-credential-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon('chevron-down', 14)}</div>
                 <div id="aus-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
+              <div id="aus-stats-filter-reset" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);font-size:var(--aus-fs-base);cursor:pointer;margin-left:auto;">${icon('refresh', 14)}<span>重置筛选</span></div>
             </div>
             <div id="aus-stats-three" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
               <div class="ds-card"><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">消费金额</div><div id="aus-stats-cost" style="font-size:22px;font-weight:700;color:var(--ds-text);margin-top:6px;">¥0.00 CNY</div></div>
@@ -1081,6 +1091,7 @@ export function createPanel() {
                 <div id="aus-history-credential-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-history-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon('chevron-down', 14)}</div>
                 <div id="aus-history-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
+              <div id="aus-history-filter-reset" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);font-size:var(--aus-fs-base);cursor:pointer;margin-left:auto;">${icon('refresh', 14)}<span>重置筛选</span></div>
             </div>
             <div id="aus-diff" class="ds-card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">缓存断点</span><button id="aus-diff-fullscreen" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">全屏</button></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">在历史中各选一条 旧/新 对比，橙/绿高亮即发散点</div></div>
             <div id="aus-history"></div>

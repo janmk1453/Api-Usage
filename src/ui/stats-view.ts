@@ -24,7 +24,9 @@ import { toast } from '../utils/logger';
 import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
 
 type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom' | 'all';
-let currentRange: RangeKey = '30d';
+// 默认时间维度：工具栏「重置筛选」与首次进入共用同一口径
+const DEFAULT_RANGE: RangeKey = '30d';
+let currentRange: RangeKey = DEFAULT_RANGE;
 let customStart = '';
 let customEnd = '';
 let pickerOpen = false;
@@ -61,6 +63,30 @@ function persistStatsFilters() {
       credential: selectedCredential,
     },
   });
+}
+
+
+// 工具栏「重置筛选」：五维恢复为默认（近 30 天 + 全部），关闭所有下拉并重绘（重绘末尾自动落盘）
+function resetStatsFilters() {
+  const doc = getDoc();
+  currentRange = DEFAULT_RANGE;
+  customStart = '';
+  customEnd = '';
+  selectedModels = [];
+  selectedChat = STATS_FILTER_ALL;
+  selectedEndpoint = STATS_FILTER_ALL;
+  selectedCredential = STATS_FILTER_ALL;
+  pickerOpen = false;
+  modelPickerOpen = false;
+  chatPickerOpen = false;
+  endpointPickerOpen = false;
+  credentialPickerOpen = false;
+  ['aus-range-dropdown', 'aus-model-dropdown', 'aus-chat-dropdown', 'aus-endpoint-dropdown', 'aus-credential-dropdown'].forEach((id) => {
+    const el = doc.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  updatePickerLabel();
+  renderStatsView();
 }
 
 // 模型汇总表排序：点击表头（除模型外）正序/倒序切换。
@@ -460,6 +486,12 @@ function bindPicker() {
         renderCredentialPicker(lastStatsHistory);
         positionFilterDropdown(kBtn as HTMLElement, kDropdown as HTMLElement);
       }
+    };
+  }
+  const statsResetBtn = doc.getElementById('aus-stats-filter-reset');
+  if (statsResetBtn) {
+    statsResetBtn.onclick = () => {
+      resetStatsFilters();
     };
   }
   doc.addEventListener('click', (e: any) => {

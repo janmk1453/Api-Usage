@@ -54,6 +54,7 @@ export const CHANGELOG: ChangelogEntry[] = [
           '图表/历史记录的输入输出和部分 UI 配色与样式对齐 DeepSeek 官网',
           '部分选项的选择现在会在刷新网页后留存',
           '调整移动端 UI',
+          '用量统计和历史记录页新增一键重置筛选',
         ],
       },
       {

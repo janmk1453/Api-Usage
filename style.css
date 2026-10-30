@@ -2060,3 +2060,25 @@
   background: var(--aus-nav-hover-bg, var(--ds-card-hover)) !important;
   transition-duration: 0ms;
 }
+
+/* 筛选工具栏「重置筛选」：与胶囊同尺寸的次级按钮，只用底色区分（不描边、无阴影）
+   按钮底色写在 inline style 上，因此 hover/active 必须带 !important 才能生效 */
+#aus-panel #aus-stats-filter-reset,
+#aus-panel #aus-history-filter-reset {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+@media (hover: hover) {
+  #aus-panel #aus-stats-filter-reset:hover,
+  #aus-panel #aus-history-filter-reset:hover {
+    background: var(--ds-card) !important;
+    color: var(--ds-text) !important;
+  }
+}
+#aus-panel #aus-stats-filter-reset:active,
+#aus-panel #aus-history-filter-reset:active {
+  background: var(--ds-card-hover) !important;
+  color: var(--ds-text) !important;
+  transition-duration: 0ms;
+}

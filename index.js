@@ -7437,7 +7437,8 @@ function writeFilterPrefs(patch) {
 }
 //#endregion
 //#region src/ui/stats-view.ts
-var currentRange = "30d";
+var DEFAULT_RANGE = "30d";
+var currentRange = DEFAULT_RANGE;
 var customStart = "";
 var customEnd = "";
 var pickerOpen = false;
@@ -7468,6 +7469,33 @@ function persistStatsFilters() {
 		endpoint: selectedEndpoint,
 		credential: selectedCredential
 	} });
+}
+function resetStatsFilters() {
+	const doc = getDoc$6();
+	currentRange = DEFAULT_RANGE;
+	customStart = "";
+	customEnd = "";
+	selectedModels = [];
+	selectedChat = STATS_FILTER_ALL;
+	selectedEndpoint = STATS_FILTER_ALL;
+	selectedCredential = STATS_FILTER_ALL;
+	pickerOpen = false;
+	modelPickerOpen = false;
+	chatPickerOpen = false;
+	endpointPickerOpen = false;
+	credentialPickerOpen = false;
+	[
+		"aus-range-dropdown",
+		"aus-model-dropdown",
+		"aus-chat-dropdown",
+		"aus-endpoint-dropdown",
+		"aus-credential-dropdown"
+	].forEach((id) => {
+		const el = doc.getElementById(id);
+		if (el) el.style.display = "none";
+	});
+	updatePickerLabel();
+	renderStatsView();
 }
 var summarySort = {
 	key: null,
@@ -7901,6 +7929,10 @@ function bindPicker() {
 			renderCredentialPicker$1(lastStatsHistory);
 			positionFilterDropdown(kBtn, kDropdown);
 		}
+	};
+	const statsResetBtn = doc.getElementById("aus-stats-filter-reset");
+	if (statsResetBtn) statsResetBtn.onclick = () => {
+		resetStatsFilters();
 	};
 	doc.addEventListener("click", (e) => {
 		const t = e.target;
@@ -12119,7 +12151,8 @@ var CHANGELOG = [{
 				"优化深浅色模式显示效果，提高可读性",
 				"图表/历史记录的输入输出和部分 UI 配色与样式对齐 DeepSeek 官网",
 				"部分选项的选择现在会在刷新网页后留存",
-				"调整移动端 UI"
+				"调整移动端 UI",
+				"用量统计和历史记录页新增一键重置筛选"
 			]
 		},
 		{
@@ -12674,6 +12707,12 @@ function bindHistoryFilters(doc) {
 			positionFilterDropdown(button, dropdown);
 		};
 	}
+	const historyResetBtn = doc.getElementById("aus-history-filter-reset");
+	if (historyResetBtn) historyResetBtn.onclick = () => {
+		resetHistoryFilters();
+		closeHistoryFilterDropdowns();
+		renderHistory(doc, getSelectedSave());
+	};
 	doc.addEventListener("click", (event) => {
 		if (!event.target.closest("#aus-history-filter-host")) closeHistoryFilterDropdowns();
 	});
@@ -13348,6 +13387,7 @@ function createPanel() {
                 <div id="aus-credential-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
+              <div id="aus-stats-filter-reset" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);font-size:var(--aus-fs-base);cursor:pointer;margin-left:auto;">${icon("refresh", 14)}<span>重置筛选</span></div>
             </div>
             <div id="aus-stats-three" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
               <div class="ds-card"><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">消费金额</div><div id="aus-stats-cost" style="font-size:22px;font-weight:700;color:var(--ds-text);margin-top:6px;">¥0.00 CNY</div></div>
@@ -13479,6 +13519,7 @@ function createPanel() {
                 <div id="aus-history-credential-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-history-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-history-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
+              <div id="aus-history-filter-reset" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);font-size:var(--aus-fs-base);cursor:pointer;margin-left:auto;">${icon("refresh", 14)}<span>重置筛选</span></div>
             </div>
             <div id="aus-diff" class="ds-card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">缓存断点</span><button id="aus-diff-fullscreen" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">全屏</button></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">在历史中各选一条 旧/新 对比，橙/绿高亮即发散点</div></div>
             <div id="aus-history"></div>
