@@ -1,10 +1,10 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { r as state } from "./store-BhaWFCjs.js";
+import { r as state } from "./store-CgJSmTLt.js";
 import { a as HIDDEN_PRICING_MODELS, d as PRICING_SYNC_SOURCE, l as PRICING, u as PRICING_SYNC_FALLBACK } from "./pricing-Bc-qEvy8.js";
 import { f as saveHot } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { _ as normalizeModel, m as isDeepSeekOfficialModel, t as repository, v as cloneWallet } from "./repository-BotjYXCT.js";
-import { a as getWalletExchangeRate } from "./currency-DYtqS43k.js";
+import { _ as normalizeModel, m as isDeepSeekOfficialModel, t as repository, v as cloneWallet } from "./repository-BW-r59iw.js";
+import { a as getWalletExchangeRate } from "./currency-DgeH8MPr.js";
 /** 已知同义模型名（仅做等价加分，不强绑）：归一化后仍不同但确为同一模型的写法 */
 var MODEL_ALIAS_HINTS = {
 	"qwen-max": ["qwen3-max", "qwen-max-latest"],
@@ -193,6 +193,7 @@ var pricing_sync_exports = /* @__PURE__ */ __exportAll({
 	applySyncPlan: () => applySyncPlan,
 	buildSyncPlan: () => buildSyncPlan,
 	fetchModelsDevCatalog: () => fetchModelsDevCatalog,
+	hasSyncableWallet: () => hasSyncableWallet,
 	isSyncedCustomModel: () => isSyncedCustomModel,
 	markLegacySyncedModels: () => markLegacySyncedModels,
 	removeSyncedModels: () => removeSyncedModels,
@@ -505,11 +506,20 @@ async function applySyncPlan(plan, opts = {}) {
 		wallets: Array.from(affected)
 	};
 }
+/** 是否存在需要同步的钱包：未忽略且已在钱包页选定价格来源（catalogProvider）。没有就完全不联网 */
+function hasSyncableWallet() {
+	const ignored = new Set(state.walletIgnored || []);
+	return repository.getWallets().some((wallet) => !ignored.has(wallet.id) && !!wallet.catalogProvider);
+}
 /** 按钱包同步价格：构建计划 → 自动应用（排除歧义行） */
 async function syncPricingFromModelsDev(opts = {}) {
 	const silent = !!opts.silent;
 	if (!state.settings.pricingSync) return null;
 	if (silent && !opts.force && Date.now() - lastAutoSync < AUTO_SYNC_THROTTLE) return null;
+	if (!hasSyncableWallet()) {
+		if (!silent) toast("warning", "没有可用于比对的模型：请先在钱包页为钱包选择价格来源，并等待识别到模型");
+		return null;
+	}
 	if (silent) lastAutoSync = Date.now();
 	try {
 		const plan = buildSyncPlan(await fetchModelsDevCatalog({ force: !!opts.force }), {
@@ -565,8 +575,7 @@ function restartPricingSyncTimer() {
 		pricingTimer = null;
 	}
 	const ps = state.settings.pricingSync;
-	if (!ps?.enabled) return;
-	const hours = parseInt(String(ps.autoIntervalHours)) || 0;
+	const hours = parseInt(String(ps?.autoIntervalHours)) || 0;
 	if (!hours || hours <= 0) return;
 	pricingTimer = setInterval(() => {
 		syncPricingFromModelsDev({ silent: true }).catch(() => {});

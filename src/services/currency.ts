@@ -4,10 +4,21 @@ import { saveHot } from '../store/persistence';
 
 export type DisplayCurrency = { code: 'CNY' | 'USD'; symbol: string; rate: number };
 
+/**
+ * 显示币种由钱包驱动：未忽略钱包**全部**为 USD 时全站按美元展示，否则一律按 CNY。
+ * 内部计价单位始终是 CNY，这里只决定展示换算方式；已移除全局币种开关。
+ */
+export function walletDrivenCurrency(): 'CNY' | 'USD' {
+  const ignored = new Set<string>((state as any).walletIgnored || []);
+  const wallets: any[] = ((state as any).wallets || []).filter((wallet: any) => wallet && !ignored.has(wallet.id));
+  if (!wallets.length) return 'CNY';
+  return wallets.every((wallet: any) => String(wallet?.balance?.currency || 'CNY').toUpperCase() === 'USD') ? 'USD' : 'CNY';
+}
+
+/** USD→CNY 汇率（配置值，兜底 7.2）：用于钱包余额换算与 models.dev 价格换算 */
 export function getEffectiveRate(): number {
   const ps: any = (state.settings as any)?.pricingSync;
-  if (!ps?.enabled) return 1;
-  const r = parseFloat(String(ps.exchangeRate));
+  const r = parseFloat(String(ps?.exchangeRate));
   if (!isFinite(r) || r <= 0) return DEFAULT_EXCHANGE_RATE;
   return r;
 }
@@ -20,9 +31,8 @@ export function getWalletExchangeRate(): number {
 }
 
 export function getDisplayCurrency(): DisplayCurrency {
-  const ps: any = (state.settings as any)?.pricingSync;
-  if (ps?.enabled) {
-    return { code: 'USD', symbol: '$', rate: getEffectiveRate() };
+  if (walletDrivenCurrency() === 'USD') {
+    return { code: 'USD', symbol: "$", rate: getEffectiveRate() };
   }
   return { code: 'CNY', symbol: '¥', rate: 1 };
 }
@@ -100,7 +110,7 @@ let rateTimer: any = null;
 export function restartRateTimer() {
   if (rateTimer) { try { clearInterval(rateTimer); } catch {} rateTimer = null; }
   const ps: any = (state.settings as any)?.pricingSync;
-  if (!ps?.enabled || !ps?.useLiveRate) return;
+  if (!ps?.useLiveRate) return;
   rateTimer = setInterval(() => { fetchLiveRate(false).catch(() => {}); }, EXCHANGE_RATE_FETCH_INTERVAL);
   // 首次若超时则立即尝试
   if (!ps.lastRateFetch || Date.now() - ps.lastRateFetch >= EXCHANGE_RATE_FETCH_INTERVAL) {

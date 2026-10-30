@@ -14,6 +14,9 @@ import { initExtraCharts, renderExtraCharts, resetChartThemeCache } from './extr
 import { renderForecastView, initForecastView } from './forecast-view';
 import { disposeForecastCharts } from './forecast-chart';
 import { renderWalletView } from './wallet-view';
+import { bindChangelog, renderChangelogCard } from './changelog';
+import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
+import { initPillState } from './pill';
 import { applyTheme } from '../services/theme';
 import { DataEvents, on as onDataEvent } from '../data/events';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
@@ -140,6 +143,14 @@ const historyFilters = {
   endpoint: STATS_FILTER_ALL,
   credential: STATS_FILTER_ALL,
 };
+
+// 四维筛选跨刷新记忆（与统计页共用 aus_filter_prefs_v1，分片存储互不覆盖）；
+// 记录里已不存在的选项仍由 renderHistoryFilters 的校验剔除。
+const restoredHistoryPrefs = readFilterPrefs().history;
+if (restoredHistoryPrefs.model) historyFilters.model = restoredHistoryPrefs.model;
+if (restoredHistoryPrefs.chat) historyFilters.chat = restoredHistoryPrefs.chat;
+if (restoredHistoryPrefs.endpoint) historyFilters.endpoint = restoredHistoryPrefs.endpoint;
+if (restoredHistoryPrefs.credential) historyFilters.credential = restoredHistoryPrefs.credential;
 let historyFilterBase: any[] = [];
 try {
   onDataEvent(DataEvents.HISTORY_ADDED, invalidateHistoryCache);
@@ -289,6 +300,15 @@ function renderHistoryFilters(history: any[]) {
     closeHistoryFilterDropdowns();
     renderHistory(doc, getSelectedSave());
   });
+  // 纯展示偏好：每次渲染筛选器后落盘（含校验剔除后的值），供下次打开还原
+  writeFilterPrefs({
+    history: {
+      model: historyFilters.model,
+      chat: historyFilters.chat,
+      endpoint: historyFilters.endpoint,
+      credential: historyFilters.credential,
+    },
+  });
 }
 
 function filteredHistoryForDisplay(history: any[]): any[] {
@@ -318,6 +338,15 @@ function bindHistoryFilters(doc: Document) {
       renderHistoryFilters(historyFilterBase);
       dropdown.style.display = 'block';
       positionFilterDropdown(button, dropdown);
+    };
+  }
+  // 顶部筛选「重置筛选」：四维恢复为全部、分页回第一页，并随 renderHistoryFilters 落盘
+  const historyResetBtn = doc.getElementById('aus-history-filter-reset');
+  if (historyResetBtn) {
+    historyResetBtn.onclick = () => {
+      resetHistoryFilters();
+      closeHistoryFilterDropdowns();
+      renderHistory(doc, getSelectedSave());
     };
   }
   doc.addEventListener('click', (event: any) => {
@@ -466,7 +495,7 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
       <div class="aus-history-card-head" style="display:flex;justify-content:space-between;align-items:center;">
         <div class="aus-history-card-main" style="min-width:0;flex:1;">
           <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${originBadge}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(h.model)} · ${esc(localTimeHM(h.timestamp))}</span></div>
-          <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · ${h.duration || 0}ms · ${(h.tokenRate||0)>0 ? h.tokenRate+' t/s' : '未测速'}</div>
+          <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · ${(h.tokenRate||0)>0 ? h.tokenRate+' t/s' : '未测速'}</div>
         </div>
         <div class="aus-history-card-actions" style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
           <div class="aus-history-card-cost">
@@ -480,12 +509,16 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
         </div>
       </div>
       <div style="background:var(--ds-border);border-radius:999px;height:6px;overflow:hidden;margin-top:8px;display:flex;">
-        <div style="background:var(--ds-green);width:${hp}%;height:100%;"></div>
-        <div style="background:var(--ds-red-border);width:${mp}%;height:100%;"></div>
-        <div style="background:var(--ds-purple-bg);width:${op}%;height:100%;"></div>
+        <div style="background:var(--aus-token-hit);width:${hp}%;height:100%;"></div>
+        <div style="background:var(--aus-token-miss);width:${mp}%;height:100%;"></div>
+        <div style="background:var(--aus-token-output);width:${op}%;height:100%;"></div>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:var(--aus-fs-sm);margin-top:4px;">
-        <div style="display:flex;gap:8px;"><span style="color:var(--ds-green);font-weight:500;">${hps}% 命中</span><span style="color:var(--ds-red);font-weight:500;">${mps}% 未命中</span><span style="color:var(--ds-purple);font-weight:500;">${ops}% 输出</span></div>
+        <div style="display:flex;gap:10px;align-items:center;color:var(--ds-text-2);">
+          <span style="display:inline-flex;align-items:center;gap:4px;"><span class="aus-token-dot" style="background:var(--aus-token-hit);"></span><b style="color:var(--ds-text);font-weight:600;">${hps}%</b> 命中</span>
+          <span style="display:inline-flex;align-items:center;gap:4px;"><span class="aus-token-dot" style="background:var(--aus-token-miss);"></span><b style="color:var(--ds-text);font-weight:600;">${mps}%</b> 未命中</span>
+          <span style="display:inline-flex;align-items:center;gap:4px;"><span class="aus-token-dot" style="background:var(--aus-token-output);"></span><b style="color:var(--ds-text);font-weight:600;">${ops}%</b> 输出</span>
+        </div>
         <span style="color:var(--ds-text-2);">${total.toLocaleString()}t</span>
       </div>
       <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;margin-top:8px;border-top:1px solid var(--ds-border);padding-top:8px;max-height:min(520px,60vh);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;flex-direction:column;gap:8px;">
@@ -661,9 +694,64 @@ function renderHistory(doc: Document, s: any) {
   })();
 }
 
+// 顶栏毛玻璃：内容从顶栏底部穿过，滚到顶部之外时才补一条分隔线。
+// 只写 data-scrolled 属性，滚动回调走 rAF 节流，避免每帧重排/重绘模糊层。
+function syncTopbarState(doc: Document): void {
+  try {
+    const main = doc.getElementById('aus-main') as HTMLElement | null;
+    if (!main) return;
+    const on = main.scrollTop > 4 ? '1' : '0';
+    for (const id of ['aus-page-header', 'aus-mobile-header']) {
+      const bar = doc.getElementById(id);
+      if (bar && bar.getAttribute('data-scrolled') !== on) bar.setAttribute('data-scrolled', on);
+    }
+  } catch {}
+}
+
+function bindTopbarScroll(doc: Document): void {
+  try {
+    const main = doc.getElementById('aus-main') as HTMLElement | null;
+    if (!main || main.getAttribute('data-topbar-bound') === '1') return;
+    main.setAttribute('data-topbar-bound', '1');
+    let raf = 0;
+    main.addEventListener('scroll', () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => { raf = 0; syncTopbarState(doc); });
+    }, { passive: true });
+    syncTopbarState(doc);
+  } catch {}
+}
+
+// 移动端「菜单」按钮按压反馈：触屏没有 hover，反馈只能靠 pointerdown 在同一帧打上
+// data-pressed（不等 click、也不等抽屉展开）。松手时移除，CSS 侧 120ms 回弹。
+function bindPressFeedback(doc: Document): void {
+  try {
+    const btn = doc.getElementById('aus-hamburger-btn') as HTMLElement | null;
+    if (!btn || btn.getAttribute('data-press-bound') === '1') return;
+    btn.setAttribute('data-press-bound', '1');
+    const press = (on: boolean) => {
+      if (on) btn.setAttribute('data-pressed', '1');
+      else btn.removeAttribute('data-pressed');
+    };
+    btn.addEventListener('pointerdown', () => press(true), { passive: true });
+    btn.addEventListener('pointerup', () => press(false), { passive: true });
+    btn.addEventListener('pointercancel', () => press(false), { passive: true });
+    btn.addEventListener('pointerleave', () => press(false), { passive: true });
+    // 键盘触发与旧内核兜底：保证点击结束后不残留按压态
+    btn.addEventListener('click', () => press(false));
+    btn.addEventListener('blur', () => press(false));
+  } catch {}
+}
+
 export function bindPanel(doc: Document) {
   const q = doc.getElementById('aus-btn-query-balance') as HTMLButtonElement | null;
   if (q) q.onclick = () => queryBalance();
+  // 胶囊下拉的打开状态（箭头旋转 / 开合时长）统一由 pill.ts 跟随 DOM 变化标注
+  try { initPillState(doc); } catch {}
+  // 顶栏毛玻璃的滚动联动（幂等，重复调用只补一次监听）
+  bindTopbarScroll(doc);
+  // 移动端菜单按钮的按压反馈（幂等）
+  bindPressFeedback(doc);
 }
 
 function switchView(view: typeof currentView) {
@@ -694,6 +782,7 @@ function switchView(view: typeof currentView) {
       scroller.scrollLeft = 0;
     }
   } catch {}
+  syncTopbarState(doc);
   doc.querySelectorAll('.aus-nav-item').forEach((el: any) => {
     const v = el.getAttribute('data-nav');
     if (v === view) el.classList.add('active');
@@ -759,17 +848,17 @@ export function createPanel() {
   panel.setAttribute('data-ds-theme', theme);
   panel.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:\'Microsoft YaHei\',\'微软雅黑\',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;';
   panel.innerHTML = `
-    <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;border-bottom:1px solid var(--ds-border);background:var(--ds-card-inner);">
-      <button id="aus-hamburger-btn" title="菜单" style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);font-size:18px;line-height:1;padding:0;">${icon('menu', 20)}</button>
+    <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;">
+      <button id="aus-hamburger-btn" title="菜单" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);font-size:18px;line-height:1;padding:0;">${icon('menu', 22)}</button>
       <span style="margin-left:12px;font-size:var(--aus-fs-base);font-weight:700;color:var(--ds-text);white-space:nowrap;flex-shrink:0;">API用量统计</span>
       <span id="aus-mobile-page-title" style="margin-left:10px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text-2);">用量概览</span>
-      <button id="aus-mobile-panel-close" title="关闭" style="margin-left:auto;width:32px;height:32px;flex-shrink:0;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:var(--aus-fs-base);">${icon('close', 16)}</button>
+      <button id="aus-mobile-panel-close" title="关闭" style="margin-left:auto;width:32px;height:32px;padding:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:var(--aus-fs-base);">${icon('close', 16)}</button>
     </div>
     <div id="aus-panel-body" style="flex:1;display:flex;flex-direction:row;overflow:hidden;min-height:0;">
     <div id="aus-sidebar" style="width:260px;flex-shrink:0;background:var(--ds-sidebar-bg);border-right:1px solid var(--ds-border);display:flex;flex-direction:column;overflow:hidden;">
       <div id="aus-brand-row" style="height:56px;display:flex;align-items:flex-start;justify-content:space-between;padding:0 14px;flex-shrink:0;">
         <div style="display:flex;align-items:flex-start;gap:12px;min-width:0;margin-top:18px;" id="aus-brand">
-          <span class="aus-brand-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--ds-orange);">${icon('brand', 20)}</span>
+          <span class="aus-brand-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--ds-orange);">${icon('brand', 18)}</span>
           <div style="display:flex;flex-direction:column;min-width:0;">
             <span style="font-size:15px;font-weight:700;line-height:20px;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
             <span style="font-size:var(--aus-fs-sm);line-height:16px;color:var(--ds-text-2);white-space:nowrap;">v${typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : ''}</span>
@@ -793,10 +882,10 @@ export function createPanel() {
         </div>
       </div>
     </div>
-    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--ds-panel-bg);">
-      <div id="aus-page-header" style="flex-shrink:0;height:56px;display:flex;align-items:flex-start;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--ds-border);background:var(--ds-card-inner);">
+    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--ds-panel-bg);position:relative;">
+      <div id="aus-page-header" style="flex-shrink:0;height:56px;display:flex;align-items:flex-start;justify-content:space-between;padding:0 20px;">
         <span id="aus-page-title" style="font-size:var(--aus-fs-base);font-weight:600;line-height:20px;margin-top:18px;color:var(--ds-text);">用量概览</span>
-        <button id="aus-panel-close" style="width:32px;height:32px;margin-top:12px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:var(--aus-fs-base);">${icon('close', 16)}</button>
+        <button id="aus-panel-close" style="width:32px;height:32px;margin-top:12px;padding:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;line-height:1;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:var(--aus-fs-base);">${icon('close', 16)}</button>
       </div>
       <div id="aus-content-body" style="flex:1;display:flex;flex-direction:row;overflow:hidden;min-height:0;position:relative;">
       <div id="aus-main" style="flex:1;min-width:0;overflow:auto;padding:20px;background:var(--ds-panel-bg);">
@@ -870,6 +959,7 @@ export function createPanel() {
                 <div id="aus-credential-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon('chevron-down', 14)}</div>
                 <div id="aus-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
+              <div id="aus-stats-filter-reset" class="aus-filter-reset" title="重置筛选" aria-label="重置筛选" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);font-size:var(--aus-fs-base);cursor:pointer;margin-left:auto;">${icon('refresh', 14)}<span>重置筛选</span></div>
             </div>
             <div id="aus-stats-three" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
               <div class="ds-card"><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">消费金额</div><div id="aus-stats-cost" style="font-size:22px;font-weight:700;color:var(--ds-text);margin-top:6px;">¥0.00 CNY</div></div>
@@ -884,7 +974,7 @@ export function createPanel() {
                 <tbody id="aus-summary-tbody"><tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
               </table>
             </div>
-            <div class="ds-card" style="margin-top:12px;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">自定义图表</span><div style="display:flex;gap:8px;position:relative;"><div id="aus-chart-y-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span style="color:var(--ds-text-2);">Y</span><span id="aus-chart-y-label" style="font-weight:600;color:var(--ds-text);">总费用</span>${icon('chevron-down', 14)}</div><div id="aus-chart-x-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span style="color:var(--ds-text-2);">X</span><span id="aus-chart-x-label" style="font-weight:600;color:var(--ds-text);">每日</span>${icon('chevron-down', 14)}</div><div id="aus-chart-y-dropdown" style="display:none;position:absolute;top:34px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;"></div><div id="aus-chart-x-dropdown" style="display:none;position:absolute;top:34px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:140px;"></div></div></div><div id="aus-stats-chart" style="height:300px;"></div></div>
+            <div class="ds-card" style="margin-top:12px;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">自定义图表</span><div style="display:flex;gap:8px;position:relative;"><div id="aus-chart-y-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span style="color:var(--ds-text-2);">Y</span><span id="aus-chart-y-label" style="font-weight:600;color:var(--ds-text);">5 项</span>${icon('chevron-down', 14)}</div><div id="aus-chart-x-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span style="color:var(--ds-text-2);">X</span><span id="aus-chart-x-label" style="font-weight:600;color:var(--ds-text);">轮次</span>${icon('chevron-down', 14)}</div><div id="aus-chart-y-dropdown" style="display:none;position:absolute;top:34px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;"></div><div id="aus-chart-x-dropdown" style="display:none;position:absolute;top:34px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:140px;"></div></div></div><div id="aus-stats-chart" style="height:300px;"></div></div>
             <div id="aus-extra-charts" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px;">
               <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">Token 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-y-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-y-label-token">3 项</span>${icon('chevron-down', 14)}</div><div id="aus-extra-x-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-token">轮次</span>${icon('chevron-down', 14)}</div></div></div><div id="aus-extra-y-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:180px;max-height:200px;overflow:auto;"></div><div id="aus-extra-x-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-token" style="height:220px;"></div></div>
               <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">费用 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-y-cost" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-y-label-cost">1 项</span>${icon('chevron-down', 14)}</div><div id="aus-extra-x-cost" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-cost">轮次</span>${icon('chevron-down', 14)}</div></div></div><div id="aus-extra-y-drop-cost" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:180px;max-height:200px;overflow:auto;"></div><div id="aus-extra-x-drop-cost" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-cost" style="height:220px;"></div></div>
@@ -1001,6 +1091,7 @@ export function createPanel() {
                 <div id="aus-history-credential-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-history-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon('chevron-down', 14)}</div>
                 <div id="aus-history-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
+              <div id="aus-history-filter-reset" class="aus-filter-reset" title="重置筛选" aria-label="重置筛选" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);font-size:var(--aus-fs-base);cursor:pointer;margin-left:auto;">${icon('refresh', 14)}<span>重置筛选</span></div>
             </div>
             <div id="aus-diff" class="ds-card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">缓存断点</span><button id="aus-diff-fullscreen" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">全屏</button></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">在历史中各选一条 旧/新 对比，橙/绿高亮即发散点</div></div>
             <div id="aus-history"></div>
@@ -1045,6 +1136,7 @@ export function createPanel() {
                 </div>
                 <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">可选择 main（稳定）或 dev（测试）分支获取更新，默认 main；更新完成后自动刷新网页。</div>
               </div>
+              ${renderChangelogCard()}
             </div>
           </div>
         </div>
@@ -1052,7 +1144,7 @@ export function createPanel() {
       <aside id="aus-history-detail" style="display:none;flex-direction:column;width:25%;min-width:300px;max-width:480px;flex-shrink:0;border-left:1px solid var(--ds-border);background:var(--ds-card-inner);overflow:hidden;">
         <div style="flex-shrink:0;height:48px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 12px;border-bottom:1px solid var(--ds-border);">
           <span id="aus-history-detail-title" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">记录详情</span>
-          <button id="aus-history-detail-close" title="关闭" style="width:28px;height:28px;flex-shrink:0;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card);color:var(--ds-text-2);cursor:pointer;line-height:1;display:inline-flex;align-items:center;justify-content:center;">${icon('close', 16)}</button>
+          <button id="aus-history-detail-close" title="关闭" style="width:28px;height:28px;flex-shrink:0;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card);color:var(--ds-text-2);cursor:pointer;line-height:1;padding:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;">${icon('close', 16)}</button>
         </div>
         <div id="aus-history-detail-body" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:12px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;"></div>
       </aside>
@@ -1083,7 +1175,7 @@ export function createPanel() {
       if (v) switchView(v as any);
     });
   });
-  // DeepSeek 方案：窄屏覆盖式抽屉 + 遮罩点外关闭，宽屏 60/260 折叠；无动画瞬时切换
+  // 窄屏覆盖式抽屉（滑动动画由 style.css 末尾的 transform/opacity 过渡提供）+ 遮罩点外关闭，宽屏 60/260 折叠（瞬时切换）
   let mobileOpen = false;
   const isMobile = () => {
     try {
@@ -1185,6 +1277,7 @@ export function createPanel() {
   bindImportExport(doc);
   renderSettings(doc);
   bindHistoryCompare();
+  bindChangelog(doc);
   initStatsView();
   initExtraCharts();
   try { initForecastView(); } catch {}

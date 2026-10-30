@@ -5,6 +5,7 @@
 import type { ForecastSeries } from '../stats/forecast-series';
 import { chartDateTime } from './chart-time';
 import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
+import { TOKEN_SERIES_COLORS } from './chart-config';
 
 type CurrencyInfo = { code: string; symbol: string; rate: number };
 
@@ -332,20 +333,7 @@ async function renderMainChart(echarts: any, options: ForecastChartOptions): Pro
   }
 
   const seriesOption: any[] = [
-    {
-      name: '历史输入(命中)',
-      type: 'line',
-      stack: 'input',
-      data: historyHit,
-      smooth: false,
-      showSymbol: false,
-      lineStyle: { width: 1, color: '#0BA25E' },
-      itemStyle: { color: '#0BA25E' },
-      areaStyle: { color: 'rgba(11, 162, 94, 0.28)' },
-      sampling: 'lttb',
-      markLine: markLineData.length ? { silent: true, symbol: 'none', data: markLineData } : undefined,
-      markArea,
-    },
+    // 堆叠自下而上：未命中（中间调）压底、命中（最浅）置顶，与柱状图「上浅下深」一致
     {
       name: '历史输入(未命中)',
       type: 'line',
@@ -353,10 +341,24 @@ async function renderMainChart(echarts: any, options: ForecastChartOptions): Pro
       data: historyMiss,
       smooth: false,
       showSymbol: false,
-      lineStyle: { width: 1, color: '#F87171' },
-      itemStyle: { color: '#F87171' },
-      areaStyle: { color: 'rgba(248, 113, 113, 0.26)' },
+      lineStyle: { width: 1, color: TOKEN_SERIES_COLORS.miss },
+      itemStyle: { color: TOKEN_SERIES_COLORS.miss },
+      areaStyle: { color: 'rgba(96, 179, 254, 0.32)' },
       sampling: 'lttb',
+    },
+    {
+      name: '历史输入(命中)',
+      type: 'line',
+      stack: 'input',
+      data: historyHit,
+      smooth: false,
+      showSymbol: false,
+      lineStyle: { width: 1, color: TOKEN_SERIES_COLORS.hit },
+      itemStyle: { color: TOKEN_SERIES_COLORS.hit },
+      areaStyle: { color: 'rgba(160, 220, 253, 0.38)' },
+      sampling: 'lttb',
+      markLine: markLineData.length ? { silent: true, symbol: 'none', data: markLineData } : undefined,
+      markArea,
     },
     {
       name: '历史输出',
@@ -364,8 +366,8 @@ async function renderMainChart(echarts: any, options: ForecastChartOptions): Pro
       data: historyOutput,
       smooth: false,
       showSymbol: false,
-      lineStyle: { width: 1.6, color: '#6366F1' },
-      itemStyle: { color: '#6366F1' },
+      lineStyle: { width: 1.6, color: TOKEN_SERIES_COLORS.output },
+      itemStyle: { color: TOKEN_SERIES_COLORS.output },
       sampling: 'lttb',
     },
   ];
@@ -377,8 +379,8 @@ async function renderMainChart(echarts: any, options: ForecastChartOptions): Pro
         data: predInput,
         smooth: false,
         showSymbol: false,
-        lineStyle: { width: 1.8, color: '#0BA25E', type: 'dashed' },
-        itemStyle: { color: '#0BA25E' },
+        lineStyle: { width: 1.8, color: TOKEN_SERIES_COLORS.hit, type: 'dashed' },
+        itemStyle: { color: TOKEN_SERIES_COLORS.hit },
       },
       {
         name: '预测输出',
@@ -386,8 +388,8 @@ async function renderMainChart(echarts: any, options: ForecastChartOptions): Pro
         data: predOutput,
         smooth: false,
         showSymbol: false,
-        lineStyle: { width: 1.4, color: '#8B5CF6', type: 'dashed' },
-        itemStyle: { color: '#8B5CF6' },
+        lineStyle: { width: 1.4, color: TOKEN_SERIES_COLORS.output, type: 'dashed' },
+        itemStyle: { color: TOKEN_SERIES_COLORS.output },
       },
       {
         name: '__bandLow',

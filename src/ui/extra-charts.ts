@@ -1,10 +1,11 @@
-import { localDay } from '../utils/date';
+import { localDay, esc } from '../utils/date';
 import { bucketTip, roundTip, rangeTip } from './chart-time';
 import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
 import { BAR_SQUARE, barTopRadius, estimateBarWidth } from './chart-bar';
-import { Y_OPTIONS, X_OPTIONS, X_OPTIONS_WITHOUT_ROUND, getYSelected as getMainY, getXSelected as getMainX } from './chart-config';
+import { Y_OPTIONS, X_OPTIONS, X_OPTIONS_WITHOUT_ROUND, getYSelected as getMainY, getXSelected as getMainX, tokenStackDrawOrder, sortTooltipParams } from './chart-config';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 import { attachChartZoom, detachChartZoom, getChartRange } from './range-zoom';
+import { readChartPrefs, writeChartPrefs } from './chart-prefs';
 
 type ChartId = 'token'|'cost'|'hit'|'req'|'dur'|'pie';
 type XKey = 'round'|'hour'|'day'|'week'|'month';
@@ -27,6 +28,30 @@ const state: Record<ChartId, {y:Set<string>,x:XKey,pieMode:'token'|'count'}> = {
   dur: { y: new Set(['duration','rate']), x:'round', pieMode:'token' },
   pie: { y: new Set([]), x:'day', pieMode:'token' },
 };
+
+/** 从 localStorage 恢复各图上次的 Y/X 与占比模式（刷新后保持不变）；非法键逐项丢弃回退默认 */
+function restoreExtraPrefs(): void {
+  const { extra, pie } = readChartPrefs();
+  for (const id of Object.keys(state) as ChartId[]) {
+    const saved = extra[id];
+    if (!saved) continue;
+    if (Array.isArray(saved.y)) {
+      const allowed = CHART_DEFS[id].yOpts.map(o => o.key);
+      const y = (saved.y as unknown[]).filter((k): k is string => typeof k === 'string' && allowed.includes(k));
+      if (y.length) state[id].y = new Set(y);
+    }
+    const options = id === 'req' ? X_OPTIONS_WITHOUT_ROUND : X_OPTIONS;
+    if (typeof saved.x === 'string' && options.some(o => o.key === saved.x)) state[id].x = saved.x as XKey;
+  }
+  if (pie.mode === 'count' || pie.mode === 'token') state.pie.pieMode = pie.mode;
+}
+restoreExtraPrefs();
+
+/** 改动即落盘：按图表 id 分片写入，不会覆盖其他图已保存的配置 */
+function persistExtraPrefs(id: ChartId): void {
+  if (id === 'pie') { writeChartPrefs({ pie: { mode: state.pie.pieMode } }); return; }
+  writeChartPrefs({ extra: { [id]: { y: Array.from(state[id].y), x: state[id].x } } });
+}
 
 function getDoc(){ return (window.parent as any)?.document ?? document; }
 function themeColor(name: string, fallback: string) {
@@ -105,6 +130,12 @@ export function renderExtraCharts(filtered:any[]){
   }
 }
 
+// 饼图/图例用的模型名截断：完整名字在悬浮窗里给出，图面上只留可辨认的前缀
+function shortModelName(name: string, max = 16): string {
+  const s = String(name || '');
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+
 async function renderOne(id:ChartId, filtered:any[]){
   try {
   const doc=getDoc();
@@ -117,7 +148,20 @@ async function renderOne(id:ChartId, filtered:any[]){
     if (!filtered.length){ dropChart(id); el.innerHTML='<div style="text-align:center;padding:40px;color:var(--ds-text-3);">暂无数据</div>'; return; }
     const map: Record<string, number> = {};
     for (const e of filtered){ const m=e.model||'unknown'; const v = mode==='token' ? (e.total_tokens||0) : 1; map[m]=(map[m]||0)+v; }
-    const data = Object.entries(map).map(([name,value])=>({name, value}));
+    // 模型多时逐项画扇区会让外置标签与底部图例互相压盖（移动端尤甚）：
+    // 按用量倒序，只画前 N 大，其余合并成「其他 N 个模型」，被合并的全名放进悬浮窗
+    const sorted = Object.entries(map).sort((a,b)=> b[1]-a[1]);
+    const cw = el.clientWidth || doc.documentElement.clientWidth || 320;
+    const narrow = cw < 560;
+    const maxSlices = narrow ? 5 : 8;
+    let others: string[] = [];
+    let data = sorted.map(([name,value])=>({name, value}));
+    if (sorted.length > maxSlices + 1){
+      const rest = sorted.slice(maxSlices);
+      others = rest.map(([n])=>n);
+      data = sorted.slice(0, maxSlices).map(([name,value])=>({name, value}));
+      data.push({ name:`其他 ${rest.length} 个模型`, value: rest.reduce((s,[,v])=>s+v,0) });
+    }
     const ec = await getEcharts();
     let c = charts[id];
     if (!c || (c as any).isDisposed?.()) {
@@ -135,12 +179,20 @@ async function renderOne(id:ChartId, filtered:any[]){
           let html = `<div style="display:flex;align-items:center;gap:6px;font-weight:600;margin-bottom:4px;">${p.marker||''}${p.name}</div>`;
           html += `<div style="display:flex;gap:16px;"><span>用量</span><span style="margin-left:auto;font-weight:600;">${val}</span></div>`;
           html += `<div style="display:flex;gap:16px;"><span>占比</span><span style="margin-left:auto;font-weight:600;">${pct} %</span></div>`;
+          if (others.length && String(p.name||'').startsWith('其他')) html += `<div style="margin-top:4px;font-size:11px;color:${themeColor('--ds-text-3','#9CA3AF')};max-width:220px;white-space:normal;">含 ${others.map((n)=>esc(n)).join('、')}</div>`;
           if (range) html += `<div style="margin-top:4px;font-size:11px;color:#9CA3AF;">时间范围 ${range}</div>`;
           return `<div style="padding:2px 2px;min-width:170px;">${html}</div>`;
         }
       },
-      legend:{ bottom:0, textStyle:{fontSize: 12,color:themeColor('--ds-text-2','#6B7280')} },
-      series:[{ type:'pie', radius:['40%','70%'], itemStyle:{borderRadius:6,borderColor:themeColor('--ds-card-inner','#FFFFFF'),borderWidth:2}, label:{fontSize: 12}, data }],
+      legend:{ type:'scroll', bottom:0, icon:'circle', itemWidth:8, itemHeight:8, itemGap: narrow?8:12,
+        textStyle:{fontSize: 12,color:themeColor('--ds-text-2','#6B7280')},
+        pageIconSize:10, pageTextStyle:{fontSize:11,color:themeColor('--ds-text-3','#9CA3AF')},
+        formatter:(name:string)=> shortModelName(name, narrow?12:18) },
+      series:[{ type:'pie', radius: narrow?['30%','54%']:['38%','64%'], center:['50%', narrow?'45%':'43%'], avoidLabelOverlap:true,
+        itemStyle:{borderRadius:6,borderColor:themeColor('--ds-card-inner','#FFFFFF'),borderWidth:2},
+        label: narrow? { show:false } : { show:true, fontSize:12, color:themeColor('--ds-text-2','#6B7280'), formatter:(p:any)=> shortModelName(String(p?.name||''), 14) },
+        labelLine: narrow? { show:false } : { show:true, length:8, length2:10, lineStyle:{color:themeColor('--ds-border','#E5E7EB')} },
+        data }],
     }, true);
     setTimeout(()=>{ try{ c.resize(); }catch{} }, 60);
     return;
@@ -161,7 +213,7 @@ async function renderOne(id:ChartId, filtered:any[]){
         const v=getYValue(e,k);
         return Number(v.toFixed(k.includes('cost')||k==='hit_rate'?2:0));
       });
-      return { name: meta.label, data, color: meta.color, kind: meta.kind || 'token' };
+      return { key: k, name: meta.label, data, color: meta.color, kind: meta.kind || 'token' };
     });
     await drawBarLine(el, id, labels, series, tips);
     return;
@@ -222,7 +274,7 @@ async function renderOne(id:ChartId, filtered:any[]){
         return Number(sum.toFixed(k.includes('cost')?2:0));
       });
     }
-    return { name: meta.label, data, color: meta.color, kind: meta.kind || 'token' };
+    return { key: k, name: meta.label, data, color: meta.color, kind: meta.kind || 'token' };
   });
   await drawBarLine(el, id, labels, series, tips);
   } catch(e:any){
@@ -251,7 +303,7 @@ function seriesUnit(name:string):'cost'|'percent'|'rate'|'duration'|'count'|'tok
   return 'token';
 }
 
-async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:Array<{name:string,data:number[],color:string,kind:string}>, tips:string[] = []){
+async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:Array<{key?:string,name:string,data:number[],color:string,kind:string}>, tips:string[] = []){
   try {
   const curCur = (()=>{ try{  return getDisplayCurrency(); } catch{ return {code:'CNY',symbol:'¥',rate:1} as any; } })();
   // 费用类数据在 USD 模式下需换算为显示币种
@@ -277,7 +329,8 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
         const idx = list[0].dataIndex;
         const title = tips[idx] || list[0].axisValueLabel || '';
         let html = `<div style="font-weight:600;margin-bottom:6px;">${title}</div>`;
-        for (const p of list){
+        // 悬浮窗条目按 Y 选项顺序（命中 → 未命中 → 输出）展示
+        for (const p of sortTooltipParams(list)){
           const unit = seriesUnit(p.seriesName);
           const v = Number(p.value);
           let disp:string;
@@ -294,18 +347,20 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
     // 旋转标签 + 底部视窗滑块都需要额外空间，否则标签被裁（表现为「X 轴名称丢失」）
     grid:{ left:40, right:20, top:8, bottom: labels.length>12 ? 62 : 46 },
     xAxis:{ type:'category', data: labels, axisLine:{lineStyle:{color:themeColor('--ds-border','#E5E7EB')}}, axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF'),rotate: labels.length>12?30:0, interval: 'auto', hideOverlap: false} },
-    yAxis:{ type:'value', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF')}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F6F7F8')}} },
+    yAxis:{ type:'value', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF')}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F5F6F7')}} },
     // 默认完整展示全部 X 轴数据（与第一张图一致），缩放交给 inside 手势/拖拽
-    dataZoom: labels.length > 1 ? [{ type:'inside', xAxisIndex:0, start: savedZoom?.start ?? 0, end: savedZoom?.end ?? 100, zoomOnMouseWheel: false, moveOnMouseMove: true }] : undefined,
+    dataZoom: labels.length > 1 ? [{ type:'inside', xAxisIndex:0, start: savedZoom?.start ?? 0, end: savedZoom?.end ?? 100, zoomOnMouseWheel: false, moveOnMouseMove: true, zoomLock: true }] : undefined,
     series: (() => {
+      // 堆叠次序：输出最深压底、命中最浅置顶（与主图表一致）
+      const drawSeries = tokenStackDrawOrder(series);
       // 堆叠柱仅最顶段有圆角，中间段直角以无缝衔接
-      const barIndices = series.map((s, i) => ({ s, i })).filter(({ s }) => !(isTokenCost && s.name.includes('总'))).map(({ i }) => i);
+      const barIndices = drawSeries.map((s, i) => ({ s, i })).filter(({ s }) => !(isTokenCost && s.name.includes('总'))).map(({ i }) => i);
       const topIdx = barIndices.length ? barIndices[barIndices.length - 1] : -1;
       // 柱宽估算 → 顶部圆角（半径 ≈ 柱宽 1/6，见 chart-bar.ts）
       const BAR_MAX_WIDTH = 16;
       const barWidth = estimateBarWidth((el as HTMLElement)?.clientWidth || 320, 60, labels.length, BAR_MAX_WIDTH);
       const topRadius = barTopRadius(barWidth);
-      return series.map((s, idx)=>{
+      return drawSeries.map((s, idx)=>{
         const isTotal = s.name.includes('总');
         if (isTokenCost && isTotal) return { name:s.name, type:'line', data:s.data, smooth:true, lineStyle:{color:s.color,width:2}, itemStyle:{color:s.color}, symbolSize:2 };
         const isTop = idx === topIdx;
@@ -314,14 +369,14 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
     })(),
   };
   if (id==='cost') {
-    opts.yAxis = { type:'value', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF'), formatter:(v:number)=> curCur.symbol + Number(v).toFixed(2)}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F6F7F8')}} } as any;
-    opts.tooltip = { trigger:'axis', ...CHART_TOOLTIP_SURFACE, backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12}, formatter: (params:any)=>{ const idx = params[0]?.dataIndex ?? 0; const title = tips[idx] || params[0]?.axisValueLabel || ''; let html=`<div style="font-weight:600;margin-bottom:6px;">${title}</div>`; for(const p of params){ html+=`<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${curCur.symbol}${Number(p.value).toFixed(4)} ${curCur.code}</span></div>`; } return `<div style="padding:4px 2px;min-width:160px;">${html}</div>`; } } as any;
+    opts.yAxis = { type:'value', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF'), formatter:(v:number)=> curCur.symbol + Number(v).toFixed(2)}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F5F6F7')}} } as any;
+    opts.tooltip = { trigger:'axis', ...CHART_TOOLTIP_SURFACE, backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12}, formatter: (params:any)=>{ const idx = params[0]?.dataIndex ?? 0; const title = tips[idx] || params[0]?.axisValueLabel || ''; let html=`<div style="font-weight:600;margin-bottom:6px;">${title}</div>`; for(const p of sortTooltipParams(Array.isArray(params)?params:[params])){ html+=`<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${curCur.symbol}${Number(p.value).toFixed(4)} ${curCur.code}</span></div>`; } return `<div style="padding:4px 2px;min-width:160px;">${html}</div>`; } } as any;
   }
   // 命中/请求等单指标改为线+面积更可读
   if (id==='hit'){ opts.series = [{ name:'命中率', type:'line', data: series[0].data, areaStyle:{opacity:0.12,color:series[0].color}, lineStyle:{color:series[0].color}, itemStyle:{color:series[0].color}, smooth:true }]; opts.yAxis={ max:100, axisLabel:{formatter:(v:number)=>v+'%'} } as any; }
   if (id==='dur'){
     opts.yAxis=[
-      {type:'value', name:'耗时 s', position:'left', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF')}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F6F7F8')}}},
+      {type:'value', name:'耗时 s', position:'left', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF')}, splitLine:{lineStyle:{color:themeColor('--ds-card','#F5F6F7')}}},
       {type:'value', name:'速率 t/s', position:'right', axisLabel:{fontSize: 12,color:themeColor('--ds-text-3','#9CA3AF')}, splitLine:{show:false}}
     ] as any;
     opts.series = series.map(s=>({
@@ -348,6 +403,12 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
 
 export function initExtraCharts(){
   const doc=getDoc();
+  // 先把恢复出来的配置画到胶囊上（不依赖用户点开下拉，刷新后文案即为上次选择）
+  for (const id of Object.keys(CHART_DEFS) as ChartId[]){
+    if (!CHART_DEFS[id].hasX) continue;
+    renderExtraY(id);
+    renderExtraX(id);
+  }
   // 绑定每图 Y/X
   for (const id of Object.keys(CHART_DEFS) as ChartId[]){
     if (!CHART_DEFS[id].hasX) continue;
@@ -373,9 +434,11 @@ export function initExtraCharts(){
   // pie 模式切换：复用已过滤的 lastFiltered，避免丢失时间/模型筛选
   const pieToggle = doc.getElementById('aus-pie-toggle');
   if (pieToggle){
+    (pieToggle as any).textContent = state.pie.pieMode==='token' ? 'Token' : '次数';
     pieToggle.onclick = ()=>{
       state.pie.pieMode = state.pie.pieMode==='token'?'count':'token';
       (pieToggle as any).textContent = state.pie.pieMode==='token'?'Token':'次数';
+      persistExtraPrefs('pie');
       renderOne('pie', lastFiltered);
     };
   }
@@ -409,6 +472,7 @@ function renderExtraY(id:ChartId){
     el.onchange=()=>{
       const k=el.getAttribute('data-y'), cid=el.getAttribute('data-chart') as ChartId;
       if (el.checked) state[cid].y.add(k); else { if (state[cid].y.size>1) state[cid].y.delete(k); else el.checked=true; }
+      persistExtraPrefs(cid);
       renderExtraY(cid);
       renderOne(cid, lastFiltered);
     };
@@ -431,6 +495,7 @@ function renderExtraX(id:ChartId){
     el.onclick=()=>{
       const k=el.getAttribute('data-x') as XKey, cid=el.getAttribute('data-chart') as ChartId;
       state[cid].x = k;
+      persistExtraPrefs(cid);
       drop.style.display='none';
       renderExtraX(cid);
       renderOne(cid, lastFiltered);

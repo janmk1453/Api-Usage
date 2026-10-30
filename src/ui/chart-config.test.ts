@@ -6,6 +6,9 @@ import {
   setChartType,
   DEFAULT_Y_KEYS,
   Y_OPTIONS,
+  TOKEN_SERIES_COLORS,
+  tokenStackDrawOrder,
+  sortTooltipParams,
 } from './chart-config';
 
 const entry = (over: any = {}) => ({
@@ -109,5 +112,51 @@ describe('自定义图表聚合', () => {
     const byDay = aggregateForChart(es, ['total_token'], 'day');
     expect(byDay.tips[0]).toContain('2026-10-23');
     expect(byDay.tips).toHaveLength(byDay.labels.length);
+  });
+
+  it('Token 三段配色取自设计稿的三档蓝', () => {
+    expect(TOKEN_SERIES_COLORS).toEqual({ hit: '#A0DCFD', miss: '#60B3FE', output: '#0C70F3' });
+    const byKey = new Map(Y_OPTIONS.map(o => [o.key, o.color]));
+    expect(byKey.get('input_hit_token')).toBe(TOKEN_SERIES_COLORS.hit);
+    expect(byKey.get('input_miss_token')).toBe(TOKEN_SERIES_COLORS.miss);
+    expect(byKey.get('output_token')).toBe(TOKEN_SERIES_COLORS.output);
+  });
+
+  it('堆叠绘制顺序：输出压底、命中最浅置顶，其余系列位置不变', () => {
+    const series = [
+      { key: 'input_hit_token', name: 'hit' },
+      { key: 'input_miss_token', name: 'miss' },
+      { key: 'total_cost', name: 'cost' },
+      { key: 'output_token', name: 'out' },
+    ];
+    const ordered = tokenStackDrawOrder(series).map(s => s.key);
+    // 三个 Token 槽位（0/1/3）重排为 输出 → 未命中 → 命中，费用系列保持在第 3 位
+    expect(ordered).toEqual(['output_token', 'input_miss_token', 'total_cost', 'input_hit_token']);
+    // 不修改入参
+    expect(series.map(s => s.key)).toEqual(['input_hit_token', 'input_miss_token', 'total_cost', 'output_token']);
+  });
+
+  it('堆叠绘制顺序：不足两段时原样返回', () => {
+    const onlyOne = [{ key: 'output_token', name: 'out' }];
+    expect(tokenStackDrawOrder(onlyOne)).toBe(onlyOne);
+    const others = [{ key: 'total_cost', name: 'cost' }, { key: 'hit_rate', name: 'rate' }];
+    expect(tokenStackDrawOrder(others)).toEqual(others);
+  });
+
+  it('悬浮窗条目按 Y 选项顺序排列（命中 → 未命中 → 输出 → 费用）', () => {
+    const params = [
+      { seriesName: '输出 token', value: 3 },
+      { seriesName: '总费用', value: 4 },
+      { seriesName: '输入(未命中) token', value: 2 },
+      { seriesName: '输入(命中) token', value: 1 },
+    ];
+    expect(sortTooltipParams(params).map(p => p.seriesName)).toEqual([
+      '输入(命中) token',
+      '输入(未命中) token',
+      '输出 token',
+      '总费用',
+    ]);
+    // 不改动原数组
+    expect(params[0].seriesName).toBe('输出 token');
   });
 });

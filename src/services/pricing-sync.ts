@@ -378,6 +378,12 @@ export async function applySyncPlan(
   return { applied: targets.length, wallets: Array.from(affected) };
 }
 
+/** 是否存在需要同步的钱包：未忽略且已在钱包页选定价格来源（catalogProvider）。没有就完全不联网 */
+export function hasSyncableWallet(): boolean {
+  const ignored = new Set<string>(state.walletIgnored || []);
+  return repository.getWallets().some((wallet) => !ignored.has(wallet.id) && !!wallet.catalogProvider);
+}
+
 /** 按钱包同步价格：构建计划 → 自动应用（排除歧义行） */
 export async function syncPricingFromModelsDev(opts: {
   silent?: boolean;
@@ -390,6 +396,11 @@ export async function syncPricingFromModelsDev(opts: {
   const ps: any = (state.settings as any).pricingSync;
   if (!ps) return null;
   if (silent && !opts.force && Date.now() - lastAutoSync < AUTO_SYNC_THROTTLE) return null;
+  // 同步的唯一开关是「钱包是否选了价格来源」，没有可同步钱包就不拉目录
+  if (!hasSyncableWallet()) {
+    if (!silent) toast('warning', '没有可用于比对的模型：请先在钱包页为钱包选择价格来源，并等待识别到模型');
+    return null;
+  }
   if (silent) lastAutoSync = Date.now();
   try {
     const catalog = await fetchModelsDevCatalog({ force: !!opts.force });
@@ -440,9 +451,9 @@ let pricingTimer: any = null;
 export function restartPricingSyncTimer() {
   if (pricingTimer) { try { clearInterval(pricingTimer); } catch {} pricingTimer = null; }
   const ps: any = (state.settings as any).pricingSync;
-  if (!ps?.enabled) return;
-  const hours = parseInt(String(ps.autoIntervalHours)) || 0;
+  const hours = parseInt(String(ps?.autoIntervalHours)) || 0;
   if (!hours || hours <= 0) return;
+  // 定时器只按间隔跑；具体钱包是否参与由各自的价格来源决定（无可同步钱包时静默跳过，不联网）
   pricingTimer = setInterval(() => { syncPricingFromModelsDev({ silent: true }).catch(() => {}); }, hours * 60 * 60 * 1000);
 }
 export function stopPricingSyncTimer() {

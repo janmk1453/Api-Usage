@@ -23,7 +23,6 @@ function currentWallet() {
 describe('钱包价格同步（模糊匹配写入）', () => {
   beforeEach(() => {
     state.settings = defaultSettings();
-    state.settings.pricingSync.enabled = true;
     state.settings.pricingSync.exchangeRate = 7;
     state.settings.pricingSync.mode = 'add-missing';
     const wallet = createWalletFromConnection({
@@ -85,6 +84,26 @@ describe('钱包价格同步（模糊匹配写入）', () => {
     const row = second?.rows.find((item) => item.localModel === 'relay-model');
     expect(row?.action).toBe('skip-same');
     expect(row?.changed).toBe(false);
+  });
+
+  it('没有选择价格来源的钱包不参与同步，也不会联网拉目录', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    currentWallet().catalogProvider = null;
+
+    const plan = await syncPricingFromModelsDev({ silent: true, force: true });
+    expect(plan).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('只要钱包选了价格来源就同步，不再依赖任何全局开关', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => catalogWithPrice(1),
+    }));
+    const plan = await syncPricingFromModelsDev({ silent: true, force: true });
+    expect(plan?.summary.matched).toBe(1);
+    expect(currentWallet().models[0].price.priceConfigured).toBe(true);
   });
 
   it('覆盖未锁定模式且尊重 locked 保护', async () => {

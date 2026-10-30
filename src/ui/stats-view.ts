@@ -2,7 +2,7 @@ import { icon } from './icons';
 import { bindSortableHeaders, paintSortHeader, type SortState } from './sort-header';
 import { getSelectedSave, state } from '../store/index';
 import { localDay, esc } from '../utils/date';
-import { Y_OPTIONS, Y_GROUPS, X_OPTIONS, getYSelected, getXSelected, getChartType, setChartType, getAxisLabelMode, setAxisLabelMode, toggleY, setXSelected, aggregateForChart } from './chart-config';
+import { Y_OPTIONS, Y_GROUPS, X_OPTIONS, getYSelected, getXSelected, getChartType, setChartType, getAxisLabelMode, setAxisLabelMode, toggleY, setXSelected, aggregateForChart, tokenStackDrawOrder, sortTooltipParams } from './chart-config';
 import { renderExtraCharts } from './extra-charts';
 import { BAR_SQUARE, barTopRadius, estimateBarWidth } from './chart-bar';
 import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
@@ -21,9 +21,12 @@ import {
 import { FOUR_OPTIONS, getFourDisplay } from './overview';
 import { historyRecordKey } from '../utils/history-key';
 import { toast } from '../utils/logger';
+import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
 
 type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom' | 'all';
-let currentRange: RangeKey = '30d';
+// 默认时间维度：工具栏「重置筛选」与首次进入共用同一口径
+const DEFAULT_RANGE: RangeKey = '30d';
+let currentRange: RangeKey = DEFAULT_RANGE;
 let customStart = '';
 let customEnd = '';
 let pickerOpen = false;
@@ -36,6 +39,55 @@ let endpointPickerOpen = false;
 let selectedCredential: string = STATS_FILTER_ALL;
 let credentialPickerOpen = false;
 let lastStatsHistory: any[] = [];
+
+// 五维筛选跨刷新记忆：时间维度/模型/对话/接入/密钥写入 localStorage，
+// 下次打开面板时还原（记录里已不存在的选项仍由 renderStatsView 的校验剔除）。
+const restoredStatsPrefs = readFilterPrefs().stats;
+if (restoredStatsPrefs.range) currentRange = restoredStatsPrefs.range;
+if (typeof restoredStatsPrefs.customStart === 'string') customStart = restoredStatsPrefs.customStart;
+if (typeof restoredStatsPrefs.customEnd === 'string') customEnd = restoredStatsPrefs.customEnd;
+if (restoredStatsPrefs.models) selectedModels = restoredStatsPrefs.models.slice();
+if (restoredStatsPrefs.chat) selectedChat = restoredStatsPrefs.chat;
+if (restoredStatsPrefs.endpoint) selectedEndpoint = restoredStatsPrefs.endpoint;
+if (restoredStatsPrefs.credential) selectedCredential = restoredStatsPrefs.credential;
+
+function persistStatsFilters() {
+  writeFilterPrefs({
+    stats: {
+      range: currentRange,
+      customStart,
+      customEnd,
+      models: selectedModels.slice(),
+      chat: selectedChat,
+      endpoint: selectedEndpoint,
+      credential: selectedCredential,
+    },
+  });
+}
+
+
+// 工具栏「重置筛选」：五维恢复为默认（近 30 天 + 全部），关闭所有下拉并重绘（重绘末尾自动落盘）
+function resetStatsFilters() {
+  const doc = getDoc();
+  currentRange = DEFAULT_RANGE;
+  customStart = '';
+  customEnd = '';
+  selectedModels = [];
+  selectedChat = STATS_FILTER_ALL;
+  selectedEndpoint = STATS_FILTER_ALL;
+  selectedCredential = STATS_FILTER_ALL;
+  pickerOpen = false;
+  modelPickerOpen = false;
+  chatPickerOpen = false;
+  endpointPickerOpen = false;
+  credentialPickerOpen = false;
+  ['aus-range-dropdown', 'aus-model-dropdown', 'aus-chat-dropdown', 'aus-endpoint-dropdown', 'aus-credential-dropdown'].forEach((id) => {
+    const el = doc.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  updatePickerLabel();
+  renderStatsView();
+}
 
 // 模型汇总表排序：点击表头（除模型外）正序/倒序切换。
 // 表头交互与箭头指示统一由 sort-header 提供（与概览「按对话统计」同一份实现）。
@@ -436,6 +488,12 @@ function bindPicker() {
       }
     };
   }
+  const statsResetBtn = doc.getElementById('aus-stats-filter-reset');
+  if (statsResetBtn) {
+    statsResetBtn.onclick = () => {
+      resetStatsFilters();
+    };
+  }
   doc.addEventListener('click', (e: any) => {
     const t = e.target as HTMLElement;
     if (pickerOpen && !t.closest('#aus-range-dropdown') && !t.closest('#aus-range-btn')) {
@@ -566,6 +624,8 @@ function bindChartSelectors() {
     if (chartYOpen && !t.closest('#aus-chart-y-dropdown') && !t.closest('#aus-chart-y-btn')) { chartYOpen=false; const d=doc.getElementById('aus-chart-y-dropdown'); if(d) d.style.display='none'; }
     if (chartXOpen && !t.closest('#aus-chart-x-dropdown') && !t.closest('#aus-chart-x-btn')) { chartXOpen=false; const d=doc.getElementById('aus-chart-x-dropdown'); if(d) d.style.display='none'; }
   });
+  // 初始化即按已保存配置刷新胶囊文案（Y 项数、X 维度），刷新后不必点开下拉才对
+  renderChartSelectors();
 }
 
 // 可配置图表（Y多选 X单选，双轴）
@@ -632,7 +692,7 @@ async function renderChart(filteredRaw: any[]) {
   const hasPercent = kinds.has('percent');
   const chartType = getChartType();
   const cBorder = themeColor('--ds-border', '#E5E7EB');
-  const cCard = themeColor('--ds-card', '#F6F7F8');
+  const cCard = themeColor('--ds-card', '#F5F6F7');
   const cText3 = themeColor('--ds-text-3', '#9CA3AF');
   const curCur = (()=>{ try{  return getDisplayCurrency(); } catch{ return {code:'CNY',symbol:'¥',rate:1} as any; } })();
   if (hasCost) {
@@ -686,9 +746,11 @@ async function renderChart(filteredRaw: any[]) {
   // 柱宽估算 + 顶部圆角（半径 ≈ 柱宽 1/6，见 chart-bar.ts）
   const BAR_MAX_WIDTH = 18;
   const barWidth = estimateBarWidth(w || 320, narrow ? 70 : 104, labels.length, BAR_MAX_WIDTH);
-  const tokenSeries = series.filter(s => s.kind === 'token');
-  const lastTokenIdx = tokenSeries.length ? series.indexOf(tokenSeries[tokenSeries.length - 1]) : -1;
-  const seriesOpt = series.map((s, idx)=>{
+  // 堆叠次序按「输出最深压底、命中最浅置顶」重排（只影响绘制顺序，不改变 Y 选择顺序）
+  const drawSeries = tokenStackDrawOrder(series);
+  const tokenSeries = drawSeries.filter(s => s.kind === 'token');
+  const lastTokenIdx = tokenSeries.length ? drawSeries.indexOf(tokenSeries[tokenSeries.length - 1]) : -1;
+  const seriesOpt = drawSeries.map((s, idx)=>{
     const kind = s.kind;
     let type: 'bar' | 'line';
     if (chartType === 'bar') type = 'bar';
@@ -750,7 +812,8 @@ async function renderChart(filteredRaw: any[]) {
         // 悬浮窗标题用完整日期时间（X 轴标签是压缩格式，看不清具体时刻）
         const label = tips[idx] || labels[idx];
         let html = `<div style="font-weight:600;margin-bottom:6px;">${esc(label)}</div>`;
-        for (const p of params) {
+        // 悬浮窗条目按 Y 选项顺序（命中 → 未命中 → 输出）展示，与读图习惯一致
+        for (const p of sortTooltipParams(params)) {
           const v = p.value;
           const meta = Y_OPTIONS.find((o:any)=>o.label===p.seriesName);
           const kind = meta?.kind;
@@ -769,7 +832,7 @@ async function renderChart(filteredRaw: any[]) {
     grid: { left: gridLeft, right: gridRight, top: 8, bottom: showZoom ? (narrow ? 50 : 54) : 28 },
     // 底部视窗滑块：拖中间平移 X 轴，拖两端改变可视范围（缩放）
     dataZoom: showZoom
-      ? [{ type: 'inside', xAxisIndex: 0, start: savedZoom?.start ?? 0, end: savedZoom?.end ?? 100, zoomOnMouseWheel: false, moveOnMouseMove: true }]
+      ? [{ type: 'inside', xAxisIndex: 0, start: savedZoom?.start ?? 0, end: savedZoom?.end ?? 100, zoomOnMouseWheel: false, moveOnMouseMove: true, zoomLock: true }]
       : undefined,
     // 有视窗滑块时让 ECharts 按当前可视范围自适应标签密度（缩放后不会只剩一两个刻度）
     xAxis: { type:'category', data: labels, axisLine:{lineStyle:{color:cBorder}}, axisLabel:{color:cText3,fontSize: 12,interval: showZoom ? 'auto' : xInterval,rotate: labels.length>12?30:0, hideOverlap: false} },
@@ -965,6 +1028,8 @@ export async function renderStatsView() {
   } else {
     try { const { log } = await import('../utils/logger'); log.debug('stats 隐藏，跳过图表初始化'); } catch {}
   }
+  // 本页五维筛选是纯展示偏好，每次渲染后落盘（含校验剔除后的值），供下次打开还原
+  persistStatsFilters();
 }
 
 // 统计页 4 小块（响应时间+模型双维度筛选）

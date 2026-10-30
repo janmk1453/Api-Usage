@@ -1,5 +1,6 @@
 import { localDay } from '../utils/date';
 import { bucketTip, roundTip } from './chart-time';
+import { readChartPrefs, writeChartPrefs } from './chart-prefs';
 
 export type YKind = 'token' | 'cost' | 'count' | 'duration' | 'rate' | 'percent';
 export type YAgg = 'sum' | 'avg' | 'ratio';
@@ -22,11 +23,52 @@ export type YOption = {
   color: string;
 };
 
+/** Token 三段配色（命中 / 未命中 / 输出，浅 → 深蓝，取自设计稿图例）：全站图表统一引用 */
+export const TOKEN_SERIES_COLORS = {
+  hit: '#A0DCFD',
+  miss: '#60B3FE',
+  output: '#0C70F3',
+} as const;
+
+/** 堆叠柱自下而上的叠放次序：输出最深压底，命中最浅置顶（与「上浅下深」的读图习惯一致） */
+const TOKEN_STACK_RANK: Record<string, number> = {
+  output_token: 0,
+  input_miss_token: 1,
+  input_hit_token: 2,
+};
+
+/**
+ * 调整 Token 三段的绘制顺序：ECharts 堆叠按 series 数组顺序自下而上叠放，
+ * 因此把命中最浅的一段放到数组末尾（最上层）、输出最深的一段放到最前（最底层）。
+ * 只重排 input_hit_token / input_miss_token / output_token 这三个键，其余系列位置不变。
+ */
+export function tokenStackDrawOrder<T extends { key?: string }>(series: T[]): T[] {
+  const slots: number[] = [];
+  for (let i = 0; i < series.length; i++) {
+    const key = series[i]?.key;
+    if (key && key in TOKEN_STACK_RANK) slots.push(i);
+  }
+  if (slots.length < 2) return series;
+  const picked = slots
+    .map(i => series[i])
+    .sort((a, b) => (TOKEN_STACK_RANK[(a as any).key] ?? 9) - (TOKEN_STACK_RANK[(b as any).key] ?? 9));
+  const out = series.slice();
+  slots.forEach((pos, i) => { out[pos] = picked[i]; });
+  return out;
+}
+
+/** 悬浮窗条目按 Y 选项顺序（命中 → 未命中 → 输出）排列，稳定排序，未命中的条目保持原相对次序 */
+export function sortTooltipParams<T extends Record<string, any>>(params: T[]): T[] {
+  const order = new Map<string, number>(Y_OPTIONS.map((o, i) => [o.label, i] as [string, number]));
+  const rank = (p: T) => order.get((p?.seriesName as string) || '') ?? 999;
+  return params.slice().sort((a, b) => rank(a) - rank(b));
+}
+
 export const Y_OPTIONS: YOption[] = [
   // Token
-  { key: 'input_hit_token', label: '输入(命中) token', unit: 'tokens', kind: 'token', agg: 'sum', group: 'token', color: '#0BA25E' },
-  { key: 'input_miss_token', label: '输入(未命中) token', unit: 'tokens', kind: 'token', agg: 'sum', group: 'token', color: '#F87171' },
-  { key: 'output_token', label: '输出 token', unit: 'tokens', kind: 'token', agg: 'sum', group: 'token', color: '#6366F1' },
+  { key: 'input_hit_token', label: '输入(命中) token', unit: 'tokens', kind: 'token', agg: 'sum', group: 'token', color: TOKEN_SERIES_COLORS.hit },
+  { key: 'input_miss_token', label: '输入(未命中) token', unit: 'tokens', kind: 'token', agg: 'sum', group: 'token', color: TOKEN_SERIES_COLORS.miss },
+  { key: 'output_token', label: '输出 token', unit: 'tokens', kind: 'token', agg: 'sum', group: 'token', color: TOKEN_SERIES_COLORS.output },
   { key: 'total_token', label: '总 Token', unit: 'tokens', kind: 'token', agg: 'sum', group: 'token', color: '#111827' },
   { key: 'avg_tokens', label: '平均每轮 Token', unit: 'tokens', kind: 'token', agg: 'avg', group: 'token', color: '#0EA5E9' },
   // 费用
@@ -75,21 +117,42 @@ let axisLabelMode: AxisLabelMode = DEFAULT_AXIS_LABEL_MODE;
 let xSelected: XKey = DEFAULT_X_KEY;
 let chartType: ChartType = DEFAULT_CHART_TYPE;
 
+/** 从 localStorage 恢复上次的配置（刷新后 Y/X/展示方式/轴标签保持不变）；非法值逐项丢弃回退默认 */
+function restoreChartPrefs(): void {
+  const { main } = readChartPrefs();
+  const y = Array.isArray(main.y)
+    ? (main.y as unknown[]).filter((k): k is YKey => Y_OPTIONS.some(o => o.key === k))
+    : [];
+  if (y.length) ySelected = new Set<YKey>(y);
+  if (X_OPTIONS.some(o => o.key === main.x)) xSelected = main.x as XKey;
+  if (main.type === 'bar' || main.type === 'line' || main.type === 'area' || main.type === 'auto') chartType = main.type;
+  if (main.axisLabel === 'all' || main.axisLabel === 'hide' || main.axisLabel === 'auto') axisLabelMode = main.axisLabel;
+}
+restoreChartPrefs();
+
+/** 任一 setter 都要落盘，保证刷新后与界面一致 */
+function persistChartPrefs(): void {
+  writeChartPrefs({ main: { y: Array.from(ySelected), x: xSelected, type: chartType, axisLabel: axisLabelMode } });
+}
+
 export function getYSelected(): YKey[] { return Array.from(ySelected); }
 export function getXSelected(): XKey { return xSelected; }
 export function getChartType(): ChartType { return chartType; }
-export function setYSelected(keys: YKey[]) { ySelected = new Set(keys.length ? keys : DEFAULT_Y_KEYS); }
-export function setXSelected(k: XKey) { xSelected = k; }
+export function setYSelected(keys: YKey[]) { ySelected = new Set(keys.length ? keys : DEFAULT_Y_KEYS); persistChartPrefs(); }
+export function setXSelected(k: XKey) { xSelected = k; persistChartPrefs(); }
 export function setChartType(t: ChartType) {
   chartType = (t === 'bar' || t === 'line' || t === 'area') ? t : 'auto';
+  persistChartPrefs();
 }
 export function getAxisLabelMode(): AxisLabelMode { return axisLabelMode; }
 export function setAxisLabelMode(m: AxisLabelMode) {
   axisLabelMode = (m === 'all' || m === 'hide') ? m : 'auto';
+  persistChartPrefs();
 }
 export function toggleY(key: YKey) {
   if (ySelected.has(key)) { if (ySelected.size > 1) ySelected.delete(key); }
   else ySelected.add(key);
+  persistChartPrefs();
 }
 
 function toHourKey(ts: number): string {
@@ -201,6 +264,7 @@ function precisionFor(kind: YKind): number {
 }
 
 export type ChartSeries = {
+  key: YKey;
   name: string;
   data: number[];
   kind: YKind;
@@ -254,7 +318,7 @@ export function aggregateForChart(entries: any[], yKeys: YKey[], xKey: XKey): { 
     const data = round
       ? entries.map(e => Number(getYValue(e, k).toFixed(precisionFor(opt.kind))))
       : sortedKeys.map(b => Number(bucketValue((buckets as Map<string, Bucket>).get(b)!.list, opt).toFixed(precisionFor(opt.kind))));
-    return { name: opt.label, data, kind: opt.kind, agg: opt.agg, unit: opt.unit, group: opt.group, color: opt.color };
+    return { key: k, name: opt.label, data, kind: opt.kind, agg: opt.agg, unit: opt.unit, group: opt.group, color: opt.color };
   });
   return { labels, series, tips };
 }

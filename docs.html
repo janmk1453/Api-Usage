@@ -1042,6 +1042,7 @@
 
         <h3 id="doc-theme-navigation">主题、目录与跳转</h3>
         <p>顶部主题切换提供“浅色”和“深色”两个明确选项，点击后立即生效，并记住本次选择。首次打开时如果没有历史选择，会先参考操作系统的颜色偏好。</p>
+        <p>深色模式对齐 DeepSeek 平台深色观感：页面底色接近纯黑，块面比页面底色明显更亮，块内二级面板再亮一档，正文使用接近纯白的高亮色——因此在深色下也能一眼分清「页面 / 块 / 块内面板」三层，块内文字保持足够对比度。</p>
         <div class="callout tip"><strong>移动端说明：</strong>顶部菜单按钮打开完整目录；选择章节、点击遮罩或按 Esc 均会关闭目录。</div>
 
         <h3 id="doc-fields">页面中的通用交互</h3>
@@ -1140,7 +1141,7 @@
               <tr><td>钱包</td><td>按接入地址管理余额和模型价格。</td><td>钱包汇总、余额、密钥、模型、峰谷、价格来源、忽略状态。</td></tr>
               <tr><td>设置</td><td>控制全局显示、余额、价格同步和调试。</td><td>主题、历史范围、自动校准、峰谷、汇率、WebDAV。</td></tr>
               <tr><td>使用说明</td><td>查看扩展内快速说明与隐私信息。</td><td>基础使用、隐私、免责声明和钱包说明。</td></tr>
-              <tr><td>关于</td><td>查看版本信息和检查更新。</td><td>当前版本、仓库地址、更新状态。</td></tr>
+              <tr><td>关于</td><td>查看版本信息、更新日志和检查更新。</td><td>当前版本、仓库地址、更新日志、更新状态。</td></tr>
             </tbody>
           </table>
         </div>
@@ -1228,6 +1229,8 @@
             </tbody>
           </table>
         </div>
+        <div class="callout tip"><strong>重置筛选：</strong>筛选胶囊右侧有一个「重置筛选」按钮，点击后本页五个筛选条件一起回到默认（近 30 天 + 全部），不必逐个打开下拉恢复。筛选条件会被记住，刷新网页或重新打开面板后仍然生效。</div>
+
         <div class="callout tip"><strong>模型多选：</strong>在模型下拉中勾选多个项目可以同时比较。点击“全部模型”会清空选择，恢复全量统计。</div>
 
         <h3 id="stats-summary">汇总与指标卡</h3>
@@ -1250,7 +1253,8 @@
           <li>横轴支持轮次、每小时、每日、每周、每月等时间粒度；按时间聚合时，Token/费用求和、请求数计数、耗时/速率取有效样本均值、命中率/思维链占比/截断率按桶内数据加权，不会把单条百分比简单平均。</li>
           <li>费用类轴会按当前币种换算，悬浮提示按指标类型显示单位（tokens / 货币 / 次 / 秒 / t/s / %）。</li>
           <li>所有图表的悬浮提示标题都会给出<strong>完整日期与时间</strong>（X 轴标签仍是紧凑短格式）：轮次显示该轮具体时刻，每小时显示「日期 + 整点区间」，每日显示日期与星期，每周显示一周起止日期与周号，每月显示年月；趋势预测的预测轮次显示按历史间隔推算的预计时刻，模型占比图显示当前筛选的时间范围。</li>
-          <li>默认纵轴为输入(命中)/未命中/输出三段 Token、总费用与缓存命中率，默认横轴为轮次；改动只影响本次面板会话。</li>
+          <li>默认纵轴为输入(命中)/未命中/输出三段 Token、总费用与缓存命中率，默认横轴为轮次。</li>
+          <li><strong>图表设置会被记住</strong>：自定义图表的纵轴多选、横轴粒度、展示方式、轴标签，以及下方 6 张扩展图各自的纵轴/横轴与「模型用量占比」的 Token/次数切换，都保存在本机浏览器里；刷新页面或重开面板后仍是上次的选择，无需重新配置。</li>
         </ul>
 
         <h3 id="stats-extra-charts">扩展图表与模型趋势</h3>
@@ -1292,6 +1296,7 @@
           <li>接入类型与密钥联动；切换接入后，密钥筛选会回到全部。</li>
           <li>筛选先作用于热历史和冷库全量历史，再进行分页，每页显示一定数量的记录。</li>
           <li>没有结果时可以点击清除筛选恢复，不必逐项重置。</li>
+          <li>筛选胶囊右侧的「重置筛选」按钮可以一次性把四个筛选条件恢复为全部，并回到第一页；筛选条件同样会在刷新后保留。</li>
         </ul>
 
         <h3 id="history-origin">记录来源：Agent 与常规</h3>
@@ -1475,7 +1480,7 @@
           <li>匹配到的价格会留下“目录模型 + 置信度”记录，显示在模型表“来源”列下方，便于核对这条价格从哪来。</li>
           <li>同步模式包括只补未定价、覆盖未锁定和全部覆盖；歧义匹配（多个候选分数接近）默认不写入。</li>
           <li>点击钱包卡上的同步图标会打开「价格同步预览」浮层，可逐条勾选、切换模式、搜索模型，确认后才会写入并重算该钱包历史费用。</li>
-          <li>自动同步会缓存价格目录 10 分钟，并限制 60 秒内不重复拉取，避免每次请求都下载完整目录。</li>
+          <li><strong>同步跟随各钱包自己的「价格来源」设置，没有全局开关</strong>：钱包选了来源才会把该钱包里已识别的模型送去匹配；未选来源的钱包不参与同步，也不会触发任何联网拉取。价格目录会缓存 10 分钟，并限制 60 秒内不重复拉取，避免每次请求都下载完整目录。</li>
         </ul>
 
         <h3 id="wallet-balance-adapters">余额查询适配器</h3>
@@ -1556,19 +1561,25 @@
           <li>修改价格或峰谷规则后，相关钱包的冷热历史会重新计算费用。</li>
         </ul>
 
-        <h3 id="settings-modelsdev">模型价格自动同步</h3>
-        <p>开启后，扩展可以从 models.dev 获取模型价格，并把同步结果写入各钱包的价格规则。同步页还提供同步模式、汇率、自动同步间隔、实时汇率和同步后重算历史费用等选项。</p>
+        <h3 id="settings-modelsdev">汇率与价格同步（models.dev）</h3>
+        <p>这里<strong>没有“自动同步”总开关</strong>：价格同步由<strong>各钱包自己的「价格来源」</strong>决定，显示币种由<strong>各钱包自己的货币单位</strong>决定。本卡片只保留汇率、同步模式、同步节奏等技术参数。</p>
+        <ul>
+          <li><strong>价格同步</strong>：某钱包在钱包页选定了价格来源后，扩展才会把该钱包里已识别到的模型名拿去 models.dev 匹配并写价；没有选定来源的钱包既不参与同步，也不会联网。同步只写已有模型的价格，不会把供应商目录整批塞进钱包。</li>
+          <li><strong>显示币种</strong>：未忽略的钱包<strong>全部</strong>设置为美元时，全站金额按 <span class="code">$</span> 显示并按下方汇率换算；只要有一个钱包是人民币，就统一按 <span class="code">¥ CNY</span> 显示。内部计价单位始终是人民币，改钱包币种不会改变历史记录的费用数值。</li>
+          <li>同步结果会写入该钱包的模型价格并留下匹配记录；汇率同时用于把 models.dev 的美元价格换算成内部人民币价格。</li>
+        </ul>
         <div class="table-wrap">
           <table>
             <thead><tr><th>选项</th><th>作用</th></tr></thead>
             <tbody>
               <tr><td>同步模式</td><td>决定只补充缺失价格、覆盖未锁定价格，还是覆盖全部可同步价格。</td></tr>
-              <tr><td>汇率</td><td>用于把美元价格和其他币种统一换算为显示币种。</td></tr>
-              <tr><td>自动同步间隔</td><td>可以选择仅手动或按设定周期自动更新。</td></tr>
+              <tr><td>汇率</td><td>美元与人民币的换算比例，用于价格同步、钱包余额换算，以及钱包全部为美元时的全站展示。</td></tr>
+              <tr><td>自动同步间隔</td><td>选择仅手动或按设定周期更新；周期性同步只处理已选价格来源的钱包，没有可同步钱包时不会联网。</td></tr>
               <tr><td>同步后重算</td><td>开启后，价格同步会更新已有历史费用；关闭后主要影响后续请求。</td></tr>
               <tr><td>预览</td><td>在正式同步前查看新增、更新、跳过和待定价数量。</td></tr>
             </tbody>
           </table>
+        </div>
         </div>
 
         <h3 id="settings-peak-dot">峰值提示圆点</h3>
@@ -1653,7 +1664,7 @@
       <section class="doc-section" id="update-about" data-keywords="检查更新 关于 版本 仓库 更新状态">
         <div class="section-kicker">更新与关于</div>
         <h2 id="update-about-title">检查更新与关于</h2>
-        <p class="lead">关于页用于查看扩展信息、仓库地址和更新状态。当前版本以扩展显示为准，本文不固定具体版本号。</p>
+        <p class="lead">关于页用于查看扩展信息、更新日志、仓库地址和更新状态。当前版本以扩展显示为准，本文不固定具体版本号。</p>
 
         <h3 id="update-check">检查更新</h3>
         <ul>
@@ -1667,6 +1678,13 @@
 
         <h3 id="about-info">关于页信息</h3>
         <p>关于页显示扩展名称、当前版本、仓库入口和项目说明。需要报告问题或查看变更时，应优先确认当前版本和复现步骤。</p>
+
+        <h3 id="about-changelog">更新日志</h3>
+        <ul>
+          <li>“关于”页底部有「更新日志」块，按版本列出新增、改进、修复三类内容；默认只展开最新版本，点击版本表头可展开或收起其他版本。</li>
+          <li>日志由作者随版本手动维护，不联网、不写本地存储，也不需要用户额外配置；更新扩展后即可看到新条目。</li>
+          <li>本文档只描述当前版本的功能，不承担逐版本变更清单；更早的版本差异请看仓库提交记录。</li>
+        </ul>
       </section>
 
       <section class="doc-section" id="faq" data-keywords="常见问题 没有记录 0 Token 费用为零 钱包 图表 WebDAV 窄屏 下拉 Agent 标识">
@@ -1845,7 +1863,7 @@
             <tbody>
               <tr><td>1</td><td><span class="code">api.deepseek.com</span>、<span class="code">api.moonshot.cn</span>、<span class="code">api.moonshot.ai</span>、<span class="code">api.siliconflow.cn</span>、<span class="code">openrouter.ai</span>、<span class="code">api.stepfun.com</span>、<span class="code">api.novita.ai</span></td><td><span class="code">/user/balance</span>、<span class="code">/v1/users/me/balance</span>、<span class="code">/v1/user/info</span>、<span class="code">/api/v1/credits</span>、<span class="code">/v1/accounts</span>、<span class="code">/v3/user/balance</span></td><td>查询对应厂商钱包余额（校准）</td><td>仅当该钱包被识别为对应厂商（或用户在钱包内手动指定查询适配器）、且用户填写查询密钥后：手动查询，或开启「自动校准」后按设定间隔（1–1440 分钟）触发</td><td>仅 <span class="code">Authorization</span> / <span class="code">api-key</span> 请求头；不含任何聊天内容或统计数据</td></tr>
               <tr><td>1b</td><td><span class="code">open.bigmodel.cn</span>（海外 <span class="code">api.z.ai</span>）、<span class="code">api.minimaxi.com</span>、<strong>用户自行填写的中转站地址</strong>（new-api / one-api 站点）</td><td><span class="code">/api/monitor/usage/quota/limit</span>、<span class="code">/v1/api/openplatform/coding_plan/remains</span>、<span class="code">/dashboard/billing/subscription</span>、<span class="code">/dashboard/billing/usage</span></td><td>查询套餐额度 / 中转站订阅额度（仅展示）</td><td>仅当用户为钱包选择了对应查询适配器并填写查询密钥（中转站另需用户 ID）后手动查询，或在开启「自动校准」后按设定间隔触发</td><td>仅认证请求头（<span class="code">Authorization</span>，智谱为裸密钥）与 <span class="code">New-Api-User</span> 用户 ID；不含任何聊天内容或统计数据</td></tr>
-              <tr><td>2</td><td><span class="code">models.dev</span></td><td><span class="code">/api.json</span>、<span class="code">/catalog.json</span></td><td>模型价格目录同步（「价格来源、自动同步」功能）</td><td><strong>默认关闭</strong>；用户开启后手动或按设定间隔触发</td><td>无用户数据（纯 GET 拉取公开目录）</td></tr>
+              <tr><td>2</td><td><span class="code">models.dev</span></td><td><span class="code">/api.json</span>、<span class="code">/catalog.json</span></td><td>模型价格目录同步（各钱包的「价格来源」功能）</td><td><strong>默认不请求</strong>；仅在钱包选定价格来源后手动或按设定间隔触发</td><td>无用户数据（纯 GET 拉取公开目录）</td></tr>
               <tr><td>3</td><td><span class="code">raw.githubusercontent.com</span></td><td><span class="code">anomalyco/opencode/main/models.json</span></td><td>价格同步的备用数据源</td><td>同上，仅在主源拉取失败时依序尝试</td><td>无用户数据</td></tr>
               <tr><td>4</td><td><span class="code">raw.githubusercontent.com</span></td><td><span class="code">janmk1453/Api-Usage/{main|dev}/manifest.json</span></td><td>检查所选分支的扩展更新</td><td>每小时一次的自动检查（5 秒超时）</td><td>无用户数据</td></tr>
               <tr><td>5</td><td><span class="code">api.github.com</span></td><td><span class="code">repos/janmk1453/Api-Usage/compare/.../{main|dev}</span></td><td>检查所选分支的扩展更新（提交比对）</td><td>同上，仅在本地版本与清单版本不一致时</td><td>无用户数据（仅比较目标与缓存破坏时间戳）</td></tr>

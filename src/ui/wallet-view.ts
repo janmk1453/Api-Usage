@@ -377,12 +377,13 @@ export async function renderWalletView(): Promise<void> {
     if (walletFilter === 'official') return wallet.id === DEEPSEEK_WALLET_ID;
     return true;
   };
+  // 「展开全部 / 收起全部」合并成一个切换胶囊：只要还有收起的钱包就显示「展开全部」
+  const anyCollapsed = active.some((wallet) => wallet.collapsed);
   const toolbar = `
       <div class="ds-card" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;">
         <input data-wallet-search="1" value="${esc(walletQuery)}" placeholder="搜索钱包 / 地址 / 模型" style="flex:1;min-width:180px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
         ${filters.map((item) => '<button data-wallet-filter="' + item.id + '" style="padding:6px 11px;border:1px solid ' + (walletFilter === item.id ? 'var(--ds-black)' : 'var(--ds-border)') + ';border-radius:999px;background:' + (walletFilter === item.id ? 'var(--ds-black)' : 'var(--ds-card-inner)') + ';color:' + (walletFilter === item.id ? 'var(--ds-black-text)' : 'var(--ds-text)') + ';font-size:var(--aus-fs-sm);cursor:pointer;">' + esc(item.label) + (item.count != null ? ' ' + item.count : '') + '</button>').join('')}
-        <button data-wallet-expand-all="1" style="padding:6px 11px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">展开全部</button>
-        <button data-wallet-collapse-all="1" style="padding:6px 11px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">收起全部</button>
+        <button data-wallet-toggle-all="${anyCollapsed ? 'expand' : 'collapse'}" style="padding:6px 11px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">${anyCollapsed ? '展开全部' : '收起全部'}</button>
       </div>`;
   const visibleWallets = active.filter(matchesFilter);
   let balanceCny = 0;
@@ -845,19 +846,11 @@ function bindWalletView(doc: Document): void {
     };
   });
 
-  doc.querySelectorAll('[data-wallet-expand-all]').forEach((button: any) => {
+  doc.querySelectorAll('[data-wallet-toggle-all]').forEach((button: any) => {
     button.onclick = () => {
+      const expand = button.getAttribute('data-wallet-toggle-all') === 'expand';
       const next = repository.getWallets().map((wallet) => cloneWallet(wallet));
-      next.forEach((wallet) => { wallet.collapsed = false; });
-      repository.replaceWallets(next);
-      renderWalletView();
-    };
-  });
-
-  doc.querySelectorAll('[data-wallet-collapse-all]').forEach((button: any) => {
-    button.onclick = () => {
-      const next = repository.getWallets().map((wallet) => cloneWallet(wallet));
-      next.forEach((wallet) => { wallet.collapsed = true; });
+      next.forEach((wallet) => { wallet.collapsed = !expand; });
       repository.replaceWallets(next);
       renderWalletView();
     };

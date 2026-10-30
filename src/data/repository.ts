@@ -651,6 +651,8 @@ export function normalizeSettings(incoming: any): any {
   merged.pricingSync = { ...def.pricingSync, ...(src.pricingSync || {}) };
   if (!isFinite(parseFloat(String(merged.pricingSync.exchangeRate))) || parseFloat(String(merged.pricingSync.exchangeRate)) <= 0) merged.pricingSync.exchangeRate = 7.2;
   if (typeof merged.pricingSync.showSyncedModels !== 'boolean') merged.pricingSync.showSyncedModels = false;
+  // 旧的全局开关已移除：币种改由各钱包 currency 决定，同步改由各钱包 catalogProvider 决定
+  if ('enabled' in merged.pricingSync) delete (merged.pricingSync as any).enabled;
   if (!isFinite(parseFloat(String(merged.pricingSync.syncedMarkVersion)))) merged.pricingSync.syncedMarkVersion = 0;
   if (!Array.isArray(merged.peakHours) || !merged.peakHours.length) merged.peakHours = def.peakHours;
   merged.extraOffDays = Array.isArray(merged.extraOffDays)
@@ -972,7 +974,8 @@ export const repository = {
           if (
             modelObservation.model?.source === 'discovered'
             && modelObservation.model.price.priceConfigured !== true
-            && (state.settings as any).pricingSync?.enabled
+            // 是否同步只看该钱包有没有选价格来源，不再有全局总开关
+            && !!wallet.catalogProvider
           ) {
             try {
               import('../services/pricing-sync')
@@ -1595,9 +1598,9 @@ export const repository = {
         }
       } catch {}
     }
-    // 迁移：pricingSync（默认关闭，汇率 7.2，自动同步仅手动）
+    // 迁移：pricingSync（无全局开关：币种由钱包 currency 决定，同步由钱包 catalogProvider 决定；汇率 7.2，自动同步仅手动）
     if (!(state.settings as any).pricingSync) {
-      (state.settings as any).pricingSync = { enabled: false, mode: 'add-missing', exchangeRate: 7.2, useLiveRate: true, autoIntervalHours: 0, lastSync: null, lastRateFetch: null, recalcOnSync: false, showSyncedModels: false, syncedMarkVersion: 0 };
+      (state.settings as any).pricingSync = { mode: 'add-missing', exchangeRate: 7.2, useLiveRate: true, autoIntervalHours: 0, lastSync: null, lastRateFetch: null, recalcOnSync: false, showSyncedModels: false, syncedMarkVersion: 0 };
       try { saveHot({ settings: state.settings }); } catch {}
     } else {
       try {
