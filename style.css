@@ -32,6 +32,9 @@
   --ds-active-bg: #F6F7F8;
   /* 侧边栏导航选中态：取自 DeepSeek 官网用量页实测灰度 #EBEEF2 */
   --ds-nav-active-bg: #EBEEF2;
+  /* 侧边栏导航：悬停/触屏按下 #F1F3F5、选中项图标转品牌蓝（取自 DeepSeek 官网用量页截图实测） */
+  --aus-nav-hover-bg: #F1F3F5;
+  --aus-nav-active-icon: #0070F3;
   --ds-overlay: rgba(0,0,0,0.45);
   --ds-scrollbar: #E5E7EB;
   --ds-orange: #FF6A00;
@@ -89,6 +92,9 @@
   --ds-active-bg: #434447;
   /* 侧边栏导航选中态（深色）：保持与窄屏深色覆盖同值 */
   --ds-nav-active-bg: #3C3D41;
+  /* 侧边栏导航（深色）：悬停底色比侧栏略亮，选中项图标用提亮的蓝 */
+  --aus-nav-hover-bg: #2A2B2E;
+  --aus-nav-active-icon: #4C9AFF;
   --ds-overlay: rgba(0,0,0,0.7);
   --ds-scrollbar: #4A4B4F;
   --ds-orange: #FF7A3D;
@@ -565,8 +571,10 @@
   #aus-hamburger-btn:hover { opacity: 0.72; }
 }
 .aus-nav-item { transition: none; color: var(--ds-text-2); }
-.aus-nav-item:hover { background: var(--ds-hover-bg) !important; }
+.aus-nav-item:hover { background: var(--aus-nav-hover-bg, var(--ds-hover-bg)) !important; }
 .aus-nav-item.active { background: var(--ds-nav-active-bg, var(--ds-active-bg)) !important; color: var(--ds-text) !important; font-weight: 600; }
+/* 选中项图标转品牌蓝（图标 stroke=currentColor，改容器颜色即可） */
+.aus-nav-item.active .aus-nav-icon { color: var(--aus-nav-active-icon, currentColor); }
 #aus-panel #aus-main::-webkit-scrollbar { width: 6px; }
 #aus-panel #aus-main::-webkit-scrollbar-thumb { background: var(--ds-scrollbar); border-radius: 999px; }
 #aus-main::-webkit-scrollbar { width: 6px; }
@@ -641,9 +649,6 @@
   #aus-sidebar .aus-nav-item { justify-content:flex-start !important; padding:11px 12px !important; gap:12px !important; font-size:var(--aus-fs-base) !important; border-radius:10px !important; }
   /* 窄屏抽屉：导航按钮间距放宽（内联 gap:4px 需 !important） */
   #aus-sidebar .aus-nav-group { gap:8px !important; }
-  /* 窄屏选中态加深，避免 #F9FAFB 侧栏与近白块面（--ds-card #F5F6F7）导致“都是白底” */
-  .aus-nav-item.active { background: #E5E7EB !important; }
-  [data-extension="api-usage-stat"][data-ds-theme="dark"] .aus-nav-item.active { background: var(--ds-nav-active-bg) !important; }
   #aus-main { padding: 12px !important; overflow-x: hidden !important; }
   #aus-main > div { max-width: 1100px !important; width: 100% !important; margin: 0 auto !important; box-sizing: border-box !important; min-width: 0 !important; }
   /* 视图容器不裁剪下拉：原 overflow-x:hidden 会把胶囊下拉裁进 UI 底下；需配合 min-width:0 防止 720px 表撑开整个视图导致块超出屏幕 */
@@ -2046,8 +2051,8 @@
 @media (hover: hover) {
   #aus-hamburger-btn:hover:not([data-pressed="1"]) { opacity: 0.72; transition-duration: 120ms; }
 }
-/* 抽屉里的导航项按下同样给即时底色（选中项按下也变亮，落点立刻有响应） */
+/* 抽屉里的导航项按下同样给即时底色（与悬停同色，落点立刻有响应） */
 #aus-panel .aus-nav-item:active {
-  background: var(--ds-card-hover) !important;
+  background: var(--aus-nav-hover-bg, var(--ds-card-hover)) !important;
   transition-duration: 0ms;
 }
