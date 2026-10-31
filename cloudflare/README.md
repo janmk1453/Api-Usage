@@ -6,11 +6,12 @@
 
 | 文件 | 作用 |
 | --- | --- |
-| `worker.js` | Worker 入口：`POST /collect`、`GET /dashboard`、`GET /vendor/echarts.js`、`GET /api/summary`、`GET /api/trend`、`GET /health`，以及每月清理的定时任务 |
-| `vendor/echarts.min.js` | 自托管图表库（ECharts 6.1.0 的 **full 构建**，取自 `node_modules/echarts/dist/echarts.min.js`），由 `/vendor/echarts.js` 同源提供。**不可换回 simple 构建**：simple 不含 Tooltip 组件 |
+| `worker.js` | Worker 入口：`POST /collect`、`GET /dashboard`、`GET /api/summary`、`GET /api/trend`、`GET /health`，以及每月清理的定时任务 |
+| `api.js` | 看板只读聚合层：设备/日/小时/今日/累计/渲染耗时查询、`buildSummary`、`buildTrend`、`buildBootPayload`、`respondWithCache`；不碰写入，可被离线预览脚本直接复用 |
+| `boot.js` | 看板模板注入（纯函数）：`serializeBoot` 转义、`renderDashboard` 替换占位符、`BUILD_ID` 构建标识 |
 | `summary.js` | 看板聚合纯函数（日期与小时基准、趋势窗口归一、计数截断、时长分桶、渲染耗时估算、环境画像），`summary.test.js` 覆盖 |
 | `payload.js` | 上报体白名单校验与数值钳制（纯函数，`payload.test.js` 覆盖） |
-| `worker.test.js` | Worker 接口测试：鉴权、`/collect` 契约、总计/趋势口径、定时清理 |
+| `worker.test.js` | Worker 接口测试：鉴权、`/collect` 契约、看板首屏注入、总计/趋势口径、定时清理 |
 | `schema.sql` | D1 建表脚本（`device` 设备维度汇总 + `device_daily` 逐设备日数据 + `device_hourly` 逐设备小时数据），新库直接执行 |
 | `migrate-device-totals.sql` | 已有库的一次性迁移与回填脚本（新增累计列并用 `device_daily` 回填） |
 | `migrate-backfill-device-totals.sql` | 只做累计列回填与校验（可安全重复执行），用于「列已存在」或需要重新回填时 |
@@ -20,7 +21,11 @@
 | `migrate-device-metrics.sql` | 已有库补充 `device.history_count` 与 `device.telemetry_off` 两列（未执行时 Worker 自动回退旧列集合，不影响上报） |
 | `migrate-theme-mode.sql` | 已有库补充 `device.theme_mode` 颜色模式列（light / dark / auto，未执行时 Worker 自动降级为不写该列，不影响上报） |
 | `wrangler.toml` | Worker 配置模板（D1 绑定、Cron、文本模块规则）；`database_id` 保持占位符，真实值放本地 `wrangler.local.toml` |
-| `dashboard.html` | 看板页模板，作为文本模块打包进 Worker |
+| `dashboard.html` | 看板页（单文件零依赖，自绘 SVG 图表），作为文本模块打包进 Worker |
+| `dashboard.test.js` | 看板模板与注入测试：占位符唯一、无外部资源、五视图结构与 `serializeBoot` 转义 |
+| `scripts/build-preview.mjs` | 用 D1 REST 直接生成「真实数据 + 看板」的离线单文件，用于本地/离线验收 |
+
+除 Worker 与 D1 之外没有其它外部依赖：看板图表全部自绘，仓库内不含任何第三方图表库文件。
 
 ## 部署步骤
 
@@ -118,47 +123,39 @@ npx wrangler d1 execute api_usage_stat --remote --file cloudflare/migrate-tt-ver
 
 ## 看板
 
-看板分五个分区，自上而下：
+`/dashboard`（以及根路径 `/`）是一个**单文件零依赖**页面：HTML 里没有任何 `<script src>`、外部样式、字体或图表库，图表全部自绘 SVG。首屏数据由 Worker 直接内联成 `window.__TEL_BOOT__`（紧凑数组 JSON），浏览器拿到 HTML 就能渲染，不额外请求接口。
 
-| 分区 | 内容 |
-| --- | --- |
-| 总计速览 | 不重复累计用户、累计打开面板、累计使用时长、人均使用时长；当日新增用户 / 打开 / 时长 / 不重复用户（按北京时间） |
-| 增长与活跃趋势 | 累计用户趋势、每日打开面板次数、每日不重复用户数、每日新增用户数、每日面板打开占比（8 条线，按面板固定配色）、时段活跃分布（0–24 时：柱=该时段活跃设备数，线=累计占比，看用户一天中何时最活跃） |
-| 面板使用构成 | 各面板全部时间累计打开次数（横向长条） |
-| 用户与设备画像 | 扩展版本分布、酒馆版本分布、TauriTavern 版本分布、CPU 架构饼图、操作系统饼图、浏览器 / 浏览器主版本 / 语言 / 宽度分桶 / 系统深浅色偏好 / 颜色模式设置 / 显示形态 / 指针类型 / 时区（横向长条） |
-| 使用时长与渲染性能 | 每设备累计使用时长分布（直方图）、按扩展版本区分的渲染耗时（横向长条） |
+页面分五个视图，每个视图只回答一个问题；顶部只有**一个全局时间范围**（近 7 / 30 / 90 天或自定义起止），切视图不会重置。范围、粒度与所选指标写进地址 hash（如 `#/trends?r=30d&g=hour&m=users,views`），可直接分享或存成书签。
 
-界面与响应式：
+| 视图 | 回答的问题 | 主要内容 |
+| --- | --- | --- |
+| 概览 `#/overview` | 现在整体什么情况 | 3 条自动结论（活跃时段、版本覆盖与快慢）+ 4 张 KPI（活跃用户·日均 / 打开次数 / 使用时长 / 新增用户，均带环比）+ 活跃趋势图（可叠上一周期虚线）+ 今日卡（设备 / 新增 / 打开 / 时长 / 今日峰值时段）+ 页面构成 + 活跃时段 + 累计快照（全时段，不随范围变化） |
+| 趋势 `#/trends` | 在往哪个方向走 | 指标多选（最多 3 个，单位不同的指标自动指数化到基准 100）+ 粒度按天 / 按小时 + 形态面积 / 折线 / 柱状 + 对比上一周期 + 当前指标数值表 + 页面表现表 + 24 小时分布 |
+| 用户 `#/audience` | 谁在用、怎么用 | 设备总数 / 深色偏好 / 触屏 / 关闭匿名四项占比 + 扩展版本、酒馆版本、宿主版本分布 + 使用深度（人均页面浏览、单次打开时长）+ 面板宽度 / 指针类型 / 显示形态 / 时区 |
+| 性能 `#/performance` | 面板打开得够快吗 | 平均渲染耗时与快慢标尺、P50 / P90（由 5 档估算）、慢样本占比 + 版本耗时分布与明细表（可排序）+ 结论与建议 |
+| 自定义 `#/explore` | 想按任意维度切数据 | 维度 × 形态（条形 / 环形 / 占比条）× Top N（5 / 8 / 12 / 20）× 排序，即时预览，可保存为本机视图（最多 8 个，存 `localStorage`）并把配置带进链接 |
 
-- 页面为单列流式布局，页头吸顶并显示构建标识；分区标题带品牌色细条，KPI 卡片与图表卡片各自成栅格（`auto-fit`，桌面 3–4 列、≤860px 单列、≤760px KPI 仍为两列、≤420px 单列）；**「增长与活跃趋势」6 图例外，桌面固定一行 3 个（正好两行铺满），≤1180px 降 2 列、≤860px 单列**。
-- 时间控件收成分段胶囊（按天 / 按小时 / 预设区间），自定义起止日期与当前窗口文本同一行，窄屏自动换行并整行显示当前窗口。
-- ECharts 全部图表共用主题化 tooltip（跟随深浅色、圆角、轻阴影）、虚线网格、圆角条形与横向条形背景轨道；系统切换深浅色时整页重绘。
-- 图表库不可用时，横条、直方图与折线都会退化为纯文本数值列表，卡片与布局保持不变。
+界面与交互：
 
-交互与口径：
+- **图表全部自绘 SVG**：`niceTicks` 取整刻度、单调三次插值平滑曲线、渐变面积、十字线与悬浮读数。没有第三方图表库，因此也不存在「图表库加载失败 / 只剩文本列表」的降级路径。
+- 动效克制：入场错峰上浮、数字滚动、柱与折线的生长动画；`prefers-reduced-motion` 下全部降级为瞬时。
+- 主题浅色 / 深色 / 跟随系统，首帧由内联脚本读 `localStorage` 恢复，不闪白；切主题即时重绘图表。
+- 响应式：≥1280 常显侧栏；≤1120 收成 72px 图标栏；≤900 侧栏隐藏、改底部 5 项 tab；≤760 单列；≤620 表格隐藏次要列；图表随容器宽度重绘。
+- 键盘：`⌘K` / `Ctrl+K` 打开命令面板，`1`–`5` 直切视图，`?` 看快捷键。
 
-- **每个趋势图有独立的粒度与时间控件**（按天：30 / 90 / 365 天预设 + 自定义起止日期；按小时：最近 24 小时 / 最近 7 天 / 最近 30 天），默认按天最近 30 天；按小时粒度最长 180 天（与小时数据保留期一致），总计类指标固定为全时段累计，不随时间控件变化。
-- 小时粒度的 X 轴精确到小时（`MM-DD HH:00`），四个趋势图各自独立记忆粒度；小时桶按北京时间整点归集，跨天不会混淆。
-- **时段活跃分布**（`/api/trend?parts=hours`）把窗口内的 `device_hourly` 按「一天中的第几小时」重新聚合：柱为该时段窗口内去重的活跃设备数（同一设备在不同时段各计一次），线为累计占比（右轴 0–100%），用于判断用户在一天中的活跃时段。该图只接受按天窗口（30/90/365 天或自定义起止），没有按小时粒度切换。
-- 「人均使用时长」= 累计使用时长 ÷ 不重复累计用户数。
-- 「当日」按北京时间（UTC+8）计算，与多数用户客户端上报的本地日期一致。
-- 环境维度取**每台设备最近一次上报的状态**（浏览器、系统、架构、语言、宽度、深浅色、独立窗口、触屏、时区都是设备维度去重值，一台设备只计一次）。
-- 「当日新增用户」按设备首次出现的日期统计；历史设备的首次日期在迁移时用 `device_daily` 回填。
-- 「当日不重复用户」= 当日在 `device_daily` 产生过数据的去重设备数（日活），老设备当天打开也计入；与「当日新增用户」（仅首次出现）互补。字段为 `/api/summary` 的 `totals.todayActiveUsers`。
-- 渲染耗时由客户端 5 档（<100 / <300 / <800 / <2000 / ≥2000ms）按代表值 50 / 200 / 550 / 1400 / 3000ms 估算平均耗时，长条长度偏保守，用于版本间横向对比，不能当作精确 P50/P95。
-- 使用时长分布按每台设备的累计时长分桶（未记录 / <1 分钟 / <10 分钟 / <30 分钟 / <1 小时 / <3 小时 / <10 小时 / <30 小时 / ≥30 小时）。
+数据口径：
+
+- 「累计打开 / 累计时长 / 人均」一律取 `device_daily` 的汇总（`api.js#lifetime`），**不用 `device.opens_total` / `device.dur_ms_total`**：那两列由 `last_seq` 幂等累加，补发或跨天重发时增量会被跳过（实测累计打开 2732 vs 日表 2746、时长 505h vs 561h）。设备数仍取 `device` 全表行数。
+- `device_daily.sessions` / `device_hourly.sessions` 记的是**上报批次数**（Worker 每写一行 +1），不是用户会话数，看板不再展示这一项；「打开次数」用 `opens`，「使用时长」用 `dur_ms`。
+- 活跃时段（24 小时分布）按窗口内 `device_hourly` 聚合，日均除数取「小时数据实际覆盖的天数」（小时表通常比日表短），因此不会因为缺天被摊平；峰值不做四舍五入，23 时这类峰能正常显示。
+- 首屏内联的数据量：日趋势最长 730 天、小时趋势 32 天、按版本渲染耗时 30 天。性能页切到其它范围时按需请求 `GET /api/trend?parts=render&from=…&to=…` 补齐；其余视图全部用首屏数据本地重算，切换不产生请求。
+- 其余口径不变：北京时间 UTC+8；环境维度取每台设备最近一次上报的状态；渲染耗时由客户端 5 档（<100 / <300 / <800 / <2000 / ≥2000ms，代表值 50 / 200 / 550 / 1400 / 3000ms）估算，用于版本间横向对比；使用时长按每台设备的累计时长分桶。
 
 ### 缓存与刷新
 
-- `/api/summary` 与 `/api/trend` 默认走 Cloudflare Cache API 缓存 **600 秒**，响应头 `X-Cache: HIT|MISS|BYPASS` 标明本次来源。
-- 看板右上角「刷新」按钮使用 `?force=1` 绕过缓存重新查询并回填缓存，页面顶部显示数据生成时间。
-- 图表库 ECharts（固定 `6.1.0`）**仅自托管加载**：只请求 Worker 同源的 `GET /vendor/echarts.js`（返回 `cloudflare/vendor/echarts.min.js`，浏览器 brotli 压缩后约 380 KiB、缓存 24 小时），不再使用任何第三方 CDN（npmmirror / jsdelivr / unpkg 已全部移除）。这样看板页不会向外部站点发起请求，不会留下第三方访问痕迹，也不会被广告拦截类扩展或网络策略误伤。
-- 看板页头会显示实际生效的来源徽标（`图表库：自托管`）；若加载失败，顶部横幅会列出尝试结果（成功/失败 + 耗时）并提示可点「重试加载图表库」，此时纯文本数值列表照常可用。
-- 页头「数据生成于 … · 看板构建 `2026-10-21.5`」里的构建标识用于确认浏览器拿到的是否为最新页面；改动看板后请同步更新 `dashboard.html` 中的 `BUILD_ID`。
-- **历史记录条数分布**为折线图：X 轴是条数分组，Y 轴是该组的设备数，取每台设备最近一次上报的精确条数。分组步长分两段——1–499 每 10 条一组（`1–9` / `10–19` / …），500–999 每 50 条一组（`500–549` / `550–599` / …），1000 条以上并入末组，合计固定 **61** 个点；步长分段是为了兼顾中低段的分辨率与高段的可读性（库里见过 1600+ 条的设备）。**0 条的设备整组排除**（0 条表示从未产生过历史记录，与「有少量记录」是两种状态，混进首组会把曲线左端拉成高大尖峰）。空组保留为 0 以呈现分布形状；无任何非 0 条设备时显示「暂无数据」。
-- **移动端触屏读数**：触屏没有 hover，ECharts 默认的 tooltip 在指尖一抬就消失。看板改为「点一下图表即固定数值提示」——`touchstart` 按触点像素换算出最近的数据点（先用 zrender 命中检测覆盖饼图等无坐标系系列，再用 `convertFromPixel` 退化为最近 X 点）后 `dispatchAction showTip`，`touchend` 后延迟 80ms 再钉一次；手指按住本图滑动可逐点跟读，点页面空白处或 6 秒后自动收起，且同一时间只保留一个图表的提示。桌面端 hover 行为不受影响。
-- 若来源超时判负、但脚本随后仍下载并执行成功，看板会自动检测到（每 1.5 秒回看一次 `window.echarts`，最多 90 秒）并补画图表、收起失败提示，页头来源徽标显示「迟到加载」——不会出现「图表已经画出来、横幅还提示失败」的矛盾状态。
-- 自托管文件用的是 ECharts **full 构建**（`echarts.min.js`，1122 KiB，brotli 后约 380 KiB）。**曾因用 simple 构建导致看板完全没有数值提示**：`echarts.simple.min.js` 里不含 Tooltip 组件，option 中的 `tooltip` 与 `axisPointer` 会被静默忽略——图表正常绘制，但鼠标划过和触屏点按都不出提示，且不报任何错。已实测确认（simple 构建 `getComponent('tooltip')` 为 `null`、划过时 `showTip` 触发 0 次；full 构建为 `present` 且正常触发）。升级时把 `node_modules/echarts/dist/echarts.min.js`（注意不是 `.simple.min.js`）覆盖到 `cloudflare/vendor/echarts.min.js`，同步 `dashboard.html` 里的 `?v=` 查询串，再重新部署。
+- `/dashboard`、`/api/summary`、`/api/trend` 都走 Cloudflare Cache API 缓存 **600 秒**，响应头 `X-Cache: HIT|MISS|BYPASS` 标明本次来源。
+- 页面里的「刷新」用 `?force=1`：绕过缓存重新查库并回填；`?force=1` 会在页面加载后从地址栏清掉，复制出去的链接仍是干净地址。
+- 页脚显示「数据生成于 … · 构建 …」，构建标识来自 `cloudflare/boot.js` 的 `BUILD_ID`；改动看板后同步更新它，用来确认浏览器拿到的是新页面。
 
 ## 接口
 
@@ -168,8 +165,7 @@ npx wrangler d1 execute api_usage_stat --remote --file cloudflare/migrate-tt-ver
 | `GET /api/summary` | 总计、当日、累计用户序列、面板累计、版本分布、环境画像、时长直方图；支持 `?force=1` |
 | `GET /api/trend?from=YYYY-MM-DD&to=YYYY-MM-DD&parts=daily\|render\|both` | 每日趋势（不重复用户 / 打开次数 / 使用时长 / 面板明细）与按版本渲染耗时；支持 `?force=1` |
 | `GET /api/trend?bucket=hour&from=YYYY-MM-DDTHH&to=YYYY-MM-DDTHH&parts=daily` | 小时粒度趋势（同上指标，X 轴为北京时间整点，缺失小时补 0，另返回累计用户序列）；缺省窗口为最近 24 小时，最长 180 天；支持 `?force=1` |
-| `GET /vendor/echarts.js` | 自托管图表库（公开、无需口令，仅返回 ECharts 静态文件） |
-| `GET /dashboard` | 口令保护的看板页 |
+| `GET /dashboard` | 口令保护的看板页（也响应根路径 `/`）；首屏数据内联，支持 `?force=1` 绕过缓存 |
 | `GET /health` | 健康检查，无需口令 |
 
 除 `/collect` 与 `/health` 外都需要 HTTP Basic 口令（用户名任意，口令为 `DASHBOARD_TOKEN`）。
@@ -196,7 +192,15 @@ curl -u 'user:你的口令' 'http://127.0.0.1:8787/api/trend?parts=both'
 curl -u 'user:你的口令' 'http://127.0.0.1:8787/api/summary?force=1'
 ```
 
-单元测试（含看板聚合与 Worker 接口契约，不需要网络）：
+想在不部署的情况下看真实数据的效果，可直接生成离线单文件（与线上 `/dashboard` 同源，用同一套 `buildBootPayload` + `renderDashboard`，双击即可打开）：
+
+```bash
+# 凭据：CLOUDFLARE_API_TOKEN（或 CLOUDFLARE_TOKEN_FILE 指向的文件）+ CLOUDFLARE_ACCOUNT_ID
+# 库 ID 默认从 cloudflare/wrangler.local.toml 的 database_id 读取，也可用 CLOUDFLARE_DATABASE_ID 覆盖
+node cloudflare/scripts/build-preview.mjs [输出路径]
+```
+
+单元测试（含看板模板注入、聚合与 Worker 接口契约，不需要网络）：
 
 ```bash
 npm test          # 覆盖 cloudflare/*.test.js 与 src/**/*.test.ts
@@ -213,7 +217,7 @@ Cloudflare 免费额度（2026 年 4 月官方文档）：Workers **10 万请求
 | 写入行数 | `device` 每次有效上报 1 行（累计列增量累加）+ `device_daily` 1 行 + `device_hourly` 1 行 | 每次上报 3 行写，重复上报 0 行；小时表缺失时自动降级为 2 行 |
 | 幂等 | `device.last_seq < seq`、`device_daily.last_seq < seq` 与 `device_hourly.last_seq < seq` 三重判据 | 重发/重复提交不重复计数、不重复累加 |
 | 读取行数 | 总计与画像走 `device` 表一次全表读（行数 = 设备数）；趋势按 `day` / `hour` 索引范围扫描（行数 = 桶数 × 桶内活跃设备） | 单次冷加载 ≈ 设备数 + 日活 + 2 × 窗口桶数 × 桶内活跃设备 |
-| 缓存 | `/api/summary` 与 `/api/trend` 走 Cache API 600 秒 | 重复查看、切换范围与粒度都不会重复扫表；「刷新」按钮才强制重查 |
+| 缓存 | `/dashboard`、`/api/summary` 与 `/api/trend` 走 Cache API 600 秒 | 重复查看、切换范围与粒度都不会重复扫表；「刷新」按钮才强制重查 |
 | 保留期 | 每月 1 号清理超过 730 天的逐设备日数据与超过 180 天的逐设备小时数据（设备维度汇总长期保留） | 长期占用远低于 5 GB |
 
 读量估算：日活 5000、累计设备 2 万、趋势窗口 30 天时，单次冷加载约 `2 万 + 0.5 万 + 2 × 15 万 ≈ 33 万行`，配合 10 分钟缓存远低于 500 万行/天。若日后 30 天窗口的单次读行数逼近 100 万，可再加一层按日汇总表（本期未做）。
@@ -272,9 +276,9 @@ npx wrangler d1 execute api_usage_stat --remote --command \
   再执行 `npx wrangler deploy`，并把 `src/services/telemetry.ts` 的 `TELEMETRY_ENDPOINT` 换成 `https://stat.你的域名/collect` 后重新构建。
 - **看板 401**：未设置 `DASHBOARD_TOKEN`，或浏览器缓存了错误口令；重新 `npx wrangler secret put DASHBOARD_TOKEN` 后换浏览器隐私窗口访问。
 - **看板数字比预期略旧**：接口默认缓存 10 分钟，页面顶部显示数据生成时间；点「刷新」按钮会 `?force=1` 强制取最新数据。
-- **看板图表不显示，顶部出现提示**：自托管图表库加载失败，可点提示里的「重试加载图表库」；此时的数值列表同样完整可用。
-- **看板只有文本列表、没有图表**：先强制刷新一次（`Ctrl+Shift+R`），再看顶部横幅里的加载结果与耗时。常见原因是 `cloudflare/vendor/echarts.min.js` 未随代码部署、浏览器扩展（广告拦截类）屏蔽了脚本请求，或网络中断；可用 `curl -I https://你的域名/vendor/echarts.js` 单独确认（应为 `200` 且 `Content-Type: text/javascript`）。
-- **更新看板后浏览器仍是旧版**：看页头「看板构建」标识是否变化；`/dashboard` 响应为 `no-store` 不会缓存，旧页面通常只是没有刷新。
+- **看板空白或只有骨架**：先强制刷新一次（`Ctrl+Shift+R`），再看浏览器 console 是否有脚本报错。确认服务端确实内联了首屏数据：`curl -u 'user:你的口令' https://你的域名/dashboard | grep -c '__TEL_BOOT__'` 应为 `1`。看板没有外部脚本与外部资源，这类问题通常来自前置代理截断或改写了 HTML。
+- **看板图表画不出来**：图表是自绘 SVG，先确认浏览器不是过老（需支持 SVG、CSS 变量）；再确认没有被浏览器扩展注入的全局样式覆盖（例如给 `svg` 设了 `display:none`）。
+- **更新看板后浏览器仍是旧版**：看页脚「构建」标识是否变化；`/dashboard` 响应带 `Cache-Control: no-store`，旧页面通常只是没有刷新（接口数据另有 600 秒缓存，点「刷新」可强取）。
 - **迁移脚本报 `duplicate column name`**：说明这些列此前已经加过，改跑 `cloudflare/migrate-backfill-device-totals.sql`（只做回填与校验、可重复执行）即可，不必再加列。
 - **想重新计算累计列**：同样跑 `cloudflare/migrate-backfill-device-totals.sql`；它会把累计列整体重算为 `device_daily` 的汇总值，因此请在部署新版 Worker 之前执行（否则会覆盖上线后累加进去的增量）。
 - **当日数据看起来比「昨天」少**：趋势图按客户端本地日期（`day`）归集，而「当日新增」按北京时间计算；跨时区用户在 0 点~8 点之间的上报可能归到前一天，属预期现象。

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import worker from './worker.js';
+import { BUILD_ID, PLACEHOLDER_BOOT, PLACEHOLDER_BUILD } from './boot.js';
 import { beijingDayKey, beijingHourKey, offsetDayKey, shiftHour } from './summary.js';
 
 const TOKEN = 'test-token';
@@ -27,6 +28,8 @@ function createDb(fixtures, options) {
         },
         async all() {
           calls.push({ sql, params: stmt.params });
+          // 模拟 D1 查询整体失败：看板应回退到可读错误页
+          if (opts.failDevices) throw new Error('D1_ERROR: unavailable');
           // 模拟既有库尚未执行 migrate-theme-mode.sql：读取 theme_mode 的查询整体失败
           if (opts.failThemeSelect && sql.includes('theme_mode')) throw new Error('no such column: theme_mode');
           if (opts.failTtSelect && sql.includes('tt_version')) throw new Error('no such column: tt_version');
@@ -194,31 +197,52 @@ describe('鉴权与健康检查', () => {
     expect(res.status).toBe(200);
   });
 
-  it('/dashboard 返回看板页并包含新版分区', async () => {
+  it('/dashboard 首屏直接吐出内联数据的完整看板', async () => {
     const { env } = makeEnv();
     const res = await get('/dashboard', env);
     expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toContain('text/html');
+    expect(res.headers.get('X-Cache')).toBe('MISS');
     const html = await res.text();
-    expect(html).toContain('总计速览');
-    expect(html).toContain('/api/trend');
-    // 四个趋势图可选按小时粒度，并提供最近 24 小时快捷选项
-    expect(html).toContain('data-bucket="hour"');
-    expect(html).toContain('最近 24 小时');
-    // 图表库仅走同源自托管，不再引用任何第三方 CDN
-    expect(html).toContain("'/vendor/echarts.js?v=6.1.0-full'");
-    expect(html).not.toContain('echarts@6.1.0');
+    // 首屏数据已经内联，模板占位符必须已被替换
+    expect(html).toContain('window.__TEL_BOOT__ = {"');
+    expect(html).not.toContain(PLACEHOLDER_BOOT);
+    expect(html).not.toContain(PLACEHOLDER_BUILD);
+    expect(html).toContain(BUILD_ID);
+    // 载荷带上了真实聚合结果：日趋势、小时趋势与渲染耗时
+    expect(html).toContain('"daily":[');
+    expect(html).toContain('"hourly":[');
+    expect(html).toContain('"render":[{"version":"3.1.');
+    // 单文件零依赖：既没有外部图表库，也没有第三方 CDN
+    expect(html).not.toContain('echarts');
+    expect(html).toContain('data-nav="performance"');
   });
 
-  it('/vendor/echarts.js 自托管图表库无需口令且按 JS 返回', async () => {
+  it('/dashboard?force=1 绕过缓存并标为 BYPASS', async () => {
     const { env } = makeEnv();
-    const res = await worker.fetch(new Request('https://stat.example.com/vendor/echarts.js'), env, { waitUntil() {} });
+    const res = await get('/dashboard?force=1', env);
     expect(res.status).toBe(200);
-    expect(res.headers.get('Content-Type')).toContain('text/javascript');
-    const body = await res.text();
-    expect(body.length).toBeGreaterThan(100000);
-    expect(body).toContain('echarts');
-    // 必须是 full 构建：simple 构建不含 Tooltip 组件，数值提示会整个失效
-    expect(body).toContain('showTip');
+    expect(res.headers.get('X-Cache')).toBe('BYPASS');
+  });
+
+  it('/ 根路径同样返回看板', async () => {
+    const { env } = makeEnv();
+    const res = await get('/', env);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('window.__TEL_BOOT__ = {');
+  });
+
+  it('/dashboard 查询失败时返回可读的错误页而不是 500 空壳', async () => {
+    const { env } = makeEnv({}, { failDevices: true });
+    const res = await get('/dashboard', env);
+    expect(res.status).toBe(500);
+    expect(await res.text()).toContain('看板数据加载失败');
+  });
+
+  it('/vendor/echarts.js 已下线（自绘 SVG 后不再提供图表库）', async () => {
+    const { env } = makeEnv();
+    const res = await get('/vendor/echarts.js', env);
+    expect(res.status).toBe(404);
   });
 });
 
