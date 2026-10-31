@@ -59,6 +59,14 @@ describe('看板模板结构', () => {
     expect(html).toContain('TEL.api.reload');
   });
 
+  it('图表交互层支持触屏横向拖动读数，纵向仍可滚动页面', () => {
+    expect(html).toContain('.chart-host .c-hit { touch-action: pan-y; }');
+    expect(html).toContain("if (e.pointerType === 'touch' && e.pointerId !== dragId) return;");
+    expect(html).toContain('setPointerCapture(e.pointerId)');
+    expect(html).toContain('touchHide = setTimeout(hide, 1800);');
+    expect(html).toContain("touch ? { touch: true } : null");
+  });
+
   it('图表是自绘 SVG，没有 canvas 依赖', () => {
     expect(html).not.toContain('<canvas');
     expect(html).toContain('createElementNS');

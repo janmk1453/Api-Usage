@@ -424,6 +424,8 @@ html[data-theme="dark"] .seg button.on { background: var(--surface-3); }
 
 .chart-card .card-body { padding-top: 12px; }
 .chart-host { position: relative; width: 100%; min-width: 0; overflow: hidden; }
+.chart-host .c-hit { touch-action: pan-y; }
+.chart-host svg { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 .chart-host svg text { font-family: var(--font); font-variant-numeric: tabular-nums; }
 .chart-empty { height: 100%; display: grid; place-items: center; color: var(--text-3); font-size: 12px; }
 .chart-table { padding-top: 4px; }
@@ -2451,8 +2453,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     hoverG.appendChild(hoverDots);
     svg.appendChild(hoverG);
 
-    let pinTimer = null;
-    function showAt(i, clientX, clientY, pin) {
+    function showAt(i, clientX, clientY, touch) {
       i = Math.max(0, Math.min(n - 1, i));
       const x = xAt(i);
       cross.setAttribute('x1', x);
@@ -2475,11 +2476,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
           + '<span>' + TEL.ui.esc(s.name) + '</span><b>' + TEL.ui.esc(f(v)) + '</b></div>';
       }).join('');
       const label = (cfg.tipFormat ? cfg.tipFormat(labels[i], i) : labels[i]) || '';
-      TEL.ui.tip.show('<div class="tip-h">' + TEL.ui.esc(label) + '</div>' + rows, clientX, clientY);
-      if (pin) {
-        clearTimeout(pinTimer);
-        pinTimer = setTimeout(() => hide(), 3500);
-      }
+      TEL.ui.tip.show('<div class="tip-h">' + TEL.ui.esc(label) + '</div>' + rows, clientX, clientY, touch ? { touch: true } : null);
     }
     function hide() {
       hoverG.setAttribute('opacity', 0);
@@ -2491,15 +2488,43 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       if (isBar) return Math.floor((x - pad.l) / band);
       return Math.round((x - pad.l) / (step || 1));
     }
-    hit.addEventListener('pointermove', (e) => {
-      if (e.pointerType === 'touch') return;
-      showAt(indexFromEvent(e), e.clientX, e.clientY, false);
-    });
-    hit.addEventListener('pointerleave', () => { if (!pinTimer) hide(); });
+    /* 触屏：手指按下即钉住一条竖线，横向拖动逐点读数，抬手后留一会儿再收起 */
+    let dragId = null;
+    let touchHide = null;
     hit.addEventListener('pointerdown', (e) => {
-      showAt(indexFromEvent(e), e.clientX, e.clientY, true);
+      dragId = e.pointerId;
+      clearTimeout(touchHide);
+      if (hit.setPointerCapture) {
+        try { hit.setPointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
+      }
+      showAt(indexFromEvent(e), e.clientX, e.clientY, e.pointerType === 'touch');
     });
-    host.addEventListener('pointerleave', hide);
+    hit.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'touch' && e.pointerId !== dragId) return;
+      clearTimeout(touchHide);
+      showAt(indexFromEvent(e), e.clientX, e.clientY, e.pointerType === 'touch');
+    });
+    hit.addEventListener('pointerup', (e) => {
+      const wasTouch = e.pointerType === 'touch';
+      dragId = null;
+      if (!wasTouch) return;
+      clearTimeout(touchHide);
+      touchHide = setTimeout(hide, 1800);
+    });
+    hit.addEventListener('pointercancel', (e) => {
+      dragId = null;
+      if (e.pointerType !== 'touch') return;
+      clearTimeout(touchHide);
+      touchHide = setTimeout(hide, 1800);
+    });
+    hit.addEventListener('pointerleave', (e) => {
+      if (e.pointerType === 'touch') return;
+      hide();
+    });
+    host.addEventListener('pointerleave', (e) => {
+      if (e.pointerType === 'touch') return;
+      hide();
+    });
 
     host.appendChild(svg);
     if (anim) {
@@ -2551,17 +2576,23 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
         class: 'c-arc',
       });
       circle.style.transition = 'stroke-width .16s ease, opacity .16s ease';
+      let arcTouch = false;
       circle.addEventListener('pointerenter', (e) => {
+        arcTouch = e.pointerType === 'touch';
         circle.setAttribute('stroke-width', stroke + 3);
         TEL.ui.tip.show(
           '<div class="tip-h">' + TEL.ui.esc(item.label) + '</div>'
           + '<div class="tip-row"><i style="background:' + token(item.color || ('--chart-' + ((i % 8) + 1))) + '"></i><span>数量</span><b>' + TEL.ui.esc(TEL.core.fmtInt(item.value)) + '</b></div>'
           + '<div class="tip-row"><i style="background:transparent"></i><span>占比</span><b>' + TEL.ui.esc(TEL.core.fmtPct(item.value / total)) + '</b></div>',
-          e.clientX, e.clientY,
+          e.clientX, e.clientY, arcTouch ? { touch: true } : null,
         );
       });
       circle.addEventListener('pointermove', (e) => TEL.ui.tip.move(e.clientX, e.clientY));
-      circle.addEventListener('pointerleave', () => { circle.setAttribute('stroke-width', stroke); TEL.ui.tip.hide(); });
+      circle.addEventListener('pointerleave', () => {
+        circle.setAttribute('stroke-width', stroke);
+        if (arcTouch) TEL.ui.tip.hideSoon(1500);
+        else TEL.ui.tip.hide();
+      });
       if (animOn) {
         circle.style.strokeDasharray = '0 ' + C;
         setTimeout(() => {
@@ -2720,7 +2751,10 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
   /* -------------------------------- 图表提示 ------------------------------ */
   const tip = {
     node: null,
-    show(html, x, y) {
+    touch: false,
+    show(html, x, y, opts) {
+      this.touch = !!(opts && opts.touch);
+      clearTimeout(this._hideTimer);
       if (!this.node) this.node = $('#tooltip');
       if (!this.node) return;
       this.node.innerHTML = html;
@@ -2733,16 +2767,29 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       const pad = 14;
       const w = this.node.offsetWidth;
       const h = this.node.offsetHeight;
-      let left = x + pad;
-      let top = y - h - pad;
-      if (left + w > window.innerWidth - 8) left = x - w - pad;
+      let left, top;
+      if (this.touch) {
+        // 触屏：水平居中于手指，垂直抬到手指上方，避免被手挡住
+        left = x - w / 2;
+        top = y - h - 62;
+      } else {
+        left = x + pad;
+        top = y - h - pad;
+      }
+      if (left + w > window.innerWidth - 8) left = window.innerWidth - w - 8;
       if (left < 8) left = 8;
-      if (top < 8) top = y + pad;
+      if (top < 8) top = this.touch ? y + 42 : y + pad;
       if (top + h > window.innerHeight - 8) top = window.innerHeight - h - 8;
       this.node.style.left = left + 'px';
       this.node.style.top = top + 'px';
     },
+    /** 抬手后留一小段时间给人看清数字，再收起 */
+    hideSoon(ms) {
+      clearTimeout(this._hideTimer);
+      this._hideTimer = setTimeout(() => this.hide(), ms || 0);
+    },
     hide() {
+      clearTimeout(this._hideTimer);
       if (!this.node) this.node = $('#tooltip');
       if (this.node) {
         this.node.classList.remove('on');
@@ -2751,7 +2798,8 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     },
   };
   document.addEventListener('pointerdown', (e) => {
-    if (!e.target.closest || !e.target.closest('.chart-host')) tip.hide();
+    if (e.target.closest && e.target.closest('.chart-host, .heat-cell, .stack-row .seg')) return;
+    tip.hide();
   }, true);
 
   /* -------------------------------- 复制 ---------------------------------- */
@@ -3595,15 +3643,20 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     if (nightEl) nightEl.textContent = C.fmtPct(night, 1);
 
     box.querySelectorAll('[data-hour]').forEach((cell) => {
+      let cellTouch = false;
       cell.addEventListener('pointerenter', (e) => {
+        cellTouch = e.pointerType === 'touch';
         const h = hours[Number(cell.getAttribute('data-hour'))];
         U.tip.show('<div class="tip-h">' + String(h.hour).padStart(2, '0') + ':00 – ' + String(h.hour).padStart(2, '0') + ':59</div>'
           + '<div class="tip-row"><i style="background:var(--accent)"></i><span>活跃设备</span><b>' + C.fmtInt(h.devices) + '</b></div>'
           + '<div class="tip-row"><i style="background:var(--chart-2)"></i><span>打开次数</span><b>' + C.fmtInt(h.opens) + '</b></div>'
-          + '<div class="tip-row"><i style="background:transparent"></i><span>时段占比</span><b>' + C.fmtPct(h.share) + '</b></div>', e.clientX, e.clientY);
+          + '<div class="tip-row"><i style="background:transparent"></i><span>时段占比</span><b>' + C.fmtPct(h.share) + '</b></div>', e.clientX, e.clientY, cellTouch ? { touch: true } : null);
       });
       cell.addEventListener('pointermove', (e) => U.tip.move(e.clientX, e.clientY));
-      cell.addEventListener('pointerleave', () => U.tip.hide());
+      cell.addEventListener('pointerleave', () => {
+        if (cellTouch) U.tip.hideSoon(1500);
+        else U.tip.hide();
+      });
     });
   }
 
@@ -4559,7 +4612,9 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
         + '</div>';
     }).join('');
     host.querySelectorAll('.seg').forEach((seg) => {
+      let segTouch = false;
       const show = (e) => {
+        segTouch = e.pointerType === 'touch';
         const ver = seg.getAttribute('data-ver');
         const bi = Number(seg.getAttribute('data-b'));
         const count = Number(seg.getAttribute('data-c'));
@@ -4567,11 +4622,14 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
         U.tip.show('<div class="tip-h">' + U.esc(ver) + '</div>'
           + '<div class="tip-row"><i style="background:var(' + C.RENDER_COLORS[bi] + ')"></i><span>' + C.RENDER_LABELS[bi] + '</span><b>' + C.fmtInt(count) + ' 样本</b></div>'
           + '<div class="tip-row"><i style="background:transparent"></i><span>版本内占比</span><b>' + pct.toFixed(1) + '%</b></div>'
-          + '<div class="tip-row"><i style="background:transparent"></i><span>版本平均</span><b>' + C.fmtMs(rows.find((x) => x.version === ver).avgMs) + '</b></div>', e.clientX, e.clientY);
+          + '<div class="tip-row"><i style="background:transparent"></i><span>版本平均</span><b>' + C.fmtMs(rows.find((x) => x.version === ver).avgMs) + '</b></div>', e.clientX, e.clientY, segTouch ? { touch: true } : null);
       };
       seg.addEventListener('pointerenter', show);
-      seg.addEventListener('pointermove', (e) => U.tip.move(e.clientX, e.clientY));
-      seg.addEventListener('pointerleave', () => U.tip.hide());
+      seg.addEventListener('pointermove', (e) => { segTouch = e.pointerType === 'touch'; U.tip.move(e.clientX, e.clientY); });
+      seg.addEventListener('pointerleave', () => {
+        if (segTouch) U.tip.hideSoon(1500);
+        else U.tip.hide();
+      });
       seg.addEventListener('focus', (e) => {
         const r = seg.getBoundingClientRect();
         show({ clientX: r.left + r.width / 2, clientY: r.top });
