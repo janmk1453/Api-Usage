@@ -263,6 +263,7 @@ html { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 
 .icon-btn {
   width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
+  justify-content: center; align-items: center;
   color: var(--text-2); transition: background .16s ease, color .16s ease, transform .16s ease;
   flex: none;
 }
@@ -393,7 +394,7 @@ html[data-theme="dark"] .seg button.on { background: var(--surface-3); }
 .kdot { width: 7px; height: 7px; border-radius: 2px; flex: none; }
 .kpi-hint { font-size: 9.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 52%; }
 .kpi-value { font-size: 30px; font-weight: 660; letter-spacing: -.035em; line-height: 1.15; margin-top: 7px; font-variant-numeric: tabular-nums; }
-.kpi-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin-top: 8px; min-height: 30px; }
+.kpi-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; min-height: 30px; }
 .kpi-delta { display: flex; flex-direction: column; gap: 1px; }
 .kpi-delta .muted { font-size: 9.5px; }
 .spark { width: 92px; height: 30px; flex: none; color: var(--accent); }
@@ -407,7 +408,7 @@ html[data-theme="dark"] .seg button.on { background: var(--surface-3); }
 
 .insight-rail { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .insight {
-  display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px;
+  display: flex; align-items: center; gap: 10px; padding: 11px 13px;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
   min-width: 0;
 }
@@ -1128,7 +1129,7 @@ html[data-rail="mini"] .rail-foot { padding-top: 4px; }
 html[data-rail="mini"] .tabs-collapse { display: none; }
 
 .card-actions { flex-wrap: wrap; justify-content: flex-end; }
-.only-desktop { display: inline-flex; }
+.only-desktop:not(.icon-btn) { display: inline-flex; }
 </style>
 <script>
 (function () {
@@ -1783,7 +1784,8 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
         delta: delta(cur, prev),
         deltaAbs: cur - prev,
         spark: spark(key, range),
-        compareText: '较上一周期',
+        compareText: '较前 ' + rangeDays(range) + ' 天',
+        prevEmptyText: '前 ' + rangeDays(range) + ' 天无数据',
       };
     });
   }
@@ -3401,8 +3403,8 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       + '<span class="kpi-hint">' + esc(k.hint) + '</span></div>'
       + '<div class="kpi-value count" data-val="' + k.value + '" data-format="' + (k.key === 'duration' ? 'hours' : 'int') + '">' + esc(k.display) + '</div>'
       + '<div class="kpi-foot"><div class="kpi-delta">' + (k.delta === null || k.delta === undefined
-        ? '<span class="delta flat">首期</span><span class="muted">无可比周期</span>'
-        : deltaChip(k.delta) + '<span class="muted">较上一周期</span>') + '</div>'
+        ? '<span class="delta flat">首期</span><span class="muted" title="对比周期 = 紧邻当前时间范围之前的等长区间">' + esc(k.prevEmptyText || '无更早数据') + '</span>'
+        : deltaChip(k.delta) + '<span class="muted" title="与紧邻当前时间范围之前的等长区间比较">' + esc(k.compareText) + '</span>') + '</div>'
       + '<div class="spark" data-values="' + esc(JSON.stringify(k.spark)) + '" data-color="' + k.color + '"></div></div>'
       + '</article>';
   }
@@ -3632,6 +3634,19 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       /* KPI */
       + '<section class="kpi-grid">' + kpis.map(S.kpiCard).join('') + '</section>'
 
+      /* 累计口径（全时段，不随范围变化） */
+      + '<section class="card lifetime rise">'
+      + '<div class="life-head"><span class="life-label">' + U.icon('database') + '自 ' + C.fmtDate(life.since) + ' 起累计</span>'
+      + '<span class="foot-note">全部时间 · 不随筛选变化</span></div>'
+      + '<div class="life-grid">'
+      + '<div class="life-item"><span>不重复设备</span><b>' + C.fmtInt(life.users) + '</b></div>'
+      + '<div class="life-item"><span>累计打开面板</span><b>' + C.fmtInt(life.opens) + '</b></div>'
+      + '<div class="life-item"><span>累计使用时长</span><b>' + C.fmtInt(life.duration) + ' 小时' + '</b></div>'
+      + '<div class="life-item"><span>人均累计时长</span><b>' + C.fmtDuration(life.avgDuration) + '</b></div>'
+      + '<div class="life-item"><span>关闭匿名统计</span><b>' + C.fmtPct(life.disabledRate) + '<em>' + C.fmtInt(life.disabledUsers) + ' 台</em></b></div>'
+      + '</div>'
+      + '</section>'
+
       /* 主趋势 + 今日 */
       + '<div class="grid split">'
       + '<section class="card chart-card rise">'
@@ -3689,19 +3704,6 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       + '<footer class="card-foot"><span class="foot-note">晚间是主要使用窗口 · 峰值小时 ' + String(peak.hour).padStart(2, '0') + ':00</span></footer>'
       + '</section>'
       + '</div>'
-
-      /* 累计口径 */
-      + '<section class="card lifetime rise">'
-      + '<div class="life-head"><span class="life-label">' + U.icon('database') + '自 ' + C.fmtDate(life.since) + ' 起累计</span>'
-      + '<span class="foot-note">全部时间 · 不随筛选变化</span></div>'
-      + '<div class="life-grid">'
-      + '<div class="life-item"><span>不重复设备</span><b>' + C.fmtInt(life.users) + '</b></div>'
-      + '<div class="life-item"><span>累计打开面板</span><b>' + C.fmtInt(life.opens) + '</b></div>'
-      + '<div class="life-item"><span>累计使用时长</span><b>' + C.fmtInt(life.duration) + ' 小时' + '</b></div>'
-      + '<div class="life-item"><span>人均累计时长</span><b>' + C.fmtDuration(life.avgDuration) + '</b></div>'
-      + '<div class="life-item"><span>关闭匿名统计</span><b>' + C.fmtPct(life.disabledRate) + '<em>' + C.fmtInt(life.disabledUsers) + ' 台</em></b></div>'
-      + '</div>'
-      + '</section>'
 
       + '</div>';
 
