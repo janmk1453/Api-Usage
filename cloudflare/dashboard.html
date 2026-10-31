@@ -923,6 +923,12 @@ html[data-theme="dark"] .heat-cell i { opacity: calc(var(--o) * .86 + .16); }
 @media (max-width: 1120px) {
   .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .split { grid-template-columns: 1fr; }
+  /* 竖排后「今日」比「活跃趋势」更该靠前：把 split 容器摊平，让今日卡排到累计卡之前 */
+  .ov-stack > .split { display: contents; }
+  .ov-stack > .lifetime { order: 4; }
+  .ov-stack > .split > .today-card { order: 3; }
+  .ov-stack > .split > .chart-card { order: 5; }
+  .ov-stack > .grid.g-2 { order: 6; }
   .ex-layout { grid-template-columns: 260px minmax(0, 1fr); }
   .stat-band .sb { padding: 12px 14px; }
   .sb b { font-size: 20px; }
@@ -3796,7 +3802,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
 
     const donutItems = pages.map((p) => ({ label: p.label, value: p.count, color: 'var(' + p.color + ')' }));
 
-    root.innerHTML = '<div class="stack">'
+    root.innerHTML = '<div class="stack ov-stack">'
 
       /* 洞察 */
       + '<section class="insight-rail rise" aria-label="本期要点">'

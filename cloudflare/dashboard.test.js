@@ -103,6 +103,14 @@ describe('看板模板结构', () => {
     expect(html).toContain('const rows = w.rows.slice().sort((a, b) => S.byVersionDesc({ label: a.version }, { label: b.version }));');
   });
 
+  it('窄屏把「今日」卡排到累计卡之前', () => {
+    expect(html).toContain('<div class="stack ov-stack">');
+    expect(html).toContain('.ov-stack > .split { display: contents; }');
+    expect(html).toContain('.ov-stack > .lifetime { order: 4; }');
+    expect(html).toContain('.ov-stack > .split > .today-card { order: 3; }');
+    expect(html).toContain('.ov-stack > .split > .chart-card { order: 5; }');
+  });
+
   it('图表是自绘 SVG，没有 canvas 依赖', () => {
     expect(html).not.toContain('<canvas');
     expect(html).toContain('createElementNS');
