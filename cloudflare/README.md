@@ -125,7 +125,7 @@ npx wrangler d1 execute api_usage_stat --remote --file cloudflare/migrate-tt-ver
 
 `/dashboard`（以及根路径 `/`）是一个**单文件零依赖**页面：HTML 里没有任何 `<script src>`、外部样式、字体或图表库，图表全部自绘 SVG。首屏数据由 Worker 直接内联成 `window.__TEL_BOOT__`（紧凑数组 JSON），浏览器拿到 HTML 就能渲染，不额外请求接口。
 
-页面分五个视图，每个视图只回答一个问题；顶部只有**一个全局时间范围**（近 7 / 30 / 90 天或自定义起止），切视图不会重置。范围、粒度与所选指标写进地址 hash（如 `#/trends?r=30d&g=hour&m=users,views`），可直接分享或存成书签。
+页面分五个视图，每个视图只回答一个问题；顶部只有**一个全局时间范围**（近 7 / 30 / 90 / 365 天、全部数据或自定义起止；「全部数据」从首个上报日算起，写进 hash 为 `r=all`），切视图不会重置。范围、粒度与所选指标写进地址 hash（如 `#/trends?r=30d&g=hour&m=users,views`），可直接分享或存成书签。
 
 | 视图 | 回答的问题 | 主要内容 |
 | --- | --- | --- |

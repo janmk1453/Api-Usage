@@ -778,6 +778,7 @@ html[data-theme="dark"] .heat-cell i { opacity: calc(var(--o) * .86 + .16); }
 .preset { text-align: left; padding: 8px 9px; border: 1px solid var(--line); border-radius: 9px; transition: border-color .14s ease, background .14s ease; }
 .preset:hover { border-color: var(--line-strong); background: var(--surface-2); }
 .preset.on { border-color: var(--accent); background: var(--accent-soft); }
+.preset.wide { grid-column: 1 / -1; }
 .preset b { display: block; font-size: 11.5px; font-weight: 600; }
 .preset span { display: block; font-size: 9px; color: var(--text-3); margin-top: 1px; }
 .preset.on span { color: color-mix(in srgb, var(--accent) 70%, var(--text-3)); }
@@ -1631,6 +1632,8 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     if (from < START) from = START;
     return { preset: n + 'd', from, to: END };
   }
+  // 全部数据：从首个上报日到今天，不受 365 天档位限制
+  function allRange() { return { preset: 'all', from: START, to: END }; }
   function normalizeRange(from, to) {
     let f = /^\d{4}-\d{2}-\d{2}$/.test(String(from)) ? String(from) : START;
     let t = /^\d{4}-\d{2}-\d{2}$/.test(String(to)) ? String(to) : END;
@@ -1649,6 +1652,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     return { preset: range.preset, from: U.dayKey(U.addDays(U.parseDay(to), -(n - 1))), to };
   }
   function rangeLabel(range) {
+    if (range.preset === 'all') return '全部数据';
     if (range.preset && range.preset !== 'custom') return '最近 ' + parseInt(range.preset, 10) + ' 天';
     return fmtShort(range.from) + ' – ' + fmtShort(range.to);
   }
@@ -2074,7 +2078,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     fmtInt, fmtCompact, fmtPct, fmtSignedPct, fmtDuration, fmtHours, fmtMs,
     fmtDate, fmtShort, fmtHour, fmtRelative,
     sum, avg, delta,
-    presetRange, normalizeRange, rangeDays, shiftRange, rangeLabel, rangeSub, renderWindowSub,
+    presetRange, allRange, normalizeRange, rangeDays, shiftRange, rangeLabel, rangeSub, renderWindowSub,
     daysIn, prevDaysIn, hourlyIn, canHour, series, hourlySeries, spark,
     METRICS, METRIC_ORDER, metricValue,
     kpis, lifetime, today,
@@ -3054,10 +3058,14 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
   /* -------------------------------- 区间 ---------------------------------- */
   function rangePopover(anchor) {
     const state = STATE;
-    const presets = [['7d', '7 天'], ['30d', '30 天'], ['90d', '90 天'], ['365d', '365 天']];
+    const presets = [
+      ['7d', '7 天', '最近 7 天'], ['30d', '30 天', '最近 30 天'],
+      ['90d', '90 天', '最近 90 天'], ['365d', '365 天', '最近 365 天'],
+      ['all', '全部', '自 ' + TEL.core.START + ' 起'],
+    ];
     const html = '<div class="pop-head">时间范围<span class="pop-note">' + esc(TEL.core.rangeSub(state.range)) + '</span></div>'
-      + '<div class="preset-grid">' + presets.map(([key, label]) =>
-        '<button class="preset' + (state.range.preset === key ? ' on' : '') + '" data-preset="' + key + '"><b>' + label + '</b><span>最近 ' + parseInt(key, 10) + ' 天</span></button>'
+      + '<div class="preset-grid">' + presets.map(([key, label, sub]) =>
+        '<button class="preset' + (key === 'all' ? ' wide' : '') + (state.range.preset === key ? ' on' : '') + '" data-preset="' + key + '"><b>' + label + '</b><span>' + esc(sub) + '</span></button>'
       ).join('') + '</div>'
       + '<div class="pop-sep"></div>'
       + '<div class="pop-label">自定义</div>'
@@ -3068,7 +3076,8 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     const node = popover(anchor, html, { wide: true });
     node.querySelectorAll('[data-preset]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        setRange(TEL.core.presetRange(parseInt(btn.getAttribute('data-preset'), 10)));
+        const key = btn.getAttribute('data-preset');
+        setRange(key === 'all' ? TEL.core.allRange() : TEL.core.presetRange(parseInt(key, 10)));
         closePopover();
       });
     });
@@ -3183,6 +3192,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     const views = [['overview', '概览', 'grid'], ['trends', '趋势', 'trend'], ['audience', '用户', 'users'], ['performance', '性能', 'gauge'], ['explore', '自定义', 'sliders']];
     views.forEach(([key, label, ic]) => actions.push({ group: '前往', label, hint: '视图', icon: ic, run: () => route.navigate(key) }));
     [7, 30, 90, 365].forEach((n) => actions.push({ group: '时间范围', label: '最近 ' + n + ' 天', hint: '筛选', icon: 'calendar', run: () => setRange(TEL.core.presetRange(n)) }));
+    actions.push({ group: '时间范围', label: '全部数据', hint: '筛选', icon: 'calendar', run: () => setRange(TEL.core.allRange()) });
     actions.push({ group: '显示', label: '切换对比上一周期', hint: STATE.compare ? '已开启' : '已关闭', icon: 'compare', run: () => route.toggleCompare() });
     actions.push({ group: '显示', label: '浅色外观', hint: '主题', icon: 'sun', run: () => setTheme('light') });
     actions.push({ group: '显示', label: '深色外观', hint: '主题', icon: 'moon', run: () => setTheme('dark') });
@@ -3374,7 +3384,8 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       const p = new URLSearchParams(m[2] || '');
       const r = p.get('r');
       if (r) {
-        if (/^\d+d$/.test(r)) STATE.range = TEL.core.presetRange(parseInt(r, 10));
+        if (r === 'all') STATE.range = TEL.core.allRange();
+        else if (/^\d+d$/.test(r)) STATE.range = TEL.core.presetRange(parseInt(r, 10));
         else if (r.includes('..')) {
           const [f, t] = r.split('..');
           STATE.range = TEL.core.normalizeRange(f, t);

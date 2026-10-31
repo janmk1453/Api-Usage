@@ -89,6 +89,16 @@ describe('看板模板结构', () => {
     expect((html.match(/host\.addEventListener\('pointerdown'/g) || []).length).toBe(1);
   });
 
+  it('时间范围提供「全部数据」，从首个上报日到今天', () => {
+    expect(html).toContain("function allRange() { return { preset: 'all', from: START, to: END }; }");
+    expect(html).toContain("if (range.preset === 'all') return '全部数据';");
+    expect(html).toContain("['all', '全部', '自 ' + TEL.core.START + ' 起'],");
+    expect(html).toContain("setRange(key === 'all' ? TEL.core.allRange() : TEL.core.presetRange(parseInt(key, 10)));");
+    expect(html).toContain("if (r === 'all') STATE.range = TEL.core.allRange();");
+    expect(html).toContain('.preset.wide { grid-column: 1 / -1; }');
+    expect(html).toContain("label: '全部数据', hint: '筛选'");
+  });
+
   it('图表是自绘 SVG，没有 canvas 依赖', () => {
     expect(html).not.toContain('<canvas');
     expect(html).toContain('createElementNS');
