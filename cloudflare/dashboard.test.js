@@ -66,11 +66,16 @@ describe('看板模板结构', () => {
     expect(html).not.toContain('const padL = width < 480 ? 38 : 46;');
   });
 
-  it('图表交互层支持触屏横向拖动读数，纵向仍可滚动页面', () => {
-    expect(html).toContain('.chart-host .c-hit { touch-action: pan-y; }');
-    expect(html).toContain("if (e.pointerType === 'touch' && e.pointerId !== dragId) return;");
+  it('触屏拖动不交给浏览器抢：容器自管手势，横滑读数、竖滑滚页、轻点读数', () => {
+    // SVG 子元素上的 touch-action 在 Chrome 不生效，必须挂在 HTML 容器上
+    expect(html).toContain("host.style.touchAction = 'none';");
+    expect(html).not.toContain('.chart-host .c-hit { touch-action: pan-y; }');
+    expect(html).toContain("if (e.pointerId !== dragId) return;");
+    expect(html).toContain("dragMode = dx >= dy ? 'scrub' : 'scroll';");
+    expect(html).toContain('scroller().scrollTop -= step;');
+    expect(html).toContain('fling(velocity);');
     expect(html).toContain('setPointerCapture(e.pointerId)');
-    expect(html).toContain('touchHide = setTimeout(hide, 1800);');
+    expect(html).toContain('touchHide = setTimeout(hide, 2400);');
     expect(html).toContain("touch ? { touch: true } : null");
   });
 
