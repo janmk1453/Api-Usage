@@ -70,13 +70,23 @@ describe('看板模板结构', () => {
     // SVG 子元素上的 touch-action 在 Chrome 不生效，必须挂在 HTML 容器上
     expect(html).toContain("host.style.touchAction = 'none';");
     expect(html).not.toContain('.chart-host .c-hit { touch-action: pan-y; }');
-    expect(html).toContain("if (e.pointerId !== dragId) return;");
-    expect(html).toContain("dragMode = dx >= dy ? 'scrub' : 'scroll';");
+    expect(html).toContain("if (e.pointerId !== IH.dragId) return;");
+    expect(html).toContain("IH.mode = dx >= dy ? 'scrub' : 'scroll';");
     expect(html).toContain('scroller().scrollTop -= step;');
-    expect(html).toContain('fling(velocity);');
+    expect(html).toContain('fling(IH.velocity);');
     expect(html).toContain('setPointerCapture(e.pointerId)');
-    expect(html).toContain('touchHide = setTimeout(hide, 2400);');
+    expect(html).toContain('IH.hideTimer = setTimeout(() => live().hide(), 2400);');
     expect(html).toContain("touch ? { touch: true } : null");
+  });
+
+  it('图表监听每个容器只绑一次，重绘只换委托，避免监听叠加把滚动放大 N 倍', () => {
+    expect(html).toContain('const IH = host._ih || (host._ih = {');
+    expect(html).toContain('IH.api = { showAt, hide, indexFromEvent };');
+    expect(html).toContain('if (!host._ihBound) {');
+    expect(html).toContain('host._ihBound = true;');
+    // 一次重绘只允许出现一套 addEventListener 绑定
+    expect((html.match(/host\.addEventListener\('pointermove'/g) || []).length).toBe(1);
+    expect((html.match(/host\.addEventListener\('pointerdown'/g) || []).length).toBe(1);
   });
 
   it('图表是自绘 SVG，没有 canvas 依赖', () => {

@@ -11,7 +11,7 @@ export const PLACEHOLDER_BOOT = '<%= TEL_BOOT %>';
 export const PLACEHOLDER_BUILD = '__TEL_BUILD__';
 
 /** 看板构建标识：改动 dashboard.html 时同步更新，页头据此确认浏览器拿到的是新页面 */
-export const BUILD_ID = '2026-10-31.7';
+export const BUILD_ID = '2026-10-31.8';
 
 /** 序列化首屏数据：转义 <、> 与行分隔符，保证内联进 <script> 一定安全 */
 export function serializeBoot(boot) {

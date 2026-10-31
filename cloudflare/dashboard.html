@@ -2509,22 +2509,18 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       if (isBar) return Math.floor((x - pad.l) / band);
       return Math.round((x - pad.l) / (step || 1));
     }
-    /* 触屏：按下先不定夺方向——
-       横向拖动 = 钉住竖线逐点读数（浏览器不再抢走手势，所以能一路滑到底）；
-       纵向拖动 = 自己接管滚动，带一点甩动惯性，页面照常翻；
-       轻点 = 选中该点看一眼。 */
-    let dragId = null;
-    let touchHide = null;
-    let dragMode = null;
-    let startX = 0;
-    let startY = 0;
-    let prevY = 0;
-    let prevT = 0;
-    let velocity = 0;
-    let flyId = 0;
+    /* 触屏：按下先不定夺方向——横向拖动逐点读数，纵向拖动自己接管滚动，轻点看读数。
+       状态与监听都挂在 host 上且只绑一次：重绘只换 IH.api，
+       否则每重绘一次就多叠一套监听，一次移动会滚 N 次，页面看着"飞快"。 */
+    const IH = host._ih || (host._ih = {
+      dragId: null, hideTimer: null, mode: null,
+      startX: 0, startY: 0, prevY: 0, prevT: 0, velocity: 0, flyId: 0, api: null,
+    });
+    IH.api = { showAt, hide, indexFromEvent };
+    const live = () => IH.api || { showAt, hide, indexFromEvent };
     const scroller = () => document.scrollingElement || document.documentElement;
     function stopFly() {
-      if (flyId) { cancelAnimationFrame(flyId); flyId = 0; }
+      if (IH.flyId) { cancelAnimationFrame(IH.flyId); IH.flyId = 0; }
     }
     function fling(v) {
       let last = performance.now();
@@ -2532,80 +2528,90 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
         const dt = Math.min(48, Math.max(8, now - last));
         last = now;
         v *= Math.pow(0.94, dt / 16);
-        if (Math.abs(v) < 0.03) { flyId = 0; return; }
+        if (Math.abs(v) < 0.03) { IH.flyId = 0; return; }
         scroller().scrollTop -= v * dt;
-        flyId = requestAnimationFrame(step);
+        IH.flyId = requestAnimationFrame(step);
       };
-      flyId = requestAnimationFrame(step);
+      stopFly();
+      IH.flyId = requestAnimationFrame(step);
     }
     function beginTouch(e) {
-      dragId = e.pointerId;
-      dragMode = null;
-      startX = e.clientX;
-      startY = e.clientY;
-      prevY = e.clientY;
-      prevT = performance.now();
-      velocity = 0;
+      IH.dragId = e.pointerId;
+      IH.mode = null;
+      IH.startX = e.clientX;
+      IH.startY = e.clientY;
+      IH.prevY = e.clientY;
+      IH.prevT = performance.now();
+      IH.velocity = 0;
       stopFly();
-      clearTimeout(touchHide);
+      clearTimeout(IH.hideTimer);
     }
     function endTouch(e) {
       const wasTouch = e.pointerType === 'touch';
-      const mode = dragMode;
-      dragId = null;
-      dragMode = null;
+      const mode = IH.mode;
+      IH.dragId = null;
+      IH.mode = null;
       if (!wasTouch) return;
       if (mode === 'scroll') {
-        if (Math.abs(velocity) > 0.12) fling(velocity);
+        if (Math.abs(IH.velocity) > 0.12) fling(IH.velocity);
         return;
       }
-      if (mode === null) showAt(indexFromEvent(e), e.clientX, e.clientY, true);
-      clearTimeout(touchHide);
-      touchHide = setTimeout(hide, 2400);
+      if (mode === null) {
+        const a = live();
+        a.showAt(a.indexFromEvent(e), e.clientX, e.clientY, true);
+      }
+      clearTimeout(IH.hideTimer);
+      IH.hideTimer = setTimeout(() => live().hide(), 2400);
     }
-    host.addEventListener('pointerdown', (e) => {
-      if (e.pointerType === 'touch') {
-        beginTouch(e);
-        if (host.setPointerCapture) {
-          try { host.setPointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
+    if (!host._ihBound) {
+      host._ihBound = true;
+      host.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'touch') {
+          beginTouch(e);
+          if (host.setPointerCapture) {
+            try { host.setPointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
+          }
+          return;
         }
-        return;
-      }
-      clearTimeout(touchHide);
-      showAt(indexFromEvent(e), e.clientX, e.clientY, false);
-    });
-    host.addEventListener('pointermove', (e) => {
-      if (e.pointerType !== 'touch') {
-        showAt(indexFromEvent(e), e.clientX, e.clientY, false);
-        return;
-      }
-      if (e.pointerId !== dragId) return;
-      if (!dragMode) {
-        const dx = Math.abs(e.clientX - startX);
-        const dy = Math.abs(e.clientY - startY);
-        if (Math.max(dx, dy) < 6) return;
-        dragMode = dx >= dy ? 'scrub' : 'scroll';
-        if (dragMode === 'scroll') hide();
-      }
-      if (dragMode === 'scroll') {
-        const now = performance.now();
-        const dt = Math.max(8, now - prevT);
-        const step = e.clientY - prevY;
-        prevY = e.clientY;
-        prevT = now;
-        velocity = velocity * 0.7 + (step / dt) * 0.3;
-        scroller().scrollTop -= step;
-        return;
-      }
-      clearTimeout(touchHide);
-      showAt(indexFromEvent(e), e.clientX, e.clientY, true);
-    });
-    host.addEventListener('pointerup', endTouch);
-    host.addEventListener('pointercancel', endTouch);
-    host.addEventListener('pointerleave', (e) => {
-      if (e.pointerType === 'touch') return;
-      hide();
-    });
+        clearTimeout(IH.hideTimer);
+        const a = live();
+        a.showAt(a.indexFromEvent(e), e.clientX, e.clientY, false);
+      });
+      host.addEventListener('pointermove', (e) => {
+        if (e.pointerType !== 'touch') {
+          const a = live();
+          a.showAt(a.indexFromEvent(e), e.clientX, e.clientY, false);
+          return;
+        }
+        if (e.pointerId !== IH.dragId) return;
+        if (!IH.mode) {
+          const dx = Math.abs(e.clientX - IH.startX);
+          const dy = Math.abs(e.clientY - IH.startY);
+          if (Math.max(dx, dy) < 6) return;
+          IH.mode = dx >= dy ? 'scrub' : 'scroll';
+          if (IH.mode === 'scroll') live().hide();
+        }
+        if (IH.mode === 'scroll') {
+          const now = performance.now();
+          const dt = Math.max(8, now - IH.prevT);
+          const step = e.clientY - IH.prevY;
+          IH.prevY = e.clientY;
+          IH.prevT = now;
+          IH.velocity = IH.velocity * 0.7 + (step / dt) * 0.3;
+          scroller().scrollTop -= step;
+          return;
+        }
+        clearTimeout(IH.hideTimer);
+        const a = live();
+        a.showAt(a.indexFromEvent(e), e.clientX, e.clientY, true);
+      });
+      host.addEventListener('pointerup', endTouch);
+      host.addEventListener('pointercancel', endTouch);
+      host.addEventListener('pointerleave', (e) => {
+        if (e.pointerType === 'touch') return;
+        live().hide();
+      });
+    }
 
     host.appendChild(svg);
     if (anim) {
