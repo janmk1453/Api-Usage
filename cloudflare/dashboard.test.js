@@ -59,6 +59,13 @@ describe('看板模板结构', () => {
     expect(html).toContain('TEL.api.reload');
   });
 
+  it('坐标轴留白按刻度标签实测宽度收窄，窄屏不再白占一截', () => {
+    expect(html).toContain('function labelWidth(str, fontSize)');
+    expect(html).toContain('yMaxLabel * 1.06 + 9');
+    expect(html).toContain('Math.round(Math.min(46, Math.max(18,');
+    expect(html).not.toContain('const padL = width < 480 ? 38 : 46;');
+  });
+
   it('图表交互层支持触屏横向拖动读数，纵向仍可滚动页面', () => {
     expect(html).toContain('.chart-host .c-hit { touch-action: pan-y; }');
     expect(html).toContain("if (e.pointerType === 'touch' && e.pointerId !== dragId) return;");

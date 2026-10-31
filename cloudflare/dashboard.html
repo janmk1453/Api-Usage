@@ -2144,6 +2144,20 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     return String(Math.round(n * 10) / 10);
   }
 
+  /** 估粗略字宽：中文与全角算 1 em，数字/字母/符号按比例，用来按标签实际长度收窄坐标轴留白 */
+  function labelWidth(str, fontSize) {
+    let w = 0;
+    for (const ch of String(str == null ? '' : str)) {
+      if (/[\u2e80-\u9fff\uff00-\uffef\u3000-\u303f]/.test(ch)) w += fontSize;
+      else if (/[0-9]/.test(ch)) w += fontSize * 0.56;
+      else if (/[.,:;'\u2019]/.test(ch)) w += fontSize * 0.28;
+      else if (/[%]/.test(ch)) w += fontSize * 0.76;
+      else if (/[a-zA-Z]/.test(ch)) w += fontSize * 0.56;
+      else w += fontSize * 0.5;
+    }
+    return w;
+  }
+
   /* ------------------------------- 平滑曲线 ------------------------------- */
   // Fritsch–Carlson 单调三次插值，避免普通 Catmull-Rom 在波峰处过冲成负值
   function smoothPath(pts) {
@@ -2199,8 +2213,27 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     const labels = cfg.labels || [];
     const n = Math.max(1, labels.length || series[0].values.length);
     const hasY2 = series.some((s) => s.axis === 1);
-    const padL = width < 480 ? 38 : 46;
-    const padR = hasY2 ? (width < 480 ? 38 : 46) : 14;
+    const fsY = width < 480 ? 9.5 : 10.5;
+    /* 先算刻度，再按标签真实宽度决定左右留白，窄屏不再白占一截 */
+    const mainVals = [];
+    const y2Vals = [];
+    series.forEach((s) => {
+      s.values.forEach((v) => {
+        if (v === null || v === undefined || !Number.isFinite(Number(v))) return;
+        (s.axis === 1 ? y2Vals : mainVals).push(Number(v));
+      });
+    });
+    const yMaxRaw = Math.max(cfg.yMax || 0, ...(mainVals.length ? mainVals : [0]), 0.0001);
+    const yT = niceTicks(yMaxRaw, width < 480 ? 4 : 5);
+    const yMax = cfg.yMax || yT.top;
+    const yTicks = cfg.yMax ? niceTicks(cfg.yMax, 4).ticks.filter((v) => v <= cfg.yMax) : yT.ticks;
+    if (yTicks[yTicks.length - 1] !== yMax) yTicks.push(yMax);
+    const y2Max = cfg.y2Max || Math.max(1, ...(y2Vals.length ? y2Vals : [1]));
+    const y2T = niceTicks(y2Max, 4);
+    const yMaxLabel = Math.max.apply(null, yTicks.map((t) => labelWidth((cfg.yFormat || axisFmt)(t), fsY)));
+    const y2MaxLabel = hasY2 ? Math.max.apply(null, y2T.ticks.map((t) => labelWidth((cfg.y2Format || axisFmt)(t), fsY))) : 0;
+    const padL = Math.round(Math.min(46, Math.max(18, yMaxLabel * 1.06 + 9)));
+    const padR = hasY2 ? Math.round(Math.min(46, Math.max(18, y2MaxLabel * 1.06 + 9))) : 14;
     const fsX = width < 480 ? 9.5 : 10.5;
     const labelW = (s) => {
       let w = 0;
@@ -2234,21 +2267,6 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     const pw = Math.max(10, width - pad.l - pad.r);
     const ph = Math.max(10, height - pad.t - pad.b);
 
-    const mainVals = [];
-    const y2Vals = [];
-    series.forEach((s) => {
-      s.values.forEach((v) => {
-        if (v === null || v === undefined || !Number.isFinite(Number(v))) return;
-        (s.axis === 1 ? y2Vals : mainVals).push(Number(v));
-      });
-    });
-    const yMaxRaw = Math.max(cfg.yMax || 0, ...(mainVals.length ? mainVals : [0]), 0.0001);
-    const yT = niceTicks(yMaxRaw, width < 480 ? 4 : 5);
-    const yMax = cfg.yMax || yT.top;
-    const yTicks = cfg.yMax ? niceTicks(cfg.yMax, 4).ticks.filter((v) => v <= cfg.yMax) : yT.ticks;
-    if (yTicks[yTicks.length - 1] !== yMax) yTicks.push(yMax);
-    const y2Max = cfg.y2Max || Math.max(1, ...(y2Vals.length ? y2Vals : [1]));
-    const y2T = niceTicks(y2Max, 4);
 
     const band = isBar ? pw / n : 0;
     const step = n > 1 ? pw / (n - 1) : 0;
@@ -2276,8 +2294,8 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
         x1: pad.l, x2: pad.l + pw, y1: Math.round(y) + 0.5, y2: Math.round(y) + 0.5,
         stroke: token('--line'), 'stroke-width': 1,
       }));
-      yLabelG.appendChild(svgText(pad.l - 9, y + 3.5, (cfg.yFormat || axisFmt)(tick), {
-        'text-anchor': 'end', fill: token('--text-3'), 'font-size': width < 480 ? 9.5 : 10.5,
+      yLabelG.appendChild(svgText(pad.l - 7, y + 3.5, (cfg.yFormat || axisFmt)(tick), {
+        'text-anchor': 'end', fill: token('--text-3'), 'font-size': fsY,
       }));
     });
     svg.appendChild(gridG);
@@ -2287,8 +2305,8 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       const y2G = el('g', { class: 'c-axis' });
       y2T.ticks.forEach((tick) => {
         const y = y2At(tick);
-        y2G.appendChild(svgText(pad.l + pw + 9, y + 3.5, (cfg.y2Format || axisFmt)(tick), {
-          'text-anchor': 'start', fill: token('--text-3'), 'font-size': width < 480 ? 9.5 : 10.5,
+        y2G.appendChild(svgText(pad.l + pw + 7, y + 3.5, (cfg.y2Format || axisFmt)(tick), {
+          'text-anchor': 'start', fill: token('--text-3'), 'font-size': fsY,
         }));
       });
       svg.appendChild(y2G);
