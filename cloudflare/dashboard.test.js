@@ -99,6 +99,10 @@ describe('看板模板结构', () => {
     expect(html).toContain("label: '全部数据', hint: '筛选'");
   });
 
+  it('版本耗时分布图按版本号降序排布', () => {
+    expect(html).toContain('const rows = w.rows.slice().sort((a, b) => S.byVersionDesc({ label: a.version }, { label: b.version }));');
+  });
+
   it('图表是自绘 SVG，没有 canvas 依赖', () => {
     expect(html).not.toContain('<canvas');
     expect(html).toContain('createElementNS');

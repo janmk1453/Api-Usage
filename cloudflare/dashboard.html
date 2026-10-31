@@ -4690,7 +4690,8 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
 
   function paintStack(root) {
     const w = C.weightedRender(state.range, state.granularity);
-    const rows = w.rows;
+    // 堆叠行按版本号降序固定排布：不随样本量或耗时高低跳动，同一版本每次都在同一行
+    const rows = w.rows.slice().sort((a, b) => S.byVersionDesc({ label: a.version }, { label: b.version }));
     const host = root.querySelector('#stackRows');
     if (!host) return;
     host.innerHTML = rows.map((r) => {
