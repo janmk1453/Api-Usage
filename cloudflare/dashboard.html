@@ -2026,7 +2026,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     if (topVersion && slowest && fastest && slowest !== fastest) {
       out.push({
         icon: 'zap', tone: 'neutral',
-        html: '<b>' + topVersion.label + '</b> 覆盖 <b>' + fmtPct(topVersion.count / (D.meta.users || 1), 0) + '</b>，最快版本 <b>' + fastest.version + '</b> 比最慢的 ' + slowest.version + ' 快 <b>' + fmtPct(slowest.avgMs ? (slowest.avgMs - fastest.avgMs) / slowest.avgMs : 0, 0) + '</b>。',
+        html: '主流版本 <b>' + topVersion.label + '</b> 占 <b>' + fmtPct(topVersion.count / (D.meta.users || 1), 0) + '</b>，最快版本 <b>' + fastest.version + '</b> 比最慢的 ' + slowest.version + ' 快 <b>' + fmtPct(slowest.avgMs ? (slowest.avgMs - fastest.avgMs) / slowest.avgMs : 0, 0) + '</b>。',
       });
     }
     return out.slice(0, 3);
@@ -3487,9 +3487,30 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     return tableHTML(cols, rows, { maxHeight: o.maxHeight || '320px' });
   }
 
+  /* 版本号降序：取标签里的数字段逐个比较，没有数字的（未知 / 其他）恒排末位 */
+  function versionParts(label) {
+    const m = String(label == null ? '' : label).match(/(\d+(?:\.\d+)*)/);
+    return m ? m[1].split('.').map(Number) : null;
+  }
+  function byVersionDesc(a, b) {
+    const pa = versionParts(a.label);
+    const pb = versionParts(b.label);
+    if (!pa && !pb) return 0;
+    if (!pa) return 1;
+    if (!pb) return -1;
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const d = (pb[i] || 0) - (pa[i] || 0);
+      if (d) return d;
+    }
+    return 0;
+  }
+  function sortVersionItems(items) {
+    return items.slice().sort(byVersionDesc);
+  }
+
   TEL.comp = {
     head, chartCard, seg, legend, deltaChip, kpiCard, rankList, donutLegend,
-    tableHTML, empty, initCommon, seriesTable,
+    tableHTML, empty, initCommon, seriesTable, sortVersionItems, byVersionDesc,
   };
 })();
 
@@ -4240,6 +4261,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       const rest = d.items.slice(o.limit || 8).reduce((s, x) => s + x.count, 0);
       items.push({ label: '其他', value: rest, display: C.fmtInt(rest), total, color: 'var(--chart-8)' });
     }
+    if (o.byVersion) items = S.sortVersionItems(items);
     return '<section class="card dim-card rise">'
       + S.head(d.label, o.note || ('共 ' + C.fmtInt(total) + ' 台设备'))
       + '<div class="card-body">' + (items.length ? S.rankList(items, { showShare: true, compact: true }) : S.empty()) + '</div>'
@@ -4307,7 +4329,8 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
   function softwareTab() {
     const total = TEL.data.meta.users;
     const versions = TEL.data.versions;
-    const latest = versions.find((v) => /^v\d/.test(v.label));
+    // 最新版 = 版本号最大的一个（不能取用量最多的那个）
+    const latest = S.sortVersionItems(versions.filter((v) => /^v\d/.test(v.label)))[0] || null;
     const line = latest ? latest.label.split('.').slice(0, 2).join('.') : '';
     const lineLabel = line ? line.slice(1) + '.x' : '同系列';
     const recent = line ? versions.filter((v) => v.label.indexOf(line + '.') === 0).reduce((s, v) => s + v.count, 0) : 0;
@@ -4324,7 +4347,9 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       return 0;
     });
     const oldest = numeric[0];
-    const items = versions.slice(0, 9).map((v, i) => ({
+    // 取用量最多的 9 个做展示，再按版本号降序排列
+    const shown = S.sortVersionItems(versions.slice(0, 9));
+    const items = shown.map((v, i) => ({
       label: v.label, value: v.count, display: C.fmtInt(v.count), total,
       color: i === 0 ? 'var(--accent)' : i < 3 ? 'var(--chart-2)' : 'var(--chart-8)',
     }));
@@ -4353,9 +4378,9 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       + '</div>'
       + '<div class="masonry">'
       + dimCard('browser', { note: '浏览器家族 · 每设备最近一次上报', color: 'var(--chart-2)' })
-      + dimCard('browserVersion', { note: '浏览器 + 主版本号', color: 'var(--chart-2)' })
-      + dimCard('stVersion', { note: 'SillyTavern 前端版本', color: 'var(--chart-4)' })
-      + dimCard('ttVersion', { note: '仅 TauriTavern 宿主上报', color: 'var(--chart-1)', limit: 6 })
+      + dimCard('browserVersion', { note: '浏览器 + 主版本号', color: 'var(--chart-2)', byVersion: true })
+      + dimCard('stVersion', { note: 'SillyTavern 前端版本', color: 'var(--chart-4)', byVersion: true })
+      + dimCard('ttVersion', { note: '仅 TauriTavern 宿主上报', color: 'var(--chart-1)', limit: 6, byVersion: true })
       + dimCard('lang', { note: '界面语言', color: 'var(--chart-3)', limit: 6 })
       + dimCard('tz', { note: 'UTC 偏移', color: 'var(--chart-6)', limit: 7 })
       + '</div>';
