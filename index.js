@@ -3,13 +3,13 @@ import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from ".
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { f as saveHot, p as historyRecordKey } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-D6Zn3BrY.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-CwKYX7kw.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-9LYFOfk8.js";
-import { t as installInterception } from "./interception-C-uRMjmL.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-B9aZlpFt.js";
-import { a as trackOpen, c as applyTheme, d as icon, i as initTelemetry, l as unwatchSystemTheme, o as trackPage, r as flushTelemetry, s as trackRender, t as renderSettings, u as watchSystemTheme } from "./settings-CvKLMfjR.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-PaDVHrO2.js";
+import { t as installInterception } from "./interception-CR2BPaxY.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-B1Eel724.js";
+import { a as trackOpen, c as applyTheme, d as icon, i as initTelemetry, l as unwatchSystemTheme, o as trackPage, r as flushTelemetry, s as trackRender, t as renderSettings, u as watchSystemTheme } from "./settings-19-GE3yK.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-CRDUpC_Z.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -53,7 +53,7 @@ async function exportHistory() {
 		path: "",
 		proxy: ""
 	};
-	const _appVer = "3.1.8";
+	const _appVer = "3.1.9";
 	let fullHist = [];
 	try {
 		fullHist = await repository.getAllHistory();
@@ -8942,7 +8942,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-B9aZlpFt.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-B1Eel724.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -9337,72 +9337,101 @@ function bindWalletView(doc) {
 	}
 }
 /** 更新日志（最新在前） */
-var CHANGELOG = [{
-	version: "r3.1.8",
-	date: "2026-10-29",
-	sections: [
-		{
-			kind: "feature",
-			items: [
-				"关于页新增更新日志",
-				"新增一些动画和模糊效果",
-				"新增重置筛选"
-			]
-		},
-		{
-			kind: "improve",
-			items: [
-				"移除了一些旧有设置",
-				"优化深浅色模式显示效果，提高可读性",
-				"图表/历史记录的输入输出和部分 UI 配色与样式对齐 DeepSeek 官网",
-				"部分选项的选择现在会在刷新网页后留存",
-				"调整移动端 UI"
-			]
-		},
-		{
-			kind: "fix",
-			items: [
-				"鼠标滚轮无法在图表上滚动",
-				"调整细节",
-				"模型占比图在大量模型时挤成一团"
-			]
-		}
-	]
-}, {
-	version: "r3.1.7",
-	date: "2026-10-23",
-	sections: [
-		{
-			kind: "feature",
-			items: [
-				"重做钱包价格自动识别填充，现在可以通过选择价格来源并点击更新实现自动识别填充价格",
-				"余额自动校准支持多家供应商：DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita；套餐额度支持智谱 GLM、MiniMax",
-				"钱包卡新增自动识别厂商官方图标",
-				"钱包页新增工具栏",
-				"所有统计图表底部新增视窗滑块：拖中间平移、拖两端缩放"
-			]
-		},
-		{
-			kind: "improve",
-			items: [
-				"改进钱包和统计页的部分 UI",
-				"优化滚动条视觉效果",
-				"在 tooltip 中显示时间和更多信息",
-				"部分图表现在支持排序",
-				"设置 - 储存 中现在支持清理缓存",
-				"改进了很多 UI 效果，验证性的加入了少量过渡动画"
-			]
-		},
-		{
-			kind: "fix",
-			items: [
-				"修复移动端钱包页文字与按钮错位",
-				"修复潜在的图表不可用问题",
-				"修复无法统计思维链耗时"
-			]
-		}
-	]
-}];
+var CHANGELOG = [
+	{
+		version: "r3.1.9",
+		date: "2026-11-02",
+		sections: [
+			{
+				kind: "feature",
+				items: [
+					"设置里新增「移动端兼容UI」开关，开着用底部标签栏，关掉就回到原来的侧栏抽屉",
+					"手机端改用底部标签栏：概览、统计、历史、趋势、设置",
+					"钱包、使用说明、关于收进设置页，左上角箭头返回"
+				]
+			},
+			{
+				kind: "improve",
+				items: [
+					"底栏和顶栏一样带模糊，切换标签有滑动指示和淡入",
+					"底栏高度加高一些",
+					"检测到新版本时，底栏「设置」直接显示「新版本」"
+				]
+			},
+			{
+				kind: "fix",
+				items: ["关掉开关后的侧栏抽屉里，图标和标题挤成两行"]
+			}
+		]
+	},
+	{
+		version: "r3.1.8",
+		date: "2026-10-29",
+		sections: [
+			{
+				kind: "feature",
+				items: [
+					"关于页新增更新日志",
+					"新增一些动画和模糊效果",
+					"新增重置筛选"
+				]
+			},
+			{
+				kind: "improve",
+				items: [
+					"移除了一些旧有设置",
+					"优化深浅色模式显示效果，提高可读性",
+					"图表/历史记录的输入输出和部分 UI 配色与样式对齐 DeepSeek 官网",
+					"部分选项的选择现在会在刷新网页后留存",
+					"调整移动端 UI"
+				]
+			},
+			{
+				kind: "fix",
+				items: [
+					"鼠标滚轮无法在图表上滚动",
+					"调整细节",
+					"模型占比图在大量模型时挤成一团"
+				]
+			}
+		]
+	},
+	{
+		version: "r3.1.7",
+		date: "2026-10-23",
+		sections: [
+			{
+				kind: "feature",
+				items: [
+					"重做钱包价格自动识别填充，现在可以通过选择价格来源并点击更新实现自动识别填充价格",
+					"余额自动校准支持多家供应商：DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita；套餐额度支持智谱 GLM、MiniMax",
+					"钱包卡新增自动识别厂商官方图标",
+					"钱包页新增工具栏",
+					"所有统计图表底部新增视窗滑块：拖中间平移、拖两端缩放"
+				]
+			},
+			{
+				kind: "improve",
+				items: [
+					"改进钱包和统计页的部分 UI",
+					"优化滚动条视觉效果",
+					"在 tooltip 中显示时间和更多信息",
+					"部分图表现在支持排序",
+					"设置 - 储存 中现在支持清理缓存",
+					"改进了很多 UI 效果，验证性的加入了少量过渡动画"
+				]
+			},
+			{
+				kind: "fix",
+				items: [
+					"修复移动端钱包页文字与按钮错位",
+					"修复潜在的图表不可用问题",
+					"修复无法统计思维链耗时"
+				]
+			}
+		]
+	}
+];
 /** 取最近若干个版本（默认 CHANGELOG_ENTRY_LIMIT 条） */
 function getRecentChangelog(limit = 3) {
 	const n = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : 3;
@@ -10698,7 +10727,7 @@ function createPanel() {
           <span class="aus-brand-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--ds-orange);">${icon("brand", 18)}</span>
           <div style="display:flex;flex-direction:column;min-width:0;">
             <span style="font-size:15px;font-weight:700;line-height:20px;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
-            <span style="font-size:var(--aus-fs-sm);line-height:16px;color:var(--ds-text-2);white-space:nowrap;">v3.1.8</span>
+            <span style="font-size:var(--aus-fs-sm);line-height:16px;color:var(--ds-text-2);white-space:nowrap;">v3.1.9</span>
           </div>
         </div>
         <button id="aus-sidebar-toggle" style="width:30px;height:30px;margin-top:13px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;font-size:var(--aus-fs-base);padding:0;line-height:1;">${icon("chevron-left", 14)}</button>
@@ -10981,7 +11010,7 @@ function createPanel() {
                   </div>
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:var(--aus-fs-sm);">检查更新</button>
                   <button id="aus-run-update" class="ds-btn-pill" style="display:none;padding:6px 14px;font-size:var(--aus-fs-sm);">立即更新</button>
-                  <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">当前 v3.1.8 · 每 1 小时自动检查</span>
+                  <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">当前 v3.1.9 · 每 1 小时自动检查</span>
                 </div>
                 <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">可选择 main（稳定）或 dev（测试）分支获取更新，默认 main；更新完成后自动刷新网页。</div>
               </div>
@@ -11017,7 +11046,7 @@ function createPanel() {
 	doc.body.appendChild(overlay);
 	doc.body.appendChild(panel);
 	try {
-		import("./update-hEuwPQhF.js").then((mod) => mod.syncUpdateIndicators?.());
+		import("./update-BZzkl0bd.js").then((mod) => mod.syncUpdateIndicators?.());
 	} catch {}
 	try {
 		applyTheme(theme);
@@ -11134,7 +11163,7 @@ function createPanel() {
 		initForecastView();
 	} catch {}
 	try {
-		import("./update-hEuwPQhF.js").then((m) => {
+		import("./update-BZzkl0bd.js").then((m) => {
 			const branchBtn = doc.getElementById("aus-update-branch-btn");
 			const branchLabel = doc.getElementById("aus-update-branch-label");
 			const branchDrop = doc.getElementById("aus-update-branch-dropdown");
@@ -11173,7 +11202,7 @@ function createPanel() {
 		if (updBtn) updBtn.onclick = () => {
 			updBtn.textContent = "检查中…";
 			updBtn.setAttribute("disabled", "");
-			import("./update-hEuwPQhF.js").then((m) => m.checkUpdate(true).finally(() => {
+			import("./update-BZzkl0bd.js").then((m) => m.checkUpdate(true).finally(() => {
 				updBtn.textContent = "检查更新";
 				updBtn.removeAttribute("disabled");
 			}));
@@ -11183,7 +11212,7 @@ function createPanel() {
 			if (runUpdBtn.hasAttribute("disabled")) return;
 			runUpdBtn.textContent = "更新中…";
 			runUpdBtn.setAttribute("disabled", "");
-			import("./update-hEuwPQhF.js").then((m) => m.updateSelf()).then((res) => {
+			import("./update-BZzkl0bd.js").then((m) => m.updateSelf()).then((res) => {
 				if (res.ok && res.changed) {
 					const bannerEl = doc.getElementById("aus-update-banner");
 					if (bannerEl) {
@@ -11259,10 +11288,10 @@ function openPanel() {
 	panelOpen = true;
 	refreshUI();
 	try {
-		import("./collector-TXuKnAPm.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-DE5ci5o6.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
-		import("./update-hEuwPQhF.js").then((m) => m.maybeAutoCheck());
+		import("./update-BZzkl0bd.js").then((m) => m.maybeAutoCheck());
 	} catch {}
 }
 function closePanel() {
@@ -11481,10 +11510,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-C-uRMjmL.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-CR2BPaxY.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-TXuKnAPm.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-DE5ci5o6.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -11492,10 +11521,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-C-uRMjmL.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-CR2BPaxY.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-TXuKnAPm.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-DE5ci5o6.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -11585,13 +11614,13 @@ async function onDelete() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-B9aZlpFt.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-B1Eel724.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-9LYFOfk8.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-PaDVHrO2.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-CRDUpC_Z.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 	try {
@@ -11618,19 +11647,19 @@ async function onDelete() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-C-uRMjmL.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-CR2BPaxY.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-TXuKnAPm.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-DE5ci5o6.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-B9aZlpFt.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-B1Eel724.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-9LYFOfk8.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-PaDVHrO2.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-CRDUpC_Z.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -11640,10 +11669,10 @@ async function onDisable() {
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-C-uRMjmL.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-CR2BPaxY.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-TXuKnAPm.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-DE5ci5o6.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -11662,13 +11691,13 @@ async function onDisable() {
 		unwatchSystemTheme();
 	} catch {}
 	try {
-		(await import("./balance-B9aZlpFt.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-B1Eel724.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-9LYFOfk8.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-PaDVHrO2.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-CRDUpC_Z.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -11696,19 +11725,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-B9aZlpFt.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-B1Eel724.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-9LYFOfk8.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-PaDVHrO2.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-CRDUpC_Z.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-TXuKnAPm.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-DE5ci5o6.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -11730,7 +11759,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-PaDVHrO2.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-CRDUpC_Z.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

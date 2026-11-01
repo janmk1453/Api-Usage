@@ -37,6 +37,34 @@ export const CHANGELOG_ENTRY_LIMIT = 3;
 /** 更新日志（最新在前） */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'r3.1.9',
+    date: '2026-11-02',
+    sections: [
+      {
+        kind: 'feature',
+        items: [
+          '设置里新增「移动端兼容UI」开关，开着用底部标签栏，关掉就回到原来的侧栏抽屉',
+          '手机端改用底部标签栏：概览、统计、历史、趋势、设置',
+          '钱包、使用说明、关于收进设置页，左上角箭头返回',
+        ],
+      },
+      {
+        kind: 'improve',
+        items: [
+          '底栏和顶栏一样带模糊，切换标签有滑动指示和淡入',
+          '底栏高度加高一些',
+          '检测到新版本时，底栏「设置」直接显示「新版本」',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          '关掉开关后的侧栏抽屉里，图标和标题挤成两行',
+        ],
+      },
+    ],
+  },
+  {
     version: 'r3.1.8',
     date: '2026-10-29',
     sections: [
