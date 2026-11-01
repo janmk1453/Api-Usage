@@ -1,14 +1,15 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from "./store-CgJSmTLt.js";
-import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
-import { a as getExtensionSettings, f as saveHot, o as isMigrationBackupKey, p as historyRecordKey, r as deleteMigrationBackups, u as saveExtensionSettings } from "./persistence-CaWdvByH.js";
+import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from "./store-DdBSZEXQ.js";
+import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
+import { f as saveHot, p as historyRecordKey } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, a as decryptKey, c as isTruncatedFinish, d as calcCost, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-BW-r59iw.js";
-import { a as isUnsafeKey$1, c as localDay$1, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay, t as esc$2, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
-import { a as getWalletExchangeRate, i as getDisplayCurrency, n as fetchLiveRate, r as formatMoney } from "./currency-DgeH8MPr.js";
-import { r as recalcAllCosts, t as installInterception } from "./interception-BsHkDurZ.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, i as saveApiKey, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-CvgCg-F3.js";
-import { c as walletSyncStatus, i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev, t as applySyncPlan } from "./pricing-sync-DuNUqgL8.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-D6Zn3BrY.js";
+import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
+import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-9LYFOfk8.js";
+import { t as installInterception } from "./interception-C-uRMjmL.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-B9aZlpFt.js";
+import { a as trackOpen, c as applyTheme, d as icon, i as initTelemetry, l as unwatchSystemTheme, o as trackPage, r as flushTelemetry, s as trackRender, t as renderSettings, u as watchSystemTheme } from "./settings-CvKLMfjR.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-PaDVHrO2.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -32,7 +33,7 @@ function sanitizeImportedValue(value, depth = 0) {
 	}
 	return clean;
 }
-function stripHistory$1(history) {
+function stripHistory(history) {
 	return history.filter((h) => h && h._debug !== true).map((h) => {
 		const c = { ...h };
 		delete c.messages;
@@ -68,7 +69,7 @@ async function exportHistory() {
 		scope: "full",
 		walletFormat: 2,
 		data: {
-			history: stripHistory$1(fullHist),
+			history: stripHistory(fullHist),
 			total_tokens: state$2.total_tokens,
 			total_cost: state$2.total_cost,
 			input_tokens: state$2.input_tokens,
@@ -87,7 +88,7 @@ async function exportHistory() {
 			messageCount: state$2.messageCount,
 			saves: { default: {
 				name: "default",
-				history: stripHistory$1(fullHist),
+				history: stripHistory(fullHist),
 				total_tokens: state$2.total_tokens,
 				total_cost: state$2.total_cost,
 				input_tokens: state$2.input_tokens,
@@ -301,2899 +302,6 @@ function triggerImport() {
 	inputEl.click();
 }
 //#endregion
-//#region src/ui/icons.ts
-var PATHS = {
-	overview: "<rect width=\"7\" height=\"9\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"9\" x=\"14\" y=\"12\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"3\" y=\"16\" rx=\"1\"/>",
-	stats: "<path d=\"M3 3v16a2 2 0 0 0 2 2h16\"/><path d=\"M18 17V9\"/><path d=\"M13 17V5\"/><path d=\"M8 17v-3\"/>",
-	history: "<path d=\"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8\"/><path d=\"M3 3v5h5\"/><path d=\"M12 7v5l4 2\"/>",
-	forecast: "<path d=\"M16 7h6v6\"/><path d=\"m22 7-8.5 8.5-5-5L2 17\"/>",
-	wallet: "<path d=\"M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1\"/><path d=\"M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4\"/>",
-	settings: "<path d=\"M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>",
-	help: "<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3\"/><path d=\"M12 17h.01\"/>",
-	about: "<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 16v-4\"/><path d=\"M12 8h.01\"/>",
-	"chevron-down": "<path d=\"m6 9 6 6 6-6\"/>",
-	"chevron-up": "<path d=\"m18 15-6-6-6 6\"/>",
-	"chevron-left": "<path d=\"m15 18-6-6 6-6\"/>",
-	"chevron-right": "<path d=\"m9 18 6-6-6-6\"/>",
-	refresh: "<path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/>",
-	close: "<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>",
-	menu: "<path d=\"M4 6h16\"/><path d=\"M4 12h16\"/><path d=\"M4 18h16\"/>",
-	brand: "<rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"4\"/><path d=\"M8 15v-3\"/><path d=\"M12 15V9\"/><path d=\"M16 15v-2\"/>"
-};
-/**
-* 生成内联 SVG；尺寸默认 20px、线宽 1.9，颜色继承 currentColor。
-* 用 inline-block + vertical-align 保证既能进 flex 容器居中，也能跟在文字旁边不换行。
-*/
-function icon(name, size = 20, strokeWidth = 1.9) {
-	return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:inline-block;vertical-align:middle;flex-shrink:0;">${PATHS[name]}</svg>`;
-}
-//#endregion
-//#region src/services/sync.ts
-function b64(s) {
-	try {
-		return btoa(unescape(encodeURIComponent(s)));
-	} catch {
-		return btoa(s);
-	}
-}
-function rawFetch() {
-	try {
-		const p = window.parent;
-		return p?.fetch?.bind(p) ?? fetch.bind(window);
-	} catch {
-		return fetch.bind(window);
-	}
-}
-function authHeader() {
-	const cfg = state$2.settings.webdav || {};
-	let pass = "";
-	try {
-		pass = decryptKey(localStorage.getItem("ds_ds_webdav_pass") || "");
-	} catch {}
-	try {
-		const v = globalThis.SillyTavern?.getContext?.().extensionSettings?.["api_usage_stat"]?.webdavPass;
-		if (v) pass = decryptKey(v);
-	} catch {}
-	return "Basic " + b64((cfg.username || "") + ":" + pass);
-}
-function realUrl() {
-	const cfg = state$2.settings.webdav || {};
-	const base = (cfg.url || "").trim().replace(/\/+$/, "");
-	const path = (cfg.path || "").trim().replace(/^\/+|\/+$/g, "");
-	let u = base + "/";
-	if (path) u += path + "/";
-	u += WEBDAV_SYNC_FILE;
-	return u;
-}
-function reqUrl(u) {
-	const proxy = (state$2.settings.webdav?.proxy || "").trim();
-	if (!proxy) return u;
-	if (proxy.indexOf("?") !== -1) return proxy + encodeURIComponent(u);
-	return proxy.replace(/\/+$/, "") + "/" + encodeURIComponent(u);
-}
-function dirs() {
-	const cfg = state$2.settings.webdav || {};
-	const base = (cfg.url || "").trim().replace(/\/+$/, "");
-	const path = (cfg.path || "").trim().replace(/^\/+|\/+$/g, "");
-	const out = [];
-	if (path) {
-		let acc = base;
-		path.split("/").forEach((seg) => {
-			if (seg) {
-				acc += "/" + seg;
-				out.push(acc);
-			}
-		});
-	}
-	return out;
-}
-async function webdavGet() {
-	const url = reqUrl(realUrl());
-	try {
-		const r = await rawFetch()(url, {
-			method: "GET",
-			headers: {
-				Authorization: authHeader(),
-				Accept: "*/*"
-			}
-		});
-		if (r.status === 404) return { exists: false };
-		if (!r.ok) return {
-			exists: true,
-			error: true,
-			status: r.status
-		};
-		return {
-			exists: true,
-			text: await r.text()
-		};
-	} catch (e) {
-		return {
-			exists: false,
-			netError: true,
-			errName: e?.name || "",
-			errMsg: e?.message || String(e)
-		};
-	}
-}
-async function webdavMkcol(dir) {
-	const url = reqUrl(dir);
-	try {
-		const r = await rawFetch()(url, {
-			method: "MKCOL",
-			headers: { Authorization: authHeader() }
-		});
-		if (r.status === 201 || r.status === 405 || r.status === 204) return true;
-		if (r.status === 409) return false;
-		return false;
-	} catch {
-		return false;
-	}
-}
-async function webdavPut(text) {
-	for (const d of dirs()) await webdavMkcol(d);
-	const url = reqUrl(realUrl());
-	const r = await rawFetch()(url, {
-		method: "PUT",
-		headers: {
-			Authorization: authHeader(),
-			"Content-Type": "application/json; charset=utf-8"
-		},
-		body: text
-	});
-	if (!r.ok) throw new Error("上传失败 HTTP " + r.status);
-}
-function stripHistory(history) {
-	return history.filter((h) => h && h._debug !== true).map((h) => {
-		const c = { ...h };
-		delete c.messages;
-		delete c.fullRequest;
-		delete c.fullResponse;
-		return c;
-	});
-}
-async function buildLocalBundle() {
-	const history = await repository.getAllHistory();
-	const settings = JSON.parse(JSON.stringify(state$2.settings));
-	if (settings.webdav) settings.webdav = {
-		url: "",
-		username: "",
-		path: "",
-		proxy: ""
-	};
-	return {
-		format: "deepseek-stat-sync",
-		version: 2,
-		walletFormat: 2,
-		syncedAt: Date.now(),
-		data: {
-			history: stripHistory(history),
-			total_tokens: state$2.total_tokens,
-			total_cost: state$2.total_cost,
-			input_tokens: state$2.input_tokens,
-			output_tokens: state$2.output_tokens,
-			cache_hit_tokens: state$2.cache_hit_tokens,
-			cache_miss_tokens: state$2.cache_miss_tokens,
-			input_cost: state$2.input_cost,
-			output_cost: state$2.output_cost,
-			rounds: state$2.rounds,
-			startTime: state$2.startTime,
-			balance: state$2.balance,
-			customBalance: state$2.customBalance,
-			wallets: state$2.wallets,
-			walletIgnored: state$2.walletIgnored,
-			settings,
-			messageCount: state$2.messageCount
-		},
-		_ts: {}
-	};
-}
-function mergeBundles(remote, local) {
-	const rd = remote.data || {}, ld = local.data || {};
-	const toHistory = (d) => {
-		if (Array.isArray(d.history)) return d.history;
-		if (d.saves && typeof d.saves === "object") {
-			let arr = [];
-			for (const s of Object.values(d.saves)) arr = arr.concat(s.history || []);
-			return arr;
-		}
-		return [];
-	};
-	const clean = (arr) => arr.map((e) => {
-		if (e && typeof e === "object") {
-			for (const k of Object.keys(e)) if (isUnsafeKey$1(k)) delete e[k];
-		}
-		return e;
-	});
-	const lh = clean(toHistory(ld)), rh = clean(toHistory(rd));
-	const keyOf = historyRecordKey;
-	const lseen = new Set(lh.map((h) => keyOf(h)));
-	const rseen = new Set(rh.map((h) => keyOf(h)));
-	let pulled = 0, pushed = 0;
-	const merged = [
-		...rh.filter((h) => {
-			if (!lseen.has(keyOf(h))) {
-				pulled++;
-				return true;
-			}
-			return false;
-		}),
-		...lh.filter((h) => {
-			if (!rseen.has(keyOf(h))) {
-				pushed++;
-				return true;
-			}
-			return false;
-		}),
-		...lh.filter((h) => rseen.has(keyOf(h)))
-	];
-	const dedup = /* @__PURE__ */ new Map();
-	for (const h of merged) dedup.set(keyOf(h), h);
-	let hist = Array.from(dedup.values()).sort((a, b) => b.timestamp - a.timestamp);
-	return {
-		mergedData: {
-			history: hist,
-			total_tokens: ld.total_tokens ?? rd.total_tokens ?? hist.reduce((a, h) => a + (h.total_tokens || 0), 0),
-			total_cost: ld.total_cost ?? rd.total_cost ?? hist.reduce((a, h) => a + (h.cost || 0), 0),
-			input_tokens: ld.input_tokens ?? rd.input_tokens ?? 0,
-			output_tokens: ld.output_tokens ?? rd.output_tokens ?? 0,
-			cache_hit_tokens: ld.cache_hit_tokens ?? rd.cache_hit_tokens ?? 0,
-			cache_miss_tokens: ld.cache_miss_tokens ?? rd.cache_miss_tokens ?? 0,
-			input_cost: ld.input_cost ?? rd.input_cost ?? 0,
-			output_cost: ld.output_cost ?? rd.output_cost ?? 0,
-			rounds: ld.rounds ?? rd.rounds ?? hist.length,
-			startTime: ld.startTime ?? rd.startTime ?? Date.now(),
-			balance: ld.balance ?? rd.balance,
-			customBalance: ld.customBalance ?? rd.customBalance,
-			wallets: mergeWalletCollections(ld.wallets || repository.getWallets(), rd.wallets || []),
-			walletIgnored: Array.from(/* @__PURE__ */ new Set([...ld.walletIgnored || [], ...rd.walletIgnored || []])),
-			messageCount: ld.messageCount ?? rd.messageCount,
-			settings: ld.settings ?? rd.settings
-		},
-		pulled,
-		pushed
-	};
-}
-var syncing = false;
-async function doSyncNow() {
-	if (syncing) return alert("同步进行中");
-	const cfg = state$2.settings.webdav || {};
-	if (!cfg.url || !cfg.username) return alert("请先在设置中填写 WebDAV 地址与用户名");
-	if (!/^https:\/\//i.test(cfg.url)) return alert("WebDAV 地址必须为 https");
-	const proxy = (cfg.proxy || "").trim();
-	if (proxy && !/^https:\/\//i.test(proxy)) {
-		if (!confirm("CORS 代理非 https，WebDAV 用户名密码将以可被截获的方式经该代理传输。\n仍要继续？")) return;
-	}
-	syncing = true;
-	const btn = window.parent?.document?.getElementById("aus-webdav-sync");
-	if (btn) {
-		btn.disabled = true;
-		btn.textContent = "同步中…";
-	}
-	try {
-		const local = await buildLocalBundle();
-		const res = await webdavGet();
-		if (res.netError) {
-			const isCors = res.errName === "TypeError" || /Failed to fetch|NetworkError|CORS/i.test(res.errMsg || "");
-			throw new Error(isCors ? "CORS 被拦截，请配置 CORS 代理" : "网络错误: " + (res.errMsg || "未知"));
-		}
-		if (res.error) throw new Error("读取云端失败 HTTP " + res.status);
-		let merged;
-		if (!res.exists) merged = {
-			mergedData: local.data,
-			pulled: 0,
-			pushed: 0
-		};
-		else {
-			let remote;
-			try {
-				remote = JSON.parse(res.text);
-			} catch {
-				throw new Error("云端文件解析失败");
-			}
-			if (remote.format !== "deepseek-stat-sync") throw new Error("云端格式不符");
-			if (remote.version > 2) throw new Error("云端版本过高，请升级扩展");
-			merged = mergeBundles(remote, local);
-		}
-		await repository.replaceAll(merged.mergedData);
-		await repository.recalcAll();
-		await repository.rebuildAggregates();
-		const uploaded = await buildLocalBundle();
-		await webdavPut(JSON.stringify(uploaded));
-		alert(`同步完成${merged.pulled ? `（拉取 ${merged.pulled} 条）` : ""}${merged.pushed ? `（上传 ${merged.pushed} 条）` : ""}`);
-		try {
-			globalThis.ApiUsageStat?.refreshUI?.();
-		} catch {}
-	} catch (e) {
-		alert("同步失败: " + (e?.message || e));
-	} finally {
-		syncing = false;
-		if (btn) {
-			btn.disabled = false;
-			btn.textContent = "☁️ 立即同步";
-		}
-	}
-}
-function saveWebdavPass(pass) {
-	try {
-		if (pass) localStorage.setItem("ds_ds_webdav_pass", encryptKey(pass));
-		else localStorage.removeItem("ds_ds_webdav_pass");
-		const ctx = globalThis.SillyTavern?.getContext?.();
-		if (ctx?.extensionSettings) {
-			ctx.extensionSettings["api_usage_stat"] = ctx.extensionSettings["api_usage_stat"] || {};
-			if (pass) ctx.extensionSettings["api_usage_stat"].webdavPass = encryptKey(pass);
-			else delete ctx.extensionSettings["api_usage_stat"].webdavPass;
-			ctx.saveSettingsDebounced?.();
-		}
-	} catch {}
-}
-//#endregion
-//#region src/services/theme.ts
-var DARK_QUERY = "(prefers-color-scheme: dark)";
-/** 归一化用户设置值，非法值一律视为 light（保持旧版本行为） */
-function normalizeThemeMode(v) {
-	return v === "dark" || v === "auto" ? v : "light";
-}
-/** 取宿主窗口：面板可能运行在 iframe 中，优先 parent */
-function hostWindow() {
-	try {
-		const p = window?.parent;
-		if (p && typeof p.matchMedia === "function") return p;
-	} catch {}
-	try {
-		if (typeof window !== "undefined" && typeof window.matchMedia === "function") return window;
-	} catch {}
-	return null;
-}
-/** 系统是否处于深色（不支持 prefers-color-scheme 时返回 false） */
-function systemPrefersDark(win) {
-	const w = win ?? hostWindow();
-	try {
-		if (!w || typeof w.matchMedia !== "function") return false;
-		return !!w.matchMedia(DARK_QUERY).matches;
-	} catch {
-		return false;
-	}
-}
-/** 把设置值解析为真正生效的 light / dark */
-function resolveTheme(mode, win) {
-	const m = normalizeThemeMode(mode);
-	if (m === "dark") return "dark";
-	if (m === "auto") return systemPrefersDark(win) ? "dark" : "light";
-	return "light";
-}
-function getDoc$12() {
-	try {
-		const parentDoc = window.parent?.document;
-		if (parentDoc) return parentDoc;
-	} catch {}
-	try {
-		return document;
-	} catch {
-		return {};
-	}
-}
-/** 仅同步 DOM 属性，不读设置、不落盘 */
-function paintTheme(mode, resolved) {
-	const r = resolved ?? resolveTheme(mode);
-	try {
-		const doc = getDoc$12();
-		const panel = doc.getElementById("aus-panel");
-		if (panel) panel.setAttribute("data-ds-theme", r);
-		const overlay = doc.getElementById("aus-overlay");
-		if (overlay) {
-			overlay.setAttribute("data-extension", "api-usage-stat");
-			overlay.setAttribute("data-ds-theme", r);
-		}
-		try {
-			document.documentElement.removeAttribute("data-ds-theme");
-			document.documentElement.removeAttribute("data-extension");
-		} catch {}
-		try {
-			doc.documentElement.removeAttribute("data-ds-theme");
-			if (doc.documentElement.getAttribute("data-extension") === "api-usage-stat") {
-				if (!!doc.getElementById("aus-panel")) doc.documentElement.removeAttribute("data-extension");
-			}
-		} catch {}
-	} catch {}
-}
-function applyTheme(theme) {
-	const t = normalizeThemeMode(theme ?? state$2.settings?.theme);
-	paintTheme(t);
-	if (t === "auto") try {
-		watchSystemTheme();
-	} catch {}
-}
-var boundWin = null;
-var boundMql = null;
-var boundHandler = null;
-/**
-* 主题实际变化后需要重绘的动态内容。
-* ECharts 的配色在绘制时就已固化进 option，不随 CSS 变量更新，必须重建实例再重绘；
-* 热力图等内联色值同理。refreshUI 会在面板打开时重绘 概览/统计/预测/钱包 四个视图。
-*/
-function repaintDynamic() {
-	try {
-		globalThis.ApiUsageStat?.refreshTheme?.();
-	} catch {}
-}
-/**
-* 监听系统配色变化：仅在 auto 模式下响应。
-* 同一 window 只绑一次；宿主不支持 addEventListener 时静默降级（不抛错）。
-*/
-function watchSystemTheme(win) {
-	const w = win ?? hostWindow();
-	if (!w || typeof w.matchMedia !== "function") return;
-	if (boundWin === w) return;
-	unwatchSystemTheme();
-	try {
-		const mql = w.matchMedia(DARK_QUERY);
-		if (!mql || typeof mql.addEventListener !== "function") return;
-		boundHandler = (e) => {
-			if (normalizeThemeMode(state$2.settings?.theme) !== "auto") return;
-			paintTheme("auto", e?.matches ? "dark" : "light");
-			let hasPanel = false;
-			try {
-				hasPanel = !!getDoc$12().getElementById("aus-panel");
-			} catch {}
-			if (hasPanel) repaintDynamic();
-		};
-		mql.addEventListener("change", boundHandler);
-		boundWin = w;
-		boundMql = mql;
-	} catch {}
-}
-/** 解除监听（扩展禁用时调用，避免热重载后重复触发） */
-function unwatchSystemTheme() {
-	try {
-		if (boundMql && boundHandler) boundMql.removeEventListener("change", boundHandler);
-	} catch {}
-	boundMql = null;
-	boundWin = null;
-	boundHandler = null;
-}
-/** 设置切换后调用：auto 时确保监听已建立 */
-function syncThemeWatcher() {
-	if (normalizeThemeMode(state$2.settings?.theme) === "auto") watchSystemTheme();
-}
-//#endregion
-//#region src/services/storage-usage.ts
-/**
-* 存储占用统计：统计本扩展在各类存储中占用的空间。
-*
-* 本扩展的数据实际分布在四个地方（见 store/persistence.ts）：
-*  1. SillyTavern 设置（extensionSettings.api_usage_stat）—— 热数据：最近 50 条历史 + 设置 + 汇总
-*     注：由酒馆统一序列化进其 settings.json，浏览器端拿不到落盘字节数，只能按 UTF-8 估算
-*  2. IndexedDB `api_usage_stat_db` / `kv` —— 冷历史、旧版迁移备份
-*  3. localStorage —— 零星小项（WebDAV 密码密文、峰值圆点位置、调试开关、更新检查时间、预测页偏好）
-*  4. 浏览器存储配额（navigator.storage.estimate）—— 全局参考，不是本扩展独占
-*
-* 兼容性要点：
-*  - `navigator.storage.estimate` 仅在安全上下文（https / localhost）可用；http 局域网访问时缺失，
-*    此时标记为“不可用”，不显示假数据。
-*  - `navigator.storage.persisted` 在 Safari 早期版本缺失，按未知处理。
-*  - 隐私模式 / 第三方 Cookie 被拦截时 IndexedDB 可能直接抛错，全部走 try/catch 降级。
-*  - 统一用 UTF-8 字节数（TextEncoder），不用 .length（UTF-16 码元数会低估中文占用）。
-*/
-var DB_NAME = "api_usage_stat_db";
-var STORE_NAME = "kv";
-/** UTF-8 字节数（中文 3 字节，避免用 length 低估） */
-function utf8Bytes(text) {
-	if (!text) return 0;
-	try {
-		if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(text).length;
-	} catch {}
-	let n = 0;
-	for (let i = 0; i < text.length; i++) {
-		const c = text.charCodeAt(i);
-		if (c < 128) n += 1;
-		else if (c < 2048) n += 2;
-		else if (c >= 55296 && c <= 56319) {
-			n += 4;
-			i++;
-		} else n += 3;
-	}
-	return n;
-}
-/** 人类可读的容量文本。始终用二进制单位（KB=1024），与系统/浏览器存储界面口径一致 */
-function formatBytes(bytes) {
-	if (bytes == null || !isFinite(bytes) || bytes < 0) return "—";
-	if (bytes < 1024) return `${Math.round(bytes)} B`;
-	const units = [
-		"KB",
-		"MB",
-		"GB",
-		"TB"
-	];
-	let v = bytes / 1024;
-	let i = 0;
-	while (v >= 1024 && i < units.length - 1) {
-		v /= 1024;
-		i++;
-	}
-	const digits = v < 10 ? 2 : v < 100 ? 1 : 0;
-	return `${parseFloat(v.toFixed(digits))} ${units[i]}`;
-}
-var LS_PREFIX_KEYS = [
-	{
-		key: "webdav_pass",
-		label: "WebDAV 密码（XOR）",
-		match: (k) => k === "ds_ds_webdav_pass"
-	},
-	{
-		key: "peak_dot",
-		label: "峰值圆点位置",
-		match: (k) => k === "ds_ds_peak_dot_pos"
-	},
-	{
-		key: "debug_log",
-		label: "调试日志开关",
-		match: (k) => k === "ds_debug_log"
-	},
-	{
-		key: "update",
-		label: "更新检查记录",
-		match: (k) => k.startsWith("aus_update_")
-	},
-	{
-		key: "forecast_prefs",
-		label: "预测页偏好",
-		match: (k) => k === "aus_forecast_prefs_v1"
-	},
-	{
-		key: "idb_fallback",
-		label: "本地存储降级副本",
-		match: (k) => k.startsWith("aus_cold")
-	}
-];
-function readLocalStorage(doc) {
-	let ls = null;
-	try {
-		ls = doc.defaultView?.localStorage ?? null;
-	} catch {
-		ls = null;
-	}
-	if (!ls) return [];
-	let keys = [];
-	try {
-		for (let i = 0; i < ls.length; i++) {
-			const k = ls.key(i);
-			if (k) keys.push(k);
-		}
-	} catch {
-		return [];
-	}
-	const items = [];
-	const used = /* @__PURE__ */ new Set();
-	for (const def of LS_PREFIX_KEYS) {
-		let bytes = 0;
-		let count = 0;
-		for (const k of keys) {
-			if (used.has(k) || !def.match(k)) continue;
-			try {
-				bytes += utf8Bytes(ls.getItem(k)) + utf8Bytes(k);
-			} catch {}
-			used.add(k);
-			count++;
-		}
-		if (count > 0) items.push({
-			key: `ls-${def.key}`,
-			label: def.label,
-			bytes
-		});
-	}
-	return items;
-}
-/**
-* 打开本扩展的 IndexedDB。读不到返回 null（隐私模式、被拦截、从未写入过）。
-* 用 openDatabase 时不会在全新浏览器上创建空库；但标准 indexedDB 只有 open()，
-* 而 open() 在库不存在时会触发 upgradeneeded 并真的建一个空库 —— 为避免“看一眼就建库”，
-* 先用 databases() 探测是否存在（Chrome 71+ / Safari 14+ / Firefox 126+），
-* 不支持 databases() 的环境退回 open()，且不写入任何数据（空库 0 字节，无害）。
-*/
-function openDb(doc) {
-	return new Promise((resolve) => {
-		let idb = null;
-		try {
-			idb = doc.defaultView?.indexedDB ?? null;
-		} catch {
-			idb = null;
-		}
-		if (!idb) return resolve(null);
-		let settled = false;
-		const done = (db) => {
-			if (settled) {
-				try {
-					db?.close();
-				} catch {}
-				return;
-			}
-			settled = true;
-			resolve(db);
-		};
-		const doOpen = () => {
-			try {
-				const req = idb.open(DB_NAME, 1);
-				req.onsuccess = (e) => done(e.target.result);
-				req.onerror = () => done(null);
-				req.onblocked = () => done(null);
-				req.onupgradeneeded = () => {
-					try {
-						req.result.createObjectStore(STORE_NAME);
-					} catch {}
-				};
-			} catch {
-				done(null);
-			}
-		};
-		const probe = idb.databases;
-		if (typeof probe === "function") try {
-			probe.call(idb).then((list) => {
-				if (settled) return;
-				if (Array.isArray(list) && list.some((d) => d && d.name === DB_NAME)) doOpen();
-				else done(null);
-			}).catch(() => done(null));
-			return;
-		} catch {}
-		done(null);
-	});
-}
-async function readIndexedDb(doc) {
-	const db = await openDb(doc);
-	if (!db) return [];
-	try {
-		if (!db.objectStoreNames.contains(STORE_NAME)) return [];
-		const result = await new Promise((resolve) => {
-			const out = [];
-			try {
-				const tx = db.transaction([STORE_NAME], "readonly");
-				const req = tx.objectStore(STORE_NAME).openCursor();
-				req.onsuccess = (e) => {
-					const cur = e.target.result;
-					if (!cur) {
-						resolve(out);
-						return;
-					}
-					const v = cur.value;
-					out.push({
-						k: String(cur.key),
-						bytes: typeof v === "string" ? utf8Bytes(v) : utf8Bytes(JSON.stringify(v))
-					});
-					try {
-						cur.continue();
-					} catch {
-						resolve(out);
-					}
-				};
-				req.onerror = () => resolve(out);
-				tx.onabort = () => resolve(out);
-			} catch {
-				resolve(out);
-			}
-			setTimeout(() => resolve(out), 800);
-		});
-		const items = [];
-		let backupBytes = 0;
-		let backupCount = 0;
-		for (const r of result) {
-			if (r.k === "cold_history") {
-				items.push({
-					key: "idb-cold",
-					label: "历史记录（冷数据）",
-					bytes: r.bytes
-				});
-				continue;
-			}
-			if (isMigrationBackupKey(r.k)) {
-				backupBytes += r.bytes;
-				backupCount += 1;
-				continue;
-			}
-			items.push({
-				key: "idb-" + r.k.replace(/[^\w-]/g, "_"),
-				label: r.k,
-				bytes: r.bytes
-			});
-		}
-		if (backupCount > 0) items.push({
-			key: "idb-backup",
-			label: "旧版迁移备份",
-			bytes: backupBytes,
-			detail: backupCount > 1 ? `${backupCount} 份升级前快照，确认数据无误后可清理` : "升级前的一次性快照，确认数据无误后可清理",
-			cleanable: "migration_backup",
-			itemCount: backupCount
-		});
-		return items;
-	} finally {
-		try {
-			db.close();
-		} catch {}
-	}
-}
-/** 热数据：酒馆 extensionSettings 中被序列化的 JSON 体积（UTF-8 估算） */
-function estimateHotBytes(settings) {
-	if (settings == null) return 0;
-	try {
-		return utf8Bytes(JSON.stringify(settings));
-	} catch {
-		return 0;
-	}
-}
-/**
-* 汇总存储占用。任何单项失败都只影响该项（标记为 null），不会让整块 UI 失败。
-* 全程不使用 localStorage.clear / indexedDB.deleteDatabase 等破坏性操作。
-*/
-async function collectStorageReport(opts = {}) {
-	const doc = opts.doc ?? (typeof document !== "undefined" ? document : {});
-	const items = [];
-	const hotBytes = estimateHotBytes(opts.hotSettings);
-	items.push({
-		key: "hot",
-		label: "设置与近期记录",
-		bytes: hotBytes,
-		detail: "保存在酒馆设置文件中"
-	});
-	let idbItems = [];
-	let idbTimer = null;
-	try {
-		const timeout = opts.idbTimeoutMs ?? 1e3;
-		idbItems = await Promise.race([readIndexedDb(doc), new Promise((resolve) => {
-			idbTimer = setTimeout(() => resolve([]), timeout);
-		})]);
-	} catch {
-		idbItems = [];
-	} finally {
-		if (idbTimer) try {
-			clearTimeout(idbTimer);
-		} catch {}
-	}
-	items.push(...idbItems);
-	try {
-		items.push(...readLocalStorage(doc));
-	} catch {}
-	let quotaBytes = null;
-	let usageBytes = null;
-	let persisted = null;
-	let globalAvailable = false;
-	try {
-		const storage = (doc.defaultView?.navigator ?? (typeof navigator !== "undefined" ? navigator : null))?.storage;
-		if (storage && typeof storage.estimate === "function") {
-			const est = await storage.estimate();
-			if (est && typeof est.quota === "number") {
-				quotaBytes = est.quota;
-				usageBytes = typeof est.usage === "number" ? est.usage : null;
-				globalAvailable = true;
-			}
-		}
-		if (storage && typeof storage.persisted === "function") persisted = !!await storage.persisted();
-	} catch {}
-	return {
-		items,
-		totalBytes: items.reduce((sum, i) => sum + (i.bytes || 0), 0),
-		quotaBytes,
-		usageBytes,
-		persisted,
-		globalAvailable
-	};
-}
-//#endregion
-//#region src/ui/storage-usage-card.ts
-/**
-* 设置页「存储占用」卡片渲染。
-*
-* 结构：标题行（标题 + 刷新按钮） → 合计数字 → 细分条目列表 → 浏览器配额（可缺失）→ 说明。
-* 细分行用 grid 两列（名称 / 数值），窄屏下名称自动换行，数值右对齐，不会撑破容器。
-*/
-var MODULE$1 = "api_usage_stat";
-/** 小于该体积的条目归入「其他」，避免十几个几十字节的小项把列表撑长 */
-var SMALL_ITEM_BYTES = 1024;
-function esc$1(s) {
-	return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-/** 单项行：名称 + 数值，数值用等宽数字避免跳动 */
-function row(item, total, opts = {}) {
-	const pctRaw = total > 0 && item.bytes != null ? item.bytes / total * 100 : null;
-	const pct = pctRaw != null && !opts.sub && pctRaw >= .5 ? Math.round(pctRaw) : null;
-	const detailHtml = item.detail && opts.toggle ? `<span data-others-count>${esc$1(item.detail)}</span>` : esc$1(item.detail || "");
-	const sub = item.detail ? `<div ${opts.toggle ? "data-others-hint" : ""} style="font-size:var(--aus-fs-xs);color:var(--ds-text-3);margin-top:2px;line-height:1.4;">${detailHtml}</div>` : "";
-	const indent = opts.sub ? "padding-left:16px;background:color-mix(in srgb, var(--ds-text) 3%, transparent);" : "";
-	const clickStyle = opts.toggle ? "cursor:pointer;user-select:none;" : "";
-	return `<div class="aus-storage-row"${opts.toggle ? ` id="${opts.toggle.id}" role="button" tabindex="0" aria-expanded="${opts.toggle.expanded}"` : ""} style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--ds-border);${indent}${clickStyle}">
-    <div style="min-width:0;flex:1 1 auto;">
-      <div class="aus-storage-row-label" style="font-size:var(--aus-fs-base);color:var(--ds-text);line-height:1.5;overflow-wrap:anywhere;">${esc$1(item.label)}</div>
-      ${sub}
-    </div>
-    <div style="flex:0 0 auto;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;">
-      <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">${formatBytes(item.bytes)}</div>
-      ${pct != null ? `<div style="font-size:var(--aus-fs-xs);color:var(--ds-text-3);margin-top:2px;">${pct}%</div>` : ""}
-      ${opts.action ? `<button id="${opts.action.id}" type="button" data-armed="0" title="${esc$1(opts.action.title || "")}" style="margin-top:5px;padding:3px 10px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-xs);cursor:pointer;line-height:1.5;white-space:nowrap;">${esc$1(opts.action.label)}</button>` : ""}
-    </div>
-  </div>`;
-}
-function renderStorageUsageCard(doc) {
-	return `<div class="ds-card" id="aus-storage-card">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-      <span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">存储占用</span>
-      <button id="aus-storage-refresh" title="重新统计" style="display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;line-height:1;">${icon("refresh", 13)}<span>刷新</span></button>
-    </div>
-    <div id="aus-storage-body" style="margin-top:6px;">
-      <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);padding:10px 0;">正在统计…</div>
-    </div>
-  </div>`;
-}
-function bodyHtml(r) {
-	const parts = [];
-	parts.push(`<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding-bottom:10px;">
-    <span class="ds-card-val" style="font-size:clamp(20px,4.2cqi,26px);">${formatBytes(r.totalBytes)}</span>
-    <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">本扩展占用合计</span>
-  </div>`);
-	if (r.items.length === 0) parts.push(`<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);padding:6px 0;">暂无数据</div>`);
-	else {
-		const major = r.items.filter((i) => (i.bytes ?? 0) >= SMALL_ITEM_BYTES);
-		const minor = r.items.filter((i) => (i.bytes ?? 0) < SMALL_ITEM_BYTES);
-		const rows = major.map((i) => row(i, r.totalBytes, i.cleanable === "migration_backup" ? { action: {
-			id: "aus-storage-clean-backup",
-			label: "清理",
-			title: "删除升级前的一次性备份快照"
-		} } : {}));
-		if (minor.length) {
-			const minorTotal = minor.reduce((a, i) => a + (i.bytes || 0), 0);
-			rows.push(row({
-				label: "其他",
-				bytes: minorTotal,
-				detail: `${minor.length} 项小数据，点击展开`
-			}, r.totalBytes, { toggle: {
-				id: "aus-storage-others",
-				expanded: false
-			} }));
-			rows.push(`<div id="aus-storage-others-detail" style="display:none;">${minor.map((i) => row(i, r.totalBytes, { sub: true })).join("")}</div>`);
-		}
-		parts.push(`<div>${rows.join("")}</div>`);
-	}
-	if (r.globalAvailable && r.quotaBytes != null) {
-		const usagePct = r.usageBytes != null && r.quotaBytes > 0 ? Math.min(100, r.usageBytes / r.quotaBytes * 100) : null;
-		const persistLabel = r.persisted == null ? "" : r.persisted ? "已启用持久化存储" : "未申请持久化存储";
-		parts.push(`<div style="margin-top:10px;padding:9px 11px;border-radius:10px;background:var(--ds-card-inner);">
-      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-        <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">浏览器站点用量</span>
-        <span style="font-size:var(--aus-fs-sm);color:var(--ds-text);font-variant-numeric:tabular-nums;white-space:nowrap;">
-          ${r.usageBytes != null ? formatBytes(r.usageBytes) : "—"} / ${formatBytes(r.quotaBytes)}
-        </span>
-      </div>
-      ${usagePct != null ? `<div class="aus-storage-quota-bar" style="margin-top:7px;">
-        <div class="aus-storage-quota-fill" style="width:${usagePct.toFixed(2)}%;"></div>
-      </div>` : ""}
-      <div style="font-size:var(--aus-fs-xs);color:var(--ds-text-3);margin-top:6px;line-height:1.5;">该数值由浏览器统计，包含酒馆与所有扩展的占用，本扩展只占其中一部分。${persistLabel ? `<span style="margin-left:4px;">${persistLabel}</span>` : ""}</div>
-    </div>`);
-	}
-	parts.push(`<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:9px;line-height:1.6;">
-    历史记录按最近 50 条保存在酒馆设置中，更早的进入浏览器 IndexedDB；设置为 UTF-8 估算体积，与实际落盘大小可能略有差异。旧版迁移备份是升级前的一次性快照，现有数据已迁移完成，确认无误后可点「清理」删除（不影响历史、设置与钱包）。
-  </div>`);
-	return parts.join("");
-}
-/** 统计并渲染到指定卡片。多次调用会取消上一次的过期结果 */
-var renderSeq = 0;
-async function refreshStorageUsage(doc) {
-	const body = doc.getElementById("aus-storage-body");
-	if (!body) return;
-	const seq = ++renderSeq;
-	const btn = doc.getElementById("aus-storage-refresh");
-	if (btn) {
-		btn.disabled = true;
-		btn.style.opacity = "0.6";
-	}
-	try {
-		const report = await collectStorageReport({
-			doc,
-			hotSettings: (globalThis.SillyTavern?.getContext?.())?.extensionSettings?.[MODULE$1] ?? getExtensionSettings()
-		});
-		if (seq !== renderSeq) return;
-		body.innerHTML = bodyHtml(report);
-		bindStorageUsageCard(doc);
-	} catch (e) {
-		if (seq === renderSeq) body.innerHTML = `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);padding:8px 0;">统计失败：${esc$1(e?.message || "未知错误")}</div>`;
-	} finally {
-		if (seq === renderSeq && btn) {
-			btn.disabled = false;
-			btn.style.opacity = "";
-		}
-	}
-}
-/** 绑定刷新按钮 */
-function bindStorageUsageCard(doc) {
-	const btn = doc.getElementById("aus-storage-refresh");
-	if (btn) btn.onclick = () => {
-		refreshStorageUsage(doc);
-	};
-	const cleanBtn = doc.getElementById("aus-storage-clean-backup");
-	if (cleanBtn) {
-		const idleLabel = cleanBtn.textContent || "清理";
-		let armTimer = null;
-		const disarm = () => {
-			cleanBtn.dataset.armed = "0";
-			cleanBtn.textContent = idleLabel;
-			if (armTimer) {
-				clearTimeout(armTimer);
-				armTimer = null;
-			}
-		};
-		cleanBtn.onclick = async () => {
-			if (cleanBtn.dataset.armed !== "1") {
-				cleanBtn.dataset.armed = "1";
-				cleanBtn.textContent = "确认清理？再点一次";
-				if (armTimer) clearTimeout(armTimer);
-				armTimer = setTimeout(disarm, 5e3);
-				return;
-			}
-			disarm();
-			cleanBtn.disabled = true;
-			cleanBtn.textContent = "清理中…";
-			try {
-				const result = await deleteMigrationBackups();
-				if (result.deleted > 0) toast("success", `已清理 ${result.deleted} 份旧版迁移备份`);
-				else if (result.remaining > 0) toast("warning", "旧版迁移备份未能删除，请刷新后重试");
-				else toast("info", "未找到可清理的旧版迁移备份");
-				if (result.remaining > 0 && result.deleted > 0) toast("warning", `仍有 ${result.remaining} 份备份未删除，请刷新后重试`);
-			} catch (e) {
-				toast("error", "清理失败：" + (e?.message || e));
-			} finally {
-				await refreshStorageUsage(doc);
-			}
-		};
-	}
-	const toggle = doc.getElementById("aus-storage-others");
-	const detail = doc.getElementById("aus-storage-others-detail");
-	if (!toggle || !detail) return;
-	const flip = () => {
-		const open = detail.style.display !== "none";
-		detail.style.display = open ? "none" : "block";
-		toggle.setAttribute("aria-expanded", open ? "false" : "true");
-		const hint = toggle.querySelector("[data-others-hint] [data-others-count]");
-		if (hint) hint.textContent = hint.textContent.replace(open ? "点击收起" : "点击展开", open ? "点击展开" : "点击收起");
-	};
-	toggle.onclick = flip;
-	toggle.onkeydown = (e) => {
-		if (e.key === "Enter" || e.key === " ") {
-			e.preventDefault();
-			flip();
-		}
-	};
-}
-//#endregion
-//#region src/services/debug.ts
-function generateDebugBatch() {
-	const startStr = state$2.settings.debugDateStart;
-	const endStr = state$2.settings.debugDateEnd;
-	if (!startStr || !endStr) return alert("请设置起始与结束日期");
-	const startDate = /* @__PURE__ */ new Date(startStr + "T00:00:00");
-	const endDate = /* @__PURE__ */ new Date(endStr + "T00:00:00");
-	if (isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || endDate < startDate) return alert("日期范围无效");
-	const count = state$2.settings.debugBatchCount || 30;
-	const model = state$2.settings.debugModel || "deepseek-v4-flash";
-	const hit = state$2.settings.debugHit || 1e4;
-	const miss = state$2.settings.debugMiss || 5e3;
-	const output = state$2.settings.debugOutput || 2e3;
-	const totalDays = Math.round((endDate.getTime() - startDate.getTime()) / 864e5) + 1;
-	const perDay = Math.ceil(count / totalDays);
-	let generated = 0;
-	for (let d = 0; d < totalDays && generated < count; d++) {
-		const curDate = new Date(startDate);
-		curDate.setDate(startDate.getDate() + d);
-		for (let i = 0; i < perDay && generated < count; i++) {
-			const rv = (base) => Math.round(base * (.3 + Math.random() * 1.4));
-			const h = rv(hit), m = rv(miss), o = rv(output);
-			const total = h + m + o;
-			const ts = new Date(curDate);
-			ts.setHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60), Math.floor(Math.random() * 60), 0);
-			const dur = Math.floor(Math.random() * 5e3) + 500;
-			const ttft = Math.floor(Math.random() * 1e3) + 100;
-			const c = calcCost({
-				timestamp: ts.getTime(),
-				model,
-				prompt_cache_hit_tokens: h,
-				prompt_cache_miss_tokens: m,
-				completion_tokens: o
-			}, state$2.settings);
-			state$2.total_tokens += total;
-			state$2.total_cost += c.total;
-			state$2.input_tokens += h + m;
-			state$2.output_tokens += o;
-			state$2.cache_hit_tokens += h;
-			state$2.cache_miss_tokens += m;
-			state$2.input_cost += c.input;
-			state$2.output_cost += c.output;
-			if (isDeepSeekOfficialModel(model)) state$2.rounds += 1;
-			const isTrunc = Math.random() < .08;
-			const fr = isTrunc ? "length" : "stop";
-			state$2.history.unshift({
-				timestamp: ts.getTime(),
-				model,
-				prompt_tokens: h + m,
-				cache_hit_tokens: h,
-				cache_miss_tokens: m,
-				completion_tokens: o,
-				total_tokens: total,
-				input_cost: c.input,
-				output_cost: c.output,
-				cost: c.total,
-				cache_hit_rate: h + m > 0 ? h / (h + m) * 100 : 0,
-				priceType: c.priceType,
-				raw_usage: {
-					prompt_cache_hit_tokens: h,
-					prompt_cache_miss_tokens: m,
-					completion_tokens: o,
-					total_tokens: total,
-					__finish_reason: fr
-				},
-				messages: [],
-				duration: dur,
-				ttft,
-				thinkTime: 300,
-				thinkTokens: Math.floor(o * .2),
-				tokenRate: Math.round(o / (dur - ttft) * 1e3),
-				fullRequest: null,
-				fullResponse: null,
-				finishReason: fr,
-				isTruncated: isTrunc,
-				_debug: true
-			});
-			generated++;
-		}
-	}
-	state$2.history.sort((a, b) => b.timestamp - a.timestamp);
-	repository.recalcAll();
-	try {
-		globalThis.ApiUsageStat?.refreshUI?.();
-	} catch {}
-	alert("已生成 " + generated + " 条模拟数据");
-}
-var IDENTITY_KEY = "telemetry";
-/** 关闭面板触发上报的最小间隔（吃掉反复开关面板造成的抖动） */
-var CLOSE_FLUSH_GAP = 6e4;
-/** 页面隐藏/卸载触发上报的最小间隔（合并间隔，避免同一次使用反复发送） */
-var PASSIVE_FLUSH_GAP = 18e5;
-/** 失败重试退避（首次发送 + 3 次重试） */
-var RETRY_DELAYS = [
-	1e3,
-	5e3,
-	3e4
-];
-/** 单次会话时长上限，超出按上限计入 */
-var MAX_DURATION_MS = 432e5;
-var TELEMETRY_PAGE_KEYS = [
-	"overview",
-	"stats",
-	"history",
-	"forecast",
-	"wallet",
-	"settings",
-	"help",
-	"about"
-];
-function emptyPages() {
-	const pages = {};
-	for (const key of TELEMETRY_PAGE_KEYS) pages[key] = 0;
-	return pages;
-}
-function emptyCounters() {
-	return {
-		opens: 0,
-		dur_ms: 0,
-		pages: emptyPages(),
-		render: [
-			0,
-			0,
-			0,
-			0,
-			0
-		]
-	};
-}
-function isTelemetryPageKey(value) {
-	return typeof value === "string" && TELEMETRY_PAGE_KEYS.includes(value);
-}
-/** 面板可用宽度分桶 */
-function widthBucket(width) {
-	const w = Number.isFinite(width) ? Number(width) : 0;
-	if (w > 1024) return "gt1024";
-	if (w > 760) return "761-1024";
-	if (w > 480) return "481-760";
-	return "le480";
-}
-/** 面板首帧渲染耗时分桶下标：<100 / <300 / <800 / <2000 / ≥2000 毫秒 */
-function renderBucketIndex(ms) {
-	const value = Number.isFinite(ms) ? Math.max(0, Number(ms)) : 0;
-	if (value < 100) return 0;
-	if (value < 300) return 1;
-	if (value < 800) return 2;
-	if (value < 2e3) return 3;
-	return 4;
-}
-/** 时区偏移按 0.5 小时取整并钳制到 [-12, 14] */
-function roundTz(hours) {
-	const value = Number.isFinite(hours) ? Number(hours) : 0;
-	const rounded = Math.round(value * 2) / 2;
-	const clamped = Math.min(14, Math.max(-12, rounded));
-	return clamped === 0 ? 0 : clamped;
-}
-/** 本地日期（YYYY-MM-DD） */
-function todayKey(now = Date.now()) {
-	const d = new Date(now);
-	const pad = (n) => n < 10 ? "0" + n : String(n);
-	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-/**
-* 从 UA 解析浏览器名与主版本。UA-CH（userAgentData）在调用侧优先，这里只做字符串回退。
-*/
-function parseBrowser(ua) {
-	const source = String(ua || "");
-	const pick = (pattern) => {
-		const m = source.match(pattern);
-		if (!m) return "";
-		return String(m[1] || "").split(".")[0];
-	};
-	const edge = pick(/\bEdg(?:e|A|iOS)?\/(\d+)/);
-	if (edge) return {
-		name: "Edge",
-		major: edge
-	};
-	const opera = pick(/\b(?:OPR|OPT)\/(\d+)/);
-	if (opera) return {
-		name: "Opera",
-		major: opera
-	};
-	const samsung = pick(/\bSamsungBrowser\/(\d+)/);
-	if (samsung) return {
-		name: "Samsung Internet",
-		major: samsung
-	};
-	const firefox = pick(/\b(?:Firefox|FxiOS)\/(\d+)/);
-	if (firefox) return {
-		name: "Firefox",
-		major: firefox
-	};
-	const chrome = pick(/\b(?:Chrome|CriOS|Chromium)\/(\d+)/);
-	if (chrome) return {
-		name: "Chrome",
-		major: chrome
-	};
-	const safari = pick(/\bVersion\/(\d+)[.\d]*\s+Mobile\/\w+\s+Safari\//) || pick(/\bVersion\/(\d+)[.\d]*\s+Safari\//);
-	if (safari) return {
-		name: "Safari",
-		major: safari
-	};
-	if (/\bSafari\//.test(source)) return {
-		name: "Safari",
-		major: ""
-	};
-	return {
-		name: source ? "Other" : "",
-		major: ""
-	};
-}
-/** 从 UA 解析操作系统 */
-function parseOs(ua) {
-	const source = String(ua || "");
-	if (/\bWindows NT\b/.test(source)) return "Windows";
-	if (/\bAndroid\b/.test(source)) return "Android";
-	if (/\b(?:iPhone|iPod)\b/.test(source)) return "iOS";
-	if (/\biPad\b/.test(source)) return "iPadOS";
-	if (/\bCrOS\b/.test(source)) return "ChromeOS";
-	if (/\bMac OS X\b/.test(source)) return "macOS";
-	if (/\bLinux\b/.test(source)) return "Linux";
-	return source ? "Other" : "";
-}
-/** 合并两份计数（用于把上次发送失败的上报体与本次新数据合并成一条） */
-function mergeCounters(a, b) {
-	const pages = emptyPages();
-	for (const key of TELEMETRY_PAGE_KEYS) pages[key] = Math.max(0, Number(a?.pages?.[key]) || 0) + Math.max(0, Number(b?.pages?.[key]) || 0);
-	const render = [
-		0,
-		0,
-		0,
-		0,
-		0
-	];
-	for (let i = 0; i < render.length; i++) render[i] = Math.max(0, Number(a?.render?.[i]) || 0) + Math.max(0, Number(b?.render?.[i]) || 0);
-	return {
-		opens: Math.max(0, Number(a?.opens) || 0) + Math.max(0, Number(b?.opens) || 0),
-		dur_ms: Math.max(0, Number(a?.dur_ms) || 0) + Math.max(0, Number(b?.dur_ms) || 0),
-		pages,
-		render
-	};
-}
-function countersAreEmpty(counters) {
-	if ((counters?.opens || 0) > 0 || (counters?.dur_ms || 0) > 0) return false;
-	for (const key of TELEMETRY_PAGE_KEYS) if ((counters?.pages?.[key] || 0) > 0) return false;
-	for (const value of counters?.render || []) if ((value || 0) > 0) return false;
-	return true;
-}
-/** 上报端点是否已配置（占位符视为未配置，此时只本地累加） */
-function isEndpointConfigured(endpoint = currentEndpoint()) {
-	const value = String(endpoint || "").trim();
-	if (!/^https:\/\/[^\s<>]+$/i.test(value)) return false;
-	return !value.includes("<") && !value.includes(">");
-}
-/** 测试用端点覆盖；生产环境始终使用 TELEMETRY_ENDPOINT */
-var endpointOverride = null;
-function currentEndpoint() {
-	return endpointOverride ?? "https://stat.janmk.us.ci/collect";
-}
-/**
-* 扩展内历史记录总条数（热区 state.history + 冷区 _coldCount）。
-* 冷计数由 store/persistence 在各写入路径同步维护，因此这里可同步取到精确值。
-*/
-function historyRecordCount() {
-	try {
-		const hot = Array.isArray(state$2?.history) ? state$2.history.length : 0;
-		const settings = getExtensionSettings() || {};
-		const cold = Number(settings?._coldCount);
-		return hot + (Number.isFinite(cold) && cold > 0 ? Math.floor(cold) : 0);
-	} catch {
-		return 0;
-	}
-}
-var counters = emptyCounters();
-var sessionStart = null;
-var envCache = null;
-var lastFlushAt = 0;
-var inFlight = false;
-var bound = false;
-function appVersion() {
-	try {
-		return String("3.1.8");
-	} catch {
-		return "";
-	}
-}
-function safeWindow() {
-	try {
-		return typeof window === "undefined" ? null : window;
-	} catch {
-		return null;
-	}
-}
-function parentWindow() {
-	try {
-		const win = safeWindow();
-		if (!win) return null;
-		const parent = win.parent;
-		return parent && parent !== win ? parent : null;
-	} catch {
-		return null;
-	}
-}
-/** 面板宽度取自酒馆主窗口（面板渲染在主文档中），失败时退回当前窗口 */
-function currentViewportWidth() {
-	try {
-		const parent = parentWindow();
-		const parentWidth = Number(parent?.innerWidth);
-		if (Number.isFinite(parentWidth) && parentWidth > 0) return parentWidth;
-	} catch {}
-	try {
-		const width = Number(safeWindow()?.innerWidth);
-		if (Number.isFinite(width) && width > 0) return width;
-	} catch {}
-	return 0;
-}
-function mediaMatches(query) {
-	try {
-		const win = safeWindow();
-		if (typeof win?.matchMedia !== "function") return false;
-		return !!win.matchMedia(query).matches;
-	} catch {
-		return false;
-	}
-}
-/**
-* 当前颜色模式（扩展设置里的 light / dark / auto）。
-* 每次发送前重新读取，用户中途切换「跟随系统」也会在本次上报中体现。
-*/
-function currentThemeMode() {
-	try {
-		return normalizeThemeMode(state$2?.settings?.theme);
-	} catch {
-		return "light";
-	}
-}
-function nav() {
-	try {
-		return typeof navigator === "undefined" ? null : navigator;
-	} catch {
-		return null;
-	}
-}
-/** 探测浏览器环境（只保留分桶与主版本，不含任何可定位到个人的信息） */
-function probeEnv() {
-	const n = nav();
-	const ua = String(n?.userAgent || "");
-	let browser = parseBrowser(ua);
-	try {
-		const brands = Array.isArray(n?.userAgentData?.brands) ? n.userAgentData.brands : [];
-		for (const [pattern, name] of [
-			[/Microsoft Edge/i, "Edge"],
-			[/Opera|OPR/i, "Opera"],
-			[/Samsung/i, "Samsung Internet"],
-			[/Google Chrome/i, "Chrome"],
-			[/Chromium/i, "Chrome"],
-			[/Firefox/i, "Firefox"],
-			[/Safari/i, "Safari"]
-		]) {
-			const hit = brands.find((item) => pattern.test(String(item?.brand || "")));
-			if (hit) {
-				browser = {
-					name,
-					major: String(hit.version || "").split(".")[0] || browser.major
-				};
-				break;
-			}
-		}
-	} catch {}
-	const lang = String(n?.language || n?.languages?.[0] || "").slice(0, 12);
-	return {
-		b: browser.name,
-		bv: browser.major,
-		os: parseOs(ua),
-		arch: "unknown",
-		lang,
-		w: widthBucket(currentViewportWidth()),
-		dark: mediaMatches("(prefers-color-scheme: dark)"),
-		standalone: mediaMatches("(display-mode: standalone)") || n?.standalone === true,
-		touch: mediaMatches("(pointer: coarse)") || Number(n?.maxTouchPoints || 0) > 0,
-		tm: currentThemeMode(),
-		stv: tavernVersionFromContext(),
-		ttv: ""
-	};
-}
-/** 版本号清洗：只保留数字、字母与 . + -，最长 16 字符；不含数字视为无效 */
-function sanitizeVersion(value) {
-	if (typeof value !== "string" && typeof value !== "number") return "";
-	const text = String(value).trim().replace(/[^0-9A-Za-z.+-]/g, "").slice(0, 16);
-	return /\d/.test(text) ? text : "";
-}
-/** 从酒馆上下文/文档元信息同步读取版本号（取不到返回空字符串） */
-function tavernVersionFromContext() {
-	try {
-		const g = globalThis;
-		const st = g?.SillyTavern;
-		const ctx = typeof st?.getContext === "function" ? st.getContext() : null;
-		const candidates = [
-			ctx?.version,
-			ctx?.stVersion,
-			st?.version,
-			g?.__ST_VERSION__
-		];
-		for (const candidate of candidates) {
-			const version = sanitizeVersion(candidate);
-			if (version) return version;
-		}
-	} catch {}
-	try {
-		const meta = (typeof document === "undefined" ? null : document)?.querySelector?.("meta[name=\"version\"]");
-		const version = sanitizeVersion(meta?.getAttribute?.("content"));
-		if (version) return version;
-	} catch {}
-	return "";
-}
-/** 版本探测是否已经成功拿到需要的信息，成功前按下面的间隔重试 */
-var tavernVersionSettled = false;
-var tavernVersionAttempts = 0;
-/** 首次失败后的重试间隔：覆盖酒馆/宿主启动较慢、路由尚未就绪的情况 */
-var TAVERN_VERSION_RETRY_DELAYS_MS = [
-	4e3,
-	15e3,
-	6e4,
-	18e4
-];
-var MAX_TAVERN_VERSION_ATTEMPTS = TAVERN_VERSION_RETRY_DELAYS_MS.length + 1;
-/**
-* 解析 `/version` 的响应体。
-*
-* 上游 SillyTavern 与 TauriTavern 都返回 `pkgVersion`（**不是** `version`）：
-* - SillyTavern：`{ agent, pkgVersion, gitRevision, gitBranch, commitDate, isLatest }`
-* - TauriTavern：`{ agent, pkgVersion, tauriVersion, gitRevision, gitBranch, defaultUpdateChannel }`，
-*   其中 `pkgVersion` 保持与内嵌前端基线一致以兼容上游扩展，`tauriVersion` 才是 TauriTavern 自身版本。
-*
-* 同时兼容 `version` 字段与纯文本响应（早期版本或第三方宿主）。
-*/
-function parseTavernVersionPayload(text) {
-	const raw = String(text ?? "");
-	const empty = {
-		stv: "",
-		ttv: ""
-	};
-	if (!raw.trim()) return empty;
-	try {
-		const data = JSON.parse(raw);
-		if (!data || typeof data !== "object") return empty;
-		return {
-			stv: sanitizeVersion(data.pkgVersion) || sanitizeVersion(data.version) || sanitizeVersion(data.stVersion),
-			ttv: sanitizeVersion(data.tauriVersion) || sanitizeVersion(data.ttVersion)
-		};
-	} catch {
-		const trimmed = raw.trim();
-		return {
-			stv: trimmed.length <= 16 ? sanitizeVersion(trimmed) : "",
-			ttv: ""
-		};
-	}
-}
-/**
-* 异步读取酒馆同源 `/version` 接口补充版本号（只发这一个本地请求，不携带任何统计内容）。
-* 首次失败后按退避重试，最多 MAX_TAVERN_VERSION_ATTEMPTS 次；成功一次即停止。
-*/
-async function refineTavernVersion(force = false) {
-	if (!envCache) return;
-	if (tavernVersionSettled && !force) return;
-	if (!force && tavernVersionAttempts >= MAX_TAVERN_VERSION_ATTEMPTS) return;
-	tavernVersionAttempts += 1;
-	let ok = false;
-	try {
-		const ctx = globalThis?.SillyTavern?.getContext?.();
-		const headers = typeof ctx?.getRequestHeaders === "function" ? ctx.getRequestHeaders() : void 0;
-		const res = await fetch("/version", {
-			headers,
-			credentials: "same-origin"
-		});
-		if (res?.ok) {
-			const parsed = parseTavernVersionPayload(await res.text());
-			if (parsed.stv || parsed.ttv) {
-				if (!envCache.stv && parsed.stv) envCache.stv = parsed.stv;
-				if (!envCache.ttv && parsed.ttv) envCache.ttv = parsed.ttv;
-				ok = true;
-			}
-		}
-	} catch {}
-	if (ok) {
-		tavernVersionSettled = true;
-		return;
-	}
-	const nextDelay = TAVERN_VERSION_RETRY_DELAYS_MS[tavernVersionAttempts - 1];
-	if (!force && nextDelay != null) try {
-		setTimeout(() => {
-			refineTavernVersion();
-		}, nextDelay);
-	} catch {}
-}
-/** 尽力补充 CPU 架构（Chromium 高熵值，失败保持 unknown） */
-function refineArch() {
-	try {
-		const uad = nav()?.userAgentData;
-		if (!uad || typeof uad.getHighEntropyValues !== "function") return;
-		uad.getHighEntropyValues(["architecture", "bitness"]).then((values) => {
-			if (!envCache) return;
-			const arch = String(values?.architecture || "").toLowerCase();
-			const bitness = String(values?.bitness || "");
-			let next = "unknown";
-			if (arch.includes("arm")) next = arch.includes("32") || bitness === "32" ? "unknown" : "arm64";
-			else if (arch === "x86" && bitness === "64") next = "x86_64";
-			else if (arch === "x86") next = "x86";
-			if (next !== "unknown") envCache.arch = next;
-		}).catch(() => {});
-	} catch {}
-}
-function randomId() {
-	try {
-		const buf = /* @__PURE__ */ new Uint8Array(16);
-		const cryptoObj = globalThis?.crypto;
-		if (cryptoObj && typeof cryptoObj.getRandomValues === "function") cryptoObj.getRandomValues(buf);
-		else for (let i = 0; i < buf.length; i++) buf[i] = Math.floor(Math.random() * 256);
-		return Array.from(buf, (byte) => byte.toString(16).padStart(2, "0")).join("");
-	} catch {
-		let fallback = "";
-		for (let i = 0; i < 32; i++) fallback += Math.floor(Math.random() * 16).toString(16);
-		return fallback;
-	}
-}
-function isIdentityShape(value) {
-	return !!value && typeof value === "object" && typeof value.id === "string" && /^[0-9a-f]{32}$/.test(value.id);
-}
-function readIdentity() {
-	try {
-		const stored = (getExtensionSettings() || {})[IDENTITY_KEY];
-		if (isIdentityShape(stored)) return {
-			id: stored.id,
-			seq: Number.isFinite(Number(stored.seq)) ? Number(stored.seq) : 0,
-			day: typeof stored.day === "string" ? stored.day : void 0,
-			pending: stored.pending && typeof stored.pending === "object" ? stored.pending : null
-		};
-	} catch {}
-	return {
-		id: "",
-		seq: 0
-	};
-}
-function writeIdentity(identity) {
-	try {
-		const settings = getExtensionSettings() || {};
-		saveExtensionSettings({
-			...settings,
-			[IDENTITY_KEY]: {
-				id: identity.id,
-				seq: identity.seq,
-				day: identity.day,
-				pending: identity.pending ?? null,
-				updatedAt: Date.now()
-			},
-			_updated: Date.now()
-		});
-	} catch {}
-}
-function ensureIdentity() {
-	const identity = readIdentity();
-	if (identity.id) return identity;
-	const created = {
-		id: randomId(),
-		seq: 0
-	};
-	writeIdentity(created);
-	return created;
-}
-/** 重置匿名标识：下次上报会被计为一台新设备 */
-function resetIdentity() {
-	try {
-		resetCounters();
-		writeIdentity({
-			id: randomId(),
-			seq: 0
-		});
-	} catch {}
-}
-function isTelemetryEnabled() {
-	try {
-		const settings = state$2?.settings;
-		if (!settings) return true;
-		return settings.telemetryEnabled !== false;
-	} catch {
-		return true;
-	}
-}
-function telemetryStatus() {
-	const identity = readIdentity();
-	return {
-		enabled: isTelemetryEnabled(),
-		configured: isEndpointConfigured(currentEndpoint()),
-		id: identity.id,
-		seq: identity.seq,
-		hasPending: !!identity.pending
-	};
-}
-function resetCounters() {
-	counters = emptyCounters();
-	sessionStart = null;
-}
-function touchActivity(now) {
-	if (sessionStart === null) sessionStart = now;
-}
-function currentDuration(now) {
-	if (sessionStart === null) return 0;
-	return Math.max(0, Math.min(MAX_DURATION_MS, now - sessionStart));
-}
-/** 打开面板：计一次打开，并开始一个使用时段 */
-function trackOpen() {
-	try {
-		if (!isTelemetryEnabled()) return;
-		const now = Date.now();
-		counters.opens += 1;
-		touchActivity(now);
-		if (!envCache) envCache = probeEnv();
-	} catch {}
-}
-/** 切换视图：对应页面计数 +1 */
-function trackPage(view) {
-	try {
-		if (!isTelemetryEnabled()) return;
-		if (!isTelemetryPageKey(view)) return;
-		const now = Date.now();
-		counters.pages[view] += 1;
-		touchActivity(now);
-		if (!envCache) envCache = probeEnv();
-	} catch {}
-}
-/** 记录面板首帧渲染耗时（毫秒） */
-function trackRender(ms) {
-	try {
-		if (!isTelemetryEnabled()) return;
-		if (!Number.isFinite(ms)) return;
-		counters.render[renderBucketIndex(ms)] += 1;
-		if (!envCache) envCache = probeEnv();
-	} catch {}
-}
-function buildPayload(identity, incoming, pending, now, final = false) {
-	const day = todayKey(now);
-	const pendingCounters = pending ? mergeCounters(emptyCounters(), {
-		opens: pending?.s?.opens,
-		dur_ms: pending?.s?.dur_ms,
-		pages: pending?.s?.pages || {},
-		render: Array.isArray(pending?.s?.render) ? pending.s.render : []
-	}) : emptyCounters();
-	const merged = pending ? mergeCounters(pendingCounters, incoming) : incoming;
-	const seq = pending && Number.isFinite(Number(pending.seq)) ? Number(pending.seq) : identity.seq + 1;
-	const env = envCache ?? probeEnv();
-	env.tm = currentThemeMode();
-	env.dark = mediaMatches("(prefers-color-scheme: dark)");
-	env.w = widthBucket(currentViewportWidth());
-	if (!env.stv) env.stv = tavernVersionFromContext();
-	return {
-		v: 1,
-		id: identity.id,
-		seq: Math.max(1, seq),
-		day,
-		ts: now,
-		tz: roundTz(-new Date(now).getTimezoneOffset() / 60),
-		app: appVersion(),
-		env,
-		s: {
-			opens: Math.max(0, Number(merged.opens) || 0),
-			dur_ms: Math.max(0, Math.min(MAX_DURATION_MS, Number(merged.dur_ms) || 0)),
-			pages: merged.pages,
-			render: merged.render
-		},
-		daily: pending ? pending.daily === true : identity.day !== day,
-		hc: historyRecordCount(),
-		...final ? { off: true } : {}
-	};
-}
-/**
-* 发送前先把序号写盘：即使响应丢失导致本地状态未更新，下一次上报也会使用更大的 seq，
-* 不会因为服务端已记录该序号而永久丢弃后续数据（同一 seq 的重复提交由服务端幂等丢弃）。
-*/
-function reserveSeq(payload) {
-	try {
-		const identity = ensureIdentity();
-		if (identity.seq < payload.seq) {
-			identity.seq = payload.seq;
-			writeIdentity(identity);
-		}
-	} catch {}
-}
-function commitSuccess(payload) {
-	lastFlushAt = Date.now();
-	const identity = ensureIdentity();
-	if (identity.seq < payload.seq) identity.seq = payload.seq;
-	identity.day = payload.day;
-	identity.pending = null;
-	writeIdentity(identity);
-	resetCounters();
-}
-function commitPending(payload) {
-	try {
-		const identity = ensureIdentity();
-		identity.pending = payload;
-		writeIdentity(identity);
-	} catch {}
-	resetCounters();
-}
-function sleep(ms) {
-	return new Promise((resolve) => {
-		setTimeout(resolve, ms);
-	});
-}
-async function postPayload(body) {
-	try {
-		const res = await fetch(currentEndpoint(), {
-			method: "POST",
-			mode: "cors",
-			keepalive: true,
-			credentials: "omit",
-			headers: { "Content-Type": "text/plain;charset=UTF-8" },
-			body
-		});
-		return res.status === 204 || res.ok;
-	} catch {
-		return false;
-	}
-}
-function sendBeaconOnce(body) {
-	try {
-		const n = nav();
-		if (typeof n?.sendBeacon !== "function") return false;
-		if (typeof Blob === "undefined") return false;
-		return !!n.sendBeacon(currentEndpoint(), new Blob([body], { type: "text/plain;charset=UTF-8" }));
-	} catch {
-		return false;
-	}
-}
-async function sendWithRetry(payload) {
-	const body = JSON.stringify(payload);
-	for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
-		if (await postPayload(body)) {
-			commitSuccess(payload);
-			inFlight = false;
-			return;
-		}
-		if (attempt < RETRY_DELAYS.length) await sleep(RETRY_DELAYS[attempt]);
-	}
-	commitPending(payload);
-	inFlight = false;
-}
-/**
-* 上报入口。数据为空且没有待发缓存时直接返回，不发请求。
-* close：关闭面板触发（主要路径）；hide：页面隐藏/卸载触发；manual：设置页手动触发。
-*/
-function flushTelemetry(reason = "close", options) {
-	try {
-		const final = options?.final === true;
-		if (!isTelemetryEnabled() && !final) {
-			resetCounters();
-			return;
-		}
-		if (!isEndpointConfigured(currentEndpoint())) return;
-		if (inFlight) return;
-		const now = Date.now();
-		counters.dur_ms = currentDuration(now);
-		const gap = reason === "hide" ? PASSIVE_FLUSH_GAP : CLOSE_FLUSH_GAP;
-		if (!final && lastFlushAt && now - lastFlushAt < gap) return;
-		const identity = ensureIdentity();
-		const pending = identity.pending && typeof identity.pending === "object" ? identity.pending : null;
-		if (!final && !pending && countersAreEmpty(counters)) return;
-		const payload = buildPayload(identity, counters, pending, now, final);
-		inFlight = true;
-		reserveSeq(payload);
-		if (reason === "hide") {
-			if (sendBeaconOnce(JSON.stringify(payload))) {
-				commitSuccess(payload);
-				inFlight = false;
-				return;
-			}
-		}
-		sendWithRetry(payload).catch(() => {
-			inFlight = false;
-		});
-	} catch (error) {
-		inFlight = false;
-		log.warn("匿名统计上报失败", error);
-	}
-}
-/**
-* 关闭匿名统计开关时的最后一次上报。
-* 必须在把 telemetryEnabled 写为 false 之前调用：本次会带上关闭标记并立即发送。
-*/
-function flushTelemetryOnDisable() {
-	flushTelemetry("manual", { final: true });
-}
-function bindLifecycle() {
-	if (bound) return;
-	const win = safeWindow();
-	if (!win || typeof win.addEventListener !== "function") return;
-	bound = true;
-	const onHide = () => {
-		try {
-			flushTelemetry("hide");
-		} catch {}
-	};
-	const onVisibility = (event) => {
-		try {
-			if ((event?.target ?? win.document)?.visibilityState === "hidden") onHide();
-		} catch {}
-	};
-	const targets = [win];
-	const parent = parentWindow();
-	if (parent && typeof parent.addEventListener === "function") targets.push(parent);
-	for (const target of targets) {
-		try {
-			target.addEventListener("pagehide", onHide);
-		} catch {}
-		try {
-			target.addEventListener("visibilitychange", onVisibility);
-		} catch {}
-	}
-}
-/** 初始化：生成匿名标识、缓存环境、绑定生命周期上报时机（幂等） */
-function initTelemetry() {
-	try {
-		if (!ensureIdentity().id) return;
-		if (!envCache) envCache = probeEnv();
-		refineArch();
-		refineTavernVersion();
-		bindLifecycle();
-	} catch (error) {
-		log.warn("匿名统计初始化失败", error);
-	}
-}
-//#endregion
-//#region src/ui/settings.ts
-var settings_exports = /* @__PURE__ */ __exportAll({ renderSettings: () => renderSettings });
-function esc(s) {
-	return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-}
-/** 刷新「匿名使用统计」卡片上的标识与状态文案 */
-function renderTelemetryStatus(doc) {
-	const idEl = doc.getElementById("aus-telemetry-id");
-	const statusEl = doc.getElementById("aus-telemetry-status");
-	let status = null;
-	try {
-		status = telemetryStatus();
-	} catch {}
-	if (idEl) idEl.textContent = status?.id ? `匿名标识：${String(status.id).slice(0, 8)}…` : "匿名标识：待生成";
-	if (!statusEl) return;
-	let hint = "";
-	if (!status?.configured) hint = "未配置上报端点：仅本地累计，不会发送任何数据";
-	else if (!status.enabled) hint = "已关闭：不再采集，也不再发送";
-	statusEl.textContent = hint;
-	statusEl.style.display = hint ? "block" : "none";
-}
-var docClickBound = false;
-function bindSettingsOutsideClick(doc) {
-	if (docClickBound) return;
-	docClickBound = true;
-	doc.addEventListener("click", (e) => {
-		const t = e.target;
-		const td = doc.getElementById("aus-theme-dropdown");
-		if (td && td.style.display === "block" && !t.closest("#aus-theme-dropdown") && !t.closest("#aus-theme-btn")) td.style.display = "none";
-		const sd = doc.getElementById("aus-history-scope-dropdown");
-		if (sd && sd.style.display === "block" && !t.closest("#aus-history-scope-dropdown") && !t.closest("#aus-history-scope-btn")) sd.style.display = "none";
-		const md = doc.getElementById("aus-pricing-sync-mode-dropdown");
-		if (md && md.style.display === "block" && !t.closest("#aus-pricing-sync-mode-dropdown") && !t.closest("#aus-pricing-sync-mode-btn")) md.style.display = "none";
-		const idd = doc.getElementById("aus-pricing-sync-interval-dropdown");
-		if (idd && idd.style.display === "block" && !t.closest("#aus-pricing-sync-interval-dropdown") && !t.closest("#aus-pricing-sync-interval-btn")) idd.style.display = "none";
-	});
-}
-function localDay(ts) {
-	const d = new Date(ts);
-	const pad = (n) => String(n).padStart(2, "0");
-	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-async function recalcCostsAndRefresh() {
-	try {
-		await recalcAllCosts();
-		await repository.rebuildAggregates();
-		globalThis.ApiUsageStat?.refreshUI?.();
-	} catch (error) {
-		toast("error", "历史费用重算失败：" + (error?.message || error));
-	}
-}
-function readHistoryDeleteFilter(doc) {
-	const startEl = doc.getElementById("aus-delete-start");
-	const endEl = doc.getElementById("aus-delete-end");
-	const modelEl = doc.getElementById("aus-delete-model");
-	const chatEl = doc.getElementById("aus-delete-chat");
-	const start = String(startEl?.value || "").trim();
-	const end = String(endEl?.value || "").trim();
-	return {
-		start: start && isValidDayKey(start) ? start : "",
-		end: end && isValidDayKey(end) ? end : "",
-		model: String(modelEl?.value || "").trim(),
-		chat: String(chatEl?.value || "").trim()
-	};
-}
-async function countHistoryDeleteMatches(filter) {
-	return (await repository.getAllHistory() || []).filter((entry) => {
-		if (filter.start || filter.end) {
-			const day = localDay(entry.timestamp);
-			if (filter.start && day < filter.start) return false;
-			if (filter.end && day > filter.end) return false;
-		}
-		if (filter.model && String(entry.model || "") !== filter.model) return false;
-		if (filter.chat) {
-			const chatId = String(entry.chatId || "");
-			const chatName = String(entry.chatName || "");
-			if (chatId !== filter.chat && chatName !== filter.chat) return false;
-		}
-		return true;
-	}).length;
-}
-function bindHistoryDelete(doc) {
-	const previewBtn = doc.getElementById("aus-delete-preview");
-	const deleteBtn = doc.getElementById("aus-delete-run");
-	const status = doc.getElementById("aus-delete-status");
-	if (!previewBtn || !deleteBtn) return;
-	let armed = false;
-	let armTimer = null;
-	let armedFilter = null;
-	const resetArmed = () => {
-		armed = false;
-		armedFilter = null;
-		try {
-			deleteBtn.textContent = "删除匹配记录";
-		} catch {}
-	};
-	previewBtn.onclick = async () => {
-		previewBtn.disabled = true;
-		const old = previewBtn.textContent;
-		previewBtn.textContent = "统计中…";
-		try {
-			const count = await countHistoryDeleteMatches(readHistoryDeleteFilter(doc));
-			if (status) status.textContent = `匹配 ${count} 条记录${count ? "，点击“删除匹配记录”后会二次确认" : ""}`;
-		} catch (error) {
-			if (status) status.textContent = "统计失败：" + (error?.message || error);
-		} finally {
-			previewBtn.disabled = false;
-			previewBtn.textContent = old || "统计匹配记录";
-		}
-	};
-	deleteBtn.onclick = async () => {
-		const filter = readHistoryDeleteFilter(doc);
-		if (!armed) {
-			const count = await countHistoryDeleteMatches(filter).catch(() => -1);
-			if (count <= 0) {
-				if (status) status.textContent = count === 0 ? "当前范围没有可删除记录" : "匹配数量检查失败，请重试";
-				return;
-			}
-			armed = true;
-			armedFilter = filter;
-			deleteBtn.textContent = `确认删除 ${count} 条？再点一次`;
-			if (status) status.textContent = `本次将删除 ${count} 条记录，再次点击执行`;
-			if (armTimer) clearTimeout(armTimer);
-			armTimer = setTimeout(() => {
-				armTimer = null;
-				resetArmed();
-			}, 5e3);
-			return;
-		}
-		if (armTimer) {
-			clearTimeout(armTimer);
-			armTimer = null;
-		}
-		const targetFilter = armedFilter || filter;
-		resetArmed();
-		deleteBtn.disabled = true;
-		if (status) status.textContent = "正在删除并重算…";
-		try {
-			const removed = await repository.deleteHistoryByFilter(targetFilter);
-			await recalcCostsAndRefresh();
-			if (status) status.textContent = removed ? `已删除 ${removed} 条记录并完成重算` : "当前范围没有可删除记录";
-			if (removed) toast("success", `已删除 ${removed} 条记录`);
-		} catch (error) {
-			if (status) status.textContent = "删除失败：" + (error?.message || error);
-		} finally {
-			deleteBtn.disabled = false;
-		}
-	};
-}
-function renderSettings(doc) {
-	const host = doc.getElementById("aus-settings");
-	if (!host) return;
-	const s = state$2.settings;
-	host.innerHTML = `
-    <div style="display:grid;gap:12px;">
-      <!-- 匿名使用统计（默认开启，可随时关闭） -->
-      <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">匿名使用统计</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-telemetry-enabled" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-telemetry-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
-        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">仅匿名上报浏览器环境参数（浏览器版本、系统、架构、语言、屏幕等）、渲染性能等开发数据；<strong>不含对话内容、密钥等任何隐私信息，数据经过匿名化处理，仅用于开发与完善兼容性。</strong>关闭后立即停止采集与上报。<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">隐私声明</a></div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;flex-wrap:wrap;"><span id="aus-telemetry-id" style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">匿名标识：待生成</span><button id="aus-telemetry-reset" style="padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">重置匿名标识</button></div>
-        <div id="aus-telemetry-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;"></div>
-      </div>
-      <!-- 颜色模式（与用量统计·模型选择一致的胶囊下拉） -->
-      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">颜色模式</span><div id="aus-theme-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">模式</span><span id="aus-theme-label" style="font-weight:600;color:var(--ds-text);">浅色</span>${icon("chevron-down", 14)}</div></div><div id="aus-theme-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:140px;padding:8px;"></div><div id="aus-theme-hint" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">切换后立即生效，深色模式针对夜间可读性优化</div></div>
-
-      <!-- 历史显示范围 -->
-      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">历史显示范围</span><div id="aus-history-scope-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">范围</span><span id="aus-history-scope-label" style="font-weight:600;color:var(--ds-text);">全部历史</span>${icon("chevron-down", 14)}</div></div><div id="aus-history-scope-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">调整历史记录页的默认展示范围</div></div>
-
-      <!-- API 密钥 -->
-      <div class="ds-card" style="display:none;"><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);font-weight:500;margin-bottom:6px;">API 密钥</div><div style="display:flex;gap:8px;"><input id="aus-api-key" type="password" placeholder="输入 DeepSeek API 密钥" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);outline:none;" /><button id="aus-save-key" class="ds-btn-pill" style="padding:8px 14px;">保存</button></div><div id="aus-key-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;"></div></div>
-
-      <!-- 余额 -->
-      <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">自动校准余额</span><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);color:var(--ds-text);">校准间隔（分钟）</span>
-          <input type="number" id="aus-balance-interval" min="1" max="1440" style="width:90px;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);text-align:center;" /></div></div>
-        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">在钱包中勾选「自动校准」后按此间隔自动查询余额（暂仅 DeepSeek 官方支持）</div>
-        <div style="display:none;margin-top:12px;"><input id="aus-custom-balance" /><button id="aus-save-balance"></button><button id="aus-clear-balance"></button><div id="aus-balance-status"></div></div>
-      </div>
-
-      <!-- 高峰时段 -->
-      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">新钱包默认峰谷时段</span><button id="aus-btn-add-peak-hour" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加</button></div><div id="aus-peak-hours-list" style="display:grid;gap:6px;margin-top:8px;"></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;line-height:1.6;">支持跨天（如 22:00-02:00）；钱包页可分别覆盖时段和周末规则。<br />DeepSeek 官方规则：周一至周五（不含中国法定节假日）9:00-12:00、14:00-18:00 为高峰，其余时段（含周末和法定节假日全天）为空闲；调休上班的周末同样按空闲计费。</div><div style="margin-top:10px;"><div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">额外空闲日期</div><textarea id="aus-extra-off-days" rows="3" placeholder="每行一个日期，如 2027-01-01" style="width:100%;margin-top:6px;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);resize:vertical;box-sizing:border-box;"></textarea><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:4px;">内置法定节假日数据覆盖 ${CN_HOLIDAY_COVERAGE_LABEL}；超出范围的日期可按 YYYY-MM-DD 每行一条补充，全天按空闲计费。</div></div></div>
-
-      <!-- 模型与价格（可折叠，默认收起） -->
-      <div class="ds-card" style="display:none;"><div id="aus-models-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">模型与价格（<span id="aus-model-price-unit">${getDisplayCurrency().code}/百万 tokens</span>）</span><div style="display:flex;align-items:center;gap:8px;"><button id="aus-btn-clear-custom-models" style="padding:6px 10px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">清空自定义模型</button><button id="aus-btn-add-model" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">+ 自定义模型</button><span id="aus-models-toggle" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;user-select:none;line-height:1;">${icon("chevron-down", 14)} 展开</span></div></div><div id="aus-models-sync-note" style="display:none;margin-top:8px;padding:8px 10px;border:1px dashed var(--ds-border);border-radius:10px;background:var(--ds-sidebar-bg);font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;"></div><div id="aus-custom-models-list" style="display:grid;gap:8px;margin-top:8px;"></div></div>
-
-      <!-- 汇率与价格同步（models.dev）：无总开关，同步与币种都由各钱包自己的设置决定 -->
-      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">汇率与价格同步（models.dev）</span></div>
-        <div id="aus-pricing-sync-panel" style="display:grid;margin-top:10px;gap:10px;">
-          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;"><b style="color:var(--ds-text);">价格同步没有总开关</b>：在钱包页为某个钱包选定「价格来源」后，该钱包里已识别的模型才会按 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 价格同步；未选来源的钱包不参与，也不会联网。同步只按模型名模糊匹配写入该模型的价格，不会把供应商目录整批塞进钱包；DeepSeek 峰价按谷价 2× 合成。<br /><b style="color:var(--ds-text);">显示币种同样由钱包决定</b>：未忽略的钱包全部为美元时全站按 $ 显示（按下方汇率换算），否则按 ¥ CNY；内部计价单位始终是人民币。下表开关只是同步行为与汇率参数，钱包中锁定或手工维护的价格受同步模式保护。</div>
-          <div style="display:flex;align-items:center;justify-content:space-between;position:relative;"><span style="font-size:var(--aus-fs-base);color:var(--ds-text);">同步模式</span><div id="aus-pricing-sync-mode-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);cursor:pointer;"><span id="aus-pricing-sync-mode-label" style="font-weight:600;color:var(--ds-text);">仅新增</span>${icon("chevron-down", 14)}</div><div id="aus-pricing-sync-mode-dropdown" style="display:none;position:absolute;top:40px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-            <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">汇率 USD→CNY</div><input id="aus-exchange-rate" type="number" step="0.0001" min="0" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div>
-            <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">自动同步间隔</div><div id="aus-pricing-sync-interval-btn" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);cursor:pointer;"><span id="aus-pricing-sync-interval-label" style="font-weight:600;">仅手动</span>${icon("chevron-down", 14)}</div><div id="aus-pricing-sync-interval-dropdown" style="display:none;position:absolute;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:140px;padding:8px;"></div></div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;"><label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" id="aus-use-live-rate" class="aus-checkbox" /> 每24小时自动联网获取最新汇率</label><button id="aus-fetch-rate" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">立即获取</button></div>
-          <div id="aus-rate-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);"></div>
-          <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" id="aus-recalc-on-sync" class="aus-checkbox" /> 同步后重算历史费用（否则仅新请求生效）</label>
-          <div style="display:flex;gap:8px;"><button id="aus-btn-sync-pricing" class="ds-btn-pill" style="flex:1;">立即同步</button><button id="aus-btn-preview-pricing" style="flex:1;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">预览</button></div>
-          <div id="aus-pricing-sync-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);"></div>
-          <div id="aus-pricing-sync-preview" style="display:none;max-height:160px;overflow:auto;border-radius:8px;padding:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);"></div>
-        </div>
-      </div>
-
-      <!-- 调试 -->
-      <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">调试模式（模拟数据，不计费）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-debug-mode" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-debug-mode-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
-        <div id="aus-debug-panel" style="display:${s.debug ? "grid" : "none"};margin-top:10px;gap:8px;">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">命中</div><input type="number" id="aus-debug-hit" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div><div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">未命中</div><input type="number" id="aus-debug-miss" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">输出</div><input type="number" id="aus-debug-output" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div><div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">模型</div><select id="aus-debug-model" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);"></select></div></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="date" id="aus-debug-date-start" style="padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /><input type="date" id="aus-debug-date-end" style="padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /><input type="number" id="aus-debug-batch-count" min="1" placeholder="条数" style="padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div>
-          <button id="aus-btn-debug-batch" class="ds-btn-pill" style="width:100%;">生成模拟数据</button>
-          <button id="aus-btn-debug-clear" style="width:100%;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">清除调试数据</button><div id="aus-debug-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);"></div>
-        </div>
-      </div>
-
-      <!-- 峰值圆点 -->
-      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">峰值提示小圆点</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-peak-dot" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-peak-dot-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div><button id="aus-reset-dot" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">重置位置</button><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">开启后在酒馆中显示一个小圆点，按颜色区分当前峰谷</div></div>
-
-      <!-- 记录数据管理 -->
-      <div class="ds-card">
-        <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:6px;">按范围删除记录</div>
-        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.7;margin-bottom:8px;">可删除全部记录，或按日期、模型、对话缩小范围。日期留空表示不限；模型与对话需完全匹配，留空表示不限。删除会同时处理热记录与冷记录，并立即重算统计。</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-          <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">开始日期</div><input type="date" id="aus-delete-start" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);box-sizing:border-box;" /></div>
-          <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">结束日期</div><input type="date" id="aus-delete-end" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);box-sizing:border-box;" /></div>
-          <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">模型</div><input id="aus-delete-model" placeholder="如 deepseek-flash" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);box-sizing:border-box;" /></div>
-          <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">对话</div><input id="aus-delete-chat" placeholder="对话名称或 chatId" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);box-sizing:border-box;" /></div>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button id="aus-delete-preview" style="padding:7px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">统计匹配记录</button>
-          <button id="aus-delete-run" style="padding:7px 12px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">删除匹配记录</button>
-        </div>
-        <div id="aus-delete-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:8px;"></div>
-      </div>
-
-      <!-- 存储占用 -->
-      ${renderStorageUsageCard(doc)}
-
-      <!-- WebDAV -->
-      <div class="ds-card"><div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:6px;">WebDAV 云同步</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:8px;">双向合并，仅同步统计/设置/余额，不含聊天内容与密钥。强制 https。</div>
-        <div style="display:grid;gap:8px;">
-          <input id="aus-webdav-url" placeholder="https://dav.jianguoyun.com/dav/" style="padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" />
-          <div style="display:flex;gap:8px;"><input id="aus-webdav-user" placeholder="用户名" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /><input id="aus-webdav-pass" type="password" placeholder="应用密码" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /><button id="aus-webdav-pass-clear" type="button" style="padding:8px 12px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">清除密码</button></div>
-          <input id="aus-webdav-path" placeholder="远程子路径（可空）" style="padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" />
-          <input id="aus-webdav-proxy" placeholder="CORS 代理（可选，http://127.0.0.1:8000/proxy?url=）" style="padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" />
-          <button id="aus-webdav-sync" class="ds-btn-pill">☁️ 立即同步</button>
-        </div>
-      </div>
-    </div>
-  `;
-	const apiKeyEl = doc.getElementById("aus-api-key");
-	try {
-		if ((globalThis.SillyTavern?.getContext?.())?.extensionSettings?.["api_usage_stat"]?.apiKey && apiKeyEl) {
-			apiKeyEl.value = "";
-			apiKeyEl.placeholder = "已保存 ●●●●（留空不修改）";
-			apiKeyEl.dataset.hasKey = "1";
-		}
-	} catch {}
-	doc.getElementById("aus-custom-balance").value = state$2.customBalance || "";
-	const telemetryCb = doc.getElementById("aus-telemetry-enabled");
-	const telemetrySlider = doc.getElementById("aus-telemetry-slider");
-	if (telemetryCb) telemetryCb.checked = s.telemetryEnabled !== false;
-	if (telemetrySlider) telemetrySlider.style.left = s.telemetryEnabled !== false ? "23px" : "3px";
-	renderTelemetryStatus(doc);
-	doc.getElementById("aus-peak-dot").checked = state$2.settings.peakDot !== false;
-	const peakSlider = doc.getElementById("aus-peak-dot-slider");
-	if (peakSlider) peakSlider.style.left = state$2.settings.peakDot !== false ? "23px" : "3px";
-	doc.getElementById("aus-balance-interval").value = String(s.balanceInterval ?? 10);
-	const dbgCb = doc.getElementById("aus-debug-mode");
-	const dbgSlider = doc.getElementById("aus-debug-mode-slider");
-	if (dbgCb) dbgCb.checked = !!s.debug;
-	if (dbgSlider) dbgSlider.style.left = s.debug ? "23px" : "3px";
-	doc.getElementById("aus-debug-hit").value = String(s.debugHit ?? 1e4);
-	doc.getElementById("aus-debug-miss").value = String(s.debugMiss ?? 5e3);
-	doc.getElementById("aus-debug-output").value = String(s.debugOutput ?? 2e3);
-	doc.getElementById("aus-debug-date-start").value = s.debugDateStart || "";
-	doc.getElementById("aus-debug-date-end").value = s.debugDateEnd || "";
-	doc.getElementById("aus-debug-batch-count").value = String(s.debugBatchCount ?? 30);
-	doc.getElementById("aus-webdav-url").value = s.webdav?.url || "";
-	doc.getElementById("aus-webdav-user").value = s.webdav?.username || "";
-	doc.getElementById("aus-webdav-path").value = s.webdav?.path || "";
-	doc.getElementById("aus-webdav-proxy").value = s.webdav?.proxy || "";
-	try {
-		const pass = localStorage.getItem("ds_ds_webdav_pass") || "";
-		const el = doc.getElementById("aus-webdav-pass");
-		if (pass && el) {
-			el.value = "";
-			el.placeholder = "已保存 ●●●●（留空不修改）";
-			el.dataset.hasKey = "1";
-		} else if ((globalThis.SillyTavern?.getContext?.())?.extensionSettings?.["api_usage_stat"]?.webdavPass && el) {
-			el.value = "";
-			el.placeholder = "已保存 ●●●●（留空不修改）";
-			el.dataset.hasKey = "1";
-		}
-	} catch {}
-	function renderThemePicker() {
-		const dropdown = doc.getElementById("aus-theme-dropdown");
-		const label = doc.getElementById("aus-theme-label");
-		if (!label) return;
-		const cur = state$2.settings.theme || "light";
-		label.textContent = cur === "dark" ? "深色" : cur === "auto" ? "跟随系统" : "浅色";
-		const hint = doc.getElementById("aus-theme-hint");
-		if (hint) hint.textContent = "切换后立即生效，深色模式针对夜间可读性优化";
-		if (!dropdown) return;
-		dropdown.innerHTML = [
-			{
-				v: "light",
-				l: "浅色"
-			},
-			{
-				v: "dark",
-				l: "深色"
-			},
-			{
-				v: "auto",
-				l: "跟随系统"
-			}
-		].map((o) => {
-			const active = o.v === cur ? "background:var(--ds-card);font-weight:600;" : "";
-			return `<div data-theme="${o.v}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${o.l}</div>`;
-		}).join("");
-		dropdown.querySelectorAll("[data-theme]").forEach((el) => {
-			el.onclick = () => {
-				const v = el.getAttribute("data-theme");
-				state$2.settings.theme = v;
-				saveHot({ settings: state$2.settings });
-				applyTheme(v);
-				syncThemeWatcher();
-				dropdown.style.display = "none";
-				renderThemePicker();
-				try {
-					globalThis.ApiUsageStat?.refreshUI?.();
-				} catch {}
-			};
-		});
-	}
-	renderThemePicker();
-	const themeBtn = doc.getElementById("aus-theme-btn");
-	const themeDropdown = doc.getElementById("aus-theme-dropdown");
-	if (themeBtn && themeDropdown) themeBtn.onclick = () => {
-		const open = themeDropdown.style.display === "block";
-		themeDropdown.style.display = open ? "none" : "block";
-		if (!open) renderThemePicker();
-	};
-	bindSettingsOutsideClick(doc);
-	function renderScopePicker() {
-		const dropdown = doc.getElementById("aus-history-scope-dropdown");
-		const label = doc.getElementById("aus-history-scope-label");
-		if (!label) return;
-		const cur = state$2.settings.historyScope || "all";
-		label.textContent = cur === "current" ? "当前对话" : "全部历史";
-		if (!dropdown) return;
-		dropdown.innerHTML = [{
-			v: "all",
-			l: "全部历史"
-		}, {
-			v: "current",
-			l: "当前对话"
-		}].map((o) => {
-			const active = o.v === cur ? "background:var(--ds-card);font-weight:600;" : "";
-			return `<div data-scope="${o.v}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${o.l}</div>`;
-		}).join("");
-		dropdown.querySelectorAll("[data-scope]").forEach((el) => {
-			el.onclick = () => {
-				const v = el.getAttribute("data-scope");
-				state$2.settings.historyScope = v;
-				saveHot({ settings: state$2.settings });
-				dropdown.style.display = "none";
-				renderScopePicker();
-				try {
-					globalThis.ApiUsageStat?.refreshUI?.();
-				} catch {}
-			};
-		});
-	}
-	renderScopePicker();
-	bindStorageUsageCard(doc);
-	refreshStorageUsage(doc);
-	const scopeBtn = doc.getElementById("aus-history-scope-btn");
-	const scopeDropdown = doc.getElementById("aus-history-scope-dropdown");
-	if (scopeBtn && scopeDropdown) scopeBtn.onclick = () => {
-		const open = scopeDropdown.style.display === "block";
-		scopeDropdown.style.display = open ? "none" : "block";
-		if (!open) renderScopePicker();
-	};
-	doc.getElementById("aus-save-key").onclick = () => {
-		const el = doc.getElementById("aus-api-key");
-		const v = el.value.trim();
-		if (!v && el.dataset.hasKey === "1") {
-			const sEl = doc.getElementById("aus-key-status");
-			sEl.textContent = "未修改，已保留原密钥";
-			return;
-		}
-		saveApiKey(v);
-		const sEl = doc.getElementById("aus-key-status");
-		sEl.textContent = v ? "已保存" : "已清空";
-		if (v) {
-			el.value = "";
-			el.placeholder = "已保存 ●●●●（留空不修改）";
-			el.dataset.hasKey = "1";
-		} else {
-			el.placeholder = "输入 DeepSeek API 密钥";
-			el.dataset.hasKey = "";
-		}
-	};
-	doc.getElementById("aus-save-balance").onclick = () => {
-		const v = doc.getElementById("aus-custom-balance").value.trim();
-		if (v && isNaN(parseFloat(v))) return alert("请输入有效金额");
-		state$2.customBalance = v || null;
-		saveHot({ customBalance: state$2.customBalance });
-		try {
-			globalThis.ApiUsageStat?.refreshUI?.();
-		} catch {}
-		doc.getElementById("aus-balance-status").textContent = v ? "已保存" : "已清除";
-	};
-	doc.getElementById("aus-clear-balance").onclick = () => {
-		state$2.customBalance = null;
-		saveHot({ customBalance: null });
-		doc.getElementById("aus-custom-balance").value = "";
-		doc.getElementById("aus-balance-status").textContent = "已清除";
-		try {
-			globalThis.ApiUsageStat?.refreshUI?.();
-		} catch {}
-	};
-	doc.getElementById("aus-balance-interval").onchange = (e) => {
-		state$2.settings.balanceInterval = parseInt(e.target.value) || 10;
-		saveHot({ settings: state$2.settings });
-		try {
-			import("./balance-CvgCg-F3.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
-		} catch {}
-	};
-	if (dbgCb) dbgCb.onchange = () => {
-		state$2.settings.debug = dbgCb.checked;
-		if (dbgSlider) dbgSlider.style.left = dbgCb.checked ? "23px" : "3px";
-		doc.getElementById("aus-debug-panel").style.display = dbgCb.checked ? "grid" : "none";
-		const st = doc.getElementById("aus-debug-status");
-		if (st) st.textContent = dbgCb.checked ? "调试模式已开启，下次对话将使用模拟参数，不计费" : "";
-		saveHot({ settings: state$2.settings });
-	};
-	doc.getElementById("aus-debug-hit").onchange = (e) => {
-		state$2.settings.debugHit = parseInt(e.target.value) || 0;
-		saveHot({ settings: state$2.settings });
-	};
-	doc.getElementById("aus-debug-miss").onchange = (e) => {
-		state$2.settings.debugMiss = parseInt(e.target.value) || 0;
-		saveHot({ settings: state$2.settings });
-	};
-	doc.getElementById("aus-debug-output").onchange = (e) => {
-		state$2.settings.debugOutput = parseInt(e.target.value) || 0;
-		saveHot({ settings: state$2.settings });
-	};
-	const dbgModel = doc.getElementById("aus-debug-model");
-	if (dbgModel) dbgModel.onchange = (e) => {
-		state$2.settings.debugModel = e.target.value;
-		saveHot({ settings: state$2.settings });
-	};
-	doc.getElementById("aus-debug-date-start").onchange = (e) => {
-		state$2.settings.debugDateStart = e.target.value;
-		saveHot({ settings: state$2.settings });
-	};
-	doc.getElementById("aus-debug-date-end").onchange = (e) => {
-		state$2.settings.debugDateEnd = e.target.value;
-		saveHot({ settings: state$2.settings });
-	};
-	doc.getElementById("aus-debug-batch-count").onchange = (e) => {
-		state$2.settings.debugBatchCount = parseInt(e.target.value) || 1;
-		saveHot({ settings: state$2.settings });
-	};
-	doc.getElementById("aus-btn-debug-batch").onclick = () => generateDebugBatch();
-	try {
-		const clearBtn = doc.getElementById("aus-btn-debug-clear");
-		if (clearBtn) clearBtn.onclick = async () => {
-			try {
-				const { repository } = await import("./repository-BW-r59iw.js").then((n) => n.n);
-				const { state: st } = await import("./store-CgJSmTLt.js").then((n) => n.i);
-				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
-				await repository.recalcAll();
-				await repository.rebuildAggregates();
-				try {
-					globalThis.ApiUsageStat?.refreshUI?.();
-				} catch {}
-				const el = doc.getElementById("aus-debug-status");
-				if (el) el.textContent = "已清除调试数据";
-			} catch {}
-		};
-	} catch {}
-	doc.getElementById("aus-peak-dot").onchange = (e) => {
-		state$2.settings.peakDot = e.target.checked;
-		const sl = doc.getElementById("aus-peak-dot-slider");
-		if (sl) sl.style.left = e.target.checked ? "23px" : "3px";
-		saveHot({ settings: state$2.settings });
-		try {
-			globalThis.ApiUsageStat?.updatePeakDot?.();
-		} catch {}
-	};
-	doc.getElementById("aus-reset-dot").onclick = () => {
-		try {
-			localStorage.removeItem("ds_ds_peak_dot_pos");
-			const dot = window.parent?.document?.getElementById("aus-peak-dot-indicator");
-			if (dot) {
-				dot.style.left = "";
-				dot.style.top = "60px";
-				dot.style.right = "16px";
-			}
-		} catch {}
-		alert("已重置");
-	};
-	const telemetryToggle = doc.getElementById("aus-telemetry-enabled");
-	if (telemetryToggle) telemetryToggle.onchange = (e) => {
-		const enabled = !!e.target.checked;
-		if (!enabled) try {
-			flushTelemetryOnDisable();
-		} catch {}
-		state$2.settings.telemetryEnabled = enabled;
-		const slider = doc.getElementById("aus-telemetry-slider");
-		if (slider) slider.style.left = enabled ? "23px" : "3px";
-		saveHot({ settings: state$2.settings });
-		renderTelemetryStatus(doc);
-	};
-	const telemetryReset = doc.getElementById("aus-telemetry-reset");
-	if (telemetryReset) telemetryReset.onclick = () => {
-		try {
-			resetIdentity();
-		} catch {}
-		renderTelemetryStatus(doc);
-		toast("info", "已重置匿名标识，后续上报将按新设备计入");
-	};
-	bindHistoryDelete(doc);
-	const wUrl = doc.getElementById("aus-webdav-url");
-	const wUser = doc.getElementById("aus-webdav-user");
-	const wPath = doc.getElementById("aus-webdav-path");
-	const wProxy = doc.getElementById("aus-webdav-proxy");
-	const wPass = doc.getElementById("aus-webdav-pass");
-	if (wUrl) wUrl.onchange = () => {
-		state$2.settings.webdav.url = wUrl.value.trim();
-		saveHot({ settings: state$2.settings });
-	};
-	if (wUser) wUser.onchange = () => {
-		state$2.settings.webdav.username = wUser.value.trim();
-		saveHot({ settings: state$2.settings });
-	};
-	if (wPath) wPath.onchange = () => {
-		state$2.settings.webdav.path = wPath.value.trim();
-		saveHot({ settings: state$2.settings });
-	};
-	if (wProxy) wProxy.onchange = () => {
-		state$2.settings.webdav.proxy = wProxy.value.trim();
-		saveHot({ settings: state$2.settings });
-	};
-	if (wPass) wPass.onchange = () => {
-		const vv = wPass.value.trim();
-		if (!vv && wPass.dataset.hasKey === "1") return;
-		saveWebdavPass(wPass.value);
-		if (vv) {
-			wPass.value = "";
-			wPass.placeholder = "已保存 ●●●●（留空不修改）";
-			wPass.dataset.hasKey = "1";
-		}
-	};
-	const wPassClear = doc.getElementById("aus-webdav-pass-clear");
-	if (wPassClear && wPass) wPassClear.onclick = () => {
-		saveWebdavPass("");
-		wPass.value = "";
-		wPass.placeholder = "应用密码";
-		wPass.dataset.hasKey = "";
-	};
-	doc.getElementById("aus-webdav-sync").onclick = () => doSyncNow();
-	try {
-		const ps = state$2.settings.pricingSync || {};
-		const modeBtn = doc.getElementById("aus-pricing-sync-mode-btn");
-		const modeLabel = doc.getElementById("aus-pricing-sync-mode-label");
-		const modeDrop = doc.getElementById("aus-pricing-sync-mode-dropdown");
-		const modeMap = {
-			"add-missing": "只补未定价",
-			"overwrite-unlocked": "覆盖未锁定",
-			"overwrite-all": "全部覆盖"
-		};
-		if (modeLabel) modeLabel.textContent = modeMap[ps.mode] || "只补未定价";
-		if (modeDrop) {
-			modeDrop.innerHTML = Object.entries(modeMap).map(([k, l]) => `<div data-mode="${k}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${ps.mode === k ? "background:var(--ds-card);font-weight:600;" : ""}">${l}</div>`).join("");
-			modeDrop.querySelectorAll("[data-mode]").forEach((el) => {
-				el.onclick = () => {
-					state$2.settings.pricingSync.mode = el.getAttribute("data-mode");
-					saveHot({ settings: state$2.settings });
-					modeDrop.style.display = "none";
-					if (modeLabel) modeLabel.textContent = modeMap[state$2.settings.pricingSync.mode] || el.getAttribute("data-mode");
-					modeDrop.innerHTML = Object.entries(modeMap).map(([k, l]) => `<div data-mode="${k}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${state$2.settings.pricingSync.mode === k ? "background:var(--ds-card);font-weight:600;" : ""}">${l}</div>`).join("");
-				};
-			});
-		}
-		if (modeBtn && modeDrop) modeBtn.onclick = () => {
-			modeDrop.style.display = modeDrop.style.display === "block" ? "none" : "block";
-		};
-		const rateEl = doc.getElementById("aus-exchange-rate");
-		if (rateEl) rateEl.value = String(ps.exchangeRate ?? 7.2);
-		const liveEl = doc.getElementById("aus-use-live-rate");
-		if (liveEl) liveEl.checked = !!ps.useLiveRate;
-		const recalcEl = doc.getElementById("aus-recalc-on-sync");
-		if (recalcEl) recalcEl.checked = !!ps.recalcOnSync;
-		const intervalBtn = doc.getElementById("aus-pricing-sync-interval-btn");
-		const intervalLabel = doc.getElementById("aus-pricing-sync-interval-label");
-		const intervalDrop = doc.getElementById("aus-pricing-sync-interval-dropdown");
-		const intervalMap = {
-			"0": "仅手动",
-			"24": "每天",
-			"168": "每周"
-		};
-		if (intervalLabel) intervalLabel.textContent = intervalMap[String(ps.autoIntervalHours ?? 0)] || "仅手动";
-		if (intervalDrop) {
-			intervalDrop.innerHTML = Object.entries(intervalMap).map(([k, l]) => `<div data-interval="${k}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${String(ps.autoIntervalHours) === k ? "background:var(--ds-card);font-weight:600;" : ""}">${l}</div>`).join("");
-			intervalDrop.querySelectorAll("[data-interval]").forEach((el) => {
-				el.onclick = () => {
-					state$2.settings.pricingSync.autoIntervalHours = parseInt(el.getAttribute("data-interval")) || 0;
-					saveHot({ settings: state$2.settings });
-					intervalDrop.style.display = "none";
-					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
-					try {
-						import("./pricing-sync-DuNUqgL8.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
-						import("./currency-DgeH8MPr.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
-					} catch {}
-				};
-			});
-		}
-		if (intervalBtn && intervalDrop) intervalBtn.onclick = () => {
-			intervalDrop.style.display = intervalDrop.style.display === "block" ? "none" : "block";
-		};
-		const rateStatus = doc.getElementById("aus-rate-status");
-		if (rateStatus) {
-			const last = ps.lastRateFetch ? new Date(ps.lastRateFetch).toLocaleString("zh-CN") : "—";
-			rateStatus.textContent = `1 USD ≈ ${Number(ps.exchangeRate || 7.2).toFixed(4)} CNY（更新于 ${last}）`;
-		}
-		const syncStatus = doc.getElementById("aus-pricing-sync-status");
-		if (syncStatus) syncStatus.textContent = `上次同步：${ps.lastSync ? new Date(ps.lastSync).toLocaleString("zh-CN") : "未同步"} · 模式：${modeMap[ps.mode] || ps.mode}`;
-		if (rateEl) rateEl.onchange = () => {
-			const v = parseFloat(rateEl.value);
-			if (!isFinite(v) || v <= 0) return;
-			state$2.settings.pricingSync.exchangeRate = Math.round(v * 1e4) / 1e4;
-			saveHot({ settings: state$2.settings });
-			if (rateStatus) rateStatus.textContent = `1 USD ≈ ${v.toFixed(4)} CNY（更新于 ${(/* @__PURE__ */ new Date()).toLocaleString("zh-CN")}）`;
-			try {
-				globalThis.ApiUsageStat?.refreshUI?.();
-			} catch {}
-		};
-		if (liveEl) liveEl.onchange = () => {
-			state$2.settings.pricingSync.useLiveRate = liveEl.checked;
-			saveHot({ settings: state$2.settings });
-			try {
-				import("./currency-DgeH8MPr.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
-			} catch {}
-		};
-		if (recalcEl) recalcEl.onchange = () => {
-			state$2.settings.pricingSync.recalcOnSync = recalcEl.checked;
-			saveHot({ settings: state$2.settings });
-		};
-		const fetchBtn = doc.getElementById("aus-fetch-rate");
-		if (fetchBtn) fetchBtn.onclick = async () => {
-			fetchBtn.textContent = "获取中…";
-			fetchBtn.disabled = true;
-			try {
-				const r = await fetchLiveRate(true);
-				if (r && rateEl) {
-					rateEl.value = String(r);
-					if (rateStatus) rateStatus.textContent = `1 USD ≈ ${Number(r).toFixed(4)} CNY（更新于 ${(/* @__PURE__ */ new Date()).toLocaleString("zh-CN")}）`;
-					try {
-						globalThis.ApiUsageStat?.refreshUI?.();
-					} catch {}
-				}
-			} finally {
-				fetchBtn.textContent = "立即获取";
-				fetchBtn.disabled = false;
-			}
-		};
-		const syncBtn = doc.getElementById("aus-btn-sync-pricing");
-		if (syncBtn) syncBtn.onclick = async () => {
-			syncBtn.textContent = "同步中…";
-			syncBtn.disabled = true;
-			try {
-				await syncPricingFromModelsDev({ silent: false });
-				if (syncStatus) {
-					const ps2 = state$2.settings.pricingSync;
-					syncStatus.textContent = `上次同步：${new Date(ps2.lastSync).toLocaleString("zh-CN")} · 模式：${modeMap[ps2.mode] || ps2.mode}`;
-				}
-				try {
-					globalThis.ApiUsageStat?.refreshUI?.();
-					renderModelsEditor(doc);
-				} catch {}
-			} finally {
-				syncBtn.textContent = "立即同步";
-				syncBtn.disabled = false;
-			}
-		};
-		const previewBtn = doc.getElementById("aus-btn-preview-pricing");
-		const previewHost = doc.getElementById("aus-pricing-sync-preview");
-		if (previewBtn && previewHost) previewBtn.onclick = async () => {
-			previewBtn.textContent = "预览中…";
-			previewBtn.disabled = true;
-			try {
-				const catalog = await fetchModelsDevCatalog();
-				const plan = buildSyncPlan(catalog);
-				const summary = plan.summary;
-				const rows = plan.rows.filter((row) => row.catalogModel).slice(0, 8);
-				previewHost.style.display = "block";
-				previewHost.innerHTML = "<div style=\"font-weight:600;margin-bottom:6px;\">匹配 " + summary.matched + "（精确 " + summary.exact + " / 模糊 " + summary.fuzzy + (summary.ambiguous ? " / 歧义 " + summary.ambiguous : "") + "）· 未匹配 " + summary.unmatched + " · 将写入 " + summary.write + " · 将更新 " + summary.update + " · 跳过 " + summary.skipped + "</div>" + rows.map((row) => "<div style=\"display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--ds-border);padding:4px 0;\"><span style=\"overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;\" title=\"" + esc(row.localModel) + "\">" + esc(row.localModel) + "</span><span style=\"color:var(--ds-text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;\" title=\"" + esc(row.catalogModel || "") + "\">" + esc(row.catalogModel || "") + "</span><span>" + Math.round(row.score * 100) + "%</span></div>").join("") + "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;\">按钱包已识别模型模糊匹配，只写价格不新增模型；到钱包页可逐条勾选后应用。</div>";
-			} catch (e) {
-				previewHost.style.display = "block";
-				previewHost.textContent = "预览失败：" + (e?.message || e);
-			} finally {
-				previewBtn.textContent = "预览";
-				previewBtn.disabled = false;
-			}
-		};
-	} catch {}
-	renderPeakHoursEditor(doc);
-	renderModelsEditor(doc);
-	fillDebugModelSelect(doc);
-	try {
-		const listEl = doc.getElementById("aus-custom-models-list");
-		const toggleEl = doc.getElementById("aus-models-toggle");
-		const headerEl = doc.getElementById("aus-models-header");
-		const addBtn = doc.getElementById("aus-btn-add-model");
-		const collapsed = s.modelsPricingCollapsed !== false;
-		if (listEl) listEl.style.display = collapsed ? "none" : "grid";
-		if (toggleEl) toggleEl.innerHTML = collapsed ? icon("chevron-down", 14) + " 展开" : icon("chevron-up", 14) + " 收起";
-		const applyCollapsed = (next) => {
-			state$2.settings.modelsPricingCollapsed = next;
-			try {
-				saveHot({ settings: state$2.settings });
-			} catch {}
-			if (listEl) listEl.style.display = next ? "none" : "grid";
-			if (toggleEl) toggleEl.innerHTML = next ? icon("chevron-down", 14) + " 展开" : icon("chevron-up", 14) + " 收起";
-		};
-		if (toggleEl) toggleEl.onclick = (e) => {
-			e.stopPropagation();
-			applyCollapsed(listEl?.style.display !== "none" ? true : false);
-		};
-		if (headerEl) headerEl.onclick = (e) => {
-			const target = e.target;
-			if (target.closest("#aus-btn-add-model") || target.closest("#aus-btn-clear-custom-models") || target.closest("#aus-models-toggle")) return;
-			applyCollapsed(listEl?.style.display !== "none" ? true : false);
-		};
-		const clearAllBtn = doc.getElementById("aus-btn-clear-custom-models");
-		if (clearAllBtn) {
-			let armed = false;
-			let armTimer = null;
-			const resetLabel = () => {
-				armed = false;
-				try {
-					clearAllBtn.textContent = "清空自定义模型";
-				} catch {}
-			};
-			clearAllBtn.onclick = () => {
-				if (!armed) {
-					armed = true;
-					clearAllBtn.textContent = "确认清空？再点一次";
-					armTimer = setTimeout(() => {
-						armTimer = null;
-						resetLabel();
-					}, 4e3);
-					return;
-				}
-				if (armTimer) {
-					clearTimeout(armTimer);
-					armTimer = null;
-				}
-				resetLabel();
-				const n = clearAllCustomModels();
-				renderModelsEditor(doc);
-				fillDebugModelSelect(doc);
-				recalcCostsAndRefresh();
-				if (n) toast("success", `已清空 ${n} 项自定义模型与价格，内置模型计价规则保持不变`);
-				else toast("info", "当前没有自定义模型可清空");
-			};
-		}
-		if (addBtn) addBtn.addEventListener("click", () => {
-			if (listEl?.style.display === "none") applyCollapsed(false);
-			setTimeout(() => {
-				const l = doc.getElementById("aus-custom-models-list");
-				const t = doc.getElementById("aus-models-toggle");
-				if (l) l.style.display = "grid";
-				if (t) t.innerHTML = icon("chevron-up", 14) + " 收起";
-			}, 30);
-		});
-	} catch {}
-}
-function renderPeakHoursEditor(doc) {
-	const list = doc.getElementById("aus-peak-hours-list");
-	if (!list) return;
-	list.innerHTML = (state$2.settings.peakHours || []).map((h, i) => `
-    <div style="display:flex;align-items:center;gap:6px;">
-      <input type="time" value="${esc(h.start || "")}" data-idx="${i}" data-field="start" style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" />
-      <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">至</span>
-      <input type="time" value="${esc(h.end || "")}" data-idx="${i}" data-field="end" style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" />
-      <button data-del="${i}" style="padding:6px 8px;border:1px solid var(--ds-red-border);border-radius:8px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">删除</button>
-    </div>
-  `).join("");
-	list.querySelectorAll("input[type=\"time\"]").forEach((el) => {
-		el.onchange = () => {
-			const idx = parseInt(el.getAttribute("data-idx"));
-			const field = el.getAttribute("data-field");
-			state$2.settings.peakHours[idx][field] = el.value;
-			saveHot({ settings: state$2.settings });
-			recalcCostsAndRefresh();
-		};
-	});
-	list.querySelectorAll("button[data-del]").forEach((el) => {
-		el.onclick = () => {
-			const idx = parseInt(el.getAttribute("data-del"));
-			state$2.settings.peakHours.splice(idx, 1);
-			if (!state$2.settings.peakHours.length) state$2.settings.peakHours = JSON.parse(JSON.stringify(DEFAULT_PEAK_HOURS));
-			saveHot({ settings: state$2.settings });
-			renderPeakHoursEditor(doc);
-			recalcCostsAndRefresh();
-		};
-	});
-	const addBtn = doc.getElementById("aus-btn-add-peak-hour");
-	if (addBtn) addBtn.onclick = () => {
-		state$2.settings.peakHours.push({
-			start: "09:00",
-			end: "12:00"
-		});
-		saveHot({ settings: state$2.settings });
-		renderPeakHoursEditor(doc);
-	};
-	bindExtraOffDays(doc);
-}
-function bindExtraOffDays(doc) {
-	const el = doc.getElementById("aus-extra-off-days");
-	if (!el) return;
-	el.value = (state$2.settings.extraOffDays || []).join("\n");
-	el.onchange = () => {
-		const raw = String(el.value || "").split(/[\s,，;；]+/).filter(Boolean);
-		const valid = [];
-		const invalid = [];
-		for (const day of raw) if (isValidDayKey(day)) {
-			if (valid.indexOf(day) === -1) valid.push(day);
-		} else invalid.push(day);
-		valid.sort();
-		state$2.settings.extraOffDays = valid;
-		saveHot({ settings: state$2.settings });
-		renderPeakHoursEditor(doc);
-		recalcCostsAndRefresh();
-		if (invalid.length) toast("warning", `已保存 ${valid.length} 个日期，忽略 ${invalid.length} 个非法日期：${invalid.slice(0, 3).join("、")}`);
-		else toast("success", `已保存 ${valid.length} 个额外空闲日期`);
-	};
-}
-function renderModelsEditor(doc) {
-	const list = doc.getElementById("aus-custom-models-list");
-	if (!list) return;
-	const builtin = Object.keys(PRICING).filter((m) => HIDDEN_PRICING_MODELS.indexOf(m) === -1);
-	const cms = state$2.settings.customModels || [];
-	const showSynced = state$2.settings.pricingSync?.showSyncedModels === true;
-	const syncedCount = cms.filter((c) => isSyncedCustomModel(c)).length;
-	const rows = [];
-	for (const m of builtin) {
-		const p = getPricing(m);
-		const usePeak = p.usePeakPricing !== false;
-		rows.push(modelRow(m, p, true, usePeak));
-	}
-	for (const e of cms) {
-		if (isSyncedCustomModel(e) && !showSynced) continue;
-		if (e?.model && builtin.indexOf(e.model) === -1 && HIDDEN_PRICING_MODELS.indexOf(e.model) === -1) {
-			const p = getPricing(e.model);
-			rows.push(modelRow(e.model, p, false, p.usePeakPricing !== false, isSyncedCustomModel(e)));
-		}
-	}
-	list.innerHTML = rows.join("");
-	renderModelsSyncNote(doc, syncedCount, showSynced);
-	list.querySelectorAll("input[type=\"checkbox\"].aus-cm-peak").forEach((el) => {
-		el.onchange = () => {
-			const model = el.closest("[data-model]").getAttribute("data-model") || "";
-			const usePeak = el.checked;
-			upsertCustom(model, { usePeakPricing: usePeak });
-			saveHot({ settings: state$2.settings });
-			renderModelsEditor(doc);
-			recalcCostsAndRefresh();
-		};
-	});
-	list.querySelectorAll("input[data-price]").forEach((el) => {
-		el.onchange = () => {
-			const row = el.closest("[data-model]");
-			const model = row.getAttribute("data-model") || "";
-			const isBuiltin = row.getAttribute("data-builtin") === "1";
-			saveCustomRow(model, readRow(row), isBuiltin);
-		};
-	});
-	list.querySelectorAll("button[data-del]").forEach((el) => {
-		el.onclick = () => {
-			const model = el.closest("[data-model]").getAttribute("data-model") || "";
-			state$2.settings.customModels = state$2.settings.customModels.filter((c) => c.model !== model);
-			saveHot({ settings: state$2.settings });
-			renderModelsEditor(doc);
-			fillDebugModelSelect(doc);
-			recalcCostsAndRefresh();
-		};
-	});
-	const addBtn = doc.getElementById("aus-btn-add-model");
-	if (addBtn) addBtn.onclick = () => {
-		const name = "custom-model-" + (state$2.settings.customModels.length + 1);
-		state$2.settings.customModels.push({
-			model: name,
-			usePeakPricing: true,
-			offpeak: {},
-			peak: {}
-		});
-		saveHot({ settings: state$2.settings });
-		renderModelsEditor(doc);
-		fillDebugModelSelect(doc);
-	};
-}
-/** 已同步模型提示条：说明隐藏原因，并提供展开查看 / 一次性移除入口 */
-function renderModelsSyncNote(doc, syncedCount, showSynced) {
-	const note = doc.getElementById("aus-models-sync-note");
-	if (!note) return;
-	if (!syncedCount) {
-		note.style.display = "none";
-		note.innerHTML = "";
-		return;
-	}
-	note.style.display = "block";
-	note.innerHTML = `已从 models.dev 同步 <b style="color:var(--ds-text);">${syncedCount}</b> 个模型价格，默认隐藏不显示（仍照常参与计费）。
-    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
-      <button id="aus-toggle-synced-models" style="padding:5px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">${showSynced ? "隐藏同步模型" : "显示同步模型"}</button>
-      <button id="aus-clear-synced-models" style="padding:5px 10px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">移除全部同步模型</button>
-    </div>`;
-	const toggleBtn = doc.getElementById("aus-toggle-synced-models");
-	if (toggleBtn) toggleBtn.onclick = () => {
-		state$2.settings.pricingSync.showSyncedModels = !showSynced;
-		saveHot({ settings: state$2.settings });
-		renderModelsEditor(doc);
-	};
-	const clearBtn = doc.getElementById("aus-clear-synced-models");
-	if (clearBtn) {
-		let armed = false;
-		clearBtn.onclick = () => {
-			if (!armed) {
-				armed = true;
-				clearBtn.textContent = "确认移除？再点一次";
-				setTimeout(() => {
-					armed = false;
-					try {
-						clearBtn.textContent = "移除全部同步模型";
-					} catch {}
-				}, 4e3);
-				return;
-			}
-			const n = removeSyncedModels();
-			renderModelsEditor(doc);
-			fillDebugModelSelect(doc);
-			recalcCostsAndRefresh();
-			if (n) toast("success", `已移除 ${n} 个同步模型价格`);
-		};
-	}
-}
-function modelRow(model, p, isBuiltin, usePeak, synced = false) {
-	const cur = (() => {
-		try {
-			return getDisplayCurrency();
-		} catch {
-			return {
-				code: "CNY",
-				symbol: "¥",
-				rate: 1
-			};
-		}
-	})();
-	const toDisplay = (v) => {
-		if (v === "" || v == null) return "";
-		const num = parseFloat(String(v));
-		if (!isFinite(num)) return String(v);
-		const d = cur.code === "USD" ? num / cur.rate : num;
-		return String(Math.round(d * 1e4) / 1e4);
-	};
-	const hit = (v) => v !== void 0 && v !== "" ? toDisplay(v) : "";
-	return `<div data-model="${esc(model)}" data-builtin="${isBuiltin ? "1" : "0"}" data-synced="${synced ? "1" : "0"}" style="border-radius:10px;padding:10px;background:var(--ds-card-inner);display:grid;gap:8px;">
-    <div style="display:flex;align-items:center;gap:8px;">
-      <input value="${esc(model)}" ${isBuiltin ? "readonly" : ""} style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:${isBuiltin ? "var(--ds-sidebar-bg)" : "var(--ds-card-inner)"};font-size:var(--aus-fs-base);" />
-      ${synced ? "<span title=\"来自 models.dev 自动同步\" style=\"flex-shrink:0;padding:2px 8px;border-radius:999px;background:var(--ds-green-bg);color:var(--ds-green);font-size:var(--aus-fs-sm);font-weight:600;\">已同步</span>" : ""}
-      <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" class="aus-cm-peak aus-checkbox" ${usePeak ? "checked" : ""} /> 峰谷</label>
-      ${isBuiltin ? "" : "<button data-del=\"1\" style=\"padding:4px 8px;border:1px solid var(--ds-red-border);border-radius:6px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;\">删除</button>"}
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-      <div style="background:var(--ds-sidebar-bg);border-radius:8px;padding:8px;display:grid;gap:6px;">
-        <div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-green);">非峰</div>
-        ${field("offpeak.hit", hit(p.offpeak.hit))}${field("offpeak.miss", hit(p.offpeak.miss))}${field("offpeak.output", hit(p.offpeak.output))}
-      </div>
-      <div style="background:var(--ds-card-inner);border-radius:8px;padding:8px;display:grid;gap:6px;${usePeak ? "" : "opacity:0.45;pointer-events:none;"}">
-        <div style="font-size:var(--aus-fs-sm);font-weight:600;color:#D97706;">高峰</div>
-        ${field("peak.hit", hit(p.peak.hit))}${field("peak.miss", hit(p.peak.miss))}${field("peak.output", hit(p.peak.output))}
-      </div>
-    </div>
-    <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">单位：${cur.code}/百万 tokens（${cur.symbol}）· ${synced ? "同步模型：手动改价后转为自定义模型" : "内置模型不可删除，价格可覆盖"}</div>
-  </div>`;
-}
-function field(key, val) {
-	return `<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);width:44px;">${key.endsWith(".hit") ? "命中" : key.endsWith(".miss") ? "未命中" : "输出"}</span><input type="number" step="0.001" min="0" data-price="${key}" value="${esc(val)}" style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div>`;
-}
-function readRow(row) {
-	const out = {
-		usePeakPricing: row.querySelector(".aus-cm-peak")?.checked ?? true,
-		offpeak: {},
-		peak: {}
-	};
-	const cur = (() => {
-		try {
-			return getDisplayCurrency();
-		} catch {
-			return {
-				code: "CNY",
-				rate: 1
-			};
-		}
-	})();
-	row.querySelectorAll("input[data-price]").forEach((el) => {
-		const k = el.getAttribute("data-price");
-		const v = el.value.trim();
-		if (v === "") return;
-		const num = parseFloat(v);
-		if (isNaN(num)) return;
-		const cny = cur.code === "USD" ? Math.round(num * cur.rate * 1e4) / 1e4 : num;
-		const [zone, field] = k.split(".");
-		out[zone][field] = cny;
-	});
-	return out;
-}
-function upsertCustom(model, patch) {
-	const cms = state$2.settings.customModels;
-	let found = cms.find((c) => c.model === model);
-	if (found) {
-		Object.assign(found, patch);
-		delete found.synced;
-	} else cms.push({
-		model,
-		usePeakPricing: patch.usePeakPricing,
-		offpeak: {},
-		peak: {}
-	});
-}
-/**
-* 清空全部自定义模型与覆盖价格（含 models.dev 同步项）。
-* 仅清空 settings.customModels —— 脚本内置的 PRICING / PRICE_HISTORY 完全不动，
-* 因此未外显模型（如已下架/旧键）以及过去/现在/未来的多段计价规则都照常生效。
-*/
-function clearAllCustomModels() {
-	const n = (state$2.settings.customModels || []).length;
-	state$2.settings.customModels = [];
-	const ps = state$2.settings.pricingSync;
-	if (ps) ps.showSyncedModels = false;
-	saveHot({ settings: state$2.settings });
-	return n;
-}
-function saveCustomRow(model, prices, isBuiltin) {
-	const base = PRICING[model];
-	let same = true;
-	for (const f of [
-		"hit",
-		"miss",
-		"output"
-	]) {
-		if (prices.offpeak[f] !== void 0 && prices.offpeak[f] !== base?.offpeak?.[f]) same = false;
-		if (prices.peak[f] !== void 0 && prices.peak[f] !== base?.peak?.[f]) same = false;
-	}
-	const cms = state$2.settings.customModels;
-	const idx = cms.findIndex((c) => c.model === model);
-	if (isBuiltin && prices.usePeakPricing && same) {
-		if (idx !== -1) cms.splice(idx, 1);
-	} else {
-		const entry = {
-			model,
-			usePeakPricing: prices.usePeakPricing,
-			offpeak: prices.offpeak,
-			peak: prices.peak
-		};
-		if (idx !== -1) cms[idx] = entry;
-		else cms.push(entry);
-	}
-	saveHot({ settings: state$2.settings });
-	recalcCostsAndRefresh();
-}
-function getPricing(model) {
-	const m = model || "deepseek-flash";
-	try {
-		return getPricing$1(m, state$2.settings);
-	} catch {
-		return PRICING[m] || PRICING["deepseek-v4-flash"];
-	}
-}
-function fillDebugModelSelect(doc) {
-	const sel = doc.getElementById("aus-debug-model");
-	if (!sel) return;
-	const models = Object.keys(PRICING).concat((state$2.settings.customModels || []).filter((c) => !isSyncedCustomModel(c)).map((c) => c.model).filter(Boolean)).concat(repository.getWallets().flatMap((wallet) => wallet.models.map((model) => model.model)).filter(Boolean)).filter((m) => HIDDEN_PRICING_MODELS.indexOf(m) === -1);
-	const uniq = Array.from(new Set(models));
-	sel.innerHTML = uniq.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
-	const cur = state$2.settings.debugModel;
-	if (uniq.indexOf(cur) === -1) {
-		state$2.settings.debugModel = uniq[0] || "deepseek-flash";
-		try {
-			saveHot({ settings: state$2.settings });
-		} catch {}
-	}
-	sel.value = state$2.settings.debugModel;
-}
-//#endregion
 //#region src/ui/compare.ts
 var selOld = null;
 var selNew = null;
@@ -3208,7 +316,7 @@ function diffMessages(oldMsgs, newMsgs) {
 	while (i < a.length && i < b.length && a[i] === b[i]) i++;
 	if (i === a.length && i === b.length) return "<span style=\"color:var(--ds-text-2);\">两条请求完全一致（缓存命中段完整）</span>";
 	const ctx = 80;
-	return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${esc$2(a.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-red-bg);color:var(--ds-red);padding:0 2px;border-radius:3px;\">" + esc$2(a.slice(i, i + 200)) + "</span>" + esc$2(a.slice(i + 200, i + 280))}</div><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${esc$2(b.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-green-bg);color:var(--ds-green);padding:0 2px;border-radius:3px;\">" + esc$2(b.slice(i, i + 200)) + "</span>" + esc$2(b.slice(i + 200, i + 280))}</div></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
+	return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${esc(a.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-red-bg);color:var(--ds-red);padding:0 2px;border-radius:3px;\">" + esc(a.slice(i, i + 200)) + "</span>" + esc(a.slice(i + 200, i + 280))}</div><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${esc(b.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-green-bg);color:var(--ds-green);padding:0 2px;border-radius:3px;\">" + esc(b.slice(i, i + 200)) + "</span>" + esc(b.slice(i + 200, i + 280))}</div></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
 }
 function bindHistoryCompare() {
 	const doc = getDoc$11();
@@ -3975,7 +1083,7 @@ function filterStatsHistory(entries, filter = {}) {
 	return (entries || []).filter((entry) => {
 		if (!entry) return false;
 		if (filter.start || filter.end) {
-			const day = localDay$1(entry.timestamp);
+			const day = localDay(entry.timestamp);
 			if (filter.start && day < filter.start) return false;
 			if (filter.end && day > filter.end) return false;
 		}
@@ -4594,7 +1702,7 @@ function renderChatSummaryTable(doc, rows) {
 		} catch {}
 		return [
 			"<tr style=\"border-bottom:1px solid var(--ds-card);\">",
-			"<td style=\"padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;\" title=\"" + esc$2(r.chatId || "null") + "\">" + esc$2(r.displayName) + "</td>",
+			"<td style=\"padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;\" title=\"" + esc(r.chatId || "null") + "\">" + esc(r.displayName) + "</td>",
 			"<td style=\"padding:6px 8px;text-align:right;\">" + r.count + "</td>",
 			"<td style=\"padding:6px 8px;text-align:right;color:#0BA25E;\">" + r.hit.toLocaleString("zh-CN") + "</td>",
 			"<td style=\"padding:6px 8px;text-align:right;color:#DC2626;\">" + r.miss.toLocaleString("zh-CN") + "</td>",
@@ -4634,12 +1742,12 @@ function renderHeatmap(filtered) {
 	}
 	const dayMap = {};
 	for (const h of filtered) {
-		const k = localDay$1(h.timestamp);
+		const k = localDay(h.timestamp);
 		dayMap[k] = (dayMap[k] || 0) + (h.total_tokens || 0);
 	}
 	const keys = Object.keys(dayMap).sort();
 	const isDark = themeIsDark();
-	const endStr = localDay$1((/* @__PURE__ */ new Date()).getTime());
+	const endStr = localDay((/* @__PURE__ */ new Date()).getTime());
 	const endDate = /* @__PURE__ */ new Date(endStr + "T00:00:00");
 	let startDate = new Date(endDate);
 	startDate.setFullYear(startDate.getFullYear() - 2);
@@ -4747,7 +1855,7 @@ function renderHeatmap(filtered) {
 		for (let w = 0; w < totalWeeks; w++) {
 			const cd = new Date(startDate);
 			cd.setDate(startDate.getDate() + w * 7 + d);
-			const t = dayMap[localDay$1(cd.getTime())] || 0;
+			const t = dayMap[localDay(cd.getTime())] || 0;
 			const lv = getLevel(t);
 			const weekday = [
 				"周日",
@@ -5101,7 +2209,7 @@ function renderOverview(fullHistory) {
 	if (walletDrop) {
 		const item = (id, label) => {
 			const active = id === activeWalletId;
-			return `<div data-overview-wallet="${esc$2(id)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-sm);${active ? "background:var(--ds-card);font-weight:600;" : ""}">${esc$2(label)}</div>`;
+			return `<div data-overview-wallet="${esc(id)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-sm);${active ? "background:var(--ds-card);font-weight:600;" : ""}">${esc(label)}</div>`;
 		};
 		walletDrop.innerHTML = item("all", "全部钱包合计") + wallets.map((wallet) => item(wallet.id, wallet.name)).join("");
 		walletDrop.querySelectorAll("[data-overview-wallet]").forEach((el) => {
@@ -5818,10 +2926,10 @@ function toMonthKey(ts) {
 function getBucketKey(e, x, idx) {
 	if (x === "round") return `#${idx + 1}`;
 	if (x === "hour") return toHourKey(e.timestamp);
-	if (x === "day") return localDay$1(e.timestamp);
+	if (x === "day") return localDay(e.timestamp);
 	if (x === "week") return toWeekKey(e.timestamp);
 	if (x === "month") return toMonthKey(e.timestamp);
-	return localDay$1(e.timestamp);
+	return localDay(e.timestamp);
 }
 /** 单条记录对应的数值（比率类返回 0-100） */
 function getYValue$1(e, y) {
@@ -6376,7 +3484,7 @@ function bucketKey$1(ts, x, idx) {
 		const d = new Date(ts);
 		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:00`;
 	}
-	if (x === "day") return localDay$1(ts);
+	if (x === "day") return localDay(ts);
 	if (x === "week") {
 		const d = new Date(ts);
 		const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -6390,7 +3498,7 @@ function bucketKey$1(ts, x, idx) {
 		const d = new Date(ts);
 		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 	}
-	return localDay$1(ts);
+	return localDay(ts);
 }
 function getYValue(e, key) {
 	switch (key) {
@@ -6537,7 +3645,7 @@ async function renderOne$1(id, filtered) {
 						let html = `<div style="display:flex;align-items:center;gap:6px;font-weight:600;margin-bottom:4px;">${p.marker || ""}${p.name}</div>`;
 						html += `<div style="display:flex;gap:16px;"><span>用量</span><span style="margin-left:auto;font-weight:600;">${val}</span></div>`;
 						html += `<div style="display:flex;gap:16px;"><span>占比</span><span style="margin-left:auto;font-weight:600;">${pct} %</span></div>`;
-						if (others.length && String(p.name || "").startsWith("其他")) html += `<div style="margin-top:4px;font-size:11px;color:${themeColor$3("--ds-text-3", "#9CA3AF")};max-width:220px;white-space:normal;">含 ${others.map((n) => esc$2(n)).join("、")}</div>`;
+						if (others.length && String(p.name || "").startsWith("其他")) html += `<div style="margin-top:4px;font-size:11px;color:${themeColor$3("--ds-text-3", "#9CA3AF")};max-width:220px;white-space:normal;">含 ${others.map((n) => esc(n)).join("、")}</div>`;
 						if (range) html += `<div style="margin-top:4px;font-size:11px;color:#9CA3AF;">时间范围 ${range}</div>`;
 						return `<div style="padding:2px 2px;min-width:170px;">${html}</div>`;
 					}
@@ -7091,7 +4199,7 @@ function bucketKey(ts, x, idx) {
 		const d = new Date(ts);
 		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:00`;
 	}
-	if (x === "day") return localDay$1(ts);
+	if (x === "day") return localDay(ts);
 	if (x === "week") {
 		const d = new Date(ts);
 		const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -7105,7 +4213,7 @@ function bucketKey(ts, x, idx) {
 		const d = new Date(ts);
 		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 	}
-	return localDay$1(ts);
+	return localDay(ts);
 }
 async function getEcharts() {
 	const ec = await import("./core-fg_o3xmJ.js");
@@ -7245,10 +4353,10 @@ async function renderOne(id, filtered) {
 					const label = labels[idx];
 					let sum = 0;
 					for (const p of params) sum += Number(p.value || 0);
-					let html = `<div style="font-weight:600;margin-bottom:6px;">${esc$2(label)}<span style="margin-left:8px;color:var(--ds-text-2);font-weight:400;">合计 ${id === "token" ? sum.toLocaleString() + " tokens" : sum + " 次"}</span></div>`;
+					let html = `<div style="font-weight:600;margin-bottom:6px;">${esc(label)}<span style="margin-left:8px;color:var(--ds-text-2);font-weight:400;">合计 ${id === "token" ? sum.toLocaleString() + " tokens" : sum + " 次"}</span></div>`;
 					for (const p of params) {
 						if (Number(p.value) === 0) continue;
-						html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${esc$2(p.seriesName)}<span style="margin-left:auto;font-weight:600;">${id === "token" ? Number(p.value).toLocaleString() + " tokens" : p.value + " 次"}</span></div>`;
+						html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${esc(p.seriesName)}<span style="margin-left:auto;font-weight:600;">${id === "token" ? Number(p.value).toLocaleString() + " tokens" : p.value + " 次"}</span></div>`;
 					}
 					if (!params.some((p) => Number(p.value) > 0)) html += `<div style="color:var(--ds-text-3);font-size:var(--aus-fs-sm);">本${xKey === "day" ? "日" : xKey === "hour" ? "时段" : xKey === "week" ? "周" : xKey === "month" ? "月" : "轮次"}无数据</div>`;
 					return `<div style="padding:4px 2px;min-width:180px;max-width:280px;">${html}</div>`;
@@ -7615,9 +4723,9 @@ function themeColor$1(name, fallback) {
 	}
 }
 function getRangeDates() {
-	const today = localDay$1(Date.now());
+	const today = localDay(Date.now());
 	const d = /* @__PURE__ */ new Date(today + "T00:00:00");
-	const fmt = (x) => localDay$1(x.getTime());
+	const fmt = (x) => localDay(x.getTime());
 	switch (currentRange) {
 		case "today": return {
 			start: today,
@@ -7741,7 +4849,7 @@ function renderCalendar() {
 	if (!cal) return;
 	updateRangeHighlight();
 	if (currentRange !== "custom") return;
-	const todayStr = localDay$1(Date.now());
+	const todayStr = localDay(Date.now());
 	if (!customStart) customStart = todayStr;
 	if (!customEnd) customEnd = todayStr;
 	cal.innerHTML = `<div style="padding:12px;min-width:260px;display:grid;gap:10px;">
@@ -7801,7 +4909,7 @@ function renderModelPicker(modelsHist) {
 	let html = `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${allSelected ? "background:var(--ds-card);font-weight:600;" : ""}"><input type="checkbox" data-model-all ${allSelected ? "checked" : ""} class="aus-checkbox" /><span>全部模型</span></label>`;
 	for (const m of models) {
 		const checked = selectedModels.includes(m);
-		html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${checked ? "background:var(--ds-card);font-weight:600;" : ""}"><input type="checkbox" data-model="${esc$2(m)}" ${checked ? "checked" : ""} class="aus-checkbox" /><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$2(m)}</span></label>`;
+		html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${checked ? "background:var(--ds-card);font-weight:600;" : ""}"><input type="checkbox" data-model="${esc(m)}" ${checked ? "checked" : ""} class="aus-checkbox" /><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m)}</span></label>`;
 	}
 	if (!models.length) html += "<div style=\"padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">暂无模型</div>";
 	dropdown.innerHTML = html;
@@ -7834,7 +4942,7 @@ function renderChatPicker(chatHist) {
 	for (const c of list) {
 		const key = c.chatId ?? "__null__";
 		const active = key === selectedChat ? "background:var(--ds-card);font-weight:600;" : "";
-		html += `<div data-chat="${esc$2(key)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}" title="${esc$2(c.chatId || "")}">${esc$2(c.displayName)}</div>`;
+		html += `<div data-chat="${esc(key)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}" title="${esc(c.chatId || "")}">${esc(c.displayName)}</div>`;
 	}
 	if (!list.length) html += "<div style=\"padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">暂无对话</div>";
 	dropdown.innerHTML = html;
@@ -7859,7 +4967,7 @@ function renderEndpointPicker(history) {
 	label.title = label.textContent;
 	const optionHtml = (id, text, title) => {
 		const active = id === selectedEndpoint ? "background:var(--ds-card);font-weight:600;" : "";
-		return `<div data-endpoint="${esc$2(id)}" title="${esc$2(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${esc$2(text)}</div>`;
+		return `<div data-endpoint="${esc(id)}" title="${esc(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${esc(text)}</div>`;
 	};
 	let html = optionHtml(STATS_FILTER_ALL, "全部", "全部");
 	for (const option of options) html += optionHtml(option.id, option.label, option.label);
@@ -7886,7 +4994,7 @@ function renderCredentialPicker$1(history, endpoint = selectedEndpoint) {
 	label.title = label.textContent;
 	const optionHtml = (id, text, title) => {
 		const active = id === selectedCredential ? "background:var(--ds-card);font-weight:600;" : "";
-		return `<div data-credential="${esc$2(id)}" title="${esc$2(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${esc$2(text)}</div>`;
+		return `<div data-credential="${esc(id)}" title="${esc(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${esc(text)}</div>`;
 	};
 	let html = optionHtml(STATS_FILTER_ALL, "全部", "全部");
 	for (const option of options) html += optionHtml(option.id, option.label, option.label);
@@ -8477,7 +5585,7 @@ async function renderChart(filteredRaw) {
 				if (!params?.length) return "";
 				const idx = params[0].dataIndex;
 				const label = tips[idx] || labels[idx];
-				let html = `<div style="font-weight:600;margin-bottom:6px;">${esc$2(label)}</div>`;
+				let html = `<div style="font-weight:600;margin-bottom:6px;">${esc(label)}</div>`;
 				for (const p of sortTooltipParams(params)) {
 					const v = p.value;
 					const meta = Y_OPTIONS.find((o) => o.label === p.seriesName);
@@ -8489,7 +5597,7 @@ async function renderChart(filteredRaw) {
 					else if (kind === "rate") disp = Math.round(Number(v)) + " t/s";
 					else if (kind === "count") disp = Number(v).toLocaleString() + " 次";
 					else disp = Number(v).toLocaleString() + " " + (meta?.unit || "");
-					html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${esc$2(p.seriesName)}<span style="margin-left:auto;font-weight:600;">${disp}</span></div>`;
+					html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${esc(p.seriesName)}<span style="margin-left:auto;font-weight:600;">${disp}</span></div>`;
 				}
 				return `<div style="padding:4px 2px;min-width:180px;">${html}</div>`;
 			}
@@ -8640,7 +5748,7 @@ function renderModelSummary(filtered) {
 		}
 	};
 	tbody.innerHTML = list.map((r) => {
-		return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc$2(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${fmtC(r.cost)}</td><td style="padding:6px 8px;text-align:right;">${fmtC(r.avgCost)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
+		return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${fmtC(r.cost)}</td><td style="padding:6px 8px;text-align:right;">${fmtC(r.avgCost)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
 	}).join("");
 }
 var cachedAllHistory = null;
@@ -10182,7 +7290,7 @@ function resolvePriceContext(history, model) {
 	if (!latest && !history.length) return null;
 	const wallet = findWalletForHistory(state$2.wallets || [], latest || history[history.length - 1] || {});
 	const walletModel = findWalletModel(wallet, model);
-	const pricing = getPricing$1(model, state$2.settings, wallet);
+	const pricing = getPricing(model, state$2.settings, wallet);
 	const pending = pricing?.pending === true;
 	const avgInterval = averageIntervalMs(history);
 	const nextTs = latest?.timestamp ? Number(latest.timestamp) + avgInterval : Date.now();
@@ -10270,9 +7378,9 @@ function bindGlobalClose() {
 	} catch {}
 }
 function dropdownItem(attr, value, label, active, meta = "") {
-	return `<div class="aus-forecast-dropdown-item${active ? " is-active" : ""}" ${attr}="${esc$2(value)}" title="${esc$2(label)}">
-    <span class="aus-forecast-dropdown-label">${esc$2(label)}</span>
-    ${meta ? `<span class="aus-forecast-dropdown-meta">${esc$2(meta)}</span>` : ""}
+	return `<div class="aus-forecast-dropdown-item${active ? " is-active" : ""}" ${attr}="${esc(value)}" title="${esc(label)}">
+    <span class="aus-forecast-dropdown-label">${esc(label)}</span>
+    ${meta ? `<span class="aus-forecast-dropdown-meta">${esc(meta)}</span>` : ""}
   </div>`;
 }
 function renderChatDropdown(fullHist) {
@@ -10346,7 +7454,7 @@ function renderHitControl(fullHist, model, series, globalRate, modelRate) {
     <div class="aus-forecast-picker" style="position:relative;">
       <div id="aus-forecast-hit-btn" class="aus-forecast-pill" title="该对话没有缓存命中数据，可选择平均命中率">
         <span class="aus-forecast-pill-label">平均命中率</span>
-        <span class="aus-forecast-pill-value">${esc$2(hitModeLabel(hitMode, globalRate, modelRate))}</span>
+        <span class="aus-forecast-pill-value">${esc(hitModeLabel(hitMode, globalRate, modelRate))}</span>
         ${icon("chevron-down", 14)}
       </div>
       <div id="aus-forecast-hit-dropdown" class="aus-forecast-dropdown"></div>
@@ -10453,8 +7561,8 @@ function renderToolbar(fullHist, effective, modelOptions, model, priceContext, s
 	}
 }
 function kpiCard(label, value, sub, tone = "default", title = "") {
-	return `<div class="ds-card aus-forecast-kpi aus-forecast-kpi-${tone}"${title ? ` title="${esc$2(title)}"` : ""}>
-    <div class="aus-forecast-kpi-label">${esc$2(label)}</div>
+	return `<div class="ds-card aus-forecast-kpi aus-forecast-kpi-${tone}"${title ? ` title="${esc(title)}"` : ""}>
+    <div class="aus-forecast-kpi-label">${esc(label)}</div>
     <div class="aus-forecast-kpi-value">${value}</div>
     <div class="aus-forecast-kpi-sub">${sub}</div>
   </div>`;
@@ -10529,7 +7637,7 @@ function renderHealth(history, model) {
       <div><span>截断</span><b>${pct(metrics.truncRate)}</b></div>
       <div><span>思维链</span><b>${pct(metrics.thinkRatio)}</b></div>
     </div>
-    <div class="aus-forecast-health-foot">样本 ${history.length} 轮 · ${esc$2(model || "—")} · ${esc$2(getForecastLabel(lastFullHistory))}</div>
+    <div class="aus-forecast-health-foot">样本 ${history.length} 轮 · ${esc(model || "—")} · ${esc(getForecastLabel(lastFullHistory))}</div>
   `;
 }
 function renderCompaction(series, options) {
@@ -10635,8 +7743,8 @@ function renderEfficiency(history, scopeLabel) {
 		const avg = row.avgCost == null ? "—" : formatCost(row.avgCost, 4);
 		const ratio = row.ioRatio == null ? "—" : `${row.ioRatio.toFixed(1)} : 1`;
 		const selectable = selectableModels.has(row.model);
-		return `<tr class="aus-forecast-eff-row${row.model === selectedForecastModel ? " is-selected" : ""}" data-eff-model="${esc$2(row.model)}" title="${selectable ? "点击切换为计价模型" : "该模型不在当前对话中，仅作全量对比"}">
-      <td><div class="aus-forecast-eff-model"><span>${esc$2(row.model)}</span>${isBest ? "<span class=\"aus-forecast-eff-best\">最省</span>" : ""}</div></td>
+		return `<tr class="aus-forecast-eff-row${row.model === selectedForecastModel ? " is-selected" : ""}" data-eff-model="${esc(row.model)}" title="${selectable ? "点击切换为计价模型" : "该模型不在当前对话中，仅作全量对比"}">
+      <td><div class="aus-forecast-eff-model"><span>${esc(row.model)}</span>${isBest ? "<span class=\"aus-forecast-eff-best\">最省</span>" : ""}</div></td>
       <td>${row.rounds}</td>
       <td>${ratio}</td>
       <td><div class="aus-forecast-eff-cost"><span>${cost}</span><span class="aus-forecast-eff-bar"><i style="width:${width}%"></i></span></div></td>
@@ -10729,7 +7837,7 @@ function renderTop(fullHist) {
 		const avgCost = entries.length ? entries.reduce((sum, entry) => sum + (Number(entry.cost) || 0), 0) / entries.length : 0;
 		const pctWidth = Math.max(4, Math.min(100, row.delta / Math.max(1, list[0].delta) * 100));
 		return `<div class="aus-forecast-top-row">
-      <span class="aus-forecast-top-name" title="${esc$2(row.chatId || "未分组/旧数据")}">${esc$2(name)}</span>
+      <span class="aus-forecast-top-name" title="${esc(row.chatId || "未分组/旧数据")}">${esc(name)}</span>
       <span class="aus-forecast-grade aus-forecast-grade-sm" style="background:${colors[row.grade] || "#9CA3AF"};">${row.grade}</span>
       <span class="aus-forecast-top-bar"><span style="width:${pctWidth}%"></span></span>
       <span class="aus-forecast-top-delta">${compactTok(row.delta)} tok/轮</span>
@@ -10746,13 +7854,13 @@ function clearCharts(message) {
 		"aus-forecast-cost-chart"
 	]) {
 		const el = doc.getElementById(id);
-		if (el) el.innerHTML = `<div class="aus-forecast-chart-empty">${esc$2(message)}</div>`;
+		if (el) el.innerHTML = `<div class="aus-forecast-chart-empty">${esc(message)}</div>`;
 	}
 }
 function renderNoticeCards(message) {
 	const doc = getDoc$4();
 	const kpis = doc.getElementById("aus-forecast-kpis");
-	if (kpis) kpis.innerHTML = `<div class="ds-card aus-forecast-notice">${esc$2(message)}</div>`;
+	if (kpis) kpis.innerHTML = `<div class="ds-card aus-forecast-notice">${esc(message)}</div>`;
 	const health = doc.getElementById("aus-forecast-health");
 	if (health) health.innerHTML = "<div class=\"aus-forecast-empty\">需要单个对话的逐轮数据</div>";
 	const compaction = doc.getElementById("aus-forecast-compaction");
@@ -10976,7 +8084,7 @@ async function openWalletSyncPreview(options = {}) {
 	try {
 		catalog = await fetchModelsDevCatalog();
 	} catch (error) {
-		body.innerHTML = "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-red);\">价格目录拉取失败：" + esc$2(error?.message || error) + "</div>";
+		body.innerHTML = "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-red);\">价格目录拉取失败：" + esc(error?.message || error) + "</div>";
 		return;
 	}
 	wallet && resolveVendor({
@@ -11002,10 +8110,10 @@ async function openWalletSyncPreview(options = {}) {
 			return (row.localModel + " " + (row.catalogModel || "")).toLowerCase().includes(keyword.toLowerCase());
 		});
 		const actionable = plan.rows.filter((row) => row.changed && !row.ambiguous);
-		const head = "<div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:8px;\"><div style=\"display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);\">" + (providerVendor ? "<span style=\"width:18px;height:18px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;background:" + providerVendor.color + ";color:#fff;font-size:10px;font-weight:700;\">" + (vendorIconSvg(providerVendor.id, 12) || esc$2(providerVendor.mark)) + "</span>" : "") + "供应商 <b style=\"color:var(--ds-text);\">" + esc$2(plan.providerLabel || "未选择") + "</b></div><div style=\"display:flex;gap:4px;margin-left:auto;\">" + MODE_LABELS.map((item) => "<button data-sync-mode=\"" + item.id + "\" style=\"padding:5px 10px;border:1px solid " + (mode === item.id ? "var(--ds-black)" : "var(--ds-border)") + ";border-radius:999px;background:" + (mode === item.id ? "var(--ds-black)" : "var(--ds-card)") + ";color:" + (mode === item.id ? "var(--ds-black-text)" : "var(--ds-text)") + ";font-size:var(--aus-fs-sm);cursor:pointer;\">" + item.label + "</button>").join("") + "</div></div><div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:8px;\"><input data-sync-search=\"1\" value=\"" + esc$2(keyword) + "\" placeholder=\"搜索模型\" style=\"flex:1;min-width:140px;padding:6px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card);color:var(--ds-text);font-size:var(--aus-fs-sm);\" /><label style=\"display:flex;align-items:center;gap:5px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;\"><input type=\"checkbox\" class=\"aus-checkbox\" data-sync-only-changed=\"1\" " + (onlyChanged ? "checked" : "") + " /> 仅看变化</label></div><div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);line-height:1.7;\">按钱包里已识别的模型名，在目录中用模糊匹配找到对应价格后写入该模型（不会新增模型）。 匹配 " + plan.summary.matched + " · 精确 " + plan.summary.exact + " · 模糊 " + plan.summary.fuzzy + (plan.summary.ambiguous ? " · 歧义 " + plan.summary.ambiguous : "") + " · 未匹配 " + plan.summary.unmatched + " · 单位 " + getDisplayCurrency().code + "/百万 tokens</div>";
+		const head = "<div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:8px;\"><div style=\"display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);\">" + (providerVendor ? "<span style=\"width:18px;height:18px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;background:" + providerVendor.color + ";color:#fff;font-size:10px;font-weight:700;\">" + (vendorIconSvg(providerVendor.id, 12) || esc(providerVendor.mark)) + "</span>" : "") + "供应商 <b style=\"color:var(--ds-text);\">" + esc(plan.providerLabel || "未选择") + "</b></div><div style=\"display:flex;gap:4px;margin-left:auto;\">" + MODE_LABELS.map((item) => "<button data-sync-mode=\"" + item.id + "\" style=\"padding:5px 10px;border:1px solid " + (mode === item.id ? "var(--ds-black)" : "var(--ds-border)") + ";border-radius:999px;background:" + (mode === item.id ? "var(--ds-black)" : "var(--ds-card)") + ";color:" + (mode === item.id ? "var(--ds-black-text)" : "var(--ds-text)") + ";font-size:var(--aus-fs-sm);cursor:pointer;\">" + item.label + "</button>").join("") + "</div></div><div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:8px;\"><input data-sync-search=\"1\" value=\"" + esc(keyword) + "\" placeholder=\"搜索模型\" style=\"flex:1;min-width:140px;padding:6px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card);color:var(--ds-text);font-size:var(--aus-fs-sm);\" /><label style=\"display:flex;align-items:center;gap:5px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;\"><input type=\"checkbox\" class=\"aus-checkbox\" data-sync-only-changed=\"1\" " + (onlyChanged ? "checked" : "") + " /> 仅看变化</label></div><div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);line-height:1.7;\">按钱包里已识别的模型名，在目录中用模糊匹配找到对应价格后写入该模型（不会新增模型）。 匹配 " + plan.summary.matched + " · 精确 " + plan.summary.exact + " · 模糊 " + plan.summary.fuzzy + (plan.summary.ambiguous ? " · 歧义 " + plan.summary.ambiguous : "") + " · 未匹配 " + plan.summary.unmatched + " · 单位 " + getDisplayCurrency().code + "/百万 tokens</div>";
 		const table = rows.length ? "<div style=\"width:100%;overflow:auto;border-radius:10px;\"><table style=\"width:100%;min-width:720px;border-collapse:collapse;font-size:var(--aus-fs-sm);\"><thead><tr style=\"text-align:left;color:var(--ds-text-2);background:var(--ds-card);\"><th style=\"padding:6px;\">选</th><th style=\"padding:6px;\">钱包模型</th><th style=\"padding:6px;\">匹配</th><th style=\"padding:6px;\">目录模型</th><th style=\"padding:6px;\">价格（命中/未命中/输出）</th><th style=\"padding:6px;\">动作</th></tr></thead><tbody>" + rows.map((row) => {
 			const checked = selected.has(row.key);
-			return "<tr style=\"border-top:1px solid var(--ds-border);\"><td style=\"padding:6px;\"><input type=\"checkbox\" class=\"aus-checkbox\" data-sync-row=\"" + esc$2(row.key) + "\" " + (checked ? "checked" : "") + " " + (row.changed ? "" : "disabled") + " /></td><td style=\"padding:6px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\" title=\"" + esc$2(row.localModel) + "\">" + esc$2(row.localModel) + "</td><td style=\"padding:6px;white-space:nowrap;\">" + scoreLabel(row) + "</td><td style=\"padding:6px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ds-text-2);\" title=\"" + esc$2(row.catalogModel || "") + "\">" + esc$2(row.catalogModel || "—") + "</td><td style=\"padding:6px;white-space:nowrap;\">" + tierText(row) + "</td><td style=\"padding:6px;white-space:nowrap;\">" + actionLabel(row) + "</td></tr>";
+			return "<tr style=\"border-top:1px solid var(--ds-border);\"><td style=\"padding:6px;\"><input type=\"checkbox\" class=\"aus-checkbox\" data-sync-row=\"" + esc(row.key) + "\" " + (checked ? "checked" : "") + " " + (row.changed ? "" : "disabled") + " /></td><td style=\"padding:6px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\" title=\"" + esc(row.localModel) + "\">" + esc(row.localModel) + "</td><td style=\"padding:6px;white-space:nowrap;\">" + scoreLabel(row) + "</td><td style=\"padding:6px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ds-text-2);\" title=\"" + esc(row.catalogModel || "") + "\">" + esc(row.catalogModel || "—") + "</td><td style=\"padding:6px;white-space:nowrap;\">" + tierText(row) + "</td><td style=\"padding:6px;white-space:nowrap;\">" + actionLabel(row) + "</td></tr>";
 		}).join("") + "</tbody></table></div>" : "<div style=\"padding:14px;text-align:center;color:var(--ds-text-3);font-size:var(--aus-fs-sm);\">" + (onlyChanged ? "没有需要变化的价格（可关闭「仅看变化」查看全部）" : "没有可展示的模型") + "</div>";
 		const footer = "<div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:8px;\"><div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">已选 " + selected.size + " / 可写入 " + actionable.length + "</div><div style=\"margin-left:auto;display:flex;gap:8px;\"><button data-sync-cancel=\"1\" style=\"padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;\">取消</button><button data-sync-apply=\"1\" style=\"padding:6px 14px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;\">应用所选</button></div></div>";
 		body.innerHTML = head + table + footer;
@@ -11252,13 +8360,13 @@ function renderRemote(wallet) {
 		const ratio = item.used != null && item.limit ? Math.min(1, item.used / item.limit) : 0;
 		const percent = Math.round(ratio * 100);
 		const left = item.remaining != null ? formatPlanUnit(item.remaining, item.unit === "percent" ? "percent" : item.unit === "count" ? "count" : item.unit) : formatPlanUnit(Math.max(0, 100 - percent), "percent");
-		return "<div style=\"display:grid;gap:4px;\"><div style=\"display:flex;justify-content:space-between;gap:8px;font-size:var(--aus-fs-sm);\"><span style=\"color:var(--ds-text-2);\">" + esc$2(item.label) + "</span><span style=\"color:" + ratioColor(ratio) + ";font-weight:600;\">已用 " + percent + "% · 剩余 " + esc$2(left) + "</span></div>" + bar(ratio, ratioColor(ratio)) + "<div style=\"font-size:var(--aus-fs-xs,11px);color:var(--ds-text-3);\">厂商返回 · " + esc$2(resetLabel({
+		return "<div style=\"display:grid;gap:4px;\"><div style=\"display:flex;justify-content:space-between;gap:8px;font-size:var(--aus-fs-sm);\"><span style=\"color:var(--ds-text-2);\">" + esc(item.label) + "</span><span style=\"color:" + ratioColor(ratio) + ";font-weight:600;\">已用 " + percent + "% · 剩余 " + esc(left) + "</span></div>" + bar(ratio, ratioColor(ratio)) + "<div style=\"font-size:var(--aus-fs-xs,11px);color:var(--ds-text-3);\">厂商返回 · " + esc(resetLabel({
 			id: "custom",
 			label: item.label,
 			unit: "token",
 			limit: 0,
 			resetMode: item.resetAt ? "calendar" : "rolling"
-		}, item.resetAt)) + " · 查询于 " + esc$2(item.checkedAt ? new Date(item.checkedAt).toLocaleTimeString("zh-CN") : "—") + "</div></div>";
+		}, item.resetAt)) + " · 查询于 " + esc(item.checkedAt ? new Date(item.checkedAt).toLocaleTimeString("zh-CN") : "—") + "</div></div>";
 	}).join("") + "</div>";
 }
 /** 本地估算（可选，仅作补充） */
@@ -11269,7 +8377,7 @@ function renderLocal(wallet, history) {
 		const window = usage.window;
 		const eta = estimateExhaustion(usage);
 		const hasLimit = usage.limit > 0;
-		return "<div style=\"display:grid;gap:4px;\"><div style=\"display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:space-between;\"><span style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-2);\">" + esc$2(describePlanWindow(window)) + "</span><span style=\"display:flex;align-items:center;gap:4px;font-size:var(--aus-fs-sm);\"><input type=\"number\" min=\"0\" step=\"1000\" data-plan-limit=\"" + index + "\" value=\"" + (window.limit || "") + "\" placeholder=\"额度\" style=\"width:96px;padding:3px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);\" /><span style=\"color:var(--ds-text-3);\">" + esc$2(PLAN_UNIT_LABEL[window.unit]) + "</span><button data-plan-reset=\"" + index + "\" title=\"切换重置方式：滚动窗口 / 自然月\" style=\"padding:2px 7px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;\">" + (window.resetMode === "calendar" ? "自然月" : "滚动") + "</button><button data-plan-remove=\"" + index + "\" title=\"移除该窗口\" style=\"padding:2px 6px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;\">" + icon("close", 12) + "</button></span></div>" + (hasLimit ? bar(usage.ratio, ratioColor(usage.ratio)) : "<div style=\"height:6px;border-radius:999px;background:var(--ds-border);\"></div>") + "<div style=\"font-size:var(--aus-fs-xs,11px);color:var(--ds-text-3);\">本地估算 · 已用 " + esc$2(formatPlanUnit(usage.used, window.unit)) + (hasLimit ? " / " + esc$2(formatPlanUnit(usage.limit, window.unit)) + "（" + Math.round(usage.ratio * 100) + "%）· 剩余 " + esc$2(formatPlanUnit(usage.remaining, window.unit)) : "（填额度后显示比例）") + " · " + resetLabel(window, usage.resetAt) + (eta ? " · 预计 " + esc$2(relativeTime(eta)) + "耗尽" : "") + "</div></div>";
+		return "<div style=\"display:grid;gap:4px;\"><div style=\"display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:space-between;\"><span style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-2);\">" + esc(describePlanWindow(window)) + "</span><span style=\"display:flex;align-items:center;gap:4px;font-size:var(--aus-fs-sm);\"><input type=\"number\" min=\"0\" step=\"1000\" data-plan-limit=\"" + index + "\" value=\"" + (window.limit || "") + "\" placeholder=\"额度\" style=\"width:96px;padding:3px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);\" /><span style=\"color:var(--ds-text-3);\">" + esc(PLAN_UNIT_LABEL[window.unit]) + "</span><button data-plan-reset=\"" + index + "\" title=\"切换重置方式：滚动窗口 / 自然月\" style=\"padding:2px 7px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;\">" + (window.resetMode === "calendar" ? "自然月" : "滚动") + "</button><button data-plan-remove=\"" + index + "\" title=\"移除该窗口\" style=\"padding:2px 6px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;\">" + icon("close", 12) + "</button></span></div>" + (hasLimit ? bar(usage.ratio, ratioColor(usage.ratio)) : "<div style=\"height:6px;border-radius:999px;background:var(--ds-border);\"></div>") + "<div style=\"font-size:var(--aus-fs-xs,11px);color:var(--ds-text-3);\">本地估算 · 已用 " + esc(formatPlanUnit(usage.used, window.unit)) + (hasLimit ? " / " + esc(formatPlanUnit(usage.limit, window.unit)) + "（" + Math.round(usage.ratio * 100) + "%）· 剩余 " + esc(formatPlanUnit(usage.remaining, window.unit)) : "（填额度后显示比例）") + " · " + resetLabel(window, usage.resetAt) + (eta ? " · 预计 " + esc(relativeTime(eta)) + "耗尽" : "") + "</div></div>";
 	}).join("");
 }
 function renderPlanBlock(wallet, history) {
@@ -11279,8 +8387,8 @@ function renderPlanBlock(wallet, history) {
 	plan?.remote;
 	const localEnabled = plan?.enabled === true && (plan?.windows || []).length > 0;
 	const hasKey = !!getWalletApiKey(wallet.id);
-	const header = "<div style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;\"><div><div style=\"font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);\">套餐额度</div><div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">" + esc$2(adapter.label) + " · 仅供展示参考，不参与计费与导出</div></div><div style=\"display:flex;gap:6px;flex-wrap:wrap;\"><button data-plan-query=\"1\" style=\"padding:6px 11px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;display:inline-flex;align-items:center;gap:4px;\">" + icon("refresh", 13) + " 查询额度</button>" + (localEnabled ? "<button data-plan-disable=\"1\" style=\"padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;\">关闭本地估算</button>" : "<button data-plan-enable=\"1\" style=\"padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;\">启用本地估算</button>") + "</div></div>";
-	const error = plan?.remoteError ? "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-red);\">查询失败：" + esc$2(plan.remoteError) + "</div>" : "";
+	const header = "<div style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;\"><div><div style=\"font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);\">套餐额度</div><div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">" + esc(adapter.label) + " · 仅供展示参考，不参与计费与导出</div></div><div style=\"display:flex;gap:6px;flex-wrap:wrap;\"><button data-plan-query=\"1\" style=\"padding:6px 11px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;display:inline-flex;align-items:center;gap:4px;\">" + icon("refresh", 13) + " 查询额度</button>" + (localEnabled ? "<button data-plan-disable=\"1\" style=\"padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;\">关闭本地估算</button>" : "<button data-plan-enable=\"1\" style=\"padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;\">启用本地估算</button>") + "</div></div>";
+	const error = plan?.remoteError ? "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-red);\">查询失败：" + esc(plan.remoteError) + "</div>" : "";
 	const remoteHtml = renderRemote(wallet);
 	const localHtml = localEnabled ? renderLocal(wallet, history) : "";
 	const empty = !remoteHtml && !localHtml ? "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">" + (hasKey ? "点击「查询额度」获取厂商返回的额度与剩余。" : "先在下方填写查询密钥，再点「查询额度」。") + "</div>" : "";
@@ -11421,9 +8529,9 @@ function closeOtherDropdowns(id) {
 }
 function dropdownHtml(walletId, kind, options) {
 	return options.map((option) => `
-    <div data-wallet-select="${esc$2(kind)}" data-wallet-id="${esc$2(walletId)}" data-value="${esc$2(option.id)}"
+    <div data-wallet-select="${esc(kind)}" data-wallet-id="${esc(walletId)}" data-value="${esc(option.id)}"
       style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-sm);${option.active ? "background:var(--ds-card);font-weight:600;" : ""}">
-      ${esc$2(option.label)}
+      ${esc(option.label)}
     </div>
   `).join("");
 }
@@ -11434,8 +8542,8 @@ function sourceLabel(model) {
 	return "待定价";
 }
 function priceField(walletId, modelId, tier, key, value) {
-	return `<input type="number" step="0.000001" min="0" data-wallet-price="1" data-wallet-id="${esc$2(walletId)}"
-    data-model-id="${esc$2(modelId)}" data-tier="${tier}" data-key="${key}" value="${esc$2(cnyToDisplay(value))}"
+	return `<input type="number" step="0.000001" min="0" data-wallet-price="1" data-wallet-id="${esc(walletId)}"
+    data-model-id="${esc(modelId)}" data-tier="${tier}" data-key="${key}" value="${esc(cnyToDisplay(value))}"
     style="width:100%;min-width:72px;padding:5px 6px;border:1px solid var(--ds-border);border-radius:7px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />`;
 }
 function renderModelRows(wallet, showHidden = false) {
@@ -11446,18 +8554,18 @@ function renderModelRows(wallet, showHidden = false) {
 	return models.map((model) => {
 		const pending = !model.price.priceConfigured;
 		const canDelete = model.source !== "builtin";
-		const matchLine = model.priceMatch ? "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:3px;\" title=\"来源：" + esc$2(model.priceMatch.provider + " / " + model.priceMatch.catalogModel) + "\">↳ " + esc$2(model.priceMatch.catalogModel) + " · " + Math.round(model.priceMatch.score * 100) + "%</div>" : "";
+		const matchLine = model.priceMatch ? "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:3px;\" title=\"来源：" + esc(model.priceMatch.provider + " / " + model.priceMatch.catalogModel) + "\">↳ " + esc(model.priceMatch.catalogModel) + " · " + Math.round(model.priceMatch.score * 100) + "%</div>" : "";
 		const rowStyle = "border-top:1px solid var(--ds-border);" + (model.hidden === true ? "opacity:0.55;" : "");
 		return `
-      <tr data-wallet-model-row="${esc$2(model.id)}" style="${rowStyle}">
+      <tr data-wallet-model-row="${esc(model.id)}" style="${rowStyle}">
         <td style="padding:8px 6px;min-width:180px;">
-          <input data-wallet-model-name="1" data-wallet-id="${esc$2(wallet.id)}" data-model-id="${esc$2(model.id)}"
-            value="${esc$2(model.model)}"
+          <input data-wallet-model-name="1" data-wallet-id="${esc(wallet.id)}" data-model-id="${esc(model.id)}"
+            value="${esc(model.model)}"
             style="width:100%;padding:6px 7px;border:1px solid var(--ds-border);border-radius:7px;background:${model.source === "builtin" ? "var(--ds-sidebar-bg)" : "var(--ds-card-inner)"};color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:3px;">${esc$2(model.sourceModel)}${model.aliases.length ? ` · 别名 ${esc$2(model.aliases.join("、"))}` : ""}${model.hidden === true ? " · 已隐藏" : ""}</div>
+          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:3px;">${esc(model.sourceModel)}${model.aliases.length ? ` · 别名 ${esc(model.aliases.join("、"))}` : ""}${model.hidden === true ? " · 已隐藏" : ""}</div>
           <label style="display:flex;align-items:center;gap:5px;margin-top:5px;font-size:var(--aus-fs-sm);color:var(--ds-text-3);">
             上下文上限
-            <input type="number" min="1" step="1000" data-wallet-context-limit="1" data-wallet-id="${esc$2(wallet.id)}" data-model-id="${esc$2(model.id)}"
+            <input type="number" min="1" step="1000" data-wallet-context-limit="1" data-wallet-id="${esc(wallet.id)}" data-model-id="${esc(model.id)}"
               value="${model.contextLimit ?? ""}" placeholder="未知"
               style="width:80px;padding:3px 5px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
           </label>
@@ -11472,9 +8580,9 @@ function renderModelRows(wallet, showHidden = false) {
         <td style="padding:8px 6px;min-width:224px;opacity:${model.price.usePeakPricing ? "1" : "0.45"};">
           <div style="display:grid;grid-template-columns:repeat(3,minmax(68px,1fr));gap:4px;">${priceField(wallet.id, model.id, "peak", "hit", model.price.peak.hit)}${priceField(wallet.id, model.id, "peak", "miss", model.price.peak.miss)}${priceField(wallet.id, model.id, "peak", "output", model.price.peak.output)}</div>
         </td>
-        <td style="padding:8px 6px;text-align:center;"><input type="checkbox" class="aus-checkbox" data-wallet-model-peak="1" data-wallet-id="${esc$2(wallet.id)}" data-model-id="${esc$2(model.id)}" ${model.price.usePeakPricing ? "checked" : ""} /></td>
-        <td style="padding:8px 6px;text-align:center;"><input type="checkbox" class="aus-checkbox" data-wallet-model-lock="1" data-wallet-id="${esc$2(wallet.id)}" data-model-id="${esc$2(model.id)}" ${model.locked ? "checked" : ""} /></td>
-        <td style="padding:8px 6px;text-align:center;">${canDelete ? `<button data-wallet-model-delete="1" data-wallet-id="${esc$2(wallet.id)}" data-model-id="${esc$2(model.id)}" style="padding:4px 8px;border:1px solid var(--ds-red-border);border-radius:7px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">删除</button>` : "—"}</td>
+        <td style="padding:8px 6px;text-align:center;"><input type="checkbox" class="aus-checkbox" data-wallet-model-peak="1" data-wallet-id="${esc(wallet.id)}" data-model-id="${esc(model.id)}" ${model.price.usePeakPricing ? "checked" : ""} /></td>
+        <td style="padding:8px 6px;text-align:center;"><input type="checkbox" class="aus-checkbox" data-wallet-model-lock="1" data-wallet-id="${esc(wallet.id)}" data-model-id="${esc(model.id)}" ${model.locked ? "checked" : ""} /></td>
+        <td style="padding:8px 6px;text-align:center;">${canDelete ? `<button data-wallet-model-delete="1" data-wallet-id="${esc(wallet.id)}" data-model-id="${esc(model.id)}" style="padding:4px 8px;border:1px solid var(--ds-red-border);border-radius:7px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">删除</button>` : "—"}</td>
       </tr>`;
 	}).join("");
 }
@@ -11482,22 +8590,22 @@ function renderPeakRows(wallet) {
 	if (!wallet.peakHours.length) return "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">暂无高峰时段</div>";
 	return wallet.peakHours.map((item, index) => `
     <div style="display:flex;align-items:center;gap:6px;">
-      <input type="time" data-wallet-peak="1" data-wallet-id="${esc$2(wallet.id)}" data-peak-index="${index}" data-peak-field="start" value="${esc$2(item.start)}" style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:7px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
+      <input type="time" data-wallet-peak="1" data-wallet-id="${esc(wallet.id)}" data-peak-index="${index}" data-peak-field="start" value="${esc(item.start)}" style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:7px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
       <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">至</span>
-      <input type="time" data-wallet-peak="1" data-wallet-id="${esc$2(wallet.id)}" data-peak-index="${index}" data-peak-field="end" value="${esc$2(item.end)}" style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:7px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-      <button data-wallet-peak-delete="1" data-wallet-id="${esc$2(wallet.id)}" data-peak-index="${index}" style="padding:5px 8px;border:1px solid var(--ds-red-border);border-radius:7px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">删除</button>
+      <input type="time" data-wallet-peak="1" data-wallet-id="${esc(wallet.id)}" data-peak-index="${index}" data-peak-field="end" value="${esc(item.end)}" style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:7px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
+      <button data-wallet-peak-delete="1" data-wallet-id="${esc(wallet.id)}" data-peak-index="${index}" style="padding:5px 8px;border:1px solid var(--ds-red-border);border-radius:7px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">删除</button>
     </div>
   `).join("");
 }
 function renderCredentialPicker(wallet) {
 	const current = wallet.credentials.find((item) => item.id === wallet.balance.primaryCredentialId);
 	return `
-    <button data-wallet-credential-btn="1" data-wallet-id="${esc$2(wallet.id)}" style="display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;max-width:100%;">
+    <button data-wallet-credential-btn="1" data-wallet-id="${esc(wallet.id)}" style="display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;max-width:100%;">
       <span style="color:var(--ds-text-2);">主密钥</span>
-      <span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;">${esc$2(current?.label || "未指定")}</span>
+      <span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;">${esc(current?.label || "未指定")}</span>
       ${icon("chevron-down", 14)}
     </button>
-    <div id="aus-wallet-credential-drop-${esc$2(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;left:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-width:320px;">
+    <div id="aus-wallet-credential-drop-${esc(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;left:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-width:320px;">
       ${dropdownHtml(wallet.id, "credential", [{
 		id: "",
 		label: "无（使用钱包内校准密钥）",
@@ -11516,14 +8624,14 @@ function renderCatalogPicker(wallet) {
 	const status = walletSyncStatus(wallet);
 	return `
     <div class="aus-wallet-catalog-picker" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:0 0 auto;min-width:0;max-width:100%;">
-    <button type="button" class="aus-wallet-catalog-btn" data-wallet-catalog-btn="1" data-wallet-id="${esc$2(wallet.id)}" title="选择价格来源" style="display:flex;align-items:center;gap:7px;flex:0 0 auto;max-width:100%;box-sizing:border-box;min-height:30px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
+    <button type="button" class="aus-wallet-catalog-btn" data-wallet-catalog-btn="1" data-wallet-id="${esc(wallet.id)}" title="选择价格来源" style="display:flex;align-items:center;gap:7px;flex:0 0 auto;max-width:100%;box-sizing:border-box;min-height:30px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
       <span style="color:var(--ds-text-2);flex:0 0 auto;">价格来源</span>
       ${providerIcon ? "<span style=\"display:inline-flex;flex:0 0 auto;color:var(--ds-text-2);\">" + providerIcon + "</span>" : ""}
-      <span style="font-weight:600;min-width:0;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$2(current?.label || "不自动同步")}</span>
+      <span style="font-weight:600;min-width:0;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(current?.label || "不自动同步")}</span>
       <span style="display:inline-flex;flex:0 0 auto;">${icon("chevron-down", 14)}</span>
     </button>
-    <div style="font-size:var(--aus-fs-sm);color:${status.pending ? "var(--ds-red)" : "var(--ds-text-3)"};max-width:190px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc$2(status.label)}">${esc$2(status.label)}${status.pending ? ` · ${status.pending} 个待匹配` : ""}</div>
-    <div id="aus-wallet-catalog-drop-${esc$2(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;right:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:180px;max-height:260px;overflow:auto;">
+    <div style="font-size:var(--aus-fs-sm);color:${status.pending ? "var(--ds-red)" : "var(--ds-text-3)"};max-width:190px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(status.label)}">${esc(status.label)}${status.pending ? ` · ${status.pending} 个待匹配` : ""}</div>
+    <div id="aus-wallet-catalog-drop-${esc(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;right:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:180px;max-height:260px;overflow:auto;">
       ${dropdownHtml(wallet.id, "catalog", [{
 		id: "",
 		label: "不自动同步",
@@ -11540,14 +8648,14 @@ function renderAdapterPicker(wallet) {
 	const current = BALANCE_ADAPTERS.find((item) => item.id === wallet.balance.adapter);
 	return `
     <div style="position:relative;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-      <button data-wallet-adapter-btn="1" data-wallet-id="${esc$2(wallet.id)}" style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
+      <button data-wallet-adapter-btn="1" data-wallet-id="${esc(wallet.id)}" style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
         <span style="color:var(--ds-text-2);">查询适配器</span>
-        <span style="font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$2(current?.label || "自动识别")}</span>
+        <span style="font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(current?.label || "自动识别")}</span>
         ${icon("chevron-down", 14)}
       </button>
-      <input data-wallet-adapter-user-id="1" data-wallet-id="${esc$2(wallet.id)}" value="${esc$2(wallet.balance.userId || "")}" placeholder="用户 ID（new-api 需要）"
+      <input data-wallet-adapter-user-id="1" data-wallet-id="${esc(wallet.id)}" value="${esc(wallet.balance.userId || "")}" placeholder="用户 ID（new-api 需要）"
         style="width:150px;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-      <div id="aus-wallet-adapter-drop-${esc$2(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:36px;left:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;">
+      <div id="aus-wallet-adapter-drop-${esc(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:36px;left:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;">
         ${dropdownHtml(wallet.id, "adapter", [{
 		id: "",
 		label: "自动识别",
@@ -11587,24 +8695,24 @@ function renderWalletCard(wallet, history) {
 		title: walletBalanceText(wallet)
 	}];
 	return `
-    <section class="ds-card" data-wallet-card="${esc$2(wallet.id)}" style="display:grid;gap:12px;">
+    <section class="ds-card" data-wallet-card="${esc(wallet.id)}" style="display:grid;gap:12px;">
       <div class="aus-wallet-header">
-        ${vendor ? `<div class="aus-wallet-avatar" title="${esc$2(vendor.label)}" style="background:${vendor.color};color:#FFFFFF;${vendorIconSvg(vendor.id, 22) ? "padding:0;" : vendor.mark.length > 1 ? "font-size:12px;" : ""}">${vendorIconSvg(vendor.id, 22) || esc$2(vendor.mark)}</div>` : `<div class="aus-wallet-avatar" title="${esc$2(wallet.name)}">${esc$2(avatarLetter)}</div>`}
+        ${vendor ? `<div class="aus-wallet-avatar" title="${esc(vendor.label)}" style="background:${vendor.color};color:#FFFFFF;${vendorIconSvg(vendor.id, 22) ? "padding:0;" : vendor.mark.length > 1 ? "font-size:12px;" : ""}">${vendorIconSvg(vendor.id, 22) || esc(vendor.mark)}</div>` : `<div class="aus-wallet-avatar" title="${esc(wallet.name)}">${esc(avatarLetter)}</div>`}
         <div class="aus-wallet-identity">
           <div class="aus-wallet-name-row">
-            <input data-wallet-name="1" data-wallet-id="${esc$2(wallet.id)}" value="${esc$2(wallet.name)}" />
-            <span class="${isOfficial ? "aus-wallet-badge-official" : "aus-wallet-badge-relay"}" style="padding:3px 8px;border-radius:999px;background:${isOfficial ? "var(--ds-green-bg)" : "var(--ds-card-inner)"};color:${isOfficial ? "var(--ds-green)" : "var(--ds-text-2)"};font-size:var(--aus-fs-sm);white-space:nowrap;">${isOfficial ? "DeepSeek 官方" : esc$2(vendor?.label || "中转/自定义")}</span>
+            <input data-wallet-name="1" data-wallet-id="${esc(wallet.id)}" value="${esc(wallet.name)}" />
+            <span class="${isOfficial ? "aus-wallet-badge-official" : "aus-wallet-badge-relay"}" style="padding:3px 8px;border-radius:999px;background:${isOfficial ? "var(--ds-green-bg)" : "var(--ds-card-inner)"};color:${isOfficial ? "var(--ds-green)" : "var(--ds-text-2)"};font-size:var(--aus-fs-sm);white-space:nowrap;">${isOfficial ? "DeepSeek 官方" : esc(vendor?.label || "中转/自定义")}</span>
             ${pending ? `<span style="padding:3px 8px;border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);white-space:nowrap;">${pending} 个待定价</span>` : ""}
           </div>
-          <div class="aus-wallet-sub">${esc$2(wallet.endpointDisplay || wallet.endpointLabel || "本机官方接口")} · ${esc$2(wallet.sourceType || "未识别")}</div>
+          <div class="aus-wallet-sub">${esc(wallet.endpointDisplay || wallet.endpointLabel || "本机官方接口")} · ${esc(wallet.sourceType || "未识别")}</div>
         </div>
         <div class="aus-wallet-metrics">
-          ${metrics.map((item) => `<div class="aus-wallet-metric" title="${esc$2(item.title)}"><div class="aus-wallet-metric-label">${esc$2(item.label)}</div><div class="aus-wallet-metric-value">${esc$2(item.value)}</div></div>`).join("")}
+          ${metrics.map((item) => `<div class="aus-wallet-metric" title="${esc(item.title)}"><div class="aus-wallet-metric-label">${esc(item.label)}</div><div class="aus-wallet-metric-value">${esc(item.value)}</div></div>`).join("")}
         </div>
         <div class="aus-wallet-actions">
-          <button class="aus-wallet-icon-btn" data-wallet-toggle="1" data-wallet-id="${esc$2(wallet.id)}" title="${collapsed ? "展开钱包详情" : "收起钱包详情"}" aria-label="${collapsed ? "展开钱包详情" : "收起钱包详情"}">${collapsed ? icon("chevron-down", 16) : icon("chevron-up", 16)}</button>
-          <button class="aus-wallet-icon-btn" data-wallet-sync="1" data-wallet-id="${esc$2(wallet.id)}" title="${wallet.catalogProvider ? "预览并应用价格同步（按已识别模型模糊匹配）" : "先选择价格来源，再同步价格"}" aria-label="预览价格同步">${icon("refresh", 16)}</button>
-          ${isOfficial ? "" : `<button class="aus-wallet-icon-btn is-danger" data-wallet-ignore="1" data-wallet-id="${esc$2(wallet.id)}" title="忽略该钱包（历史与统计保留）" aria-label="忽略钱包">${icon("close", 16)}</button>`}
+          <button class="aus-wallet-icon-btn" data-wallet-toggle="1" data-wallet-id="${esc(wallet.id)}" title="${collapsed ? "展开钱包详情" : "收起钱包详情"}" aria-label="${collapsed ? "展开钱包详情" : "收起钱包详情"}">${collapsed ? icon("chevron-down", 16) : icon("chevron-up", 16)}</button>
+          <button class="aus-wallet-icon-btn" data-wallet-sync="1" data-wallet-id="${esc(wallet.id)}" title="${wallet.catalogProvider ? "预览并应用价格同步（按已识别模型模糊匹配）" : "先选择价格来源，再同步价格"}" aria-label="预览价格同步">${icon("refresh", 16)}</button>
+          ${isOfficial ? "" : `<button class="aus-wallet-icon-btn is-danger" data-wallet-ignore="1" data-wallet-id="${esc(wallet.id)}" title="忽略该钱包（历史与统计保留）" aria-label="忽略钱包">${icon("close", 16)}</button>`}
         </div>
       </div>
 
@@ -11612,15 +8720,15 @@ function renderWalletCard(wallet, history) {
       <div class="aus-wallet-two-col" style="display:grid;grid-template-columns:minmax(250px,1fr) minmax(260px,1fr);gap:10px;">
         <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;display:grid;gap:8px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-            <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包余额</div><div style="font-size:17px;font-weight:700;color:var(--ds-text);">${esc$2(walletBalanceText(wallet))}</div></div>
+            <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包余额</div><div style="font-size:17px;font-weight:700;color:var(--ds-text);">${esc(walletBalanceText(wallet))}</div></div>
             <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:${supportsAuto ? "pointer" : "not-allowed"};">
-              <input type="checkbox" class="aus-checkbox" data-wallet-auto-balance="1" data-wallet-id="${esc$2(wallet.id)}" ${wallet.balance.mode === "auto" ? "checked" : ""} ${supportsAuto ? "" : "disabled"} /> 自动校准
+              <input type="checkbox" class="aus-checkbox" data-wallet-auto-balance="1" data-wallet-id="${esc(wallet.id)}" ${wallet.balance.mode === "auto" ? "checked" : ""} ${supportsAuto ? "" : "disabled"} /> 自动校准
             </label>
           </div>
           <div style="display:flex;gap:6px;align-items:center;position:relative;">
-            <input data-wallet-balance-amount="1" data-wallet-id="${esc$2(wallet.id)}" value="${esc$2(wallet.balance.amount ?? "")}" placeholder="手工余额" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-            <button data-wallet-currency-btn="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">${wallet.balance.currency}${icon("chevron-down", 14)}</button>
-            <div id="aus-wallet-currency-drop-${esc$2(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;right:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:6px;min-width:110px;">
+            <input data-wallet-balance-amount="1" data-wallet-id="${esc(wallet.id)}" value="${esc(wallet.balance.amount ?? "")}" placeholder="手工余额" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
+            <button data-wallet-currency-btn="1" data-wallet-id="${esc(wallet.id)}" style="padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">${wallet.balance.currency}${icon("chevron-down", 14)}</button>
+            <div id="aus-wallet-currency-drop-${esc(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;right:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:6px;min-width:110px;">
               ${dropdownHtml(wallet.id, "currency", [{
 		id: "CNY",
 		label: "CNY",
@@ -11635,17 +8743,17 @@ function renderWalletCard(wallet, history) {
           ${supportsAuto ? `
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;position:relative;">
               ${renderCredentialPicker(wallet)}
-              <button data-wallet-calibrate="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:7px 11px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;">立即校准</button>
+              <button data-wallet-calibrate="1" data-wallet-id="${esc(wallet.id)}" style="padding:7px 11px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;">立即校准</button>
             </div>
             <div style="display:flex;gap:6px;">
-              <input type="password" data-wallet-api-key="1" data-wallet-id="${esc$2(wallet.id)}" value="" placeholder="${getWalletApiKey(wallet.id) ? "已保存钱包校准密钥（留空不修改）" : "填写钱包校准密钥"}" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-              <button data-wallet-save-key="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">保存密钥</button>
+              <input type="password" data-wallet-api-key="1" data-wallet-id="${esc(wallet.id)}" value="" placeholder="${getWalletApiKey(wallet.id) ? "已保存钱包校准密钥（留空不修改）" : "填写钱包校准密钥"}" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
+              <button data-wallet-save-key="1" data-wallet-id="${esc(wallet.id)}" style="padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">保存密钥</button>
             </div>
-            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">查询方式：${esc$2(balanceAdapter?.label || "无")}${balanceAdapter?.note ? "（" + esc$2(balanceAdapter.note) + "）" : ""}；勾选「自动校准」后按设置页校准间隔轮询；主密钥：${esc$2(selectedCredential?.label || "未指定")}</div>
-            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc$2(item.label)).join("、") : "未识别"}</div>
+            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">查询方式：${esc(balanceAdapter?.label || "无")}${balanceAdapter?.note ? "（" + esc(balanceAdapter.note) + "）" : ""}；勾选「自动校准」后按设置页校准间隔轮询；主密钥：${esc(selectedCredential?.label || "未指定")}</div>
+            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc(item.label)).join("、") : "未识别"}</div>
           ` : `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">该接入暂无可用查询适配器，可直接手工维护余额；中转站可在下方「查询适配器」中选择 new-api 并填写系统访问令牌与用户 ID。</div>`}
           ${renderAdapterPicker(wallet)}
-          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc$2(item.label)).join("、") : "未识别"}</div>
+          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc(item.label)).join("、") : "未识别"}</div>
         </div>
 
         <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;display:grid;gap:8px;position:relative;">
@@ -11655,8 +8763,8 @@ function renderWalletCard(wallet, history) {
           </div>
           <div style="display:grid;gap:6px;">${renderPeakRows(wallet)}</div>
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-            <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" class="aus-checkbox" data-wallet-weekend="1" data-wallet-id="${esc$2(wallet.id)}" ${wallet.weekendOffpeak ? "checked" : ""} /> 周末全天按低谷</label>
-            <button data-wallet-add-peak="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:6px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加时段</button>
+            <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" class="aus-checkbox" data-wallet-weekend="1" data-wallet-id="${esc(wallet.id)}" ${wallet.weekendOffpeak ? "checked" : ""} /> 周末全天按低谷</label>
+            <button data-wallet-add-peak="1" data-wallet-id="${esc(wallet.id)}" style="padding:6px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加时段</button>
           </div>
           ${isOfficial ? `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);line-height:1.6;">官方接口按 DeepSeek 规则计费：中国法定节假日全天空闲（内置数据覆盖 ${CN_HOLIDAY_COVERAGE_LABEL}），调休上班的周末同样按空闲计价，可在设置中补充额外空闲日期。</div>` : ""}
         </div>
@@ -11665,7 +8773,7 @@ function renderWalletCard(wallet, history) {
       <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;overflow:hidden;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
           <div><div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">模型与价格</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">单位 ${getDisplayCurrency().code}/百万 tokens；模型改名会保留旧名别名</div></div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;"><button data-wallet-toggle-hidden="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;display:${hiddenCount ? "inline-flex" : "none"};align-items:center;gap:4px;">${showHidden ? "隐藏" : "显示"} ${hiddenCount} 个隐藏条目</button><button data-wallet-add-model="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加模型</button></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;"><button data-wallet-toggle-hidden="1" data-wallet-id="${esc(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;display:${hiddenCount ? "inline-flex" : "none"};align-items:center;gap:4px;">${showHidden ? "隐藏" : "显示"} ${hiddenCount} 个隐藏条目</button><button data-wallet-add-model="1" data-wallet-id="${esc(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加模型</button></div>
         </div>
         <div style="width:100%;overflow-x:auto;">
           <table style="width:100%;min-width:900px;border-collapse:collapse;font-size:var(--aus-fs-sm);">
@@ -11684,8 +8792,8 @@ function renderIgnoredWallets(ignored, wallets) {
 		const wallet = wallets.find((item) => item.id === id);
 		if (!wallet) return "";
 		return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--ds-border);">
-      <div><div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">${esc$2(wallet.name)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">${esc$2(wallet.endpointDisplay || wallet.endpointLabel || "")}</div></div>
-      <button data-wallet-restore="1" data-wallet-id="${esc$2(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">恢复显示</button>
+      <div><div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">${esc(wallet.name)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">${esc(wallet.endpointDisplay || wallet.endpointLabel || "")}</div></div>
+      <button data-wallet-restore="1" data-wallet-id="${esc(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">恢复显示</button>
     </div>`;
 	}).filter(Boolean).join("") || "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">暂无已忽略接入</div>";
 }
@@ -11740,8 +8848,8 @@ async function renderWalletView() {
 	const anyCollapsed = active.some((wallet) => wallet.collapsed);
 	const toolbar = `
       <div class="ds-card" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;">
-        <input data-wallet-search="1" value="${esc$2(walletQuery)}" placeholder="搜索钱包 / 地址 / 模型" style="flex:1;min-width:180px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-        ${filters.map((item) => "<button data-wallet-filter=\"" + item.id + "\" style=\"padding:6px 11px;border:1px solid " + (walletFilter === item.id ? "var(--ds-black)" : "var(--ds-border)") + ";border-radius:999px;background:" + (walletFilter === item.id ? "var(--ds-black)" : "var(--ds-card-inner)") + ";color:" + (walletFilter === item.id ? "var(--ds-black-text)" : "var(--ds-text)") + ";font-size:var(--aus-fs-sm);cursor:pointer;\">" + esc$2(item.label) + (item.count != null ? " " + item.count : "") + "</button>").join("")}
+        <input data-wallet-search="1" value="${esc(walletQuery)}" placeholder="搜索钱包 / 地址 / 模型" style="flex:1;min-width:180px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
+        ${filters.map((item) => "<button data-wallet-filter=\"" + item.id + "\" style=\"padding:6px 11px;border:1px solid " + (walletFilter === item.id ? "var(--ds-black)" : "var(--ds-border)") + ";border-radius:999px;background:" + (walletFilter === item.id ? "var(--ds-black)" : "var(--ds-card-inner)") + ";color:" + (walletFilter === item.id ? "var(--ds-black-text)" : "var(--ds-text)") + ";font-size:var(--aus-fs-sm);cursor:pointer;\">" + esc(item.label) + (item.count != null ? " " + item.count : "") + "</button>").join("")}
         <button data-wallet-toggle-all="${anyCollapsed ? "expand" : "collapse"}" style="padding:6px 11px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">${anyCollapsed ? "展开全部" : "收起全部"}</button>
       </div>`;
 	const visibleWallets = active.filter(matchesFilter);
@@ -11834,7 +8942,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-CvgCg-F3.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-B9aZlpFt.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -12331,14 +9439,14 @@ function formatChangelogDate(date, now = Date.now()) {
 }
 function sectionHtml(section) {
 	const style = KIND_STYLE[section.kind] || KIND_STYLE.feature;
-	const items = section.items.map((text) => `<div class="aus-changelog-item"><span class="aus-changelog-dot" style="background:${style.color};"></span><span>${esc$2(text)}</span></div>`).join("");
+	const items = section.items.map((text) => `<div class="aus-changelog-item"><span class="aus-changelog-dot" style="background:${style.color};"></span><span>${esc(text)}</span></div>`).join("");
 	return `<div class="aus-changelog-section"><span class="aus-changelog-kind" style="color:${style.color};background:${style.bg};">${style.label}</span><div class="aus-changelog-items">${items}</div></div>`;
 }
 function entryHtml(entry, open, isLatest) {
 	const dateText = formatChangelogDate(entry.date);
-	const meta = [dateText ? `${esc$2(dateText)} 更新` : ""].concat(isLatest ? ["<span class=\"aus-changelog-latest\">最新</span>"] : []).filter(Boolean).join("");
+	const meta = [dateText ? `${esc(dateText)} 更新` : ""].concat(isLatest ? ["<span class=\"aus-changelog-latest\">最新</span>"] : []).filter(Boolean).join("");
 	const sections = entry.sections.filter((s) => s && s.items && s.items.length).map(sectionHtml).join("");
-	return "<div class=\"aus-changelog-entry\" data-changelog-entry data-open=\"" + (open ? "1" : "0") + `"><button type="button" class="aus-changelog-head" data-changelog-toggle aria-expanded="${open ? "true" : "false"}"><span class="aus-changelog-version">${esc$2(entry.version)}</span><span class="aus-changelog-meta">${meta}</span><span class="aus-changelog-caret">${icon(open ? "chevron-up" : "chevron-down", 16)}</span></button><div class="aus-changelog-body"${open ? "" : " style=\"display:none;\""}>${sections}</div></div>`;
+	return "<div class=\"aus-changelog-entry\" data-changelog-entry data-open=\"" + (open ? "1" : "0") + `"><button type="button" class="aus-changelog-head" data-changelog-toggle aria-expanded="${open ? "true" : "false"}"><span class="aus-changelog-version">${esc(entry.version)}</span><span class="aus-changelog-meta">${meta}</span><span class="aus-changelog-caret">${icon(open ? "chevron-up" : "chevron-down", 16)}</span></button><div class="aus-changelog-body"${open ? "" : " style=\"display:none;\""}>${sections}</div></div>`;
 }
 /**
 * 关于页底部的「更新日志」块：默认只展开最新版本，其余版本点击表头展开/收起。
@@ -12350,7 +9458,7 @@ function renderChangelogCard() {
 	const total = CHANGELOG.length;
 	const countText = total > entries.length ? `共 ${total} 个版本 · 显示最近 ${entries.length} 个` : `共 ${total} 个版本`;
 	const list = entries.map((e, i) => entryHtml(e, i === 0, i === 0)).join("");
-	return `<div class="ds-card" id="aus-changelog"><div class="aus-changelog-header"><span class="aus-changelog-title">更新日志</span><span class="aus-changelog-count">${esc$2(countText)}</span></div><div class="aus-changelog-list">${list}</div><div class="aus-changelog-footer">更新日志由作者手动维护，更早的版本请看仓库提交记录：<a href="https://github.com/janmk1453/Api-Usage/commits/main" target="_blank" rel="noreferrer">janmk1453/Api-Usage</a></div></div>`;
+	return `<div class="ds-card" id="aus-changelog"><div class="aus-changelog-header"><span class="aus-changelog-title">更新日志</span><span class="aus-changelog-count">${esc(countText)}</span></div><div class="aus-changelog-list">${list}</div><div class="aus-changelog-footer">更新日志由作者手动维护，更早的版本请看仓库提交记录：<a href="https://github.com/janmk1453/Api-Usage/commits/main" target="_blank" rel="noreferrer">janmk1453/Api-Usage</a></div></div>`;
 }
 /** 绑定展开/收起（事件委托，只绑一次；表头是原生 button，键盘回车/空格同样可用） */
 function bindChangelog(doc) {
@@ -12509,6 +9617,17 @@ function disposePillState() {
 }
 //#endregion
 //#region src/ui/panel.ts
+var panel_exports = /* @__PURE__ */ __exportAll({
+	applyMobileNavMode: () => applyMobileNavMode,
+	bindPanel: () => bindPanel,
+	closePanel: () => closePanel,
+	createPanel: () => createPanel,
+	openPanel: () => openPanel,
+	refreshTheme: () => refreshTheme,
+	refreshUI: () => refreshUI,
+	resetPanelState: () => resetPanelState,
+	togglePanel: () => togglePanel
+});
 /** 面板首帧渲染耗时的起点（用于匿名统计里的渲染耗时分桶） */
 var panelOpenStartTs = 0;
 function nowTs() {
@@ -12707,11 +9826,11 @@ function renderHistoryFilterDropdown(kind, selected, options, emptyText, onSelec
 	if (!dropdown) return;
 	const item = (id, label, title = label) => {
 		const active = id === selected ? "background:var(--ds-card);font-weight:600;" : "";
-		return `<div data-history-value="${esc$2(id)}" title="${esc$2(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${esc$2(label)}</div>`;
+		return `<div data-history-value="${esc(id)}" title="${esc(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${esc(label)}</div>`;
 	};
 	let html = item(STATS_FILTER_ALL, "全部");
 	for (const option of options) html += item(option.id, option.label, option.title || option.label);
-	if (!options.length) html += `<div style="padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);">${esc$2(emptyText)}</div>`;
+	if (!options.length) html += `<div style="padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);">${esc(emptyText)}</div>`;
 	dropdown.innerHTML = html;
 	dropdown.querySelectorAll("[data-history-value]").forEach((element) => {
 		element.onclick = () => onSelect(element.getAttribute("data-history-value") || "__all__");
@@ -12965,7 +10084,7 @@ function renderHistoryInner(doc, fullHist) {
 				failed: "失败"
 			}[agentStatusKey] || ""
 		].filter(Boolean).join(" · ") : "常规对话";
-		const originBadge = isAgentRecord ? `<span class="aus-origin-badge" title="${esc$2(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:var(--ds-green-bg);color:var(--ds-green);">Agent</span>` : `<span class="aus-origin-badge" title="${esc$2(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:var(--ds-card-inner);color:var(--ds-text-3);">常规</span>`;
+		const originBadge = isAgentRecord ? `<span class="aus-origin-badge" title="${esc(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:var(--ds-green-bg);color:var(--ds-green);">Agent</span>` : `<span class="aus-origin-badge" title="${esc(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:var(--ds-card-inner);color:var(--ds-text-3);">常规</span>`;
 		const recordDate = new Date(h.timestamp);
 		const recordDateText = recordDate.toLocaleDateString("zh-CN");
 		const recordTimeText = recordDate.toLocaleTimeString("zh-CN", { hour12: false });
@@ -12973,7 +10092,7 @@ function renderHistoryInner(doc, fullHist) {
     <div style="padding:10px 12px;background:var(--ds-card);border-radius:10px;margin-bottom:8px;font-size:var(--aus-fs-base);">
       <div class="aus-history-card-head" style="display:flex;justify-content:space-between;align-items:center;">
         <div class="aus-history-card-main" style="min-width:0;flex:1;">
-          <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${originBadge}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$2(h.model)} · ${esc$2(localTimeHM(h.timestamp))}</span></div>
+          <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${originBadge}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(h.model)} · ${esc(localTimeHM(h.timestamp))}</span></div>
           <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · ${(h.tokenRate || 0) > 0 ? h.tokenRate + " t/s" : "未测速"}</div>
         </div>
         <div class="aus-history-card-actions" style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
@@ -12983,7 +10102,7 @@ function renderHistoryInner(doc, fullHist) {
           <div style="display:flex;gap:4px;">
             <button class="aus-compare-old" data-ts="${h.timestamp}" style="padding:4px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">旧</button>
             <button class="aus-compare-new" data-ts="${h.timestamp}" style="padding:4px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">新</button>
-            <button class="aus-detail-toggle" data-ts="${h.timestamp}" data-model="${esc$2(h.model || "")}" data-time="${esc$2(recordDateText + " " + recordTimeText)}" style="padding:4px 8px;border:1px solid var(--ds-black);border-radius:6px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;">详情</button>
+            <button class="aus-detail-toggle" data-ts="${h.timestamp}" data-model="${esc(h.model || "")}" data-time="${esc(recordDateText + " " + recordTimeText)}" style="padding:4px 8px;border:1px solid var(--ds-black);border-radius:6px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;">详情</button>
           </div>
         </div>
       </div>
@@ -13005,12 +10124,12 @@ function renderHistoryInner(doc, fullHist) {
           <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;">
             <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">基础信息</div>
             <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:6px;font-size:11px;">
-              <div><div style="color:var(--ds-text-2);font-size:10px;">模型</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${esc$2(h.model || "—")}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">模型</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${esc(h.model || "—")}</div></div>
               <div><div style="color:var(--ds-text-2);font-size:10px;">时段</div><div style="font-weight:600;margin-top:2px;color:var(--ds-text);">${h.priceType === "new-peak" || h.priceType === "wallet-peak" ? "高峰" : h.priceType === "new-offpeak" || h.priceType === "wallet-offpeak" ? "非高峰" : h.priceType === "unpriced" ? "待定价" : "旧价格"}</div></div>
-              <div style="min-width:0;"><div style="color:var(--ds-text-2);font-size:10px;">钱包</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${esc$2(repository.getWallet(String(h.walletId || ""))?.name || h.endpointLabel || "未归属钱包")}</div></div>
+              <div style="min-width:0;"><div style="color:var(--ds-text-2);font-size:10px;">钱包</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${esc(repository.getWallet(String(h.walletId || ""))?.name || h.endpointLabel || "未归属钱包")}</div></div>
               <div style="min-width:0;"><div style="color:var(--ds-text-2);font-size:10px;">计价来源</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${h.pricingSource === "wallet" ? "钱包规则" : h.pricingSource === "builtin" ? "DeepSeek 内置" : h.pricingSource === "unpriced" ? "待定价" : h.pricingSource === "legacy-match" ? "旧数据同名价" : h.pricingSource === "legacy" ? "旧全局规则" : "旧记录兜底"}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">日期</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${esc$2(recordDateText)}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">时间</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${esc$2(recordTimeText)}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">日期</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${esc(recordDateText)}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">时间</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${esc(recordTimeText)}</div></div>
             </div>
           </div>
             <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;">
@@ -13025,7 +10144,7 @@ function renderHistoryInner(doc, fullHist) {
 			if (!comp || !th) return "—";
 			return (th / comp * 100).toFixed(1) + "%";
 		})()}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">是否截断</div><div style="font-weight:600;margin-top:2px;color:${isTruncatedFinish(h.finishReason) || h.isTruncated ? "var(--ds-red)" : "var(--ds-text)"};">${isTruncatedFinish(h.finishReason) || h.isTruncated ? "是 (" + esc$2(h.finishReason || "length") + ")" : "否"}</div></div>
+              <div><div style="color:var(--ds-text-2);font-size:10px;">是否截断</div><div style="font-weight:600;margin-top:2px;color:${isTruncatedFinish(h.finishReason) || h.isTruncated ? "var(--ds-red)" : "var(--ds-text)"};">${isTruncatedFinish(h.finishReason) || h.isTruncated ? "是 (" + esc(h.finishReason || "length") + ")" : "否"}</div></div>
             </div>
           </div>
         </div>
@@ -13055,13 +10174,13 @@ function renderHistoryInner(doc, fullHist) {
           <button class="aus-tab-btn" data-tab="raw" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">原始 Token 用量 (Raw Usage)</button>
           <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">消息内容 (Messages)</button>
         </div>
-        <pre class="aus-tab-content" data-content="req-${h.timestamp}" style="flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$2(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : "（原文已清理，仅保留统计）")}</pre>
+        <pre class="aus-tab-content" data-content="req-${h.timestamp}" style="flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : "（原文已清理，仅保留统计）")}</pre>
         <div class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;margin-top:2px;">
-          <pre style="margin:0;min-height:160px;max-height:360px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$2(prettyFullResponse(h.fullResponse))}</pre>
-          ${h.fullResponse ? `<div style="display:flex;justify-content:flex-end;margin-top:6px;"><button class="aus-res-raw-btn" data-ts="${h.timestamp}" style="padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">查看原始完整数据</button></div><pre class="aus-res-raw" data-ts="${h.timestamp}" style="display:none;margin:6px 0 0;max-height:360px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$2(typeof h.fullResponse === "string" ? h.fullResponse : JSON.stringify(h.fullResponse, null, 2))}</pre>` : ""}
+          <pre style="margin:0;min-height:160px;max-height:360px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(prettyFullResponse(h.fullResponse))}</pre>
+          ${h.fullResponse ? `<div style="display:flex;justify-content:flex-end;margin-top:6px;"><button class="aus-res-raw-btn" data-ts="${h.timestamp}" style="padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">查看原始完整数据</button></div><pre class="aus-res-raw" data-ts="${h.timestamp}" style="display:none;margin:6px 0 0;max-height:360px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(typeof h.fullResponse === "string" ? h.fullResponse : JSON.stringify(h.fullResponse, null, 2))}</pre>` : ""}
         </div>
-        <pre class="aus-tab-content" data-content="raw-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$2(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
-        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc$2(h.messages && h.messages.length ? JSON.stringify(h.messages, null, 2) : "（原文已清理——仅最近 5 条保留，其余仅统计可用）")}</pre>
+        <pre class="aus-tab-content" data-content="raw-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
+        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.messages && h.messages.length ? JSON.stringify(h.messages, null, 2) : "（原文已清理——仅最近 5 条保留，其余仅统计可用）")}</pre>
       </div>
     </div>
   `;
@@ -13243,7 +10362,7 @@ function bindTopbarScroll(doc) {
 }
 function bindPressFeedback(doc) {
 	try {
-		doc.querySelectorAll("#aus-mobile-back, #aus-bottom-nav .aus-bottom-item, #aus-settings-entries .aus-settings-entry").forEach((el) => {
+		doc.querySelectorAll("#aus-hamburger-btn, #aus-mobile-back, #aus-bottom-nav .aus-bottom-item, #aus-settings-entries .aus-settings-entry").forEach((el) => {
 			const node = el;
 			if (node.getAttribute("data-press-bound") === "1") return;
 			node.setAttribute("data-press-bound", "1");
@@ -13268,6 +10387,28 @@ function bindPanel(doc) {
 	} catch {}
 	bindTopbarScroll(doc);
 	bindPressFeedback(doc);
+}
+/** 「移动端兼容 UI」关闭时窄屏回到改造前的侧栏抽屉（含汉堡按钮与遮罩） */
+var mobileOpen = false;
+/** 由 createPanel 注入：切换「移动端兼容 UI」后立即按新布局重排导航 */
+var applyMobileNavModeImpl = null;
+/** 移动端兼容 UI 开关：true（默认）窄屏用底栏；false 回到改造前的侧栏抽屉 */
+function mobileNavMode() {
+	try {
+		return state$2.settings.mobileCompatUi === false ? "sidebar" : "bottom";
+	} catch {
+		return "bottom";
+	}
+}
+/** 窄屏且开启底栏布局时才走底栏语义（指示胶囊 / 返回箭头 / 重复点 tab / 入场动画） */
+function bottomNavActive(doc) {
+	return isNarrowPanel(doc) && mobileNavMode() === "bottom";
+}
+/** 设置页开关调用：把当前选择写到 #aus-panel[data-mobile-nav] 并重排导航，无需刷新页面 */
+function applyMobileNavMode() {
+	try {
+		applyMobileNavModeImpl?.();
+	} catch {}
 }
 /**
 * 面板当前是否按窄屏（底栏）布局渲染。
@@ -13298,6 +10439,9 @@ function playViewEnter(el) {
 		el.classList.add("aus-view-in");
 	} catch {}
 }
+/** 底栏指示胶囊尺寸（必须与 style.css 的 #aus-bottom-indicator 保持 56×44 / 圆角 16 一致） */
+var BOTTOM_PILL_W = 56;
+var BOTTOM_PILL_H = 44;
 /**
 * 底栏指示胶囊跟随当前 tab（切换动画的核心）。
 * 首次定位关掉过渡，避免面板一打开胶囊就从最左侧"飞过来"。
@@ -13319,31 +10463,47 @@ function syncBottomNav(doc, animate) {
 			ind.style.opacity = "0";
 			return;
 		}
+		if (!target.offsetWidth) {
+			ind.style.opacity = "0";
+			return;
+		}
 		ind.style.opacity = "1";
-		const x = Math.round(target.offsetLeft + target.offsetWidth / 2 - 23);
+		const barRect = bar.getBoundingClientRect();
+		const itemRect = target.getBoundingClientRect();
+		if (!barRect.height || !itemRect.width) {
+			ind.style.opacity = "0";
+			return;
+		}
+		const x = Math.round(itemRect.left - barRect.left + itemRect.width / 2 - BOTTOM_PILL_W / 2);
+		const y = Math.round(itemRect.top - barRect.top + itemRect.height / 2 - BOTTOM_PILL_H / 2);
 		const first = bar.getAttribute("data-ready") !== "1";
+		const next = "translate3d(" + x + "px," + y + "px,0)";
 		if (!animate || first) {
 			const prev = ind.style.transition;
 			ind.style.transition = "none";
-			ind.style.transform = "translate3d(" + x + "px,0,0)";
+			ind.style.transform = next;
 			ind.offsetWidth;
 			ind.style.transition = prev;
 			bar.setAttribute("data-ready", "1");
-		} else ind.style.transform = "translate3d(" + x + "px,0,0)";
+		} else ind.style.transform = next;
 	} catch {}
 }
-/** 侧栏（桌面）/底栏（窄屏）高亮 + 二级页返回箭头显隐：切页与窗口尺寸变化共用 */
-function paintNavState(doc, narrow, animate) {
-	currentNavKey = narrow ? parentTabOf(currentView) : currentView;
+/**
+* 侧栏 / 底栏高亮 + 二级页返回箭头显隐：切页与窗口尺寸变化共用。
+* bottom=true 表示当前是底栏布局（窄屏 + 移动端兼容 UI 开启）：二级页的高亮归到「设置」并显示返回箭头；
+* bottom=false 是桌面侧栏或「移动端兼容 UI」关闭后的原侧栏抽屉，直接按当前视图高亮，也没有返回箭头。
+*/
+function paintNavState(doc, bottom, animate) {
+	currentNavKey = bottom ? parentTabOf(currentView) : currentView;
 	try {
 		doc.querySelectorAll("#aus-sidebar [data-nav]").forEach((el) => {
 			const v = el.getAttribute("data-nav");
 			el.classList.toggle("active", v === currentNavKey);
 		});
 	} catch {}
-	syncBottomNav(doc, animate);
+	if (bottom) syncBottomNav(doc, animate);
 	const backBtn = doc.getElementById("aus-mobile-back");
-	if (backBtn) backBtn.style.display = narrow && isSettingsChild(currentView) ? "flex" : "none";
+	if (backBtn) backBtn.style.display = bottom && isSettingsChild(currentView) ? "flex" : "none";
 }
 /**
 * 底栏 tab 点击语义：
@@ -13353,7 +10513,7 @@ function paintNavState(doc, narrow, animate) {
 */
 function handleBottomTabTap(target) {
 	const doc = getDoc$1();
-	if (!isNarrowPanel(doc)) {
+	if (!bottomNavActive(doc)) {
 		switchView(target);
 		return;
 	}
@@ -13376,6 +10536,48 @@ function handleBottomTabTap(target) {
 		if (contentBody) contentBody.scrollTop = 0;
 	} catch {}
 }
+/**
+* 侧栏抽屉显隐（仅「移动端兼容 UI」关闭时的窄屏：原侧栏抽屉 + 汉堡 + 遮罩，与改造前实现一致）。
+* 滑动/淡入淡出动画全部由 style.css 提供，这里只管 class 与遮罩可点性。
+*/
+function syncMobileSidebar(doc) {
+	try {
+		const sb = doc.getElementById("aus-sidebar");
+		if (!sb) return;
+		const ov = doc.getElementById("aus-sidebar-overlay");
+		if (isNarrowPanel(doc) && mobileNavMode() === "sidebar") {
+			sb.classList.toggle("is-open", mobileOpen);
+			if (ov) {
+				ov.classList.toggle("is-open", mobileOpen);
+				ov.style.display = "";
+				ov.onclick = mobileOpen ? () => {
+					mobileOpen = false;
+					syncMobileSidebar(doc);
+				} : null;
+			}
+			const brand = doc.getElementById("aus-brand");
+			if (brand) brand.style.removeProperty("display");
+			doc.querySelectorAll("#aus-sidebar .aus-nav-label").forEach((el) => {
+				el.style.removeProperty("display");
+			});
+			doc.querySelectorAll("#aus-sidebar .aus-nav-item").forEach((el) => {
+				const c = el;
+				c.style.removeProperty("justify-content");
+				c.style.removeProperty("padding");
+			});
+			sb.style.removeProperty("width");
+			sb.style.removeProperty("min-width");
+			sb.style.removeProperty("max-width");
+		} else {
+			sb.classList.remove("is-open");
+			if (ov) {
+				ov.classList.remove("is-open");
+				ov.style.display = "none";
+				ov.onclick = null;
+			}
+		}
+	} catch {}
+}
 function switchView(view) {
 	const prevView = currentView;
 	currentView = view;
@@ -13388,7 +10590,7 @@ function switchView(view) {
 		trackPage(view);
 	} catch {}
 	const doc = getDoc$1();
-	const narrow = isNarrowPanel(doc);
+	const bottom = bottomNavActive(doc);
 	if (view !== "history") closeHistoryDetail(doc);
 	doc.querySelectorAll("[data-view]").forEach((el) => {
 		const on = el.getAttribute("data-view") === view;
@@ -13397,7 +10599,7 @@ function switchView(view) {
 			el.style.transition = "none";
 			el.style.opacity = "1";
 		}
-		if (on && narrow) playViewEnter(el);
+		if (on && bottom) playViewEnter(el);
 	});
 	try {
 		for (const id of ["aus-main", "aus-content-body"]) {
@@ -13408,7 +10610,7 @@ function switchView(view) {
 		}
 	} catch {}
 	syncTopbarState(doc);
-	paintNavState(doc, narrow, narrow);
+	paintNavState(doc, bottom, bottom);
 	const titleText = viewTitle(view);
 	const titleEl = doc.getElementById("aus-page-title");
 	const mobileTitleEl = doc.getElementById("aus-mobile-page-title");
@@ -13479,9 +10681,11 @@ function createPanel() {
 	panel.id = "aus-panel";
 	panel.setAttribute("data-extension", "api-usage-stat");
 	panel.setAttribute("data-ds-theme", theme);
+	panel.setAttribute("data-mobile-nav", mobileNavMode());
 	panel.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:'Microsoft YaHei','微软雅黑',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;";
 	panel.innerHTML = `
     <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;">
+      <button id="aus-hamburger-btn" title="菜单" style="display:none;width:28px;height:28px;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;">${icon("menu", 22)}</button>
       <button id="aus-mobile-back" title="返回设置" style="display:none;width:28px;height:28px;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;">${icon("chevron-left", 20)}</button>
       <span id="aus-mobile-brand" style="margin-left:12px;font-size:var(--aus-fs-base);font-weight:700;color:var(--ds-text);white-space:nowrap;flex-shrink:0;">API用量统计</span>
       <span id="aus-mobile-page-title" style="margin-left:10px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text-2);">用量概览</span>
@@ -13746,7 +10950,7 @@ function createPanel() {
           <div data-view="help" style="display:none;">
             <div style="display:grid;gap:12px;">
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#FF6A00;font-weight:600;margin-bottom:6px;">完整使用文档</div><div style="color:var(--ds-text-2);">详细说明各页面、筛选、钱包、定价、同步、隐私与常见问题。</div><a href="https://janmk1453.github.io/Api-Usage/" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;margin-top:10px;padding:8px 14px;border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);text-decoration:none;font-size:var(--aus-fs-base);font-weight:600;">前往完整使用文档</a></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0070F3;font-weight:600;margin-bottom:6px;">🧭 导航（手机端）</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 窄屏改用底部标签栏：概览 / 统计 / 历史 / 趋势 / 设置；再点一次当前标签可回到页面顶部</div><div>2. 钱包、使用说明、关于都收在「设置」页顶部的入口里，进入后点左上角返回箭头回到设置</div><div>3. 从别的标签回到「设置」时会回到上次停留的那个页面（钱包/使用说明/关于）；桌面端仍是左侧可折叠侧边栏，入口位置不变</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0070F3;font-weight:600;margin-bottom:6px;">🧭 导航（手机端）</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 窄屏改用底部标签栏：概览 / 统计 / 历史 / 趋势 / 设置；再点一次当前标签可回到页面顶部</div><div>2. 钱包、使用说明、关于都收在「设置」页顶部的入口里，进入后点左上角返回箭头回到设置</div><div>3. 从别的标签回到「设置」时会回到上次停留的那个页面（钱包/使用说明/关于）；桌面端仍是左侧可折叠侧边栏，入口位置不变</div><div>4. 不习惯底栏？去「设置 → 移动端兼容UI」关掉开关，窄屏立刻变回原来的侧栏抽屉（左上角菜单按钮），桌面端不受影响</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#DC2626;font-weight:600;margin-bottom:6px;">隐私声明（完整版：<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:#DC2626;text-decoration:underline;">https://janmk1453.github.io/Api-Usage/#privacy</a>）</div><div style="color:var(--ds-text-2);display:grid;gap:6px;"><div>本扩展有且只能获得用户在酒馆本身中填写的：密钥条目的编号、用户备注和掩码末三位，仅用于独立区分请求来源，不会且无法读取、保存或上传完整明文密钥。</div><div>用户储存在酒馆本身的密钥是安全的，本扩展无法获取真实密钥。</div><div>用户主动填入本扩展的校准密钥是实际可用的密钥，且仅会被用于查询该钱包所对应厂商的余额或套餐额度接口（DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita、智谱 GLM、MiniMax、以及用户自填的 new-api 中转站），不会额外造成扣费或消耗；它仅经 XOR 混淆后存放于 SillyTavern，不进入历史记录、统计、日志、导入导出或 WebDAV。查询由浏览器直连厂商接口，不经过任何第三方代理；对未开放跨域（CORS）的厂商会直接失败并提示，扩展不会绕过该限制。</div><div>XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。</div><div>本扩展完整代码开源可审查。</div><div style="margin-top:2px;padding-top:6px;border-top:1px solid var(--ds-border);font-weight:600;color:#DC2626;">免责声明（完整版见上方链接）</div><div>本扩展不对功能“价格来源”、“自动同步”等利用 <a href="https://models.dev" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 获取的数据中出现或可能出现的商业化中转站负责；我们不建议使用任何商业化中转站，尽管我们已经尽力筛选数据，但由于对大量数据进行完全筛选难以实现，因此我们不对可能出现的任何商业化中转站名称负责，不构成推荐，和 models.dev 或任何中转站没有商业往来，坚定不移的反对商业化。</div><div>「套餐额度」中的本地估算基于本扩展记录的历史数据推算，不包含其他设备或其他客户端的消耗，可能与实际剩余额度有偏差，仅供展示参考，不参与计费、导出与云同步，不能作为账单依据；对没有公开接口或未开放跨域的厂商（Claude Code、Codex、OpenCode、GitHub Copilot、Cursor、讯飞星辰等），扩展不提供、也不会绕过限制去提供自动查询。</div><div>界面中的厂商图标与名称商标归各自所有者，仅用于标识接入来源，不构成任何关联、合作或背书；图标数据内联自 simple-icons（CC0 发布）。</div><div>我们将尽可能维护扩展的安全和隐私性，但本扩展不对因酒馆/本扩展的安全漏洞或因间接原因导致的任何形式的密钥泄露及产生的损失负责。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0BA25E;font-weight:600;margin-bottom:6px;">钱包</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 扩展按识别到的接入链接自动创建和汇总钱包，默认始终保留 DeepSeek 官方钱包；同名链接下识别的密钥和模型会归入同一钱包。</div><div>2. 每个钱包可独立维护名称、余额、模型价格、峰谷规则和价格来源；钱包默认收起，展开状态按钱包记忆。价格来源仅展示第一方模型厂商，不展示中转站或聚合平台；同步时只按钱包里已识别的模型名做模糊匹配后写入该模型价格，不会把供应商目录里的模型整批加入钱包。</div><div>3. 请求进入后会先匹配所属钱包，再使用该钱包的模型价格和峰谷规则计费，并从对应钱包余额预扣；未配置价格的模型先记零费用，保存或同步价格后自动重算冷热历史。</div><div>4. 余额查询按「查询适配器」工作：DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita 可查余额，智谱 GLM 与 MiniMax 可查套餐额度，new-api 中转可用「系统访问令牌 + 用户 ID」查订阅额度；密钥在该钱包内单独填写，多个密钥不会自动相加。</div><div>5. 删除钱包会进入“已忽略接入”，后续请求不会自动重建、不参与余额合计，历史记录仍保留归属，需要时可恢复显示。</div><div>6. 「套餐额度」只对能查询到额度的厂商显示，查到哪个展示哪个；本地估算需手动启用，仅作参考，不参与计费。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（按钱包内的「查询适配器」查询，支持多家厂商）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
@@ -13806,6 +11010,10 @@ function createPanel() {
         </div>`).join("")}
     </div>
   `;
+	const sbOverlay = doc.createElement("div");
+	sbOverlay.id = "aus-sidebar-overlay";
+	sbOverlay.style.cssText = "display:none;";
+	panel.appendChild(sbOverlay);
 	doc.body.appendChild(overlay);
 	doc.body.appendChild(panel);
 	try {
@@ -13824,6 +11032,10 @@ function createPanel() {
 		el.addEventListener("click", () => {
 			const v = el.getAttribute("data-nav");
 			if (v) switchView(v);
+			if (mobileOpen) {
+				mobileOpen = false;
+				syncMobileSidebar(doc);
+			}
 		});
 	});
 	doc.querySelectorAll("#aus-bottom-nav [data-bottom-nav]").forEach((el) => {
@@ -13851,7 +11063,10 @@ function createPanel() {
 		const brand = doc.getElementById("aus-brand");
 		const btn = doc.getElementById("aus-sidebar-toggle");
 		if (!sb) return;
-		if (isNarrowPanel(doc)) return;
+		if (isNarrowPanel(doc)) {
+			if (mobileNavMode() === "sidebar") syncMobileSidebar(doc);
+			return;
+		}
 		sb.setAttribute("data-collapsed", collapsed ? "1" : "0");
 		sb.style.setProperty("width", collapsed ? "60px" : "260px", "important");
 		sb.style.setProperty("min-width", collapsed ? "60px" : "260px", "important");
@@ -13869,16 +11084,36 @@ function createPanel() {
 		});
 	};
 	doc.getElementById("aus-sidebar-toggle")?.addEventListener("click", () => applyCollapsed(!collapsed));
+	doc.getElementById("aus-hamburger-btn")?.addEventListener("click", () => {
+		mobileOpen = !mobileOpen;
+		syncMobileSidebar(doc);
+	});
+	/**
+	* 把「移动端兼容 UI」开关状态写到 #aus-panel[data-mobile-nav]（CSS 靠这个属性二选一），
+	* 并立刻按新布局重排：关掉抽屉、必要时恢复宽屏折叠、重算底栏高亮与返回箭头。
+	*/
+	const applyMobileNavModeLocal = () => {
+		const pn = doc.getElementById("aus-panel");
+		if (pn) pn.setAttribute("data-mobile-nav", mobileNavMode());
+		mobileOpen = false;
+		syncMobileSidebar(doc);
+		if (!isNarrowPanel(doc)) applyCollapsed(collapsed);
+		paintNavState(doc, bottomNavActive(doc), false);
+	};
+	applyMobileNavModeImpl = applyMobileNavModeLocal;
+	applyMobileNavModeLocal();
 	try {
-		paintNavState(doc, isNarrowPanel(doc), false);
 		let rzT = null;
 		const onResize = () => {
 			if (rzT) return;
 			rzT = setTimeout(() => {
 				rzT = null;
-				const narrow = isNarrowPanel(doc);
-				if (!narrow) applyCollapsed(collapsed);
-				paintNavState(doc, narrow, false);
+				if (!isNarrowPanel(doc)) {
+					mobileOpen = false;
+					syncMobileSidebar(doc);
+					applyCollapsed(collapsed);
+				} else syncMobileSidebar(doc);
+				paintNavState(doc, bottomNavActive(doc), false);
 				try {
 					positionPanel();
 				} catch {}
@@ -14011,7 +11246,7 @@ function openPanel() {
 	ov.style.display = "block";
 	pn.style.display = "flex";
 	try {
-		paintNavState(doc, isNarrowPanel(doc), false);
+		applyMobileNavModeImpl?.();
 	} catch {}
 	positionPanel();
 	requestAnimationFrame(() => {
@@ -14024,7 +11259,7 @@ function openPanel() {
 	panelOpen = true;
 	refreshUI();
 	try {
-		import("./collector-DJ0dScs1.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-TXuKnAPm.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-Xu8AeOd6.js").then((m) => m.maybeAutoCheck());
@@ -14041,6 +11276,8 @@ function closePanel() {
 		}, 200);
 	}
 	if (pn) pn.style.display = "none";
+	mobileOpen = false;
+	syncMobileSidebar(doc);
 	panelOpen = false;
 	try {
 		flushTelemetry("close");
@@ -14244,10 +11481,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-BsHkDurZ.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-C-uRMjmL.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-DJ0dScs1.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-TXuKnAPm.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -14255,10 +11492,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-BsHkDurZ.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-C-uRMjmL.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-DJ0dScs1.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-TXuKnAPm.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -14348,13 +11585,13 @@ async function onDelete() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-CvgCg-F3.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-B9aZlpFt.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-DgeH8MPr.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-9LYFOfk8.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DuNUqgL8.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-PaDVHrO2.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 	try {
@@ -14381,19 +11618,19 @@ async function onDelete() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-BsHkDurZ.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-C-uRMjmL.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-DJ0dScs1.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-TXuKnAPm.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-CvgCg-F3.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-B9aZlpFt.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
-		import("./currency-DgeH8MPr.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+		import("./currency-9LYFOfk8.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-DuNUqgL8.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-PaDVHrO2.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -14403,10 +11640,10 @@ async function onDisable() {
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-BsHkDurZ.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-C-uRMjmL.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-DJ0dScs1.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-TXuKnAPm.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -14425,13 +11662,13 @@ async function onDisable() {
 		unwatchSystemTheme();
 	} catch {}
 	try {
-		(await import("./balance-CvgCg-F3.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-B9aZlpFt.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-DgeH8MPr.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-9LYFOfk8.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DuNUqgL8.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-PaDVHrO2.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -14459,19 +11696,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-CvgCg-F3.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-B9aZlpFt.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-DgeH8MPr.js").then((n) => n.t)).restartRateTimer?.();
+		(await import("./currency-9LYFOfk8.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DuNUqgL8.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-PaDVHrO2.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-DJ0dScs1.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-TXuKnAPm.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -14493,7 +11730,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-DuNUqgL8.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-PaDVHrO2.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();
@@ -14540,4 +11777,4 @@ async function init() {
 }
 init();
 //#endregion
-export { onActivate, onDelete, onDisable, onEnable, onInstall, onUpdate, settings_exports as t };
+export { onActivate, onDelete, onDisable, onEnable, onInstall, onUpdate, panel_exports as t };

@@ -25,6 +25,7 @@ var defaultSettings = () => ({
 	extraOffDays: [],
 	peakDot: false,
 	telemetryEnabled: true,
+	mobileCompatUi: true,
 	webdav: {
 		url: "https://dav.jianguoyun.com/dav/",
 		username: "",

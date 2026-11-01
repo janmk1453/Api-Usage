@@ -739,7 +739,7 @@ function bindTopbarScroll(doc: Document): void {
 // 松手时移除，CSS 侧 120ms 回弹。窄屏的底栏 tab、返回箭头与设置页二级入口都复用这一套。
 function bindPressFeedback(doc: Document): void {
   try {
-    const sel = '#aus-mobile-back, #aus-bottom-nav .aus-bottom-item, #aus-settings-entries .aus-settings-entry';
+    const sel = '#aus-hamburger-btn, #aus-mobile-back, #aus-bottom-nav .aus-bottom-item, #aus-settings-entries .aus-settings-entry';
     doc.querySelectorAll(sel).forEach((el: any) => {
       const node = el as HTMLElement;
       if (node.getAttribute('data-press-bound') === '1') return;
@@ -770,6 +770,26 @@ export function bindPanel(doc: Document) {
   bindPressFeedback(doc);
 }
 
+/** 「移动端兼容 UI」关闭时窄屏回到改造前的侧栏抽屉（含汉堡按钮与遮罩） */
+let mobileOpen = false;
+/** 由 createPanel 注入：切换「移动端兼容 UI」后立即按新布局重排导航 */
+let applyMobileNavModeImpl: (() => void) | null = null;
+
+/** 移动端兼容 UI 开关：true（默认）窄屏用底栏；false 回到改造前的侧栏抽屉 */
+function mobileNavMode(): 'bottom' | 'sidebar' {
+  try { return (state.settings as any).mobileCompatUi === false ? 'sidebar' : 'bottom'; } catch { return 'bottom'; }
+}
+
+/** 窄屏且开启底栏布局时才走底栏语义（指示胶囊 / 返回箭头 / 重复点 tab / 入场动画） */
+function bottomNavActive(doc: Document): boolean {
+  return isNarrowPanel(doc) && mobileNavMode() === 'bottom';
+}
+
+/** 设置页开关调用：把当前选择写到 #aus-panel[data-mobile-nav] 并重排导航，无需刷新页面 */
+export function applyMobileNavMode(): void {
+  try { applyMobileNavModeImpl?.(); } catch {}
+}
+
 /**
  * 面板当前是否按窄屏（底栏）布局渲染。
  * 用 #aus-panel-body 的实际宽度判定；面板未显示（clientWidth 为 0）时回退到窗口宽度。
@@ -797,6 +817,10 @@ function playViewEnter(el: HTMLElement | null): void {
   } catch {}
 }
 
+/** 底栏指示胶囊尺寸（必须与 style.css 的 #aus-bottom-indicator 保持 56×44 / 圆角 16 一致） */
+const BOTTOM_PILL_W = 56;
+const BOTTOM_PILL_H = 44;
+
 /**
  * 底栏指示胶囊跟随当前 tab（切换动画的核心）。
  * 首次定位关掉过渡，避免面板一打开胶囊就从最左侧"飞过来"。
@@ -815,34 +839,46 @@ function syncBottomNav(doc: Document, animate: boolean): void {
     if (!ind) return;
     const target = activeEl as HTMLElement | null;
     if (!target) { ind.style.opacity = '0'; return; }
+    // 底栏在「移动端兼容 UI」关闭时整体隐藏（display:none），此时量不到位置，直接跳过
+    if (!target.offsetWidth) { ind.style.opacity = '0'; return; }
     ind.style.opacity = '1';
-    const x = Math.round(target.offsetLeft + target.offsetWidth / 2 - 23);
+    // 胶囊对准整个 tab（图标 + 文字）的中心：只圈住图标会像个悬空的椭圆环，观感很怪
+    const barRect = bar.getBoundingClientRect();
+    const itemRect = target.getBoundingClientRect();
+    if (!barRect.height || !itemRect.width) { ind.style.opacity = '0'; return; }
+    const x = Math.round(itemRect.left - barRect.left + itemRect.width / 2 - BOTTOM_PILL_W / 2);
+    const y = Math.round(itemRect.top - barRect.top + itemRect.height / 2 - BOTTOM_PILL_H / 2);
     const first = bar.getAttribute('data-ready') !== '1';
+    const next = 'translate3d(' + x + 'px,' + y + 'px,0)';
     if (!animate || first) {
       const prev = ind.style.transition;
       ind.style.transition = 'none';
-      ind.style.transform = 'translate3d(' + x + 'px,0,0)';
+      ind.style.transform = next;
       void ind.offsetWidth;
       ind.style.transition = prev;
       bar.setAttribute('data-ready', '1');
     } else {
-      ind.style.transform = 'translate3d(' + x + 'px,0,0)';
+      ind.style.transform = next;
     }
   } catch {}
 }
 
-/** 侧栏（桌面）/底栏（窄屏）高亮 + 二级页返回箭头显隐：切页与窗口尺寸变化共用 */
-function paintNavState(doc: Document, narrow: boolean, animate: boolean): void {
-  currentNavKey = narrow ? parentTabOf(currentView) : currentView;
+/**
+ * 侧栏 / 底栏高亮 + 二级页返回箭头显隐：切页与窗口尺寸变化共用。
+ * bottom=true 表示当前是底栏布局（窄屏 + 移动端兼容 UI 开启）：二级页的高亮归到「设置」并显示返回箭头；
+ * bottom=false 是桌面侧栏或「移动端兼容 UI」关闭后的原侧栏抽屉，直接按当前视图高亮，也没有返回箭头。
+ */
+function paintNavState(doc: Document, bottom: boolean, animate: boolean): void {
+  currentNavKey = bottom ? parentTabOf(currentView) : currentView;
   try {
     doc.querySelectorAll('#aus-sidebar [data-nav]').forEach((el: any) => {
       const v = el.getAttribute('data-nav');
       el.classList.toggle('active', v === currentNavKey);
     });
   } catch {}
-  syncBottomNav(doc, animate);
+  if (bottom) syncBottomNav(doc, animate);
   const backBtn = doc.getElementById('aus-mobile-back') as HTMLElement | null;
-  if (backBtn) backBtn.style.display = narrow && isSettingsChild(currentView) ? 'flex' : 'none';
+  if (backBtn) backBtn.style.display = bottom && isSettingsChild(currentView) ? 'flex' : 'none';
 }
 
 /**
@@ -853,7 +889,8 @@ function paintNavState(doc: Document, narrow: boolean, animate: boolean): void {
  */
 function handleBottomTabTap(target: AppView): void {
   const doc = getDoc();
-  if (!isNarrowPanel(doc)) { switchView(target); return; }
+  // 底栏不显示（桌面 / 移动端兼容 UI 关闭）时它就是普通切页
+  if (!bottomNavActive(doc)) { switchView(target); return; }
   const action = resolveTabTap(target, currentView, isSettingsChild(currentView));
   if (action === 'switch') {
     const to = target === 'settings' && settingsChildView ? settingsChildView : target;
@@ -866,6 +903,45 @@ function handleBottomTabTap(target: AppView): void {
     if (main) main.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
     const contentBody = doc.getElementById('aus-content-body') as HTMLElement | null;
     if (contentBody) contentBody.scrollTop = 0;
+  } catch {}
+}
+
+/**
+ * 侧栏抽屉显隐（仅「移动端兼容 UI」关闭时的窄屏：原侧栏抽屉 + 汉堡 + 遮罩，与改造前实现一致）。
+ * 滑动/淡入淡出动画全部由 style.css 提供，这里只管 class 与遮罩可点性。
+ */
+function syncMobileSidebar(doc: Document): void {
+  try {
+    const sb = doc.getElementById('aus-sidebar') as HTMLElement | null;
+    if (!sb) return;
+    const ov = doc.getElementById('aus-sidebar-overlay') as HTMLElement | null;
+    if (isNarrowPanel(doc) && mobileNavMode() === 'sidebar') {
+      sb.classList.toggle('is-open', mobileOpen);
+      if (ov) {
+        ov.classList.toggle('is-open', mobileOpen);
+        ov.style.display = '';
+        ov.onclick = mobileOpen ? () => { mobileOpen = false; syncMobileSidebar(doc); } : null;
+      }
+      // 窄屏强制还原完整导航，避免宽屏折叠残留的 inline 隐藏
+      const brand = doc.getElementById('aus-brand') as HTMLElement | null;
+      if (brand) brand.style.removeProperty('display');
+      doc.querySelectorAll('#aus-sidebar .aus-nav-label').forEach((el: any) => { (el as HTMLElement).style.removeProperty('display'); });
+      doc.querySelectorAll('#aus-sidebar .aus-nav-item').forEach((el: any) => {
+        const c = el as HTMLElement;
+        c.style.removeProperty('justify-content');
+        c.style.removeProperty('padding');
+      });
+      sb.style.removeProperty('width');
+      sb.style.removeProperty('min-width');
+      sb.style.removeProperty('max-width');
+    } else {
+      sb.classList.remove('is-open');
+      if (ov) {
+        ov.classList.remove('is-open');
+        ov.style.display = 'none';
+        ov.onclick = null;
+      }
+    }
   } catch {}
 }
 
@@ -882,7 +958,7 @@ function switchView(view: AppView) {
   // 匿名使用统计：页面使用率（仅本地累加，关闭面板时统一上报）
   try { trackPage(view); } catch {}
   const doc = getDoc();
-  const narrow = isNarrowPanel(doc);
+  const bottom = bottomNavActive(doc);
   if (view !== 'history') closeHistoryDetail(doc);
   doc.querySelectorAll('[data-view]').forEach((el: any) => {
     const v = el.getAttribute('data-view');
@@ -890,8 +966,8 @@ function switchView(view: AppView) {
     el.style.display = on ? 'block' : 'none';
     // 瞬时切换：不再走"先透明再淡入"，避免点击后有一小段延迟感
     if (on) { el.style.transition = 'none'; el.style.opacity = '1'; }
-    // 入场动画只在窄屏播放，桌面端保持原样（不淡入）
-    if (on && narrow) playViewEnter(el as HTMLElement);
+    // 入场动画只在底栏布局（窄屏 + 兼容 UI 开启）播放，桌面与原侧栏抽屉保持瞬时切换
+    if (on && bottom) playViewEnter(el as HTMLElement);
   });
   // 所有视图共用 #aus-main 作为滚动容器，切换页面时必须把滚动位置归零，
   // 否则会沿用上一页的 scrollTop，出现"切过去直接显示页面中部"的问题。
@@ -904,8 +980,8 @@ function switchView(view: AppView) {
     }
   } catch {}
   syncTopbarState(doc);
-  // 侧栏/底栏高亮（窄屏二级页归到「设置」）+ 二级页返回箭头
-  paintNavState(doc, narrow, narrow);
+  // 侧栏/底栏高亮（底栏布局下二级页归到「设置」）+ 二级页返回箭头
+  paintNavState(doc, bottom, bottom);
   const titleText = viewTitle(view);
   const titleEl = doc.getElementById('aus-page-title');
   const mobileTitleEl = doc.getElementById('aus-mobile-page-title');
@@ -963,9 +1039,12 @@ export function createPanel() {
   panel.id = 'aus-panel';
   panel.setAttribute('data-extension', 'api-usage-stat');
   panel.setAttribute('data-ds-theme', theme);
+  // 窄屏布局二选一：bottom=底部标签栏（移动端兼容 UI 开启）/ sidebar=改造前的侧栏抽屉
+  panel.setAttribute('data-mobile-nav', mobileNavMode());
   panel.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:\'Microsoft YaHei\',\'微软雅黑\',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;';
   panel.innerHTML = `
     <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;">
+      <button id="aus-hamburger-btn" title="菜单" style="display:none;width:28px;height:28px;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;">${icon('menu', 22)}</button>
       <button id="aus-mobile-back" title="返回设置" style="display:none;width:28px;height:28px;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;">${icon('chevron-left', 20)}</button>
       <span id="aus-mobile-brand" style="margin-left:12px;font-size:var(--aus-fs-base);font-weight:700;color:var(--ds-text);white-space:nowrap;flex-shrink:0;">API用量统计</span>
       <span id="aus-mobile-page-title" style="margin-left:10px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text-2);">用量概览</span>
@@ -1230,7 +1309,7 @@ export function createPanel() {
           <div data-view="help" style="display:none;">
             <div style="display:grid;gap:12px;">
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#FF6A00;font-weight:600;margin-bottom:6px;">完整使用文档</div><div style="color:var(--ds-text-2);">详细说明各页面、筛选、钱包、定价、同步、隐私与常见问题。</div><a href="https://janmk1453.github.io/Api-Usage/" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;margin-top:10px;padding:8px 14px;border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);text-decoration:none;font-size:var(--aus-fs-base);font-weight:600;">前往完整使用文档</a></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0070F3;font-weight:600;margin-bottom:6px;">🧭 导航（手机端）</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 窄屏改用底部标签栏：概览 / 统计 / 历史 / 趋势 / 设置；再点一次当前标签可回到页面顶部</div><div>2. 钱包、使用说明、关于都收在「设置」页顶部的入口里，进入后点左上角返回箭头回到设置</div><div>3. 从别的标签回到「设置」时会回到上次停留的那个页面（钱包/使用说明/关于）；桌面端仍是左侧可折叠侧边栏，入口位置不变</div></div></div>
+              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0070F3;font-weight:600;margin-bottom:6px;">🧭 导航（手机端）</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 窄屏改用底部标签栏：概览 / 统计 / 历史 / 趋势 / 设置；再点一次当前标签可回到页面顶部</div><div>2. 钱包、使用说明、关于都收在「设置」页顶部的入口里，进入后点左上角返回箭头回到设置</div><div>3. 从别的标签回到「设置」时会回到上次停留的那个页面（钱包/使用说明/关于）；桌面端仍是左侧可折叠侧边栏，入口位置不变</div><div>4. 不习惯底栏？去「设置 → 移动端兼容UI」关掉开关，窄屏立刻变回原来的侧栏抽屉（左上角菜单按钮），桌面端不受影响</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#DC2626;font-weight:600;margin-bottom:6px;">隐私声明（完整版：<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:#DC2626;text-decoration:underline;">https://janmk1453.github.io/Api-Usage/#privacy</a>）</div><div style="color:var(--ds-text-2);display:grid;gap:6px;"><div>本扩展有且只能获得用户在酒馆本身中填写的：密钥条目的编号、用户备注和掩码末三位，仅用于独立区分请求来源，不会且无法读取、保存或上传完整明文密钥。</div><div>用户储存在酒馆本身的密钥是安全的，本扩展无法获取真实密钥。</div><div>用户主动填入本扩展的校准密钥是实际可用的密钥，且仅会被用于查询该钱包所对应厂商的余额或套餐额度接口（DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita、智谱 GLM、MiniMax、以及用户自填的 new-api 中转站），不会额外造成扣费或消耗；它仅经 XOR 混淆后存放于 SillyTavern，不进入历史记录、统计、日志、导入导出或 WebDAV。查询由浏览器直连厂商接口，不经过任何第三方代理；对未开放跨域（CORS）的厂商会直接失败并提示，扩展不会绕过该限制。</div><div>XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。</div><div>本扩展完整代码开源可审查。</div><div style="margin-top:2px;padding-top:6px;border-top:1px solid var(--ds-border);font-weight:600;color:#DC2626;">免责声明（完整版见上方链接）</div><div>本扩展不对功能“价格来源”、“自动同步”等利用 <a href="https://models.dev" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 获取的数据中出现或可能出现的商业化中转站负责；我们不建议使用任何商业化中转站，尽管我们已经尽力筛选数据，但由于对大量数据进行完全筛选难以实现，因此我们不对可能出现的任何商业化中转站名称负责，不构成推荐，和 models.dev 或任何中转站没有商业往来，坚定不移的反对商业化。</div><div>「套餐额度」中的本地估算基于本扩展记录的历史数据推算，不包含其他设备或其他客户端的消耗，可能与实际剩余额度有偏差，仅供展示参考，不参与计费、导出与云同步，不能作为账单依据；对没有公开接口或未开放跨域的厂商（Claude Code、Codex、OpenCode、GitHub Copilot、Cursor、讯飞星辰等），扩展不提供、也不会绕过限制去提供自动查询。</div><div>界面中的厂商图标与名称商标归各自所有者，仅用于标识接入来源，不构成任何关联、合作或背书；图标数据内联自 simple-icons（CC0 发布）。</div><div>我们将尽可能维护扩展的安全和隐私性，但本扩展不对因酒馆/本扩展的安全漏洞或因间接原因导致的任何形式的密钥泄露及产生的损失负责。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0BA25E;font-weight:600;margin-bottom:6px;">钱包</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 扩展按识别到的接入链接自动创建和汇总钱包，默认始终保留 DeepSeek 官方钱包；同名链接下识别的密钥和模型会归入同一钱包。</div><div>2. 每个钱包可独立维护名称、余额、模型价格、峰谷规则和价格来源；钱包默认收起，展开状态按钱包记忆。价格来源仅展示第一方模型厂商，不展示中转站或聚合平台；同步时只按钱包里已识别的模型名做模糊匹配后写入该模型价格，不会把供应商目录里的模型整批加入钱包。</div><div>3. 请求进入后会先匹配所属钱包，再使用该钱包的模型价格和峰谷规则计费，并从对应钱包余额预扣；未配置价格的模型先记零费用，保存或同步价格后自动重算冷热历史。</div><div>4. 余额查询按「查询适配器」工作：DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita 可查余额，智谱 GLM 与 MiniMax 可查套餐额度，new-api 中转可用「系统访问令牌 + 用户 ID」查订阅额度；密钥在该钱包内单独填写，多个密钥不会自动相加。</div><div>5. 删除钱包会进入“已忽略接入”，后续请求不会自动重建、不参与余额合计，历史记录仍保留归属，需要时可恢复显示。</div><div>6. 「套餐额度」只对能查询到额度的厂商显示，查到哪个展示哪个；本地估算需手动启用，仅作参考，不参与计费。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（按钱包内的「查询适配器」查询，支持多家厂商）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
@@ -1290,6 +1369,11 @@ export function createPanel() {
         </div>`).join('')}
     </div>
   `;
+  // 侧栏抽屉遮罩：仅「移动端兼容 UI」关闭 + 窄屏时出现，点遮罩关闭抽屉
+  const sbOverlay = doc.createElement('div');
+  sbOverlay.id = 'aus-sidebar-overlay';
+  sbOverlay.style.cssText = 'display:none;';
+  panel.appendChild(sbOverlay);
   doc.body.appendChild(overlay);
   doc.body.appendChild(panel);
   // 面板可能晚于更新检查创建：挂载后按当前更新状态同步导航徽标
@@ -1307,6 +1391,8 @@ export function createPanel() {
     el.addEventListener('click', () => {
       const v = el.getAttribute('data-nav');
       if (v) switchView(v as AppView);
+      // 原侧栏抽屉：窄屏点完导航自动收起（底栏布局下本就不会进这里）
+      if (mobileOpen) { mobileOpen = false; syncMobileSidebar(doc); }
     });
   });
   // 底栏（仅窄屏显示）：走 tab 语义（换页 / 二级页回根 / 回顶部）
@@ -1337,8 +1423,8 @@ export function createPanel() {
     const brand = doc.getElementById('aus-brand') as HTMLElement | null;
     const btn = doc.getElementById('aus-sidebar-toggle') as HTMLElement | null;
     if (!sb) return;
-    // 窄屏走底栏布局，侧栏整体隐藏，不做折叠（避免残留 inline 宽度）
-    if (isNarrowPanel(doc)) return;
+    // 窄屏：底栏布局下侧栏整体隐藏；兼容 UI 关闭时由抽屉开关（mobileOpen）控制显隐，都不做折叠
+    if (isNarrowPanel(doc)) { if (mobileNavMode() === 'sidebar') syncMobileSidebar(doc); return; }
     // 折叠态隐藏「有新版本」徽标（60px 侧栏放不下），展开后按真实状态恢复
     sb.setAttribute('data-collapsed', collapsed ? '1' : '0');
     // 宽屏：保留 60/260 折叠
@@ -1354,18 +1440,41 @@ export function createPanel() {
     });
   };
   doc.getElementById('aus-sidebar-toggle')?.addEventListener('click', () => applyCollapsed(!collapsed));
+  // 原侧栏抽屉：左上角菜单按钮开合
+  doc.getElementById('aus-hamburger-btn')?.addEventListener('click', () => {
+    mobileOpen = !mobileOpen;
+    syncMobileSidebar(doc);
+  });
+  /**
+   * 把「移动端兼容 UI」开关状态写到 #aus-panel[data-mobile-nav]（CSS 靠这个属性二选一），
+   * 并立刻按新布局重排：关掉抽屉、必要时恢复宽屏折叠、重算底栏高亮与返回箭头。
+   */
+  const applyMobileNavModeLocal = () => {
+    const pn = doc.getElementById('aus-panel') as HTMLElement | null;
+    if (pn) pn.setAttribute('data-mobile-nav', mobileNavMode());
+    mobileOpen = false;
+    syncMobileSidebar(doc);
+    if (!isNarrowPanel(doc)) applyCollapsed(collapsed);
+    paintNavState(doc, bottomNavActive(doc), false);
+  };
+  applyMobileNavModeImpl = applyMobileNavModeLocal;
+  applyMobileNavModeLocal();
   try {
-    paintNavState(doc, isNarrowPanel(doc), false);
     let rzT: any = null;
     const onResize = () => {
       if (rzT) return;
       rzT = setTimeout(() => {
         rzT = null;
         const narrow = isNarrowPanel(doc);
-        // 宽屏下恢复用户上次的折叠状态；窄屏侧栏整体隐藏，无需处理
-        if (!narrow) applyCollapsed(collapsed);
+        if (!narrow) {
+          mobileOpen = false;
+          syncMobileSidebar(doc);
+          applyCollapsed(collapsed);
+        } else {
+          syncMobileSidebar(doc);
+        }
         // 底栏在尺寸变化后需重新量位置（宽度变了 tab 中线也变了），不播动画
-        paintNavState(doc, narrow, false);
+        paintNavState(doc, bottomNavActive(doc), false);
         try { positionPanel(); } catch {}
       }, 150);
     };
@@ -1499,8 +1608,8 @@ export function openPanel() {
   }
   ov.style.display = 'block';
   pn.style.display = 'flex';
-  // 面板刚显示，此时才能量到底栏 tab 的真实位置：不播动画直接摆好指示胶囊
-  try { paintNavState(doc, isNarrowPanel(doc), false); } catch {}
+  // 面板刚显示，此时才能量到底栏 tab 的真实位置：按当前兼容 UI 开关摆好导航，不播动画
+  try { applyMobileNavModeImpl?.(); } catch {}
   positionPanel();
   requestAnimationFrame(() => {
     ov.style.opacity = '1';
@@ -1519,6 +1628,9 @@ export function closePanel() {
   const pn = doc.getElementById('aus-panel') as HTMLElement | null;
   if (ov) { ov.style.opacity = '0'; setTimeout(() => { ov.style.display = 'none'; }, 200); }
   if (pn) pn.style.display = 'none';
+  // 收起原侧栏抽屉，下次打开从关闭态开始
+  mobileOpen = false;
+  syncMobileSidebar(doc);
   panelOpen = false;
   // 匿名使用统计：关闭面板时合并上报本次会话数据
   try { flushTelemetry('close'); } catch {}

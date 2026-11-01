@@ -662,6 +662,8 @@ export function normalizeSettings(incoming: any): any {
   if (!merged.historyScope) merged.historyScope = def.historyScope;
   if (!merged.theme) merged.theme = def.theme;
   if (typeof merged.modelsPricingCollapsed !== 'boolean') merged.modelsPricingCollapsed = true;
+  // 移动端兼容 UI：缺字段的旧数据一律按开启（底栏）处理，关闭后回到原侧栏抽屉
+  if (typeof (merged as any).mobileCompatUi !== 'boolean') (merged as any).mobileCompatUi = true;
   // 峰值圆点默认值改为「关闭」只作用于全新安装（没有任何已存设置）：
   // 老版本持久化里根本没有这个键的用户，按旧行为迁移成开启，避免升级后圆点无声消失。
   if (src.peakDot === undefined && Object.keys(src).length > 0) merged.peakDot = true;

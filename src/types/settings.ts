@@ -73,6 +73,8 @@ export type Settings = {
   peakDot: boolean;
   /** 匿名使用统计开关（默认开启，关闭后不再采集与上报） */
   telemetryEnabled: boolean;
+  /** 移动端兼容 UI：true（默认）窄屏用底部标签栏；false 回到改造前的侧栏抽屉 + 汉堡按钮 */
+  mobileCompatUi: boolean;
   webdav: WebdavSettings;
   historyScope: HistoryScope;
   overviewFour: OverviewFourKey[];
@@ -99,6 +101,7 @@ export const defaultSettings = (): Settings => ({
   extraOffDays: [],
   peakDot: false,
   telemetryEnabled: true,
+  mobileCompatUi: true,
   webdav: { url: 'https://dav.jianguoyun.com/dav/', username: '', path: '', proxy: '' },
   historyScope: 'all',
   overviewFour: ['avg_cost', 'avg_tokens', 'avg_duration', 'avg_rate', 'avg_input_tokens', 'avg_output_tokens', 'avg_hit_rate', 'max_total'],
