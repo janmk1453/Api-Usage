@@ -1716,6 +1716,8 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     },
   };
   const METRIC_ORDER = ['users', 'newUsers', 'opens', 'views', 'duration', 'cumulative'];
+  /* 概览「活跃趋势」卡只允许单一指标，且只在这四项里切换；趋势页的多指标选择另用 chart.metrics */
+  const OV_METRICS = ['users', 'newUsers', 'opens', 'duration'];
 
   function metricValue(metric, rows) {
     if (!rows.length) return 0;
@@ -2067,7 +2069,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     range: presetRange(30),
     compare: true,
     granularity: 'day',
-    chart: Object.assign({ metrics: ['users'], type: 'area', smooth: true, dots: false }, stored.chart || {}),
+    chart: Object.assign({ metrics: ['users'], ov: 'users', type: 'area', smooth: true, dots: false }, stored.chart || {}),
     audienceTab: 'device',
     perfSort: { key: 'avgMs', dir: 'asc' },
     explore: Object.assign({ dim: 'os', viz: 'bar', topN: 8, sort: 'value' }, stored.explore || {}),
@@ -2078,6 +2080,8 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
   };
   if (!Array.isArray(state.chart.metrics) || !state.chart.metrics.length) state.chart.metrics = ['users'];
   if (state.chart.metrics.length > 3) state.chart.metrics = state.chart.metrics.slice(0, 3);
+  /* 概览指标与趋势页解耦：历史存下来的 views/cumulative 等非法值一律回落到活跃 */
+  if (OV_METRICS.indexOf(state.chart.ov) < 0) state.chart.ov = 'users';
 
   /* -------------------------------- 导出 -------------------------------- */
   const core = {
@@ -2086,7 +2090,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     sum, avg, delta,
     presetRange, allRange, normalizeRange, rangeDays, shiftRange, rangeLabel, rangeSub, renderWindowSub,
     daysIn, prevDaysIn, hourlyIn, canHour, series, hourlySeries, spark,
-    METRICS, METRIC_ORDER, metricValue,
+    METRICS, METRIC_ORDER, OV_METRICS, metricValue,
     kpis, lifetime, today,
     PAGE_KEYS, PAGE_LABELS, PAGE_COLORS, pagesIn, pageShareSeries, pageSpark,
     hourOfDay, hourWindow, mergeTail, dimensionItems, DIMENSIONS, explore,
@@ -3693,7 +3697,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
   }
 
   function paintChart(root) {
-    const metric = state.chart.metrics[0] || 'users';
+    const metric = state.chart.ov;
     const m = C.METRICS[metric];
     const host = root.querySelector('#ovChart');
     if (!host) return;
@@ -3830,7 +3834,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       + '<section class="card chart-card rise">'
       + S.head('活跃趋势',
         '当前 ' + U.esc(C.rangeSub(state.range)),
-        S.seg('ovMetric', [['users', '活跃'], ['opens', '打开'], ['duration', '时长']], state.chart.metrics[0] || 'users')
+        S.seg('ovMetric', [['users', '活跃'], ['newUsers', '新增'], ['opens', '打开'], ['duration', '时长']], state.chart.ov)
         + '<button class="icon-btn" data-act="ov-table" aria-label="切换数据表" title="数据表">' + U.icon('table') + '</button>'
         + '<button class="icon-btn" data-act="ov-more" aria-label="在趋势中深入" title="在趋势中深入">' + U.icon('arrow-up-right') + '</button>')
       + '<div class="card-body"><div class="chart-host" id="ovChart" style="height:286px"></div>'
@@ -3888,7 +3892,8 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     /* 交互 */
     root.querySelectorAll('[data-seg="ovMetric"] button').forEach((btn) => {
       btn.addEventListener('click', () => {
-        state.chart.metrics = [btn.getAttribute('data-v')];
+        state.chart.ov = btn.getAttribute('data-v');
+        C.saveStore();
         root.querySelectorAll('[data-seg="ovMetric"] button').forEach((b) => {
           const on = b === btn;
           b.classList.toggle('on', on);
@@ -3906,7 +3911,13 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       host.style.display = on ? 'none' : '';
       e.currentTarget.classList.toggle('active', on);
     });
-    root.querySelector('[data-act="ov-more"]').addEventListener('click', () => U.route.navigate('trends'));
+    root.querySelector('[data-act="ov-more"]').addEventListener('click', () => {
+      /* 深入趋势时把当前指标带过去，避免到了趋势页还停在别的指标上 */
+      state.chart.metrics = [state.chart.ov];
+      state.chart.index = false;
+      C.saveStore();
+      U.route.navigate('trends');
+    });
     root.querySelector('[data-act="ov-pages"]').addEventListener('click', () => U.route.navigate('trends'));
 
     root.querySelector('[data-act="ov-hours"]').addEventListener('click', () => U.route.navigate('trends'));
@@ -4185,7 +4196,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       state.chart.index = e.target.checked; C.saveStore(); U.route.syncURL(false); refresh(root);
     });
     panel.querySelector('[data-reset]').addEventListener('click', () => {
-      state.chart = { metrics: ['users'], type: 'area', smooth: true, dots: false };
+      state.chart = { metrics: ['users'], ov: 'users', type: 'area', smooth: true, dots: false };
       state.compare = true;
       C.saveStore(); U.route.syncURL(false); U.route.updateChrome();
       panel.querySelectorAll('[data-sm]').forEach((x) => x.classList.toggle('on', x.getAttribute('data-sm') === 'users'));

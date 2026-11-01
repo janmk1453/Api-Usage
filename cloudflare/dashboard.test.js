@@ -111,6 +111,17 @@ describe('看板模板结构', () => {
     expect(html).toContain('.ov-stack > .split > .chart-card { order: 5; }');
   });
 
+  it('概览活跃趋势的指标能切回「新增」，且与趋势页的多指标选择互不干扰', () => {
+    // 概览卡自己的单指标白名单，包含 newUsers（默认不再是趋势页残留的指标）
+    expect(html).toContain("const OV_METRICS = ['users', 'newUsers', 'opens', 'duration'];");
+    expect(html).toContain('if (OV_METRICS.indexOf(state.chart.ov) < 0) state.chart.ov = \'users\';');
+    // 切换器四个选项齐全，点击只写 ov，不动 chart.metrics
+    expect(html).toContain("S.seg('ovMetric', [['users', '活跃'], ['newUsers', '新增'], ['opens', '打开'], ['duration', '时长']], state.chart.ov)");
+    expect(html).toContain('const metric = state.chart.ov;');
+    expect(html).toContain("state.chart.ov = btn.getAttribute('data-v');");
+    expect(html).not.toContain("state.chart.metrics = [btn.getAttribute('data-v')];");
+  });
+
   it('图表是自绘 SVG，没有 canvas 依赖', () => {
     expect(html).not.toContain('<canvas');
     expect(html).toContain('createElementNS');
