@@ -2095,14 +2095,14 @@
   #aus-mobile-back:hover:not([data-pressed="1"]),
   #aus-hamburger-btn:hover:not([data-pressed="1"]) { opacity: 0.72; transition-duration: 120ms; }
 }
-/* 底栏 tab 与设置入口：按下即时底色（与悬停同色，落点立刻有响应），不做缩放以免指示胶囊跳动 */
-#aus-bottom-nav .aus-bottom-item[data-pressed="1"],
-#aus-bottom-nav .aus-bottom-item:active,
+/* 设置入口：按下即时底色（列表行，需要落点反馈） */
 #aus-settings-entries .aus-settings-entry[data-pressed="1"],
 #aus-settings-entries .aus-settings-entry:active {
   background: var(--ds-card-hover) !important;
   transition-duration: 0ms;
 }
+/* 底栏 tab 刻意**不做**按下灰底：整条底栏是连续区域，灰方块压在图标与文字上很跳；
+   反馈交给移动中的指示胶囊与图标/文字变色，所以这里连 background 过渡都不留。 */
 /* 侧栏导航项按下同样给即时底色（桌面端悬停/按下反馈不变） */
 #aus-panel .aus-nav-item:active {
   background: var(--aus-nav-hover-bg, var(--ds-card-hover)) !important;
@@ -2174,16 +2174,17 @@
   -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
   backdrop-filter: blur(20px) saturate(140%) !important;
 }
-/* 指示胶囊：JS 写 transform 把 56×44 的圆角块居中到当前 tab（图标 + 文字整块），
-   首次定位走 transition:none 防「从左侧飞来」。尺寸必须与 panel.ts 的 BOTTOM_PILL_W/H 一致；
-   圆角刻意不做 999px——只圈住图标时会像一圈悬空的椭圆环，圈住整块 + 16px 圆角才像选中底色。 */
+/* 指示胶囊：JS 写 transform 把 64×48 的圆角块居中到当前 tab（图标 + 文字整块），
+   首次定位走 transition:none 防「从左侧飞来」。**尺寸以本规则为唯一真源**，
+   panel.ts#syncBottomNav 直接量 offsetWidth/Height（横屏压缩时自动跟随）。
+   圆角刻意不做 999px——只圈住图标时会像一圈悬空的椭圆环，圈住整块 + 18px 圆角才像选中底色。 */
 #aus-bottom-indicator {
   position: absolute;
   top: 0;
   left: 0;
-  width: 56px;
-  height: 44px;
-  border-radius: 16px;
+  width: 64px;
+  height: 48px;
+  border-radius: 18px;
   background: var(--ds-nav-active-bg, var(--ds-card-hover));
   transform: translate3d(-999px, 0, 0);
   transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -2208,7 +2209,7 @@
   color: var(--ds-text-3);
   cursor: pointer;
   user-select: none;
-  transition: color 140ms ease, background-color 120ms ease;
+  transition: color 140ms ease;
 }
 #aus-bottom-nav .aus-bottom-icon {
   display: inline-flex;
@@ -2240,6 +2241,8 @@
   #aus-bottom-nav .aus-bottom-icon,
   #aus-bottom-nav .aus-bottom-icon svg { width: 20px; height: 20px; }
   #aus-bottom-nav .aus-bottom-label { font-size: 10px; }
+  /* 底栏压到 50px，胶囊跟着收一档，否则上下几乎没有余量 */
+  #aus-bottom-indicator { width: 58px; height: 42px; border-radius: 15px; }
 }
 
 /* ══ 移动端兼容 UI 关闭 → 完全复用改造前的侧栏抽屉 ══

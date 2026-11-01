@@ -180,7 +180,7 @@ export function renderSettings(doc: Document) {
       <!-- 移动端兼容 UI：窄屏底栏（默认） / 改造前的侧栏抽屉 -->
       <div class="ds-card">
         <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">移动端兼容UI</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-mobile-compat-ui" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-mobile-compat-ui-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
-        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">开启后窄屏使用底部标签栏（概览 / 统计 / 历史 / 趋势 / 设置），钱包、使用说明、关于收进「设置」页顶部的入口；关闭则回到原来的侧栏抽屉与左上角菜单按钮。桌面端始终是侧边栏，不受影响。</div>
+        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">开启后使用类似 APP 的底栏模式，便于单手操作，多次点按底栏按钮可以返回上一页；桌面端不受该开关控制。</div>
       </div>
 
       <!-- 历史显示范围 -->

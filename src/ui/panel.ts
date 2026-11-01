@@ -817,9 +817,12 @@ function playViewEnter(el: HTMLElement | null): void {
   } catch {}
 }
 
-/** 底栏指示胶囊尺寸（必须与 style.css 的 #aus-bottom-indicator 保持 56×44 / 圆角 16 一致） */
-const BOTTOM_PILL_W = 56;
-const BOTTOM_PILL_H = 44;
+/**
+ * 底栏指示胶囊的兜底尺寸：实际以 #aus-bottom-indicator 量到的 offsetWidth/Height 为准
+ * （极短横屏会把胶囊压小），量不到时才回退这两个值，改动须与 style.css 同步。
+ */
+const BOTTOM_PILL_W = 64;
+const BOTTOM_PILL_H = 48;
 
 /**
  * 底栏指示胶囊跟随当前 tab（切换动画的核心）。
@@ -846,8 +849,10 @@ function syncBottomNav(doc: Document, animate: boolean): void {
     const barRect = bar.getBoundingClientRect();
     const itemRect = target.getBoundingClientRect();
     if (!barRect.height || !itemRect.width) { ind.style.opacity = '0'; return; }
-    const x = Math.round(itemRect.left - barRect.left + itemRect.width / 2 - BOTTOM_PILL_W / 2);
-    const y = Math.round(itemRect.top - barRect.top + itemRect.height / 2 - BOTTOM_PILL_H / 2);
+    const pillW = ind.offsetWidth || BOTTOM_PILL_W;
+    const pillH = ind.offsetHeight || BOTTOM_PILL_H;
+    const x = Math.round(itemRect.left - barRect.left + itemRect.width / 2 - pillW / 2);
+    const y = Math.round(itemRect.top - barRect.top + itemRect.height / 2 - pillH / 2);
     const first = bar.getAttribute('data-ready') !== '1';
     const next = 'translate3d(' + x + 'px,' + y + 'px,0)';
     if (!animate || first) {
