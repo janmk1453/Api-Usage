@@ -177,30 +177,39 @@ export function isUpdateAvailable(): boolean {
   return pendingUpdate;
 }
 
-function getNavBadge(): HTMLElement | null {
+/**
+ * 收集面板内所有「有新版本」指示位。
+ * 同一个更新状态现在有三处要去：桌面侧栏「关于」的蓝色徽标、窄屏底栏「设置」的红点、
+ * 设置页「关于」入口行的蓝色徽标，全部用 data-update-badge 标注，统一回填。
+ */
+function getNavBadges(): HTMLElement[] {
   try {
     const doc = (window.parent as any)?.document ?? document;
-    return doc.getElementById('aus-nav-update-badge') as HTMLElement | null;
-  } catch { return null; }
+    const list = Array.from(doc.querySelectorAll('[data-update-badge]')) as HTMLElement[];
+    // 兜底：旧面板只有 id 没有标记属性时也不能漏掉
+    const legacy = doc.getElementById('aus-nav-update-badge') as HTMLElement | null;
+    if (legacy && list.indexOf(legacy) < 0) list.push(legacy);
+    return list;
+  } catch { return []; }
 }
 
 /**
- * 导航栏「关于」右侧的蓝色「有新版本」徽标。
- * 徽标在导航项内部，点击时事件冒泡到 .aus-nav-item → 与点击「关于」完全一致；
+ * 「有新版本」指示位同步。
+ * 侧栏徽标在导航项内部，点击时事件冒泡到 .aus-nav-item → 与点击「关于」完全一致；
  * 折叠态（60px 侧栏）由 style.css 按 #aus-sidebar[data-collapsed="1"] 隐藏。
  */
 function setNavBadge(visible: boolean) {
   pendingUpdate = visible;
-  const badge = getNavBadge();
-  if (!badge) return;
-  badge.setAttribute('data-on', visible ? '1' : '0');
+  const on = visible ? '1' : '0';
+  for (const badge of getNavBadges()) badge.setAttribute('data-on', on);
 }
 
-/** 面板创建晚于更新检查时调用：把当前更新状态回填到导航徽标 */
+/** 面板创建晚于更新检查时调用：把当前更新状态回填到全部指示位 */
 export function syncUpdateIndicators(): void {
-  const badge = getNavBadge();
-  if (!badge) return;
-  badge.setAttribute('data-on', pendingUpdate ? '1' : '0');
+  const badges = getNavBadges();
+  if (!badges.length) return;
+  const on = pendingUpdate ? '1' : '0';
+  for (const badge of badges) badge.setAttribute('data-on', on);
 }
 
 function showBanner(message: string) {

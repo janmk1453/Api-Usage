@@ -9,6 +9,15 @@ import { renderSettings } from './settings';
 import { bindHistoryCompare, renderUsageDetail } from './compare';
 import { renderOverview } from './overview';
 import { icon } from './icons';
+import {
+  MOBILE_TABS,
+  SETTINGS_ENTRIES,
+  isSettingsChild,
+  parentTabOf,
+  resolveTabTap,
+  viewTitle,
+} from './nav-model';
+import type { AppView } from './nav-model';
 import { initStatsView, positionFilterDropdown, renderStatsView } from './stats-view';
 import { initExtraCharts, renderExtraCharts, resetChartThemeCache } from './extra-charts';
 import { renderForecastView, initForecastView } from './forecast-view';
@@ -86,7 +95,11 @@ function prettyFullResponse(resp: any): string {
 
 let panelCreated = false;
 let panelOpen = false;
-let currentView: 'overview' | 'stats' | 'history' | 'forecast' | 'wallet' | 'settings' | 'help' | 'about' = 'overview';
+let currentView: AppView = 'overview';
+/** 「设置」下最近打开的二级页（窄屏点回「设置」tab 时恢复到上次位置） */
+let settingsChildView: AppView | null = null;
+/** 当前导航高亮键：窄屏二级页归到「设置」，桌面为视图本身 */
+let currentNavKey: AppView = 'overview';
 let collapsed = false;
 
 export function refreshUI() {
@@ -722,24 +735,27 @@ function bindTopbarScroll(doc: Document): void {
   } catch {}
 }
 
-// 移动端「菜单」按钮按压反馈：触屏没有 hover，反馈只能靠 pointerdown 在同一帧打上
-// data-pressed（不等 click、也不等抽屉展开）。松手时移除，CSS 侧 120ms 回弹。
+// 触屏按压反馈：触屏没有 hover，反馈只能靠 pointerdown 在同一帧打上 data-pressed，
+// 松手时移除，CSS 侧 120ms 回弹。窄屏的底栏 tab、返回箭头与设置页二级入口都复用这一套。
 function bindPressFeedback(doc: Document): void {
   try {
-    const btn = doc.getElementById('aus-hamburger-btn') as HTMLElement | null;
-    if (!btn || btn.getAttribute('data-press-bound') === '1') return;
-    btn.setAttribute('data-press-bound', '1');
-    const press = (on: boolean) => {
-      if (on) btn.setAttribute('data-pressed', '1');
-      else btn.removeAttribute('data-pressed');
-    };
-    btn.addEventListener('pointerdown', () => press(true), { passive: true });
-    btn.addEventListener('pointerup', () => press(false), { passive: true });
-    btn.addEventListener('pointercancel', () => press(false), { passive: true });
-    btn.addEventListener('pointerleave', () => press(false), { passive: true });
-    // 键盘触发与旧内核兜底：保证点击结束后不残留按压态
-    btn.addEventListener('click', () => press(false));
-    btn.addEventListener('blur', () => press(false));
+    const sel = '#aus-mobile-back, #aus-bottom-nav .aus-bottom-item, #aus-settings-entries .aus-settings-entry';
+    doc.querySelectorAll(sel).forEach((el: any) => {
+      const node = el as HTMLElement;
+      if (node.getAttribute('data-press-bound') === '1') return;
+      node.setAttribute('data-press-bound', '1');
+      const press = (on: boolean) => {
+        if (on) node.setAttribute('data-pressed', '1');
+        else node.removeAttribute('data-pressed');
+      };
+      node.addEventListener('pointerdown', () => press(true), { passive: true });
+      node.addEventListener('pointerup', () => press(false), { passive: true });
+      node.addEventListener('pointercancel', () => press(false), { passive: true });
+      node.addEventListener('pointerleave', () => press(false), { passive: true });
+      // 键盘触发与旧内核兜底：保证点击结束后不残留按压态
+      node.addEventListener('click', () => press(false));
+      node.addEventListener('blur', () => press(false));
+    });
   } catch {}
 }
 
@@ -754,9 +770,111 @@ export function bindPanel(doc: Document) {
   bindPressFeedback(doc);
 }
 
-function switchView(view: typeof currentView) {
+/**
+ * 面板当前是否按窄屏（底栏）布局渲染。
+ * 用 #aus-panel-body 的实际宽度判定；面板未显示（clientWidth 为 0）时回退到窗口宽度。
+ */
+function isNarrowPanel(doc?: Document): boolean {
+  try {
+    const d = doc || getDoc();
+    const body = d.getElementById('aus-panel-body') as HTMLElement | null;
+    if (body && body.clientWidth > 0) return body.clientWidth <= 760;
+    return ((window.parent as any)?.innerWidth ?? window.innerWidth) <= 760;
+  } catch { return true; }
+}
+
+function prefersReducedMotion(): boolean {
+  try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch { return false; }
+}
+
+/** 窄屏页面切换入场动画（桌面端维持原样，不启用）；移除 class + 强制回流保证连续切换可重播 */
+function playViewEnter(el: HTMLElement | null): void {
+  if (!el) return;
+  try {
+    el.classList.remove('aus-view-in');
+    void el.offsetWidth;
+    el.classList.add('aus-view-in');
+  } catch {}
+}
+
+/**
+ * 底栏指示胶囊跟随当前 tab（切换动画的核心）。
+ * 首次定位关掉过渡，避免面板一打开胶囊就从最左侧"飞过来"。
+ */
+function syncBottomNav(doc: Document, animate: boolean): void {
+  try {
+    const bar = doc.getElementById('aus-bottom-nav') as HTMLElement | null;
+    if (!bar) return;
+    let activeEl: HTMLElement | null = null;
+    bar.querySelectorAll('[data-bottom-nav]').forEach((el: any) => {
+      const on = el.getAttribute('data-bottom-nav') === currentNavKey;
+      el.classList.toggle('active', on);
+      if (on) activeEl = el as HTMLElement;
+    });
+    const ind = doc.getElementById('aus-bottom-indicator') as HTMLElement | null;
+    if (!ind) return;
+    const target = activeEl as HTMLElement | null;
+    if (!target) { ind.style.opacity = '0'; return; }
+    ind.style.opacity = '1';
+    const x = Math.round(target.offsetLeft + target.offsetWidth / 2 - 23);
+    const first = bar.getAttribute('data-ready') !== '1';
+    if (!animate || first) {
+      const prev = ind.style.transition;
+      ind.style.transition = 'none';
+      ind.style.transform = 'translate3d(' + x + 'px,0,0)';
+      void ind.offsetWidth;
+      ind.style.transition = prev;
+      bar.setAttribute('data-ready', '1');
+    } else {
+      ind.style.transform = 'translate3d(' + x + 'px,0,0)';
+    }
+  } catch {}
+}
+
+/** 侧栏（桌面）/底栏（窄屏）高亮 + 二级页返回箭头显隐：切页与窗口尺寸变化共用 */
+function paintNavState(doc: Document, narrow: boolean, animate: boolean): void {
+  currentNavKey = narrow ? parentTabOf(currentView) : currentView;
+  try {
+    doc.querySelectorAll('#aus-sidebar [data-nav]').forEach((el: any) => {
+      const v = el.getAttribute('data-nav');
+      el.classList.toggle('active', v === currentNavKey);
+    });
+  } catch {}
+  syncBottomNav(doc, animate);
+  const backBtn = doc.getElementById('aus-mobile-back') as HTMLElement | null;
+  if (backBtn) backBtn.style.display = narrow && isSettingsChild(currentView) ? 'flex' : 'none';
+}
+
+/**
+ * 底栏 tab 点击语义：
+ * - 桌面端（底栏不显示）直接切页；
+ * - 窄屏换 tab → 切页（回到「设置」时恢复上次的二级页）；
+ * - 窄屏重复点当前 tab → 二级页回根页，已在根页则回到顶部。
+ */
+function handleBottomTabTap(target: AppView): void {
+  const doc = getDoc();
+  if (!isNarrowPanel(doc)) { switchView(target); return; }
+  const action = resolveTabTap(target, currentView, isSettingsChild(currentView));
+  if (action === 'switch') {
+    const to = target === 'settings' && settingsChildView ? settingsChildView : target;
+    switchView(to);
+    return;
+  }
+  if (action === 'pop-root') { switchView('settings'); return; }
+  try {
+    const main = doc.getElementById('aus-main') as HTMLElement | null;
+    if (main) main.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+    const contentBody = doc.getElementById('aus-content-body') as HTMLElement | null;
+    if (contentBody) contentBody.scrollTop = 0;
+  } catch {}
+}
+
+function switchView(view: AppView) {
   const prevView = currentView;
   currentView = view;
+  // 「设置」下的二级页记忆：点回设置 tab 时恢复到上次位置；主动切回设置根页（重复点 tab / 返回箭头）则清空
+  if (isSettingsChild(view)) settingsChildView = view;
+  else if (view === 'settings') settingsChildView = null;
   // 离开钱包页时收起所有已展开的钱包，下次进入保持默认收起
   if (prevView === 'wallet' && view !== 'wallet') {
     try { repository.collapseAllWallets(); } catch {}
@@ -764,16 +882,19 @@ function switchView(view: typeof currentView) {
   // 匿名使用统计：页面使用率（仅本地累加，关闭面板时统一上报）
   try { trackPage(view); } catch {}
   const doc = getDoc();
+  const narrow = isNarrowPanel(doc);
   if (view !== 'history') closeHistoryDetail(doc);
   doc.querySelectorAll('[data-view]').forEach((el: any) => {
     const v = el.getAttribute('data-view');
     const on = v === view;
     el.style.display = on ? 'block' : 'none';
-    // 瞬时切换：不再走“先透明再淡入”，避免点击后有一小段延迟感
+    // 瞬时切换：不再走"先透明再淡入"，避免点击后有一小段延迟感
     if (on) { el.style.transition = 'none'; el.style.opacity = '1'; }
+    // 入场动画只在窄屏播放，桌面端保持原样（不淡入）
+    if (on && narrow) playViewEnter(el as HTMLElement);
   });
   // 所有视图共用 #aus-main 作为滚动容器，切换页面时必须把滚动位置归零，
-  // 否则会沿用上一页的 scrollTop，出现“切过去直接显示页面中部”的问题。
+  // 否则会沿用上一页的 scrollTop，出现"切过去直接显示页面中部"的问题。
   try {
     for (const id of ['aus-main', 'aus-content-body']) {
       const scroller = doc.getElementById(id) as HTMLElement | null;
@@ -783,13 +904,9 @@ function switchView(view: typeof currentView) {
     }
   } catch {}
   syncTopbarState(doc);
-  doc.querySelectorAll('.aus-nav-item').forEach((el: any) => {
-    const v = el.getAttribute('data-nav');
-    if (v === view) el.classList.add('active');
-    else el.classList.remove('active');
-  });
-  const titles: any = { overview: '用量概览', stats: '用量统计', history: '历史记录', forecast: '趋势预测', wallet: '钱包', settings: '设置', help: '使用说明', about: '关于' };
-  const titleText = titles[view] || '';
+  // 侧栏/底栏高亮（窄屏二级页归到「设置」）+ 二级页返回箭头
+  paintNavState(doc, narrow, narrow);
+  const titleText = viewTitle(view);
   const titleEl = doc.getElementById('aus-page-title');
   const mobileTitleEl = doc.getElementById('aus-mobile-page-title');
   if (titleEl) titleEl.textContent = titleText;
@@ -849,8 +966,8 @@ export function createPanel() {
   panel.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:\'Microsoft YaHei\',\'微软雅黑\',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;';
   panel.innerHTML = `
     <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;">
-      <button id="aus-hamburger-btn" title="菜单" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);font-size:18px;line-height:1;padding:0;">${icon('menu', 22)}</button>
-      <span style="margin-left:12px;font-size:var(--aus-fs-base);font-weight:700;color:var(--ds-text);white-space:nowrap;flex-shrink:0;">API用量统计</span>
+      <button id="aus-mobile-back" title="返回设置" style="display:none;width:28px;height:28px;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;">${icon('chevron-left', 20)}</button>
+      <span id="aus-mobile-brand" style="margin-left:12px;font-size:var(--aus-fs-base);font-weight:700;color:var(--ds-text);white-space:nowrap;flex-shrink:0;">API用量统计</span>
       <span id="aus-mobile-page-title" style="margin-left:10px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text-2);">用量概览</span>
       <button id="aus-mobile-panel-close" title="关闭" style="margin-left:auto;width:32px;height:32px;padding:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:var(--aus-fs-base);">${icon('close', 16)}</button>
     </div>
@@ -878,7 +995,7 @@ export function createPanel() {
         <div class="aus-nav-group" style="display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--ds-border);padding-top:10px;">
           <div class="aus-nav-item" data-nav="settings" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon('settings')}</span><span class="aus-nav-label">设置</span></div>
           <div class="aus-nav-item" data-nav="help" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon('help')}</span><span class="aus-nav-label">使用说明</span></div>
-          <div class="aus-nav-item" data-nav="about" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon('about')}</span><span class="aus-nav-label">关于</span><span id="aus-nav-update-badge" data-on="0" title="检测到新版本，点击查看关于页">新版本</span></div>
+          <div class="aus-nav-item" data-nav="about" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon('about')}</span><span class="aus-nav-label">关于</span><span id="aus-nav-update-badge" data-update-badge="1" data-on="0" title="检测到新版本，点击查看关于页">新版本</span></div>
         </div>
       </div>
     </div>
@@ -1097,11 +1214,23 @@ export function createPanel() {
             <div id="aus-history"></div>
           </div>
           <div data-view="settings" style="display:none;">
+            <div id="aus-settings-entries" style="display:none;grid-template-columns:1fr;gap:8px;margin-bottom:12px;">${SETTINGS_ENTRIES.map((e) => `
+              <div class="aus-settings-entry" data-settings-entry="${e.view}" role="button" tabindex="0">
+                <span class="aus-settings-entry-icon">${icon(e.icon, 20)}</span>
+                <span class="aus-settings-entry-text">
+                  <span class="aus-settings-entry-label">${e.label}</span>
+                  <span class="aus-settings-entry-desc">${e.desc}</span>
+                </span>
+                ${e.view === 'about' ? '<span class="aus-entry-badge" data-update-badge="1" data-on="0">新版本</span>' : ''}
+                <span class="aus-settings-entry-arrow">${icon('chevron-right', 16)}</span>
+              </div>`).join('')}
+            </div>
             <div id="aus-settings"></div>
           </div>
           <div data-view="help" style="display:none;">
             <div style="display:grid;gap:12px;">
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#FF6A00;font-weight:600;margin-bottom:6px;">完整使用文档</div><div style="color:var(--ds-text-2);">详细说明各页面、筛选、钱包、定价、同步、隐私与常见问题。</div><a href="https://janmk1453.github.io/Api-Usage/" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;margin-top:10px;padding:8px 14px;border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);text-decoration:none;font-size:var(--aus-fs-base);font-weight:600;">前往完整使用文档</a></div>
+              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0070F3;font-weight:600;margin-bottom:6px;">🧭 导航（手机端）</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 窄屏改用底部标签栏：概览 / 统计 / 历史 / 趋势 / 设置；再点一次当前标签可回到页面顶部</div><div>2. 钱包、使用说明、关于都收在「设置」页顶部的入口里，进入后点左上角返回箭头回到设置</div><div>3. 从别的标签回到「设置」时会回到上次停留的那个页面（钱包/使用说明/关于）；桌面端仍是左侧可折叠侧边栏，入口位置不变</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#DC2626;font-weight:600;margin-bottom:6px;">隐私声明（完整版：<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:#DC2626;text-decoration:underline;">https://janmk1453.github.io/Api-Usage/#privacy</a>）</div><div style="color:var(--ds-text-2);display:grid;gap:6px;"><div>本扩展有且只能获得用户在酒馆本身中填写的：密钥条目的编号、用户备注和掩码末三位，仅用于独立区分请求来源，不会且无法读取、保存或上传完整明文密钥。</div><div>用户储存在酒馆本身的密钥是安全的，本扩展无法获取真实密钥。</div><div>用户主动填入本扩展的校准密钥是实际可用的密钥，且仅会被用于查询该钱包所对应厂商的余额或套餐额度接口（DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita、智谱 GLM、MiniMax、以及用户自填的 new-api 中转站），不会额外造成扣费或消耗；它仅经 XOR 混淆后存放于 SillyTavern，不进入历史记录、统计、日志、导入导出或 WebDAV。查询由浏览器直连厂商接口，不经过任何第三方代理；对未开放跨域（CORS）的厂商会直接失败并提示，扩展不会绕过该限制。</div><div>XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。</div><div>本扩展完整代码开源可审查。</div><div style="margin-top:2px;padding-top:6px;border-top:1px solid var(--ds-border);font-weight:600;color:#DC2626;">免责声明（完整版见上方链接）</div><div>本扩展不对功能“价格来源”、“自动同步”等利用 <a href="https://models.dev" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 获取的数据中出现或可能出现的商业化中转站负责；我们不建议使用任何商业化中转站，尽管我们已经尽力筛选数据，但由于对大量数据进行完全筛选难以实现，因此我们不对可能出现的任何商业化中转站名称负责，不构成推荐，和 models.dev 或任何中转站没有商业往来，坚定不移的反对商业化。</div><div>「套餐额度」中的本地估算基于本扩展记录的历史数据推算，不包含其他设备或其他客户端的消耗，可能与实际剩余额度有偏差，仅供展示参考，不参与计费、导出与云同步，不能作为账单依据；对没有公开接口或未开放跨域的厂商（Claude Code、Codex、OpenCode、GitHub Copilot、Cursor、讯飞星辰等），扩展不提供、也不会绕过限制去提供自动查询。</div><div>界面中的厂商图标与名称商标归各自所有者，仅用于标识接入来源，不构成任何关联、合作或背书；图标数据内联自 simple-icons（CC0 发布）。</div><div>我们将尽可能维护扩展的安全和隐私性，但本扩展不对因酒馆/本扩展的安全漏洞或因间接原因导致的任何形式的密钥泄露及产生的损失负责。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0BA25E;font-weight:600;margin-bottom:6px;">钱包</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 扩展按识别到的接入链接自动创建和汇总钱包，默认始终保留 DeepSeek 官方钱包；同名链接下识别的密钥和模型会归入同一钱包。</div><div>2. 每个钱包可独立维护名称、余额、模型价格、峰谷规则和价格来源；钱包默认收起，展开状态按钱包记忆。价格来源仅展示第一方模型厂商，不展示中转站或聚合平台；同步时只按钱包里已识别的模型名做模糊匹配后写入该模型价格，不会把供应商目录里的模型整批加入钱包。</div><div>3. 请求进入后会先匹配所属钱包，再使用该钱包的模型价格和峰谷规则计费，并从对应钱包余额预扣；未配置价格的模型先记零费用，保存或同步价格后自动重算冷热历史。</div><div>4. 余额查询按「查询适配器」工作：DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita 可查余额，智谱 GLM 与 MiniMax 可查套餐额度，new-api 中转可用「系统访问令牌 + 用户 ID」查订阅额度；密钥在该钱包内单独填写，多个密钥不会自动相加。</div><div>5. 删除钱包会进入“已忽略接入”，后续请求不会自动重建、不参与余额合计，历史记录仍保留归属，需要时可恢复显示。</div><div>6. 「套餐额度」只对能查询到额度的厂商显示，查到哪个展示哪个；本地估算需手动启用，仅作参考，不参与计费。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（按钱包内的「查询适配器」查询，支持多家厂商）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
@@ -1151,12 +1280,16 @@ export function createPanel() {
     </div>
     </div>
     </div>
+    <div id="aus-bottom-nav" style="display:none;">
+      <div id="aus-bottom-indicator" aria-hidden="true"></div>
+      ${MOBILE_TABS.map((t) => `
+        <div class="aus-bottom-item" data-bottom-nav="${t.view}" role="tab" title="${t.label}">
+          <span class="aus-bottom-icon">${icon(t.icon, 22)}</span>
+          <span class="aus-bottom-label">${t.label}</span>
+          ${t.view === 'settings' ? '<span class="aus-bottom-dot" data-update-badge="1" data-on="0" title="检测到新版本"></span>' : ''}
+        </div>`).join('')}
+    </div>
   `;
-  // 兼容旧遮罩：覆盖式抽屉遮罩，点击关闭
-  const sbOverlay = doc.createElement('div');
-  sbOverlay.id = 'aus-sidebar-overlay';
-  sbOverlay.style.cssText = 'display:none;';
-  panel.appendChild(sbOverlay);
   doc.body.appendChild(overlay);
   doc.body.appendChild(panel);
   // 面板可能晚于更新检查创建：挂载后按当前更新状态同步导航徽标
@@ -1169,69 +1302,43 @@ export function createPanel() {
   doc.getElementById('aus-panel-close')?.addEventListener('click', closePanel);
   doc.getElementById('aus-mobile-panel-close')?.addEventListener('click', closePanel);
   doc.getElementById('aus-history-detail-close')?.addEventListener('click', () => closeHistoryDetail(doc));
-  doc.querySelectorAll('.aus-nav-item').forEach((el: any) => {
+  // 侧栏（仅桌面显示）：直接切页，不做底栏的重复点语义
+  doc.querySelectorAll('#aus-sidebar [data-nav]').forEach((el: any) => {
     el.addEventListener('click', () => {
       const v = el.getAttribute('data-nav');
-      if (v) switchView(v as any);
+      if (v) switchView(v as AppView);
     });
   });
-  // 窄屏覆盖式抽屉（滑动动画由 style.css 末尾的 transform/opacity 过渡提供）+ 遮罩点外关闭，宽屏 60/260 折叠（瞬时切换）
-  let mobileOpen = false;
-  const isMobile = () => {
-    try {
-      const body = doc.getElementById('aus-panel-body') as HTMLElement | null;
-      if (body && body.clientWidth > 0) return body.clientWidth <= 760;
-      return ((window.parent as any)?.innerWidth ?? window.innerWidth) <= 760;
-    } catch { return window.innerWidth <= 760; }
-  };
-  const syncMobileSidebar = () => {
-    const sb = doc.getElementById('aus-sidebar') as HTMLElement | null;
-    if (!sb) return;
-    const ov = doc.getElementById('aus-sidebar-overlay') as HTMLElement | null;
-    if (isMobile()) {
-      if (mobileOpen) sb.classList.add('is-open');
-      else sb.classList.remove('is-open');
-      if (ov) {
-        ov.classList.toggle('is-open', mobileOpen);
-        ov.style.display = '';
-        if (mobileOpen) {
-          ov.onclick = () => { mobileOpen = false; syncMobileSidebar(); };
-        } else ov.onclick = null;
-      }
-      // 窄屏下强制还原为完整导航（避免宽屏折叠残留的 inline 隐藏）
-      const brand = doc.getElementById('aus-brand') as HTMLElement | null;
-      if (brand) brand.style.removeProperty('display');
-      doc.querySelectorAll('.aus-nav-label').forEach((el: any) => { (el as HTMLElement).style.removeProperty('display'); });
-      doc.querySelectorAll('#aus-sidebar .aus-nav-item').forEach((el: any) => {
-        const c = el as HTMLElement;
-        c.style.removeProperty('justify-content');
-        c.style.removeProperty('padding');
-      });
-      if (sb) {
-        sb.style.removeProperty('width');
-        sb.style.removeProperty('min-width');
-        sb.style.removeProperty('max-width');
-      }
-    } else {
-      sb.classList.remove('is-open');
-      if (ov) {
-        ov.classList.remove('is-open');
-        ov.style.display = 'none';
-        ov.onclick = null;
-      }
-    }
-  };
+  // 底栏（仅窄屏显示）：走 tab 语义（换页 / 二级页回根 / 回顶部）
+  doc.querySelectorAll('#aus-bottom-nav [data-bottom-nav]').forEach((el: any) => {
+    el.addEventListener('click', () => {
+      const v = el.getAttribute('data-bottom-nav');
+      if (v) handleBottomTabTap(v as AppView);
+    });
+  });
+  // 设置页内的二级入口：钱包 / 使用说明 / 关于
+  doc.querySelectorAll('#aus-settings-entries [data-settings-entry]').forEach((el: any) => {
+    el.addEventListener('click', () => {
+      const v = el.getAttribute('data-settings-entry');
+      if (v) switchView(v as AppView);
+    });
+    el.addEventListener('keydown', (e: any) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      const v = el.getAttribute('data-settings-entry');
+      if (v) switchView(v as AppView);
+    });
+  });
+  // 窄屏二级页顶栏返回箭头：回到「设置」根页
+  doc.getElementById('aus-mobile-back')?.addEventListener('click', () => switchView('settings'));
   const applyCollapsed = (v: boolean) => {
     collapsed = v;
     const sb = doc.getElementById('aus-sidebar') as HTMLElement | null;
     const brand = doc.getElementById('aus-brand') as HTMLElement | null;
     const btn = doc.getElementById('aus-sidebar-toggle') as HTMLElement | null;
     if (!sb) return;
-    if (isMobile()) {
-      // 窄屏：忽略 collapsed，改由 mobileOpen 控制显隐
-      syncMobileSidebar();
-      return;
-    }
+    // 窄屏走底栏布局，侧栏整体隐藏，不做折叠（避免残留 inline 宽度）
+    if (isNarrowPanel(doc)) return;
     // 折叠态隐藏「有新版本」徽标（60px 侧栏放不下），展开后按真实状态恢复
     sb.setAttribute('data-collapsed', collapsed ? '1' : '0');
     // 宽屏：保留 60/260 折叠
@@ -1240,32 +1347,25 @@ export function createPanel() {
     sb.style.setProperty('max-width', collapsed ? '60px' : '260px', 'important');
     if (brand) brand.style.setProperty('display', collapsed ? 'none' : 'flex', 'important');
     if (btn) btn.innerHTML = collapsed ? icon('chevron-right', 14) : icon('chevron-left', 14);
-    doc.querySelectorAll('.aus-nav-label').forEach((el: any) => { (el as HTMLElement).style.setProperty('display', collapsed ? 'none' : 'inline', 'important'); });
-    doc.querySelectorAll('.aus-nav-item').forEach((el: any) => { (el as HTMLElement).style.justifyContent = collapsed ? 'center' : 'flex-start'; });
+    doc.querySelectorAll('#aus-sidebar .aus-nav-label').forEach((el: any) => { (el as HTMLElement).style.setProperty('display', collapsed ? 'none' : 'inline', 'important'); });
+    doc.querySelectorAll('#aus-sidebar .aus-nav-item').forEach((el: any) => { (el as HTMLElement).style.justifyContent = collapsed ? 'center' : 'flex-start'; });
     doc.querySelectorAll('#aus-sidebar .aus-nav-item').forEach((el: any) => {
       (el as HTMLElement).style.padding = collapsed ? '10px 0' : '10px 12px';
     });
   };
   doc.getElementById('aus-sidebar-toggle')?.addEventListener('click', () => applyCollapsed(!collapsed));
-  doc.getElementById('aus-hamburger-btn')?.addEventListener('click', () => {
-    mobileOpen = !mobileOpen;
-    syncMobileSidebar();
-  });
-  // 窄屏下点击导航自动收起，复刻抽屉体验但保持 display 切换
-  doc.querySelectorAll('.aus-nav-item').forEach((el: any) => {
-    el.addEventListener('click', () => {
-      if (isMobile() && mobileOpen) { mobileOpen = false; syncMobileSidebar(); }
-    });
-  });
   try {
-    if (isMobile()) { mobileOpen = false; syncMobileSidebar(); }
+    paintNavState(doc, isNarrowPanel(doc), false);
     let rzT: any = null;
     const onResize = () => {
       if (rzT) return;
       rzT = setTimeout(() => {
         rzT = null;
-        if (isMobile()) syncMobileSidebar();
-        else { mobileOpen = false; syncMobileSidebar(); applyCollapsed(collapsed); }
+        const narrow = isNarrowPanel(doc);
+        // 宽屏下恢复用户上次的折叠状态；窄屏侧栏整体隐藏，无需处理
+        if (!narrow) applyCollapsed(collapsed);
+        // 底栏在尺寸变化后需重新量位置（宽度变了 tab 中线也变了），不播动画
+        paintNavState(doc, narrow, false);
         try { positionPanel(); } catch {}
       }, 150);
     };
@@ -1399,16 +1499,8 @@ export function openPanel() {
   }
   ov.style.display = 'block';
   pn.style.display = 'flex';
-  try {
-    const sb = doc.getElementById('aus-sidebar') as HTMLElement | null;
-    const isMobile = (()=>{ try{ const b = doc.getElementById('aus-panel-body') as HTMLElement | null; if (b && b.clientWidth > 0) return b.clientWidth <= 760; return ((window.parent as any)?.innerWidth ?? window.innerWidth) <= 760; } catch{ return window.innerWidth <=760; }})();
-    if (sb) {
-      if (isMobile) {
-        // 窄屏默认隐藏，等待汉堡呼出
-        if (sb.classList.contains('is-open') && !((doc as any)._aus_mobileOpen)) sb.classList.remove('is-open');
-      } else sb.classList.remove('is-open');
-    }
-  } catch {}
+  // 面板刚显示，此时才能量到底栏 tab 的真实位置：不播动画直接摆好指示胶囊
+  try { paintNavState(doc, isNarrowPanel(doc), false); } catch {}
   positionPanel();
   requestAnimationFrame(() => {
     ov.style.opacity = '1';

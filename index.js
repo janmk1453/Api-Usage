@@ -5219,6 +5219,98 @@ function renderChatSummaryOverview(fullHistory) {
 	})();
 }
 //#endregion
+//#region src/ui/nav-model.ts
+/** 底栏从左到右：概览、统计、历史、趋势、设置 */
+var MOBILE_TABS = [
+	{
+		view: "overview",
+		label: "概览",
+		icon: "overview"
+	},
+	{
+		view: "stats",
+		label: "统计",
+		icon: "stats"
+	},
+	{
+		view: "history",
+		label: "历史",
+		icon: "history"
+	},
+	{
+		view: "forecast",
+		label: "趋势",
+		icon: "forecast"
+	},
+	{
+		view: "settings",
+		label: "设置",
+		icon: "settings"
+	}
+];
+/** 收进「设置」页的二级入口（顺序即列表顺序） */
+var SETTINGS_ENTRIES = [
+	{
+		view: "wallet",
+		label: "钱包",
+		desc: "余额、模型价格与接入管理",
+		icon: "wallet"
+	},
+	{
+		view: "help",
+		label: "使用说明",
+		desc: "功能说明、隐私与免责声明",
+		icon: "help"
+	},
+	{
+		view: "about",
+		label: "关于",
+		desc: "版本信息与更新日志",
+		icon: "about"
+	}
+];
+/** 挂在「设置」下的二级视图 */
+var SETTINGS_CHILD_VIEWS = [
+	"wallet",
+	"help",
+	"about"
+];
+function isSettingsChild(view) {
+	return SETTINGS_CHILD_VIEWS.includes(view);
+}
+/**
+* 视图所属的底栏 tab：二级页归到「设置」，其余自身。
+* 底栏高亮与「重复点当前 tab」判定都以它为准。
+*/
+function parentTabOf(view) {
+	return isSettingsChild(view) ? "settings" : view;
+}
+/** 页面标题（全称）：桌面顶栏与窄屏 header 共用 */
+var VIEW_TITLES = {
+	overview: "用量概览",
+	stats: "用量统计",
+	history: "历史记录",
+	forecast: "趋势预测",
+	wallet: "钱包",
+	settings: "设置",
+	help: "使用说明",
+	about: "关于"
+};
+function viewTitle(view) {
+	return VIEW_TITLES[view] || VIEW_TITLES.overview;
+}
+/**
+* 底栏 tab 点击语义。
+* @param target 用户点到的 tab（根视图）
+* @param current 当前视图（可能是二级页）
+* @param currentIsChildView 当前视图是否为「设置」下的二级页
+*/
+function resolveTabTap(target, current, currentIsChildView) {
+	if (target !== parentTabOf(current)) return "switch";
+	if (currentIsChildView) return "pop-root";
+	return "scroll-top";
+}
+//#endregion
 //#region src/ui/chart-time.ts
 var WEEKDAY = [
 	"周日",
@@ -12482,6 +12574,10 @@ function prettyFullResponse(resp) {
 var panelCreated = false;
 var panelOpen = false;
 var currentView = "overview";
+/** 「设置」下最近打开的二级页（窄屏点回「设置」tab 时恢复到上次位置） */
+var settingsChildView = null;
+/** 当前导航高亮键：窄屏二级页归到「设置」，桌面为视图本身 */
+var currentNavKey = "overview";
 var collapsed = false;
 function refreshUI() {
 	try {
@@ -13147,19 +13243,21 @@ function bindTopbarScroll(doc) {
 }
 function bindPressFeedback(doc) {
 	try {
-		const btn = doc.getElementById("aus-hamburger-btn");
-		if (!btn || btn.getAttribute("data-press-bound") === "1") return;
-		btn.setAttribute("data-press-bound", "1");
-		const press = (on) => {
-			if (on) btn.setAttribute("data-pressed", "1");
-			else btn.removeAttribute("data-pressed");
-		};
-		btn.addEventListener("pointerdown", () => press(true), { passive: true });
-		btn.addEventListener("pointerup", () => press(false), { passive: true });
-		btn.addEventListener("pointercancel", () => press(false), { passive: true });
-		btn.addEventListener("pointerleave", () => press(false), { passive: true });
-		btn.addEventListener("click", () => press(false));
-		btn.addEventListener("blur", () => press(false));
+		doc.querySelectorAll("#aus-mobile-back, #aus-bottom-nav .aus-bottom-item, #aus-settings-entries .aus-settings-entry").forEach((el) => {
+			const node = el;
+			if (node.getAttribute("data-press-bound") === "1") return;
+			node.setAttribute("data-press-bound", "1");
+			const press = (on) => {
+				if (on) node.setAttribute("data-pressed", "1");
+				else node.removeAttribute("data-pressed");
+			};
+			node.addEventListener("pointerdown", () => press(true), { passive: true });
+			node.addEventListener("pointerup", () => press(false), { passive: true });
+			node.addEventListener("pointercancel", () => press(false), { passive: true });
+			node.addEventListener("pointerleave", () => press(false), { passive: true });
+			node.addEventListener("click", () => press(false));
+			node.addEventListener("blur", () => press(false));
+		});
 	} catch {}
 }
 function bindPanel(doc) {
@@ -13171,9 +13269,118 @@ function bindPanel(doc) {
 	bindTopbarScroll(doc);
 	bindPressFeedback(doc);
 }
+/**
+* 面板当前是否按窄屏（底栏）布局渲染。
+* 用 #aus-panel-body 的实际宽度判定；面板未显示（clientWidth 为 0）时回退到窗口宽度。
+*/
+function isNarrowPanel(doc) {
+	try {
+		const body = (doc || getDoc$1()).getElementById("aus-panel-body");
+		if (body && body.clientWidth > 0) return body.clientWidth <= 760;
+		return (window.parent?.innerWidth ?? window.innerWidth) <= 760;
+	} catch {
+		return true;
+	}
+}
+function prefersReducedMotion() {
+	try {
+		return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+	} catch {
+		return false;
+	}
+}
+/** 窄屏页面切换入场动画（桌面端维持原样，不启用）；移除 class + 强制回流保证连续切换可重播 */
+function playViewEnter(el) {
+	if (!el) return;
+	try {
+		el.classList.remove("aus-view-in");
+		el.offsetWidth;
+		el.classList.add("aus-view-in");
+	} catch {}
+}
+/**
+* 底栏指示胶囊跟随当前 tab（切换动画的核心）。
+* 首次定位关掉过渡，避免面板一打开胶囊就从最左侧"飞过来"。
+*/
+function syncBottomNav(doc, animate) {
+	try {
+		const bar = doc.getElementById("aus-bottom-nav");
+		if (!bar) return;
+		let activeEl = null;
+		bar.querySelectorAll("[data-bottom-nav]").forEach((el) => {
+			const on = el.getAttribute("data-bottom-nav") === currentNavKey;
+			el.classList.toggle("active", on);
+			if (on) activeEl = el;
+		});
+		const ind = doc.getElementById("aus-bottom-indicator");
+		if (!ind) return;
+		const target = activeEl;
+		if (!target) {
+			ind.style.opacity = "0";
+			return;
+		}
+		ind.style.opacity = "1";
+		const x = Math.round(target.offsetLeft + target.offsetWidth / 2 - 23);
+		const first = bar.getAttribute("data-ready") !== "1";
+		if (!animate || first) {
+			const prev = ind.style.transition;
+			ind.style.transition = "none";
+			ind.style.transform = "translate3d(" + x + "px,0,0)";
+			ind.offsetWidth;
+			ind.style.transition = prev;
+			bar.setAttribute("data-ready", "1");
+		} else ind.style.transform = "translate3d(" + x + "px,0,0)";
+	} catch {}
+}
+/** 侧栏（桌面）/底栏（窄屏）高亮 + 二级页返回箭头显隐：切页与窗口尺寸变化共用 */
+function paintNavState(doc, narrow, animate) {
+	currentNavKey = narrow ? parentTabOf(currentView) : currentView;
+	try {
+		doc.querySelectorAll("#aus-sidebar [data-nav]").forEach((el) => {
+			const v = el.getAttribute("data-nav");
+			el.classList.toggle("active", v === currentNavKey);
+		});
+	} catch {}
+	syncBottomNav(doc, animate);
+	const backBtn = doc.getElementById("aus-mobile-back");
+	if (backBtn) backBtn.style.display = narrow && isSettingsChild(currentView) ? "flex" : "none";
+}
+/**
+* 底栏 tab 点击语义：
+* - 桌面端（底栏不显示）直接切页；
+* - 窄屏换 tab → 切页（回到「设置」时恢复上次的二级页）；
+* - 窄屏重复点当前 tab → 二级页回根页，已在根页则回到顶部。
+*/
+function handleBottomTabTap(target) {
+	const doc = getDoc$1();
+	if (!isNarrowPanel(doc)) {
+		switchView(target);
+		return;
+	}
+	const action = resolveTabTap(target, currentView, isSettingsChild(currentView));
+	if (action === "switch") {
+		switchView(target === "settings" && settingsChildView ? settingsChildView : target);
+		return;
+	}
+	if (action === "pop-root") {
+		switchView("settings");
+		return;
+	}
+	try {
+		const main = doc.getElementById("aus-main");
+		if (main) main.scrollTo({
+			top: 0,
+			behavior: prefersReducedMotion() ? "auto" : "smooth"
+		});
+		const contentBody = doc.getElementById("aus-content-body");
+		if (contentBody) contentBody.scrollTop = 0;
+	} catch {}
+}
 function switchView(view) {
 	const prevView = currentView;
 	currentView = view;
+	if (isSettingsChild(view)) settingsChildView = view;
+	else if (view === "settings") settingsChildView = null;
 	if (prevView === "wallet" && view !== "wallet") try {
 		repository.collapseAllWallets();
 	} catch {}
@@ -13181,6 +13388,7 @@ function switchView(view) {
 		trackPage(view);
 	} catch {}
 	const doc = getDoc$1();
+	const narrow = isNarrowPanel(doc);
 	if (view !== "history") closeHistoryDetail(doc);
 	doc.querySelectorAll("[data-view]").forEach((el) => {
 		const on = el.getAttribute("data-view") === view;
@@ -13189,6 +13397,7 @@ function switchView(view) {
 			el.style.transition = "none";
 			el.style.opacity = "1";
 		}
+		if (on && narrow) playViewEnter(el);
 	});
 	try {
 		for (const id of ["aus-main", "aus-content-body"]) {
@@ -13199,20 +13408,8 @@ function switchView(view) {
 		}
 	} catch {}
 	syncTopbarState(doc);
-	doc.querySelectorAll(".aus-nav-item").forEach((el) => {
-		if (el.getAttribute("data-nav") === view) el.classList.add("active");
-		else el.classList.remove("active");
-	});
-	const titleText = {
-		overview: "用量概览",
-		stats: "用量统计",
-		history: "历史记录",
-		forecast: "趋势预测",
-		wallet: "钱包",
-		settings: "设置",
-		help: "使用说明",
-		about: "关于"
-	}[view] || "";
+	paintNavState(doc, narrow, narrow);
+	const titleText = viewTitle(view);
 	const titleEl = doc.getElementById("aus-page-title");
 	const mobileTitleEl = doc.getElementById("aus-mobile-page-title");
 	if (titleEl) titleEl.textContent = titleText;
@@ -13285,8 +13482,8 @@ function createPanel() {
 	panel.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:'Microsoft YaHei','微软雅黑',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;";
 	panel.innerHTML = `
     <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;">
-      <button id="aus-hamburger-btn" title="菜单" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);font-size:18px;line-height:1;padding:0;">${icon("menu", 22)}</button>
-      <span style="margin-left:12px;font-size:var(--aus-fs-base);font-weight:700;color:var(--ds-text);white-space:nowrap;flex-shrink:0;">API用量统计</span>
+      <button id="aus-mobile-back" title="返回设置" style="display:none;width:28px;height:28px;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;">${icon("chevron-left", 20)}</button>
+      <span id="aus-mobile-brand" style="margin-left:12px;font-size:var(--aus-fs-base);font-weight:700;color:var(--ds-text);white-space:nowrap;flex-shrink:0;">API用量统计</span>
       <span id="aus-mobile-page-title" style="margin-left:10px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text-2);">用量概览</span>
       <button id="aus-mobile-panel-close" title="关闭" style="margin-left:auto;width:32px;height:32px;padding:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:var(--aus-fs-base);">${icon("close", 16)}</button>
     </div>
@@ -13314,7 +13511,7 @@ function createPanel() {
         <div class="aus-nav-group" style="display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--ds-border);padding-top:10px;">
           <div class="aus-nav-item" data-nav="settings" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon("settings")}</span><span class="aus-nav-label">设置</span></div>
           <div class="aus-nav-item" data-nav="help" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon("help")}</span><span class="aus-nav-label">使用说明</span></div>
-          <div class="aus-nav-item" data-nav="about" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon("about")}</span><span class="aus-nav-label">关于</span><span id="aus-nav-update-badge" data-on="0" title="检测到新版本，点击查看关于页">新版本</span></div>
+          <div class="aus-nav-item" data-nav="about" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon("about")}</span><span class="aus-nav-label">关于</span><span id="aus-nav-update-badge" data-update-badge="1" data-on="0" title="检测到新版本，点击查看关于页">新版本</span></div>
         </div>
       </div>
     </div>
@@ -13533,11 +13730,23 @@ function createPanel() {
             <div id="aus-history"></div>
           </div>
           <div data-view="settings" style="display:none;">
+            <div id="aus-settings-entries" style="display:none;grid-template-columns:1fr;gap:8px;margin-bottom:12px;">${SETTINGS_ENTRIES.map((e) => `
+              <div class="aus-settings-entry" data-settings-entry="${e.view}" role="button" tabindex="0">
+                <span class="aus-settings-entry-icon">${icon(e.icon, 20)}</span>
+                <span class="aus-settings-entry-text">
+                  <span class="aus-settings-entry-label">${e.label}</span>
+                  <span class="aus-settings-entry-desc">${e.desc}</span>
+                </span>
+                ${e.view === "about" ? "<span class=\"aus-entry-badge\" data-update-badge=\"1\" data-on=\"0\">新版本</span>" : ""}
+                <span class="aus-settings-entry-arrow">${icon("chevron-right", 16)}</span>
+              </div>`).join("")}
+            </div>
             <div id="aus-settings"></div>
           </div>
           <div data-view="help" style="display:none;">
             <div style="display:grid;gap:12px;">
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#FF6A00;font-weight:600;margin-bottom:6px;">完整使用文档</div><div style="color:var(--ds-text-2);">详细说明各页面、筛选、钱包、定价、同步、隐私与常见问题。</div><a href="https://janmk1453.github.io/Api-Usage/" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;margin-top:10px;padding:8px 14px;border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);text-decoration:none;font-size:var(--aus-fs-base);font-weight:600;">前往完整使用文档</a></div>
+              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0070F3;font-weight:600;margin-bottom:6px;">🧭 导航（手机端）</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 窄屏改用底部标签栏：概览 / 统计 / 历史 / 趋势 / 设置；再点一次当前标签可回到页面顶部</div><div>2. 钱包、使用说明、关于都收在「设置」页顶部的入口里，进入后点左上角返回箭头回到设置</div><div>3. 从别的标签回到「设置」时会回到上次停留的那个页面（钱包/使用说明/关于）；桌面端仍是左侧可折叠侧边栏，入口位置不变</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#DC2626;font-weight:600;margin-bottom:6px;">隐私声明（完整版：<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:#DC2626;text-decoration:underline;">https://janmk1453.github.io/Api-Usage/#privacy</a>）</div><div style="color:var(--ds-text-2);display:grid;gap:6px;"><div>本扩展有且只能获得用户在酒馆本身中填写的：密钥条目的编号、用户备注和掩码末三位，仅用于独立区分请求来源，不会且无法读取、保存或上传完整明文密钥。</div><div>用户储存在酒馆本身的密钥是安全的，本扩展无法获取真实密钥。</div><div>用户主动填入本扩展的校准密钥是实际可用的密钥，且仅会被用于查询该钱包所对应厂商的余额或套餐额度接口（DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita、智谱 GLM、MiniMax、以及用户自填的 new-api 中转站），不会额外造成扣费或消耗；它仅经 XOR 混淆后存放于 SillyTavern，不进入历史记录、统计、日志、导入导出或 WebDAV。查询由浏览器直连厂商接口，不经过任何第三方代理；对未开放跨域（CORS）的厂商会直接失败并提示，扩展不会绕过该限制。</div><div>XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。</div><div>本扩展完整代码开源可审查。</div><div style="margin-top:2px;padding-top:6px;border-top:1px solid var(--ds-border);font-weight:600;color:#DC2626;">免责声明（完整版见上方链接）</div><div>本扩展不对功能“价格来源”、“自动同步”等利用 <a href="https://models.dev" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 获取的数据中出现或可能出现的商业化中转站负责；我们不建议使用任何商业化中转站，尽管我们已经尽力筛选数据，但由于对大量数据进行完全筛选难以实现，因此我们不对可能出现的任何商业化中转站名称负责，不构成推荐，和 models.dev 或任何中转站没有商业往来，坚定不移的反对商业化。</div><div>「套餐额度」中的本地估算基于本扩展记录的历史数据推算，不包含其他设备或其他客户端的消耗，可能与实际剩余额度有偏差，仅供展示参考，不参与计费、导出与云同步，不能作为账单依据；对没有公开接口或未开放跨域的厂商（Claude Code、Codex、OpenCode、GitHub Copilot、Cursor、讯飞星辰等），扩展不提供、也不会绕过限制去提供自动查询。</div><div>界面中的厂商图标与名称商标归各自所有者，仅用于标识接入来源，不构成任何关联、合作或背书；图标数据内联自 simple-icons（CC0 发布）。</div><div>我们将尽可能维护扩展的安全和隐私性，但本扩展不对因酒馆/本扩展的安全漏洞或因间接原因导致的任何形式的密钥泄露及产生的损失负责。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0BA25E;font-weight:600;margin-bottom:6px;">钱包</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 扩展按识别到的接入链接自动创建和汇总钱包，默认始终保留 DeepSeek 官方钱包；同名链接下识别的密钥和模型会归入同一钱包。</div><div>2. 每个钱包可独立维护名称、余额、模型价格、峰谷规则和价格来源；钱包默认收起，展开状态按钱包记忆。价格来源仅展示第一方模型厂商，不展示中转站或聚合平台；同步时只按钱包里已识别的模型名做模糊匹配后写入该模型价格，不会把供应商目录里的模型整批加入钱包。</div><div>3. 请求进入后会先匹配所属钱包，再使用该钱包的模型价格和峰谷规则计费，并从对应钱包余额预扣；未配置价格的模型先记零费用，保存或同步价格后自动重算冷热历史。</div><div>4. 余额查询按「查询适配器」工作：DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita 可查余额，智谱 GLM 与 MiniMax 可查套餐额度，new-api 中转可用「系统访问令牌 + 用户 ID」查订阅额度；密钥在该钱包内单独填写，多个密钥不会自动相加。</div><div>5. 删除钱包会进入“已忽略接入”，后续请求不会自动重建、不参与余额合计，历史记录仍保留归属，需要时可恢复显示。</div><div>6. 「套餐额度」只对能查询到额度的厂商显示，查到哪个展示哪个；本地估算需手动启用，仅作参考，不参与计费。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（按钱包内的「查询适配器」查询，支持多家厂商）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
@@ -13587,15 +13796,20 @@ function createPanel() {
     </div>
     </div>
     </div>
+    <div id="aus-bottom-nav" style="display:none;">
+      <div id="aus-bottom-indicator" aria-hidden="true"></div>
+      ${MOBILE_TABS.map((t) => `
+        <div class="aus-bottom-item" data-bottom-nav="${t.view}" role="tab" title="${t.label}">
+          <span class="aus-bottom-icon">${icon(t.icon, 22)}</span>
+          <span class="aus-bottom-label">${t.label}</span>
+          ${t.view === "settings" ? "<span class=\"aus-bottom-dot\" data-update-badge=\"1\" data-on=\"0\" title=\"检测到新版本\"></span>" : ""}
+        </div>`).join("")}
+    </div>
   `;
-	const sbOverlay = doc.createElement("div");
-	sbOverlay.id = "aus-sidebar-overlay";
-	sbOverlay.style.cssText = "display:none;";
-	panel.appendChild(sbOverlay);
 	doc.body.appendChild(overlay);
 	doc.body.appendChild(panel);
 	try {
-		import("./update-DQfgo-Si.js").then((mod) => mod.syncUpdateIndicators?.());
+		import("./update-Xu8AeOd6.js").then((mod) => mod.syncUpdateIndicators?.());
 	} catch {}
 	try {
 		applyTheme(theme);
@@ -13606,82 +13820,48 @@ function createPanel() {
 	doc.getElementById("aus-panel-close")?.addEventListener("click", closePanel);
 	doc.getElementById("aus-mobile-panel-close")?.addEventListener("click", closePanel);
 	doc.getElementById("aus-history-detail-close")?.addEventListener("click", () => closeHistoryDetail(doc));
-	doc.querySelectorAll(".aus-nav-item").forEach((el) => {
+	doc.querySelectorAll("#aus-sidebar [data-nav]").forEach((el) => {
 		el.addEventListener("click", () => {
 			const v = el.getAttribute("data-nav");
 			if (v) switchView(v);
 		});
 	});
-	let mobileOpen = false;
-	const isMobile = () => {
-		try {
-			const body = doc.getElementById("aus-panel-body");
-			if (body && body.clientWidth > 0) return body.clientWidth <= 760;
-			return (window.parent?.innerWidth ?? window.innerWidth) <= 760;
-		} catch {
-			return window.innerWidth <= 760;
-		}
-	};
-	const syncMobileSidebar = () => {
-		const sb = doc.getElementById("aus-sidebar");
-		if (!sb) return;
-		const ov = doc.getElementById("aus-sidebar-overlay");
-		if (isMobile()) {
-			if (mobileOpen) sb.classList.add("is-open");
-			else sb.classList.remove("is-open");
-			if (ov) {
-				ov.classList.toggle("is-open", mobileOpen);
-				ov.style.display = "";
-				if (mobileOpen) ov.onclick = () => {
-					mobileOpen = false;
-					syncMobileSidebar();
-				};
-				else ov.onclick = null;
-			}
-			const brand = doc.getElementById("aus-brand");
-			if (brand) brand.style.removeProperty("display");
-			doc.querySelectorAll(".aus-nav-label").forEach((el) => {
-				el.style.removeProperty("display");
-			});
-			doc.querySelectorAll("#aus-sidebar .aus-nav-item").forEach((el) => {
-				const c = el;
-				c.style.removeProperty("justify-content");
-				c.style.removeProperty("padding");
-			});
-			if (sb) {
-				sb.style.removeProperty("width");
-				sb.style.removeProperty("min-width");
-				sb.style.removeProperty("max-width");
-			}
-		} else {
-			sb.classList.remove("is-open");
-			if (ov) {
-				ov.classList.remove("is-open");
-				ov.style.display = "none";
-				ov.onclick = null;
-			}
-		}
-	};
+	doc.querySelectorAll("#aus-bottom-nav [data-bottom-nav]").forEach((el) => {
+		el.addEventListener("click", () => {
+			const v = el.getAttribute("data-bottom-nav");
+			if (v) handleBottomTabTap(v);
+		});
+	});
+	doc.querySelectorAll("#aus-settings-entries [data-settings-entry]").forEach((el) => {
+		el.addEventListener("click", () => {
+			const v = el.getAttribute("data-settings-entry");
+			if (v) switchView(v);
+		});
+		el.addEventListener("keydown", (e) => {
+			if (e.key !== "Enter" && e.key !== " ") return;
+			e.preventDefault();
+			const v = el.getAttribute("data-settings-entry");
+			if (v) switchView(v);
+		});
+	});
+	doc.getElementById("aus-mobile-back")?.addEventListener("click", () => switchView("settings"));
 	const applyCollapsed = (v) => {
 		collapsed = v;
 		const sb = doc.getElementById("aus-sidebar");
 		const brand = doc.getElementById("aus-brand");
 		const btn = doc.getElementById("aus-sidebar-toggle");
 		if (!sb) return;
-		if (isMobile()) {
-			syncMobileSidebar();
-			return;
-		}
+		if (isNarrowPanel(doc)) return;
 		sb.setAttribute("data-collapsed", collapsed ? "1" : "0");
 		sb.style.setProperty("width", collapsed ? "60px" : "260px", "important");
 		sb.style.setProperty("min-width", collapsed ? "60px" : "260px", "important");
 		sb.style.setProperty("max-width", collapsed ? "60px" : "260px", "important");
 		if (brand) brand.style.setProperty("display", collapsed ? "none" : "flex", "important");
 		if (btn) btn.innerHTML = collapsed ? icon("chevron-right", 14) : icon("chevron-left", 14);
-		doc.querySelectorAll(".aus-nav-label").forEach((el) => {
+		doc.querySelectorAll("#aus-sidebar .aus-nav-label").forEach((el) => {
 			el.style.setProperty("display", collapsed ? "none" : "inline", "important");
 		});
-		doc.querySelectorAll(".aus-nav-item").forEach((el) => {
+		doc.querySelectorAll("#aus-sidebar .aus-nav-item").forEach((el) => {
 			el.style.justifyContent = collapsed ? "center" : "flex-start";
 		});
 		doc.querySelectorAll("#aus-sidebar .aus-nav-item").forEach((el) => {
@@ -13689,34 +13869,16 @@ function createPanel() {
 		});
 	};
 	doc.getElementById("aus-sidebar-toggle")?.addEventListener("click", () => applyCollapsed(!collapsed));
-	doc.getElementById("aus-hamburger-btn")?.addEventListener("click", () => {
-		mobileOpen = !mobileOpen;
-		syncMobileSidebar();
-	});
-	doc.querySelectorAll(".aus-nav-item").forEach((el) => {
-		el.addEventListener("click", () => {
-			if (isMobile() && mobileOpen) {
-				mobileOpen = false;
-				syncMobileSidebar();
-			}
-		});
-	});
 	try {
-		if (isMobile()) {
-			mobileOpen = false;
-			syncMobileSidebar();
-		}
+		paintNavState(doc, isNarrowPanel(doc), false);
 		let rzT = null;
 		const onResize = () => {
 			if (rzT) return;
 			rzT = setTimeout(() => {
 				rzT = null;
-				if (isMobile()) syncMobileSidebar();
-				else {
-					mobileOpen = false;
-					syncMobileSidebar();
-					applyCollapsed(collapsed);
-				}
+				const narrow = isNarrowPanel(doc);
+				if (!narrow) applyCollapsed(collapsed);
+				paintNavState(doc, narrow, false);
 				try {
 					positionPanel();
 				} catch {}
@@ -13737,7 +13899,7 @@ function createPanel() {
 		initForecastView();
 	} catch {}
 	try {
-		import("./update-DQfgo-Si.js").then((m) => {
+		import("./update-Xu8AeOd6.js").then((m) => {
 			const branchBtn = doc.getElementById("aus-update-branch-btn");
 			const branchLabel = doc.getElementById("aus-update-branch-label");
 			const branchDrop = doc.getElementById("aus-update-branch-dropdown");
@@ -13776,7 +13938,7 @@ function createPanel() {
 		if (updBtn) updBtn.onclick = () => {
 			updBtn.textContent = "检查中…";
 			updBtn.setAttribute("disabled", "");
-			import("./update-DQfgo-Si.js").then((m) => m.checkUpdate(true).finally(() => {
+			import("./update-Xu8AeOd6.js").then((m) => m.checkUpdate(true).finally(() => {
 				updBtn.textContent = "检查更新";
 				updBtn.removeAttribute("disabled");
 			}));
@@ -13786,7 +13948,7 @@ function createPanel() {
 			if (runUpdBtn.hasAttribute("disabled")) return;
 			runUpdBtn.textContent = "更新中…";
 			runUpdBtn.setAttribute("disabled", "");
-			import("./update-DQfgo-Si.js").then((m) => m.updateSelf()).then((res) => {
+			import("./update-Xu8AeOd6.js").then((m) => m.updateSelf()).then((res) => {
 				if (res.ok && res.changed) {
 					const bannerEl = doc.getElementById("aus-update-banner");
 					if (bannerEl) {
@@ -13849,21 +14011,7 @@ function openPanel() {
 	ov.style.display = "block";
 	pn.style.display = "flex";
 	try {
-		const sb = doc.getElementById("aus-sidebar");
-		const isMobile = (() => {
-			try {
-				const b = doc.getElementById("aus-panel-body");
-				if (b && b.clientWidth > 0) return b.clientWidth <= 760;
-				return (window.parent?.innerWidth ?? window.innerWidth) <= 760;
-			} catch {
-				return window.innerWidth <= 760;
-			}
-		})();
-		if (sb) {
-			if (isMobile) {
-				if (sb.classList.contains("is-open") && !doc._aus_mobileOpen) sb.classList.remove("is-open");
-			} else sb.classList.remove("is-open");
-		}
+		paintNavState(doc, isNarrowPanel(doc), false);
 	} catch {}
 	positionPanel();
 	requestAnimationFrame(() => {
@@ -13879,7 +14027,7 @@ function openPanel() {
 		import("./collector-DJ0dScs1.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
-		import("./update-DQfgo-Si.js").then((m) => m.maybeAutoCheck());
+		import("./update-Xu8AeOd6.js").then((m) => m.maybeAutoCheck());
 	} catch {}
 }
 function closePanel() {
