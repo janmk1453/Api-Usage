@@ -11006,7 +11006,7 @@ function createPanel() {
         <div class="aus-bottom-item" data-bottom-nav="${t.view}" role="tab" title="${t.label}">
           <span class="aus-bottom-icon">${icon(t.icon, 22)}</span>
           <span class="aus-bottom-label">${t.label}</span>
-          ${t.view === "settings" ? "<span class=\"aus-bottom-dot\" data-update-badge=\"1\" data-on=\"0\" title=\"检测到新版本\"></span>" : ""}
+          ${t.view === "settings" ? "<span class=\"aus-bottom-badge\" data-update-badge=\"1\" data-on=\"0\" title=\"检测到新版本，去「设置 → 关于」查看\">新版本</span>" : ""}
         </div>`).join("")}
     </div>
   `;
@@ -11017,7 +11017,7 @@ function createPanel() {
 	doc.body.appendChild(overlay);
 	doc.body.appendChild(panel);
 	try {
-		import("./update-Xu8AeOd6.js").then((mod) => mod.syncUpdateIndicators?.());
+		import("./update-hEuwPQhF.js").then((mod) => mod.syncUpdateIndicators?.());
 	} catch {}
 	try {
 		applyTheme(theme);
@@ -11134,7 +11134,7 @@ function createPanel() {
 		initForecastView();
 	} catch {}
 	try {
-		import("./update-Xu8AeOd6.js").then((m) => {
+		import("./update-hEuwPQhF.js").then((m) => {
 			const branchBtn = doc.getElementById("aus-update-branch-btn");
 			const branchLabel = doc.getElementById("aus-update-branch-label");
 			const branchDrop = doc.getElementById("aus-update-branch-dropdown");
@@ -11173,7 +11173,7 @@ function createPanel() {
 		if (updBtn) updBtn.onclick = () => {
 			updBtn.textContent = "检查中…";
 			updBtn.setAttribute("disabled", "");
-			import("./update-Xu8AeOd6.js").then((m) => m.checkUpdate(true).finally(() => {
+			import("./update-hEuwPQhF.js").then((m) => m.checkUpdate(true).finally(() => {
 				updBtn.textContent = "检查更新";
 				updBtn.removeAttribute("disabled");
 			}));
@@ -11183,7 +11183,7 @@ function createPanel() {
 			if (runUpdBtn.hasAttribute("disabled")) return;
 			runUpdBtn.textContent = "更新中…";
 			runUpdBtn.setAttribute("disabled", "");
-			import("./update-Xu8AeOd6.js").then((m) => m.updateSelf()).then((res) => {
+			import("./update-hEuwPQhF.js").then((m) => m.updateSelf()).then((res) => {
 				if (res.ok && res.changed) {
 					const bannerEl = doc.getElementById("aus-update-banner");
 					if (bannerEl) {
@@ -11262,7 +11262,7 @@ function openPanel() {
 		import("./collector-TXuKnAPm.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
-		import("./update-Xu8AeOd6.js").then((m) => m.maybeAutoCheck());
+		import("./update-hEuwPQhF.js").then((m) => m.maybeAutoCheck());
 	} catch {}
 }
 function closePanel() {

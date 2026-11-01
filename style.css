@@ -1686,20 +1686,23 @@
 #aus-nav-update-badge[data-on="1"],
 .aus-entry-badge[data-on="1"] { display: inline-flex; }
 #aus-sidebar[data-collapsed="1"] #aus-nav-update-badge { display: none !important; }
-/* 窄屏底栏「设置」上的新版本角标：带内边距的红点，不写死宽高以便与图标对齐 */
-.aus-bottom-dot {
+/* 窄屏底栏「设置」上的新版本提示：有更新时用它顶掉「设置」两个字（父项 data-has-update
+   由 services/update.ts#paintBadge 写入），胶囊外观与侧栏/设置页徽标同源，只缩小尺寸塞进底栏 */
+.aus-bottom-badge {
   display: none;
-  position: absolute;
-  top: 8px;
-  left: 50%;
-  margin-left: 6px;
-  width: 7px;
-  height: 7px;
+  margin-left: 0;
+  padding: 1px 7px;
   border-radius: 999px;
   background: #2563EB;
-  pointer-events: none;
+  color: #FFFFFF;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
-.aus-bottom-dot[data-on="1"] { display: block; }
+.aus-bottom-badge[data-on="1"] { display: inline-flex; }
+.aus-bottom-item[data-has-update="1"] .aus-bottom-label { display: none !important; }
 
 /* ===== 顶部筛选胶囊：与趋势预测工具栏（.aus-forecast-pill）保持同一尺寸口径 ===== */
 /* 其余页面原先用 inline 的 padding:8px 12px + 14px 字号，移动端比趋势预测明显大一圈；
@@ -2288,7 +2291,10 @@
   /* 抽屉内导航保持紧凑可读尺寸（与改造前一致） */
   #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar .aus-nav-item { justify-content: flex-start !important; padding: 11px 12px !important; gap: 12px !important; font-size: var(--aus-fs-base) !important; border-radius: 10px !important; }
   #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar .aus-nav-group { gap: 8px !important; }
-  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar #aus-brand { padding-left: 6px !important; gap: 10px !important; }
+  /* 品牌区必须显式 display:flex！syncMobileSidebar 会 removeProperty('display') 清掉宽屏折叠
+     残留，清完就退回标记默认值 block，图标与标题会被拆成两行（改造前靠这条 !important 兜住） */
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar #aus-brand { display: flex !important; padding-left: 6px !important; gap: 10px !important; }
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar .aus-nav-label { display: inline !important; }
 }
 /* 不支持容器查询的旧内核：视口断点给出同一套规则（与上一块保持同步） */
 @media (max-width: 760px) {
@@ -2329,7 +2335,10 @@
   }
   #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar .aus-nav-item { justify-content: flex-start !important; padding: 11px 12px !important; gap: 12px !important; font-size: var(--aus-fs-base) !important; border-radius: 10px !important; }
   #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar .aus-nav-group { gap: 8px !important; }
-  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar #aus-brand { padding-left: 6px !important; gap: 10px !important; }
+  /* 品牌区必须显式 display:flex！syncMobileSidebar 会 removeProperty('display') 清掉宽屏折叠
+     残留，清完就退回标记默认值 block，图标与标题会被拆成两行（改造前靠这条 !important 兜住） */
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar #aus-brand { display: flex !important; padding-left: 6px !important; gap: 10px !important; }
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar .aus-nav-label { display: inline !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar,

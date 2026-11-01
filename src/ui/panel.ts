@@ -1365,7 +1365,7 @@ export function createPanel() {
         <div class="aus-bottom-item" data-bottom-nav="${t.view}" role="tab" title="${t.label}">
           <span class="aus-bottom-icon">${icon(t.icon, 22)}</span>
           <span class="aus-bottom-label">${t.label}</span>
-          ${t.view === 'settings' ? '<span class="aus-bottom-dot" data-update-badge="1" data-on="0" title="检测到新版本"></span>' : ''}
+          ${t.view === 'settings' ? '<span class="aus-bottom-badge" data-update-badge="1" data-on="0" title="检测到新版本，去「设置 → 关于」查看">新版本</span>' : ''}
         </div>`).join('')}
     </div>
   `;
