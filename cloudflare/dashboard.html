@@ -4933,7 +4933,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     const dims = C.DIMENSIONS.map(([k]) => k);
     if (dims.indexOf(state.explore.dim) < 0) state.explore.dim = 'os';
     if (['bar', 'donut', 'share'].indexOf(state.explore.viz) < 0) state.explore.viz = 'bar';
-    if ([5, 8, 12, 20].indexOf(Number(state.explore.topN)) < 0) state.explore.topN = 8;
+    if ([5, 8, 12, 20, 50].indexOf(Number(state.explore.topN)) < 0) state.explore.topN = 8;
     if (['value', 'name'].indexOf(state.explore.sort) < 0) state.explore.sort = 'value';
   }
 
@@ -5093,7 +5093,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       + '<div class="card-body">'
       + dimSel
       + '<div class="field field-full"><span>显示为</span>' + S.seg('exviz', [['bar', '条形'], ['donut', '环形'], ['share', '占比条']], state.explore.viz) + '</div>'
-      + '<div class="field"><span>Top N</span>' + S.seg('extopN', [[5, '5'], [8, '8'], [12, '12'], [20, '20']], state.explore.topN) + '</div>'
+      + '<div class="field"><span>Top N</span>' + S.seg('extopN', [[5, '5'], [8, '8'], [12, '12'], [20, '20'], [50, '50']], state.explore.topN) + '</div>'
       + '<div class="field"><span>排序</span>' + S.seg('exsort', [['value', '按数量'], ['name', '按名称']], state.explore.sort) + '</div>'
       + '<div class="builder-actions">'
       + '<button class="btn primary" data-act="ex-save">' + U.icon('bookmark') + '保存视图</button>'

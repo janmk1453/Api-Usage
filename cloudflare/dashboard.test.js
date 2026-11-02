@@ -138,6 +138,11 @@ describe('看板模板结构', () => {
     expect(html).toContain('.life-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; margin-top: 12px; }');
   });
 
+  it('自定义视图的 Top N 可选 5 / 8 / 12 / 20 / 50', () => {
+    expect(html).toContain('if ([5, 8, 12, 20, 50].indexOf(Number(state.explore.topN)) < 0) state.explore.topN = 8;');
+    expect(html).toContain("S.seg('extopN', [[5, '5'], [8, '8'], [12, '12'], [20, '20'], [50, '50']], state.explore.topN)");
+  });
+
   it('图表是自绘 SVG，没有 canvas 依赖', () => {
     expect(html).not.toContain('<canvas');
     expect(html).toContain('createElementNS');
