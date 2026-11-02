@@ -56,6 +56,25 @@ describe('设置页卡片顺序', () => {
   });
 });
 
+describe('设置页「关于」入口展示当前版本号', () => {
+  it('版本号单源读取，并渲染在关于入口的标题后面', () => {
+    expect(panelCode).toContain('function appVersionText(): string {');
+    expect(panelCode).toContain("return typeof __APP_VERSION__ !== 'undefined' ? String(__APP_VERSION__) : '';");
+    expect(panelCode).toContain("const version = e.view === 'about' && appVersionText()");
+    expect(panelCode).toContain('aus-settings-entry-version');
+    expect(panelCode).toContain('<span class="aus-settings-entry-label">${e.label}${version}</span>');
+    // 侧栏品牌与关于页的版本号同样走这个函数，禁止各自再拼 typeof 判断
+    expect(panelCode).toContain('v${appVersionText()}');
+    expect(panelCode).toContain('当前 v${appVersionText()}');
+  });
+
+  it('版本号胶囊有独立样式，标题行内并排不换行', () => {
+    expect(cssSrc).toContain('#aus-settings-entries .aus-settings-entry-version {');
+    expect(cssSrc).toContain('#aus-settings-entries .aus-settings-entry-label {');
+    expect(cssSrc).toContain('  display: inline-flex;\n  align-items: center;\n  gap: 6px;');
+  });
+});
+
 describe('底栏选中灰底可拖动切页', () => {
   it('拖动阈值与归位时长集中定义，纵向滑动不接管', () => {
     expect(panelCode).toContain('const DRAG_LOCK = 6;');

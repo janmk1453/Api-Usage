@@ -2427,7 +2427,28 @@
 }
 #aus-settings-entries .aus-settings-entry-icon svg { display: block; }
 #aus-settings-entries .aus-settings-entry-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
-#aus-settings-entries .aus-settings-entry-label { font-size: var(--aus-fs-base); font-weight: 600; line-height: 1.35; }
+/* 标题行内排布：标签 + 「关于」入口的版本号胶囊 */
+#aus-settings-entries .aus-settings-entry-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--aus-fs-base);
+  font-weight: 600;
+  line-height: 1.35;
+}
+/* 「关于」入口标题后面的当前版本号：低调胶囊，与「新版本」徽标同一行不抢视线 */
+#aus-settings-entries .aus-settings-entry-version {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--ds-card-inner);
+  color: var(--ds-text-2);
+  font-size: var(--aus-fs-xs);
+  font-weight: 600;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 #aus-settings-entries .aus-settings-entry-desc {
   font-size: var(--aus-fs-sm);
   color: var(--ds-text-3);

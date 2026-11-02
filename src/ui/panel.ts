@@ -47,6 +47,11 @@ function nowTs(): number {
 
 declare const __APP_VERSION__: string;
 
+/** 当前扩展版本号（构建时由 manifest.version 注入）：侧栏品牌、设置页「关于」入口与关于页共用 */
+function appVersionText(): string {
+  return typeof __APP_VERSION__ !== 'undefined' ? String(__APP_VERSION__) : '';
+}
+
 function getDoc(): Document { return (window.parent as any)?.document ?? document; }
 
 // 精简展示完整响应：SSE 流式合并增量内容，隐藏 id/created/object/choices/index/delta 等重复字段
@@ -1288,7 +1293,7 @@ export function createPanel() {
           <span class="aus-brand-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--ds-orange);">${icon('brand', 18)}</span>
           <div style="display:flex;flex-direction:column;min-width:0;">
             <span style="font-size:15px;font-weight:700;line-height:20px;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
-            <span style="font-size:var(--aus-fs-sm);line-height:16px;color:var(--ds-text-2);white-space:nowrap;">v${typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : ''}</span>
+            <span style="font-size:var(--aus-fs-sm);line-height:16px;color:var(--ds-text-2);white-space:nowrap;">v${appVersionText()}</span>
           </div>
         </div>
         <button id="aus-sidebar-toggle" style="width:30px;height:30px;margin-top:13px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;font-size:var(--aus-fs-base);padding:0;line-height:1;">${icon('chevron-left', 14)}</button>
@@ -1524,16 +1529,20 @@ export function createPanel() {
             <div id="aus-history"></div>
           </div>
           <div data-view="settings" style="display:none;">
-            <div id="aus-settings-entries" style="display:none;grid-template-columns:1fr;gap:8px;margin-bottom:12px;">${SETTINGS_ENTRIES.map((e) => `
+            <div id="aus-settings-entries" style="display:none;grid-template-columns:1fr;gap:8px;margin-bottom:12px;">${SETTINGS_ENTRIES.map((e) => {
+              // 「关于」入口带上当前版本号：桌面端入口在侧栏、版本显示在品牌区，这里补上窄屏设置页的版本信息
+              const version = e.view === 'about' && appVersionText() ? '<span class="aus-settings-entry-version" title="当前版本">v' + appVersionText() + '</span>' : '';
+              return `
               <div class="aus-settings-entry" data-settings-entry="${e.view}" role="button" tabindex="0">
                 <span class="aus-settings-entry-icon">${icon(e.icon, 20)}</span>
                 <span class="aus-settings-entry-text">
-                  <span class="aus-settings-entry-label">${e.label}</span>
+                  <span class="aus-settings-entry-label">${e.label}${version}</span>
                   <span class="aus-settings-entry-desc">${e.desc}</span>
                 </span>
                 ${e.view === 'about' ? '<span class="aus-entry-badge" data-update-badge="1" data-on="0">新版本</span>' : ''}
                 <span class="aus-settings-entry-arrow">${icon('chevron-right', 16)}</span>
-              </div>`).join('')}
+              </div>`;
+            }).join('')}
             </div>
             <div id="aus-settings"></div>
           </div>
@@ -1571,7 +1580,7 @@ export function createPanel() {
                   </div>
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:var(--aus-fs-sm);">检查更新</button>
                   <button id="aus-run-update" class="ds-btn-pill" style="display:none;padding:6px 14px;font-size:var(--aus-fs-sm);">立即更新</button>
-                  <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">当前 v${typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : ''} · 每 1 小时自动检查</span>
+                  <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">当前 v${appVersionText()} · 每 1 小时自动检查</span>
                 </div>
                 <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">可选择 main（稳定）或 dev（测试）分支获取更新，默认 main；更新完成后自动刷新网页。</div>
               </div>
