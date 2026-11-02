@@ -186,6 +186,9 @@ describe('上报体归一', () => {
     const legacy = normalizePayload(goodPayload(), NOW);
     expect(legacy.value.counters.run_ms).toBe(0);
     expect(legacy.value.counters.dur_ms).toBe(90000);
+    // 同时标记「没带运行时长」，供写入端按旧口径折算
+    expect(legacy.value.runReported).toBe(false);
+    expect(withRun.value.runReported).toBe(true);
   });
 
   it('缺失或非法枚举回退到安全默认值', () => {

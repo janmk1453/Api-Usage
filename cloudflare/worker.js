@@ -402,10 +402,21 @@ async function writeRow(db, payload, now) {
   ];
   const hourlyArgs = [hour, ...dailyArgs.slice(1)];
   // 运行时长列已迁移时的参数：设备语句追加在 themeArgs 之后，日/小时语句追加在末位 ?21
-  const runMs = Math.max(0, Number(counters.run_ms) || 0);
-  const runThemeArgs = [...themeArgs, runMs];
-  const runDailyArgs = [...dailyArgs, runMs];
-  const runHourlyArgs = [...hourlyArgs, runMs];
+  // 旧客户端不含 run_ms，它们的 dur_ms 实际是「页面加载 → 上报」的墙钟时间，
+  // 因此在这种语句集合里按酒馆运行时长入账，真实使用时长记 0，避免污染面板使用时长
+  const runReported = payload.runReported !== false;
+  const durMs = runReported ? counters.dur_ms : 0;
+  const runMs = Math.max(0, Number(runReported ? counters.run_ms : counters.dur_ms) || 0);
+  // themeArgs 的 ?17 与日/小时语句的 ?4 是使用时长，替换后再把运行时长追加到末位
+  const runThemeArgs = [...themeArgs];
+  runThemeArgs[16] = durMs;
+  runThemeArgs.push(runMs);
+  const runDailyArgs = [...dailyArgs];
+  runDailyArgs[3] = durMs;
+  runDailyArgs.push(runMs);
+  const runHourlyArgs = [...hourlyArgs];
+  runHourlyArgs[3] = durMs;
+  runHourlyArgs.push(runMs);
 
   // 每次重试重新 prepare：batch 事务失败会整体回滚，last_seq 判据保证重放不会重复累加
   const buildDevice = (mode) => {

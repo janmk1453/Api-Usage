@@ -356,6 +356,26 @@ describe('/collect 写入契约保持不变', () => {
     expect(batches[0].params[0][16]).toBe(60000);
   });
 
+  it('旧客户端不报运行时长时，使用时长按运行时长入账且不再计入真实使用时长', async () => {
+    const { env, db } = makeEnv();
+    const res = await worker.fetch(new Request('https://stat.example.com/collect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: legacyBody(),
+    }), env, { waitUntil() {} });
+    expect(res.status).toBe(204);
+    const batch = db.calls.find((call) => call.batch);
+    expect(batch.batch).toBe(3);
+    // 设备语句 ?17 与日/小时语句 ?4 是使用时长，旧客户端按 0 记账
+    expect(batch.params[0][16]).toBe(0);
+    expect(batch.params[1][3]).toBe(0);
+    expect(batch.params[2][3]).toBe(0);
+    // 末尾的运行时长承接旧的时长数值
+    expect(batch.params[0][30]).toBeGreaterThan(0);
+    expect(batch.params[0][30]).toBe(batch.params[1][20]);
+    expect(batch.params[1][20]).toBe(batch.params[2][20]);
+  });
+
   it('关闭开关的最终上报把设备最新开关状态记为已关闭', async () => {
     const { env, db } = makeEnv();
     const res = await worker.fetch(new Request('https://stat.example.com/collect', {

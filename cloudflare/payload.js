@@ -126,6 +126,9 @@ export function normalizePayload(raw, now = Date.now()) {
   ttv: toVersion(envRaw.ttv, 16),
   };
 
+  // 旧客户端（3.1.9 之前）不含 run_ms：它们的 dur_ms 其实是「页面加载 → 上报」的墙钟时间
+  const runReported = countersRaw.run_ms !== undefined && countersRaw.run_ms !== null;
+
   const pages = {};
   for (const key of PAGE_KEYS) pages[key] = toInt(pagesRaw[key], 0, MAX_PAGE_COUNT);
   const render = [];
@@ -150,6 +153,8 @@ export function normalizePayload(raw, now = Date.now()) {
         pages,
         render,
       },
+      /** 本次上报是否带了酒馆运行时长（run_ms）；false 表示旧客户端，dur_ms 需按运行时长入账 */
+      runReported,
       daily: raw.daily === true ? 1 : 0,
       off: raw.off === true ? 1 : 0,
       hc: toInt(raw.hc, 0, MAX_HISTORY_COUNT),
