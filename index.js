@@ -3,13 +3,13 @@ import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from ".
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { f as saveHot, p as historyRecordKey } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-EVo7ymzA.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-BOFi-4im.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-9LYFOfk8.js";
-import { t as installInterception } from "./interception-6N4ClyIz.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-C1eNwRfe.js";
-import { a as trackOpen, c as applyTheme, d as icon, i as initTelemetry, l as unwatchSystemTheme, o as trackPage, r as flushTelemetry, s as trackRender, t as renderSettings, u as watchSystemTheme } from "./settings-a5iaL_v8.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-DDfpjdW9.js";
+import { t as installInterception } from "./interception-DHoEhDho.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-Dom8uUte.js";
+import { a as trackOpen, c as applyTheme, d as icon, i as initTelemetry, l as unwatchSystemTheme, o as trackPage, r as flushTelemetry, s as trackRender, t as renderSettings, u as watchSystemTheme } from "./settings-BSE-WiTi.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-DGiqrwZs.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -8942,7 +8942,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-C1eNwRfe.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-Dom8uUte.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -10408,6 +10408,64 @@ function bindPressFeedback(doc) {
 		});
 	} catch {}
 }
+/**
+* 最近一次由 pointerup 接管处理的底栏点按时间戳。
+* 触屏上 click 有两个坑：滑动惯性期间浏览器把这一下点按当成「停止滚动」不再派发 click；
+* 手指在按下与抬起之间挪动几个像素，click 也会落到共同祖先上而不再命中 tab。
+* 因此底栏改为在 pointerup 里按「位移 + 时长」判定点按并直接切页，click 只作为键盘/读屏兜底。
+*/
+var lastBottomTapAt = 0;
+/** 底栏点按接管（幂等）：整条底栏只绑一次，用事件委托覆盖内部所有 tab */
+function bindBottomNavTap(doc) {
+	try {
+		const bar = doc.getElementById("aus-bottom-nav");
+		if (!bar || bar.getAttribute("data-tap-bound") === "1") return;
+		bar.setAttribute("data-tap-bound", "1");
+		const TAP_SLOP = 12;
+		const TAP_MAX_MS = 800;
+		let item = null;
+		let startX = 0;
+		let startY = 0;
+		let startAt = 0;
+		let moved = false;
+		const reset = () => {
+			item = null;
+			moved = false;
+		};
+		bar.addEventListener("pointerdown", (e) => {
+			if (e.pointerType === "mouse" && e.button !== 0) {
+				reset();
+				return;
+			}
+			const target = e.target;
+			const hit = target && target.closest ? target.closest(".aus-bottom-item") : null;
+			if (!hit) {
+				reset();
+				return;
+			}
+			item = hit;
+			startX = e.clientX;
+			startY = e.clientY;
+			startAt = Date.now();
+			moved = false;
+		}, { passive: true });
+		bar.addEventListener("pointermove", (e) => {
+			if (!item) return;
+			if (Math.abs(e.clientX - startX) > TAP_SLOP || Math.abs(e.clientY - startY) > TAP_SLOP) moved = true;
+		}, { passive: true });
+		bar.addEventListener("pointercancel", reset, { passive: true });
+		bar.addEventListener("pointerup", (e) => {
+			const hit = item;
+			const wasMoved = moved;
+			const elapsed = Date.now() - startAt;
+			reset();
+			if (!hit || wasMoved || elapsed > TAP_MAX_MS) return;
+			lastBottomTapAt = Date.now();
+			const v = hit.getAttribute("data-bottom-nav");
+			if (v) handleBottomTabTap(v);
+		}, { passive: true });
+	} catch {}
+}
 function bindPanel(doc) {
 	const q = doc.getElementById("aus-btn-query-balance");
 	if (q) q.onclick = () => queryBalance();
@@ -10416,6 +10474,7 @@ function bindPanel(doc) {
 	} catch {}
 	bindTopbarScroll(doc);
 	bindPressFeedback(doc);
+	bindBottomNavTap(doc);
 }
 /** 「移动端兼容 UI」关闭时窄屏回到改造前的侧栏抽屉（含汉堡按钮与遮罩） */
 var mobileOpen = false;
@@ -11074,6 +11133,7 @@ function createPanel() {
 	});
 	doc.querySelectorAll("#aus-bottom-nav [data-bottom-nav]").forEach((el) => {
 		el.addEventListener("click", () => {
+			if (Date.now() - lastBottomTapAt < 600) return;
 			const v = el.getAttribute("data-bottom-nav");
 			if (v) handleBottomTabTap(v);
 		});
@@ -11296,7 +11356,7 @@ function openPanel() {
 	panelOpen = true;
 	refreshUI();
 	try {
-		import("./collector-CEvVjk__.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-OmNDhNXI.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-BZzkl0bd.js").then((m) => m.maybeAutoCheck());
@@ -11518,10 +11578,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-6N4ClyIz.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DHoEhDho.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-CEvVjk__.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-OmNDhNXI.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -11529,10 +11589,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-6N4ClyIz.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DHoEhDho.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-CEvVjk__.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-OmNDhNXI.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -11622,13 +11682,13 @@ async function onDelete() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-C1eNwRfe.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-Dom8uUte.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-9LYFOfk8.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DDfpjdW9.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-DGiqrwZs.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 	try {
@@ -11655,19 +11715,19 @@ async function onDelete() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-6N4ClyIz.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-DHoEhDho.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-CEvVjk__.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-OmNDhNXI.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-C1eNwRfe.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-Dom8uUte.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-9LYFOfk8.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-DDfpjdW9.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-DGiqrwZs.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -11677,10 +11737,10 @@ async function onDisable() {
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-6N4ClyIz.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-DHoEhDho.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-CEvVjk__.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-OmNDhNXI.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -11699,13 +11759,13 @@ async function onDisable() {
 		unwatchSystemTheme();
 	} catch {}
 	try {
-		(await import("./balance-C1eNwRfe.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-Dom8uUte.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-9LYFOfk8.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DDfpjdW9.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-DGiqrwZs.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -11733,19 +11793,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-C1eNwRfe.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-Dom8uUte.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-9LYFOfk8.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DDfpjdW9.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-DGiqrwZs.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-CEvVjk__.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-OmNDhNXI.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -11767,7 +11827,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-DDfpjdW9.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-DGiqrwZs.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

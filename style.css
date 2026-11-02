@@ -2174,6 +2174,15 @@
   -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
   backdrop-filter: blur(20px) saturate(140%) !important;
 }
+/* 底栏模式下顶栏左侧文字要与内容区对齐：#aus-main 窄屏内距是 12px，
+   而顶栏平时是 16px 内距 + 汉堡按钮后的 12px 品牌间距，底栏模式没有汉堡按钮，
+   那 12px 间距就成了多余的缩进，标题会比下方卡片整体右移一截。
+   二级页（钱包/使用说明/关于）出现返回箭头时，品牌又该跟在箭头后面，间距补回来。
+   顶栏 padding 与品牌 margin-left 都是内联写死的，这里必须 !important 才能覆盖。 */
+#aus-panel[data-mobile-nav="bottom"] #aus-mobile-header { padding: 0 12px !important; }
+#aus-panel[data-mobile-nav="bottom"] #aus-mobile-header #aus-mobile-brand { margin-left: 0 !important; }
+#aus-panel[data-mobile-nav="bottom"] #aus-mobile-header:has(#aus-mobile-back[style*="flex"]) #aus-mobile-brand { margin-left: 12px !important; }
+
 /* 指示胶囊：JS 写 transform 把 64×48 的圆角块居中到当前 tab（图标 + 文字整块），
    首次定位走 transition:none 防「从左侧飞来」。**尺寸以本规则为唯一真源**，
    panel.ts#syncBottomNav 直接量 offsetWidth/Height（横屏压缩时自动跟随）。

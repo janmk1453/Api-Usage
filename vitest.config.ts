@@ -18,6 +18,9 @@ export default defineConfig({
   ],
   test: {
     environment: 'node',
+    // 处理 CSS 而不是把它抹成空字符串：底栏/顶栏对齐的回归测试需要 style.css 的原文
+    // （css:false 时 'style.css?raw' 只能拿到空串，样式契约无法断言）。
+    css: true,
     include: ['src/**/*.test.ts', 'cloudflare/**/*.test.js'],
     clearMocks: true,
     restoreMocks: true,

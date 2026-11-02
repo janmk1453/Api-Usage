@@ -759,6 +759,54 @@ function bindPressFeedback(doc: Document): void {
   } catch {}
 }
 
+/**
+ * 最近一次由 pointerup 接管处理的底栏点按时间戳。
+ * 触屏上 click 有两个坑：滑动惯性期间浏览器把这一下点按当成「停止滚动」不再派发 click；
+ * 手指在按下与抬起之间挪动几个像素，click 也会落到共同祖先上而不再命中 tab。
+ * 因此底栏改为在 pointerup 里按「位移 + 时长」判定点按并直接切页，click 只作为键盘/读屏兜底。
+ */
+let lastBottomTapAt = 0;
+
+/** 底栏点按接管（幂等）：整条底栏只绑一次，用事件委托覆盖内部所有 tab */
+function bindBottomNavTap(doc: Document): void {
+  try {
+    const bar = doc.getElementById('aus-bottom-nav') as HTMLElement | null;
+    if (!bar || bar.getAttribute('data-tap-bound') === '1') return;
+    bar.setAttribute('data-tap-bound', '1');
+    // 位移超过 12px 视为滑动，不当作点按；按下超过 800ms 视为长按
+    const TAP_SLOP = 12;
+    const TAP_MAX_MS = 800;
+    let item: HTMLElement | null = null;
+    let startX = 0;
+    let startY = 0;
+    let startAt = 0;
+    let moved = false;
+    const reset = () => { item = null; moved = false; };
+    bar.addEventListener('pointerdown', (e: any) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) { reset(); return; }
+      const target = e.target as HTMLElement | null;
+      const hit = target && target.closest ? (target.closest('.aus-bottom-item') as HTMLElement | null) : null;
+      if (!hit) { reset(); return; }
+      item = hit; startX = e.clientX; startY = e.clientY; startAt = Date.now(); moved = false;
+    }, { passive: true });
+    bar.addEventListener('pointermove', (e: any) => {
+      if (!item) return;
+      if (Math.abs(e.clientX - startX) > TAP_SLOP || Math.abs(e.clientY - startY) > TAP_SLOP) moved = true;
+    }, { passive: true });
+    bar.addEventListener('pointercancel', reset, { passive: true });
+    bar.addEventListener('pointerup', (e: any) => {
+      const hit = item;
+      const wasMoved = moved;
+      const elapsed = Date.now() - startAt;
+      reset();
+      if (!hit || wasMoved || elapsed > TAP_MAX_MS) return;
+      lastBottomTapAt = Date.now();
+      const v = hit.getAttribute('data-bottom-nav');
+      if (v) handleBottomTabTap(v as AppView);
+    }, { passive: true });
+  } catch {}
+}
+
 export function bindPanel(doc: Document) {
   const q = doc.getElementById('aus-btn-query-balance') as HTMLButtonElement | null;
   if (q) q.onclick = () => queryBalance();
@@ -768,6 +816,8 @@ export function bindPanel(doc: Document) {
   bindTopbarScroll(doc);
   // 移动端菜单按钮的按压反馈（幂等）
   bindPressFeedback(doc);
+  // 底栏点按接管：滑动期间也能稳定响应（幂等）
+  bindBottomNavTap(doc);
 }
 
 /** 「移动端兼容 UI」关闭时窄屏回到改造前的侧栏抽屉（含汉堡按钮与遮罩） */
@@ -1406,6 +1456,8 @@ export function createPanel() {
   // 底栏（仅窄屏显示）：走 tab 语义（换页 / 二级页回根 / 回顶部）
   doc.querySelectorAll('#aus-bottom-nav [data-bottom-nav]').forEach((el: any) => {
     el.addEventListener('click', () => {
+      // 触屏点按已由 bindBottomNavTap 在 pointerup 处理，这里只服务键盘与读屏点击
+      if (Date.now() - lastBottomTapAt < 600) return;
       const v = el.getAttribute('data-bottom-nav');
       if (v) handleBottomTabTap(v as AppView);
     });
