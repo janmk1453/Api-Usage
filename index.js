@@ -10612,7 +10612,7 @@ function syncMobileSidebar(doc) {
 		}
 	} catch {}
 }
-function switchView(view) {
+function switchView(view, opts) {
 	const prevView = currentView;
 	currentView = view;
 	if (isSettingsChild(view)) settingsChildView = view;
@@ -10620,7 +10620,7 @@ function switchView(view) {
 	if (prevView === "wallet" && view !== "wallet") try {
 		repository.collapseAllWallets();
 	} catch {}
-	try {
+	if (opts?.track !== false) try {
 		trackPage(view);
 	} catch {}
 	const doc = getDoc$1();
@@ -11256,7 +11256,7 @@ function createPanel() {
 			});
 		};
 	} catch {}
-	switchView("overview");
+	switchView("overview", { track: false });
 	refreshUI();
 }
 function resetPanelState() {
@@ -11277,6 +11277,9 @@ function openPanel() {
 		pn = doc.getElementById("aus-panel");
 		if (!ov || !pn) return;
 	}
+	try {
+		trackPage(currentView);
+	} catch {}
 	ov.style.display = "block";
 	pn.style.display = "flex";
 	try {

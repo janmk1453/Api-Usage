@@ -950,7 +950,7 @@ function syncMobileSidebar(doc: Document): void {
   } catch {}
 }
 
-function switchView(view: AppView) {
+function switchView(view: AppView, opts?: { track?: boolean }) {
   const prevView = currentView;
   currentView = view;
   // 「设置」下的二级页记忆：点回设置 tab 时恢复到上次位置；主动切回设置根页（重复点 tab / 返回箭头）则清空
@@ -961,7 +961,10 @@ function switchView(view: AppView) {
     try { repository.collapseAllWallets(); } catch {}
   }
   // 匿名使用统计：页面使用率（仅本地累加，关闭面板时统一上报）
-  try { trackPage(view); } catch {}
+  // 只有「用户真的看到这个页面」才计数：构建面板时的初始化切换必须传 track:false，
+  // 否则每次酒馆页面加载都会凭空记 1 次概览浏览并开始计时，上报后变成
+  // 「opens=0 却有 1 次概览浏览 + 一段挂机时长」的稀疏记录（数据库里约六成 device_daily 行）。
+  if (opts?.track !== false) { try { trackPage(view); } catch {} }
   const doc = getDoc();
   const bottom = bottomNavActive(doc);
   if (view !== 'history') closeHistoryDetail(doc);
@@ -1590,7 +1593,8 @@ export function createPanel() {
       };
     }
   } catch {}
-  switchView('overview');
+  // 仅初始化界面状态，不算一次浏览（用户还没打开面板）；真实浏览在 openPanel 里记。
+  switchView('overview', { track: false });
   refreshUI();
 }
 
@@ -1611,6 +1615,8 @@ export function openPanel() {
     pn = doc.getElementById('aus-panel') as HTMLElement | null;
     if (!ov || !pn) return;
   }
+  // 打开面板 = 一次落地页浏览：只在真正打开时记（面板构建时的初始化切换已跳过计数）
+  try { trackPage(currentView); } catch {}
   ov.style.display = 'block';
   pn.style.display = 'flex';
   // 面板刚显示，此时才能量到底栏 tab 的真实位置：按当前兼容 UI 开关摆好导航，不播动画
