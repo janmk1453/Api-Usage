@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import worker from './worker.js';
+import { BUILD_ID, PLACEHOLDER_BOOT, PLACEHOLDER_BUILD } from './boot.js';
 import { beijingDayKey, beijingHourKey, offsetDayKey, shiftHour } from './summary.js';
 
 const TOKEN = 'test-token';
@@ -27,6 +28,8 @@ function createDb(fixtures, options) {
         },
         async all() {
           calls.push({ sql, params: stmt.params });
+          // 模拟 D1 查询整体失败：看板应回退到可读错误页
+          if (opts.failDevices) throw new Error('D1_ERROR: unavailable');
           // 模拟既有库尚未执行 migrate-theme-mode.sql：读取 theme_mode 的查询整体失败
           if (opts.failThemeSelect && sql.includes('theme_mode')) throw new Error('no such column: theme_mode');
           if (opts.failTtSelect && sql.includes('tt_version')) throw new Error('no such column: tt_version');
@@ -194,31 +197,52 @@ describe('鉴权与健康检查', () => {
     expect(res.status).toBe(200);
   });
 
-  it('/dashboard 返回看板页并包含新版分区', async () => {
+  it('/dashboard 首屏直接吐出内联数据的完整看板', async () => {
     const { env } = makeEnv();
     const res = await get('/dashboard', env);
     expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toContain('text/html');
+    expect(res.headers.get('X-Cache')).toBe('MISS');
     const html = await res.text();
-    expect(html).toContain('总计速览');
-    expect(html).toContain('/api/trend');
-    // 四个趋势图可选按小时粒度，并提供最近 24 小时快捷选项
-    expect(html).toContain('data-bucket="hour"');
-    expect(html).toContain('最近 24 小时');
-    // 图表库仅走同源自托管，不再引用任何第三方 CDN
-    expect(html).toContain("'/vendor/echarts.js?v=6.1.0-full'");
-    expect(html).not.toContain('echarts@6.1.0');
+    // 首屏数据已经内联，模板占位符必须已被替换
+    expect(html).toContain('window.__TEL_BOOT__ = {"');
+    expect(html).not.toContain(PLACEHOLDER_BOOT);
+    expect(html).not.toContain(PLACEHOLDER_BUILD);
+    expect(html).toContain(BUILD_ID);
+    // 载荷带上了真实聚合结果：日趋势、小时趋势与渲染耗时
+    expect(html).toContain('"daily":[');
+    expect(html).toContain('"hourly":[');
+    expect(html).toContain('"render":[{"version":"3.1.');
+    // 单文件零依赖：既没有外部图表库，也没有第三方 CDN
+    expect(html).not.toContain('echarts');
+    expect(html).toContain('data-nav="performance"');
   });
 
-  it('/vendor/echarts.js 自托管图表库无需口令且按 JS 返回', async () => {
+  it('/dashboard?force=1 绕过缓存并标为 BYPASS', async () => {
     const { env } = makeEnv();
-    const res = await worker.fetch(new Request('https://stat.example.com/vendor/echarts.js'), env, { waitUntil() {} });
+    const res = await get('/dashboard?force=1', env);
     expect(res.status).toBe(200);
-    expect(res.headers.get('Content-Type')).toContain('text/javascript');
-    const body = await res.text();
-    expect(body.length).toBeGreaterThan(100000);
-    expect(body).toContain('echarts');
-    // 必须是 full 构建：simple 构建不含 Tooltip 组件，数值提示会整个失效
-    expect(body).toContain('showTip');
+    expect(res.headers.get('X-Cache')).toBe('BYPASS');
+  });
+
+  it('/ 根路径同样返回看板', async () => {
+    const { env } = makeEnv();
+    const res = await get('/', env);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('window.__TEL_BOOT__ = {');
+  });
+
+  it('/dashboard 查询失败时返回可读的错误页而不是 500 空壳', async () => {
+    const { env } = makeEnv({}, { failDevices: true });
+    const res = await get('/dashboard', env);
+    expect(res.status).toBe(500);
+    expect(await res.text()).toContain('看板数据加载失败');
+  });
+
+  it('/vendor/echarts.js 已下线（自绘 SVG 后不再提供图表库）', async () => {
+    const { env } = makeEnv();
+    const res = await get('/vendor/echarts.js', env);
+    expect(res.status).toBe(404);
   });
 });
 
@@ -299,7 +323,57 @@ describe('/collect 写入契约保持不变', () => {
       body: legacyBody(),
     }), env, { waitUntil() {} });
     expect(res.status).toBe(204);
-    expect(db.calls.filter((call) => call.batch).map((call) => call.batch)).toEqual([3, 2]);
+    // 依次为：运行时长三条（小时表缺列也一并失败）→ 设备+日+小时 → 设备+日
+    expect(db.calls.filter((call) => call.batch).map((call) => call.batch)).toEqual([3, 3, 2]);
+  });
+
+  it('运行时长列已迁移时设备、日与小时三处都写入运行时长', async () => {
+    const { env, db } = makeEnv();
+    const res = await worker.fetch(new Request('https://stat.example.com/collect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: legacyBody({
+        s: {
+          opens: 2,
+          dur_ms: 60000,
+          run_ms: 90000,
+          pages: { overview: 2, stats: 0, history: 0, forecast: 0, wallet: 0, settings: 0, help: 0, about: 0 },
+          render: [1, 0, 0, 0, 0],
+        },
+      }),
+    }), env, { waitUntil() {} });
+    expect(res.status).toBe(204);
+    const batches = db.calls.filter((call) => call.batch);
+    // 第一条即运行时长三条写入，不再走降级链
+    expect(batches.map((call) => call.batch)).toEqual([3]);
+    expect(batches[0].sqls[0]).toContain('run_ms_total');
+    expect(batches[0].sqls[1]).toContain('run_ms');
+    expect(batches[0].sqls[2]).toContain('run_ms');
+    // 设备语句末位（?31）与日/小时语句末位（?21）同为运行时长
+    expect(batches[0].params[0][30]).toBe(90000);
+    expect(batches[0].params[1][20]).toBe(90000);
+    expect(batches[0].params[2][20]).toBe(90000);
+    expect(batches[0].params[0][16]).toBe(60000);
+  });
+
+  it('旧客户端不报运行时长时，使用时长按运行时长入账且不再计入真实使用时长', async () => {
+    const { env, db } = makeEnv();
+    const res = await worker.fetch(new Request('https://stat.example.com/collect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: legacyBody(),
+    }), env, { waitUntil() {} });
+    expect(res.status).toBe(204);
+    const batch = db.calls.find((call) => call.batch);
+    expect(batch.batch).toBe(3);
+    // 设备语句 ?17 与日/小时语句 ?4 是使用时长，旧客户端按 0 记账
+    expect(batch.params[0][16]).toBe(0);
+    expect(batch.params[1][3]).toBe(0);
+    expect(batch.params[2][3]).toBe(0);
+    // 末尾的运行时长承接旧的时长数值
+    expect(batch.params[0][30]).toBeGreaterThan(0);
+    expect(batch.params[0][30]).toBe(batch.params[1][20]);
+    expect(batch.params[1][20]).toBe(batch.params[2][20]);
   });
 
   it('关闭开关的最终上报把设备最新开关状态记为已关闭', async () => {
@@ -326,8 +400,8 @@ describe('/collect 写入契约保持不变', () => {
     }), env, { waitUntil() {} });
     expect(res.status).toBe(204);
     const batches = db.calls.filter((call) => call.batch);
-    expect(batches.map((call) => call.batch)).toEqual([3, 2, 2, 2, 2]);
-    expect(batches[4].sqls[0]).not.toContain('st_version');
+    expect(batches.map((call) => call.batch)).toEqual([3, 3, 2, 2, 2, 2]);
+    expect(batches[5].sqls[0]).not.toContain('st_version');
   });
 
   it('TauriTavern 版本列尚未迁移时保留酒馆版本列写入', async () => {
@@ -340,9 +414,9 @@ describe('/collect 写入契约保持不变', () => {
     expect(res.status).toBe(204);
     const batches = db.calls.filter((call) => call.batch);
     // 前三次（含 tt_version）失败，第四次落到只含 st_version 的语句并成功
-    expect(batches.map((call) => call.batch)).toEqual([3, 2, 2, 2]);
-    expect(batches[3].sqls[0]).toContain('st_version');
-    expect(batches[3].sqls[0]).not.toContain('tt_version');
+    expect(batches.map((call) => call.batch)).toEqual([3, 3, 2, 2, 2]);
+    expect(batches[4].sqls[0]).toContain('st_version');
+    expect(batches[4].sqls[0]).not.toContain('tt_version');
   });
 
   it('颜色模式列尚未迁移时降级为不含 theme_mode 的语句，上报仍返回 204', async () => {
@@ -357,9 +431,9 @@ describe('/collect 写入契约保持不变', () => {
     }), env, { waitUntil() {} });
     expect(res.status).toBe(204);
     const batches = db.calls.filter((call) => call.batch);
-    expect(batches.map((call) => call.batch)).toEqual([3, 2, 2]);
-    expect(batches[2].sqls[0]).toContain('tt_version');
-    expect(batches[2].sqls[0]).not.toContain('theme_mode');
+    expect(batches.map((call) => call.batch)).toEqual([3, 3, 2, 2]);
+    expect(batches[3].sqls[0]).toContain('tt_version');
+    expect(batches[3].sqls[0]).not.toContain('theme_mode');
   });
 
   it('颜色模式写入设备最新状态（light / dark / auto）', async () => {
@@ -471,7 +545,8 @@ describe('/api/summary 总计口径', () => {
     const data = await res.json();
     expect(data.totals).toEqual({
       users: 0, opens: 0, durMs: 0, avgDurMsPerUser: 0,
-      todayUsers: 0, todayActiveUsers: 0, todayOpens: 0, todayDurMs: 0,
+      runMs: 0, avgRunMsPerUser: 0,
+      todayUsers: 0, todayActiveUsers: 0, todayOpens: 0, todayDurMs: 0, todayRunMs: 0,
       disabledUsers: 0, disabledRate: 0,
     });
     expect(data.historyCount.every((item) => item.count === 0)).toBe(true);

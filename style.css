@@ -295,9 +295,10 @@
   filter: none !important;
   will-change: auto !important;
 }
-/* 唯一例外：两条顶栏要保留毛玻璃的 backdrop-filter（见文件末尾「顶栏毛玻璃」），
-   其余后代的 backdrop-filter 一律清空，避免宿主 SmartTheme 滤镜渗入 */
-#aus-panel *:not(#aus-page-header):not(#aus-mobile-header) {
+/* 唯一例外：两条顶栏与窄屏底栏要保留毛玻璃的 backdrop-filter（见文件末尾「顶栏毛玻璃」与「窄屏底栏导航」），
+   其余后代的 backdrop-filter 一律清空，避免宿主 SmartTheme 滤镜渗入。
+   踩坑：新增的模糊层必须同时从这个 :not 链里排除，否则模糊会被清零、只剩半透明。 */
+#aus-panel *:not(#aus-page-header):not(#aus-mobile-header):not(#aus-bottom-nav) {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
@@ -312,35 +313,22 @@
 #aus-panel { position: fixed; } /* 使 absolute 侧栏以面板为 containing block，覆盖含 mobile-header 的全高度 */
 #aus-panel-body { display:flex; flex-direction:row; flex:1; min-height:0; overflow:hidden; container-type: inline-size; container-name: ausbody; /* 去 relative：让移动端抽屉覆盖 header，避免顶部缺口 */ }
 .aus-stats-filter { position: relative; min-width: 0; }
-/* 覆盖式抽屉遮罩（移动端/窄容器） */
-#aus-sidebar-overlay { display: none; }
-#aus-sidebar-overlay.is-open {
-  display: block !important;
-  position: absolute !important; inset: 0 !important; z-index: 20 !important;
-  background: var(--ds-overlay) !important;
-}
 
 /* 层 A：容器查询 — 以面板实际宽度做断点（分屏/平板半屏/桌面小窗口准确），@media 保留作 fallback */
 @container ausbody (max-width: 760px) {
   #aus-mobile-header { display: flex !important; }
-  #aus-sidebar {
-    display: none !important;
-    width: 240px !important; min-width: 240px !important; max-width: 240px !important;
-  }
-  #aus-sidebar.is-open {
-    display: flex !important;
-    position: absolute !important; left: 0; top: 0; bottom: 0; z-index: 30 !important;
-    box-shadow: 8px 0 24px rgba(0,0,0,0.18) !important;
-  }
   #aus-sidebar-toggle { display: none !important; }
   #aus-page-header { display: none !important; }
-  /* 窄容器抽屉同样保持紧凑导航尺寸（与 ≤760px 视口一致） */
-  #aus-sidebar .aus-nav-item { justify-content: flex-start !important; padding: 11px 12px !important; gap: 12px !important; font-size: var(--aus-fs-base) !important; border-radius: 10px !important; }
-  /* 窄容器抽屉：导航按钮之间留出更明显的间距（内联 gap:4px 需 !important） */
-  #aus-sidebar .aus-nav-group { gap: 8px !important; }
-  /* 窄容器抽屉的导航项文字起点同步左移（内距 10 + 10 + 图标 20 + 间距 10 − 品牌区内距 14 = 36） */
-  #aus-sidebar #aus-brand { padding-left: 6px !important; gap: 10px !important; }
   #aus-main { padding: 12px !important; overflow-x: hidden !important; }
+  /* 底栏布局（移动端兼容 UI 开启，默认）：侧栏整块隐藏，导航全部交给底栏；
+     关掉开关时改由数据属性 [data-mobile-nav="sidebar"] 恢复原侧栏抽屉（见文件末尾） */
+  #aus-panel[data-mobile-nav="bottom"] #aus-sidebar { display: none !important; }
+  #aus-panel[data-mobile-nav="bottom"] #aus-bottom-nav { display: flex !important; }
+  #aus-panel[data-mobile-nav="bottom"] #aus-settings-entries { display: grid !important; }
+  /* 底栏为覆盖层：主区底部让出底栏高度 + 安全区，否则最后一屏内容被压住 */
+  #aus-panel[data-mobile-nav="bottom"] #aus-main {
+    padding-bottom: calc(var(--aus-bottomnav-h) + 12px + env(safe-area-inset-bottom)) !important;
+  }
   #aus-overview-four { grid-template-columns: repeat(2, 1fr) !important; gap: clamp(8px, 1.5cqi, 10px) !important; }
   #aus-stats-four { grid-template-columns: repeat(2, 1fr) !important; gap: clamp(8px, 1.5cqi, 10px) !important; }
   /* 统计页三块：消费金额独占一行，API 请求次数与 Tokens 一行两列 */
@@ -371,7 +359,11 @@
   #aus-sidebar { display: flex !important; }
 }
 @container ausbody (max-width: 350px) {
-  #aus-sidebar, #aus-sidebar.is-open { width: 200px !important; min-width: 200px !important; max-width: 200px !important; }
+  /* 极窄容器：底栏文字再收一档，保证 5 个 tab 不挤 */
+  #aus-bottom-nav .aus-bottom-label { font-size: 10px; }
+  /* 原侧栏抽屉同样收窄（与改造前一致） */
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar,
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar.is-open { width: 200px !important; min-width: 200px !important; max-width: 200px !important; }
 }
 /* 四宫格自适应列数：删硬断点，auto-fit 流体 */
 #aus-overview-four {
@@ -569,9 +561,13 @@
   max-width: min(320px, calc(100vw - 24px));
 }
 #aus-mobile-header { display:none; height:56px; align-items:center; padding:0 16px; flex-shrink:0; }
-#aus-hamburger-btn { width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);font-size:18px;line-height:1;padding:0; }
+/* 原侧栏抽屉的菜单按钮：仅在「移动端兼容 UI」关闭 + 窄屏显示（CSS 分支在文件末尾） */
+#aus-hamburger-btn { width:28px;height:28px;display:none;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;border-radius:9px; }
+/* 二级页（钱包/使用说明/关于）返回箭头：显隐由 panel.ts 按当前视图写 inline display */
+#aus-mobile-back { width:28px;height:28px;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;border-radius:9px; }
 @media (hover: hover) {
-  /* 仅鼠标设备才走 hover 淡化；触屏的反馈见文件末尾「菜单按钮按压反馈」 */
+  /* 仅鼠标设备才走 hover 淡化；触屏的反馈见文件末尾「底栏与返回箭头按压反馈」 */
+  #aus-mobile-back:hover,
   #aus-hamburger-btn:hover { opacity: 0.72; }
 }
 .aus-nav-item { transition: none; color: var(--ds-text-2); }
@@ -623,21 +619,23 @@
 #aus-overlay input::placeholder,
 [data-extension="api-usage-stat"]#aus-panel input::placeholder { color: var(--ds-text-3); }
 
-/* 移动端自适应 — 760 为分界，复刻 DeepSeek 官网：侧边栏改覆盖式抽屉（滑动动画见文件末尾） + 汉堡按钮 */
+/* 移动端自适应 — 760 为分界：侧栏整块隐藏，导航改由底部 tab 栏（见文件末尾「窄屏底栏导航」）承担 */
 @media (max-width: 760px) {
   #aus-panel { flex-direction: column !important; width:100% !important; max-width:100% !important; left:0 !important; right:0 !important; box-sizing:border-box !important; }
   #aus-overlay { width:100% !important; max-width:100% !important; }
   #aus-mobile-header { display:flex !important; }
-  #aus-panel-body { flex-direction: row !important; /* 不设 relative，让抽屉以 #aus-panel 为锚点覆盖 header */ }
-  /* 覆盖式抽屉：侧栏绝对定位不挤压主区 + 遮罩点外关闭 */
-  #aus-sidebar { display:none !important; width:240px !important; min-width:240px !important; max-width:240px !important; }
-  #aus-sidebar.is-open { display:flex !important; position:absolute !important; left:0; top:0; bottom:0; z-index:30 !important; box-shadow:8px 0 24px rgba(0,0,0,0.18) !important; }
-  #aus-sidebar-overlay { display:none !important; }
-  #aus-sidebar-overlay.is-open { display:block !important; position:absolute !important; inset:0 !important; z-index:20 !important; background:var(--ds-overlay) !important; }
+  #aus-panel-body { flex-direction: row !important; }
   #aus-sidebar-toggle { display:none !important; }
   #aus-page-header { display:none !important; }
-  /* 窄屏呼出时强制还原完整导航样式，避免宽屏折叠残留导致间距/动画异常 */
-  #aus-sidebar #aus-brand { display:flex !important; padding-left:6px !important; gap:10px !important; }
+  /* 底栏布局（移动端兼容 UI 开启，默认）才隐藏侧栏、显示底栏与设置页二级入口；
+     桌面端不匹配本断点，因此完全不受影响 */
+  #aus-panel[data-mobile-nav="bottom"] #aus-sidebar { display:none !important; }
+  #aus-panel[data-mobile-nav="bottom"] #aus-bottom-nav { display:flex !important; }
+  #aus-panel[data-mobile-nav="bottom"] #aus-settings-entries { display:grid !important; }
+  /* 底栏为覆盖层：主区底部让出底栏高度 + 安全区 */
+  #aus-panel[data-mobile-nav="bottom"] #aus-main {
+    padding-bottom: calc(var(--aus-bottomnav-h) + 12px + env(safe-area-inset-bottom)) !important;
+  }
   /* 窄屏钱包卡紧凑化：标识缩小、余额/模型两项与图标操作并排、内外间距收紧，尽量压低纵向占用 */
   .aus-wallet-avatar { width: 36px !important; height: 36px !important; border-radius: 10px !important; font-size: 15px !important; }
   .aus-wallet-header { gap: 8px 10px !important; }
@@ -647,12 +645,8 @@
   .aus-wallet-actions { justify-content: flex-end !important; flex: 0 0 auto !important; }
   #aus-wallet [data-wallet-card] { padding: 8px 10px !important; gap: 8px !important; }
   #aus-wallet > div { gap: 8px !important; }
-  #aus-sidebar .aus-nav-label { display:inline !important; }
   /* 窄屏隐藏冗余的类型徽标（副标题已含类型与来源），避免名称行折行拉高卡片 */
   #aus-wallet .aus-wallet-badge-relay { display: none !important; }
-  #aus-sidebar .aus-nav-item { justify-content:flex-start !important; padding:11px 12px !important; gap:12px !important; font-size:var(--aus-fs-base) !important; border-radius:10px !important; }
-  /* 窄屏抽屉：导航按钮间距放宽（内联 gap:4px 需 !important） */
-  #aus-sidebar .aus-nav-group { gap:8px !important; }
   #aus-main { padding: 12px !important; overflow-x: hidden !important; }
   #aus-main > div { max-width: 1100px !important; width: 100% !important; margin: 0 auto !important; box-sizing: border-box !important; min-width: 0 !important; }
   /* 视图容器不裁剪下拉：原 overflow-x:hidden 会把胶囊下拉裁进 UI 底下；需配合 min-width:0 防止 720px 表撑开整个视图导致块超出屏幕 */
@@ -848,11 +842,12 @@
 }
 
 @media (max-width: 760px) {
+  /* 窄屏详情浮层必须停在底栏之上，否则底部按钮被底栏压住 */
   #aus-history-detail {
     position: absolute !important;
     left: 0;
     right: 0;
-    bottom: 0;
+    bottom: calc(var(--aus-bottomnav-h, 58px) + env(safe-area-inset-bottom)) !important;
     top: auto;
     width: 100% !important;
     min-width: 0 !important;
@@ -865,7 +860,7 @@
     z-index: 25;
   }
   #aus-history-detail-body {
-    padding-bottom: calc(12px + env(safe-area-inset-bottom)) !important;
+    padding-bottom: 12px !important;
   }
   #aus-history-detail .aus-detail-panel pre {
     max-height: 50vh !important;
@@ -1672,8 +1667,10 @@
 }
 
 
-/* 「新版本」导航徽标：蓝色实心胶囊，仅在有更新且侧栏展开时显示 */
-#aus-nav-update-badge {
+/* 「新版本」指示：侧栏「关于」行徽标 + 设置页「关于」入口行徽标（同一个 data-update-badge，
+   由 services/update.ts#syncUpdateIndicators 统一写 data-on），蓝色实心胶囊 */
+#aus-nav-update-badge,
+.aus-entry-badge {
   display: none;
   margin-left: auto;
   padding: 1px 8px;
@@ -1686,8 +1683,26 @@
   white-space: nowrap;
   flex-shrink: 0;
 }
-#aus-nav-update-badge[data-on="1"] { display: inline-flex; }
+#aus-nav-update-badge[data-on="1"],
+.aus-entry-badge[data-on="1"] { display: inline-flex; }
 #aus-sidebar[data-collapsed="1"] #aus-nav-update-badge { display: none !important; }
+/* 窄屏底栏「设置」上的新版本提示：有更新时用它顶掉「设置」两个字（父项 data-has-update
+   由 services/update.ts#paintBadge 写入），胶囊外观与侧栏/设置页徽标同源，只缩小尺寸塞进底栏 */
+.aus-bottom-badge {
+  display: none;
+  margin-left: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #2563EB;
+  color: #FFFFFF;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.aus-bottom-badge[data-on="1"] { display: inline-flex; }
+.aus-bottom-item[data-has-update="1"] .aus-bottom-label { display: none !important; }
 
 /* ===== 顶部筛选胶囊：与趋势预测工具栏（.aus-forecast-pill）保持同一尺寸口径 ===== */
 /* 其余页面原先用 inline 的 padding:8px 12px + 14px 字号，移动端比趋势预测明显大一圈；
@@ -1977,7 +1992,7 @@
    只改 border-color / box-shadow，避免每帧重绘模糊层。
    注意：上方 `#aus-panel *:not(#aus-page-header):not(#aus-mobile-header)` 的隔离规则
    会给其它后代写 backdrop-filter: none !important，所以这里必须带 !important 才生效。 */
-#aus-panel { --aus-topbar-h: 56px; }
+#aus-panel { --aus-topbar-h: 56px; --aus-bottomnav-h: 58px; }
 #aus-panel #aus-page-header,
 #aus-panel #aus-mobile-header {
   position: absolute;
@@ -1993,7 +2008,7 @@
   backdrop-filter: blur(20px) saturate(140%) !important;
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
-/* 移动端顶栏压在侧边抽屉（30）与遮罩（20）之下，抽屉拉开时整条顶栏一起变暗 */
+/* 窄屏顶栏与底栏同为覆盖层，顶栏压在最上层（底栏见文件末尾「窄屏底栏导航」） */
 @media (max-width: 760px) {
   #aus-panel #aus-mobile-header { z-index: 20; }
 }
@@ -2011,17 +2026,26 @@
 @media (min-width: 761px) {
   #aus-panel #aus-content-body > #aus-history-detail { padding-top: var(--aus-topbar-h); }
 }
-/* 不支持背景模糊时退回实心顶栏，避免半透明底下露出穿帮的内容 */
+/* 不支持背景模糊时退回实心顶栏/底栏，避免半透明底下露出穿帮的内容 */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   #aus-panel #aus-page-header,
   #aus-panel #aus-mobile-header {
     background: var(--ds-panel-bg);
     border-bottom-color: var(--ds-border);
   }
+  #aus-panel #aus-bottom-nav {
+    background: var(--ds-panel-bg);
+    border-top-color: var(--ds-border);
+  }
 }
 @media (prefers-reduced-transparency: reduce) {
   #aus-panel #aus-page-header,
   #aus-panel #aus-mobile-header {
+    background: var(--ds-panel-bg);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  #aus-panel #aus-bottom-nav {
     background: var(--ds-panel-bg);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
@@ -2041,30 +2065,45 @@
   #aus-wallet [data-wallet-toggle-all] { padding: 5px 8px !important; font-size: var(--aus-fs-xs) !important; }
 }
 
-/* ===== 移动端「菜单」按钮按压反馈 =====
+/* ===== 返回箭头 / 底栏 tab / 设置入口按压反馈 =====
    触屏没有 hover，反馈只能来自 pointerdown 打上的 [data-pressed] 与 :active。
-   按下 0ms 立即变色 + 缩小（不等过渡），松手 120ms 回弹，避免「点了没反应」的迟滞感。
+   按下 0ms 立即反馈（不等过渡），松手 120ms 回弹，避免「点了没反应」的迟滞感。
    touch-action:manipulation 同时消掉移动端 300ms 点击延迟与双击缩放等待。 */
 #aus-hamburger-btn,
+#aus-mobile-back,
+#aus-bottom-nav .aus-bottom-item,
+#aus-settings-entries .aus-settings-entry,
 #aus-panel .aus-nav-item {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
-#aus-hamburger-btn {
+#aus-hamburger-btn,
+#aus-mobile-back {
   border-radius: 9px;
   transition: background-color 120ms ease, transform 120ms ease, opacity 120ms ease;
 }
 #aus-hamburger-btn[data-pressed="1"],
-#aus-hamburger-btn:active {
+#aus-hamburger-btn:active,
+#aus-mobile-back[data-pressed="1"],
+#aus-mobile-back:active {
   background: var(--ds-card-hover) !important;
   transform: scale(0.88);
   opacity: 1 !important;
   transition-duration: 0ms;
 }
 @media (hover: hover) {
+  #aus-mobile-back:hover:not([data-pressed="1"]),
   #aus-hamburger-btn:hover:not([data-pressed="1"]) { opacity: 0.72; transition-duration: 120ms; }
 }
-/* 抽屉里的导航项按下同样给即时底色（与悬停同色，落点立刻有响应） */
+/* 设置入口：按下即时底色（列表行，需要落点反馈） */
+#aus-settings-entries .aus-settings-entry[data-pressed="1"],
+#aus-settings-entries .aus-settings-entry:active {
+  background: var(--ds-card-hover) !important;
+  transition-duration: 0ms;
+}
+/* 底栏 tab 刻意**不做**按下灰底：整条底栏是连续区域，灰方块压在图标与文字上很跳；
+   反馈交给移动中的指示胶囊与图标/文字变色，所以这里连 background 过渡都不留。 */
+/* 侧栏导航项按下同样给即时底色（桌面端悬停/按下反馈不变） */
 #aus-panel .aus-nav-item:active {
   background: var(--aus-nav-hover-bg, var(--ds-card-hover)) !important;
   transition-duration: 0ms;
@@ -2112,83 +2151,344 @@
   #aus-panel .aus-filter-reset svg { width: 15px; height: 15px; }
 }
 
-/* ── 移动端侧栏抽屉动画 ──
-   关闭态不再用 display:none（display 之间无法过渡），改为常驻 flex + translateX(-100%) 藏到面板外，
-   由 is-open 滑入；visibility 在收起动画结束后才置 hidden，既不挡点击也不参与 Tab 焦点。
-   遮罩同理改为常驻块，靠 opacity + pointer-events 淡入淡出。 */
-@container ausbody (max-width: 760px) {
-  #aus-panel #aus-sidebar {
-    display: flex !important;
-    position: absolute !important;
-    left: 0; top: 0; bottom: 0;
-    z-index: 30 !important;
-    width: 240px !important; min-width: 240px !important; max-width: 240px !important;
-    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18) !important;
-    transform: translateX(-100%);
-    visibility: hidden;
-    transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1), visibility 0ms linear 180ms;
-  }
-  #aus-panel #aus-sidebar.is-open {
-    transform: translateX(0);
-    visibility: visible;
-    transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1), visibility 0ms linear 0ms;
-  }
-  #aus-panel #aus-sidebar-overlay {
-    display: block !important;
-    position: absolute !important;
-    inset: 0 !important;
-    z-index: 20 !important;
-    background: var(--ds-overlay) !important;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 160ms ease;
-  }
-  #aus-panel #aus-sidebar-overlay.is-open {
-    opacity: 1;
-    pointer-events: auto;
-    transition-duration: 200ms;
-  }
+/* ══ 窄屏底栏导航（安卓常见样式）══
+   仅在窄屏出现（两套断点：容器查询 + 视口媒体查询，必须同步改），桌面端仍是原来的可折叠侧栏。
+   毛玻璃与顶栏同源：共用 --aus-glass-bg / --aus-glass-border 变量与 20px 模糊，
+   因此文件上方的隔离规则 `#aus-panel *:not(...)` 已把 #aus-bottom-nav 从排除链里放行，否则模糊会被清零。
+   层级：#aus-bottom-nav（20）低于下拉浮层（50）与历史详情浮层（25），高于普通内容。
+   底栏是覆盖层：内容从玻璃下方穿过，靠 #aus-main 的 padding-bottom 让位，不再挤压布局。 */
+#aus-panel #aus-bottom-nav {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: none;
+  flex-direction: row;
+  align-items: stretch;
+  box-sizing: border-box;
+  height: calc(var(--aus-bottomnav-h) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--aus-glass-bg, var(--ds-panel-bg));
+  border-top: 1px solid var(--aus-glass-border, var(--ds-border));
+  -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
+  backdrop-filter: blur(20px) saturate(140%) !important;
 }
-/* 不支持容器查询的旧内核：用视口断点给出同一套动画（两套规则保持同步） */
-@media (max-width: 760px) {
-  #aus-panel #aus-sidebar {
-    display: flex !important;
-    position: absolute !important;
-    left: 0; top: 0; bottom: 0;
-    z-index: 30 !important;
-    width: 240px !important; min-width: 240px !important; max-width: 240px !important;
-    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18) !important;
-    transform: translateX(-100%);
-    visibility: hidden;
-    transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1), visibility 0ms linear 180ms;
-  }
-  #aus-panel #aus-sidebar.is-open {
-    transform: translateX(0);
-    visibility: visible;
-    transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1), visibility 0ms linear 0ms;
-  }
-  #aus-panel #aus-sidebar-overlay {
-    display: block !important;
-    position: absolute !important;
-    inset: 0 !important;
-    z-index: 20 !important;
-    background: var(--ds-overlay) !important;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 160ms ease;
-  }
-  #aus-panel #aus-sidebar-overlay.is-open {
-    opacity: 1;
-    pointer-events: auto;
-    transition-duration: 200ms;
-  }
+/* 底栏模式下顶栏左侧文字要与内容区对齐：#aus-main 窄屏内距是 12px，
+   而顶栏平时是 16px 内距 + 汉堡按钮后的 12px 品牌间距，底栏模式没有汉堡按钮，
+   那 12px 间距就成了多余的缩进，标题会比下方卡片整体右移一截。
+   二级页（钱包/使用说明/关于）出现返回箭头时，品牌又该跟在箭头后面，间距补回来。
+   顶栏 padding 与品牌 margin-left 都是内联写死的，这里必须 !important 才能覆盖。 */
+#aus-panel[data-mobile-nav="bottom"] #aus-mobile-header { padding: 0 12px !important; }
+#aus-panel[data-mobile-nav="bottom"] #aus-mobile-header #aus-mobile-brand { margin-left: 0 !important; }
+#aus-panel[data-mobile-nav="bottom"] #aus-mobile-header:has(#aus-mobile-back[style*="flex"]) #aus-mobile-brand { margin-left: 12px !important; }
+
+/* 指示胶囊：JS 写 transform 把 64×48 的圆角块居中到当前 tab（图标 + 文字整块），
+   首次定位走 transition:none 防「从左侧飞来」。**尺寸以本规则为唯一真源**，
+   panel.ts#syncBottomNav 直接量 offsetWidth/Height（横屏压缩时自动跟随）。
+   圆角刻意不做 999px——只圈住图标时会像一圈悬空的椭圆环，圈住整块 + 18px 圆角才像选中底色。 */
+#aus-bottom-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 64px;
+  height: 48px;
+  border-radius: 18px;
+  background: var(--ds-nav-active-bg, var(--ds-card-hover));
+  transform: translate3d(-999px, 0, 0);
+  transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  pointer-events: none;
+  /* 独立合成层：跨页长距离滑动时即使主线程在构建目标页 DOM 也不掉帧，
+     否则每次移动都要重绘覆盖底栏毛玻璃区域，长跳会明显卡顿。 */
+  will-change: transform;
+}
+#aus-panel #aus-bottom-nav .aus-bottom-item {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: var(--aus-bottomnav-h);
+  padding: 0 2px;
+  box-sizing: border-box;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--ds-text-3);
+  cursor: pointer;
+  user-select: none;
+  transition: color 140ms ease;
+}
+#aus-bottom-nav .aus-bottom-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+#aus-bottom-nav .aus-bottom-icon svg { display: block; width: 22px; height: 22px; }
+#aus-bottom-nav .aus-bottom-label {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 选中态与侧栏同义：图标转品牌蓝、文字用正文色加粗（图标是 stroke=currentColor） */
+#aus-panel #aus-bottom-nav .aus-bottom-item.active { color: var(--ds-text); }
+#aus-panel #aus-bottom-nav .aus-bottom-item.active .aus-bottom-icon { color: var(--aus-nav-active-icon, var(--ds-text)); }
+@media (hover: hover) {
+  #aus-panel #aus-bottom-nav .aus-bottom-item:hover { color: var(--ds-text); }
+}
+/* 极短横屏（高度不足）时压低底栏，避免挤掉可视内容 */
+@media (max-height: 430px) {
+  #aus-panel { --aus-bottomnav-h: 50px; }
+  #aus-bottom-nav .aus-bottom-icon,
+  #aus-bottom-nav .aus-bottom-icon svg { width: 20px; height: 20px; }
+  #aus-bottom-nav .aus-bottom-label { font-size: 10px; }
+  /* 底栏压到 50px，胶囊跟着收一档，否则上下几乎没有余量 */
+  #aus-bottom-indicator { width: 58px; height: 42px; border-radius: 15px; }
+}
+
+/* ===== 拖动底栏选中胶囊：按住灰底横向拖到别的 tab，松手弹性归位并切页 =====
+   拖动/归位由 panel.ts#bindBottomNavTap 控制：拖起时打 is-dragging（去过渡、轻微放大、跟手），
+   松手打 is-snapping 走带轻微回弹的弹性曲线（时长见脚本里的 SNAP_MS，两边必须一致）。
+   transition 用 ID + class 特异性压过上面 #aus-bottom-indicator 的默认 220ms 过渡。 */
+#aus-bottom-indicator.is-dragging {
+  transition: none !important;
+  opacity: 0.92;
+}
+#aus-bottom-indicator.is-snapping {
+  transition: transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+/* 拖动经过的 tab：图标与文字先一步亮起，给落点预览（当前 tab 不打标记，它本来已是选中态） */
+/* 拖动要拿得到横向手势：纵向仍交给页面滚动（pan-y），横向不再被浏览器当成滚动而中途打断
+   （比上面通用的 touch-action:manipulation 高一级特异性，且同样保留「无 300ms 点击延迟」） */
+#aus-panel #aus-bottom-nav,
+#aus-panel #aus-bottom-nav .aus-bottom-item { touch-action: pan-y; }
+#aus-panel #aus-bottom-nav .aus-bottom-item[data-pill-target="1"] { color: var(--ds-text); }
+#aus-panel #aus-bottom-nav .aus-bottom-item[data-pill-target="1"] .aus-bottom-icon {
+  color: var(--ds-nav-active-icon, var(--ds-text));
+  transform: scale(1.1);
+}
+/* 图标缓动：拖动预览放大与回弹都走同一条轻微过冲曲线，和胶囊归位节奏一致 */
+#aus-bottom-nav .aus-bottom-icon {
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), color 140ms ease;
 }
 @media (prefers-reduced-motion: reduce) {
-  #aus-panel #aus-sidebar,
-  #aus-panel #aus-sidebar.is-open,
-  #aus-panel #aus-sidebar-overlay,
-  #aus-panel #aus-sidebar-overlay.is-open {
+  #aus-bottom-indicator.is-snapping { transition-duration: 1ms !important; }
+  #aus-bottom-nav .aus-bottom-icon { transition: color 140ms ease; }
+  #aus-panel #aus-bottom-nav .aus-bottom-item[data-pill-target="1"] .aus-bottom-icon { transform: none; }
+}
+
+/* ══ 移动端兼容 UI 关闭 → 完全复用改造前的侧栏抽屉 ══
+   设置页关掉「移动端兼容UI」后，#aus-panel 的 data-mobile-nav 变为 "sidebar"，
+   此分支把窄屏从底栏退回旧版：左上角菜单按钮 + 左侧滑出抽屉 + 同层遮罩。
+   数值与改造前（47b2272）逐条对齐，**不要在这里改写旧 UI 的观感**，
+   否则等于重写第二套样式；新增移动端样式请统一走 [data-mobile-nav="bottom"] 分支。
+   两套断点（容器查询 + 视口媒体查询）必须同步修改，prefers-reduced-motion 归零见本段末尾。 */
+@container ausbody (max-width: 760px) {
+  #aus-panel[data-mobile-nav="sidebar"] #aus-hamburger-btn { display: flex !important; }
+  #aus-panel[data-mobile-nav="sidebar"] #aus-bottom-nav { display: none !important; }
+  #aus-panel[data-mobile-nav="sidebar"] #aus-settings-entries { display: none !important; }
+  /* 没有底栏，历史详情浮层重新贴到面板底部 */
+  #aus-panel[data-mobile-nav="sidebar"] #aus-history-detail { bottom: 0 !important; }
+  /* 侧栏常驻 flex + translateX(-100%) 藏到面板外（display 之间无法过渡），由 is-open 滑入；
+     visibility 在收起动画结束后才置 hidden，既不挡点击也不进 Tab 焦点 */
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar {
+    display: flex !important;
+    position: absolute !important;
+    left: 0; top: 0; bottom: 0;
+    z-index: 30 !important;
+    width: 240px !important; min-width: 240px !important; max-width: 240px !important;
+    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18) !important;
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1), visibility 0ms linear 180ms;
+  }
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar.is-open {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1), visibility 0ms linear 0ms;
+  }
+  /* 遮罩同理常驻块，靠 opacity + pointer-events 淡入淡出 */
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar-overlay {
+    display: block !important;
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 20 !important;
+    background: var(--ds-overlay) !important;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+  }
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar-overlay.is-open {
+    opacity: 1;
+    pointer-events: auto;
+    transition-duration: 200ms;
+  }
+  /* 抽屉内导航保持紧凑可读尺寸（与改造前一致） */
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar .aus-nav-item { justify-content: flex-start !important; padding: 11px 12px !important; gap: 12px !important; font-size: var(--aus-fs-base) !important; border-radius: 10px !important; }
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar .aus-nav-group { gap: 8px !important; }
+  /* 品牌区必须显式 display:flex！syncMobileSidebar 会 removeProperty('display') 清掉宽屏折叠
+     残留，清完就退回标记默认值 block，图标与标题会被拆成两行（改造前靠这条 !important 兜住） */
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar #aus-brand { display: flex !important; padding-left: 6px !important; gap: 10px !important; }
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar .aus-nav-label { display: inline !important; }
+}
+/* 不支持容器查询的旧内核：视口断点给出同一套规则（与上一块保持同步） */
+@media (max-width: 760px) {
+  #aus-panel[data-mobile-nav="sidebar"] #aus-hamburger-btn { display: flex !important; }
+  #aus-panel[data-mobile-nav="sidebar"] #aus-bottom-nav { display: none !important; }
+  #aus-panel[data-mobile-nav="sidebar"] #aus-settings-entries { display: none !important; }
+  #aus-panel[data-mobile-nav="sidebar"] #aus-history-detail { bottom: 0 !important; }
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar {
+    display: flex !important;
+    position: absolute !important;
+    left: 0; top: 0; bottom: 0;
+    z-index: 30 !important;
+    width: 240px !important; min-width: 240px !important; max-width: 240px !important;
+    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18) !important;
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1), visibility 0ms linear 180ms;
+  }
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar.is-open {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1), visibility 0ms linear 0ms;
+  }
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar-overlay {
+    display: block !important;
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 20 !important;
+    background: var(--ds-overlay) !important;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+  }
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar-overlay.is-open {
+    opacity: 1;
+    pointer-events: auto;
+    transition-duration: 200ms;
+  }
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar .aus-nav-item { justify-content: flex-start !important; padding: 11px 12px !important; gap: 12px !important; font-size: var(--aus-fs-base) !important; border-radius: 10px !important; }
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar .aus-nav-group { gap: 8px !important; }
+  /* 品牌区必须显式 display:flex！syncMobileSidebar 会 removeProperty('display') 清掉宽屏折叠
+     残留，清完就退回标记默认值 block，图标与标题会被拆成两行（改造前靠这条 !important 兜住） */
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar #aus-brand { display: flex !important; padding-left: 6px !important; gap: 10px !important; }
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar .aus-nav-label { display: inline !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar,
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar.is-open,
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar-overlay,
+  #aus-panel[data-mobile-nav="sidebar"] #aus-sidebar-overlay.is-open {
     transition-duration: 0ms !important;
     transition-delay: 0ms !important;
+  }
+}
+
+/* ══ 设置页二级入口（钱包 / 使用说明 / 关于）══
+   只在窄屏显示，桌面端这三个入口仍在侧栏，保持原样。 */
+#aus-settings-entries { display: none; }
+#aus-settings-entries .aus-settings-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  min-height: 54px;
+  box-sizing: border-box;
+  background: var(--ds-card);
+  border-radius: 12px;
+  color: var(--ds-text);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 120ms ease;
+}
+@media (hover: hover) {
+  #aus-settings-entries .aus-settings-entry:hover { background: var(--ds-card-hover); }
+}
+#aus-settings-entries .aus-settings-entry-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: var(--ds-text-2);
+}
+#aus-settings-entries .aus-settings-entry-icon svg { display: block; }
+#aus-settings-entries .aus-settings-entry-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+/* 标题行内排布：标签 + 「关于」入口的版本号胶囊 */
+#aus-settings-entries .aus-settings-entry-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--aus-fs-base);
+  font-weight: 600;
+  line-height: 1.35;
+}
+/* 「关于」入口标题后面的当前版本号：低调胶囊，与「新版本」徽标同一行不抢视线 */
+#aus-settings-entries .aus-settings-entry-version {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--ds-card-inner);
+  color: var(--ds-text-2);
+  font-size: var(--aus-fs-xs);
+  font-weight: 600;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+#aus-settings-entries .aus-settings-entry-desc {
+  font-size: var(--aus-fs-sm);
+  color: var(--ds-text-3);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#aus-settings-entries .aus-settings-entry-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--ds-text-3);
+}
+#aus-settings-entries .aus-settings-entry-arrow svg { display: block; }
+
+/* ══ 页面切换入场动画（仅窄屏，panel.ts#playViewEnter 加 class）══
+   只做淡入 + 6px 上浮：轻量、不产生两页并存，避免 ECharts 双实例卡顿与横向滑动误解手势。 */
+@keyframes aus-view-in {
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+#aus-panel .aus-view-in {
+  animation: aus-view-in 180ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/* 减少动态偏好：底栏指示胶囊与页面入场动画一律归零 */
+@media (prefers-reduced-motion: reduce) {
+  #aus-bottom-indicator { transition-duration: 0ms !important; }
+  #aus-panel .aus-view-in { animation: none !important; }
+  #aus-mobile-back { transition-duration: 0ms !important; }
+}
+
+/* 兜底（两套断点保持同步）：不支持容器查询的旧内核也要显示底栏与设置入口，
+   并让主区底部让位；桌面端不匹配这两条断点，因此完全不受影响。 */
+@media (max-width: 760px) {
+  #aus-panel[data-mobile-nav="bottom"] #aus-bottom-nav { display: flex !important; }
+  #aus-panel[data-mobile-nav="bottom"] #aus-settings-entries { display: grid !important; }
+  #aus-panel[data-mobile-nav="bottom"] #aus-main {
+    padding-bottom: calc(var(--aus-bottomnav-h) + 12px + env(safe-area-inset-bottom)) !important;
   }
 }

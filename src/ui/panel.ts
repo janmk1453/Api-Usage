@@ -9,6 +9,15 @@ import { renderSettings } from './settings';
 import { bindHistoryCompare, renderUsageDetail } from './compare';
 import { renderOverview } from './overview';
 import { icon } from './icons';
+import {
+  MOBILE_TABS,
+  SETTINGS_ENTRIES,
+  isSettingsChild,
+  parentTabOf,
+  resolveTabTap,
+  viewTitle,
+} from './nav-model';
+import type { AppView } from './nav-model';
 import { initStatsView, positionFilterDropdown, renderStatsView } from './stats-view';
 import { initExtraCharts, renderExtraCharts, resetChartThemeCache } from './extra-charts';
 import { renderForecastView, initForecastView } from './forecast-view';
@@ -37,6 +46,11 @@ function nowTs(): number {
 }
 
 declare const __APP_VERSION__: string;
+
+/** 当前扩展版本号（构建时由 manifest.version 注入）：侧栏品牌、设置页「关于」入口与关于页共用 */
+function appVersionText(): string {
+  return typeof __APP_VERSION__ !== 'undefined' ? String(__APP_VERSION__) : '';
+}
 
 function getDoc(): Document { return (window.parent as any)?.document ?? document; }
 
@@ -86,7 +100,11 @@ function prettyFullResponse(resp: any): string {
 
 let panelCreated = false;
 let panelOpen = false;
-let currentView: 'overview' | 'stats' | 'history' | 'forecast' | 'wallet' | 'settings' | 'help' | 'about' = 'overview';
+let currentView: AppView = 'overview';
+/** 「设置」下最近打开的二级页（窄屏点回「设置」tab 时恢复到上次位置） */
+let settingsChildView: AppView | null = null;
+/** 当前导航高亮键：窄屏二级页归到「设置」，桌面为视图本身 */
+let currentNavKey: AppView = 'overview';
 let collapsed = false;
 
 export function refreshUI() {
@@ -722,24 +740,211 @@ function bindTopbarScroll(doc: Document): void {
   } catch {}
 }
 
-// 移动端「菜单」按钮按压反馈：触屏没有 hover，反馈只能靠 pointerdown 在同一帧打上
-// data-pressed（不等 click、也不等抽屉展开）。松手时移除，CSS 侧 120ms 回弹。
+// 触屏按压反馈：触屏没有 hover，反馈只能靠 pointerdown 在同一帧打上 data-pressed，
+// 松手时移除，CSS 侧 120ms 回弹。窄屏的底栏 tab、返回箭头与设置页二级入口都复用这一套。
 function bindPressFeedback(doc: Document): void {
   try {
-    const btn = doc.getElementById('aus-hamburger-btn') as HTMLElement | null;
-    if (!btn || btn.getAttribute('data-press-bound') === '1') return;
-    btn.setAttribute('data-press-bound', '1');
-    const press = (on: boolean) => {
-      if (on) btn.setAttribute('data-pressed', '1');
-      else btn.removeAttribute('data-pressed');
+    const sel = '#aus-hamburger-btn, #aus-mobile-back, #aus-bottom-nav .aus-bottom-item, #aus-settings-entries .aus-settings-entry';
+    doc.querySelectorAll(sel).forEach((el: any) => {
+      const node = el as HTMLElement;
+      if (node.getAttribute('data-press-bound') === '1') return;
+      node.setAttribute('data-press-bound', '1');
+      const press = (on: boolean) => {
+        if (on) node.setAttribute('data-pressed', '1');
+        else node.removeAttribute('data-pressed');
+      };
+      node.addEventListener('pointerdown', () => press(true), { passive: true });
+      node.addEventListener('pointerup', () => press(false), { passive: true });
+      node.addEventListener('pointercancel', () => press(false), { passive: true });
+      node.addEventListener('pointerleave', () => press(false), { passive: true });
+      // 键盘触发与旧内核兜底：保证点击结束后不残留按压态
+      node.addEventListener('click', () => press(false));
+      node.addEventListener('blur', () => press(false));
+    });
+  } catch {}
+}
+
+/**
+ * 最近一次由 pointerup 接管处理的底栏点按时间戳。
+ * 触屏上 click 有两个坑：滑动惯性期间浏览器把这一下点按当成「停止滚动」不再派发 click；
+ * 手指在按下与抬起之间挪动几个像素，click 也会落到共同祖先上而不再命中 tab。
+ * 因此底栏改为在 pointerup 里按「位移 + 时长」判定点按并直接切页，click 只作为键盘/读屏兜底。
+ */
+let lastBottomTapAt = 0;
+
+/**
+ * 底栏指示胶囊最近一次落位的 x / y（syncBottomNav 写入）。
+ * 拖动起点直接从这两个数换算，不去解析 transform 字符串，省掉一个易碎的解析步骤。
+ */
+let bottomPillX = 0;
+let bottomPillY = 0;
+
+/**
+ * 底栏点按 + 拖动选中胶囊接管（幂等）：整条底栏只绑一次，用事件委托覆盖内部所有 tab。
+ * - 点按：pointerup 里按「位移 + 时长」判定后直接切页，click 只作键盘/读屏兜底；
+ * - 拖动：按住选中灰底横向拖动，胶囊跟手移动并预览落点，松手用弹性曲线归位并切到最近的 tab
+ *   （纵向为主的滑动不接管，仍然交给页面滚动）。
+ */
+function bindBottomNavTap(doc: Document): void {
+  try {
+    const bar = doc.getElementById('aus-bottom-nav') as HTMLElement | null;
+    if (!bar || bar.getAttribute('data-tap-bound') === '1') return;
+    bar.setAttribute('data-tap-bound', '1');
+    // 位移超过 12px 视为滑动，不当作点按；按下超过 800ms 视为长按
+    const TAP_SLOP = 12;
+    const TAP_MAX_MS = 800;
+    // 拖动锁定阈值：横向位移超过 6px 且明显偏横向就抓起胶囊（比点按阈值更松，轻轻一划就能拖）
+    const DRAG_LOCK = 6;
+    // 松手弹性归位时长，必须与 style.css 里 #aus-bottom-indicator.is-snapping 的过渡时长一致
+    const SNAP_MS = 420;
+    let item: HTMLElement | null = null;
+    let startX = 0;
+    let startY = 0;
+    let startAt = 0;
+    let moved = false;
+    let pointerId: number | null = null;
+    // 按下点是否落在选中胶囊上：只有从这里按下才允许拖胶囊（按在别的 tab 上一律当普通点按）
+    let onPill = false;
+    // —— 拖动状态：pill 非空即表示正在拖胶囊 ——
+    let pill: HTMLElement | null = null;
+    let pillW = BOTTOM_PILL_W;
+    let trackW = 0;
+    let baseX = 0;
+    let slots: Array<{ el: HTMLElement; cx: number }> = [];
+    let dropEl: HTMLElement | null = null;
+    let snapTimer: any = null;
+    const reset = () => { item = null; moved = false; pointerId = null; onPill = false; };
+
+    /** 量一遍底栏与每个 tab 的中心：只在拖动开始与尺寸变化时做，拖动过程中不再触发布局 */
+    const measure = (): boolean => {
+      const barRect = bar.getBoundingClientRect();
+      trackW = barRect.width;
+      slots = [];
+      bar.querySelectorAll('[data-bottom-nav]').forEach((el: any) => {
+        const node = el as HTMLElement;
+        const r = node.getBoundingClientRect();
+        slots.push({ el: node, cx: r.left - barRect.left + r.width / 2 });
+      });
+      return !!(trackW && slots.length);
     };
-    btn.addEventListener('pointerdown', () => press(true), { passive: true });
-    btn.addEventListener('pointerup', () => press(false), { passive: true });
-    btn.addEventListener('pointercancel', () => press(false), { passive: true });
-    btn.addEventListener('pointerleave', () => press(false), { passive: true });
-    // 键盘触发与旧内核兜底：保证点击结束后不残留按压态
-    btn.addEventListener('click', () => press(false));
-    btn.addEventListener('blur', () => press(false));
+    /** 落点预览：只给非当前 tab 打标记（当前 tab 本身就是选中态，不必再高亮） */
+    const paintDrop = (next: HTMLElement | null) => {
+      if (dropEl === next) return;
+      const prev = dropEl;
+      if (prev) prev.removeAttribute('data-pill-target');
+      dropEl = next;
+      const cur = dropEl;
+      if (cur && !cur.classList.contains('active')) cur.setAttribute('data-pill-target', '1');
+    };
+    /**
+     * 按下点是否落在选中胶囊上。胶囊自身是 pointer-events:none（好让点击穿透到 tab），
+     * 所以只能按几何位置判断；留 4px 容差，手指按在边缘也能抓住。拿不到尺寸时判 false。
+     */
+    const hitPill = (x: number, y: number): boolean => {
+      const ind = doc.getElementById('aus-bottom-indicator') as HTMLElement | null;
+      if (!ind) return false;
+      const r = ind.getBoundingClientRect();
+      if (!r.width || !r.height) return false;
+      const pad = 4;
+      return x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad;
+    };
+
+    /** 胶囊 x 夹在底栏内，避免拖出边界 */
+    const clampX = (x: number) => Math.max(0, Math.min(Math.max(0, trackW - pillW), x));
+    const startDrag = (id: number): boolean => {
+      // 底栏不在用（桌面 / 移动端兼容 UI 关闭）时不接管拖动
+      if (!bottomNavActive(doc)) return false;
+      pill = doc.getElementById('aus-bottom-indicator') as HTMLElement | null;
+      if (!pill || !measure()) { pill = null; return false; }
+      pillW = pill.offsetWidth || BOTTOM_PILL_W;
+      baseX = bottomPillX;
+      if (snapTimer) { clearTimeout(snapTimer); snapTimer = null; }
+      pill.classList.remove('is-snapping');
+      pill.classList.add('is-dragging');
+      try { if (bar.setPointerCapture) bar.setPointerCapture(id); } catch {}
+      return true;
+    };
+    const moveDrag = (clientX: number) => {
+      if (!pill) return;
+      const x = clampX(baseX + (clientX - startX));
+      // 缩放写进同一个 transform：拖起来时轻微放大，跟手感更明显
+      pill.style.transform = 'translate3d(' + Math.round(x) + 'px,' + Math.round(bottomPillY) + 'px,0) scale(1.06)';
+      const center = x + pillW / 2;
+      let best: HTMLElement | null = null;
+      let bestGap = Infinity;
+      for (const slot of slots) {
+        const gap = Math.abs(slot.cx - center);
+        if (gap < bestGap) { bestGap = gap; best = slot.el; }
+      }
+      paintDrop(best);
+    };
+    const endDrag = (commit: boolean) => {
+      const p = pill;
+      const target = dropEl;
+      pill = null;
+      paintDrop(null);
+      if (pointerId !== null) {
+        try { if (bar.releasePointerCapture) bar.releasePointerCapture(pointerId); } catch {}
+      }
+      if (!p) return;
+      p.classList.remove('is-dragging');
+      const slot = target ? slots.find((s) => s.el === target) : undefined;
+      // 弹性归位：落到目标 tab 的中心（没有目标就回原位），再交回默认过渡
+      const x = clampX(slot ? slot.cx - pillW / 2 : baseX);
+      p.classList.add('is-snapping');
+      p.style.transform = 'translate3d(' + Math.round(x) + 'px,' + Math.round(bottomPillY) + 'px,0)';
+      bottomPillX = Math.round(x);
+      if (snapTimer) clearTimeout(snapTimer);
+      snapTimer = setTimeout(() => {
+        snapTimer = null;
+        try { p.classList.remove('is-snapping'); } catch {}
+      }, SNAP_MS + 40);
+      // 松手即算一次「已处理的点按」，压掉随后可能补发的 click，避免二次切页
+      lastBottomTapAt = Date.now();
+      if (!commit || !slot) return;
+      const v = slot.el.getAttribute('data-bottom-nav');
+      // 拖到别的 tab 才切页；落回当前 tab 只归位，不触发「重复点 tab 回到顶部」
+      if (v && !slot.el.classList.contains('active')) handleBottomTabTap(v as AppView);
+    };
+
+    bar.addEventListener('pointerdown', (e: any) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) { reset(); return; }
+      const target = e.target as HTMLElement | null;
+      const hit = target && target.closest ? (target.closest('.aus-bottom-item') as HTMLElement | null) : null;
+      if (!hit) { reset(); return; }
+      item = hit; startX = e.clientX; startY = e.clientY; startAt = Date.now(); moved = false;
+      onPill = hitPill(e.clientX, e.clientY);
+      pointerId = typeof e.pointerId === 'number' ? e.pointerId : null;
+    }, { passive: true });
+    bar.addEventListener('pointermove', (e: any) => {
+      if (!item) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (Math.abs(dx) > TAP_SLOP || Math.abs(dy) > TAP_SLOP) moved = true;
+      if (!pill) {
+        // 必须是从胶囊上按下去的才拖；按在别的 tab 上横向划动什么都不做
+        if (!onPill) return;
+        // 纵向为主的滑动留给页面滚动，只有明显偏横向才接管成「拖胶囊」
+        if (!(Math.abs(dx) > DRAG_LOCK && Math.abs(dx) > Math.abs(dy))) return;
+        if (!startDrag(pointerId === null ? 0 : pointerId)) return;
+      }
+      moveDrag(e.clientX);
+    }, { passive: true });
+    bar.addEventListener('pointercancel', () => {
+      if (pill) endDrag(false);
+      reset();
+    }, { passive: true });
+    bar.addEventListener('pointerup', () => {
+      if (pill) { endDrag(true); reset(); return; }
+      const hit = item;
+      const wasMoved = moved;
+      const elapsed = Date.now() - startAt;
+      reset();
+      if (!hit || wasMoved || elapsed > TAP_MAX_MS) return;
+      lastBottomTapAt = Date.now();
+      const v = hit.getAttribute('data-bottom-nav');
+      if (v) handleBottomTabTap(v as AppView);
+    }, { passive: true });
   } catch {}
 }
 
@@ -752,28 +957,249 @@ export function bindPanel(doc: Document) {
   bindTopbarScroll(doc);
   // 移动端菜单按钮的按压反馈（幂等）
   bindPressFeedback(doc);
+  // 底栏点按接管：滑动期间也能稳定响应（幂等）
+  bindBottomNavTap(doc);
 }
 
-function switchView(view: typeof currentView) {
+/** 「移动端兼容 UI」关闭时窄屏回到改造前的侧栏抽屉（含汉堡按钮与遮罩） */
+let mobileOpen = false;
+/** 由 createPanel 注入：切换「移动端兼容 UI」后立即按新布局重排导航 */
+let applyMobileNavModeImpl: (() => void) | null = null;
+
+/** 移动端兼容 UI 开关：true（默认）窄屏用底栏；false 回到改造前的侧栏抽屉 */
+function mobileNavMode(): 'bottom' | 'sidebar' {
+  try { return (state.settings as any).mobileCompatUi === false ? 'sidebar' : 'bottom'; } catch { return 'bottom'; }
+}
+
+/** 窄屏且开启底栏布局时才走底栏语义（指示胶囊 / 返回箭头 / 重复点 tab / 入场动画） */
+function bottomNavActive(doc: Document): boolean {
+  return isNarrowPanel(doc) && mobileNavMode() === 'bottom';
+}
+
+/** 设置页开关调用：把当前选择写到 #aus-panel[data-mobile-nav] 并重排导航，无需刷新页面 */
+export function applyMobileNavMode(): void {
+  try { applyMobileNavModeImpl?.(); } catch {}
+}
+
+/**
+ * 面板当前是否按窄屏（底栏）布局渲染。
+ * 用 #aus-panel-body 的实际宽度判定；面板未显示（clientWidth 为 0）时回退到窗口宽度。
+ */
+function isNarrowPanel(doc?: Document): boolean {
+  try {
+    const d = doc || getDoc();
+    const body = d.getElementById('aus-panel-body') as HTMLElement | null;
+    if (body && body.clientWidth > 0) return body.clientWidth <= 760;
+    return ((window.parent as any)?.innerWidth ?? window.innerWidth) <= 760;
+  } catch { return true; }
+}
+
+function prefersReducedMotion(): boolean {
+  try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch { return false; }
+}
+
+/** 窄屏页面切换入场动画（桌面端维持原样，不启用）；移除 class + 强制回流保证连续切换可重播 */
+function playViewEnter(el: HTMLElement | null): void {
+  if (!el) return;
+  try {
+    el.classList.remove('aus-view-in');
+    void el.offsetWidth;
+    el.classList.add('aus-view-in');
+  } catch {}
+}
+
+/**
+ * 底栏指示胶囊的兜底尺寸：实际以 #aus-bottom-indicator 量到的 offsetWidth/Height 为准
+ * （极短横屏会把胶囊压小），量不到时才回退这两个值，改动须与 style.css 同步。
+ */
+const BOTTOM_PILL_W = 64;
+const BOTTOM_PILL_H = 48;
+
+/**
+ * 底栏布局下「先让胶囊起跑、再渲染目标页」。
+ * 切换距离远时（概览 ↔ 设置）目标页要新建几十毫秒的 DOM，若和写 transform 落在同一个任务里，
+ * 浏览器必须等这轮任务结束才做首次绘制——手感就是「点了先愣一下、胶囊才滑出去」，滑动途中还会被主线程抢帧。
+ * 做法：第一帧只强制一次样式计算让过渡真正起跑（此时胶囊已是独立合成层，见 style.css 的 will-change），
+ * 第二帧再渲染内容，只晚约 16ms，肉眼不可见。
+ */
+function renderAfterPillStart(doc: Document, run: () => void): void {
+  const ind = doc.getElementById('aus-bottom-indicator') as HTMLElement | null;
+  let done = false;
+  const fire = (): void => {
+    if (done) return;
+    done = true;
+    try { run(); } catch {}
+  };
+  const raf: (fn: () => void) => void = typeof requestAnimationFrame === 'function'
+    ? (fn: () => void) => { requestAnimationFrame(fn); }
+    : (fn: () => void) => { setTimeout(fn, 16); };
+  raf(() => {
+    // 第一帧只做一次样式计算：让 transform 过渡在本次绘制就起跑（画面此时已是胶囊的起点）
+    try { if (ind) void ind.getBoundingClientRect(); } catch {}
+    raf(fire);
+  });
+  // 页面切到后台时 rAF 会被暂停，兜底保证目标页最终一定渲染出来
+  setTimeout(fire, 120);
+}
+
+/**
+ * 底栏指示胶囊跟随当前 tab（切换动画的核心）。
+ * 首次定位关掉过渡，避免面板一打开胶囊就从最左侧"飞过来"。
+ */
+function syncBottomNav(doc: Document, animate: boolean): void {
+  try {
+    const bar = doc.getElementById('aus-bottom-nav') as HTMLElement | null;
+    if (!bar) return;
+    let activeEl: HTMLElement | null = null;
+    bar.querySelectorAll('[data-bottom-nav]').forEach((el: any) => {
+      const on = el.getAttribute('data-bottom-nav') === currentNavKey;
+      el.classList.toggle('active', on);
+      if (on) activeEl = el as HTMLElement;
+    });
+    const ind = doc.getElementById('aus-bottom-indicator') as HTMLElement | null;
+    if (!ind) return;
+    const target = activeEl as HTMLElement | null;
+    if (!target) { ind.style.opacity = '0'; return; }
+    // 底栏在「移动端兼容 UI」关闭时整体隐藏（display:none），此时量不到位置，直接跳过
+    if (!target.offsetWidth) { ind.style.opacity = '0'; return; }
+    ind.style.opacity = '1';
+    // 胶囊对准整个 tab（图标 + 文字）的中心：只圈住图标会像个悬空的椭圆环，观感很怪
+    const barRect = bar.getBoundingClientRect();
+    const itemRect = target.getBoundingClientRect();
+    if (!barRect.height || !itemRect.width) { ind.style.opacity = '0'; return; }
+    const pillW = ind.offsetWidth || BOTTOM_PILL_W;
+    const pillH = ind.offsetHeight || BOTTOM_PILL_H;
+    const x = Math.round(itemRect.left - barRect.left + itemRect.width / 2 - pillW / 2);
+    const y = Math.round(itemRect.top - barRect.top + itemRect.height / 2 - pillH / 2);
+    // 记住落位：拖动起点从这里换算（见 bindBottomNavTap）
+    bottomPillX = x;
+    bottomPillY = y;
+    const first = bar.getAttribute('data-ready') !== '1';
+    const next = 'translate3d(' + x + 'px,' + y + 'px,0)';
+    if (!animate || first) {
+      const prev = ind.style.transition;
+      ind.style.transition = 'none';
+      ind.style.transform = next;
+      void ind.offsetWidth;
+      ind.style.transition = prev;
+      bar.setAttribute('data-ready', '1');
+    } else {
+      ind.style.transform = next;
+    }
+  } catch {}
+}
+
+/**
+ * 侧栏 / 底栏高亮 + 二级页返回箭头显隐：切页与窗口尺寸变化共用。
+ * bottom=true 表示当前是底栏布局（窄屏 + 移动端兼容 UI 开启）：二级页的高亮归到「设置」并显示返回箭头；
+ * bottom=false 是桌面侧栏或「移动端兼容 UI」关闭后的原侧栏抽屉，直接按当前视图高亮，也没有返回箭头。
+ */
+function paintNavState(doc: Document, bottom: boolean, animate: boolean): void {
+  currentNavKey = bottom ? parentTabOf(currentView) : currentView;
+  try {
+    doc.querySelectorAll('#aus-sidebar [data-nav]').forEach((el: any) => {
+      const v = el.getAttribute('data-nav');
+      el.classList.toggle('active', v === currentNavKey);
+    });
+  } catch {}
+  if (bottom) syncBottomNav(doc, animate);
+  const backBtn = doc.getElementById('aus-mobile-back') as HTMLElement | null;
+  if (backBtn) backBtn.style.display = bottom && isSettingsChild(currentView) ? 'flex' : 'none';
+}
+
+/**
+ * 底栏 tab 点击语义：
+ * - 桌面端（底栏不显示）直接切页；
+ * - 窄屏换 tab → 切页（回到「设置」时恢复上次的二级页）；
+ * - 窄屏重复点当前 tab → 二级页回根页，已在根页则回到顶部。
+ */
+function handleBottomTabTap(target: AppView): void {
+  const doc = getDoc();
+  // 底栏不显示（桌面 / 移动端兼容 UI 关闭）时它就是普通切页
+  if (!bottomNavActive(doc)) { switchView(target); return; }
+  const action = resolveTabTap(target, currentView, isSettingsChild(currentView));
+  if (action === 'switch') {
+    const to = target === 'settings' && settingsChildView ? settingsChildView : target;
+    switchView(to);
+    return;
+  }
+  if (action === 'pop-root') { switchView('settings'); return; }
+  try {
+    const main = doc.getElementById('aus-main') as HTMLElement | null;
+    if (main) main.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+    const contentBody = doc.getElementById('aus-content-body') as HTMLElement | null;
+    if (contentBody) contentBody.scrollTop = 0;
+  } catch {}
+}
+
+/**
+ * 侧栏抽屉显隐（仅「移动端兼容 UI」关闭时的窄屏：原侧栏抽屉 + 汉堡 + 遮罩，与改造前实现一致）。
+ * 滑动/淡入淡出动画全部由 style.css 提供，这里只管 class 与遮罩可点性。
+ */
+function syncMobileSidebar(doc: Document): void {
+  try {
+    const sb = doc.getElementById('aus-sidebar') as HTMLElement | null;
+    if (!sb) return;
+    const ov = doc.getElementById('aus-sidebar-overlay') as HTMLElement | null;
+    if (isNarrowPanel(doc) && mobileNavMode() === 'sidebar') {
+      sb.classList.toggle('is-open', mobileOpen);
+      if (ov) {
+        ov.classList.toggle('is-open', mobileOpen);
+        ov.style.display = '';
+        ov.onclick = mobileOpen ? () => { mobileOpen = false; syncMobileSidebar(doc); } : null;
+      }
+      // 窄屏强制还原完整导航，避免宽屏折叠残留的 inline 隐藏
+      const brand = doc.getElementById('aus-brand') as HTMLElement | null;
+      if (brand) brand.style.removeProperty('display');
+      doc.querySelectorAll('#aus-sidebar .aus-nav-label').forEach((el: any) => { (el as HTMLElement).style.removeProperty('display'); });
+      doc.querySelectorAll('#aus-sidebar .aus-nav-item').forEach((el: any) => {
+        const c = el as HTMLElement;
+        c.style.removeProperty('justify-content');
+        c.style.removeProperty('padding');
+      });
+      sb.style.removeProperty('width');
+      sb.style.removeProperty('min-width');
+      sb.style.removeProperty('max-width');
+    } else {
+      sb.classList.remove('is-open');
+      if (ov) {
+        ov.classList.remove('is-open');
+        ov.style.display = 'none';
+        ov.onclick = null;
+      }
+    }
+  } catch {}
+}
+
+function switchView(view: AppView, opts?: { track?: boolean }) {
   const prevView = currentView;
   currentView = view;
+  // 「设置」下的二级页记忆：点回设置 tab 时恢复到上次位置；主动切回设置根页（重复点 tab / 返回箭头）则清空
+  if (isSettingsChild(view)) settingsChildView = view;
+  else if (view === 'settings') settingsChildView = null;
   // 离开钱包页时收起所有已展开的钱包，下次进入保持默认收起
   if (prevView === 'wallet' && view !== 'wallet') {
     try { repository.collapseAllWallets(); } catch {}
   }
   // 匿名使用统计：页面使用率（仅本地累加，关闭面板时统一上报）
-  try { trackPage(view); } catch {}
+  // 只有「用户真的看到这个页面」才计数：构建面板时的初始化切换必须传 track:false，
+  // 否则每次酒馆页面加载都会凭空记 1 次概览浏览并开始计时，上报后变成
+  // 「opens=0 却有 1 次概览浏览 + 一段挂机时长」的稀疏记录（数据库里约六成 device_daily 行）。
+  if (opts?.track !== false) { try { trackPage(view); } catch {} }
   const doc = getDoc();
+  const bottom = bottomNavActive(doc);
   if (view !== 'history') closeHistoryDetail(doc);
   doc.querySelectorAll('[data-view]').forEach((el: any) => {
     const v = el.getAttribute('data-view');
     const on = v === view;
     el.style.display = on ? 'block' : 'none';
-    // 瞬时切换：不再走“先透明再淡入”，避免点击后有一小段延迟感
+    // 瞬时切换：不再走"先透明再淡入"，避免点击后有一小段延迟感
     if (on) { el.style.transition = 'none'; el.style.opacity = '1'; }
+    // 入场动画只在底栏布局（窄屏 + 兼容 UI 开启）播放，桌面与原侧栏抽屉保持瞬时切换
+    if (on && bottom) playViewEnter(el as HTMLElement);
   });
   // 所有视图共用 #aus-main 作为滚动容器，切换页面时必须把滚动位置归零，
-  // 否则会沿用上一页的 scrollTop，出现“切过去直接显示页面中部”的问题。
+  // 否则会沿用上一页的 scrollTop，出现"切过去直接显示页面中部"的问题。
   try {
     for (const id of ['aus-main', 'aus-content-body']) {
       const scroller = doc.getElementById(id) as HTMLElement | null;
@@ -783,26 +1209,29 @@ function switchView(view: typeof currentView) {
     }
   } catch {}
   syncTopbarState(doc);
-  doc.querySelectorAll('.aus-nav-item').forEach((el: any) => {
-    const v = el.getAttribute('data-nav');
-    if (v === view) el.classList.add('active');
-    else el.classList.remove('active');
-  });
-  const titles: any = { overview: '用量概览', stats: '用量统计', history: '历史记录', forecast: '趋势预测', wallet: '钱包', settings: '设置', help: '使用说明', about: '关于' };
-  const titleText = titles[view] || '';
+  // 侧栏/底栏高亮（底栏布局下二级页归到「设置」）+ 二级页返回箭头
+  paintNavState(doc, bottom, bottom);
+  const titleText = viewTitle(view);
   const titleEl = doc.getElementById('aus-page-title');
   const mobileTitleEl = doc.getElementById('aus-mobile-page-title');
   if (titleEl) titleEl.textContent = titleText;
   if (mobileTitleEl) mobileTitleEl.textContent = titleText;
   // 只渲染目标视图：原先每次点击都全量 refreshUI（历史/概览/统计/预测/钱包五页，其中两页要重建 ECharts），
   // 再叠加 60ms 定时器二次渲染，是点击卡顿与延迟的主要来源；数据变更仍由 refreshUI 统一刷新。
-  try {
-    if (view === 'overview') renderOverview();
-    else if (view === 'stats') renderStatsView();
-    else if (view === 'forecast') Promise.resolve(renderForecastView()).catch(() => {});
-    else if (view === 'wallet') Promise.resolve(renderWalletView()).catch(() => {});
-    else if (view === 'history') { const s = getSelectedSave(); if (s) renderHistory(doc, s); }
-  } catch {}
+  const renderTargetView = () => {
+    // 连点/快速切换时旧的延迟渲染作废，只渲染最后停留的那一页
+    if (currentView !== view) return;
+    try {
+      if (view === 'overview') renderOverview();
+      else if (view === 'stats') renderStatsView();
+      else if (view === 'forecast') Promise.resolve(renderForecastView()).catch(() => {});
+      else if (view === 'wallet') Promise.resolve(renderWalletView()).catch(() => {});
+      else if (view === 'history') { const s = getSelectedSave(); if (s) renderHistory(doc, s); }
+    } catch {}
+  };
+  // 底栏布局下切到别的页时，先把指示胶囊送上轨道（原因见 renderAfterPillStart 注释）
+  if (bottom && view !== prevView) renderAfterPillStart(doc, renderTargetView);
+  else renderTargetView();
   // 图表容器宽度兜底：首次显示若尚未完成布局，下一帧补渲染一次（替代原先 60ms/80ms 定时器）
   if (view === 'stats' || view === 'forecast') {
     requestAnimationFrame(() => {
@@ -846,11 +1275,14 @@ export function createPanel() {
   panel.id = 'aus-panel';
   panel.setAttribute('data-extension', 'api-usage-stat');
   panel.setAttribute('data-ds-theme', theme);
+  // 窄屏布局二选一：bottom=底部标签栏（移动端兼容 UI 开启）/ sidebar=改造前的侧栏抽屉
+  panel.setAttribute('data-mobile-nav', mobileNavMode());
   panel.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:\'Microsoft YaHei\',\'微软雅黑\',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;';
   panel.innerHTML = `
     <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;">
-      <button id="aus-hamburger-btn" title="菜单" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);font-size:18px;line-height:1;padding:0;">${icon('menu', 22)}</button>
-      <span style="margin-left:12px;font-size:var(--aus-fs-base);font-weight:700;color:var(--ds-text);white-space:nowrap;flex-shrink:0;">API用量统计</span>
+      <button id="aus-hamburger-btn" title="菜单" style="display:none;width:28px;height:28px;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;">${icon('menu', 22)}</button>
+      <button id="aus-mobile-back" title="返回设置" style="display:none;width:28px;height:28px;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;">${icon('chevron-left', 20)}</button>
+      <span id="aus-mobile-brand" style="margin-left:12px;font-size:var(--aus-fs-base);font-weight:700;color:var(--ds-text);white-space:nowrap;flex-shrink:0;">API用量统计</span>
       <span id="aus-mobile-page-title" style="margin-left:10px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text-2);">用量概览</span>
       <button id="aus-mobile-panel-close" title="关闭" style="margin-left:auto;width:32px;height:32px;padding:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:var(--aus-fs-base);">${icon('close', 16)}</button>
     </div>
@@ -861,7 +1293,7 @@ export function createPanel() {
           <span class="aus-brand-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--ds-orange);">${icon('brand', 18)}</span>
           <div style="display:flex;flex-direction:column;min-width:0;">
             <span style="font-size:15px;font-weight:700;line-height:20px;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
-            <span style="font-size:var(--aus-fs-sm);line-height:16px;color:var(--ds-text-2);white-space:nowrap;">v${typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : ''}</span>
+            <span style="font-size:var(--aus-fs-sm);line-height:16px;color:var(--ds-text-2);white-space:nowrap;">v${appVersionText()}</span>
           </div>
         </div>
         <button id="aus-sidebar-toggle" style="width:30px;height:30px;margin-top:13px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;font-size:var(--aus-fs-base);padding:0;line-height:1;">${icon('chevron-left', 14)}</button>
@@ -878,7 +1310,7 @@ export function createPanel() {
         <div class="aus-nav-group" style="display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--ds-border);padding-top:10px;">
           <div class="aus-nav-item" data-nav="settings" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon('settings')}</span><span class="aus-nav-label">设置</span></div>
           <div class="aus-nav-item" data-nav="help" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon('help')}</span><span class="aus-nav-label">使用说明</span></div>
-          <div class="aus-nav-item" data-nav="about" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon('about')}</span><span class="aus-nav-label">关于</span><span id="aus-nav-update-badge" data-on="0" title="检测到新版本，点击查看关于页">新版本</span></div>
+          <div class="aus-nav-item" data-nav="about" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:var(--aus-fs-base);line-height:1.5;"><span class="aus-nav-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-align:center;line-height:1;">${icon('about')}</span><span class="aus-nav-label">关于</span><span id="aus-nav-update-badge" data-update-badge="1" data-on="0" title="检测到新版本，点击查看关于页">新版本</span></div>
         </div>
       </div>
     </div>
@@ -1097,11 +1529,27 @@ export function createPanel() {
             <div id="aus-history"></div>
           </div>
           <div data-view="settings" style="display:none;">
+            <div id="aus-settings-entries" style="display:none;grid-template-columns:1fr;gap:8px;margin-bottom:12px;">${SETTINGS_ENTRIES.map((e) => {
+              // 「关于」入口带上当前版本号：桌面端入口在侧栏、版本显示在品牌区，这里补上窄屏设置页的版本信息
+              const version = e.view === 'about' && appVersionText() ? '<span class="aus-settings-entry-version" title="当前版本">v' + appVersionText() + '</span>' : '';
+              return `
+              <div class="aus-settings-entry" data-settings-entry="${e.view}" role="button" tabindex="0">
+                <span class="aus-settings-entry-icon">${icon(e.icon, 20)}</span>
+                <span class="aus-settings-entry-text">
+                  <span class="aus-settings-entry-label">${e.label}${version}</span>
+                  <span class="aus-settings-entry-desc">${e.desc}</span>
+                </span>
+                ${e.view === 'about' ? '<span class="aus-entry-badge" data-update-badge="1" data-on="0">新版本</span>' : ''}
+                <span class="aus-settings-entry-arrow">${icon('chevron-right', 16)}</span>
+              </div>`;
+            }).join('')}
+            </div>
             <div id="aus-settings"></div>
           </div>
           <div data-view="help" style="display:none;">
             <div style="display:grid;gap:12px;">
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#FF6A00;font-weight:600;margin-bottom:6px;">完整使用文档</div><div style="color:var(--ds-text-2);">详细说明各页面、筛选、钱包、定价、同步、隐私与常见问题。</div><a href="https://janmk1453.github.io/Api-Usage/" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;margin-top:10px;padding:8px 14px;border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);text-decoration:none;font-size:var(--aus-fs-base);font-weight:600;">前往完整使用文档</a></div>
+              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0070F3;font-weight:600;margin-bottom:6px;">🧭 导航（手机端）</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 窄屏改用底部标签栏：概览 / 统计 / 历史 / 趋势 / 设置；再点一次当前标签可回到页面顶部</div><div>2. 钱包、使用说明、关于都收在「设置」页顶部的入口里，进入后点左上角返回箭头回到设置</div><div>3. 从别的标签回到「设置」时会回到上次停留的那个页面（钱包/使用说明/关于）；桌面端仍是左侧可折叠侧边栏，入口位置不变</div><div>4. 不习惯底栏？去「设置 → 移动端兼容UI」关掉开关，窄屏立刻变回原来的侧栏抽屉（左上角菜单按钮），桌面端不受影响</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#DC2626;font-weight:600;margin-bottom:6px;">隐私声明（完整版：<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:#DC2626;text-decoration:underline;">https://janmk1453.github.io/Api-Usage/#privacy</a>）</div><div style="color:var(--ds-text-2);display:grid;gap:6px;"><div>本扩展有且只能获得用户在酒馆本身中填写的：密钥条目的编号、用户备注和掩码末三位，仅用于独立区分请求来源，不会且无法读取、保存或上传完整明文密钥。</div><div>用户储存在酒馆本身的密钥是安全的，本扩展无法获取真实密钥。</div><div>用户主动填入本扩展的校准密钥是实际可用的密钥，且仅会被用于查询该钱包所对应厂商的余额或套餐额度接口（DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita、智谱 GLM、MiniMax、以及用户自填的 new-api 中转站），不会额外造成扣费或消耗；它仅经 XOR 混淆后存放于 SillyTavern，不进入历史记录、统计、日志、导入导出或 WebDAV。查询由浏览器直连厂商接口，不经过任何第三方代理；对未开放跨域（CORS）的厂商会直接失败并提示，扩展不会绕过该限制。</div><div>XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。</div><div>本扩展完整代码开源可审查。</div><div style="margin-top:2px;padding-top:6px;border-top:1px solid var(--ds-border);font-weight:600;color:#DC2626;">免责声明（完整版见上方链接）</div><div>本扩展不对功能“价格来源”、“自动同步”等利用 <a href="https://models.dev" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 获取的数据中出现或可能出现的商业化中转站负责；我们不建议使用任何商业化中转站，尽管我们已经尽力筛选数据，但由于对大量数据进行完全筛选难以实现，因此我们不对可能出现的任何商业化中转站名称负责，不构成推荐，和 models.dev 或任何中转站没有商业往来，坚定不移的反对商业化。</div><div>「套餐额度」中的本地估算基于本扩展记录的历史数据推算，不包含其他设备或其他客户端的消耗，可能与实际剩余额度有偏差，仅供展示参考，不参与计费、导出与云同步，不能作为账单依据；对没有公开接口或未开放跨域的厂商（Claude Code、Codex、OpenCode、GitHub Copilot、Cursor、讯飞星辰等），扩展不提供、也不会绕过限制去提供自动查询。</div><div>界面中的厂商图标与名称商标归各自所有者，仅用于标识接入来源，不构成任何关联、合作或背书；图标数据内联自 simple-icons（CC0 发布）。</div><div>我们将尽可能维护扩展的安全和隐私性，但本扩展不对因酒馆/本扩展的安全漏洞或因间接原因导致的任何形式的密钥泄露及产生的损失负责。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0BA25E;font-weight:600;margin-bottom:6px;">钱包</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 扩展按识别到的接入链接自动创建和汇总钱包，默认始终保留 DeepSeek 官方钱包；同名链接下识别的密钥和模型会归入同一钱包。</div><div>2. 每个钱包可独立维护名称、余额、模型价格、峰谷规则和价格来源；钱包默认收起，展开状态按钱包记忆。价格来源仅展示第一方模型厂商，不展示中转站或聚合平台；同步时只按钱包里已识别的模型名做模糊匹配后写入该模型价格，不会把供应商目录里的模型整批加入钱包。</div><div>3. 请求进入后会先匹配所属钱包，再使用该钱包的模型价格和峰谷规则计费，并从对应钱包余额预扣；未配置价格的模型先记零费用，保存或同步价格后自动重算冷热历史。</div><div>4. 余额查询按「查询适配器」工作：DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita 可查余额，智谱 GLM 与 MiniMax 可查套餐额度，new-api 中转可用「系统访问令牌 + 用户 ID」查订阅额度；密钥在该钱包内单独填写，多个密钥不会自动相加。</div><div>5. 删除钱包会进入“已忽略接入”，后续请求不会自动重建、不参与余额合计，历史记录仍保留归属，需要时可恢复显示。</div><div>6. 「套餐额度」只对能查询到额度的厂商显示，查到哪个展示哪个；本地估算需手动启用，仅作参考，不参与计费。</div></div></div>
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（按钱包内的「查询适配器」查询，支持多家厂商）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
@@ -1132,7 +1580,7 @@ export function createPanel() {
                   </div>
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:var(--aus-fs-sm);">检查更新</button>
                   <button id="aus-run-update" class="ds-btn-pill" style="display:none;padding:6px 14px;font-size:var(--aus-fs-sm);">立即更新</button>
-                  <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">当前 v${typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : ''} · 每 1 小时自动检查</span>
+                  <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">当前 v${appVersionText()} · 每 1 小时自动检查</span>
                 </div>
                 <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">可选择 main（稳定）或 dev（测试）分支获取更新，默认 main；更新完成后自动刷新网页。</div>
               </div>
@@ -1151,8 +1599,17 @@ export function createPanel() {
     </div>
     </div>
     </div>
+    <div id="aus-bottom-nav" style="display:none;">
+      <div id="aus-bottom-indicator" aria-hidden="true"></div>
+      ${MOBILE_TABS.map((t) => `
+        <div class="aus-bottom-item" data-bottom-nav="${t.view}" role="tab" title="${t.label}">
+          <span class="aus-bottom-icon">${icon(t.icon, 22)}</span>
+          <span class="aus-bottom-label">${t.label}</span>
+          ${t.view === 'settings' ? '<span class="aus-bottom-badge" data-update-badge="1" data-on="0" title="检测到新版本，去「设置 → 关于」查看">新版本</span>' : ''}
+        </div>`).join('')}
+    </div>
   `;
-  // 兼容旧遮罩：覆盖式抽屉遮罩，点击关闭
+  // 侧栏抽屉遮罩：仅「移动端兼容 UI」关闭 + 窄屏时出现，点遮罩关闭抽屉
   const sbOverlay = doc.createElement('div');
   sbOverlay.id = 'aus-sidebar-overlay';
   sbOverlay.style.cssText = 'display:none;';
@@ -1169,69 +1626,47 @@ export function createPanel() {
   doc.getElementById('aus-panel-close')?.addEventListener('click', closePanel);
   doc.getElementById('aus-mobile-panel-close')?.addEventListener('click', closePanel);
   doc.getElementById('aus-history-detail-close')?.addEventListener('click', () => closeHistoryDetail(doc));
-  doc.querySelectorAll('.aus-nav-item').forEach((el: any) => {
+  // 侧栏（仅桌面显示）：直接切页，不做底栏的重复点语义
+  doc.querySelectorAll('#aus-sidebar [data-nav]').forEach((el: any) => {
     el.addEventListener('click', () => {
       const v = el.getAttribute('data-nav');
-      if (v) switchView(v as any);
+      if (v) switchView(v as AppView);
+      // 原侧栏抽屉：窄屏点完导航自动收起（底栏布局下本就不会进这里）
+      if (mobileOpen) { mobileOpen = false; syncMobileSidebar(doc); }
     });
   });
-  // 窄屏覆盖式抽屉（滑动动画由 style.css 末尾的 transform/opacity 过渡提供）+ 遮罩点外关闭，宽屏 60/260 折叠（瞬时切换）
-  let mobileOpen = false;
-  const isMobile = () => {
-    try {
-      const body = doc.getElementById('aus-panel-body') as HTMLElement | null;
-      if (body && body.clientWidth > 0) return body.clientWidth <= 760;
-      return ((window.parent as any)?.innerWidth ?? window.innerWidth) <= 760;
-    } catch { return window.innerWidth <= 760; }
-  };
-  const syncMobileSidebar = () => {
-    const sb = doc.getElementById('aus-sidebar') as HTMLElement | null;
-    if (!sb) return;
-    const ov = doc.getElementById('aus-sidebar-overlay') as HTMLElement | null;
-    if (isMobile()) {
-      if (mobileOpen) sb.classList.add('is-open');
-      else sb.classList.remove('is-open');
-      if (ov) {
-        ov.classList.toggle('is-open', mobileOpen);
-        ov.style.display = '';
-        if (mobileOpen) {
-          ov.onclick = () => { mobileOpen = false; syncMobileSidebar(); };
-        } else ov.onclick = null;
-      }
-      // 窄屏下强制还原为完整导航（避免宽屏折叠残留的 inline 隐藏）
-      const brand = doc.getElementById('aus-brand') as HTMLElement | null;
-      if (brand) brand.style.removeProperty('display');
-      doc.querySelectorAll('.aus-nav-label').forEach((el: any) => { (el as HTMLElement).style.removeProperty('display'); });
-      doc.querySelectorAll('#aus-sidebar .aus-nav-item').forEach((el: any) => {
-        const c = el as HTMLElement;
-        c.style.removeProperty('justify-content');
-        c.style.removeProperty('padding');
-      });
-      if (sb) {
-        sb.style.removeProperty('width');
-        sb.style.removeProperty('min-width');
-        sb.style.removeProperty('max-width');
-      }
-    } else {
-      sb.classList.remove('is-open');
-      if (ov) {
-        ov.classList.remove('is-open');
-        ov.style.display = 'none';
-        ov.onclick = null;
-      }
-    }
-  };
+  // 底栏（仅窄屏显示）：走 tab 语义（换页 / 二级页回根 / 回顶部）
+  doc.querySelectorAll('#aus-bottom-nav [data-bottom-nav]').forEach((el: any) => {
+    el.addEventListener('click', () => {
+      // 触屏点按已由 bindBottomNavTap 在 pointerup 处理，这里只服务键盘与读屏点击
+      if (Date.now() - lastBottomTapAt < 600) return;
+      const v = el.getAttribute('data-bottom-nav');
+      if (v) handleBottomTabTap(v as AppView);
+    });
+  });
+  // 设置页内的二级入口：钱包 / 使用说明 / 关于
+  doc.querySelectorAll('#aus-settings-entries [data-settings-entry]').forEach((el: any) => {
+    el.addEventListener('click', () => {
+      const v = el.getAttribute('data-settings-entry');
+      if (v) switchView(v as AppView);
+    });
+    el.addEventListener('keydown', (e: any) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      const v = el.getAttribute('data-settings-entry');
+      if (v) switchView(v as AppView);
+    });
+  });
+  // 窄屏二级页顶栏返回箭头：回到「设置」根页
+  doc.getElementById('aus-mobile-back')?.addEventListener('click', () => switchView('settings'));
   const applyCollapsed = (v: boolean) => {
     collapsed = v;
     const sb = doc.getElementById('aus-sidebar') as HTMLElement | null;
     const brand = doc.getElementById('aus-brand') as HTMLElement | null;
     const btn = doc.getElementById('aus-sidebar-toggle') as HTMLElement | null;
     if (!sb) return;
-    if (isMobile()) {
-      // 窄屏：忽略 collapsed，改由 mobileOpen 控制显隐
-      syncMobileSidebar();
-      return;
-    }
+    // 窄屏：底栏布局下侧栏整体隐藏；兼容 UI 关闭时由抽屉开关（mobileOpen）控制显隐，都不做折叠
+    if (isNarrowPanel(doc)) { if (mobileNavMode() === 'sidebar') syncMobileSidebar(doc); return; }
     // 折叠态隐藏「有新版本」徽标（60px 侧栏放不下），展开后按真实状态恢复
     sb.setAttribute('data-collapsed', collapsed ? '1' : '0');
     // 宽屏：保留 60/260 折叠
@@ -1240,32 +1675,48 @@ export function createPanel() {
     sb.style.setProperty('max-width', collapsed ? '60px' : '260px', 'important');
     if (brand) brand.style.setProperty('display', collapsed ? 'none' : 'flex', 'important');
     if (btn) btn.innerHTML = collapsed ? icon('chevron-right', 14) : icon('chevron-left', 14);
-    doc.querySelectorAll('.aus-nav-label').forEach((el: any) => { (el as HTMLElement).style.setProperty('display', collapsed ? 'none' : 'inline', 'important'); });
-    doc.querySelectorAll('.aus-nav-item').forEach((el: any) => { (el as HTMLElement).style.justifyContent = collapsed ? 'center' : 'flex-start'; });
+    doc.querySelectorAll('#aus-sidebar .aus-nav-label').forEach((el: any) => { (el as HTMLElement).style.setProperty('display', collapsed ? 'none' : 'inline', 'important'); });
+    doc.querySelectorAll('#aus-sidebar .aus-nav-item').forEach((el: any) => { (el as HTMLElement).style.justifyContent = collapsed ? 'center' : 'flex-start'; });
     doc.querySelectorAll('#aus-sidebar .aus-nav-item').forEach((el: any) => {
       (el as HTMLElement).style.padding = collapsed ? '10px 0' : '10px 12px';
     });
   };
   doc.getElementById('aus-sidebar-toggle')?.addEventListener('click', () => applyCollapsed(!collapsed));
+  // 原侧栏抽屉：左上角菜单按钮开合
   doc.getElementById('aus-hamburger-btn')?.addEventListener('click', () => {
     mobileOpen = !mobileOpen;
-    syncMobileSidebar();
+    syncMobileSidebar(doc);
   });
-  // 窄屏下点击导航自动收起，复刻抽屉体验但保持 display 切换
-  doc.querySelectorAll('.aus-nav-item').forEach((el: any) => {
-    el.addEventListener('click', () => {
-      if (isMobile() && mobileOpen) { mobileOpen = false; syncMobileSidebar(); }
-    });
-  });
+  /**
+   * 把「移动端兼容 UI」开关状态写到 #aus-panel[data-mobile-nav]（CSS 靠这个属性二选一），
+   * 并立刻按新布局重排：关掉抽屉、必要时恢复宽屏折叠、重算底栏高亮与返回箭头。
+   */
+  const applyMobileNavModeLocal = () => {
+    const pn = doc.getElementById('aus-panel') as HTMLElement | null;
+    if (pn) pn.setAttribute('data-mobile-nav', mobileNavMode());
+    mobileOpen = false;
+    syncMobileSidebar(doc);
+    if (!isNarrowPanel(doc)) applyCollapsed(collapsed);
+    paintNavState(doc, bottomNavActive(doc), false);
+  };
+  applyMobileNavModeImpl = applyMobileNavModeLocal;
+  applyMobileNavModeLocal();
   try {
-    if (isMobile()) { mobileOpen = false; syncMobileSidebar(); }
     let rzT: any = null;
     const onResize = () => {
       if (rzT) return;
       rzT = setTimeout(() => {
         rzT = null;
-        if (isMobile()) syncMobileSidebar();
-        else { mobileOpen = false; syncMobileSidebar(); applyCollapsed(collapsed); }
+        const narrow = isNarrowPanel(doc);
+        if (!narrow) {
+          mobileOpen = false;
+          syncMobileSidebar(doc);
+          applyCollapsed(collapsed);
+        } else {
+          syncMobileSidebar(doc);
+        }
+        // 底栏在尺寸变化后需重新量位置（宽度变了 tab 中线也变了），不播动画
+        paintNavState(doc, bottomNavActive(doc), false);
         try { positionPanel(); } catch {}
       }, 150);
     };
@@ -1376,7 +1827,8 @@ export function createPanel() {
       };
     }
   } catch {}
-  switchView('overview');
+  // 仅初始化界面状态，不算一次浏览（用户还没打开面板）；真实浏览在 openPanel 里记。
+  switchView('overview', { track: false });
   refreshUI();
 }
 
@@ -1397,18 +1849,12 @@ export function openPanel() {
     pn = doc.getElementById('aus-panel') as HTMLElement | null;
     if (!ov || !pn) return;
   }
+  // 打开面板 = 一次落地页浏览：只在真正打开时记（面板构建时的初始化切换已跳过计数）
+  try { trackPage(currentView); } catch {}
   ov.style.display = 'block';
   pn.style.display = 'flex';
-  try {
-    const sb = doc.getElementById('aus-sidebar') as HTMLElement | null;
-    const isMobile = (()=>{ try{ const b = doc.getElementById('aus-panel-body') as HTMLElement | null; if (b && b.clientWidth > 0) return b.clientWidth <= 760; return ((window.parent as any)?.innerWidth ?? window.innerWidth) <= 760; } catch{ return window.innerWidth <=760; }})();
-    if (sb) {
-      if (isMobile) {
-        // 窄屏默认隐藏，等待汉堡呼出
-        if (sb.classList.contains('is-open') && !((doc as any)._aus_mobileOpen)) sb.classList.remove('is-open');
-      } else sb.classList.remove('is-open');
-    }
-  } catch {}
+  // 面板刚显示，此时才能量到底栏 tab 的真实位置：按当前兼容 UI 开关摆好导航，不播动画
+  try { applyMobileNavModeImpl?.(); } catch {}
   positionPanel();
   requestAnimationFrame(() => {
     ov.style.opacity = '1';
@@ -1427,6 +1873,9 @@ export function closePanel() {
   const pn = doc.getElementById('aus-panel') as HTMLElement | null;
   if (ov) { ov.style.opacity = '0'; setTimeout(() => { ov.style.display = 'none'; }, 200); }
   if (pn) pn.style.display = 'none';
+  // 收起原侧栏抽屉，下次打开从关闭态开始
+  mobileOpen = false;
+  syncMobileSidebar(doc);
   panelOpen = false;
   // 匿名使用统计：关闭面板时合并上报本次会话数据
   try { flushTelemetry('close'); } catch {}

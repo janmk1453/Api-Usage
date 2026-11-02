@@ -1,3 +1,5 @@
+import { mobileDeviceHint } from '../utils/device';
+
 export type PeakHour = { start: string; end: string };
 export type CustomModel = {
   model: string;
@@ -73,6 +75,12 @@ export type Settings = {
   peakDot: boolean;
   /** 匿名使用统计开关（默认开启，关闭后不再采集与上报） */
   telemetryEnabled: boolean;
+  /**
+   * 移动端兼容 UI：true 窄屏用底部标签栏；false 回到改造前的侧栏抽屉 + 汉堡按钮。
+   * 默认值只按设备类型决定一次（见 utils/device.ts）：移动端默认开启，桌面端默认关闭；
+   * 值一旦落到设置里就是用户的选择，后续版本更新不再覆盖。
+   */
+  mobileCompatUi: boolean;
   webdav: WebdavSettings;
   historyScope: HistoryScope;
   overviewFour: OverviewFourKey[];
@@ -99,6 +107,7 @@ export const defaultSettings = (): Settings => ({
   extraOffDays: [],
   peakDot: false,
   telemetryEnabled: true,
+  mobileCompatUi: mobileDeviceHint(),
   webdav: { url: 'https://dav.jianguoyun.com/dav/', username: '', path: '', proxy: '' },
   historyScope: 'all',
   overviewFour: ['avg_cost', 'avg_tokens', 'avg_duration', 'avg_rate', 'avg_input_tokens', 'avg_output_tokens', 'avg_hit_rate', 'max_total'],

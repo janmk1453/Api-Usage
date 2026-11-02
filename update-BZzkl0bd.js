@@ -1,7 +1,7 @@
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
 import { t as esc } from "./date-BJI2m6dS.js";
 //#region src/services/update.ts
-var CURRENT_VERSION = "3.1.8";
+var CURRENT_VERSION = "3.1.9";
 var REPO = "janmk1453/Api-Usage";
 var EXTENSION_FOLDER = "Api-Usage";
 var INTERVAL_MS = 36e5;
@@ -184,29 +184,50 @@ function setUpdateButtonVisible(visible) {
 }
 /** 最近一次检查得到的新版本状态：面板可能晚于检查创建，用于回填导航徽标 */
 var pendingUpdate = false;
-function getNavBadge() {
+/**
+* 收集面板内所有「有新版本」指示位。
+* 同一个更新状态现在有三处要去：桌面侧栏「关于」的蓝色徽标、窄屏底栏「设置」上的新版本胶囊、
+* 设置页「关于」入口行的蓝色徽标，全部用 data-update-badge 标注，统一回填。
+*/
+function getNavBadges() {
 	try {
-		return (window.parent?.document ?? document).getElementById("aus-nav-update-badge");
+		const doc = window.parent?.document ?? document;
+		const list = Array.from(doc.querySelectorAll("[data-update-badge]"));
+		const legacy = doc.getElementById("aus-nav-update-badge");
+		if (legacy && list.indexOf(legacy) < 0) list.push(legacy);
+		return list;
 	} catch {
-		return null;
+		return [];
 	}
 }
 /**
-* 导航栏「关于」右侧的蓝色「有新版本」徽标。
-* 徽标在导航项内部，点击时事件冒泡到 .aus-nav-item → 与点击「关于」完全一致；
+* 写入单个指示位的开合状态。
+* 窄屏底栏的胶囊放在「设置」项里，打开时要用它顶掉「设置」两个字，
+* 因此顺手给父项写 data-has-update，由 style.css 隐藏底栏文字（避免依赖 CSS :has）。
+*/
+function paintBadge(badge, on) {
+	badge.setAttribute("data-on", on);
+	try {
+		const item = badge.closest(".aus-bottom-item");
+		if (item) item.setAttribute("data-has-update", on);
+	} catch {}
+}
+/**
+* 「有新版本」指示位同步。
+* 侧栏徽标在导航项内部，点击时事件冒泡到 .aus-nav-item → 与点击「关于」完全一致；
 * 折叠态（60px 侧栏）由 style.css 按 #aus-sidebar[data-collapsed="1"] 隐藏。
 */
 function setNavBadge(visible) {
 	pendingUpdate = visible;
-	const badge = getNavBadge();
-	if (!badge) return;
-	badge.setAttribute("data-on", visible ? "1" : "0");
+	const on = visible ? "1" : "0";
+	for (const badge of getNavBadges()) paintBadge(badge, on);
 }
-/** 面板创建晚于更新检查时调用：把当前更新状态回填到导航徽标 */
+/** 面板创建晚于更新检查时调用：把当前更新状态回填到全部指示位 */
 function syncUpdateIndicators() {
-	const badge = getNavBadge();
-	if (!badge) return;
-	badge.setAttribute("data-on", pendingUpdate ? "1" : "0");
+	const badges = getNavBadges();
+	if (!badges.length) return;
+	const on = pendingUpdate ? "1" : "0";
+	for (const badge of badges) paintBadge(badge, on);
 }
 function showBanner(message) {
 	const banner = getBanner();

@@ -37,6 +37,34 @@ export const CHANGELOG_ENTRY_LIMIT = 3;
 /** 更新日志（最新在前） */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'r3.1.9',
+    date: '2026-11-02',
+    sections: [
+      {
+        kind: 'feature',
+        items: [
+          '移动端重构导航栏逻辑，默认启用更适合移动端的底部导航栏UI，可在设置中的“移动端兼容UI”开关切回旧版',
+          '温馨提示：多次点击底栏按钮可以返回上级页面',
+        ],
+      },
+      {
+        kind: 'improve',
+        items: [
+          '视觉效果和UI细节，完善动画效果',
+          '增加统计数字实时变动的能力和动画',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          '解决了一个gemini的兼容问题',
+          '侧边导航栏在极限情况下错位',
+          '修复了很多已知问题',
+        ],
+      },
+    ],
+  },
+  {
     version: 'r3.1.8',
     date: '2026-10-29',
     sections: [

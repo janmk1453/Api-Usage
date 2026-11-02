@@ -1,10 +1,10 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { r as state } from "./store-CgJSmTLt.js";
+import { r as state } from "./store-TDK3YzRZ.js";
 import { a as HIDDEN_PRICING_MODELS, d as PRICING_SYNC_SOURCE, l as PRICING, u as PRICING_SYNC_FALLBACK } from "./pricing-Bc-qEvy8.js";
 import { f as saveHot } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { _ as normalizeModel, m as isDeepSeekOfficialModel, t as repository, v as cloneWallet } from "./repository-BW-r59iw.js";
-import { a as getWalletExchangeRate } from "./currency-DgeH8MPr.js";
+import { _ as normalizeModel, m as isDeepSeekOfficialModel, t as repository, v as cloneWallet } from "./repository-Dq4qsP3r.js";
+import { a as getWalletExchangeRate } from "./currency-Dsn2T9-Q.js";
 /** 已知同义模型名（仅做等价加分，不强绑）：归一化后仍不同但确为同一模型的写法 */
 var MODEL_ALIAS_HINTS = {
 	"qwen-max": ["qwen3-max", "qwen-max-latest"],
@@ -662,7 +662,7 @@ async function markLegacySyncedModels(opts) {
 			globalThis.ApiUsageStat?.refreshUI?.();
 		} catch {}
 		if (!opts?.skipRerender) try {
-			const { renderSettings } = await import("./index.js").then((n) => n.t);
+			const { renderSettings } = await import("./settings-BhH88qcZ.js").then((n) => n.n);
 			const doc = window.parent?.document ?? document;
 			if (doc?.getElementById("aus-settings")) renderSettings(doc);
 		} catch {}
