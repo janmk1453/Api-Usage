@@ -29,6 +29,10 @@ const PASSIVE_FLUSH_GAP = 30 * 60 * 1000;
 const RETRY_DELAYS = [1000, 5000, 30000];
 /** 单次会话时长上限，超出按上限计入 */
 const MAX_DURATION_MS = 12 * 60 * 60 * 1000;
+/** 单次上报可携带的酒馆运行时长上限（自页面加载起累加的墙钟时间） */
+const MAX_RUNTIME_MS = 24 * 60 * 60 * 1000;
+/** 只有运行时长、没有任何面板计数时的最小上报间隔，避免空转请求 */
+const RUNTIME_MIN_FLUSH_MS = 60 * 1000;
 
 export type TelemetryPageKey =
   | 'overview' | 'stats' | 'history' | 'forecast'
@@ -87,7 +91,10 @@ export type TelemetryPayload = {
   tz: number;
   app: string;
   env: TelemetryEnv;
-  s: TelemetryCounters;
+  s: TelemetryCounters & {
+    /** 酒馆页面运行时长（自页面加载起的墙钟时间增量，毫秒）；旧版本客户端不含该字段 */
+    run_ms?: number;
+  };
   daily: boolean;
   /** 关闭匿名统计开关时的最后一次上报标记（仅该次为 true，用于记录设备最新开关状态） */
   off?: boolean;
@@ -260,6 +267,10 @@ export function historyRecordCount(): number {
 
 let counters: TelemetryCounters = emptyCounters();
 let sessionStart: number | null = null;
+/** 酒馆页面加载时刻：运行时长按「加载 → 上报」的墙钟增量累加，与面板是否打开无关 */
+let runtimeStart = Date.now();
+/** 已经计入上报体的运行时长水位，takeRuntimeDelta 只返回新增部分 */
+let runtimeAccounted = 0;
 let lastActivity: number | null = null;
 let envCache: TelemetryEnv | null = null;
 let lastFlushAt = 0;
@@ -618,6 +629,19 @@ function currentDuration(now: number): number {
   return Math.max(0, Math.min(MAX_DURATION_MS, now - sessionStart));
 }
 
+/** 页面加载至今的墙钟时长（按上限截断，长时间挂机不会把累计值撑爆） */
+function runtimeSinceLoad(now: number): number {
+  return Math.max(0, Math.min(MAX_RUNTIME_MS, now - runtimeStart));
+}
+
+/** 取尚未计入上报体的运行时长增量，并推进水位；重发同一个上报体不会重复累加 */
+function takeRuntimeDelta(now: number): number {
+  const total = runtimeSinceLoad(now);
+  const delta = total > runtimeAccounted ? total - runtimeAccounted : 0;
+  if (total > runtimeAccounted) runtimeAccounted = total;
+  return delta;
+}
+
 /** 打开面板：计一次打开，并开始一个使用时段 */
 export function trackOpen(): void {
   try {
@@ -671,6 +695,9 @@ function buildPayload(
     } as any)
     : emptyCounters();
   const merged = pending ? mergeCounters(pendingCounters, incoming) : incoming;
+  // 运行时长按增量累加：pending 里未送达的部分一并带上，本次新增部分只取一次
+  const runtimeDelta = takeRuntimeDelta(now);
+  const pendingRuntime = Math.max(0, Number(pending?.s?.run_ms) || 0);
   const seq = pending && Number.isFinite(Number(pending.seq)) ? Number(pending.seq) : identity.seq + 1;
   const env = envCache ?? probeEnv();
   // 颜色模式与系统深色偏好可能在两次上报之间变化（含「跟随系统」下系统切换），发送前重新取一次
@@ -694,6 +721,8 @@ function buildPayload(
       dur_ms: Math.max(0, Math.min(MAX_DURATION_MS, Number(merged.dur_ms) || 0)),
       pages: merged.pages,
       render: merged.render,
+      // 运行时长与其它计数分开累加：只按增量计入，pending 未送达的部分一并带上
+      run_ms: Math.max(0, Math.min(MAX_RUNTIME_MS, pendingRuntime + runtimeDelta)),
     },
     daily: pending ? pending.daily === true : identity.day !== day,
     hc: historyRecordCount(),
@@ -791,18 +820,22 @@ export function flushTelemetry(reason: TelemetryFlushReason = 'close', options?:
     const final = options?.final === true;
     if (!isTelemetryEnabled() && !final) {
       resetCounters();
+      // 关闭期间的运行时长直接丢弃，避免重新开启后一次性补记
+      takeRuntimeDelta(Date.now());
       return;
     }
     if (!isEndpointConfigured(currentEndpoint())) return;
     if (inFlight) return;
     const now = Date.now();
     counters.dur_ms = currentDuration(now);
+    // 只开酒馆、没打开面板时也要按间隔把运行时长送上去，因此空数据判据同时看运行时长增量
+    const runtimePending = runtimeSinceLoad(now) - runtimeAccounted;
     const gap = reason === 'hide' ? PASSIVE_FLUSH_GAP : CLOSE_FLUSH_GAP;
     // 关闭开关的最后一次上报必须立即发出：不受节流与空数据判断限制
     if (!final && lastFlushAt && now - lastFlushAt < gap) return;
     const identity = ensureIdentity();
     const pending = identity.pending && typeof identity.pending === 'object' ? identity.pending : null;
-    if (!final && !pending && countersAreEmpty(counters)) return;
+    if (!final && !pending && countersAreEmpty(counters) && runtimePending < RUNTIME_MIN_FLUSH_MS) return;
     const payload = buildPayload(identity, counters, pending, now, final);
     inFlight = true;
     reserveSeq(payload);
@@ -870,6 +903,8 @@ export function __resetTelemetryStateForTest(): void {
   counters = emptyCounters();
   sessionStart = null;
   lastActivity = null;
+  runtimeStart = Date.now();
+  runtimeAccounted = 0;
   envCache = null;
   lastFlushAt = 0;
   inFlight = false;

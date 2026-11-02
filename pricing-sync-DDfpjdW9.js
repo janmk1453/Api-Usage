@@ -3,7 +3,7 @@ import { r as state } from "./store-DdBSZEXQ.js";
 import { a as HIDDEN_PRICING_MODELS, d as PRICING_SYNC_SOURCE, l as PRICING, u as PRICING_SYNC_FALLBACK } from "./pricing-Bc-qEvy8.js";
 import { f as saveHot } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { _ as normalizeModel, m as isDeepSeekOfficialModel, t as repository, v as cloneWallet } from "./repository-DvDiXP5y.js";
+import { _ as normalizeModel, m as isDeepSeekOfficialModel, t as repository, v as cloneWallet } from "./repository-EVo7ymzA.js";
 import { a as getWalletExchangeRate } from "./currency-9LYFOfk8.js";
 /** 已知同义模型名（仅做等价加分，不强绑）：归一化后仍不同但确为同一模型的写法 */
 var MODEL_ALIAS_HINTS = {
@@ -662,7 +662,7 @@ async function markLegacySyncedModels(opts) {
 			globalThis.ApiUsageStat?.refreshUI?.();
 		} catch {}
 		if (!opts?.skipRerender) try {
-			const { renderSettings } = await import("./settings-1B4BKr3N.js").then((n) => n.n);
+			const { renderSettings } = await import("./settings-a5iaL_v8.js").then((n) => n.n);
 			const doc = window.parent?.document ?? document;
 			if (doc?.getElementById("aus-settings")) renderSettings(doc);
 		} catch {}

@@ -140,6 +140,102 @@ ${DEVICE_UPSERT_SET}
 WHERE excluded.last_seq > device.last_seq
 `;
 
+/**
+ * 运行时长列（run_ms）已迁移（migrate-run-ms.sql）时的首选语句：
+ * 列集合在既有扩展列之后追加 run_ms_total / run_ms，参数追加在末位，
+ * 与旧语句完全独立，未迁移的库会在 batch 失败后自动降级。
+ */
+const DEVICE_UPSERT_RUN_SQL = `
+INSERT INTO device (
+  ${DEVICE_BASE_COLUMNS},
+  ${TOTAL_COLUMNS.join(', ')}, st_version, tt_version, history_count, telemetry_off, theme_mode,
+  run_ms_total
+) VALUES (
+  ${DEVICE_BASE_VALUES},
+  ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31
+)
+${DEVICE_UPSERT_SET},
+  st_version = COALESCE(NULLIF(excluded.st_version, ''), device.st_version),
+  tt_version = COALESCE(NULLIF(excluded.tt_version, ''), device.tt_version),
+  history_count = excluded.history_count,
+  telemetry_off = excluded.telemetry_off,
+  theme_mode = COALESCE(NULLIF(excluded.theme_mode, ''), device.theme_mode),
+  run_ms_total = device.run_ms_total + excluded.run_ms_total
+WHERE excluded.last_seq > device.last_seq
+`;
+
+/**
+ * 设备累加列（opens/dur_ms/pages）在冲突时逐列相加，run_ms_total 同样按增量累加；
+ * 由于 SET 片段由 DEVICE_UPSERT_SET 拼装，这里再补一列 run_ms_total。
+ */
+const DEVICE_DAILY_UPSERT_RUN_SQL = `
+INSERT INTO device_daily (
+  day, device_id, sessions, opens, dur_ms, run_ms,
+  p_overview, p_stats, p_history, p_forecast, p_wallet, p_settings, p_help, p_about,
+  r0, r1, r2, r3, r4, app_version, last_seq, first_ts, last_ts
+) VALUES (
+  ?1, ?2, 1, ?3, ?4, ?21,
+  ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
+  ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?20
+)
+ON CONFLICT(day, device_id) DO UPDATE SET
+  sessions = device_daily.sessions + 1,
+  opens = device_daily.opens + excluded.opens,
+  dur_ms = device_daily.dur_ms + excluded.dur_ms,
+  run_ms = device_daily.run_ms + excluded.run_ms,
+  p_overview = device_daily.p_overview + excluded.p_overview,
+  p_stats = device_daily.p_stats + excluded.p_stats,
+  p_history = device_daily.p_history + excluded.p_history,
+  p_forecast = device_daily.p_forecast + excluded.p_forecast,
+  p_wallet = device_daily.p_wallet + excluded.p_wallet,
+  p_settings = device_daily.p_settings + excluded.p_settings,
+  p_help = device_daily.p_help + excluded.p_help,
+  p_about = device_daily.p_about + excluded.p_about,
+  r0 = device_daily.r0 + excluded.r0,
+  r1 = device_daily.r1 + excluded.r1,
+  r2 = device_daily.r2 + excluded.r2,
+  r3 = device_daily.r3 + excluded.r3,
+  r4 = device_daily.r4 + excluded.r4,
+  app_version = excluded.app_version,
+  last_seq = excluded.last_seq,
+  last_ts = excluded.last_ts
+WHERE device_daily.last_seq < excluded.last_seq
+`;
+
+const DEVICE_HOURLY_UPSERT_RUN_SQL = `
+INSERT INTO device_hourly (
+  hour, device_id, sessions, opens, dur_ms, run_ms,
+  p_overview, p_stats, p_history, p_forecast, p_wallet, p_settings, p_help, p_about,
+  r0, r1, r2, r3, r4, app_version, last_seq, first_ts, last_ts
+) VALUES (
+  ?1, ?2, 1, ?3, ?4, ?21,
+  ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
+  ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?20
+)
+ON CONFLICT(hour, device_id) DO UPDATE SET
+  sessions = device_hourly.sessions + 1,
+  opens = device_hourly.opens + excluded.opens,
+  dur_ms = device_hourly.dur_ms + excluded.dur_ms,
+  run_ms = device_hourly.run_ms + excluded.run_ms,
+  p_overview = device_hourly.p_overview + excluded.p_overview,
+  p_stats = device_hourly.p_stats + excluded.p_stats,
+  p_history = device_hourly.p_history + excluded.p_history,
+  p_forecast = device_hourly.p_forecast + excluded.p_forecast,
+  p_wallet = device_hourly.p_wallet + excluded.p_wallet,
+  p_settings = device_hourly.p_settings + excluded.p_settings,
+  p_help = device_hourly.p_help + excluded.p_help,
+  p_about = device_hourly.p_about + excluded.p_about,
+  r0 = device_hourly.r0 + excluded.r0,
+  r1 = device_hourly.r1 + excluded.r1,
+  r2 = device_hourly.r2 + excluded.r2,
+  r3 = device_hourly.r3 + excluded.r3,
+  r4 = device_hourly.r4 + excluded.r4,
+  app_version = excluded.app_version,
+  last_seq = excluded.last_seq,
+  last_ts = excluded.last_ts
+WHERE device_hourly.last_seq < excluded.last_seq
+`;
+
 const DEVICE_DAILY_UPSERT_SQL = `
 INSERT INTO device_daily (
   day, device_id, sessions, opens, dur_ms,
@@ -305,6 +401,11 @@ async function writeRow(db, payload, now) {
     payload.app, payload.seq, ts,
   ];
   const hourlyArgs = [hour, ...dailyArgs.slice(1)];
+  // 运行时长列已迁移时的参数：设备语句追加在 themeArgs 之后，日/小时语句追加在末位 ?21
+  const runMs = Math.max(0, Number(counters.run_ms) || 0);
+  const runThemeArgs = [...themeArgs, runMs];
+  const runDailyArgs = [...dailyArgs, runMs];
+  const runHourlyArgs = [...hourlyArgs, runMs];
 
   // 每次重试重新 prepare：batch 事务失败会整体回滚，last_seq 判据保证重放不会重复累加
   const buildDevice = (mode) => {
@@ -315,7 +416,17 @@ async function writeRow(db, payload, now) {
   };
   const buildDaily = () => db.prepare(DEVICE_DAILY_UPSERT_SQL).bind(...dailyArgs);
   const buildHourly = () => db.prepare(DEVICE_HOURLY_UPSERT_SQL).bind(...hourlyArgs);
+  const buildRun = () => db.batch([
+    db.prepare(DEVICE_UPSERT_RUN_SQL).bind(...runThemeArgs),
+    db.prepare(DEVICE_DAILY_UPSERT_RUN_SQL).bind(...runDailyArgs),
+    db.prepare(DEVICE_HOURLY_UPSERT_RUN_SQL).bind(...runHourlyArgs),
+  ]);
 
+  try {
+    // 运行时长列已迁移：设备 / 日 / 小时三条都带上酒馆运行时长
+    await buildRun();
+    return;
+  } catch {}
   try {
     await db.batch([buildDevice('theme'), buildDaily(), buildHourly()]);
     return;

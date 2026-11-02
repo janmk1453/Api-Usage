@@ -405,15 +405,74 @@ describe('累加与上报', () => {
     expect(payload.s.opens).toBe(0);
   });
 
-  it('没有新数据时不再发起请求', async () => {
+  it('没有新计数且运行时长增量不足一分钟时不再发起请求', async () => {
     trackOpen();
     flushTelemetry('close');
     await vi.runAllTimersAsync();
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    // 刚上报过，运行时长增量还不够一分钟，不值得单发一条
+    vi.setSystemTime(FIXED_NOW + 20 * 1000);
+    flushTelemetry('close');
+    await vi.runAllTimersAsync();
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+  });
+
+  it('只开酒馆不开面板时也会把运行时长单独上报', async () => {
+    // 没有任何打开/浏览计数，只让时间流逝两分钟
     vi.setSystemTime(FIXED_NOW + 2 * 60 * 1000);
     flushTelemetry('close');
     await vi.runAllTimersAsync();
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse((vi.mocked(fetch).mock.calls[0] as any[])[1].body);
+    expect(payload.s.opens).toBe(0);
+    expect(payload.s.dur_ms).toBe(0);
+    expect(payload.s.run_ms).toBe(120000);
+    // 运行时长按增量累加：下一次上报只带新增部分
+    vi.setSystemTime(FIXED_NOW + 3 * 60 * 1000);
+    flushTelemetry('close');
+    await vi.runAllTimersAsync();
+    const second = JSON.parse((vi.mocked(fetch).mock.calls[1] as any[])[1].body);
+    expect(second.s.run_ms).toBe(60000);
+  });
+
+  it('运行时长上限为一天，且待发数据里的运行时长不会重复累加', async () => {
+    vi.setSystemTime(FIXED_NOW + 30 * 60 * 60 * 1000);
+    flushTelemetry('close');
+    await vi.runAllTimersAsync();
+    const payload = JSON.parse((vi.mocked(fetch).mock.calls[0] as any[])[1].body);
+    expect(payload.s.run_ms).toBe(24 * 60 * 60 * 1000);
+
+    // 发送失败后重试时沿用同一份运行时长，不与新的增量重复相加
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down'); }));
+    __resetTelemetryStateForTest();
+    __setEndpointForTest(TEST_ENDPOINT);
+    vi.setSystemTime(FIXED_NOW + 40 * 60 * 60 * 1000);
+    flushTelemetry('close');
+    await vi.runAllTimersAsync();
+    const failed = readIdentity().pending;
+    expect(failed.s.run_ms).toBeGreaterThan(0);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 204 })));
+    vi.setSystemTime(FIXED_NOW + 41 * 60 * 60 * 1000);
+    flushTelemetry('close');
+    await vi.runAllTimersAsync();
+    const retried = JSON.parse((vi.mocked(fetch).mock.calls[0] as any[])[1].body);
+    expect(retried.s.run_ms).toBe(failed.s.run_ms + 60 * 60 * 1000);
+  });
+
+  it('关闭匿名统计时的运行时长直接丢弃，不留给下一次', async () => {
+    mocks.state.settings = { telemetryEnabled: false };
+    vi.setSystemTime(FIXED_NOW + 5 * 60 * 1000);
+    flushTelemetry('close');
+    await vi.runAllTimersAsync();
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(0);
+    mocks.state.settings = { telemetryEnabled: true };
+    vi.setSystemTime(FIXED_NOW + 6 * 60 * 1000);
+    flushTelemetry('close');
+    await vi.runAllTimersAsync();
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse((vi.mocked(fetch).mock.calls[0] as any[])[1].body);
+    // 关闭期间那五分钟不计入；重新开启后只从丢弃时的水位继续累计
+    expect(payload.s.run_ms).toBe(60000);
   });
 
   it('关闭面板的抖动间隔内不重复上报', async () => {

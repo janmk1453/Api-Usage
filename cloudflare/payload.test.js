@@ -164,6 +164,30 @@ describe('上报体归一', () => {
     expect(result.value.counters.render).toEqual([1, 0, 0, 0, 2000]);
   });
 
+  it('酒馆运行时长单独归一，钳制到一天', () => {
+    const withRun = normalizePayload(goodPayload({
+      s: { ...goodPayload().s, run_ms: 90000 },
+    }), NOW);
+    expect(withRun.ok).toBe(true);
+    expect(withRun.value.counters.run_ms).toBe(90000);
+    expect(withRun.value.counters.dur_ms).toBe(90000);
+
+    const huge = normalizePayload(goodPayload({
+      s: { ...goodPayload().s, run_ms: 99999999999 },
+    }), NOW);
+    expect(huge.value.counters.run_ms).toBe(24 * 60 * 60 * 1000);
+
+    const bad = normalizePayload(goodPayload({
+      s: { ...goodPayload().s, run_ms: -1 },
+    }), NOW);
+    expect(bad.value.counters.run_ms).toBe(0);
+
+    // 旧版本扩展不报该字段时按 0 计，不影响其它计数
+    const legacy = normalizePayload(goodPayload(), NOW);
+    expect(legacy.value.counters.run_ms).toBe(0);
+    expect(legacy.value.counters.dur_ms).toBe(90000);
+  });
+
   it('缺失或非法枚举回退到安全默认值', () => {
     const result = normalizePayload(goodPayload({
       env: { arch: 'mips', w: 'huge', dark: 'yes', standalone: 1, touch: null, b: 123, tm: 'sepia' },

@@ -3,12 +3,12 @@ import { r as state } from "./store-DdBSZEXQ.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS } from "./pricing-Bc-qEvy8.js";
 import { a as getExtensionSettings, f as saveHot, o as isMigrationBackupKey, p as historyRecordKey, r as deleteMigrationBackups, u as saveExtensionSettings } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as mergeWalletCollections, a as decryptKey, d as calcCost, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, t as repository } from "./repository-DvDiXP5y.js";
+import { C as mergeWalletCollections, a as decryptKey, d as calcCost, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, t as repository } from "./repository-EVo7ymzA.js";
 import { a as isUnsafeKey, o as isValidDayKey, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
 import { i as getDisplayCurrency, n as fetchLiveRate } from "./currency-9LYFOfk8.js";
-import { r as recalcAllCosts } from "./interception-CH5fWYjp.js";
-import { i as saveApiKey } from "./balance-JJyf7e7N.js";
-import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-BwVvPuJx.js";
+import { r as recalcAllCosts } from "./interception-6N4ClyIz.js";
+import { i as saveApiKey } from "./balance-C1eNwRfe.js";
+import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-DDfpjdW9.js";
 //#region src/ui/icons.ts
 var PATHS = {
 	overview: "<rect width=\"7\" height=\"9\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"9\" x=\"14\" y=\"12\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"3\" y=\"16\" rx=\"1\"/>",
@@ -1068,6 +1068,10 @@ var RETRY_DELAYS = [
 ];
 /** 单次会话时长上限，超出按上限计入 */
 var MAX_DURATION_MS = 432e5;
+/** 单次上报可携带的酒馆运行时长上限（自页面加载起累加的墙钟时间） */
+var MAX_RUNTIME_MS = 864e5;
+/** 只有运行时长、没有任何面板计数时的最小上报间隔，避免空转请求 */
+var RUNTIME_MIN_FLUSH_MS = 6e4;
 var TELEMETRY_PAGE_KEYS = [
 	"overview",
 	"stats",
@@ -1243,6 +1247,10 @@ function historyRecordCount() {
 }
 var counters = emptyCounters();
 var sessionStart = null;
+/** 酒馆页面加载时刻：运行时长按「加载 → 上报」的墙钟增量累加，与面板是否打开无关 */
+var runtimeStart = Date.now();
+/** 已经计入上报体的运行时长水位，takeRuntimeDelta 只返回新增部分 */
+var runtimeAccounted = 0;
 var envCache = null;
 var lastFlushAt = 0;
 var inFlight = false;
@@ -1577,6 +1585,17 @@ function currentDuration(now) {
 	if (sessionStart === null) return 0;
 	return Math.max(0, Math.min(MAX_DURATION_MS, now - sessionStart));
 }
+/** 页面加载至今的墙钟时长（按上限截断，长时间挂机不会把累计值撑爆） */
+function runtimeSinceLoad(now) {
+	return Math.max(0, Math.min(MAX_RUNTIME_MS, now - runtimeStart));
+}
+/** 取尚未计入上报体的运行时长增量，并推进水位；重发同一个上报体不会重复累加 */
+function takeRuntimeDelta(now) {
+	const total = runtimeSinceLoad(now);
+	const delta = total > runtimeAccounted ? total - runtimeAccounted : 0;
+	if (total > runtimeAccounted) runtimeAccounted = total;
+	return delta;
+}
 /** 打开面板：计一次打开，并开始一个使用时段 */
 function trackOpen() {
 	try {
@@ -1616,6 +1635,8 @@ function buildPayload(identity, incoming, pending, now, final = false) {
 		render: Array.isArray(pending?.s?.render) ? pending.s.render : []
 	}) : emptyCounters();
 	const merged = pending ? mergeCounters(pendingCounters, incoming) : incoming;
+	const runtimeDelta = takeRuntimeDelta(now);
+	const pendingRuntime = Math.max(0, Number(pending?.s?.run_ms) || 0);
 	const seq = pending && Number.isFinite(Number(pending.seq)) ? Number(pending.seq) : identity.seq + 1;
 	const env = envCache ?? probeEnv();
 	env.tm = currentThemeMode();
@@ -1635,7 +1656,8 @@ function buildPayload(identity, incoming, pending, now, final = false) {
 			opens: Math.max(0, Number(merged.opens) || 0),
 			dur_ms: Math.max(0, Math.min(MAX_DURATION_MS, Number(merged.dur_ms) || 0)),
 			pages: merged.pages,
-			render: merged.render
+			render: merged.render,
+			run_ms: Math.max(0, Math.min(MAX_RUNTIME_MS, pendingRuntime + runtimeDelta))
 		},
 		daily: pending ? pending.daily === true : identity.day !== day,
 		hc: historyRecordCount(),
@@ -1724,17 +1746,19 @@ function flushTelemetry(reason = "close", options) {
 		const final = options?.final === true;
 		if (!isTelemetryEnabled() && !final) {
 			resetCounters();
+			takeRuntimeDelta(Date.now());
 			return;
 		}
 		if (!isEndpointConfigured(currentEndpoint())) return;
 		if (inFlight) return;
 		const now = Date.now();
 		counters.dur_ms = currentDuration(now);
+		const runtimePending = runtimeSinceLoad(now) - runtimeAccounted;
 		const gap = reason === "hide" ? PASSIVE_FLUSH_GAP : CLOSE_FLUSH_GAP;
 		if (!final && lastFlushAt && now - lastFlushAt < gap) return;
 		const identity = ensureIdentity();
 		const pending = identity.pending && typeof identity.pending === "object" ? identity.pending : null;
-		if (!final && !pending && countersAreEmpty(counters)) return;
+		if (!final && !pending && countersAreEmpty(counters) && runtimePending < RUNTIME_MIN_FLUSH_MS) return;
 		const payload = buildPayload(identity, counters, pending, now, final);
 		inFlight = true;
 		reserveSeq(payload);
@@ -2238,7 +2262,7 @@ function renderSettings(doc) {
 		state.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state.settings });
 		try {
-			import("./balance-JJyf7e7N.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-C1eNwRfe.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2283,7 +2307,7 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-DvDiXP5y.js").then((n) => n.n);
+				const { repository } = await import("./repository-EVo7ymzA.js").then((n) => n.n);
 				const { state: st } = await import("./store-DdBSZEXQ.js").then((n) => n.i);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
@@ -2438,7 +2462,7 @@ function renderSettings(doc) {
 					intervalDrop.style.display = "none";
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-BwVvPuJx.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./pricing-sync-DDfpjdW9.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 						import("./currency-9LYFOfk8.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};

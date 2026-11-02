@@ -113,13 +113,29 @@ describe('看板模板结构', () => {
 
   it('概览活跃趋势的指标能切回「新增」，且与趋势页的多指标选择互不干扰', () => {
     // 概览卡自己的单指标白名单，包含 newUsers（默认不再是趋势页残留的指标）
-    expect(html).toContain("const OV_METRICS = ['users', 'newUsers', 'opens', 'duration'];");
+    expect(html).toContain("const OV_METRICS = ['users', 'newUsers', 'opens', 'duration', 'runtime'];");
     expect(html).toContain('if (OV_METRICS.indexOf(state.chart.ov) < 0) state.chart.ov = \'users\';');
     // 切换器四个选项齐全，点击只写 ov，不动 chart.metrics
-    expect(html).toContain("S.seg('ovMetric', [['users', '活跃'], ['newUsers', '新增'], ['opens', '打开'], ['duration', '时长']], state.chart.ov)");
+    expect(html).toContain("S.seg('ovMetric', [['users', '活跃'], ['newUsers', '新增'], ['opens', '打开'], ['duration', '时长'], ['runtime', '运行']], state.chart.ov)");
     expect(html).toContain('const metric = state.chart.ov;');
     expect(html).toContain("state.chart.ov = btn.getAttribute('data-v');");
     expect(html).not.toContain("state.chart.metrics = [btn.getAttribute('data-v')];");
+  });
+
+  it('同时提供「真实使用时长」与「酒馆运行时长」两套口径', () => {
+    // 两套指标并存：duration 只算面板打开后的停留，runtime 算酒馆页面运行时长
+    expect(html).toContain("hint: '打开面板后的停留时长'");
+    expect(html).toContain("key: 'runtime', label: '酒馆运行时长'");
+    expect(html).toContain("if (metric === 'runtime') return sum(rows, (r) => r.runMs) / 3600000;");
+    // 首屏投影：日表末位（索引 14）与小时表第 6 位（索引 5）为运行时长
+    expect(html).toContain('runMs: row ? num(row[14]) : 0,');
+    expect(html).toContain('runMs: num(row && row[5]),');
+    expect(html).toContain('pageTotal: PAGE_KEYS.reduce((acc, key, i) => acc + num(row && row[6 + i]), 0),');
+    // 概览 KPI 与累计卡同时给两套时长
+    expect(html).toContain("return ['users', 'opens', 'duration', 'runtime', 'newUsers'].map((key) => {");
+    expect(html).toContain('累计酒馆运行');
+    expect(html).toContain('.kpi-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }');
+    expect(html).toContain('.life-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; margin-top: 12px; }');
   });
 
   it('图表是自绘 SVG，没有 canvas 依赖', () => {

@@ -49,11 +49,12 @@ const DEVICE_BASE_COLUMNS = `device_id, first_seen, last_seen, app_version, brow
 
 /**
  * 设备维度汇总：一次全表读（行数 = 设备数）覆盖总计、环境画像、版本分布与时长分布。
- * tt_version / theme_mode 属于后加的列，未跑对应迁移的库上整条查询会失败，
- * 因此按「两列都有 → 去掉 theme_mode → 去掉 tt_version → 两者都去掉」四档降级。
+ * tt_version / theme_mode / run_ms_total 属于后加的列，未跑对应迁移的库上整条查询会失败，
+ * 因此按「带新列 → 逐列去掉」的档位降级（顺序由 DEVICE_SELECT_SQLS 决定）。
  */
 function deviceSelectSql(columns) {
   const optional = [];
+  if (columns.run) optional.push('run_ms_total');
   if (columns.tt) optional.push('tt_version');
   if (columns.theme) optional.push('theme_mode');
   const extra = optional.length ? ',\n       ' + optional.join(', ') : '';
@@ -67,11 +68,15 @@ FROM device
 `;
 }
 
+// 档位顺序：优先「运行时长 + 全部扩展列」，逐级去掉后加的列，最后一档与旧库列集合一致
 const DEVICE_SELECT_SQLS = [
-  deviceSelectSql({ tt: true, theme: true }),
-  deviceSelectSql({ tt: true, theme: false }),
-  deviceSelectSql({ tt: false, theme: true }),
-  deviceSelectSql({ tt: false, theme: false }),
+  deviceSelectSql({ run: true, tt: true, theme: true }),
+  deviceSelectSql({ run: true, tt: true, theme: false }),
+  deviceSelectSql({ run: true, tt: false, theme: false }),
+  deviceSelectSql({ run: false, tt: true, theme: true }),
+  deviceSelectSql({ run: false, tt: true, theme: false }),
+  deviceSelectSql({ run: false, tt: false, theme: true }),
+  deviceSelectSql({ run: false, tt: false, theme: false }),
 ];
 
 /** 依次尝试各列组合，全部失败才抛错（未迁移的新列不影响看板出数） */
@@ -87,41 +92,56 @@ async function queryDevices(env) {
   throw lastError;
 }
 
-/** 当日汇总：只扫当天行（行数 = 当日活跃设备数），同时给出当日去重设备数（日活） */
-const TODAY_SELECT_SQL = `
+/**
+ * 当日汇总：只扫当天行（行数 = 当日活跃设备数），同时给出当日去重设备数（日活）。
+ * 带 run_ms 的版本用于已完成 migrate-run-ms.sql 的库，未迁移时由 queryWithRun 降级。
+ */
+function todaySelectSql(withRun) {
+  return `
 SELECT COUNT(DISTINCT device_id) AS devices,
-       COALESCE(SUM(opens), 0) AS opens, COALESCE(SUM(dur_ms), 0) AS dur_ms
+       COALESCE(SUM(opens), 0) AS opens, COALESCE(SUM(dur_ms), 0) AS dur_ms${withRun ? ',\n       COALESCE(SUM(run_ms), 0) AS run_ms' : ''}
 FROM device_daily
 WHERE day = ?1
 `;
+}
+const TODAY_SELECT_SQL = todaySelectSql(false);
+const TODAY_SELECT_RUN_SQL = todaySelectSql(true);
 
-/** 日粒度趋势：按 day 索引范围扫描后按天聚合 */
-const DAILY_SELECT_SQL = `
+/** 日粒度趋势：按 day 索引范围扫描后按天聚合（run 版多一列酒馆运行时长） */
+function dailySelectSql(withRun) {
+  return `
 SELECT day,
        COUNT(*) AS devices,
        COALESCE(SUM(opens), 0) AS opens,
        COALESCE(SUM(dur_ms), 0) AS dur_ms,
-       COALESCE(SUM(sessions), 0) AS sessions,
+       COALESCE(SUM(sessions), 0) AS sessions,${withRun ? '\n       COALESCE(SUM(run_ms), 0) AS run_ms,' : ''}
        ${PAGE_KEYS.map((key) => `COALESCE(SUM(p_${key}), 0) AS p_${key}`).join(',\n       ')}
 FROM device_daily
 WHERE day >= ?1 AND day <= ?2
 GROUP BY day
 ORDER BY day
 `;
+}
+const DAILY_SELECT_SQL = dailySelectSql(false);
+const DAILY_SELECT_RUN_SQL = dailySelectSql(true);
 
 /** 小时粒度趋势：按 hour 索引范围扫描后按小时聚合（行数 = 小时数 × 小时活跃设备数） */
-const HOURLY_SELECT_SQL = `
+function hourlySelectSql(withRun) {
+  return `
 SELECT hour,
        COUNT(*) AS devices,
        COALESCE(SUM(opens), 0) AS opens,
        COALESCE(SUM(dur_ms), 0) AS dur_ms,
-       COALESCE(SUM(sessions), 0) AS sessions,
+       COALESCE(SUM(sessions), 0) AS sessions,${withRun ? '\n       COALESCE(SUM(run_ms), 0) AS run_ms,' : ''}
        ${PAGE_KEYS.map((key) => `COALESCE(SUM(p_${key}), 0) AS p_${key}`).join(',\n       ')}
 FROM device_hourly
 WHERE hour >= ?1 AND hour <= ?2
 GROUP BY hour
 ORDER BY hour
 `;
+}
+const HOURLY_SELECT_SQL = hourlySelectSql(false);
+const HOURLY_SELECT_RUN_SQL = hourlySelectSql(true);
 
 /**
  * 时段活跃分布：把窗口内的 device_hourly 按「一天中的第几小时」（北京时间）重新聚合。
@@ -169,6 +189,18 @@ async function queryAll(env, sql, params = []) {
   const stmt = params.length ? env.DB.prepare(sql).bind(...params) : env.DB.prepare(sql);
   const res = await stmt.all();
   return res?.results || [];
+}
+
+/**
+ * 先试带 run_ms 的语句，失败再退回不带该列的旧语句：
+ * 未执行 migrate-run-ms.sql 的库照样出数，此时运行时长一律按 0 计。
+ */
+async function queryWithRun(env, sqlRun, sqlBase, params = []) {
+  try {
+    return await queryAll(env, sqlRun, params);
+  } catch {
+    return queryAll(env, sqlBase, params);
+  }
 }
 
 function jsonResponse(data, init = {}) {
@@ -219,12 +251,14 @@ async function buildSummary(env) {
   const today = beijingDayKey(now);
   const [deviceRows, todayRows] = await Promise.all([
     queryDevices(env),
-    queryAll(env, TODAY_SELECT_SQL, [today]),
+    queryWithRun(env, TODAY_SELECT_RUN_SQL, TODAY_SELECT_SQL, [today]),
   ]);
 
   const users = deviceRows.length;
   const opens = sumBy(deviceRows, 'opens_total');
   const durMs = sumBy(deviceRows, 'dur_ms_total');
+  // 酒馆运行时长：自页面加载起的墙钟时间累计（与是否打开面板无关）
+  const runMs = sumBy(deviceRows, 'run_ms_total');
   const disabledUsers = sumBy(deviceRows, 'telemetry_off');
 
   const pages = {};
@@ -258,10 +292,13 @@ async function buildSummary(env) {
       opens,
       durMs,
       avgDurMsPerUser: users > 0 ? Math.round(durMs / users) : 0,
+      runMs,
+      avgRunMsPerUser: users > 0 ? Math.round(runMs / users) : 0,
       todayUsers: growthCounts.get(today) || 0,
       todayActiveUsers: numberOrZero(todayAgg.devices),
       todayOpens: numberOrZero(todayAgg.opens),
       todayDurMs: numberOrZero(todayAgg.dur_ms),
+      todayRunMs: numberOrZero(todayAgg.run_ms),
       // 关闭率取每台设备最新一次上报的开关状态
       disabledUsers,
       disabledRate: users > 0 ? disabledUsers / users : 0,
@@ -287,7 +324,7 @@ async function buildTrend(env, window, parts) {
   const tasks = [];
 
   if (parts.daily) {
-    tasks.push(queryAll(env, DAILY_SELECT_SQL, [window.from, window.to]).then((rows) => {
+    tasks.push(queryWithRun(env, DAILY_SELECT_RUN_SQL, DAILY_SELECT_SQL, [window.from, window.to]).then((rows) => {
       payload.daily = rows.map((row) => {
         const dayPages = {};
         let dayTotal = 0;
@@ -301,6 +338,7 @@ async function buildTrend(env, window, parts) {
           devices: numberOrZero(row.devices),
           opens: numberOrZero(row.opens),
           durMs: numberOrZero(row.dur_ms),
+          runMs: numberOrZero(row.run_ms),
           sessions: numberOrZero(row.sessions),
           pageTotal: dayTotal,
           pages: dayPages,
@@ -314,7 +352,7 @@ async function buildTrend(env, window, parts) {
     const fromMs = hourKeyToMs(window.from);
     const toMs = hourKeyToMs(window.to) + HOUR_MS - 1;
     tasks.push(Promise.all([
-      queryAll(env, HOURLY_SELECT_SQL, [window.from, window.to]),
+      queryWithRun(env, HOURLY_SELECT_RUN_SQL, HOURLY_SELECT_SQL, [window.from, window.to]),
       queryAll(env, GROWTH_HOUR_SELECT_SQL, [fromMs, toMs]),
       queryAll(env, GROWTH_BASELINE_SELECT_SQL, [fromMs]),
     ]).then(([rows, growthRows, baselineRows]) => {
@@ -393,6 +431,7 @@ function fillHourlyTrend(payload, window, rows, growthRows, baselineRows) {
       devices: row ? numberOrZero(row.devices) : 0,
       opens: row ? numberOrZero(row.opens) : 0,
       durMs: row ? numberOrZero(row.dur_ms) : 0,
+      runMs: row ? numberOrZero(row.run_ms) : 0,
       sessions: row ? numberOrZero(row.sessions) : 0,
       pageTotal: hourTotal,
       pages: hourPages,
@@ -510,8 +549,10 @@ async function buildBootPayload(env, now = Date.now()) {
       row.sessions,
       row.pageTotal,
       ...PAGE_KEYS.map((key) => numberOrZero(row.pages?.[key])),
+      // 末位追加酒馆运行时长：看板按索引 14 读取，旧格式行缺该位时按 0 计
+      numberOrZero(row.runMs),
     ]),
-    hourly: (hourlyTrend.hourly || []).map((row) => [row.hour, row.devices, row.opens, row.durMs, row.sessions]),
+    hourly: (hourlyTrend.hourly || []).map((row) => [row.hour, row.devices, row.opens, row.durMs, row.sessions, numberOrZero(row.runMs)]),
     hourlyGrowth: (hourlyTrend.userGrowthHourly || []).map((row) => [row.hour, row.added, row.cumulative]),
     render: renderTrend.renderByVersion || [],
   };

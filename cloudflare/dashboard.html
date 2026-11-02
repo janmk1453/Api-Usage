@@ -386,7 +386,7 @@ html[data-theme="dark"] .btn.primary:hover { opacity: 1; background: var(--accen
 html[data-theme="dark"] .seg button.on { background: var(--surface-3); }
 .seg.hide-sm { display: inline-flex; }
 
-.kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.kpi-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
 .kpi { padding: 15px 16px 13px; overflow: hidden; }
 .kpi:hover { box-shadow: var(--sh-2); transform: translateY(-1px); }
 .kpi-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -439,6 +439,8 @@ html[data-theme="dark"] .seg button.on { background: var(--surface-3); }
 .today-card .card-body { padding-top: 14px; }
 .today-nums { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 10px; }
 .tn { min-width: 0; }
+/* 5 项两列排布时末项独占整行，避免右侧留空 */
+.today-nums > .tn:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .tn > span { display: block; font-size: 10px; color: var(--text-3); }
 .tn > b { display: block; font-size: 19px; font-weight: 650; letter-spacing: -.02em; line-height: 1.3; font-variant-numeric: tabular-nums; }
 .tn > em { display: block; font-style: normal; font-size: 9.5px; color: var(--text-3); margin-top: 1px; min-height: 14px; }
@@ -501,7 +503,7 @@ html[data-theme="dark"] .heat-cell i { opacity: calc(var(--o) * .86 + .16); }
 .life-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .life-label { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; color: var(--text-2); font-weight: 550; }
 .life-label .ic { width: 14px; height: 14px; color: var(--text-3); }
-.life-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; margin-top: 12px; }
+.life-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; margin-top: 12px; }
 .life-item { padding: 0 16px; border-left: 1px solid var(--line); min-width: 0; }
 .life-item:first-child { padding-left: 0; border-left: 0; }
 .life-item span { display: block; font-size: 9.5px; color: var(--text-3); }
@@ -933,8 +935,8 @@ html[data-theme="dark"] .heat-cell i { opacity: calc(var(--o) * .86 + .16); }
   .stat-band .sb { padding: 12px 14px; }
   .sb b { font-size: 20px; }
   .life-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 12px; }
-  .life-item:nth-child(4) { border-left: 0; padding-left: 0; }
-  .life-item:nth-child(4), .life-item:nth-child(5) { margin-top: 4px; }
+  .life-item:nth-child(3n + 1) { border-left: 0; padding-left: 0; }
+  .life-item:nth-child(n + 4) { margin-top: 4px; }
   .perf-hero { grid-template-columns: 1fr; gap: 16px; }
   .ph-stats { border-top: 1px solid var(--line); padding-top: 4px; }
   .ph-stats > div { padding: 10px 0 10px 16px; }
@@ -994,6 +996,7 @@ html[data-theme="dark"] .heat-cell i { opacity: calc(var(--o) * .86 + .16); }
   .life-grid { grid-template-columns: 1fr 1fr; }
   .life-item { padding: 0 10px; }
   .life-item:nth-child(odd) { border-left: 0; padding-left: 0; }
+  .life-item:nth-child(even) { border-left: 1px solid var(--line); padding-left: 10px; }
   .life-item:nth-child(n+3) { margin-top: 8px; }
   .stat-band { grid-template-columns: 1fr 1fr; }
   .stat-band .sb:nth-child(3) { border-left: 0; border-top: 1px solid var(--line); }
@@ -1397,6 +1400,8 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
         sessions: row ? num(row[4]) : 0,
         opens: row ? num(row[2]) : 0,
         durMs: row ? num(row[3]) : 0,
+        // 日投影末位（索引 14）为酒馆运行时长；旧格式缺该位时按 0 计
+        runMs: row ? num(row[14]) : 0,
         pages,
         pageTotal: row ? num(row[5]) : 0,
         cumulativeUsers: cumulative,
@@ -1418,7 +1423,9 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
         opens: num(row && row[2]),
         durMs: num(row && row[3]),
         sessions: num(row && row[4]),
-        pageTotal: PAGE_KEYS.reduce((acc, key, i) => acc + num(row && row[5 + i]), 0),
+        // 小时投影索引 5 为酒馆运行时长，页列从索引 6 起
+        runMs: num(row && row[5]),
+        pageTotal: PAGE_KEYS.reduce((acc, key, i) => acc + num(row && row[6 + i]), 0),
       };
     }).filter((row) => row.hour.length >= 13);
 
@@ -1489,10 +1496,13 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
         opens: num(totals.opens),
         durMs: num(totals.durMs),
         avgDurMsPerUser: num(totals.avgDurMsPerUser) || (num(totals.users) ? num(totals.durMs) / num(totals.users) : 0),
+        runMs: num(totals.runMs),
+        avgRunMsPerUser: num(totals.avgRunMsPerUser) || (num(totals.users) ? num(totals.runMs) / num(totals.users) : 0),
         todayUsers: num(totals.todayUsers),
         todayActiveUsers: num(totals.todayActiveUsers),
         todayOpens: num(totals.todayOpens),
         todayDurMs: num(totals.todayDurMs),
+        todayRunMs: num(totals.todayRunMs),
         disabledUsers: num(totals.disabledUsers),
         disabledRate: num(totals.disabledRate),
       },
@@ -1704,7 +1714,11 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     },
     duration: {
       key: 'duration', label: '使用时长', short: '使用时长', unit: '小时', color: '--chart-4',
-      agg: 'sum', hint: '会话时长累计', fmt: (v) => fmtHours(v),
+      agg: 'sum', hint: '打开面板后的停留时长', fmt: (v) => fmtHours(v),
+    },
+    runtime: {
+      key: 'runtime', label: '酒馆运行时长', short: '运行时长', unit: '小时', color: '--chart-5',
+      agg: 'sum', hint: '酒馆页面打开时长', fmt: (v) => fmtHours(v),
     },
     views: {
       key: 'views', label: '页面浏览', short: '页面浏览', unit: '次', color: '--chart-6',
@@ -1715,9 +1729,9 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       agg: 'last', hint: '截至窗口末的累计设备', fmt: fmtInt,
     },
   };
-  const METRIC_ORDER = ['users', 'newUsers', 'opens', 'views', 'duration', 'cumulative'];
-  /* 概览「活跃趋势」卡只允许单一指标，且只在这四项里切换；趋势页的多指标选择另用 chart.metrics */
-  const OV_METRICS = ['users', 'newUsers', 'opens', 'duration'];
+  const METRIC_ORDER = ['users', 'newUsers', 'opens', 'views', 'duration', 'runtime', 'cumulative'];
+  /* 概览「活跃趋势」卡只允许单一指标，且只在这几项里切换；趋势页的多指标选择另用 chart.metrics */
+  const OV_METRICS = ['users', 'newUsers', 'opens', 'duration', 'runtime'];
 
   function metricValue(metric, rows) {
     if (!rows.length) return 0;
@@ -1725,6 +1739,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     if (metric === 'newUsers') return sum(rows, (r) => r.newUsers);
     if (metric === 'opens') return sum(rows, (r) => r.opens);
     if (metric === 'duration') return sum(rows, (r) => r.durMs) / 3600000;
+    if (metric === 'runtime') return sum(rows, (r) => r.runMs) / 3600000;
     if (metric === 'views') return sum(rows, (r) => r.pageTotal);
     if (metric === 'cumulative') return rows[rows.length - 1].cumulativeUsers;
     return 0;
@@ -1737,6 +1752,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       if (metric === 'newUsers') return r.newUsers;
       if (metric === 'opens') return r.opens;
       if (metric === 'duration') return Math.round((r.durMs / 3600000) * 10) / 10;
+      if (metric === 'runtime') return Math.round((r.runMs / 3600000) * 10) / 10;
       if (metric === 'views') return r.pageTotal;
       if (metric === 'cumulative') return r.cumulativeUsers;
       return 0;
@@ -1760,6 +1776,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
         if (metric === 'users') return r.devices;
         if (metric === 'opens') return r.opens;
         if (metric === 'duration') return Math.round((r.durMs / 3600000) * 100) / 100;
+        if (metric === 'runtime') return Math.round((r.runMs / 3600000) * 100) / 100;
         if (metric === 'views') return r.pageTotal;
         if (metric === 'newUsers') { const g = U.growthAt(r.hour); return g ? g.added : 0; }
         if (metric === 'cumulative') { const g = U.growthAt(r.hour); return g ? g.cumulative : 0; }
@@ -1787,7 +1804,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
   function kpis(range) {
     const curRows = daysIn(range);
     const prevRows = prevDaysIn(range);
-    return ['users', 'opens', 'duration', 'newUsers'].map((key) => {
+    return ['users', 'opens', 'duration', 'runtime', 'newUsers'].map((key) => {
       const cur = metricValue(key, curRows);
       const prev = metricValue(key, prevRows);
       const m = METRICS[key];
@@ -1809,11 +1826,14 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     // 累计列（device.*_total）在幂等重发时会漏掉增量，日表汇总更接近真实值
     const opens = sum(D.days, (r) => r.opens);
     const durMs = sum(D.days, (r) => r.durMs);
+    const runMs = sum(D.days, (r) => r.runMs);
     return {
       users: t.users,
       opens,
       duration: durMs / 3600000,
       avgDuration: t.users ? durMs / t.users : 0,
+      runtime: runMs / 3600000,
+      avgRuntime: t.users ? runMs / t.users : 0,
       disabledUsers: t.disabledUsers,
       disabledRate: t.disabledRate,
       since: D.meta.startDay,
@@ -1829,6 +1849,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       newUsers: t.todayUsers,
       opens: t.todayOpens,
       duration: t.todayDurMs / 3600000,
+      runtime: t.todayRunMs / 3600000,
       devices: last.devices,
     };
   }
@@ -3137,6 +3158,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
           if (m === 'newUsers') return d.newUsers;
           if (m === 'opens') return d.opens;
           if (m === 'duration') return (d.durMs / 3600000).toFixed(2);
+          if (m === 'runtime') return (d.runMs / 3600000).toFixed(2);
           if (m === 'views') return d.pageTotal;
           return d.cumulativeUsers;
         })));
@@ -3155,7 +3177,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       name = 'telemetry-explore-' + s.explore.dim;
     } else {
       rows = [['指标', '当前周期', '上一周期', '变化']].concat(c.kpis(s.range).map((k) => [k.label, k.display, '—', k.delta === null ? '—' : (k.delta * 100).toFixed(1) + '%']));
-      rows.push([], ['累计指标', '数值'], ['不重复累计用户', c.lifetime().users], ['累计打开面板', c.lifetime().opens], ['累计使用时长(小时)', Math.round(c.lifetime().duration)], ['累计设备人均时长(小时)', (c.lifetime().avgDuration / 3600000).toFixed(2)]);
+      rows.push([], ['累计指标', '数值'], ['不重复累计用户', c.lifetime().users], ['累计打开面板', c.lifetime().opens], ['累计使用时长(小时)', Math.round(c.lifetime().duration)], ['累计设备人均时长(小时)', (c.lifetime().avgDuration / 3600000).toFixed(2)], ['累计酒馆运行时长(小时)', Math.round(c.lifetime().runtime)], ['累计酒馆人均运行时长(小时)', (c.lifetime().avgRuntime / 3600000).toFixed(2)]);
     }
     download(name + '.csv', toCSV(rows));
     toast('已导出 ' + rows.length + ' 行 CSV', 'ok');
@@ -3557,7 +3579,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     return '<article class="card kpi rise" data-kpi="' + k.key + '">'
       + '<div class="kpi-top"><span class="kpi-label"><i class="kdot" style="background:var(' + k.color + ')"></i>' + esc(k.label) + '</span>'
       + '<span class="kpi-hint">' + esc(k.hint) + '</span></div>'
-      + '<div class="kpi-value count" data-val="' + k.value + '" data-format="' + (k.key === 'duration' ? 'hours' : 'int') + '">' + esc(k.display) + '</div>'
+      + '<div class="kpi-value count" data-val="' + k.value + '" data-format="' + (k.key === 'duration' || k.key === 'runtime' ? 'hours' : 'int') + '">' + esc(k.display) + '</div>'
       + '<div class="kpi-foot"><div class="kpi-delta">' + (k.delta === null || k.delta === undefined
         ? '<span class="delta flat">首期</span><span class="muted" title="对比周期 = 紧邻当前时间范围之前的等长区间">' + esc(k.prevEmptyText || '无更早数据') + '</span>'
         : deltaChip(k.delta) + '<span class="muted" title="与紧邻当前时间范围之前的等长区间比较">' + esc(k.compareText) + '</span>') + '</div>'
@@ -3704,7 +3726,8 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     const days = C.daysIn(state.range);
     const labels = days.map((d) => d.day);
     const series = mainSeries(metric);
-    const fmtY = metric === 'duration' ? (v) => (v >= 100 ? C.fmtInt(v) : Number(v).toFixed(1)) : null;
+    const isHours = metric === 'duration' || metric === 'runtime';
+    const fmtY = isHours ? (v) => (v >= 100 ? C.fmtInt(v) : Number(v).toFixed(1)) : null;
     TEL.charts.trend(host, {
       labels,
       series,
@@ -3723,7 +3746,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     const table = root.querySelector('#ovTable');
     if (table) {
       table.innerHTML = S.seriesTable(labels, series.map((s) => Object.assign({}, s, {
-        fmt: metric === 'duration' ? (v) => C.fmtHours(v) : C.fmtInt,
+        fmt: isHours ? (v) => C.fmtHours(v) : C.fmtInt,
       })), { label: '日期' });
     }
   }
@@ -3825,6 +3848,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       + '<div class="life-item"><span>累计打开面板</span><b>' + C.fmtInt(life.opens) + '</b></div>'
       + '<div class="life-item"><span>累计使用时长</span><b>' + C.fmtInt(life.duration) + ' 小时' + '</b></div>'
       + '<div class="life-item"><span>人均累计时长</span><b>' + C.fmtDuration(life.avgDuration) + '</b></div>'
+      + '<div class="life-item"><span>累计酒馆运行</span><b>' + C.fmtDuration(life.runtime * 3600000) + '</b></div>'
       + '<div class="life-item"><span>关闭匿名统计</span><b>' + C.fmtPct(life.disabledRate) + '<em>' + C.fmtInt(life.disabledUsers) + ' 台</em></b></div>'
       + '</div>'
       + '</section>'
@@ -3834,7 +3858,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       + '<section class="card chart-card rise">'
       + S.head('活跃趋势',
         '当前 ' + U.esc(C.rangeSub(state.range)),
-        S.seg('ovMetric', [['users', '活跃'], ['newUsers', '新增'], ['opens', '打开'], ['duration', '时长']], state.chart.ov)
+        S.seg('ovMetric', [['users', '活跃'], ['newUsers', '新增'], ['opens', '打开'], ['duration', '时长'], ['runtime', '运行']], state.chart.ov)
         + '<button class="icon-btn" data-act="ov-table" aria-label="切换数据表" title="数据表">' + U.icon('table') + '</button>'
         + '<button class="icon-btn" data-act="ov-more" aria-label="在趋势中深入" title="在趋势中深入">' + U.icon('arrow-up-right') + '</button>')
       + '<div class="card-body"><div class="chart-host" id="ovChart" style="height:286px"></div>'
@@ -3851,6 +3875,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       + '<div class="tn"><span>新增用户</span><b class="count" data-val="' + today.newUsers + '" data-format="int">' + C.fmtInt(today.newUsers) + '</b><em class="muted">今日首见</em></div>'
       + '<div class="tn"><span>打开次数</span><b class="count" data-val="' + today.opens + '" data-format="int">' + C.fmtInt(today.opens) + '</b><em>' + S.deltaChip(C.delta(today.opens, yest.opens)) + '</em></div>'
       + '<div class="tn"><span>使用时长</span><b class="count" data-val="' + today.duration + '" data-format="hours">' + C.fmtHours(today.duration) + '</b><em>' + S.deltaChip(C.delta(today.duration, yest.durMs / 3600000)) + '</em></div>'
+      + '<div class="tn"><span>酒馆运行</span><b class="count" data-val="' + today.runtime + '" data-format="hours">' + C.fmtHours(today.runtime) + '</b><em>' + S.deltaChip(C.delta(today.runtime, yest.runMs / 3600000)) + '</em></div>'
       + '</div>'
       + '<div class="today-chart-wrap"><div class="chart-host" id="todayChart" style="height:96px"></div></div>'
       + '</div>'
@@ -3993,7 +4018,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
 
   function metricFmt(metric) {
     const m = C.METRICS[metric];
-    if (metric === 'duration') return (v) => C.fmtHours(v);
+    if (metric === 'duration' || metric === 'runtime') return (v) => C.fmtHours(v);
     return m.fmt;
   }
 
@@ -4052,7 +4077,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     const isHour = cfg.gran === 'hour';
     const fmtAxis = cfg.idx ? (v) => Math.round(v) : (isHour
       ? (v) => C.fmtCompact(v)
-      : (v) => (cfg.metrics[0] === 'duration' ? C.fmtHours(v) : C.fmtCompact(v)));
+      : (v) => (cfg.metrics[0] === 'duration' || cfg.metrics[0] === 'runtime' ? C.fmtHours(v) : C.fmtCompact(v)));
     TEL.charts.trend(host, {
       labels: cfg.labels,
       series: cfg.series,

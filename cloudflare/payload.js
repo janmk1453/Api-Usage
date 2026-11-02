@@ -19,6 +19,8 @@ export const RENDER_BUCKET_COUNT = 5;
 
 const MAX_OPENS = 500;
 const MAX_DURATION_MS = 12 * 60 * 60 * 1000;
+/** 酒馆页面运行时长上限（自页面加载起累加的墙钟时间，允许跨天挂机） */
+const MAX_RUNTIME_MS = 24 * 60 * 60 * 1000;
 const MAX_PAGE_COUNT = 2000;
 const MAX_SEQ = 100000000;
 /** 历史记录总条数上限（精确值，超出按上限钳制） */
@@ -143,6 +145,8 @@ export function normalizePayload(raw, now = Date.now()) {
       counters: {
         opens: toInt(countersRaw.opens, 0, MAX_OPENS),
         dur_ms: toInt(countersRaw.dur_ms, 0, MAX_DURATION_MS),
+        /** 酒馆页面运行时长（墙钟时间的增量累加），旧客户端缺失时按 0 计 */
+        run_ms: toInt(countersRaw.run_ms, 0, MAX_RUNTIME_MS),
         pages,
         render,
       },
