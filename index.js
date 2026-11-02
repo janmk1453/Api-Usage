@@ -10441,6 +10441,7 @@ function bindBottomNavTap(doc) {
 		let startAt = 0;
 		let moved = false;
 		let pointerId = null;
+		let onPill = false;
 		let pill = null;
 		let pillW = BOTTOM_PILL_W;
 		let trackW = 0;
@@ -10452,6 +10453,7 @@ function bindBottomNavTap(doc) {
 			item = null;
 			moved = false;
 			pointerId = null;
+			onPill = false;
 		};
 		/** 量一遍底栏与每个 tab 的中心：只在拖动开始与尺寸变化时做，拖动过程中不再触发布局 */
 		const measure = () => {
@@ -10476,6 +10478,18 @@ function bindBottomNavTap(doc) {
 			dropEl = next;
 			const cur = dropEl;
 			if (cur && !cur.classList.contains("active")) cur.setAttribute("data-pill-target", "1");
+		};
+		/**
+		* 按下点是否落在选中胶囊上。胶囊自身是 pointer-events:none（好让点击穿透到 tab），
+		* 所以只能按几何位置判断；留 4px 容差，手指按在边缘也能抓住。拿不到尺寸时判 false。
+		*/
+		const hitPill = (x, y) => {
+			const ind = doc.getElementById("aus-bottom-indicator");
+			if (!ind) return false;
+			const r = ind.getBoundingClientRect();
+			if (!r.width || !r.height) return false;
+			const pad = 4;
+			return x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad;
 		};
 		/** 胶囊 x 夹在底栏内，避免拖出边界 */
 		const clampX = (x) => Math.max(0, Math.min(Math.max(0, trackW - pillW), x));
@@ -10558,6 +10572,7 @@ function bindBottomNavTap(doc) {
 			startY = e.clientY;
 			startAt = Date.now();
 			moved = false;
+			onPill = hitPill(e.clientX, e.clientY);
 			pointerId = typeof e.pointerId === "number" ? e.pointerId : null;
 		}, { passive: true });
 		bar.addEventListener("pointermove", (e) => {
@@ -10566,6 +10581,7 @@ function bindBottomNavTap(doc) {
 			const dy = e.clientY - startY;
 			if (Math.abs(dx) > TAP_SLOP || Math.abs(dy) > TAP_SLOP) moved = true;
 			if (!pill) {
+				if (!onPill) return;
 				if (!(Math.abs(dx) > DRAG_LOCK && Math.abs(dx) > Math.abs(dy))) return;
 				if (!startDrag(pointerId === null ? 0 : pointerId)) return;
 			}

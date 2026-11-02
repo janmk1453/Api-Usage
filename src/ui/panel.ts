@@ -798,6 +798,8 @@ function bindBottomNavTap(doc: Document): void {
     let startAt = 0;
     let moved = false;
     let pointerId: number | null = null;
+    // 按下点是否落在选中胶囊上：只有从这里按下才允许拖胶囊（按在别的 tab 上一律当普通点按）
+    let onPill = false;
     // —— 拖动状态：pill 非空即表示正在拖胶囊 ——
     let pill: HTMLElement | null = null;
     let pillW = BOTTOM_PILL_W;
@@ -806,7 +808,7 @@ function bindBottomNavTap(doc: Document): void {
     let slots: Array<{ el: HTMLElement; cx: number }> = [];
     let dropEl: HTMLElement | null = null;
     let snapTimer: any = null;
-    const reset = () => { item = null; moved = false; pointerId = null; };
+    const reset = () => { item = null; moved = false; pointerId = null; onPill = false; };
 
     /** 量一遍底栏与每个 tab 的中心：只在拖动开始与尺寸变化时做，拖动过程中不再触发布局 */
     const measure = (): boolean => {
@@ -829,6 +831,19 @@ function bindBottomNavTap(doc: Document): void {
       const cur = dropEl;
       if (cur && !cur.classList.contains('active')) cur.setAttribute('data-pill-target', '1');
     };
+    /**
+     * 按下点是否落在选中胶囊上。胶囊自身是 pointer-events:none（好让点击穿透到 tab），
+     * 所以只能按几何位置判断；留 4px 容差，手指按在边缘也能抓住。拿不到尺寸时判 false。
+     */
+    const hitPill = (x: number, y: number): boolean => {
+      const ind = doc.getElementById('aus-bottom-indicator') as HTMLElement | null;
+      if (!ind) return false;
+      const r = ind.getBoundingClientRect();
+      if (!r.width || !r.height) return false;
+      const pad = 4;
+      return x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad;
+    };
+
     /** 胶囊 x 夹在底栏内，避免拖出边界 */
     const clampX = (x: number) => Math.max(0, Math.min(Math.max(0, trackW - pillW), x));
     const startDrag = (id: number): boolean => {
@@ -893,6 +908,7 @@ function bindBottomNavTap(doc: Document): void {
       const hit = target && target.closest ? (target.closest('.aus-bottom-item') as HTMLElement | null) : null;
       if (!hit) { reset(); return; }
       item = hit; startX = e.clientX; startY = e.clientY; startAt = Date.now(); moved = false;
+      onPill = hitPill(e.clientX, e.clientY);
       pointerId = typeof e.pointerId === 'number' ? e.pointerId : null;
     }, { passive: true });
     bar.addEventListener('pointermove', (e: any) => {
@@ -901,6 +917,8 @@ function bindBottomNavTap(doc: Document): void {
       const dy = e.clientY - startY;
       if (Math.abs(dx) > TAP_SLOP || Math.abs(dy) > TAP_SLOP) moved = true;
       if (!pill) {
+        // 必须是从胶囊上按下去的才拖；按在别的 tab 上横向划动什么都不做
+        if (!onPill) return;
         // 纵向为主的滑动留给页面滚动，只有明显偏横向才接管成「拖胶囊」
         if (!(Math.abs(dx) > DRAG_LOCK && Math.abs(dx) > Math.abs(dy))) return;
         if (!startDrag(pointerId === null ? 0 : pointerId)) return;

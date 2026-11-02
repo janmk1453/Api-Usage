@@ -73,6 +73,21 @@ describe('底栏选中灰底可拖动切页', () => {
     expect(panelCode).toContain('baseX = bottomPillX;');
   });
 
+it('只有按在选中胶囊上才能拖动，按在别的 tab 上不会拖', () => {
+    // 胶囊是 pointer-events:none，只能按几何位置判定命中
+    expect(panelCode).toContain('const hitPill = (x: number, y: number): boolean => {');
+    expect(panelCode).toContain('const r = ind.getBoundingClientRect();');
+    expect(panelCode).toContain('onPill = hitPill(e.clientX, e.clientY);');
+    // pointermove 里必须先校验 onPill 再接管拖动
+    expect(panelCode).toContain('if (!onPill) return;');
+    const gate = panelCode.indexOf('if (!onPill) return;');
+    const drag = panelCode.indexOf('if (!(Math.abs(dx) > DRAG_LOCK && Math.abs(dx) > Math.abs(dy))) return;');
+    expect(gate).toBeGreaterThan(-1);
+    expect(drag).toBeGreaterThan(gate);
+    // 每次手势结束都要清标记
+    expect(panelCode).toContain('onPill = false; };');
+  });
+
   it('拖起加 is-dragging、松手加 is-snapping，只有落到别的 tab 才切页', () => {
     expect(panelCode).toContain('const startDrag = (id: number): boolean => {');
     expect(panelCode).toContain('const moveDrag = (clientX: number) => {');
