@@ -123,3 +123,28 @@ describe('「移动端兼容 UI」默认值按设备类型决定一次', () => {
     expect(code).toContain('(state.settings as any).mobileCompatUi = mobileDeviceHint();');
   });
 });
+
+describe('跨页长距离切换：胶囊先起跑再渲染', () => {
+  it('胶囊先写 transform，目标页内容下一帧再渲染（避免长跳先愣一下）', () => {
+    expect(panelCode).toContain('function renderAfterPillStart(doc: Document, run: () => void): void {');
+    // 第一帧强制一次样式计算，让 transform 过渡真正起跑
+    expect(panelCode).toContain('void ind.getBoundingClientRect();');
+    expect(panelCode).toContain('if (bottom && view !== prevView) renderAfterPillStart(doc, renderTargetView);');
+    // 快速连点只渲染最后停留的那页
+    expect(panelCode).toContain('if (currentView !== view) return;');
+    // 后台标签页里 rAF 会被暂停，必须有兜底计时器
+    expect(panelCode).toContain('setTimeout(fire, 120);');
+    // 顺序契约：先定位胶囊（paintNavState → syncBottomNav），再排队渲染
+    const nav = panelCode.indexOf('paintNavState(doc, bottom, bottom);');
+    const deferred = panelCode.indexOf('renderAfterPillStart(doc, renderTargetView);');
+    expect(nav).toBeGreaterThan(-1);
+    expect(deferred).toBeGreaterThan(nav);
+  });
+
+  it('指示胶囊单独提层，长跳时不被主线程抢帧', () => {
+    const start = cssSrc.indexOf('#aus-bottom-indicator {');
+    expect(start).toBeGreaterThan(-1);
+    const block = cssSrc.slice(start, cssSrc.indexOf('}', start));
+    expect(block).toContain('will-change: transform;');
+  });
+});

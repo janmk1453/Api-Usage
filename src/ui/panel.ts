@@ -1011,6 +1011,33 @@ const BOTTOM_PILL_W = 64;
 const BOTTOM_PILL_H = 48;
 
 /**
+ * 底栏布局下「先让胶囊起跑、再渲染目标页」。
+ * 切换距离远时（概览 ↔ 设置）目标页要新建几十毫秒的 DOM，若和写 transform 落在同一个任务里，
+ * 浏览器必须等这轮任务结束才做首次绘制——手感就是「点了先愣一下、胶囊才滑出去」，滑动途中还会被主线程抢帧。
+ * 做法：第一帧只强制一次样式计算让过渡真正起跑（此时胶囊已是独立合成层，见 style.css 的 will-change），
+ * 第二帧再渲染内容，只晚约 16ms，肉眼不可见。
+ */
+function renderAfterPillStart(doc: Document, run: () => void): void {
+  const ind = doc.getElementById('aus-bottom-indicator') as HTMLElement | null;
+  let done = false;
+  const fire = (): void => {
+    if (done) return;
+    done = true;
+    try { run(); } catch {}
+  };
+  const raf: (fn: () => void) => void = typeof requestAnimationFrame === 'function'
+    ? (fn: () => void) => { requestAnimationFrame(fn); }
+    : (fn: () => void) => { setTimeout(fn, 16); };
+  raf(() => {
+    // 第一帧只做一次样式计算：让 transform 过渡在本次绘制就起跑（画面此时已是胶囊的起点）
+    try { if (ind) void ind.getBoundingClientRect(); } catch {}
+    raf(fire);
+  });
+  // 页面切到后台时 rAF 会被暂停，兜底保证目标页最终一定渲染出来
+  setTimeout(fire, 120);
+}
+
+/**
  * 底栏指示胶囊跟随当前 tab（切换动画的核心）。
  * 首次定位关掉过渡，避免面板一打开胶囊就从最左侧"飞过来"。
  */
@@ -1186,13 +1213,20 @@ function switchView(view: AppView, opts?: { track?: boolean }) {
   if (mobileTitleEl) mobileTitleEl.textContent = titleText;
   // 只渲染目标视图：原先每次点击都全量 refreshUI（历史/概览/统计/预测/钱包五页，其中两页要重建 ECharts），
   // 再叠加 60ms 定时器二次渲染，是点击卡顿与延迟的主要来源；数据变更仍由 refreshUI 统一刷新。
-  try {
-    if (view === 'overview') renderOverview();
-    else if (view === 'stats') renderStatsView();
-    else if (view === 'forecast') Promise.resolve(renderForecastView()).catch(() => {});
-    else if (view === 'wallet') Promise.resolve(renderWalletView()).catch(() => {});
-    else if (view === 'history') { const s = getSelectedSave(); if (s) renderHistory(doc, s); }
-  } catch {}
+  const renderTargetView = () => {
+    // 连点/快速切换时旧的延迟渲染作废，只渲染最后停留的那一页
+    if (currentView !== view) return;
+    try {
+      if (view === 'overview') renderOverview();
+      else if (view === 'stats') renderStatsView();
+      else if (view === 'forecast') Promise.resolve(renderForecastView()).catch(() => {});
+      else if (view === 'wallet') Promise.resolve(renderWalletView()).catch(() => {});
+      else if (view === 'history') { const s = getSelectedSave(); if (s) renderHistory(doc, s); }
+    } catch {}
+  };
+  // 底栏布局下切到别的页时，先把指示胶囊送上轨道（原因见 renderAfterPillStart 注释）
+  if (bottom && view !== prevView) renderAfterPillStart(doc, renderTargetView);
+  else renderTargetView();
   // 图表容器宽度兜底：首次显示若尚未完成布局，下一帧补渲染一次（替代原先 60ms/80ms 定时器）
   if (view === 'stats' || view === 'forecast') {
     requestAnimationFrame(() => {

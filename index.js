@@ -10676,6 +10676,36 @@ function playViewEnter(el) {
 var BOTTOM_PILL_W = 64;
 var BOTTOM_PILL_H = 48;
 /**
+* 底栏布局下「先让胶囊起跑、再渲染目标页」。
+* 切换距离远时（概览 ↔ 设置）目标页要新建几十毫秒的 DOM，若和写 transform 落在同一个任务里，
+* 浏览器必须等这轮任务结束才做首次绘制——手感就是「点了先愣一下、胶囊才滑出去」，滑动途中还会被主线程抢帧。
+* 做法：第一帧只强制一次样式计算让过渡真正起跑（此时胶囊已是独立合成层，见 style.css 的 will-change），
+* 第二帧再渲染内容，只晚约 16ms，肉眼不可见。
+*/
+function renderAfterPillStart(doc, run) {
+	const ind = doc.getElementById("aus-bottom-indicator");
+	let done = false;
+	const fire = () => {
+		if (done) return;
+		done = true;
+		try {
+			run();
+		} catch {}
+	};
+	const raf = typeof requestAnimationFrame === "function" ? (fn) => {
+		requestAnimationFrame(fn);
+	} : (fn) => {
+		setTimeout(fn, 16);
+	};
+	raf(() => {
+		try {
+			if (ind) ind.getBoundingClientRect();
+		} catch {}
+		raf(fire);
+	});
+	setTimeout(fire, 120);
+}
+/**
 * 底栏指示胶囊跟随当前 tab（切换动画的核心）。
 * 首次定位关掉过渡，避免面板一打开胶囊就从最左侧"飞过来"。
 */
@@ -10853,16 +10883,21 @@ function switchView(view, opts) {
 	const mobileTitleEl = doc.getElementById("aus-mobile-page-title");
 	if (titleEl) titleEl.textContent = titleText;
 	if (mobileTitleEl) mobileTitleEl.textContent = titleText;
-	try {
-		if (view === "overview") renderOverview();
-		else if (view === "stats") renderStatsView();
-		else if (view === "forecast") Promise.resolve(renderForecastView()).catch(() => {});
-		else if (view === "wallet") Promise.resolve(renderWalletView()).catch(() => {});
-		else if (view === "history") {
-			const s = getSelectedSave();
-			if (s) renderHistory(doc, s);
-		}
-	} catch {}
+	const renderTargetView = () => {
+		if (currentView !== view) return;
+		try {
+			if (view === "overview") renderOverview();
+			else if (view === "stats") renderStatsView();
+			else if (view === "forecast") Promise.resolve(renderForecastView()).catch(() => {});
+			else if (view === "wallet") Promise.resolve(renderWalletView()).catch(() => {});
+			else if (view === "history") {
+				const s = getSelectedSave();
+				if (s) renderHistory(doc, s);
+			}
+		} catch {}
+	};
+	if (bottom && view !== prevView) renderAfterPillStart(doc, renderTargetView);
+	else renderTargetView();
 	if (view === "stats" || view === "forecast") requestAnimationFrame(() => {
 		try {
 			const chartEl = doc.getElementById(view === "stats" ? "aus-stats-chart" : "aus-forecast-main-chart");
