@@ -2254,6 +2254,37 @@
   #aus-bottom-indicator { width: 58px; height: 42px; border-radius: 15px; }
 }
 
+/* ===== 拖动底栏选中胶囊：按住灰底横向拖到别的 tab，松手弹性归位并切页 =====
+   拖动/归位由 panel.ts#bindBottomNavTap 控制：拖起时打 is-dragging（去过渡、轻微放大、跟手），
+   松手打 is-snapping 走带轻微回弹的弹性曲线（时长见脚本里的 SNAP_MS，两边必须一致）。
+   transition 用 ID + class 特异性压过上面 #aus-bottom-indicator 的默认 220ms 过渡。 */
+#aus-bottom-indicator.is-dragging {
+  transition: none !important;
+  opacity: 0.92;
+}
+#aus-bottom-indicator.is-snapping {
+  transition: transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+/* 拖动经过的 tab：图标与文字先一步亮起，给落点预览（当前 tab 不打标记，它本来已是选中态） */
+/* 拖动要拿得到横向手势：纵向仍交给页面滚动（pan-y），横向不再被浏览器当成滚动而中途打断
+   （比上面通用的 touch-action:manipulation 高一级特异性，且同样保留「无 300ms 点击延迟」） */
+#aus-panel #aus-bottom-nav,
+#aus-panel #aus-bottom-nav .aus-bottom-item { touch-action: pan-y; }
+#aus-panel #aus-bottom-nav .aus-bottom-item[data-pill-target="1"] { color: var(--ds-text); }
+#aus-panel #aus-bottom-nav .aus-bottom-item[data-pill-target="1"] .aus-bottom-icon {
+  color: var(--ds-nav-active-icon, var(--ds-text));
+  transform: scale(1.1);
+}
+/* 图标缓动：拖动预览放大与回弹都走同一条轻微过冲曲线，和胶囊归位节奏一致 */
+#aus-bottom-nav .aus-bottom-icon {
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), color 140ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  #aus-bottom-indicator.is-snapping { transition-duration: 1ms !important; }
+  #aus-bottom-nav .aus-bottom-icon { transition: color 140ms ease; }
+  #aus-panel #aus-bottom-nav .aus-bottom-item[data-pill-target="1"] .aus-bottom-icon { transform: none; }
+}
+
 /* ══ 移动端兼容 UI 关闭 → 完全复用改造前的侧栏抽屉 ══
    设置页关掉「移动端兼容UI」后，#aus-panel 的 data-mobile-nav 变为 "sidebar"，
    此分支把窄屏从底栏退回旧版：左上角菜单按钮 + 左侧滑出抽屉 + 同层遮罩。

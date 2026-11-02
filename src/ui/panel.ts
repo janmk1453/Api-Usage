@@ -767,7 +767,19 @@ function bindPressFeedback(doc: Document): void {
  */
 let lastBottomTapAt = 0;
 
-/** 底栏点按接管（幂等）：整条底栏只绑一次，用事件委托覆盖内部所有 tab */
+/**
+ * 底栏指示胶囊最近一次落位的 x / y（syncBottomNav 写入）。
+ * 拖动起点直接从这两个数换算，不去解析 transform 字符串，省掉一个易碎的解析步骤。
+ */
+let bottomPillX = 0;
+let bottomPillY = 0;
+
+/**
+ * 底栏点按 + 拖动选中胶囊接管（幂等）：整条底栏只绑一次，用事件委托覆盖内部所有 tab。
+ * - 点按：pointerup 里按「位移 + 时长」判定后直接切页，click 只作键盘/读屏兜底；
+ * - 拖动：按住选中灰底横向拖动，胶囊跟手移动并预览落点，松手用弹性曲线归位并切到最近的 tab
+ *   （纵向为主的滑动不接管，仍然交给页面滚动）。
+ */
 function bindBottomNavTap(doc: Document): void {
   try {
     const bar = doc.getElementById('aus-bottom-nav') as HTMLElement | null;
@@ -776,25 +788,131 @@ function bindBottomNavTap(doc: Document): void {
     // 位移超过 12px 视为滑动，不当作点按；按下超过 800ms 视为长按
     const TAP_SLOP = 12;
     const TAP_MAX_MS = 800;
+    // 拖动锁定阈值：横向位移超过 6px 且明显偏横向就抓起胶囊（比点按阈值更松，轻轻一划就能拖）
+    const DRAG_LOCK = 6;
+    // 松手弹性归位时长，必须与 style.css 里 #aus-bottom-indicator.is-snapping 的过渡时长一致
+    const SNAP_MS = 420;
     let item: HTMLElement | null = null;
     let startX = 0;
     let startY = 0;
     let startAt = 0;
     let moved = false;
-    const reset = () => { item = null; moved = false; };
+    let pointerId: number | null = null;
+    // —— 拖动状态：pill 非空即表示正在拖胶囊 ——
+    let pill: HTMLElement | null = null;
+    let pillW = BOTTOM_PILL_W;
+    let trackW = 0;
+    let baseX = 0;
+    let slots: Array<{ el: HTMLElement; cx: number }> = [];
+    let dropEl: HTMLElement | null = null;
+    let snapTimer: any = null;
+    const reset = () => { item = null; moved = false; pointerId = null; };
+
+    /** 量一遍底栏与每个 tab 的中心：只在拖动开始与尺寸变化时做，拖动过程中不再触发布局 */
+    const measure = (): boolean => {
+      const barRect = bar.getBoundingClientRect();
+      trackW = barRect.width;
+      slots = [];
+      bar.querySelectorAll('[data-bottom-nav]').forEach((el: any) => {
+        const node = el as HTMLElement;
+        const r = node.getBoundingClientRect();
+        slots.push({ el: node, cx: r.left - barRect.left + r.width / 2 });
+      });
+      return !!(trackW && slots.length);
+    };
+    /** 落点预览：只给非当前 tab 打标记（当前 tab 本身就是选中态，不必再高亮） */
+    const paintDrop = (next: HTMLElement | null) => {
+      if (dropEl === next) return;
+      const prev = dropEl;
+      if (prev) prev.removeAttribute('data-pill-target');
+      dropEl = next;
+      const cur = dropEl;
+      if (cur && !cur.classList.contains('active')) cur.setAttribute('data-pill-target', '1');
+    };
+    /** 胶囊 x 夹在底栏内，避免拖出边界 */
+    const clampX = (x: number) => Math.max(0, Math.min(Math.max(0, trackW - pillW), x));
+    const startDrag = (id: number): boolean => {
+      // 底栏不在用（桌面 / 移动端兼容 UI 关闭）时不接管拖动
+      if (!bottomNavActive(doc)) return false;
+      pill = doc.getElementById('aus-bottom-indicator') as HTMLElement | null;
+      if (!pill || !measure()) { pill = null; return false; }
+      pillW = pill.offsetWidth || BOTTOM_PILL_W;
+      baseX = bottomPillX;
+      if (snapTimer) { clearTimeout(snapTimer); snapTimer = null; }
+      pill.classList.remove('is-snapping');
+      pill.classList.add('is-dragging');
+      try { if (bar.setPointerCapture) bar.setPointerCapture(id); } catch {}
+      return true;
+    };
+    const moveDrag = (clientX: number) => {
+      if (!pill) return;
+      const x = clampX(baseX + (clientX - startX));
+      // 缩放写进同一个 transform：拖起来时轻微放大，跟手感更明显
+      pill.style.transform = 'translate3d(' + Math.round(x) + 'px,' + Math.round(bottomPillY) + 'px,0) scale(1.06)';
+      const center = x + pillW / 2;
+      let best: HTMLElement | null = null;
+      let bestGap = Infinity;
+      for (const slot of slots) {
+        const gap = Math.abs(slot.cx - center);
+        if (gap < bestGap) { bestGap = gap; best = slot.el; }
+      }
+      paintDrop(best);
+    };
+    const endDrag = (commit: boolean) => {
+      const p = pill;
+      const target = dropEl;
+      pill = null;
+      paintDrop(null);
+      if (pointerId !== null) {
+        try { if (bar.releasePointerCapture) bar.releasePointerCapture(pointerId); } catch {}
+      }
+      if (!p) return;
+      p.classList.remove('is-dragging');
+      const slot = target ? slots.find((s) => s.el === target) : undefined;
+      // 弹性归位：落到目标 tab 的中心（没有目标就回原位），再交回默认过渡
+      const x = clampX(slot ? slot.cx - pillW / 2 : baseX);
+      p.classList.add('is-snapping');
+      p.style.transform = 'translate3d(' + Math.round(x) + 'px,' + Math.round(bottomPillY) + 'px,0)';
+      bottomPillX = Math.round(x);
+      if (snapTimer) clearTimeout(snapTimer);
+      snapTimer = setTimeout(() => {
+        snapTimer = null;
+        try { p.classList.remove('is-snapping'); } catch {}
+      }, SNAP_MS + 40);
+      // 松手即算一次「已处理的点按」，压掉随后可能补发的 click，避免二次切页
+      lastBottomTapAt = Date.now();
+      if (!commit || !slot) return;
+      const v = slot.el.getAttribute('data-bottom-nav');
+      // 拖到别的 tab 才切页；落回当前 tab 只归位，不触发「重复点 tab 回到顶部」
+      if (v && !slot.el.classList.contains('active')) handleBottomTabTap(v as AppView);
+    };
+
     bar.addEventListener('pointerdown', (e: any) => {
       if (e.pointerType === 'mouse' && e.button !== 0) { reset(); return; }
       const target = e.target as HTMLElement | null;
       const hit = target && target.closest ? (target.closest('.aus-bottom-item') as HTMLElement | null) : null;
       if (!hit) { reset(); return; }
       item = hit; startX = e.clientX; startY = e.clientY; startAt = Date.now(); moved = false;
+      pointerId = typeof e.pointerId === 'number' ? e.pointerId : null;
     }, { passive: true });
     bar.addEventListener('pointermove', (e: any) => {
       if (!item) return;
-      if (Math.abs(e.clientX - startX) > TAP_SLOP || Math.abs(e.clientY - startY) > TAP_SLOP) moved = true;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (Math.abs(dx) > TAP_SLOP || Math.abs(dy) > TAP_SLOP) moved = true;
+      if (!pill) {
+        // 纵向为主的滑动留给页面滚动，只有明显偏横向才接管成「拖胶囊」
+        if (!(Math.abs(dx) > DRAG_LOCK && Math.abs(dx) > Math.abs(dy))) return;
+        if (!startDrag(pointerId === null ? 0 : pointerId)) return;
+      }
+      moveDrag(e.clientX);
     }, { passive: true });
-    bar.addEventListener('pointercancel', reset, { passive: true });
-    bar.addEventListener('pointerup', (e: any) => {
+    bar.addEventListener('pointercancel', () => {
+      if (pill) endDrag(false);
+      reset();
+    }, { passive: true });
+    bar.addEventListener('pointerup', () => {
+      if (pill) { endDrag(true); reset(); return; }
       const hit = item;
       const wasMoved = moved;
       const elapsed = Date.now() - startAt;
@@ -903,6 +1021,9 @@ function syncBottomNav(doc: Document, animate: boolean): void {
     const pillH = ind.offsetHeight || BOTTOM_PILL_H;
     const x = Math.round(itemRect.left - barRect.left + itemRect.width / 2 - pillW / 2);
     const y = Math.round(itemRect.top - barRect.top + itemRect.height / 2 - pillH / 2);
+    // 记住落位：拖动起点从这里换算（见 bindBottomNavTap）
+    bottomPillX = x;
+    bottomPillY = y;
     const first = bar.getAttribute('data-ready') !== '1';
     const next = 'translate3d(' + x + 'px,' + y + 'px,0)';
     if (!animate || first) {

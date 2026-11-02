@@ -1,15 +1,15 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from "./store-DdBSZEXQ.js";
+import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from "./store-TDK3YzRZ.js";
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { f as saveHot, p as historyRecordKey } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-BOFi-4im.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-CUwc_Yad.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
-import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-9LYFOfk8.js";
-import { t as installInterception } from "./interception-DHoEhDho.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-Dom8uUte.js";
-import { a as trackOpen, c as applyTheme, d as icon, i as initTelemetry, l as unwatchSystemTheme, o as trackPage, r as flushTelemetry, s as trackRender, t as renderSettings, u as watchSystemTheme } from "./settings-BSE-WiTi.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-DGiqrwZs.js";
+import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-Dsn2T9-Q.js";
+import { t as installInterception } from "./interception-pWAzsaM8.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-BYjczZSH.js";
+import { a as trackOpen, c as applyTheme, d as icon, i as initTelemetry, l as unwatchSystemTheme, o as trackPage, r as flushTelemetry, s as trackRender, t as renderSettings, u as watchSystemTheme } from "./settings-Bkg6GUIt.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-BoxNdgVq.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -8942,7 +8942,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-Dom8uUte.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-BYjczZSH.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -10415,7 +10415,18 @@ function bindPressFeedback(doc) {
 * 因此底栏改为在 pointerup 里按「位移 + 时长」判定点按并直接切页，click 只作为键盘/读屏兜底。
 */
 var lastBottomTapAt = 0;
-/** 底栏点按接管（幂等）：整条底栏只绑一次，用事件委托覆盖内部所有 tab */
+/**
+* 底栏指示胶囊最近一次落位的 x / y（syncBottomNav 写入）。
+* 拖动起点直接从这两个数换算，不去解析 transform 字符串，省掉一个易碎的解析步骤。
+*/
+var bottomPillX = 0;
+var bottomPillY = 0;
+/**
+* 底栏点按 + 拖动选中胶囊接管（幂等）：整条底栏只绑一次，用事件委托覆盖内部所有 tab。
+* - 点按：pointerup 里按「位移 + 时长」判定后直接切页，click 只作键盘/读屏兜底；
+* - 拖动：按住选中灰底横向拖动，胶囊跟手移动并预览落点，松手用弹性曲线归位并切到最近的 tab
+*   （纵向为主的滑动不接管，仍然交给页面滚动）。
+*/
 function bindBottomNavTap(doc) {
 	try {
 		const bar = doc.getElementById("aus-bottom-nav");
@@ -10423,14 +10434,113 @@ function bindBottomNavTap(doc) {
 		bar.setAttribute("data-tap-bound", "1");
 		const TAP_SLOP = 12;
 		const TAP_MAX_MS = 800;
+		const DRAG_LOCK = 6;
 		let item = null;
 		let startX = 0;
 		let startY = 0;
 		let startAt = 0;
 		let moved = false;
+		let pointerId = null;
+		let pill = null;
+		let pillW = BOTTOM_PILL_W;
+		let trackW = 0;
+		let baseX = 0;
+		let slots = [];
+		let dropEl = null;
+		let snapTimer = null;
 		const reset = () => {
 			item = null;
 			moved = false;
+			pointerId = null;
+		};
+		/** 量一遍底栏与每个 tab 的中心：只在拖动开始与尺寸变化时做，拖动过程中不再触发布局 */
+		const measure = () => {
+			const barRect = bar.getBoundingClientRect();
+			trackW = barRect.width;
+			slots = [];
+			bar.querySelectorAll("[data-bottom-nav]").forEach((el) => {
+				const node = el;
+				const r = node.getBoundingClientRect();
+				slots.push({
+					el: node,
+					cx: r.left - barRect.left + r.width / 2
+				});
+			});
+			return !!(trackW && slots.length);
+		};
+		/** 落点预览：只给非当前 tab 打标记（当前 tab 本身就是选中态，不必再高亮） */
+		const paintDrop = (next) => {
+			if (dropEl === next) return;
+			const prev = dropEl;
+			if (prev) prev.removeAttribute("data-pill-target");
+			dropEl = next;
+			const cur = dropEl;
+			if (cur && !cur.classList.contains("active")) cur.setAttribute("data-pill-target", "1");
+		};
+		/** 胶囊 x 夹在底栏内，避免拖出边界 */
+		const clampX = (x) => Math.max(0, Math.min(Math.max(0, trackW - pillW), x));
+		const startDrag = (id) => {
+			if (!bottomNavActive(doc)) return false;
+			pill = doc.getElementById("aus-bottom-indicator");
+			if (!pill || !measure()) {
+				pill = null;
+				return false;
+			}
+			pillW = pill.offsetWidth || BOTTOM_PILL_W;
+			baseX = bottomPillX;
+			if (snapTimer) {
+				clearTimeout(snapTimer);
+				snapTimer = null;
+			}
+			pill.classList.remove("is-snapping");
+			pill.classList.add("is-dragging");
+			try {
+				if (bar.setPointerCapture) bar.setPointerCapture(id);
+			} catch {}
+			return true;
+		};
+		const moveDrag = (clientX) => {
+			if (!pill) return;
+			const x = clampX(baseX + (clientX - startX));
+			pill.style.transform = "translate3d(" + Math.round(x) + "px," + Math.round(bottomPillY) + "px,0) scale(1.06)";
+			const center = x + pillW / 2;
+			let best = null;
+			let bestGap = Infinity;
+			for (const slot of slots) {
+				const gap = Math.abs(slot.cx - center);
+				if (gap < bestGap) {
+					bestGap = gap;
+					best = slot.el;
+				}
+			}
+			paintDrop(best);
+		};
+		const endDrag = (commit) => {
+			const p = pill;
+			const target = dropEl;
+			pill = null;
+			paintDrop(null);
+			if (pointerId !== null) try {
+				if (bar.releasePointerCapture) bar.releasePointerCapture(pointerId);
+			} catch {}
+			if (!p) return;
+			p.classList.remove("is-dragging");
+			const slot = target ? slots.find((s) => s.el === target) : void 0;
+			const x = clampX(slot ? slot.cx - pillW / 2 : baseX);
+			p.classList.add("is-snapping");
+			p.style.transform = "translate3d(" + Math.round(x) + "px," + Math.round(bottomPillY) + "px,0)";
+			bottomPillX = Math.round(x);
+			if (snapTimer) clearTimeout(snapTimer);
+			snapTimer = setTimeout(() => {
+				snapTimer = null;
+				try {
+					p.classList.remove("is-snapping");
+				} catch {}
+			}, 460);
+			lastBottomTapAt = Date.now();
+			if (!commit || !slot) return;
+			const v = slot.el.getAttribute("data-bottom-nav");
+			if (v && !slot.el.classList.contains("active")) handleBottomTabTap(v);
 		};
 		bar.addEventListener("pointerdown", (e) => {
 			if (e.pointerType === "mouse" && e.button !== 0) {
@@ -10448,13 +10558,29 @@ function bindBottomNavTap(doc) {
 			startY = e.clientY;
 			startAt = Date.now();
 			moved = false;
+			pointerId = typeof e.pointerId === "number" ? e.pointerId : null;
 		}, { passive: true });
 		bar.addEventListener("pointermove", (e) => {
 			if (!item) return;
-			if (Math.abs(e.clientX - startX) > TAP_SLOP || Math.abs(e.clientY - startY) > TAP_SLOP) moved = true;
+			const dx = e.clientX - startX;
+			const dy = e.clientY - startY;
+			if (Math.abs(dx) > TAP_SLOP || Math.abs(dy) > TAP_SLOP) moved = true;
+			if (!pill) {
+				if (!(Math.abs(dx) > DRAG_LOCK && Math.abs(dx) > Math.abs(dy))) return;
+				if (!startDrag(pointerId === null ? 0 : pointerId)) return;
+			}
+			moveDrag(e.clientX);
 		}, { passive: true });
-		bar.addEventListener("pointercancel", reset, { passive: true });
-		bar.addEventListener("pointerup", (e) => {
+		bar.addEventListener("pointercancel", () => {
+			if (pill) endDrag(false);
+			reset();
+		}, { passive: true });
+		bar.addEventListener("pointerup", () => {
+			if (pill) {
+				endDrag(true);
+				reset();
+				return;
+			}
 			const hit = item;
 			const wasMoved = moved;
 			const elapsed = Date.now() - startAt;
@@ -10569,6 +10695,8 @@ function syncBottomNav(doc, animate) {
 		const pillH = ind.offsetHeight || BOTTOM_PILL_H;
 		const x = Math.round(itemRect.left - barRect.left + itemRect.width / 2 - pillW / 2);
 		const y = Math.round(itemRect.top - barRect.top + itemRect.height / 2 - pillH / 2);
+		bottomPillX = x;
+		bottomPillY = y;
 		const first = bar.getAttribute("data-ready") !== "1";
 		const next = "translate3d(" + x + "px," + y + "px,0)";
 		if (!animate || first) {
@@ -11356,7 +11484,7 @@ function openPanel() {
 	panelOpen = true;
 	refreshUI();
 	try {
-		import("./collector-OmNDhNXI.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-BtH61sAU.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-BZzkl0bd.js").then((m) => m.maybeAutoCheck());
@@ -11578,10 +11706,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-DHoEhDho.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-pWAzsaM8.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-OmNDhNXI.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BtH61sAU.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -11589,10 +11717,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-DHoEhDho.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-pWAzsaM8.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-OmNDhNXI.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BtH61sAU.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -11682,13 +11810,13 @@ async function onDelete() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-Dom8uUte.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-BYjczZSH.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-9LYFOfk8.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-Dsn2T9-Q.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DGiqrwZs.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-BoxNdgVq.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 	try {
@@ -11715,19 +11843,19 @@ async function onDelete() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-DHoEhDho.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-pWAzsaM8.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-OmNDhNXI.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BtH61sAU.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-Dom8uUte.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-BYjczZSH.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
-		import("./currency-9LYFOfk8.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+		import("./currency-Dsn2T9-Q.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-DGiqrwZs.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-BoxNdgVq.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -11737,10 +11865,10 @@ async function onDisable() {
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-DHoEhDho.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-pWAzsaM8.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-OmNDhNXI.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-BtH61sAU.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -11759,13 +11887,13 @@ async function onDisable() {
 		unwatchSystemTheme();
 	} catch {}
 	try {
-		(await import("./balance-Dom8uUte.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-BYjczZSH.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-9LYFOfk8.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-Dsn2T9-Q.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DGiqrwZs.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-BoxNdgVq.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -11793,19 +11921,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-Dom8uUte.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-BYjczZSH.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-9LYFOfk8.js").then((n) => n.t)).restartRateTimer?.();
+		(await import("./currency-Dsn2T9-Q.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DGiqrwZs.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-BoxNdgVq.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-OmNDhNXI.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BtH61sAU.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -11827,7 +11955,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-DGiqrwZs.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-BoxNdgVq.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

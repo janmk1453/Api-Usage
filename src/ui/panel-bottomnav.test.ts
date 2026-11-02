@@ -3,6 +3,8 @@ import { describe, it, expect } from 'vitest';
 import panelSrc from './panel.ts?raw';
 import settingsSrc from './settings.ts?raw';
 import cssSrc from '../../style.css?raw';
+import typesSrc from '../types/settings.ts?raw';
+import repoSrc from '../data/repository.ts?raw';
 
 function stripComments(src: string): string {
   return src
@@ -51,5 +53,58 @@ describe('设置页卡片顺序', () => {
     expect(peak).toBeGreaterThan(-1);
     expect(telemetry).toBeGreaterThan(peak);
     expect(telemetry).toBeLessThan(models);
+  });
+});
+
+describe('底栏选中灰底可拖动切页', () => {
+  it('拖动阈值与归位时长集中定义，纵向滑动不接管', () => {
+    expect(panelCode).toContain('const DRAG_LOCK = 6;');
+    expect(panelCode).toContain('const SNAP_MS = 420;');
+    // 纵向为主的滑动留给页面滚动，只有明显偏横向才抓胶囊
+    expect(panelCode).toContain('if (!(Math.abs(dx) > DRAG_LOCK && Math.abs(dx) > Math.abs(dy))) return;');
+  });
+
+  it('胶囊落位由 syncBottomNav 记下来，拖动起点据此换算', () => {
+    expect(panelCode).toContain('let bottomPillX = 0;');
+    expect(panelCode).toContain('let bottomPillY = 0;');
+    // 一处是 syncBottomNav 落位、一处是拖动松手后的归位
+    expect(panelCode).toContain('bottomPillX = x;');
+    expect(panelCode).toContain('bottomPillX = Math.round(x);');
+    expect(panelCode).toContain('baseX = bottomPillX;');
+  });
+
+  it('拖起加 is-dragging、松手加 is-snapping，只有落到别的 tab 才切页', () => {
+    expect(panelCode).toContain('const startDrag = (id: number): boolean => {');
+    expect(panelCode).toContain('const moveDrag = (clientX: number) => {');
+    expect(panelCode).toContain('const endDrag = (commit: boolean) => {');
+    expect(panelCode).toContain("pill.classList.add('is-dragging');");
+    expect(panelCode).toContain("p.classList.add('is-snapping');");
+    expect(panelCode).toContain('scale(1.06)');
+    expect(panelCode).toContain("if (v && !slot.el.classList.contains('active')) handleBottomTabTap(v as AppView);");
+    // 拖动结束也算一次已处理点按，防止随后补发的 click 二次切页
+    expect(panelCode).toContain('lastBottomTapAt = Date.now();');
+  });
+
+  it('拖动与归位的样式走带轻微过冲的弹性曲线', () => {
+    expect(cssSrc).toContain('#aus-bottom-indicator.is-dragging {');
+    expect(cssSrc).toContain('#aus-bottom-indicator.is-snapping {');
+    expect(cssSrc).toContain('transition: transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1) !important;');
+    expect(cssSrc).toContain('#aus-panel #aus-bottom-nav .aus-bottom-item[data-pill-target="1"] { color: var(--ds-text); }');
+    expect(cssSrc).toContain('@media (prefers-reduced-motion: reduce)');
+  });
+});
+
+describe('「移动端兼容 UI」默认值按设备类型决定一次', () => {
+  it('默认设置与设置归一化都取设备判定结果', () => {
+    expect(typesSrc).toContain('mobileCompatUi: mobileDeviceHint(),');
+    expect(typesSrc).not.toContain('mobileCompatUi: true,');
+    expect(stripComments(repoSrc)).toContain('(merged as any).mobileCompatUi = mobileDeviceHint();');
+    expect(stripComments(repoSrc)).not.toContain('mobileCompatUi = true;');
+  });
+
+  it('缺这个键时在 hydrate 里补上并立刻落盘，之后不再覆盖用户选择', () => {
+    const code = stripComments(repoSrc);
+    expect(code).toContain("if (typeof (state.settings as any).mobileCompatUi !== 'boolean') {");
+    expect(code).toContain('(state.settings as any).mobileCompatUi = mobileDeviceHint();');
   });
 });

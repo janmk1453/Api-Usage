@@ -14,6 +14,7 @@ import { isUnsafeKey, isValidDayKey, localDay } from '../utils/date';
 import { isTruncatedFinish } from '../utils/finish';
 import { log, toast } from '../utils/logger';
 import { usageFingerprint } from './fingerprint';
+import { mobileDeviceHint } from '../utils/device';
 import { computeTokenRate, sanitizeHistoryTiming } from './token-rate';
 import { normalizeConnectionEndpoint, type HistoryConnection } from '../services/connection-identity';
 import {
@@ -662,8 +663,9 @@ export function normalizeSettings(incoming: any): any {
   if (!merged.historyScope) merged.historyScope = def.historyScope;
   if (!merged.theme) merged.theme = def.theme;
   if (typeof merged.modelsPricingCollapsed !== 'boolean') merged.modelsPricingCollapsed = true;
-  // 移动端兼容 UI：缺字段的旧数据一律按开启（底栏）处理，关闭后回到原侧栏抽屉
-  if (typeof (merged as any).mobileCompatUi !== 'boolean') (merged as any).mobileCompatUi = true;
+  // 移动端兼容 UI：默认值只按设备类型决定一次（utils/device.ts）——移动端默认开启底栏，
+  // 桌面端默认关闭、保持改造前的侧栏抽屉；字段一旦是布尔值（用户自己改过、或上一版已写入）就不再覆盖。
+  if (typeof (merged as any).mobileCompatUi !== 'boolean') (merged as any).mobileCompatUi = mobileDeviceHint();
   // 峰值圆点默认值改为「关闭」只作用于全新安装（没有任何已存设置）：
   // 老版本持久化里根本没有这个键的用户，按旧行为迁移成开启，避免升级后圆点无声消失。
   if (src.peakDot === undefined && Object.keys(src).length > 0) merged.peakDot = true;
@@ -1585,6 +1587,12 @@ export const repository = {
     }
     if (typeof (state.settings as any).modelsPricingCollapsed !== 'boolean') {
       (state.settings as any).modelsPricingCollapsed = true;
+      try { saveHot({ settings: state.settings }); } catch {}
+    }
+    // 迁移：「移动端兼容 UI」的初值只决定一次——老版本没有这个键时按设备类型补上
+    // （移动端默认开启底栏，桌面端保持原样），随后立刻写进设置；以后再升级都以用户的选择为准。
+    if (typeof (state.settings as any).mobileCompatUi !== 'boolean') {
+      (state.settings as any).mobileCompatUi = mobileDeviceHint();
       try { saveHot({ settings: state.settings }); } catch {}
     }
     if (!Array.isArray((state.settings as any).statsFour) || (state.settings as any).statsFour.length !== 4) {
