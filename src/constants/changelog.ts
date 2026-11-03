@@ -32,7 +32,7 @@ export interface ChangelogEntry {
 }
 
 /** 关于页展示的版本条数上限 */
-export const CHANGELOG_ENTRY_LIMIT = 3;
+export const CHANGELOG_ENTRY_LIMIT = 5;
 
 /** 更新日志（最新在前） */
 export const CHANGELOG: ChangelogEntry[] = [

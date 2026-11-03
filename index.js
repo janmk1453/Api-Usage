@@ -9437,8 +9437,8 @@ var CHANGELOG = [
 	}
 ];
 /** 取最近若干个版本（默认 CHANGELOG_ENTRY_LIMIT 条） */
-function getRecentChangelog(limit = 3) {
-	const n = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : 3;
+function getRecentChangelog(limit = 5) {
+	const n = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : 5;
 	return CHANGELOG.slice(0, n);
 }
 //#endregion
