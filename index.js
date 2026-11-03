@@ -9339,6 +9339,14 @@ function bindWalletView(doc) {
 /** 更新日志（最新在前） */
 var CHANGELOG = [
 	{
+		version: "r3.1.9fix",
+		date: "2026-11-04",
+		sections: [{
+			kind: "fix",
+			items: ["移动端部分情况下底部导航栏被浏览器工具栏遮挡"]
+		}]
+	},
+	{
 		version: "r3.1.9",
 		date: "2026-11-02",
 		sections: [
@@ -9429,8 +9437,8 @@ var CHANGELOG = [
 	}
 ];
 /** 取最近若干个版本（默认 CHANGELOG_ENTRY_LIMIT 条） */
-function getRecentChangelog(limit = 3) {
-	const n = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : 3;
+function getRecentChangelog(limit = 5) {
+	const n = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : 5;
 	return CHANGELOG.slice(0, n);
 }
 //#endregion
@@ -10908,7 +10916,45 @@ function switchView(view, opts) {
 		} catch {}
 	});
 }
+/**
+* 移动端浏览器的「浏览器工具栏」不占布局视口：Edge（安卓版把地址栏放底部）/ Chrome 的
+* 100vh 与 window.innerHeight 取的是「工具栏收起」的大视口，比真正可见的区域高出一个工具栏，
+* 于是面板底栏（position:absolute;bottom:0）正好落在工具栏背后——既看不见也点不到。
+* visualViewport.height 才是此刻真正可见的高度，面板按它收一下就能贴住可见底部。
+* 双指缩放（scale≠1）时不动，避免面板被反复裁切、内容重排。
+*/
+function visibleViewportHeight() {
+	try {
+		const vv = getDoc$1().defaultView?.visualViewport;
+		if (!vv || !(vv.height > 0)) return null;
+		const scale = typeof vv.scale === "number" ? vv.scale : 1;
+		if (Math.abs(scale - 1) > .01) return null;
+		return vv.height;
+	} catch {
+		return null;
+	}
+}
+/** 把 #aus-overlay / #aus-panel 的高度贴到当前可视视口（工具栏显隐、键盘弹出都会变） */
+function syncViewportHeight() {
+	const doc = getDoc$1();
+	const h = visibleViewportHeight();
+	const supportsDvh = (() => {
+		try {
+			return !!(window.CSS && CSS.supports && CSS.supports("height", "100dvh"));
+		} catch {
+			return false;
+		}
+	})();
+	for (const id of ["aus-overlay", "aus-panel"]) {
+		const node = doc.getElementById(id);
+		if (!node) continue;
+		node.style.height = h == null ? supportsDvh ? "100dvh" : "100vh" : `${Math.round(h)}px`;
+	}
+}
 function positionPanel() {
+	try {
+		syncViewportHeight();
+	} catch {}
 	try {
 		const doc = getDoc$1();
 		for (const id of [
@@ -10945,7 +10991,7 @@ function createPanel() {
 	overlay.id = "aus-overlay";
 	overlay.setAttribute("data-extension", "api-usage-stat");
 	overlay.setAttribute("data-ds-theme", theme);
-	overlay.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;background:var(--ds-overlay);z-index:100000;display:none;opacity:0;transition:opacity 0.2s;";
+	overlay.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;height:100dvh;background:var(--ds-overlay);z-index:100000;display:none;opacity:0;transition:opacity 0.2s;";
 	overlay.addEventListener("click", (e) => {
 		if (e.target === overlay) closePanel();
 	});
@@ -10954,7 +11000,7 @@ function createPanel() {
 	panel.setAttribute("data-extension", "api-usage-stat");
 	panel.setAttribute("data-ds-theme", theme);
 	panel.setAttribute("data-mobile-nav", mobileNavMode());
-	panel.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:'Microsoft YaHei','微软雅黑',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;";
+	panel.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;height:100dvh;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:'Microsoft YaHei','微软雅黑',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;";
 	panel.innerHTML = `
     <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;">
       <button id="aus-hamburger-btn" title="菜单" style="display:none;width:28px;height:28px;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;">${icon("menu", 22)}</button>
@@ -11397,6 +11443,30 @@ function createPanel() {
 		};
 		window.parent?.addEventListener("resize", onResize);
 		window.addEventListener("resize", onResize);
+	} catch {}
+	try {
+		const vv = window.visualViewport;
+		let vvRaf = null;
+		const onViewportChange = () => {
+			try {
+				syncViewportHeight();
+			} catch {}
+			if (vvRaf) return;
+			vvRaf = (typeof requestAnimationFrame === "function" ? requestAnimationFrame : (fn) => setTimeout(fn, 16))(() => {
+				vvRaf = null;
+				try {
+					syncViewportHeight();
+				} catch {}
+				try {
+					paintNavState(doc, bottomNavActive(doc), false);
+				} catch {}
+				try {
+					positionPanel();
+				} catch {}
+			});
+		};
+		vv?.addEventListener?.("resize", onViewportChange, { passive: true });
+		vv?.addEventListener?.("scroll", onViewportChange, { passive: true });
 	} catch {}
 	bindPanel(doc);
 	bindHistoryFilters(doc);

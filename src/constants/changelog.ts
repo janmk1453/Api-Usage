@@ -32,10 +32,22 @@ export interface ChangelogEntry {
 }
 
 /** 关于页展示的版本条数上限 */
-export const CHANGELOG_ENTRY_LIMIT = 3;
+export const CHANGELOG_ENTRY_LIMIT = 5;
 
 /** 更新日志（最新在前） */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: 'r3.1.9fix',
+    date: '2026-11-04',
+    sections: [
+      {
+        kind: 'fix',
+        items: [
+          '移动端部分情况下底部导航栏被浏览器工具栏遮挡',
+        ],
+      },
+    ],
+  },
   {
     version: 'r3.1.9',
     date: '2026-11-02',
