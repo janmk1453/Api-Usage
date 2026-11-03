@@ -9339,6 +9339,14 @@ function bindWalletView(doc) {
 /** 更新日志（最新在前） */
 var CHANGELOG = [
 	{
+		version: "r3.1.9fix",
+		date: "2026-11-04",
+		sections: [{
+			kind: "fix",
+			items: ["移动端部分情况下底部导航栏被浏览器工具栏遮挡"]
+		}]
+	},
+	{
 		version: "r3.1.9",
 		date: "2026-11-02",
 		sections: [
