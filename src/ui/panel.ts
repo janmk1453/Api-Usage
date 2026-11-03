@@ -1246,8 +1246,40 @@ function switchView(view: AppView, opts?: { track?: boolean }) {
   }
 }
 
+/**
+ * 移动端浏览器的「浏览器工具栏」不占布局视口：Edge（安卓版把地址栏放底部）/ Chrome 的
+ * 100vh 与 window.innerHeight 取的是「工具栏收起」的大视口，比真正可见的区域高出一个工具栏，
+ * 于是面板底栏（position:absolute;bottom:0）正好落在工具栏背后——既看不见也点不到。
+ * visualViewport.height 才是此刻真正可见的高度，面板按它收一下就能贴住可见底部。
+ * 双指缩放（scale≠1）时不动，避免面板被反复裁切、内容重排。
+ */
+function visibleViewportHeight(): number | null {
+  try {
+    const vv = (getDoc().defaultView as any)?.visualViewport;
+    if (!vv || !(vv.height > 0)) return null;
+    const scale = typeof vv.scale === 'number' ? vv.scale : 1;
+    if (Math.abs(scale - 1) > 0.01) return null;
+    return vv.height;
+  } catch { return null; }
+}
+
+/** 把 #aus-overlay / #aus-panel 的高度贴到当前可视视口（工具栏显隐、键盘弹出都会变） */
+function syncViewportHeight() {
+  const doc = getDoc();
+  const h = visibleViewportHeight();
+  const supportsDvh = (() => { try { return !!(window.CSS && CSS.supports && CSS.supports('height', '100dvh')); } catch { return false; } })();
+  for (const id of ['aus-overlay', 'aus-panel']) {
+    const node = doc.getElementById(id) as HTMLElement | null;
+    if (!node) continue;
+    // 拿不到可视视口（旧内核 / 缩放中）：退回整块视口高度，dvh 优先
+    node.style.height = h == null ? (supportsDvh ? '100dvh' : '100vh') : `${Math.round(h)}px`;
+  }
+}
+
 function positionPanel() {
   // 已改为 fixed，无需手动跟随滚动；保留空实现以兼容旧调用
+  // 但浏览器工具栏（移动端底部地址栏）显隐会改可视视口高度，底栏必须始终贴在可见底部
+  try { syncViewportHeight(); } catch {}
   try {
     const doc = getDoc();
     const charts: any[] = [];
@@ -1269,7 +1301,7 @@ export function createPanel() {
   overlay.id = 'aus-overlay';
   overlay.setAttribute('data-extension', 'api-usage-stat');
   overlay.setAttribute('data-ds-theme', theme);
-  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:var(--ds-overlay);z-index:100000;display:none;opacity:0;transition:opacity 0.2s;';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;height:100dvh;background:var(--ds-overlay);z-index:100000;display:none;opacity:0;transition:opacity 0.2s;';
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closePanel(); });
   const panel = doc.createElement('div');
   panel.id = 'aus-panel';
@@ -1277,7 +1309,7 @@ export function createPanel() {
   panel.setAttribute('data-ds-theme', theme);
   // 窄屏布局二选一：bottom=底部标签栏（移动端兼容 UI 开启）/ sidebar=改造前的侧栏抽屉
   panel.setAttribute('data-mobile-nav', mobileNavMode());
-  panel.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:\'Microsoft YaHei\',\'微软雅黑\',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;';
+  panel.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;height:100dvh;z-index:100001;background:var(--ds-panel-bg);color:var(--ds-text);font-family:\'Microsoft YaHei\',\'微软雅黑\',system-ui,-apple-system,sans-serif;display:none;flex-direction:column;overflow:hidden;transform:none;filter:none;will-change:auto;';
   panel.innerHTML = `
     <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;">
       <button id="aus-hamburger-btn" title="菜单" style="display:none;width:28px;height:28px;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;">${icon('menu', 22)}</button>
@@ -1722,6 +1754,25 @@ export function createPanel() {
     };
     (window.parent as any)?.addEventListener('resize', onResize);
     window.addEventListener('resize', onResize);
+  } catch {}
+  try {
+    // 移动端 Edge/Chrome 底部地址栏、虚拟键盘的显隐只发 visualViewport 事件、不发 window.resize，
+    // 不听就会让底栏继续躺在工具栏背后。rAF 合并同一帧的多次触发，落地后再量一次底栏胶囊位置。
+    const vv: any = (window as any).visualViewport;
+    let vvRaf: any = null;
+    const onViewportChange = () => {
+      try { syncViewportHeight(); } catch {}
+      if (vvRaf) return;
+      const raf = (typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (fn: any) => setTimeout(fn, 16));
+      vvRaf = raf(() => {
+        vvRaf = null;
+        try { syncViewportHeight(); } catch {}
+        try { paintNavState(doc, bottomNavActive(doc), false); } catch {}
+        try { positionPanel(); } catch {}
+      });
+    };
+    vv?.addEventListener?.('resize', onViewportChange, { passive: true } as any);
+    vv?.addEventListener?.('scroll', onViewportChange, { passive: true } as any);
   } catch {}
   bindPanel(doc);
   bindHistoryFilters(doc);
