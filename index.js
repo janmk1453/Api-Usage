@@ -11338,7 +11338,7 @@ function createPanel() {
 	doc.body.appendChild(overlay);
 	doc.body.appendChild(panel);
 	try {
-		import("./update-BZzkl0bd.js").then((mod) => mod.syncUpdateIndicators?.());
+		import("./update-BbAlyrkl.js").then((mod) => mod.syncUpdateIndicators?.());
 	} catch {}
 	try {
 		applyTheme(theme);
@@ -11480,7 +11480,7 @@ function createPanel() {
 		initForecastView();
 	} catch {}
 	try {
-		import("./update-BZzkl0bd.js").then((m) => {
+		import("./update-BbAlyrkl.js").then((m) => {
 			const branchBtn = doc.getElementById("aus-update-branch-btn");
 			const branchLabel = doc.getElementById("aus-update-branch-label");
 			const branchDrop = doc.getElementById("aus-update-branch-dropdown");
@@ -11519,7 +11519,7 @@ function createPanel() {
 		if (updBtn) updBtn.onclick = () => {
 			updBtn.textContent = "检查中…";
 			updBtn.setAttribute("disabled", "");
-			import("./update-BZzkl0bd.js").then((m) => m.checkUpdate(true).finally(() => {
+			import("./update-BbAlyrkl.js").then((m) => m.checkUpdate(true).finally(() => {
 				updBtn.textContent = "检查更新";
 				updBtn.removeAttribute("disabled");
 			}));
@@ -11529,7 +11529,7 @@ function createPanel() {
 			if (runUpdBtn.hasAttribute("disabled")) return;
 			runUpdBtn.textContent = "更新中…";
 			runUpdBtn.setAttribute("disabled", "");
-			import("./update-BZzkl0bd.js").then((m) => m.updateSelf()).then((res) => {
+			import("./update-BbAlyrkl.js").then((m) => m.updateSelf()).then((res) => {
 				if (res.ok && res.changed) {
 					const bannerEl = doc.getElementById("aus-update-banner");
 					if (bannerEl) {
@@ -11611,7 +11611,7 @@ function openPanel() {
 		import("./collector-DTy0_F8v.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
-		import("./update-BZzkl0bd.js").then((m) => m.maybeAutoCheck());
+		import("./update-BbAlyrkl.js").then((m) => m.maybeAutoCheck());
 	} catch {}
 }
 function closePanel() {
@@ -12033,6 +12033,11 @@ async function onActivate() {
 }
 async function init() {
 	ensureStyleScope();
+	try {
+		setTimeout(() => {
+			import("./update-BbAlyrkl.js").then((m) => m.probeForcedUpdateAtStartup()).catch(() => {});
+		}, 3e3);
+	} catch {}
 	try {
 		applyTheme(state$2.settings.theme);
 	} catch {}

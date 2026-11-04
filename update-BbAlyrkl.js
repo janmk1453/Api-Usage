@@ -10,6 +10,14 @@ var LOCAL_TIMEOUT_MS = 15e3;
 var LAST_CHECK_KEY = "aus_update_last_check";
 var LAST_NOTIFIED_KEY = "aus_update_last_notified_version";
 var UPDATE_BRANCH_KEY = "aus_update_branch";
+/** 强制更新失败后的退避时间 */
+var FORCE_RETRY_KEY = "aus_update_force_retry_at";
+/** 启动期救援探测的最小间隔 */
+var FORCE_PROBE_KEY = "aus_update_force_probe_at";
+var FORCE_RETRY_MS = 18e5;
+var FORCE_PROBE_INTERVAL_MS = 72e5;
+var POLICY_TIMEOUT_MS = 5e3;
+var POLICY_PATH = "update-policy.json";
 function getUpdateBranch() {
 	try {
 		const value = localStorage.getItem(UPDATE_BRANCH_KEY);
@@ -51,6 +59,51 @@ function isNewer(remote, local) {
 		if (rv < lv) return false;
 	}
 	return false;
+}
+/** 把策略文件收敛成稳定结构：缺字段/脏数据一律降级为「不强制」 */
+function normalizePolicy(raw) {
+	const minVersion = String(raw?.minVersion ?? "").trim().replace(/^v/, "");
+	const reason = String(raw?.reason ?? "").trim().slice(0, 200);
+	return {
+		force: raw?.force === true || raw?.force === "true",
+		minVersion: /^\d+(\.\d+)*$/.test(minVersion) ? minVersion : "",
+		reason
+	};
+}
+/**
+* 是否该强制更新：策略要求 + 远端版本确实更高（永不降级）+ 达到生效门槛。
+* 不依赖任何本地开关 —— 这条通道就是留给「用户已经无法手动更新」的版本的。
+*/
+function shouldForceUpdate(policy, currentVersion, remoteVersion) {
+	if (!policy?.force) return false;
+	if (!remoteVersion) return false;
+	if (!isNewer(remoteVersion, currentVersion)) return false;
+	if (policy.minVersion && isNewer(policy.minVersion, remoteVersion)) return false;
+	return true;
+}
+function getForceRetryAt() {
+	try {
+		return parseInt(localStorage.getItem(FORCE_RETRY_KEY) || "0", 10) || 0;
+	} catch {
+		return 0;
+	}
+}
+function setForceRetryAt(t) {
+	try {
+		localStorage.setItem(FORCE_RETRY_KEY, String(t));
+	} catch {}
+}
+function getForceProbeAt() {
+	try {
+		return parseInt(localStorage.getItem(FORCE_PROBE_KEY) || "0", 10) || 0;
+	} catch {
+		return 0;
+	}
+}
+function setForceProbeAt(t) {
+	try {
+		localStorage.setItem(FORCE_PROBE_KEY, String(t));
+	} catch {}
 }
 function getStoredLastCheck() {
 	try {
@@ -162,6 +215,160 @@ async function fetchRemoteManifestVersion(branch, signal) {
 	const v = String(data?.version || "").trim();
 	if (!v) throw new Error("远程版本为空");
 	return v;
+}
+/** 策略文件的两个来源：GitHub raw 优先，jsDelivr 兜底（raw 被墙/限流时仍能拿到） */
+function policyUrls(branch) {
+	const t = Date.now();
+	return [`https://raw.githubusercontent.com/${REPO}/${branch}/${POLICY_PATH}?t=${t}`, `https://cdn.jsdelivr.net/gh/${REPO}@${branch}/${POLICY_PATH}?t=${t}`];
+}
+/** 读远端策略；读不到一律当作「没有强制要求」，绝不让网络问题反而触发强制 */
+async function fetchPolicy(branch) {
+	const rf = getParentFetch();
+	for (const url of policyUrls(branch)) {
+		const ctrl = new AbortController();
+		const timer = setTimeout(() => {
+			try {
+				ctrl.abort();
+			} catch {}
+		}, POLICY_TIMEOUT_MS);
+		try {
+			const resp = await rf(url, {
+				method: "GET",
+				headers: { Accept: "application/json" },
+				cache: "no-store",
+				signal: ctrl.signal
+			});
+			clearTimeout(timer);
+			if (!resp?.ok) continue;
+			const data = await resp.json().catch(() => null);
+			if (data && typeof data === "object") return normalizePolicy(data);
+		} catch {
+			clearTimeout(timer);
+		}
+	}
+	return null;
+}
+async function fetchRemoteVersionSafe(branch) {
+	const ctrl = new AbortController();
+	const timer = setTimeout(() => {
+		try {
+			ctrl.abort();
+		} catch {}
+	}, POLICY_TIMEOUT_MS);
+	try {
+		return await fetchRemoteManifestVersion(branch, ctrl.signal);
+	} catch {
+		return "";
+	} finally {
+		clearTimeout(timer);
+	}
+}
+function isGenerating() {
+	try {
+		const ctx = globalThis.SillyTavern?.getContext?.();
+		return !!(ctx?.streaming || ctx?.isGenerating);
+	} catch {
+		return false;
+	}
+}
+function reloadPage() {
+	try {
+		window.parent?.location?.reload?.();
+	} catch {
+		try {
+			location.reload();
+		} catch {}
+	}
+}
+/**
+* 强制更新成功后刷新页面。正在生成时挂到 GENERATION_ENDED 之后，
+* 避免把用户正在跑的输出打断；拿不到事件源则每 15 秒轮询一次，最多等 10 分钟。
+*/
+function scheduleReloadForUpdate(delayMs = 1500) {
+	if (!isGenerating()) {
+		setTimeout(reloadPage, delayMs);
+		return;
+	}
+	try {
+		const ctx = globalThis.SillyTavern?.getContext?.();
+		const es = ctx?.eventSource;
+		const ended = ctx?.event_types?.GENERATION_ENDED;
+		if (es && ended) {
+			if (typeof es.once === "function") {
+				es.once(ended, () => setTimeout(reloadPage, 800));
+				return;
+			}
+			if (typeof es.on === "function") {
+				const handler = () => {
+					try {
+						es.off?.(ended, handler);
+					} catch {}
+					setTimeout(reloadPage, 800);
+				};
+				es.on(ended, handler);
+				return;
+			}
+		}
+	} catch {}
+	let ticks = 0;
+	const timer = setInterval(() => {
+		ticks++;
+		if (!isGenerating() || ticks > 40) {
+			clearInterval(timer);
+			reloadPage();
+		}
+	}, 15e3);
+}
+var forcedRunning = false;
+/**
+* 救援通道主流程：读到 force 策略 → 确认远端版本更高 → 直接安装 → 安排刷新。
+* 全程 try/catch，失败只退避半小时，不抛给调用方、不影响面板使用。
+*/
+async function maybeForceUpdate(branch) {
+	if (forcedRunning) return false;
+	if (getForceRetryAt() > Date.now()) return false;
+	try {
+		const policy = await fetchPolicy(branch);
+		if (!policy?.force) return false;
+		const remoteVersion = await fetchRemoteVersionSafe(branch);
+		if (!shouldForceUpdate(policy, CURRENT_VERSION, remoteVersion)) return false;
+		forcedRunning = true;
+		const reason = policy.reason ? `（${policy.reason}）` : "";
+		toast("info", `检测到强制更新 v${remoteVersion}${reason}，正在自动更新`);
+		const res = await updateSelf();
+		if (!res.ok) {
+			setForceRetryAt(Date.now() + FORCE_RETRY_MS);
+			return false;
+		}
+		setForceRetryAt(0);
+		if (res.changed) scheduleReloadForUpdate();
+		return true;
+	} catch (e) {
+		setForceRetryAt(Date.now() + FORCE_RETRY_MS);
+		log.debug("强制更新失败", e?.message || e);
+		return false;
+	} finally {
+		forcedRunning = false;
+	}
+}
+/**
+* 启动期静默探测：不依赖面板、不弹「已是最新」之类的提示，只问「远端是否要求强制更新」。
+* 非 Git 安装（无提交哈希）与明确最新的情况直接退出，不产生额外请求。
+*/
+async function probeForcedUpdateAtStartup() {
+	try {
+		if (Date.now() - getForceProbeAt() < FORCE_PROBE_INTERVAL_MS) return;
+		setForceProbeAt(Date.now());
+	} catch {}
+	try {
+		if (!(globalThis.SillyTavern?.getContext?.())?.getRequestHeaders) return;
+		const local = await fetchLocalCommit();
+		if (!local?.sha) return;
+		if (local.isUpToDate === true) return;
+		await maybeForceUpdate(local.branch === "dev" || local.branch === "main" ? local.branch : getUpdateBranch());
+	} catch (e) {
+		log.debug("启动期强制更新探测失败", e?.message || e);
+	}
 }
 function getBanner() {
 	try {
@@ -454,6 +661,11 @@ async function checkUpdate(manual = false) {
 				log.debug("提交哈希检查失败，回退版本检查", e?.message || e);
 			}
 			if (needsSwitch) hasUpdate = true;
+			if (hasUpdate && await maybeForceUpdate(targetBranch)) return {
+				hasUpdate: true,
+				current: localLabel,
+				remote: remoteLabel || `${targetBranch}（领先本地）`
+			};
 			if (hasUpdate) {
 				const message = needsSwitch ? `当前 ${localLabel}，可在关于页切换到 ${targetBranch} 分支并更新` : remoteLabel ? `发现新提交 ${remoteLabel}（当前 ${localLabel}），可在关于页更新` : `检测到 ${targetBranch} 有新提交（当前 ${localLabel}），可在关于页更新`;
 				if (getLastNotified() !== notifyKey || manual) {
@@ -525,4 +737,4 @@ function maybeAutoCheck() {
 	} catch {}
 }
 //#endregion
-export { checkUpdate, getUpdateBranch, maybeAutoCheck, setUpdateBranch, syncUpdateIndicators, updateSelf };
+export { checkUpdate, getUpdateBranch, maybeAutoCheck, probeForcedUpdateAtStartup, setUpdateBranch, syncUpdateIndicators, updateSelf };
