@@ -68,7 +68,7 @@ Api-Usage/
 │   │   ├── computed.ts    # 唯一算入口：computeOverview(余额口径)/computeStats/getFilteredHistory/computeStatsFour/filterStatsHistory/getEndpointFilterOptions/getCredentialFilterOptions + computeWalletStats/computeChatStats/getRecordedChats；全部平均值类指标统一走 averagePositive（忽略单轮 0/空值，从分母剔除）
 │   │   └── events.ts      # DataEvents.UPDATED/HISTORY_ADDED/SETTINGS_CHANGED
 │   ├── store/index.ts, persistence.ts # 单一历史聚合（已废弃多存档，saves 仅作迁移兼容；append/getAllHistory 指纹去重 timestamp|model|total）
-│   ├── services/pricing.ts, interception.ts(fetch透传+TTFT/思维链/截断解析+请求开始快照连接身份，GENERATION_ENDED主路径，install/uninstall幂等), think-timing.ts(思维链耗时口径：按 JSON 增量识别首个「非空思维链帧」与首个「非空正文帧」，流式时序快照与 usage 解耦), connection-identity.ts(接入地址规范化/官方名称/酒馆密钥条目映射/严格隐私模式，不读取 proxy_password 与 custom_include_headers), wallet-secrets.ts(钱包校准密钥 XOR 存取与旧 apiKey 迁移), balance.ts(钱包余额手工/DeepSeek 官方自动校准和定时器), import-export.ts(单一历史+钱包配置+清洗，不导出密钥), sync.ts(单一历史+钱包合并+清洗), debug.ts, theme.ts(applyTheme 同步 overlay), update.ts(检查更新，目标分支 main/dev 可选且默认 main、提交哈希与服务端仓库状态优先、失败回退目标分支 manifest 版本对比，跨分支先 /api/extensions/switch 再调用 /api/extensions/update 扩展内一键更新并刷新，自动检查 1h 节流), currency.ts(USD↔CNY 动态换算、walletDrivenCurrency 钱包驱动显示币种/getDisplayCurrency/formatMoney/getWalletExchangeRate/fetchLiveRate 双源 24h), pricing-sync.ts(按钱包 catalogProvider 从 models.dev 拉取、无全局开关、hasSyncableWallet 无来源不联网、USD→CNY*rate、add-missing/overwrite-unlocked/overwrite-all 和锁定保护)
+│   ├── services/pricing.ts, interception.ts(fetch透传+TTFT/思维链/截断解析+请求开始快照连接身份，GENERATION_ENDED主路径，install/uninstall幂等), think-timing.ts(思维链耗时口径：按 JSON 增量识别首个「非空思维链帧」与首个「非空正文帧」，流式时序快照与 usage 解耦), connection-identity.ts(接入地址规范化/官方名称/酒馆密钥条目映射/严格隐私模式，不读取 proxy_password 与 custom_include_headers), wallet-secrets.ts(钱包校准密钥 XOR 存取与旧 apiKey 迁移), balance.ts(钱包余额手工/DeepSeek 官方自动校准和定时器), import-export.ts(单一历史+钱包配置+清洗，不导出密钥), sync.ts(单一历史+钱包合并+清洗), debug.ts, theme.ts(applyTheme 同步 overlay), update.ts(检查更新，目标分支 main/dev 可选且默认 main、提交哈希与服务端仓库状态优先、失败回退目标分支 manifest 版本对比，跨分支先 /api/extensions/switch 再调用 /api/extensions/update 扩展内一键更新并刷新，自动检查 1h 节流；**强制更新（救援通道）**见「强制更新」条：`update-policy.json` 策略 + 启动期静默探测 + 命中即安装并刷新，无本地开关), currency.ts(USD↔CNY 动态换算、walletDrivenCurrency 钱包驱动显示币种/getDisplayCurrency/formatMoney/getWalletExchangeRate/fetchLiveRate 双源 24h), pricing-sync.ts(按钱包 catalogProvider 从 models.dev 拉取、无全局开关、hasSyncableWallet 无来源不联网、USD→CNY*rate、add-missing/overwrite-unlocked/overwrite-all 和锁定保护)
 │   ├── stats/forecast.ts, forecast-series.ts, model-efficiency.ts, energyScore.ts # 预测核心：兼容旧分段回归/二次方程求 R；新序列核心负责压缩识别、增长拟合、命中率回退、成本/余额逐轮模拟与模型效率聚合；能耗评分 A-G
 │   ├── utils/device.ts(设备判定单一来源：UA 关键字 + iPadOS 桌面模式触控点数 + 粗指针；`mobileDeviceHint()` 会话内缓存，`set/resetMobileDeviceHint` 供注入与测试；「移动端兼容 UI」默认值据此只决定一次), date.ts, crypto.ts(XOR+UTF-8), logger.ts
 │   ├── **/*.test.ts       # Vitest 核心纯逻辑测试，不进入 Vite 入口构建
@@ -158,6 +158,17 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - `models.dev` 同步已改为逐钱包写入，预览和状态显示总新增/更新/跳过/待定价数量；**不存在全局同步开关**（旧 pricingSync.enabled 已删除）：是否同步只看该钱包有没有选价格来源，hasSyncableWallet 为假时静默跳过且不联网
 - 显示币种由钱包驱动：`currency.ts#walletDrivenCurrency` 在「未忽略钱包全部为 USD」时返回 USD，否则返回 CNY（`getDisplayCurrency` 据此选美元或人民币符号），改钱包币种即刻全站生效，没有独立币种开关；钱包余额汇总固定使用 `pricingSync.exchangeRate`（`getWalletExchangeRate`），与展示币种解耦，永不回退为 1
 
+## 强制更新（救援通道）
+
+用途只有一个：**未来某个版本坏到用户无法手动更新时，靠它把用户拉回来**。因此它不是「自动更新功能」，没有本地开关，也不受任何用户偏好影响。
+
+- **策略真源**：仓库根目录 `update-policy.json`（与 `manifest.json` 分开放，改策略不用动版本号、不给酒馆清单塞未知字段）：`{ force, minVersion, reason }`，平时 `force: false`。`minVersion` 用于提前埋旗、到点生效；`reason` 会展示给用户。读的是**用户当前所在分支**的策略文件（`main` / `dev` 各自独立），所以强推 dev 用户就改 dev 的这份
+- **触发时机**：① 启动后 3s 的静默探测（`probeForcedUpdateAtStartup`，2 小时最多一次，入口里独立 `try/catch`，不依赖面板与 `repository.hydrate`）；② 用户打开面板的常规检查（`checkUpdate`）发现落后时。两处都只在「远端版本确实更高」时才动手（`shouldForceUpdate`，永不降级），并可用 `minVersion` 设门槛
+- **执行**：复用 `updateSelf()`（跨分支先 `/api/extensions/switch` 再 `/api/extensions/update`），成功后 `scheduleReloadForUpdate()` 刷新页面——正在生成时挂到 `GENERATION_ENDED` 之后，拿不到事件源则 15s 轮询、最多等 10 分钟
+- **失败退避**：任何失败（非 Git 安装、403 无权限、服务端 git 拉不到）都只写 30 分钟退避并静默记 log，不阻断面板使用；策略读不到（网络/限流）一律当「没有强制要求」，绝不反过来硬更新。策略文件走 GitHub raw + jsDelivr 双源
+- **硬边界（不要在文档里承诺能救）**：坏在 `index.js` 加载阶段的版本（语法错误、分包 404、顶层 import 抛错）自救逻辑根本没有执行机会；非 Git 安装与无管理员权限的全局扩展只能提示手动更新。所以这条通道必须在健康版本里预埋
+- **禁用形状**：不要给强制更新加开关、不要让它降级、不要在失败时反复重试刷屏、不要让它依赖面板 DOM（启动探测路径里没有任何面板元素）
+
 ## 样式规范（DeepSeek 截图定版）
 
 - 变量：`--ds-bg:#FFFFFF --ds-card:#F5F6F7 --ds-text:#111827 --ds-border:#E5E7EB --ds-black:#111827 --ds-orange:#FF6A00 --ds-green-bg:#E6F8EC --ds-green:#0BA25E --ds-radius-card:14px --ds-radius-pill:999px`，深色 `data-ds-theme="dark"` 同名覆盖（`--ds-bg:#151517/--ds-card:#303134/--ds-card-inner:#3A3B3E/--ds-text:#F5F6F7/--ds-text-2:#C0C2C6/--ds-text-3:#9A9CA1`，对齐 DeepSeek 平台深色：页面近黑 + 块面明显更亮，靠三级明度差保证块内容可读，`ECharts` 经 `themeColor()` 动态取变量保证可读性）
@@ -179,6 +190,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 ## 常见任务
 
 - **改定价/峰谷**：内置价看 `src/constants/pricing.ts` + `src/services/pricing.ts`；节假日规则看 `src/constants/holidays.ts` + `src/utils/date.ts`（`isPeakHour/isOffpeakDay/isChinaHoliday`）；钱包价和独立峰谷看 `src/data/wallets.ts` + `src/ui/wallet-view.ts`；`calcCost/calcSavings/getPricing/hasPriceForModel` 均支持可选钱包上下文，未传钱包时保持旧行为
+- **改强制更新策略**：正常情况什么都不用做，仓库根目录 `update-policy.json` 保持 `force: false` 即可。发布救援版本时把它改成 `{ "force": true, "minVersion": "3.2.0", "reason": "一句话说明" }` 并随修复版本一起提交到**目标分支**（main 与 dev 各自独立生效，dev 用户读 dev 的这份），装了本通道的旧版本会在启动后静默检查并自动更新+刷新。规则见「强制更新（救援通道）」条
 - **改更新日志**：数据看 `src/constants/changelog.ts`（`CHANGELOG` 按时间倒序，`sections[].kind` 只允许 `feature/improve/fix`，`version` 与 `manifest.json#version` 对应、可带 `r` 前缀，`date` 为北京时间 `YYYY-MM-DD`）；渲染与交互看 `src/ui/changelog.ts`（`renderChangelogCard` 生成 HTML、`bindChangelog` 事件委托展开收起、`formatChangelogDate` 同年只显示 `M/D`）+ `style.css` 的 `#aus-changelog` / `.aus-changelog-*`；关于页只展示 `CHANGELOG_ENTRY_LIMIT` 条，最新条目默认展开、其余点击表头展开。新增日志**只追加 items 文案**，不要改渲染层；文案风格照 `r3.1.7` 范本（口语、一句话、合并同类项），不写文件名/色值/内部实现；条目结构变化需同步 `src/ui/changelog.test.ts`
 - **加价格段（多段定价）**：`PRICE_HISTORY[模型].push({since: 生效时间戳, offpeak, peak, usePeakPricing?, peakHours?, label?})`（按 `since` 升序，命中 `timestamp>=since` 最后一段，未来段同样写法）；内置段按记录时间查询，钱包手工/同步规则覆盖后不分段；改价后按钱包执行冷热重算
 - **改面板/导航**：`src/ui/panel.ts`（全屏+`positionPanel` 定位置换+`applyCollapsed`（窄屏直接 return）+详情窗口 `#aus-content-body` 桌面右侧/窄屏底部 + `switchView/handleBottomTabTap/syncBottomNav/paintNavState`）+ `src/ui/nav-model.ts`（底栏标签、设置二级入口、标题、点击语义的纯逻辑单一来源，改动需同步 `nav-model.test.ts`）+ `src/types/settings.ts` 的 `mobileCompatUi`（切换两套窄屏导航时同步 `repository.ts#normalizeSettings` 兜底、`settings.ts` 开关与 `applyMobileNavMode`）+ `style.css`（桌面侧栏折叠瞬时、窄屏底栏 `#aus-bottom-nav` 与指示胶囊、`aus-view-in` 入场动画、`#aus-settings-entries`；**新增底栏项/入口不要复用 `.aus-nav-item` 类名**，两套窄屏断点必须同步；改动钱包 header 响应式时必须保持覆盖规则优先级高于通用网格规则；按钮高度不要改回 `34/40px`）

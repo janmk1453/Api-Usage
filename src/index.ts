@@ -180,6 +180,8 @@ export async function onActivate() {
 
 async function init() {
   ensureStyleScope();
+  // 救援通道：在健康版本里预埋，未来某版本若坏到用户无法手动更新，可用远端 force 策略把人拉回来
+  try { setTimeout(() => { import('./services/update').then(m => m.probeForcedUpdateAtStartup()).catch(() => {}); }, 3000); } catch {}
   try { applyTheme((state.settings as any).theme); } catch {}
   // 隔离数据初始化错误，不影响入口注入
   try { await initStore(); } catch (e) { console.error('[API用量统计] initStore 失败', e); }
@@ -231,7 +233,8 @@ async function init() {
   } catch {}
   try { getDoc().addEventListener('keydown', onEscapeKey); } catch {}
   try { window.addEventListener('pagehide', onPageHide); } catch {}
-  // 不在启动期自动检查更新（外网不可达时会长时间挂起请求），改由用户打开面板时触发（openPanel → maybeAutoCheck，每次打开都执行）
+  // 不在启动期做常规更新检查（外网不可达时会长时间挂起请求），改由用户打开面板时触发（openPanel → maybeAutoCheck）；
+  // 唯一的例外是上面的强制更新探测：只问远端策略，读不到就当作没有要求，全程静默。
   (globalThis as any).ApiUsageStat = { MODULE, refreshUI, refreshTheme, updatePeakDot, openPanel, closePanel, togglePanel, state, injectWandEntry: ensureWandEntry };
 }
 

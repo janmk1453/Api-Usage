@@ -1,0 +1,6 @@
+{
+  "_readme": "远端救援策略：force=true 时，装了强制更新通道的旧版本会在启动后静默检查（每 2 小时最多一次），发现远端版本更高就直接更新并刷新页面。minVersion 用于提前埋旗、到点生效（远端版本达到该值才开始强制）。reason 会展示给用户。平时请保持 force=false。",
+  "force": false,
+  "minVersion": "",
+  "reason": ""
+}
