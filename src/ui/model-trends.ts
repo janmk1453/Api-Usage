@@ -205,7 +205,7 @@ async function renderOne(id:TrendId, filtered:any[]){
 export function initModelTrends(){
   const doc=getDoc();
   for (const id of ['token','req'] as TrendId[]){
-    const btn=doc.getElementById(`aus-modeltrends-x-${id}`);
+    const btn=doc.getElementById(`aus-modeltrends-x-btn-${id}`);
     const drop=doc.getElementById(`aus-modeltrends-x-drop-${id}`);
     if (btn && drop){
       btn.onclick=()=>{
@@ -217,9 +217,9 @@ export function initModelTrends(){
   doc.addEventListener('click', (e:any)=>{
     const t=e.target as HTMLElement;
     for (const id of ['token','req'] as TrendId[]){
-      const btn=doc.getElementById(`aus-modeltrends-x-${id}`);
+      const btn=doc.getElementById(`aus-modeltrends-x-btn-${id}`);
       const drop=doc.getElementById(`aus-modeltrends-x-drop-${id}`);
-      if (btn && drop && !t.closest(`#aus-modeltrends-x-${id}`) && !t.closest(`#aus-modeltrends-x-drop-${id}`)) drop.style.display='none';
+      if (btn && drop && !t.closest(`#aus-modeltrends-x-btn-${id}`) && !t.closest(`#aus-modeltrends-x-drop-${id}`)) drop.style.display='none';
     }
   });
 }

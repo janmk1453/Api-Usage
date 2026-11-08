@@ -412,9 +412,9 @@ export function initExtraCharts(){
   // 绑定每图 Y/X
   for (const id of Object.keys(CHART_DEFS) as ChartId[]){
     if (!CHART_DEFS[id].hasX) continue;
-    const yBtn=doc.getElementById(`aus-extra-y-${id}`);
+    const yBtn=doc.getElementById(`aus-extra-y-btn-${id}`);
     const yDrop=doc.getElementById(`aus-extra-y-drop-${id}`);
-    const xBtn=doc.getElementById(`aus-extra-x-${id}`);
+    const xBtn=doc.getElementById(`aus-extra-x-btn-${id}`);
     const xDrop=doc.getElementById(`aus-extra-x-drop-${id}`);
     if (yBtn && yDrop){
       yBtn.onclick=()=>{
@@ -433,11 +433,13 @@ export function initExtraCharts(){
   }
   // pie 模式切换：复用已过滤的 lastFiltered，避免丢失时间/模型筛选
   const pieToggle = doc.getElementById('aus-pie-toggle');
+  const pieToggleVal = doc.getElementById('aus-pie-toggle-val');
   if (pieToggle){
-    (pieToggle as any).textContent = state.pie.pieMode==='token' ? 'Token' : '次数';
+    const paintPieToggle = ()=>{ if (pieToggleVal) pieToggleVal.textContent = state.pie.pieMode==='token' ? 'Token' : '次数'; };
+    paintPieToggle();
     pieToggle.onclick = ()=>{
       state.pie.pieMode = state.pie.pieMode==='token'?'count':'token';
-      (pieToggle as any).textContent = state.pie.pieMode==='token'?'Token':'次数';
+      paintPieToggle();
       persistExtraPrefs('pie');
       renderOne('pie', lastFiltered);
     };
@@ -447,11 +449,11 @@ export function initExtraCharts(){
     for (const id of Object.keys(CHART_DEFS) as ChartId[]){
       if (!CHART_DEFS[id].hasX) continue;
       const yDrop=doc.getElementById(`aus-extra-y-drop-${id}`);
-      const yBtn=doc.getElementById(`aus-extra-y-${id}`);
+      const yBtn=doc.getElementById(`aus-extra-y-btn-${id}`);
       const xDrop=doc.getElementById(`aus-extra-x-drop-${id}`);
-      const xBtn=doc.getElementById(`aus-extra-x-${id}`);
-      if (yDrop && yBtn && !t.closest(`#aus-extra-y-drop-${id}`) && !t.closest(`#aus-extra-y-${id}`)) yDrop.style.display='none';
-      if (xDrop && xBtn && !t.closest(`#aus-extra-x-drop-${id}`) && !t.closest(`#aus-extra-x-${id}`)) xDrop.style.display='none';
+      const xBtn=doc.getElementById(`aus-extra-x-btn-${id}`);
+      if (yDrop && yBtn && !t.closest(`#aus-extra-y-drop-${id}`) && !t.closest(`#aus-extra-y-btn-${id}`)) yDrop.style.display='none';
+      if (xDrop && xBtn && !t.closest(`#aus-extra-x-drop-${id}`) && !t.closest(`#aus-extra-x-btn-${id}`)) xDrop.style.display='none';
     }
   });
 }
@@ -466,7 +468,7 @@ function renderExtraY(id:ChartId){
   if (label) label.textContent = sel.size? `${sel.size} 项` : '选择';
   drop.innerHTML = opts.map(o=>{
     const checked = sel.has(o.key);
-    return `<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--aus-fs-sm);${checked?'background:var(--ds-active-bg);':''}"><input type="checkbox" data-y="${o.key}" data-chart="${id}" ${checked?'checked':''} class="aus-checkbox" /><span style="width:8px;height:8px;background:${o.color};border-radius:2px;"></span>${o.label}</label>`;
+    return `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--aus-fs-sm);${checked?'background:var(--ds-card);':''}"><input type="checkbox" data-y="${o.key}" data-chart="${id}" ${checked?'checked':''} class="aus-checkbox" /><span style="display:inline-block;width:8px;height:8px;background:${o.color};border-radius:2px;"></span>${o.label}<span style="margin-left:auto;color:var(--ds-text-3);font-size:var(--aus-fs-sm);">${o.unit}</span></label>`;
   }).join('');
   drop.querySelectorAll('input[data-y]').forEach((el:any)=>{
     el.onchange=()=>{
@@ -489,7 +491,7 @@ function renderExtraX(id:ChartId){
   if (label) label.textContent = options.find(o=>o.key===cur)?.label || cur;
   drop.innerHTML = options.map(o=>{
     const active=o.key===cur;
-    return `<div data-x="${o.key}" data-chart="${id}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active?'background:var(--ds-active-bg);font-weight:600;':''}">${o.label}</div>`;
+    return `<div data-x="${o.key}" data-chart="${id}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active?'background:var(--ds-card);font-weight:600;':''}">${o.label}</div>`;
   }).join('');
   drop.querySelectorAll('[data-x]').forEach((el:any)=>{
     el.onclick=()=>{

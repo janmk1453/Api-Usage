@@ -4234,9 +4234,9 @@ function initExtraCharts() {
 	}
 	for (const id of Object.keys(CHART_DEFS)) {
 		if (!CHART_DEFS[id].hasX) continue;
-		const yBtn = doc.getElementById(`aus-extra-y-${id}`);
+		const yBtn = doc.getElementById(`aus-extra-y-btn-${id}`);
 		const yDrop = doc.getElementById(`aus-extra-y-drop-${id}`);
-		const xBtn = doc.getElementById(`aus-extra-x-${id}`);
+		const xBtn = doc.getElementById(`aus-extra-x-btn-${id}`);
 		const xDrop = doc.getElementById(`aus-extra-x-drop-${id}`);
 		if (yBtn && yDrop) yBtn.onclick = () => {
 			const willOpen = yDrop.style.display !== "block";
@@ -4256,11 +4256,15 @@ function initExtraCharts() {
 		};
 	}
 	const pieToggle = doc.getElementById("aus-pie-toggle");
+	const pieToggleVal = doc.getElementById("aus-pie-toggle-val");
 	if (pieToggle) {
-		pieToggle.textContent = state$1.pie.pieMode === "token" ? "Token" : "次数";
+		const paintPieToggle = () => {
+			if (pieToggleVal) pieToggleVal.textContent = state$1.pie.pieMode === "token" ? "Token" : "次数";
+		};
+		paintPieToggle();
 		pieToggle.onclick = () => {
 			state$1.pie.pieMode = state$1.pie.pieMode === "token" ? "count" : "token";
-			pieToggle.textContent = state$1.pie.pieMode === "token" ? "Token" : "次数";
+			paintPieToggle();
 			persistExtraPrefs("pie");
 			renderOne$1("pie", lastFiltered$1);
 		};
@@ -4270,11 +4274,11 @@ function initExtraCharts() {
 		for (const id of Object.keys(CHART_DEFS)) {
 			if (!CHART_DEFS[id].hasX) continue;
 			const yDrop = doc.getElementById(`aus-extra-y-drop-${id}`);
-			const yBtn = doc.getElementById(`aus-extra-y-${id}`);
+			const yBtn = doc.getElementById(`aus-extra-y-btn-${id}`);
 			const xDrop = doc.getElementById(`aus-extra-x-drop-${id}`);
-			const xBtn = doc.getElementById(`aus-extra-x-${id}`);
-			if (yDrop && yBtn && !t.closest(`#aus-extra-y-drop-${id}`) && !t.closest(`#aus-extra-y-${id}`)) yDrop.style.display = "none";
-			if (xDrop && xBtn && !t.closest(`#aus-extra-x-drop-${id}`) && !t.closest(`#aus-extra-x-${id}`)) xDrop.style.display = "none";
+			const xBtn = doc.getElementById(`aus-extra-x-btn-${id}`);
+			if (yDrop && yBtn && !t.closest(`#aus-extra-y-drop-${id}`) && !t.closest(`#aus-extra-y-btn-${id}`)) yDrop.style.display = "none";
+			if (xDrop && xBtn && !t.closest(`#aus-extra-x-drop-${id}`) && !t.closest(`#aus-extra-x-btn-${id}`)) xDrop.style.display = "none";
 		}
 	});
 }
@@ -4288,7 +4292,7 @@ function renderExtraY(id) {
 	if (label) label.textContent = sel.size ? `${sel.size} 项` : "选择";
 	drop.innerHTML = opts.map((o) => {
 		const checked = sel.has(o.key);
-		return `<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--aus-fs-sm);${checked ? "background:var(--ds-active-bg);" : ""}"><input type="checkbox" data-y="${o.key}" data-chart="${id}" ${checked ? "checked" : ""} class="aus-checkbox" /><span style="width:8px;height:8px;background:${o.color};border-radius:2px;"></span>${o.label}</label>`;
+		return `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--aus-fs-sm);${checked ? "background:var(--ds-card);" : ""}"><input type="checkbox" data-y="${o.key}" data-chart="${id}" ${checked ? "checked" : ""} class="aus-checkbox" /><span style="display:inline-block;width:8px;height:8px;background:${o.color};border-radius:2px;"></span>${o.label}<span style="margin-left:auto;color:var(--ds-text-3);font-size:var(--aus-fs-sm);">${o.unit}</span></label>`;
 	}).join("");
 	drop.querySelectorAll("input[data-y]").forEach((el) => {
 		el.onchange = () => {
@@ -4312,7 +4316,7 @@ function renderExtraX(id) {
 	if (label) label.textContent = options.find((o) => o.key === cur)?.label || cur;
 	drop.innerHTML = options.map((o) => {
 		const active = o.key === cur;
-		return `<div data-x="${o.key}" data-chart="${id}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active ? "background:var(--ds-active-bg);font-weight:600;" : ""}">${o.label}</div>`;
+		return `<div data-x="${o.key}" data-chart="${id}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active ? "background:var(--ds-card);font-weight:600;" : ""}">${o.label}</div>`;
 	}).join("");
 	drop.querySelectorAll("[data-x]").forEach((el) => {
 		el.onclick = () => {
@@ -4634,7 +4638,7 @@ async function renderOne(id, filtered) {
 function initModelTrends() {
 	const doc = getDoc$8();
 	for (const id of ["token", "req"]) {
-		const btn = doc.getElementById(`aus-modeltrends-x-${id}`);
+		const btn = doc.getElementById(`aus-modeltrends-x-btn-${id}`);
 		const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
 		if (btn && drop) btn.onclick = () => {
 			drop.style.display = drop.style.display === "block" ? "none" : "block";
@@ -4644,9 +4648,9 @@ function initModelTrends() {
 	doc.addEventListener("click", (e) => {
 		const t = e.target;
 		for (const id of ["token", "req"]) {
-			const btn = doc.getElementById(`aus-modeltrends-x-${id}`);
+			const btn = doc.getElementById(`aus-modeltrends-x-btn-${id}`);
 			const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
-			if (btn && drop && !t.closest(`#aus-modeltrends-x-${id}`) && !t.closest(`#aus-modeltrends-x-drop-${id}`)) drop.style.display = "none";
+			if (btn && drop && !t.closest(`#aus-modeltrends-x-btn-${id}`) && !t.closest(`#aus-modeltrends-x-drop-${id}`)) drop.style.display = "none";
 		}
 	});
 }
@@ -9882,6 +9886,36 @@ function helpViewHTML() {
       </div>
     </div>`;
 }
+//#endregion
+//#region src/ui/chart-picker.ts
+var ESCAPE = {
+	"&": "&amp;",
+	"\"": "&quot;",
+	"<": "&lt;",
+	">": "&gt;"
+};
+var escText = (value) => String(value).replace(/[&"<>]/g, (ch) => ESCAPE[ch] || ch);
+/** 单枚轴设置胶囊；箭头只在真有下拉时出现（箭头永远是最后一个 svg，pill.ts 旋转它） */
+function chartPillHTML(pill) {
+	const hasDrop = pill.dropdown !== false;
+	return `<button type="button" class="aus-chart-pill" id="${escText(pill.btnId)}" data-axis-key="${escText(pill.key)}"><span class="aus-chart-pill-key">${escText(pill.key)}</span><span class="aus-chart-pill-val" id="${escText(pill.labelId)}">${escText(pill.label)}</span>` + (hasDrop ? icon("chevron-down", 14) : "") + "</button>";
+}
+/** 下拉浮层；data-axis 决定从胶囊左端（Y）还是右端（X）展开 */
+function chartDropdownHTML(pill) {
+	const axis = pill.key === "X" ? "x" : "y";
+	return `<div class="aus-chart-dropdown" id="${escText(pill.dropId)}" data-axis="${axis}" style="display:none;"></div>`;
+}
+/** 右上角设置区：胶囊并排 + 各自的绝对定位下拉（同一个 relative 容器里，位置随胶囊走） */
+function chartAxisPickerHTML(pills) {
+	return `<div class="aus-chart-picker">${pills.map(chartPillHTML).join("")}${pills.filter((pill) => pill.dropdown !== false).map(chartDropdownHTML).join("")}</div>`;
+}
+/** 统计页图表卡片：标题行 + 图表容器 */
+function chartCardHTML(spec) {
+	const pills = spec.pills && spec.pills.length ? chartAxisPickerHTML(spec.pills) : "";
+	const cardId = spec.cardId ? ` id="${escText(spec.cardId)}"` : "";
+	const height = spec.height ?? 220;
+	return `<div class="ds-card aus-chart-card"${cardId}><div class="aus-chart-card-head"><span class="aus-chart-card-title">${escText(spec.title)}</span>` + pills + `</div><div id="${escText(spec.chartId)}" style="height:${height}px;"></div></div>`;
+}
 /** 更新日志（最新在前） */
 var CHANGELOG = [
 	{
@@ -11729,18 +11763,130 @@ function createPanel() {
                 <tbody id="aus-summary-tbody"><tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
               </table>
             </div>
-            <div class="ds-card" style="margin-top:12px;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">自定义图表</span><div style="display:flex;gap:8px;position:relative;"><div id="aus-chart-y-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span style="color:var(--ds-text-2);">Y</span><span id="aus-chart-y-label" style="font-weight:600;color:var(--ds-text);">5 项</span>${icon("chevron-down", 14)}</div><div id="aus-chart-x-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span style="color:var(--ds-text-2);">X</span><span id="aus-chart-x-label" style="font-weight:600;color:var(--ds-text);">轮次</span>${icon("chevron-down", 14)}</div><div id="aus-chart-y-dropdown" style="display:none;position:absolute;top:34px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;"></div><div id="aus-chart-x-dropdown" style="display:none;position:absolute;top:34px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:140px;"></div></div></div><div id="aus-stats-chart" style="height:300px;"></div></div>
+            <div style="margin-top:12px;">
+              ${chartCardHTML({
+		title: "自定义图表",
+		chartId: "aus-stats-chart",
+		height: 300,
+		pills: [{
+			key: "Y",
+			btnId: "aus-chart-y-btn",
+			labelId: "aus-chart-y-label",
+			dropId: "aus-chart-y-dropdown",
+			label: "5 项"
+		}, {
+			key: "X",
+			btnId: "aus-chart-x-btn",
+			labelId: "aus-chart-x-label",
+			dropId: "aus-chart-x-dropdown",
+			label: "轮次"
+		}]
+	})}
+            </div>
             <div id="aus-extra-charts" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px;">
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">Token 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-y-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-y-label-token">3 项</span>${icon("chevron-down", 14)}</div><div id="aus-extra-x-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-token">轮次</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-y-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:180px;max-height:200px;overflow:auto;"></div><div id="aus-extra-x-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-token" style="height:220px;"></div></div>
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">费用 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-y-cost" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-y-label-cost">1 项</span>${icon("chevron-down", 14)}</div><div id="aus-extra-x-cost" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-cost">轮次</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-y-drop-cost" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:180px;max-height:200px;overflow:auto;"></div><div id="aus-extra-x-drop-cost" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-cost" style="height:220px;"></div></div>
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">缓存命中 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-x-hit" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-hit">轮次</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-x-drop-hit" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-hit" style="height:220px;"></div></div>
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">API请求数 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-x-req" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-req">每日</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-x-drop-req" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-req" style="height:220px;"></div></div>
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">耗时与速率 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-x-dur" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-dur">轮次</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-x-drop-dur" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-dur" style="height:220px;"></div></div>
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">模型用量占比</span><div id="aus-pie-toggle" style="padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;">Token</div></div><div id="aus-chart-pie" style="height:220px;"></div></div>
+              ${chartCardHTML({
+		title: "Token 趋势",
+		chartId: "aus-chart-token",
+		pills: [{
+			key: "Y",
+			btnId: "aus-extra-y-btn-token",
+			labelId: "aus-extra-y-label-token",
+			dropId: "aus-extra-y-drop-token",
+			label: "3 项"
+		}, {
+			key: "X",
+			btnId: "aus-extra-x-btn-token",
+			labelId: "aus-extra-x-label-token",
+			dropId: "aus-extra-x-drop-token",
+			label: "轮次"
+		}]
+	})}
+              ${chartCardHTML({
+		title: "费用 趋势",
+		chartId: "aus-chart-cost",
+		pills: [{
+			key: "Y",
+			btnId: "aus-extra-y-btn-cost",
+			labelId: "aus-extra-y-label-cost",
+			dropId: "aus-extra-y-drop-cost",
+			label: "1 项"
+		}, {
+			key: "X",
+			btnId: "aus-extra-x-btn-cost",
+			labelId: "aus-extra-x-label-cost",
+			dropId: "aus-extra-x-drop-cost",
+			label: "轮次"
+		}]
+	})}
+              ${chartCardHTML({
+		title: "缓存命中 趋势",
+		chartId: "aus-chart-hit",
+		pills: [{
+			key: "X",
+			btnId: "aus-extra-x-btn-hit",
+			labelId: "aus-extra-x-label-hit",
+			dropId: "aus-extra-x-drop-hit",
+			label: "轮次"
+		}]
+	})}
+              ${chartCardHTML({
+		title: "API请求数 趋势",
+		chartId: "aus-chart-req",
+		pills: [{
+			key: "X",
+			btnId: "aus-extra-x-btn-req",
+			labelId: "aus-extra-x-label-req",
+			dropId: "aus-extra-x-drop-req",
+			label: "每日"
+		}]
+	})}
+              ${chartCardHTML({
+		title: "耗时与速率 趋势",
+		chartId: "aus-chart-dur",
+		pills: [{
+			key: "X",
+			btnId: "aus-extra-x-btn-dur",
+			labelId: "aus-extra-x-label-dur",
+			dropId: "aus-extra-x-drop-dur",
+			label: "轮次"
+		}]
+	})}
+              ${chartCardHTML({
+		title: "模型用量占比",
+		chartId: "aus-chart-pie",
+		pills: [{
+			key: "口径",
+			btnId: "aus-pie-toggle",
+			labelId: "aus-pie-toggle-val",
+			dropId: "",
+			label: "Token",
+			dropdown: false
+		}]
+	})}
             </div>
             <div id="aus-model-trends" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px;">
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">模型 Token 趋势</span><div style="display:flex;gap:6px;"><div id="aus-modeltrends-x-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-modeltrends-x-label-token">每日</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-modeltrends-x-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-model-token" style="height:220px;"></div></div>
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">模型调用次数趋势</span><div style="display:flex;gap:6px;"><div id="aus-modeltrends-x-req" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-modeltrends-x-label-req">每日</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-modeltrends-x-drop-req" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-model-req" style="height:220px;"></div></div>
+              ${chartCardHTML({
+		title: "模型 Token 趋势",
+		chartId: "aus-chart-model-token",
+		pills: [{
+			key: "X",
+			btnId: "aus-modeltrends-x-btn-token",
+			labelId: "aus-modeltrends-x-label-token",
+			dropId: "aus-modeltrends-x-drop-token",
+			label: "每日"
+		}]
+	})}
+              ${chartCardHTML({
+		title: "模型调用次数趋势",
+		chartId: "aus-chart-model-req",
+		pills: [{
+			key: "X",
+			btnId: "aus-modeltrends-x-btn-req",
+			labelId: "aus-modeltrends-x-label-req",
+			dropId: "aus-modeltrends-x-drop-req",
+			label: "每日"
+		}]
+	})}
             </div>
           </div>
           <div data-view="forecast" style="display:none;">

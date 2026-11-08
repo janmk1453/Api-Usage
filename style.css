@@ -161,6 +161,62 @@
   filter: none;
 }
 
+/* ── 统计页图表卡片骨架：标题 + 右上角 Y/X 设置（单一来源）──────────────────────
+   模板由 src/ui/chart-picker.ts 生成，自定义图表 / 6 张扩展图 / 2 张模型趋势图共用同一套
+   类名，因此胶囊尺寸、下拉浮层、悬停反馈与开合动画天然一致，改这里即全站同步。
+   注意：胶囊改成 <button> 后会被 @media (pointer: coarse) 的 #aus-panel button{min-height:30px}
+   撑高，故统一在 .aus-chart-picker .aus-chart-pill 上把 min-height 归零（特异性更高）。 */
+#aus-panel .aus-chart-card { position: relative; min-width: 0; }
+#aus-panel .aus-chart-card-head {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 6px; margin-bottom: 6px; min-width: 0;
+}
+#aus-panel .aus-chart-card-title { font-size: var(--aus-fs-base); font-weight: 600; color: var(--ds-text); }
+#aus-panel .aus-chart-picker {
+  position: relative; display: flex; align-items: center;
+  flex-wrap: wrap; gap: 8px; min-width: 0;
+}
+#aus-panel .aus-chart-picker .aus-chart-pill {
+  display: flex; align-items: center; gap: 6px;
+  min-height: 0; padding: 6px 10px;
+  border: 1px solid var(--ds-border); border-radius: 999px;
+  background: var(--ds-card-inner); color: var(--ds-text);
+  font-family: inherit; font-size: var(--aus-fs-sm); line-height: 1.2;
+  cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  transition: background-image 120ms ease, transform 120ms ease;
+}
+#aus-panel .aus-chart-picker .aus-chart-pill-key { color: var(--ds-text-2); }
+#aus-panel .aus-chart-picker .aus-chart-pill-val { font-weight: 600; color: var(--ds-text); white-space: nowrap; }
+#aus-panel .aus-chart-picker .aus-chart-pill > svg { flex: 0 0 auto; }
+#aus-panel .aus-chart-picker .aus-chart-pill:hover {
+  background-image: linear-gradient(rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.05));
+}
+[data-extension="api-usage-stat"][data-ds-theme="dark"] #aus-panel .aus-chart-picker .aus-chart-pill:hover {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.08));
+}
+#aus-panel .aus-chart-picker .aus-chart-pill:active { transform: scale(0.98); }
+#aus-panel .aus-chart-picker .aus-chart-pill:focus-visible { outline: 2px solid var(--ds-orange); outline-offset: 1px; }
+#aus-panel .aus-chart-picker .aus-chart-pill svg:last-of-type {
+  transition: transform 140ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+#aus-panel .aus-chart-picker .aus-chart-pill[data-aus-open="1"] svg:last-of-type { transform: rotate(180deg); }
+/* 下拉浮层：半径/阴影/内距/最大高度与自定义图表原本的内联值完全一致 */
+#aus-panel .aus-chart-dropdown {
+  position: absolute; top: 34px; z-index: 50;
+  background: var(--ds-card-inner); border: 1px solid var(--ds-border);
+  border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 6px; overflow: auto; max-width: calc(100vw - 40px);
+}
+#aus-panel .aus-chart-dropdown[data-axis="y"] { left: 0; min-width: 220px; max-height: 280px; }
+#aus-panel .aus-chart-dropdown[data-axis="x"] { right: 0; min-width: 140px; }
+@media (max-width: 760px) {
+  /* 窄屏卡片只有一列宽，Y 下拉改从右端展开，避免右侧溢出到面板外 */
+  #aus-panel .aus-chart-dropdown[data-axis="y"] { left: auto; right: 0; min-width: min(220px, calc(100vw - 48px)); }
+}
+@container ausbody (max-width: 760px) {
+  #aus-panel .aus-chart-dropdown[data-axis="y"] { left: auto; right: 0; min-width: min(220px, calc(100vw - 48px)); }
+}
+
 /* ── 胶囊下拉浮层：开 / 合过渡（纯 CSS，无需改 50 多处开关逻辑）────────────────
    display 也参与过渡（allow-discrete），所以关闭时元素不会瞬间消失，而是先淡出+微缩；
    打开时靠 @starting-style 提供"变化前"起始态，实现从按钮下方弹出。
@@ -691,11 +747,13 @@
   [data-view="overview"] .ds-card { overflow: hidden !important; }
   [data-view="stats"] .ds-card { overflow: visible !important; }
   /* 统计页图表类卡片内部图表容器必须 hidden + 约束宽度，防止灰色底块随 100% 宽度把卡片撑出视口 */
+  /* 扩展图/模型趋势卡片自身不裁剪：右上角 Y/X 下拉（绝对定位、最高 280px）会伸出卡片，
+     裁剪交给卡片内的图表容器（见下方 [id^="aus-chart-"] 的 hidden 约束）承担 */
   [data-view="stats"] #aus-extra-charts .ds-card,
-  [data-view="stats"] #aus-model-trends .ds-card { overflow: hidden !important; }
+  [data-view="stats"] #aus-model-trends .ds-card { overflow: visible !important; }
   /* extra/model-trends 网格项必须 min-width:0 否则 grid 默认 minmax:auto 会被图表最小宽度撑开超出视口 */
   #aus-extra-charts, #aus-model-trends { min-width: 0 !important; max-width: 100% !important; width: 100% !important; }
-  #aus-extra-charts > .ds-card, #aus-model-trends > .ds-card { min-width: 0 !important; max-width: 100% !important; overflow: hidden !important; }
+  #aus-extra-charts > .ds-card, #aus-model-trends > .ds-card { min-width: 0 !important; max-width: 100% !important; overflow: visible !important; }
   /* 图表容器自身再加一层 hidden 约束，确保 ECharts canvas 不把父卡片撑开 */
   #aus-extra-charts [id^="aus-chart-"], #aus-model-trends [id^="aus-chart-"] { overflow: hidden !important; max-width: 100% !important; box-sizing: border-box !important; }
   #aus-model-summary { overflow-x: auto !important; overflow-y: hidden !important; }
@@ -2435,20 +2493,6 @@
 @media (pointer: coarse) {
   .aus-range-zoom { height: 30px; }
   .aus-range-zoom-handle { width: 20px; height: 20px; margin-top: -10px; }
-}
-
-/* ── 统计页额外图表下拉浮层：补齐阴影/圆角/层级，避免看起来散落在图表上 ── */
-#aus-panel [id^="aus-extra-y-drop-"],
-#aus-panel [id^="aus-extra-x-drop-"] {
-  z-index: 30 !important;
-  background: var(--ds-card-inner) !important;
-  border: 1px solid var(--ds-border) !important;
-  border-radius: 10px !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18) !important;
-  padding: 6px !important;
-  max-height: 260px !important;
-  overflow: auto !important;
-  max-width: calc(100% - 16px) !important;
 }
 
 /* ── 关于页「更新日志」块 ───────────────────────────────────────────────────────
