@@ -1972,6 +1972,71 @@
   #aus-panel .aus-switch .aus-switch-thumb { transition: none !important; }
 }
 
+/* ── 对话展示管理（概览「按对话统计」右上角「管理对话」进入的页面） ──
+   一行一个对话：左侧名称 + 用量摘要，右侧状态胶囊与 .aus-switch。
+   点整行等于点开关（逻辑在 chat-manage.ts），隐藏只影响「按对话统计」这一张表。 */
+#aus-panel .aus-chat-manage-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ds-border);
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+#aus-panel .aus-chat-manage-row:last-child { border-bottom: 0; }
+/* 行落在 --ds-card 灰面上，悬停/按压取侧栏的选中底色（比 hover 底色更明显一档） */
+@media (hover: hover) {
+  #aus-panel .aus-chat-manage-row:hover { background: var(--ds-nav-active-bg); }
+}
+#aus-panel .aus-chat-manage-row:active { background: var(--ds-nav-active-bg); }
+#aus-panel .aus-chat-manage-name {
+  font-size: var(--aus-fs-base);
+  font-weight: 600;
+  color: var(--ds-text);
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#aus-panel .aus-chat-manage-meta {
+  margin-top: 2px;
+  font-size: var(--aus-fs-sm);
+  color: var(--ds-text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#aus-panel .aus-chat-manage-state {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--ds-green-bg);
+  color: var(--ds-green);
+  font-size: var(--aus-fs-xs);
+  line-height: 1.6;
+  white-space: nowrap;
+}
+/* 已隐藏：名称与状态一起淡化，视觉上就能一眼分出「不出现在表格里」的那些 */
+#aus-panel .aus-chat-manage-row[data-hidden="1"] .aus-chat-manage-name { color: var(--ds-text-3); }
+#aus-panel .aus-chat-manage-row[data-hidden="1"] .aus-chat-manage-state {
+  background: var(--ds-card-inner);
+  color: var(--ds-text-3);
+}
+/* 概览「按对话统计」标题右侧的隐藏计数（0 个时不显示，由 paintChatManageBadge 控制） */
+#aus-chat-manage-count { font-variant-numeric: tabular-nums; }
+#aus-chat-manage-btn { font-family: inherit; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+@media (hover: hover) {
+  #aus-chat-manage-btn:hover { border-color: var(--ds-text-3); }
+}
+#aus-chat-manage-btn:active { background: var(--ds-nav-active-bg); }
+/* 窄屏：行内距与间距收一档，名称与摘要仍单行省略 */
+@media (max-width: 760px) {
+  #aus-panel .aus-chat-manage-row { padding: 8px 10px; gap: 8px; }
+  #aus-panel .aus-chat-manage-state { padding: 1px 6px; }
+}
+
 /* ── 统计页第一张图表：自绘 X 轴视窗滑块（长条 + 两端圆点，触屏可拖） ── */
 #aus-stats-chart { position: relative; }
 .aus-range-zoom {

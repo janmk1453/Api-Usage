@@ -3,13 +3,13 @@ import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from ".
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { f as saveHot, p as historyRecordKey } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-DJwQKayM.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-BtwSe1u7.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-Dsn2T9-Q.js";
-import { t as installInterception } from "./interception-B0uQL7QV.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-C2iwQj5J.js";
-import { a as trackOpen, c as applyTheme, d as icon, i as initTelemetry, l as unwatchSystemTheme, o as trackPage, r as flushTelemetry, s as trackRender, t as renderSettings, u as watchSystemTheme } from "./settings-DHsLhtsN.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-uaQh3c2q.js";
+import { t as installInterception } from "./interception-CECrCOjs.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-BUV5_VFC.js";
+import { a as trackOpen, c as applyTheme, d as switchHTML, f as icon, i as initTelemetry, l as unwatchSystemTheme, o as trackPage, r as flushTelemetry, s as trackRender, t as renderSettings, u as watchSystemTheme } from "./settings-BTltuXh0.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-C3O8JPpr.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -283,7 +283,7 @@ function triggerImport() {
 //#region src/ui/compare.ts
 var selOld = null;
 var selNew = null;
-function getDoc$11() {
+function getDoc$12() {
 	return window.parent?.document ?? document;
 }
 function diffMessages(oldMsgs, newMsgs) {
@@ -297,7 +297,7 @@ function diffMessages(oldMsgs, newMsgs) {
 	return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${esc(a.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-red-bg);color:var(--ds-red);padding:0 2px;border-radius:3px;\">" + esc(a.slice(i, i + 200)) + "</span>" + esc(a.slice(i + 200, i + 280))}</div><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${esc(b.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-green-bg);color:var(--ds-green);padding:0 2px;border-radius:3px;\">" + esc(b.slice(i, i + 200)) + "</span>" + esc(b.slice(i + 200, i + 280))}</div></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
 }
 function bindHistoryCompare() {
-	const doc = getDoc$11();
+	const doc = getDoc$12();
 	doc.addEventListener("click", (e) => {
 		const t = e.target;
 		if (!t) return;
@@ -314,7 +314,7 @@ function bindHistoryCompare() {
 	});
 }
 function renderDiff() {
-	const host = getDoc$11().getElementById("aus-diff");
+	const host = getDoc$12().getElementById("aus-diff");
 	if (!host) return;
 	if (selOld == null || selNew == null) {
 		host.innerHTML = "<div style=\"text-align:center;padding:16px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">已选 " + (selOld != null ? "旧 " : "") + (selNew != null ? "新 " : "") + "，请在历史中各选一条 旧/新 进行对比</div>";
@@ -1628,6 +1628,99 @@ function sortRows(rows, state, pick, tie) {
 	});
 }
 //#endregion
+//#region src/ui/chat-visibility.ts
+/**
+* 「按对话统计」表格的对话显隐偏好（概览页专用）。
+*
+* 定位与 `filter-prefs.ts` / `chart-prefs.ts` 一致：纯展示偏好，放 localStorage，
+* 不进 `settings`、不参与导出与 WebDAV 同步，也不影响任何统计口径——隐藏只是让
+* 该对话不出现在概览「按对话统计」表里，热力图、统计页、历史页、趋势预测、
+* 能耗评分等全部照旧按全量历史计算。
+*
+* 存储形态：`{ hidden: string[] }`，元素是「对话键」而不是 chatId 原值：
+* 无 chatId 的记录（旧数据/未分组）统一用 `NULL_CHAT_KEY`，与
+* `data/computed.ts#computeChatStats` 内部的聚合键保持一致，
+* 这样没有 chatId 的那一行也能被单独隐藏。
+*
+* 读写全部包 try/catch：宿主禁用存储或隐私模式下静默退化为内存态
+* （本次会话有效，刷新后回到「全部显示」），不影响功能可用性。
+*/
+var CHAT_VISIBILITY_KEY = "aus_chat_visibility_v1";
+/** 无 chatId 的记录（旧数据/未分组）在所有统计里共用的聚合键 */
+var NULL_CHAT_KEY = "__null__";
+/** chatId → 存储键：空值统一落到 NULL_CHAT_KEY */
+function chatVisibilityKey(chatId) {
+	return chatId ? String(chatId) : NULL_CHAT_KEY;
+}
+/** 校验并去重：只保留非空字符串，非法输入一律丢弃 */
+function normalizeHiddenKeys(value) {
+	if (!Array.isArray(value)) return [];
+	const out = [];
+	for (const item of value) {
+		if (typeof item !== "string" || !item) continue;
+		if (!out.includes(item)) out.push(item);
+	}
+	return out;
+}
+function storage$2() {
+	try {
+		const store = globalThis.localStorage;
+		if (!store || typeof store.getItem !== "function" || typeof store.setItem !== "function") return null;
+		store.getItem(CHAT_VISIBILITY_KEY);
+		return store;
+	} catch {
+		return null;
+	}
+}
+/** 内存态兜底（localStorage 不可用时本次会话仍可切换） */
+var memoryHidden = null;
+/** 读取隐藏键列表（只读副本，调用方可安全排序/遍历） */
+function readHiddenKeys() {
+	const store = storage$2();
+	if (!store) return memoryHidden ? memoryHidden.slice() : [];
+	try {
+		const raw = store.getItem(CHAT_VISIBILITY_KEY);
+		if (!raw) return [];
+		return normalizeHiddenKeys(JSON.parse(raw)?.hidden);
+	} catch {
+		return [];
+	}
+}
+function writeHiddenKeys(keys) {
+	const clean = normalizeHiddenKeys(keys);
+	memoryHidden = clean;
+	const store = storage$2();
+	if (!store) return;
+	try {
+		store.setItem(CHAT_VISIBILITY_KEY, JSON.stringify({ hidden: clean }));
+	} catch {}
+}
+/** 该对话当前是否被隐藏（入参是存储键） */
+function isHiddenKey(key) {
+	return readHiddenKeys().includes(key);
+}
+/** 设置某个对话键的显隐；hidden=true 表示从「按对话统计」表里隐藏 */
+function setHiddenKey(key, hidden) {
+	if (!key) return;
+	const current = readHiddenKeys();
+	if (hidden === current.includes(key)) return;
+	writeHiddenKeys(hidden ? current.concat(key) : current.filter((k) => k !== key));
+}
+/** 全部恢复显示 */
+function clearHiddenKeys() {
+	writeHiddenKeys([]);
+}
+/**
+* 过滤出应当展示的行（纯函数，按入参顺序、不改变排序）。
+* 传 keyOf 便于测试与复用；默认按 ChatSummaryRow.chatId 取键。
+*/
+function filterVisibleRows(rows, keyOf = (row) => chatVisibilityKey(row?.chatId ?? null)) {
+	const hidden = readHiddenKeys();
+	if (!hidden.length) return rows.slice();
+	const set = new Set(hidden);
+	return rows.filter((row) => !set.has(keyOf(row)));
+}
+//#endregion
 //#region src/ui/chat-summary-table.ts
 /** 排序状态：key 为 null 时保持数据源默认顺序（总 Tokens 倒序） */
 var sortState = {
@@ -1659,6 +1752,15 @@ function bindChatSummarySort(doc) {
 	});
 	paintSortHeader(doc, TABLE_ID, sortState);
 }
+/** 概览表格标题右侧「管理对话」按钮上的隐藏计数（0 个时整块隐藏） */
+function paintChatManageBadge(doc) {
+	const badge = doc.getElementById("aus-chat-manage-count");
+	if (!badge) return;
+	const hiddenSet = new Set(readHiddenKeys());
+	const hidden = lastRows.filter((r) => hiddenSet.has(chatVisibilityKey(r.chatId))).length;
+	badge.textContent = hidden ? "已隐藏 " + hidden + " 个" : "";
+	badge.style.display = hidden ? "inline" : "none";
+}
 /** 渲染表体：先按当前排序状态排序，未选列时保持入参顺序 */
 function renderChatSummaryTable(doc, rows) {
 	const tbody = doc.getElementById(TBODY_ID);
@@ -1667,11 +1769,19 @@ function renderChatSummaryTable(doc, rows) {
 	try {
 		bindChatSummarySort(doc);
 	} catch {}
+	try {
+		paintChatManageBadge(doc);
+	} catch {}
 	if (!lastRows.length) {
 		tbody.innerHTML = "<tr><td colspan=\"9\" style=\"text-align:center;padding:16px;color:var(--ds-text-3);\">暂无数据</td></tr>";
 		return;
 	}
-	tbody.innerHTML = sortRows(lastRows, sortState, pickChatSortValue, (row) => row.displayName).map((r) => {
+	const visible = filterVisibleRows(lastRows);
+	if (!visible.length) {
+		tbody.innerHTML = "<tr><td colspan=\"9\" style=\"text-align:center;padding:16px;color:var(--ds-text-3);\">全部对话都已隐藏 · 点击右上角「管理对话」恢复显示</td></tr>";
+		return;
+	}
+	tbody.innerHTML = sortRows(visible, sortState, pickChatSortValue, (row) => row.displayName).map((r) => {
 		const avgRate = r.avgHitRate > 0 ? r.avgHitRate.toFixed(1) + "%" : "—";
 		const colorRate = r.avgHitRate >= 50 ? "var(--ds-green)" : r.avgHitRate > 0 ? "var(--ds-text)" : "var(--ds-text-3)";
 		let costTxt = "¥" + r.cost.toFixed(4);
@@ -1695,18 +1805,18 @@ function renderChatSummaryTable(doc, rows) {
 }
 //#endregion
 //#region src/ui/heatmap.ts
-function getDoc$10() {
+function getDoc$11() {
 	return window.parent?.document ?? document;
 }
 function themeIsDark() {
 	try {
-		return getDoc$10().getElementById("aus-panel")?.getAttribute("data-ds-theme") === "dark";
+		return getDoc$11().getElementById("aus-panel")?.getAttribute("data-ds-theme") === "dark";
 	} catch {
 		return false;
 	}
 }
 function renderHeatmap(filtered) {
-	const doc = getDoc$10();
+	const doc = getDoc$11();
 	const container = doc.getElementById("aus-heatmap-container-overview") || doc.getElementById("aus-heatmap-container");
 	const legendEl = doc.getElementById("aus-heatmap-legend-overview") || doc.getElementById("aus-heatmap-legend");
 	const labelsEl = doc.getElementById("aus-heatmap-labels-overview") || doc.getElementById("aus-heatmap-labels");
@@ -1863,7 +1973,7 @@ function renderHeatmap(filtered) {
 }
 //#endregion
 //#region src/ui/overview.ts
-function getDoc$9() {
+function getDoc$10() {
 	return window.parent?.document ?? document;
 }
 function fmt(n) {
@@ -2098,7 +2208,7 @@ var overviewWalletBound = false;
 var overviewWalletViewportBound = false;
 var overviewAsyncToken = 0;
 function closeOverviewWalletDropdown() {
-	const dropdown = getDoc$9().getElementById("aus-overview-wallet-dropdown");
+	const dropdown = getDoc$10().getElementById("aus-overview-wallet-dropdown");
 	if (dropdown) dropdown.style.display = "none";
 }
 function bindOverviewWalletViewport() {
@@ -2111,12 +2221,12 @@ function bindOverviewWalletViewport() {
 		window.addEventListener("resize", closeOverviewWalletDropdown, { passive: true });
 	} catch {}
 	try {
-		getDoc$9().getElementById("aus-main")?.addEventListener("scroll", closeOverviewWalletDropdown, { passive: true });
+		getDoc$10().getElementById("aus-main")?.addEventListener("scroll", closeOverviewWalletDropdown, { passive: true });
 	} catch {}
 }
 function positionOverviewWalletDropdown(btn, dropdown) {
 	try {
-		const panelRect = getDoc$9().getElementById("aus-panel")?.getBoundingClientRect();
+		const panelRect = getDoc$10().getElementById("aus-panel")?.getBoundingClientRect();
 		const btnRect = btn.getBoundingClientRect();
 		const viewportWidth = window.parent?.innerWidth ?? window.innerWidth;
 		const viewportHeight = window.parent?.innerHeight ?? window.innerHeight;
@@ -2361,15 +2471,37 @@ var SETTINGS_CHILD_VIEWS = [
 	"help",
 	"about"
 ];
+/** 所有二级视图 → 父级根视图（用于底栏高亮、返回箭头、重复点 tab 回根页） */
+var CHILD_PARENT = {
+	wallet: "settings",
+	help: "settings",
+	about: "settings",
+	"chat-manage": "overview"
+};
+/** 二级视图清单（顺序即声明顺序） */
+var CHILD_VIEWS = [
+	"wallet",
+	"help",
+	"about",
+	"chat-manage"
+];
 function isSettingsChild(view) {
 	return SETTINGS_CHILD_VIEWS.includes(view);
 }
+/** 任意二级页判定（含挂在概览下的对话展示管理） */
+function isChildView(view) {
+	return CHILD_VIEWS.includes(view);
+}
+/** 二级页的父级根视图；非二级页返回 null */
+function childParentOf(view) {
+	return CHILD_PARENT[view] ?? null;
+}
 /**
-* 视图所属的底栏 tab：二级页归到「设置」，其余自身。
+* 视图所属的底栏 tab：二级页归到父级（设置 / 概览），其余自身。
 * 底栏高亮与「重复点当前 tab」判定都以它为准。
 */
 function parentTabOf(view) {
-	return isSettingsChild(view) ? "settings" : view;
+	return CHILD_PARENT[view] ?? view;
 }
 /** 页面标题（全称）：桌面顶栏与窄屏 header 共用 */
 var VIEW_TITLES = {
@@ -2380,7 +2512,8 @@ var VIEW_TITLES = {
 	wallet: "钱包",
 	settings: "设置",
 	help: "使用说明",
-	about: "关于"
+	about: "关于",
+	"chat-manage": "对话展示管理"
 };
 function viewTitle(view) {
 	return VIEW_TITLES[view] || VIEW_TITLES.overview;
@@ -3444,12 +3577,12 @@ function persistExtraPrefs(id) {
 		x: state$1[id].x
 	} } });
 }
-function getDoc$8() {
+function getDoc$9() {
 	return window.parent?.document ?? document;
 }
 function themeColor$3(name, fallback) {
 	try {
-		const doc = getDoc$8();
+		const doc = getDoc$9();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -3558,7 +3691,7 @@ function shortModelName(name, max = 16) {
 }
 async function renderOne$1(id, filtered) {
 	try {
-		const doc = getDoc$8();
+		const doc = getDoc$9();
 		const el = doc.getElementById(`aus-chart-${id}`);
 		if (!el) return;
 		if (id === "req" && state$1[id].x === "round") state$1[id].x = "day";
@@ -3777,7 +3910,7 @@ async function renderOne$1(id, filtered) {
 	} catch (e) {
 		dropChart(id);
 		try {
-			const el2 = getDoc$8().getElementById(`aus-chart-${id}`);
+			const el2 = getDoc$9().getElementById(`aus-chart-${id}`);
 			if (el2) el2.innerHTML = "<div style=\"text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);\">图表加载失败: " + (e?.message || e) + "</div>";
 		} catch {}
 		try {
@@ -4011,7 +4144,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 		}
 		c.setOption(opts, true);
 		attachChartZoom({
-			doc: getDoc$8(),
+			doc: getDoc$9(),
 			chart: c,
 			container: el,
 			left: 40,
@@ -4036,7 +4169,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 	}
 }
 function initExtraCharts() {
-	const doc = getDoc$8();
+	const doc = getDoc$9();
 	for (const id of Object.keys(CHART_DEFS)) {
 		if (!CHART_DEFS[id].hasX) continue;
 		renderExtraY(id);
@@ -4089,7 +4222,7 @@ function initExtraCharts() {
 	});
 }
 function renderExtraY(id) {
-	const doc = getDoc$8();
+	const doc = getDoc$9();
 	const drop = doc.getElementById(`aus-extra-y-drop-${id}`);
 	const label = doc.getElementById(`aus-extra-y-label-${id}`);
 	if (!drop) return;
@@ -4113,7 +4246,7 @@ function renderExtraY(id) {
 	});
 }
 function renderExtraX(id) {
-	const doc = getDoc$8();
+	const doc = getDoc$9();
 	const drop = doc.getElementById(`aus-extra-x-drop-${id}`);
 	const label = doc.getElementById(`aus-extra-x-label-${id}`);
 	if (!drop) return;
@@ -4159,12 +4292,12 @@ var state = {
 	token: { x: "day" },
 	req: { x: "day" }
 };
-function getDoc$7() {
+function getDoc$8() {
 	return window.parent?.document ?? document;
 }
 function themeColor$2(name, fallback) {
 	try {
-		const doc = getDoc$7();
+		const doc = getDoc$8();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -4217,7 +4350,7 @@ function renderModelTrends(filtered) {
 }
 async function renderOne(id, filtered) {
 	try {
-		const doc = getDoc$7();
+		const doc = getDoc$8();
 		const el = doc.getElementById(`aus-chart-model-${id}`);
 		if (!el) return;
 		const xKey = state[id].x;
@@ -4433,7 +4566,7 @@ async function renderOne(id, filtered) {
 			charts[id] = null;
 		}
 		try {
-			const el2 = getDoc$7().getElementById(`aus-chart-model-${id}`);
+			const el2 = getDoc$8().getElementById(`aus-chart-model-${id}`);
 			if (el2) el2.innerHTML = "<div style=\"text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);\">图表加载失败</div>";
 		} catch {}
 		try {
@@ -4442,7 +4575,7 @@ async function renderOne(id, filtered) {
 	}
 }
 function initModelTrends() {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	for (const id of ["token", "req"]) {
 		const btn = doc.getElementById(`aus-modeltrends-x-${id}`);
 		const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
@@ -4461,7 +4594,7 @@ function initModelTrends() {
 	});
 }
 function renderXDrop(id) {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
 	const label = doc.getElementById(`aus-modeltrends-x-label-${id}`);
 	if (!drop) return;
@@ -4649,7 +4782,7 @@ function persistStatsFilters() {
 	} });
 }
 function resetStatsFilters() {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	currentRange = DEFAULT_RANGE;
 	customStart = "";
 	customEnd = "";
@@ -4681,19 +4814,19 @@ var summarySort = {
 };
 var lastSummaryFiltered = null;
 function updateSummarySortHeader() {
-	paintSortHeader(getDoc$6(), "aus-model-summary", summarySort);
+	paintSortHeader(getDoc$7(), "aus-model-summary", summarySort);
 }
 function bindSummarySort() {
-	bindSortableHeaders(getDoc$6(), "aus-model-summary", summarySort, () => {
+	bindSortableHeaders(getDoc$7(), "aus-model-summary", summarySort, () => {
 		if (lastSummaryFiltered) renderModelSummary(lastSummaryFiltered);
 	});
 }
-function getDoc$6() {
+function getDoc$7() {
 	return window.parent?.document ?? document;
 }
 function themeColor$1(name, fallback) {
 	try {
-		const doc = getDoc$6();
+		const doc = getDoc$7();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -4808,7 +4941,7 @@ function currentStatsFilter() {
 	};
 }
 function updateRangeHighlight() {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	doc.querySelectorAll("[data-range]").forEach((el) => {
 		if (el.getAttribute("data-range") === currentRange) {
 			el.style.background = "var(--ds-card)";
@@ -4822,7 +4955,7 @@ function updateRangeHighlight() {
 	if (calWrap) calWrap.style.display = currentRange === "custom" ? "block" : "none";
 }
 function renderCalendar() {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const cal = doc.getElementById("aus-date-calendar");
 	if (!cal) return;
 	updateRangeHighlight();
@@ -4857,7 +4990,7 @@ function renderCalendar() {
 	if (applyBtn) applyBtn.onclick = apply;
 }
 function updatePickerLabel() {
-	const label = getDoc$6().getElementById("aus-range-label");
+	const label = getDoc$7().getElementById("aus-range-label");
 	if (!label) return;
 	const map = {
 		all: "全部",
@@ -4874,7 +5007,7 @@ function updatePickerLabel() {
 	updateRangeHighlight();
 }
 function renderModelPicker(modelsHist) {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const dropdown = doc.getElementById("aus-model-dropdown");
 	const label = doc.getElementById("aus-model-label");
 	if (!dropdown || !label) return;
@@ -4908,7 +5041,7 @@ function renderModelPicker(modelsHist) {
 	});
 }
 function renderChatPicker(chatHist) {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const dropdown = doc.getElementById("aus-chat-dropdown");
 	const label = doc.getElementById("aus-chat-label");
 	if (!dropdown || !label) return;
@@ -4935,7 +5068,7 @@ function renderChatPicker(chatHist) {
 	});
 }
 function renderEndpointPicker(history) {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const dropdown = doc.getElementById("aus-endpoint-dropdown");
 	const label = doc.getElementById("aus-endpoint-label");
 	if (!dropdown || !label) return;
@@ -4962,7 +5095,7 @@ function renderEndpointPicker(history) {
 	});
 }
 function renderCredentialPicker$1(history, endpoint = selectedEndpoint) {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const dropdown = doc.getElementById("aus-credential-dropdown");
 	const label = doc.getElementById("aus-credential-label");
 	if (!dropdown || !label) return;
@@ -4989,7 +5122,7 @@ function renderCredentialPicker$1(history, endpoint = selectedEndpoint) {
 }
 function positionFilterDropdown(btn, dropdown) {
 	try {
-		const panel = getDoc$6().getElementById("aus-panel");
+		const panel = getDoc$7().getElementById("aus-panel");
 		if (!panel) return;
 		const panelRect = panel.getBoundingClientRect();
 		const btnRect = btn.getBoundingClientRect();
@@ -5004,7 +5137,7 @@ function positionFilterDropdown(btn, dropdown) {
 	} catch {}
 }
 function closeFilterDropdowns(except) {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	if (except !== "range") {
 		pickerOpen = false;
 		const el = doc.getElementById("aus-range-dropdown");
@@ -5032,7 +5165,7 @@ function closeFilterDropdowns(except) {
 	}
 }
 function bindPicker() {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const btn = doc.getElementById("aus-range-btn");
 	const dropdown = doc.getElementById("aus-range-dropdown");
 	if (btn && dropdown) {
@@ -5144,7 +5277,7 @@ function bindPicker() {
 var chartYOpen = false;
 var chartXOpen = false;
 function renderChartSelectors() {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const yBtn = doc.getElementById("aus-chart-y-btn");
 	const xBtn = doc.getElementById("aus-chart-x-btn");
 	const yDrop = doc.getElementById("aus-chart-y-dropdown");
@@ -5250,7 +5383,7 @@ function renderChartSelectors() {
 	});
 }
 function bindChartSelectors() {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const yBtn = doc.getElementById("aus-chart-y-btn");
 	const yDrop = doc.getElementById("aus-chart-y-dropdown");
 	const xBtn = doc.getElementById("aus-chart-x-btn");
@@ -5297,7 +5430,7 @@ function bindChartSelectors() {
 var chart = null;
 var rangeZoom = null;
 async function renderChart(filteredRaw) {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const el = doc.getElementById("aus-stats-chart");
 	if (!el) return;
 	const { labels, series, tips } = aggregateForChart(filteredRaw, getYSelected(), getXSelected());
@@ -5633,7 +5766,7 @@ async function renderChart(filteredRaw) {
 	}, 60);
 }
 function renderModelSummary(filtered) {
-	const tbody = getDoc$6().getElementById("aus-summary-tbody");
+	const tbody = getDoc$7().getElementById("aus-summary-tbody");
 	if (!tbody) return;
 	lastSummaryFiltered = filtered;
 	try {
@@ -5794,7 +5927,7 @@ function currentZoomSignature() {
 	].join("|");
 }
 async function renderStatsView() {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	if (!getSelectedSave()) return;
 	const allHistory = await getHistoryForStats();
 	lastStatsHistory = allHistory;
@@ -5868,7 +6001,7 @@ var statsFourBound = false;
 function bindStatsFour() {
 	if (statsFourBound) return;
 	statsFourBound = true;
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	doc.addEventListener("click", (e) => {
 		const t = e.target;
 		for (let i = 0; i < 4; i++) {
@@ -5879,7 +6012,7 @@ function bindStatsFour() {
 	});
 }
 function openStatsFourDrop(idx, v) {
-	const drop = getDoc$6().getElementById(`aus-stats-four-drop-${idx}`);
+	const drop = getDoc$7().getElementById(`aus-stats-four-drop-${idx}`);
 	if (!drop) return;
 	const cur = ensureStatsFour()[idx];
 	drop.innerHTML = FOUR_OPTIONS.map((o) => {
@@ -5903,7 +6036,7 @@ function openStatsFourDrop(idx, v) {
 	drop.style.display = drop.style.display === "block" ? "none" : "block";
 }
 function renderStatsFour(filtered) {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const host = doc.getElementById("aus-stats-four");
 	if (!host) return;
 	const v = computeStatsFour(filtered || []);
@@ -6291,12 +6424,12 @@ var instances = {};
 var echartsPromise = null;
 var resizeObserver = null;
 var resizeBound = false;
-function getDoc$5() {
+function getDoc$6() {
 	return window.parent?.document ?? document;
 }
 function themeColor(name, fallback) {
 	try {
-		const doc = getDoc$5();
+		const doc = getDoc$6();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -6341,7 +6474,7 @@ function axisMoney(currency, cnyValue) {
 	return currency.symbol + n.toFixed(4);
 }
 async function initChart(id, echarts) {
-	const el = getDoc$5().getElementById(id);
+	const el = getDoc$6().getElementById(id);
 	if (!el) return null;
 	if (!el.clientWidth || !el.clientHeight) return null;
 	if (instances[id]) {
@@ -6361,7 +6494,7 @@ async function initChart(id, echarts) {
 }
 function ensureResizeObserver() {
 	if (resizeObserver || typeof ResizeObserver === "undefined") return;
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const targets = [
 		"aus-forecast-main-chart",
 		"aus-forecast-hit-chart",
@@ -7115,7 +7248,7 @@ var compactionEnabled = true;
 var efficiencyScope = "all";
 var showTop = false;
 var openDropdown = null;
-var renderToken = 0;
+var renderToken$1 = 0;
 var globalCloseBound = false;
 var hitRefreshTimer = null;
 var lastFullHistory = [];
@@ -7123,7 +7256,7 @@ var lastEffectiveHistory = [];
 var lastEfficiencyHistory = [];
 var lastEfficiencyLabel = "全部历史";
 var efficiencySort = null;
-function getDoc$4() {
+function getDoc$5() {
 	return window.parent?.document ?? document;
 }
 function currentChatId() {
@@ -7323,7 +7456,7 @@ function hitSourceText(series) {
 	}
 }
 function closeAllDropdowns() {
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	for (const name of [
 		"chat",
 		"model",
@@ -7337,7 +7470,7 @@ function closeAllDropdowns() {
 	openDropdown = null;
 }
 function toggleDropdown(name) {
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	if (openDropdown === name) {
 		closeAllDropdowns();
 		return;
@@ -7352,7 +7485,7 @@ function bindGlobalClose() {
 	if (globalCloseBound) return;
 	globalCloseBound = true;
 	try {
-		getDoc$4().addEventListener("click", () => closeAllDropdowns());
+		getDoc$5().addEventListener("click", () => closeAllDropdowns());
 	} catch {}
 }
 function dropdownItem(attr, value, label, active, meta = "") {
@@ -7362,7 +7495,7 @@ function dropdownItem(attr, value, label, active, meta = "") {
   </div>`;
 }
 function renderChatDropdown(fullHist) {
-	const dropdown = getDoc$4().getElementById("aus-forecast-chat-dropdown");
+	const dropdown = getDoc$5().getElementById("aus-forecast-chat-dropdown");
 	if (!dropdown) return;
 	const chats = getRecordedChatsForForecast(fullHist);
 	let html = dropdownItem("data-fchat", "__current__", "当前对话", selectedForecastKey === "__current__");
@@ -7384,7 +7517,7 @@ function renderChatDropdown(fullHist) {
 	});
 }
 function renderModelDropdown(options) {
-	const dropdown = getDoc$4().getElementById("aus-forecast-model-dropdown");
+	const dropdown = getDoc$5().getElementById("aus-forecast-model-dropdown");
 	if (!dropdown) return;
 	dropdown.innerHTML = options.map((option) => dropdownItem("data-fmodel", option.model, option.model, selectedForecastModel === option.model, `${option.count} 轮`)).join("") || "<div class=\"aus-forecast-dropdown-empty\">暂无模型</div>";
 	dropdown.querySelectorAll("[data-fmodel]").forEach((el) => {
@@ -7397,7 +7530,7 @@ function renderModelDropdown(options) {
 	});
 }
 function renderHorizonDropdown() {
-	const dropdown = getDoc$4().getElementById("aus-forecast-horizon-dropdown");
+	const dropdown = getDoc$5().getElementById("aus-forecast-horizon-dropdown");
 	if (!dropdown) return;
 	dropdown.innerHTML = HORIZONS.map((value) => dropdownItem("data-fhorizon", String(value), `${value} 轮`, horizon === value, value === 10 ? "默认" : "")).join("");
 	dropdown.querySelectorAll("[data-fhorizon]").forEach((el) => {
@@ -7417,7 +7550,7 @@ function hitModeLabel(mode, globalRate, modelRate) {
 	return globalRate == null ? "全站平均 —" : `全站平均 ${pct(globalRate)}`;
 }
 function renderHitControl(fullHist, model, series, globalRate, modelRate) {
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	const host = doc.getElementById("aus-forecast-hit-control");
 	if (!host) return;
 	if (selectedForecastKey === "__all__" || !model) {
@@ -7482,7 +7615,7 @@ function renderHitControl(fullHist, model, series, globalRate, modelRate) {
 	}
 }
 function renderToolbar(fullHist, effective, modelOptions, model, priceContext, series, globalRate, modelRate) {
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	bindGlobalClose();
 	const chatLabel = doc.getElementById("aus-forecast-chat-label");
 	if (chatLabel) chatLabel.textContent = getForecastLabel(fullHist);
@@ -7546,7 +7679,7 @@ function kpiCard(label, value, sub, tone = "default", title = "") {
   </div>`;
 }
 function renderKpis(series, priceContext, ctxLimit, options, balance) {
-	const host = getDoc$4().getElementById("aus-forecast-kpis");
+	const host = getDoc$5().getElementById("aus-forecast-kpis");
 	if (!host) return;
 	const remaining = balance != null ? simulateRemainingRounds(balance, series, options) : null;
 	const ctxRounds = contextRoundsFor(series, ctxLimit, options.compaction);
@@ -7573,7 +7706,7 @@ function renderKpis(series, priceContext, ctxLimit, options, balance) {
 	].join("");
 }
 function renderHealth(history, model) {
-	const host = getDoc$4().getElementById("aus-forecast-health");
+	const host = getDoc$5().getElementById("aus-forecast-health");
 	if (!host) return;
 	if (!history.length) {
 		host.innerHTML = "<div class=\"aus-forecast-empty\">暂无数据</div>";
@@ -7619,7 +7752,7 @@ function renderHealth(history, model) {
   `;
 }
 function renderCompaction(series, options) {
-	const host = getDoc$4().getElementById("aus-forecast-compaction");
+	const host = getDoc$5().getElementById("aus-forecast-compaction");
 	if (!host) return;
 	const forecast = series.compactionForecast;
 	if (!forecast.detected) {
@@ -7668,7 +7801,7 @@ function sortEfficiencyRows(rows) {
 	});
 }
 function renderEfficiency(history, scopeLabel) {
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	const host = doc.getElementById("aus-forecast-efficiency");
 	const sub = doc.getElementById("aus-forecast-efficiency-sub");
 	const scopeButton = doc.getElementById("aus-forecast-scope-btn");
@@ -7780,7 +7913,7 @@ function chatDisplayNameMap(fullHist) {
 	return map;
 }
 function renderTop(fullHist) {
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	const host = doc.getElementById("aus-forecast-top");
 	const toggle = doc.getElementById("aus-forecast-top-toggle");
 	if (!host || !toggle) return;
@@ -7825,7 +7958,7 @@ function renderTop(fullHist) {
 }
 function clearCharts(message) {
 	disposeForecastCharts();
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	for (const id of [
 		"aus-forecast-main-chart",
 		"aus-forecast-hit-chart",
@@ -7836,7 +7969,7 @@ function clearCharts(message) {
 	}
 }
 function renderNoticeCards(message) {
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	const kpis = doc.getElementById("aus-forecast-kpis");
 	if (kpis) kpis.innerHTML = `<div class="ds-card aus-forecast-notice">${esc(message)}</div>`;
 	const health = doc.getElementById("aus-forecast-health");
@@ -7847,17 +7980,17 @@ function renderNoticeCards(message) {
 function renderAllNotice() {
 	renderNoticeCards("当前选择“全部”历史。逐轮预测、压缩与健康度需要单个对话的时间序列；请从上方对话胶囊选择具体对话。下方模型效率对比仍可查看。");
 	clearCharts("请选择单个对话以查看逐轮预测");
-	const mainSub = getDoc$4().getElementById("aus-forecast-main-sub");
+	const mainSub = getDoc$5().getElementById("aus-forecast-main-sub");
 	if (mainSub) mainSub.textContent = "逐轮预测需要指定单个对话";
 }
 function renderNoSeries(message) {
 	renderNoticeCards(message);
 	clearCharts(message);
-	const mainSub = getDoc$4().getElementById("aus-forecast-main-sub");
+	const mainSub = getDoc$5().getElementById("aus-forecast-main-sub");
 	if (mainSub) mainSub.textContent = message;
 }
 function renderMainSub(series, ctxLimit) {
-	const mainSub = getDoc$4().getElementById("aus-forecast-main-sub");
+	const mainSub = getDoc$5().getElementById("aus-forecast-main-sub");
 	if (!mainSub) return;
 	const future = series.future.length;
 	const parts = [
@@ -7870,14 +8003,14 @@ function renderMainSub(series, ctxLimit) {
 	mainSub.textContent = parts.join(" · ");
 }
 async function renderForecastView() {
-	const token = ++renderToken;
+	const token = ++renderToken$1;
 	let fullHist = [];
 	try {
 		fullHist = await repository.getAllHistory();
 	} catch {
 		fullHist = state$2.history || [];
 	}
-	if (token !== renderToken) return;
+	if (token !== renderToken$1) return;
 	lastFullHistory = fullHist;
 	bindGlobalClose();
 	const effective = getEffectiveHist(fullHist);
@@ -7991,7 +8124,7 @@ var MODE_LABELS = [
 		label: "全部覆盖"
 	}
 ];
-function getDoc$3() {
+function getDoc$4() {
 	return window.parent?.document ?? document;
 }
 function money$1(value) {
@@ -8026,7 +8159,7 @@ function tierText(row) {
 	return "<span style=\"color:var(--ds-text-3);text-decoration:line-through;\">" + before + "</span> → <b>" + after + "</b>";
 }
 async function openWalletSyncPreview(options = {}) {
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	const existing = doc.getElementById(OVERLAY_ID);
 	if (existing) existing.remove();
 	const overlay = doc.createElement("div");
@@ -8467,7 +8600,7 @@ function bindPlanBlock(doc, walletId, onChange) {
 }
 //#endregion
 //#region src/ui/wallet-view.ts
-function getDoc$2() {
+function getDoc$3() {
 	return window.parent?.document ?? document;
 }
 function money(cny, digits = 4) {
@@ -8496,12 +8629,12 @@ function cnyToDisplay(value) {
 	return String(Math.round(result * 1e6) / 1e6);
 }
 function closeDropdowns() {
-	getDoc$2().querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
+	getDoc$3().querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
 		el.style.display = "none";
 	});
 }
 function closeOtherDropdowns(id) {
-	getDoc$2().querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
+	getDoc$3().querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
 		if (el.id !== id) el.style.display = "none";
 	});
 }
@@ -8777,7 +8910,7 @@ function renderIgnoredWallets(ignored, wallets) {
 }
 var walletRenderToken = 0;
 async function renderWalletView() {
-	const doc = getDoc$2();
+	const doc = getDoc$3();
 	const host = doc.getElementById("aus-wallet");
 	if (!host) return;
 	const token = ++walletRenderToken;
@@ -8920,7 +9053,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-C2iwQj5J.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-BUV5_VFC.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -9313,6 +9446,182 @@ function bindWalletView(doc) {
 			if (!target?.closest?.("[data-wallet-dropdown]") && !target?.closest?.("[data-wallet-currency-btn]") && !target?.closest?.("[data-wallet-catalog-btn]") && !target?.closest?.("[data-wallet-credential-btn]") && !target?.closest?.("[data-wallet-adapter-btn]")) closeDropdowns();
 		});
 	}
+}
+//#endregion
+//#region src/ui/chat-manage.ts
+/**
+* 概览 → 「按对话统计」表格的对话展示管理页（`data-view="chat-manage"`）。
+*
+* 入口只有一处：概览表格标题右侧的「管理对话」胶囊按钮。页面本身是扁平同级视图，
+* 不挂在任何导航 tab 下（桌面侧栏没有它的条目），底栏布局下由
+* `nav-model.ts#CHILD_PARENT` 把它归到「概览」tab，因此底栏仍高亮概览、
+* 顶栏出现返回箭头并回到概览。
+*
+* 这里只改「该对话在按对话统计表里是否出现」这一件事：
+* 勾掉只是写进 localStorage 的隐藏列表（`chat-visibility.ts`），
+* 既不删数据，也不参与任何统计口径——热力图、统计、历史、趋势预测、
+* 能耗评分依旧按全量历史计算，与用户要求「不影响其余地方的数据统计和展示」一致。
+*/
+var navigator = null;
+/** 切页导航回调由 panel.ts 注册（避免 chat-manage 反向 import panel 造成循环依赖） */
+function initChatManageView(opts) {
+	navigator = opts;
+}
+function getDoc$2() {
+	return window.parent?.document ?? document;
+}
+/** 搜索关键词（只在本页内过滤显示，不进存储） */
+var keyword = "";
+/** 最近一次聚合结果，供搜索与重绘复用 */
+var rows = [];
+/** 渲染令牌：热数据先画、冷数据补全，快速切页时丢弃过期结果 */
+var renderToken = 0;
+function btnStyle() {
+	return "padding:5px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;line-height:1.4;";
+}
+function shellHTML() {
+	return [
+		"<div style=\"display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;\">",
+		"<div style=\"min-width:0;flex:1;\">",
+		"<div style=\"font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);\">对话展示管理</div>",
+		"<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:4px;line-height:1.7;max-width:640px;\">只控制「按对话统计」表格里是否列出该对话：隐藏不会删除任何数据，热力图、用量统计、历史记录与趋势预测仍按全部历史计算。</div>",
+		"</div>",
+		"<div style=\"display:flex;align-items:center;gap:8px;flex-wrap:wrap;\">",
+		"<input id=\"aus-chat-manage-search\" type=\"text\" placeholder=\"搜索对话\" value=\"" + esc(keyword) + "\" style=\"width:150px;padding:5px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);outline:none;\" />",
+		"<button id=\"aus-chat-manage-reset\" type=\"button\" style=\"" + btnStyle() + "\">全部显示</button>",
+		"<button id=\"aus-chat-manage-back\" type=\"button\" style=\"" + btnStyle() + "\">返回概览</button>",
+		"</div>",
+		"</div>",
+		"<div class=\"ds-card\" style=\"padding:0;overflow:hidden;\">",
+		"<div id=\"aus-chat-manage-list\"></div>",
+		"</div>",
+		"<div id=\"aus-chat-manage-foot\" style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:8px;\"></div>"
+	].join("");
+}
+function rowHTML(row, index) {
+	const key = chatVisibilityKey(row.chatId);
+	const hidden = isHiddenKey(key);
+	let costTxt = "¥" + row.cost.toFixed(4);
+	try {
+		costTxt = formatMoney(row.cost, 4);
+	} catch {}
+	const meta = row.count + " 轮 · " + row.total.toLocaleString("zh-CN") + " tokens · " + costTxt;
+	return [
+		"<div class=\"aus-chat-manage-row\" data-chat-row=\"" + esc(key) + "\" data-chat-name=\"" + esc(row.displayName.toLowerCase()) + "\" data-hidden=\"" + (hidden ? "1" : "0") + "\">",
+		"<div style=\"flex:1;min-width:0;\">",
+		"<div class=\"aus-chat-manage-name\" title=\"" + esc(row.chatId || row.displayName) + "\">" + esc(row.displayName) + "</div>",
+		"<div class=\"aus-chat-manage-meta\">" + meta + "</div>",
+		"</div>",
+		"<span class=\"aus-chat-manage-state\" data-state>" + (hidden ? "已隐藏" : "展示中") + "</span>",
+		switchHTML("aus-chat-sw-" + index, {
+			checked: !hidden,
+			ariaLabel: row.displayName + "：在按对话统计中展示"
+		}),
+		"</div>"
+	].join("");
+}
+function applyKeywordFilter(doc) {
+	const list = doc.getElementById("aus-chat-manage-list");
+	if (!list) return;
+	const kw = keyword.trim().toLowerCase();
+	list.querySelectorAll("[data-chat-row]").forEach((el) => {
+		const name = el.getAttribute("data-chat-name") || "";
+		el.style.display = !kw || name.includes(kw) ? "flex" : "none";
+	});
+}
+function paintFoot(doc) {
+	const foot = doc.getElementById("aus-chat-manage-foot");
+	if (!foot) return;
+	const total = rows.length;
+	const hidden = rows.filter((r) => isHiddenKey(chatVisibilityKey(r.chatId))).length;
+	foot.textContent = total ? "共 " + total + " 个对话 · 已隐藏 " + hidden + " 个" + (hidden ? "（隐藏项不会出现在「按对话统计」表中）" : "") : "暂无对话数据";
+}
+/** 重画列表（数据或显隐变更后调用） */
+function paintList(doc) {
+	const list = doc.getElementById("aus-chat-manage-list");
+	if (!list) return;
+	if (!rows.length) {
+		list.innerHTML = "<div style=\"padding:20px 16px;text-align:center;color:var(--ds-text-3);font-size:var(--aus-fs-sm);\">暂无可管理的对话，产生用量记录后即可在此设置</div>";
+		paintFoot(doc);
+		return;
+	}
+	list.innerHTML = rows.map((row, i) => rowHTML(row, i)).join("");
+	applyKeywordFilter(doc);
+	paintFoot(doc);
+	try {
+		paintChatManageBadge(doc);
+	} catch {}
+}
+/** 绑定 shell 内的按钮与列表事件（幂等：只在首次构建 shell 时绑定一次） */
+function bindShell(doc) {
+	const list = doc.getElementById("aus-chat-manage-list");
+	list?.addEventListener("change", (e) => {
+		const input = e.target;
+		if (!input || input.type !== "checkbox") return;
+		const rowEl = input.closest("[data-chat-row]");
+		const key = rowEl?.getAttribute("data-chat-row") || "";
+		if (!key) return;
+		setHiddenKey(key, !input.checked);
+		if (rowEl) {
+			rowEl.setAttribute("data-hidden", input.checked ? "0" : "1");
+			const stateEl = rowEl.querySelector("[data-state]");
+			if (stateEl) stateEl.textContent = input.checked ? "展示中" : "已隐藏";
+		}
+		paintFoot(doc);
+		try {
+			paintChatManageBadge(doc);
+		} catch {}
+	});
+	list?.addEventListener("click", (e) => {
+		const target = e.target;
+		if (!target || target.closest("label.aus-switch")) return;
+		const rowEl = target.closest("[data-chat-row]");
+		if (!rowEl) return;
+		const input = rowEl.querySelector("input[type=\"checkbox\"]");
+		if (!input) return;
+		input.checked = !input.checked;
+		input.dispatchEvent(new doc.defaultView.Event("change", { bubbles: true }));
+	});
+	const search = doc.getElementById("aus-chat-manage-search");
+	search?.addEventListener("input", () => {
+		keyword = search.value || "";
+		applyKeywordFilter(doc);
+	});
+	doc.getElementById("aus-chat-manage-reset")?.addEventListener("click", () => {
+		clearHiddenKeys();
+		paintList(doc);
+	});
+	doc.getElementById("aus-chat-manage-back")?.addEventListener("click", () => {
+		try {
+			navigator?.go("overview");
+		} catch {}
+	});
+}
+/**
+* 渲染管理页：先用热数据（最近 50 条）立即出图，再异步用冷存储全量补全，
+* 避免打开页面时空白等待 IndexedDB（与概览「按对话统计」同一套补全思路）。
+*/
+async function renderChatManageView() {
+	const doc = getDoc$2();
+	const host = doc.getElementById("aus-chat-manage-body");
+	if (!host) return;
+	if (!host.firstChild) {
+		host.innerHTML = shellHTML();
+		try {
+			bindShell(doc);
+		} catch {}
+	}
+	const token = ++renderToken;
+	const hot = state$2.history || [];
+	rows = computeChatStats(hot);
+	paintList(doc);
+	try {
+		const all = await repository.getAllHistory();
+		if (token !== renderToken) return;
+		if (!all || !all.length || all.length <= hot.length) return;
+		rows = computeChatStats(all);
+		paintList(doc);
+	} catch {}
 }
 /** 更新日志（最新在前） */
 var CHANGELOG = [
@@ -10767,7 +11076,7 @@ function syncBottomNav(doc, animate) {
 * bottom=false 是桌面侧栏或「移动端兼容 UI」关闭后的原侧栏抽屉，直接按当前视图高亮，也没有返回箭头。
 */
 function paintNavState(doc, bottom, animate) {
-	currentNavKey = bottom ? parentTabOf(currentView) : currentView;
+	currentNavKey = bottom || !isSettingsChild(currentView) ? parentTabOf(currentView) : currentView;
 	try {
 		doc.querySelectorAll("#aus-sidebar [data-nav]").forEach((el) => {
 			const v = el.getAttribute("data-nav");
@@ -10776,7 +11085,7 @@ function paintNavState(doc, bottom, animate) {
 	} catch {}
 	if (bottom) syncBottomNav(doc, animate);
 	const backBtn = doc.getElementById("aus-mobile-back");
-	if (backBtn) backBtn.style.display = bottom && isSettingsChild(currentView) ? "flex" : "none";
+	if (backBtn) backBtn.style.display = bottom && isChildView(currentView) ? "flex" : "none";
 }
 /**
 * 底栏 tab 点击语义：
@@ -10790,13 +11099,13 @@ function handleBottomTabTap(target) {
 		switchView(target);
 		return;
 	}
-	const action = resolveTabTap(target, currentView, isSettingsChild(currentView));
+	const action = resolveTabTap(target, currentView, isChildView(currentView));
 	if (action === "switch") {
 		switchView(target === "settings" && settingsChildView ? settingsChildView : target);
 		return;
 	}
 	if (action === "pop-root") {
-		switchView("settings");
+		switchView(childParentOf(currentView) ?? "settings");
 		return;
 	}
 	try {
@@ -10899,7 +11208,7 @@ function switchView(view, opts) {
 			else if (view === "history") {
 				const s = getSelectedSave();
 				if (s) renderHistory(doc, s);
-			}
+			} else if (view === "chat-manage") Promise.resolve(renderChatManageView()).catch(() => {});
 		} catch {}
 	};
 	if (bottom && view !== prevView) renderAfterPillStart(doc, renderTargetView);
@@ -11070,14 +11379,23 @@ function createPanel() {
               </div>
             </div>
             <div id="aus-chat-summary-overview" class="ds-card" style="margin-top:12px;overflow:auto;">
-              <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:8px;">按对话统计</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+                <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">按对话统计</div>
+                <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                  <span id="aus-chat-manage-count" style="display:none;font-size:var(--aus-fs-xs);color:var(--ds-text-3);white-space:nowrap;"></span>
+                  <button id="aus-chat-manage-btn" type="button" title="设置哪些对话出现在此表格（不影响其它页面统计）" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;line-height:1.4;white-space:nowrap;">${icon("menu", 14)}管理对话</button>
+                </div>
+              </div>
               <table style="width:100%;border-collapse:collapse;font-size:var(--aus-fs-sm);white-space:nowrap;min-width:720px;">
                 <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">对话</th><th data-sort-key="count" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">轮次<span class="aus-sort-ind"></span></th><th data-sort-key="hit" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">命中<span class="aus-sort-ind"></span></th><th data-sort-key="miss" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">未命中<span class="aus-sort-ind"></span></th><th data-sort-key="out" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输出<span class="aus-sort-ind"></span></th><th data-sort-key="total" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总 Tokens<span class="aus-sort-ind"></span></th><th data-sort-key="cost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总费用<span class="aus-sort-ind"></span></th><th data-sort-key="avgTokens" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均 Token/轮<span class="aus-sort-ind"></span></th><th data-sort-key="avgHitRate" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均命中率<span class="aus-sort-ind"></span></th></tr></thead>
                 <tbody id="aus-chat-summary-tbody"><tr><td colspan="9" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
               </table>
-              <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">默认按总 Tokens 倒序，点击表头可切换排序 · 数据来源为全部历史（不受统计页筛选影响）</div>
+              <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">默认按总 Tokens 倒序，点击表头可切换排序 · 数据来源为全部历史（不受统计页筛选影响）· 点「管理对话」可隐藏不常看的对话</div>
             </div>
             </div>
+           <div data-view="chat-manage" style="display:none;">
+             <div id="aus-chat-manage-body"></div>
+           </div>
            <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div class="aus-stats-filter">
@@ -11375,7 +11693,9 @@ function createPanel() {
 			if (v) switchView(v);
 		});
 	});
-	doc.getElementById("aus-mobile-back")?.addEventListener("click", () => switchView("settings"));
+	doc.getElementById("aus-mobile-back")?.addEventListener("click", () => switchView(childParentOf(currentView) ?? "settings"));
+	doc.getElementById("aus-chat-manage-btn")?.addEventListener("click", () => switchView("chat-manage"));
+	initChatManageView({ go: (v) => switchView(v) });
 	const applyCollapsed = (v) => {
 		collapsed = v;
 		const sb = doc.getElementById("aus-sidebar");
@@ -11684,7 +12004,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-BNV3VVA4.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-DEYBeiSF.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-C0nJ98Sq.js").then((m) => m.maybeAutoCheck());
@@ -11909,10 +12229,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-B0uQL7QV.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-CECrCOjs.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-BNV3VVA4.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-DEYBeiSF.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -11920,10 +12240,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-B0uQL7QV.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-CECrCOjs.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-BNV3VVA4.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-DEYBeiSF.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -12013,13 +12333,13 @@ async function onDelete() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-C2iwQj5J.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-BUV5_VFC.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-Dsn2T9-Q.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-uaQh3c2q.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-C3O8JPpr.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 	try {
@@ -12046,19 +12366,19 @@ async function onDelete() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-B0uQL7QV.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-CECrCOjs.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-BNV3VVA4.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-DEYBeiSF.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-C2iwQj5J.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-BUV5_VFC.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-Dsn2T9-Q.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-uaQh3c2q.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-C3O8JPpr.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -12068,10 +12388,10 @@ async function onDisable() {
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-B0uQL7QV.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-CECrCOjs.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-BNV3VVA4.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-DEYBeiSF.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -12090,13 +12410,13 @@ async function onDisable() {
 		unwatchSystemTheme();
 	} catch {}
 	try {
-		(await import("./balance-C2iwQj5J.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-BUV5_VFC.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-Dsn2T9-Q.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-uaQh3c2q.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-C3O8JPpr.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -12129,19 +12449,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-C2iwQj5J.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-BUV5_VFC.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-Dsn2T9-Q.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-uaQh3c2q.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-C3O8JPpr.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-BNV3VVA4.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-DEYBeiSF.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -12163,7 +12483,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-uaQh3c2q.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-C3O8JPpr.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

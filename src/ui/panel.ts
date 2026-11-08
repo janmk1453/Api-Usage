@@ -12,6 +12,8 @@ import { icon } from './icons';
 import {
   MOBILE_TABS,
   SETTINGS_ENTRIES,
+  childParentOf,
+  isChildView,
   isSettingsChild,
   parentTabOf,
   resolveTabTap,
@@ -23,6 +25,7 @@ import { initExtraCharts, renderExtraCharts, resetChartThemeCache } from './extr
 import { renderForecastView, initForecastView } from './forecast-view';
 import { disposeForecastCharts } from './forecast-chart';
 import { renderWalletView } from './wallet-view';
+import { initChatManageView, renderChatManageView } from './chat-manage';
 import { bindChangelog, renderChangelogCard } from './changelog';
 import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
 import { initPillState } from './pill';
@@ -1122,7 +1125,9 @@ function syncBottomNav(doc: Document, animate: boolean): void {
  * bottom=false 是桌面侧栏或「移动端兼容 UI」关闭后的原侧栏抽屉，直接按当前视图高亮，也没有返回箭头。
  */
 function paintNavState(doc: Document, bottom: boolean, animate: boolean): void {
-  currentNavKey = bottom ? parentTabOf(currentView) : currentView;
+  // 底栏布局：一律归父级 tab（设置二级页 → settings、对话展示管理 → overview）；
+  // 桌面侧栏：设置二级页有自己的导航项（要高亮自身），对话展示管理没有导航项，归到父级「概览」。
+  currentNavKey = bottom || !isSettingsChild(currentView) ? parentTabOf(currentView) : currentView;
   try {
     doc.querySelectorAll('#aus-sidebar [data-nav]').forEach((el: any) => {
       const v = el.getAttribute('data-nav');
@@ -1131,7 +1136,7 @@ function paintNavState(doc: Document, bottom: boolean, animate: boolean): void {
   } catch {}
   if (bottom) syncBottomNav(doc, animate);
   const backBtn = doc.getElementById('aus-mobile-back') as HTMLElement | null;
-  if (backBtn) backBtn.style.display = bottom && isSettingsChild(currentView) ? 'flex' : 'none';
+  if (backBtn) backBtn.style.display = bottom && isChildView(currentView) ? 'flex' : 'none';
 }
 
 /**
@@ -1144,13 +1149,14 @@ function handleBottomTabTap(target: AppView): void {
   const doc = getDoc();
   // 底栏不显示（桌面 / 移动端兼容 UI 关闭）时它就是普通切页
   if (!bottomNavActive(doc)) { switchView(target); return; }
-  const action = resolveTabTap(target, currentView, isSettingsChild(currentView));
+  const action = resolveTabTap(target, currentView, isChildView(currentView));
   if (action === 'switch') {
     const to = target === 'settings' && settingsChildView ? settingsChildView : target;
     switchView(to);
     return;
   }
-  if (action === 'pop-root') { switchView('settings'); return; }
+  // 二级页重复点当前 tab：回到自己的父级根页（设置二级页 → 设置、对话展示管理 → 概览）
+  if (action === 'pop-root') { switchView(childParentOf(currentView) ?? 'settings'); return; }
   try {
     const main = doc.getElementById('aus-main') as HTMLElement | null;
     if (main) main.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
@@ -1254,6 +1260,7 @@ function switchView(view: AppView, opts?: { track?: boolean }) {
       else if (view === 'forecast') Promise.resolve(renderForecastView()).catch(() => {});
       else if (view === 'wallet') Promise.resolve(renderWalletView()).catch(() => {});
       else if (view === 'history') { const s = getSelectedSave(); if (s) renderHistory(doc, s); }
+      else if (view === 'chat-manage') Promise.resolve(renderChatManageView()).catch(() => {});
     } catch {}
   };
   // 底栏布局下切到别的页时，先把指示胶囊送上轨道（原因见 renderAfterPillStart 注释）
@@ -1408,14 +1415,23 @@ export function createPanel() {
               </div>
             </div>
             <div id="aus-chat-summary-overview" class="ds-card" style="margin-top:12px;overflow:auto;">
-              <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:8px;">按对话统计</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+                <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">按对话统计</div>
+                <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                  <span id="aus-chat-manage-count" style="display:none;font-size:var(--aus-fs-xs);color:var(--ds-text-3);white-space:nowrap;"></span>
+                  <button id="aus-chat-manage-btn" type="button" title="设置哪些对话出现在此表格（不影响其它页面统计）" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;line-height:1.4;white-space:nowrap;">${icon('menu', 14)}管理对话</button>
+                </div>
+              </div>
               <table style="width:100%;border-collapse:collapse;font-size:var(--aus-fs-sm);white-space:nowrap;min-width:720px;">
                 <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">对话</th><th data-sort-key="count" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">轮次<span class="aus-sort-ind"></span></th><th data-sort-key="hit" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">命中<span class="aus-sort-ind"></span></th><th data-sort-key="miss" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">未命中<span class="aus-sort-ind"></span></th><th data-sort-key="out" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输出<span class="aus-sort-ind"></span></th><th data-sort-key="total" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总 Tokens<span class="aus-sort-ind"></span></th><th data-sort-key="cost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总费用<span class="aus-sort-ind"></span></th><th data-sort-key="avgTokens" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均 Token/轮<span class="aus-sort-ind"></span></th><th data-sort-key="avgHitRate" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均命中率<span class="aus-sort-ind"></span></th></tr></thead>
                 <tbody id="aus-chat-summary-tbody"><tr><td colspan="9" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
               </table>
-              <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">默认按总 Tokens 倒序，点击表头可切换排序 · 数据来源为全部历史（不受统计页筛选影响）</div>
+              <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">默认按总 Tokens 倒序，点击表头可切换排序 · 数据来源为全部历史（不受统计页筛选影响）· 点「管理对话」可隐藏不常看的对话</div>
             </div>
             </div>
+           <div data-view="chat-manage" style="display:none;">
+             <div id="aus-chat-manage-body"></div>
+           </div>
            <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div class="aus-stats-filter">
@@ -1716,7 +1732,11 @@ export function createPanel() {
     });
   });
   // 窄屏二级页顶栏返回箭头：回到「设置」根页
-  doc.getElementById('aus-mobile-back')?.addEventListener('click', () => switchView('settings'));
+  // 窄屏二级页顶栏返回箭头：回到当前二级页自己的父级（设置二级页 → 设置、对话展示管理 → 概览）
+  doc.getElementById('aus-mobile-back')?.addEventListener('click', () => switchView(childParentOf(currentView) ?? 'settings'));
+  // 概览「按对话统计」→ 对话展示管理页（页面内的「返回概览」按钮由这里注入的导航回调驱动）
+  doc.getElementById('aus-chat-manage-btn')?.addEventListener('click', () => switchView('chat-manage'));
+  initChatManageView({ go: (v) => switchView(v) });
   const applyCollapsed = (v: boolean) => {
     collapsed = v;
     const sb = doc.getElementById('aus-sidebar') as HTMLElement | null;
