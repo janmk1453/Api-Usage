@@ -1794,6 +1794,17 @@ function applyCostPatch(entry, cost) {
 	entry.priceType = cost.priceType;
 	entry.pricingSource = entry.legacyPricingWalletId ? "legacy-match" : cost.source;
 }
+/** 命中率（%）口径统一，热/冷重算共用 */
+function hitRateOf(entry) {
+	const hit = Number(entry?.cache_hit_tokens) || 0;
+	const miss = Number(entry?.cache_miss_tokens) || 0;
+	return hit + miss > 0 ? hit / (hit + miss) * 100 : 0;
+}
+/** 计价结果与记录现值是否有差异：无差异就不必回写整份冷库 */
+function costPatchDiffers(entry, cost) {
+	const source = entry?.legacyPricingWalletId ? "legacy-match" : cost.source;
+	return (Number(entry?.input_cost) || 0) !== (cost.input || 0) || (Number(entry?.output_cost) || 0) !== (cost.output || 0) || (Number(entry?.cost) || 0) !== (cost.total || 0) || entry?.priceType !== cost.priceType || entry?.pricingSource !== source;
+}
 function applyTotalDelta(previous, next) {
 	state.input_cost += (next.input || 0) - (previous.input || 0);
 	state.output_cost += (next.output || 0) - (previous.output || 0);
@@ -1835,8 +1846,52 @@ function applyAggregate(next) {
 	state.output_cost = next.output_cost;
 	state.rounds = next.rounds;
 }
-async function rebuildAggregates() {
-	const cold = await loadHistoryCold();
+/**
+* 启动重算指纹：只把「会改变历史计价结果」的输入压成短串——扩展版本号、钱包规则与
+* 忽略列表、峰谷/额外空闲日/旧自定义价。这些一变，历史金额就必须重算；一变不变，
+* 上次数值依然成立。刻意不包含历史条目本身，避免日常只是多了几条记录就整库重算。
+*/
+var CALC_FINGERPRINT_KEY = "_calcFingerprint";
+function fnv1a(hash, text) {
+	let h = hash >>> 0;
+	for (let i = 0; i < text.length; i++) {
+		h ^= text.charCodeAt(i);
+		h = Math.imul(h, 16777619) >>> 0;
+	}
+	return h >>> 0;
+}
+function safeAppVersion() {
+	try {
+		return "3.1.9";
+	} catch {
+		return "";
+	}
+}
+function computeCalcFingerprint() {
+	let h = 2166136261;
+	h = fnv1a(h, "v1|" + safeAppVersion());
+	try {
+		h = fnv1a(h, "|w|" + JSON.stringify(state.wallets || []));
+		h = fnv1a(h, "|i|" + JSON.stringify(state.walletIgnored || []));
+	} catch {
+		h = fnv1a(h, "|w!");
+	}
+	try {
+		const s = state.settings || {};
+		h = fnv1a(h, "|p|" + JSON.stringify(s.peakHours || null) + "|" + JSON.stringify(s.extraOffDays || null) + "|" + JSON.stringify(s.customModels || null));
+	} catch {
+		h = fnv1a(h, "|p!");
+	}
+	return h.toString(36);
+}
+/** 把当前计价输入写入热设置，供下次启动比对（失败静默，下次启动只会多算一次） */
+function refreshCalcFingerprint() {
+	try {
+		saveHot({ [CALC_FINGERPRINT_KEY]: computeCalcFingerprint() });
+	} catch {}
+}
+async function rebuildAggregates(preloadedCold) {
+	const cold = Array.isArray(preloadedCold) ? preloadedCold : await loadHistoryCold();
 	const merged = [...state.history || [], ...cold].sort((a, b) => b.timestamp - a.timestamp);
 	const keyOf = historyRecordKey;
 	const seen = /* @__PURE__ */ new Set();
@@ -2221,7 +2276,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && !!wallet.catalogProvider) try {
-						import("./pricing-sync-DDNV-dji.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-BSBommNx.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
@@ -2619,7 +2674,8 @@ var repository = {
 		emit(DataEvents.HISTORY_ADDED, entry);
 		return entry;
 	},
-	async recalcAll() {
+	async recalcAll(preloadedCold) {
+		let changed = false;
 		for (const h of state.history || []) {
 			const wallet = findWalletForHistory(state.wallets, h);
 			const previous = {
@@ -2628,12 +2684,18 @@ var repository = {
 				total: Number(h.cost) || 0
 			};
 			const c = recalcEntryCost(h, wallet);
+			if (costPatchDiffers(h, c)) changed = true;
 			applyCostPatch(h, c);
 			applyTotalDelta(previous, c);
-			h.cache_hit_rate = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) > 0 ? (h.cache_hit_tokens || 0) / ((h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0)) * 100 : 0;
+			const rate = hitRateOf(h);
+			if (h.cache_hit_rate !== rate) {
+				h.cache_hit_rate = rate;
+				changed = true;
+			}
 		}
+		const providedCold = Array.isArray(preloadedCold);
 		try {
-			const cold = await loadHistoryCold();
+			const cold = providedCold ? preloadedCold : await loadHistoryCold();
 			let coldChanged = false;
 			for (const h of cold) {
 				const wallet = findWalletForHistory(state.wallets, h);
@@ -2643,16 +2705,25 @@ var repository = {
 					total: Number(h.cost) || 0
 				};
 				const c = recalcEntryCost(h, wallet);
+				if (costPatchDiffers(h, c)) coldChanged = true;
 				applyCostPatch(h, c);
 				applyTotalDelta(previous, c);
-				h.cache_hit_rate = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) > 0 ? (h.cache_hit_tokens || 0) / ((h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0)) * 100 : 0;
-				coldChanged = true;
+				const rate = hitRateOf(h);
+				if (h.cache_hit_rate !== rate) {
+					h.cache_hit_rate = rate;
+					coldChanged = true;
+				}
 			}
-			if (coldChanged) await saveHistoryCold(cold);
+			if (coldChanged) {
+				changed = true;
+				if (!providedCold) await saveHistoryCold(cold);
+			}
 		} catch (error) {
 			log.error("冷历史重算失败", error);
 		}
 		persist();
+		if (!providedCold) refreshCalcFingerprint();
+		return changed;
 	},
 	async rebuildAggregates() {
 		await rebuildAggregates();
@@ -2997,69 +3068,69 @@ var repository = {
 				saveHot({ settings: state.settings });
 			} catch {}
 		} catch {}
+		let cold = [];
 		try {
-			let need = false;
-			for (const h of state.history) {
-				if (h.finishReason === void 0) {
-					h.finishReason = h.raw_usage?.__finish_reason ?? null;
-					need = true;
-				}
-				const t = isTruncatedFinish(h.finishReason);
-				if (h.isTruncated !== t) {
-					h.isTruncated = t;
-					need = true;
-				}
-			}
-			if (need) try {
-				saveHot({ history: state.history });
-			} catch {}
-		} catch {}
-		let needPersistChatId = false;
-		for (const h of state.history || []) if (h.chatId === void 0) {
-			h.chatId = null;
-			h.chatName = null;
-			needPersistChatId = true;
+			cold = await loadHistoryCold();
+		} catch (error) {
+			log.error("冷历史读取失败", error);
 		}
-		if (needPersistChatId) try {
-			saveHot({ history: state.history });
-		} catch {}
-		let coldForWalletMigration = [];
-		try {
-			coldForWalletMigration = await loadHistoryCold();
-		} catch {}
-		try {
-			let hotFixed = false;
-			for (const h of state.history || []) if (sanitizeHistoryTiming(h)) hotFixed = true;
-			let coldFixed = false;
-			for (const h of coldForWalletMigration || []) if (sanitizeHistoryTiming(h)) coldFixed = true;
-			if (hotFixed) try {
-				saveHot({ history: state.history });
-			} catch {}
-			if (coldFixed) try {
-				await saveHistoryCold(coldForWalletMigration);
-			} catch {}
-		} catch {}
-		if (migrateWallets(hot, coldForWalletMigration)) {
+		const needFullRecalc = (hot && typeof hot[CALC_FINGERPRINT_KEY] === "string" ? String(hot[CALC_FINGERPRINT_KEY]) : "") !== computeCalcFingerprint();
+		let coldDirty = false;
+		if (needFullRecalc) {
 			try {
-				saveHot({
-					wallets: state.wallets,
-					walletIgnored: state.walletIgnored
-				});
+				let need = false;
+				for (const h of state.history) {
+					if (h.finishReason === void 0) {
+						h.finishReason = h.raw_usage?.__finish_reason ?? null;
+						need = true;
+					}
+					const t = isTruncatedFinish(h.finishReason);
+					if (h.isTruncated !== t) {
+						h.isTruncated = t;
+						need = true;
+					}
+				}
+				if (need) try {
+					saveHot({ history: state.history });
+				} catch {}
 			} catch {}
-			if (coldForWalletMigration.length) try {
-				await saveHistoryCold(coldForWalletMigration);
+			let needPersistChatId = false;
+			for (const h of state.history || []) if (h.chatId === void 0) {
+				h.chatId = null;
+				h.chatName = null;
+				needPersistChatId = true;
+			}
+			if (needPersistChatId) try {
+				saveHot({ history: state.history });
+			} catch {}
+			try {
+				for (const h of state.history || []) sanitizeHistoryTiming(h);
+				for (const h of cold) if (sanitizeHistoryTiming(h)) coldDirty = true;
+			} catch {}
+			if (migrateWallets(hot, cold)) {
+				try {
+					saveHot({
+						wallets: state.wallets,
+						walletIgnored: state.walletIgnored
+					});
+				} catch {}
+				if (cold.length) coldDirty = true;
+			}
+			try {
+				this.pruneZeroEntries();
+			} catch {}
+			try {
+				if (await this.recalcAll(cold)) coldDirty = true;
 			} catch {}
 		}
-		try {
-			this.pruneZeroEntries();
+		if (coldDirty) try {
+			await saveHistoryCold(cold);
 		} catch {}
 		try {
-			await this.recalcAll();
+			await rebuildAggregates(cold);
 		} catch {}
-		try {
-			await rebuildAggregates();
-			persist();
-		} catch {}
+		persist();
+		if (needFullRecalc) refreshCalcFingerprint();
 		emit(DataEvents.UPDATED);
 		return this.snapshot();
 	}

@@ -3,12 +3,12 @@ import { r as state } from "./store-TDK3YzRZ.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS } from "./pricing-Bc-qEvy8.js";
 import { a as getExtensionSettings, f as saveHot, o as isMigrationBackupKey, p as historyRecordKey, r as deleteMigrationBackups, u as saveExtensionSettings } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as mergeWalletCollections, a as decryptKey, d as calcCost, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, t as repository } from "./repository-Dq4qsP3r.js";
-import { a as isUnsafeKey, o as isValidDayKey, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
+import { C as mergeWalletCollections, a as decryptKey, d as calcCost, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, t as repository } from "./repository-B0leds5I.js";
+import { a as isUnsafeKey, o as isValidDayKey, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
 import { i as getDisplayCurrency, n as fetchLiveRate } from "./currency-Dsn2T9-Q.js";
-import { r as recalcAllCosts } from "./interception-_-wOz23M.js";
-import { i as saveApiKey } from "./balance-BdsjuDiq.js";
-import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-DDNV-dji.js";
+import { r as recalcAllCosts } from "./interception-DeTgjkcu.js";
+import { i as saveApiKey } from "./balance-DApHIBqp.js";
+import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-BSBommNx.js";
 //#region src/ui/icons.ts
 var PATHS = {
 	overview: "<rect width=\"7\" height=\"9\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"9\" x=\"14\" y=\"12\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"3\" y=\"16\" rx=\"1\"/>",
@@ -795,26 +795,23 @@ async function collectStorageReport(opts = {}) {
 var MODULE = "api_usage_stat";
 /** 小于该体积的条目归入「其他」，避免十几个几十字节的小项把列表撑长 */
 var SMALL_ITEM_BYTES = 1024;
-function esc$1(s) {
-	return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
 /** 单项行：名称 + 数值，数值用等宽数字避免跳动 */
 function row(item, total, opts = {}) {
 	const pctRaw = total > 0 && item.bytes != null ? item.bytes / total * 100 : null;
 	const pct = pctRaw != null && !opts.sub && pctRaw >= .5 ? Math.round(pctRaw) : null;
-	const detailHtml = item.detail && opts.toggle ? `<span data-others-count>${esc$1(item.detail)}</span>` : esc$1(item.detail || "");
+	const detailHtml = item.detail && opts.toggle ? `<span data-others-count>${esc(item.detail)}</span>` : esc(item.detail || "");
 	const sub = item.detail ? `<div ${opts.toggle ? "data-others-hint" : ""} style="font-size:var(--aus-fs-xs);color:var(--ds-text-3);margin-top:2px;line-height:1.4;">${detailHtml}</div>` : "";
 	const indent = opts.sub ? "padding-left:16px;background:color-mix(in srgb, var(--ds-text) 3%, transparent);" : "";
 	const clickStyle = opts.toggle ? "cursor:pointer;user-select:none;" : "";
 	return `<div class="aus-storage-row"${opts.toggle ? ` id="${opts.toggle.id}" role="button" tabindex="0" aria-expanded="${opts.toggle.expanded}"` : ""} style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--ds-border);${indent}${clickStyle}">
     <div style="min-width:0;flex:1 1 auto;">
-      <div class="aus-storage-row-label" style="font-size:var(--aus-fs-base);color:var(--ds-text);line-height:1.5;overflow-wrap:anywhere;">${esc$1(item.label)}</div>
+      <div class="aus-storage-row-label" style="font-size:var(--aus-fs-base);color:var(--ds-text);line-height:1.5;overflow-wrap:anywhere;">${esc(item.label)}</div>
       ${sub}
     </div>
     <div style="flex:0 0 auto;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;">
       <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">${formatBytes(item.bytes)}</div>
       ${pct != null ? `<div style="font-size:var(--aus-fs-xs);color:var(--ds-text-3);margin-top:2px;">${pct}%</div>` : ""}
-      ${opts.action ? `<button id="${opts.action.id}" type="button" data-armed="0" title="${esc$1(opts.action.title || "")}" style="margin-top:5px;padding:3px 10px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-xs);cursor:pointer;line-height:1.5;white-space:nowrap;">${esc$1(opts.action.label)}</button>` : ""}
+      ${opts.action ? `<button id="${opts.action.id}" type="button" data-armed="0" title="${esc(opts.action.title || "")}" style="margin-top:5px;padding:3px 10px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-xs);cursor:pointer;line-height:1.5;white-space:nowrap;">${esc(opts.action.label)}</button>` : ""}
     </div>
   </div>`;
 }
@@ -899,7 +896,7 @@ async function refreshStorageUsage(doc) {
 		body.innerHTML = bodyHtml(report);
 		bindStorageUsageCard(doc);
 	} catch (e) {
-		if (seq === renderSeq) body.innerHTML = `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);padding:8px 0;">统计失败：${esc$1(e?.message || "未知错误")}</div>`;
+		if (seq === renderSeq) body.innerHTML = `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);padding:8px 0;">统计失败：${esc(e?.message || "未知错误")}</div>`;
 	} finally {
 		if (seq === renderSeq && btn) {
 			btn.disabled = false;
@@ -1826,9 +1823,6 @@ function initTelemetry() {
 //#endregion
 //#region src/ui/settings.ts
 var settings_exports = /* @__PURE__ */ __exportAll({ renderSettings: () => renderSettings });
-function esc(s) {
-	return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-}
 /** 刷新「匿名使用统计」卡片上的标识与状态文案 */
 function renderTelemetryStatus(doc) {
 	const idEl = doc.getElementById("aus-telemetry-id");
@@ -2262,7 +2256,7 @@ function renderSettings(doc) {
 		state.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state.settings });
 		try {
-			import("./balance-BdsjuDiq.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-DApHIBqp.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2307,7 +2301,7 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-Dq4qsP3r.js").then((n) => n.n);
+				const { repository } = await import("./repository-B0leds5I.js").then((n) => n.n);
 				const { state: st } = await import("./store-TDK3YzRZ.js").then((n) => n.i);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
@@ -2462,7 +2456,7 @@ function renderSettings(doc) {
 					intervalDrop.style.display = "none";
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-DDNV-dji.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./pricing-sync-BSBommNx.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 						import("./currency-Dsn2T9-Q.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};

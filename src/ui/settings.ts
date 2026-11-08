@@ -8,7 +8,7 @@ import { applyTheme, syncThemeWatcher } from '../services/theme';
 import { renderStorageUsageCard, bindStorageUsageCard, refreshStorageUsage } from './storage-usage-card';
 import { PRICING, DEFAULT_PEAK_HOURS, HIDDEN_PRICING_MODELS } from '../constants/pricing';
 import { CN_HOLIDAY_COVERAGE_LABEL } from '../constants/holidays';
-import { isValidDayKey } from '../utils/date';
+import { isValidDayKey, esc } from '../utils/date';
 import { recalcAllCosts } from '../services/interception';
 import { generateDebugBatch } from '../services/debug';
 import { getDisplayCurrency } from '../services/currency';
@@ -18,8 +18,6 @@ import { fetchLiveRate } from '../services/currency';
 import { toast } from '../utils/logger';
 import { repository } from '../data/repository';
 import { telemetryStatus, resetIdentity, flushTelemetryOnDisable } from '../services/telemetry';
-
-function esc(s: string) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
 /** 刷新「匿名使用统计」卡片上的标识与状态文案 */
 function renderTelemetryStatus(doc: Document) {

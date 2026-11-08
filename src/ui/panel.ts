@@ -1883,9 +1883,93 @@ export function createPanel() {
   refreshUI();
 }
 
+/* ── 返回键接管 ─────────────────────────────────────────────────────────
+ * 面板是覆盖全屏的浮层，移动端按系统返回键（安卓物理返回、浏览器后退手势）
+ * 默认会直接退出酒馆页面。这里在窄屏打开面板时往宿主窗口压一条历史记录，
+ * 用户按返回时只关面板、不离开酒馆；面板已关闭时一律放行，不干扰酒馆自身的路由。
+ * 桌面端不接管，保持「后退 = 回上一页」的原生语义。
+ * ------------------------------------------------------------------- */
+const AUS_BACK_FLAG = '__ausBackGuard';
+const NARROW_VIEWPORT_MAX = 760;
+
+let backGuardPushed = false;
+let backGuardWin: any = null;
+
+/** 历史记录属于宿主窗口（扩展通常跑在 iframe 里），跨源时回退到自身窗口 */
+function backGuardHost(): any {
+  try {
+    const w: any = window.parent;
+    if (w && w !== window && w.history) return w;
+  } catch {}
+  return window;
+}
+
+function isNarrowViewport(): boolean {
+  try {
+    const w = backGuardHost();
+    const width = Number(w?.innerWidth || window.innerWidth || 0);
+    return width > 0 && width <= NARROW_VIEWPORT_MAX;
+  } catch {
+    return false;
+  }
+}
+
+function onBackGuardPop(ev: any): void {
+  if (!panelOpen) { releaseBackGuard(false); return; }
+  // 落回我们自己压入的条目（重复入栈）时继续保持接管
+  if (ev?.state && ev.state[AUS_BACK_FLAG]) return;
+  // 用户按了返回：只关面板，不再继续回退酒馆页面
+  releaseBackGuard(false);
+  try { closePanel(); } catch {}
+}
+
+/** 打开面板时压一条历史记录，把返回键变成「关闭面板」 */
+function armBackGuard(): void {
+  if (backGuardPushed) return;
+  if (!isNarrowViewport()) return;
+  const w = backGuardHost();
+  try {
+    if (!w?.history?.pushState) return;
+    const prev = w.history.state;
+    const next: any = prev && typeof prev === 'object' ? { ...prev } : {};
+    next[AUS_BACK_FLAG] = 1;
+    w.history.pushState(next, '');
+    backGuardWin = w;
+    backGuardPushed = true;
+    w.addEventListener('popstate', onBackGuardPop);
+  } catch {}
+}
+
+/**
+ * 解除接管。
+ * stepBack=true（点关闭按钮 / 按 Esc / 切换视图重置）时把我们压的那条记录弹掉，
+ * 避免下次返回多退一步；由返回键触发时传 false，因为历史已经退过去了。
+ */
+function releaseBackGuard(stepBack = true): void {
+  const w = backGuardWin;
+  const pushed = backGuardPushed;
+  backGuardWin = null;
+  backGuardPushed = false;
+  if (!w) return;
+  try { w.removeEventListener('popstate', onBackGuardPop); } catch {}
+  if (!stepBack || !pushed) return;
+  try {
+    const st: any = w.history?.state;
+    if (st && st[AUS_BACK_FLAG]) {
+      // 先摘标记再回退，这条记录就不会被当成「用户按了返回」
+      const next: any = { ...st };
+      delete next[AUS_BACK_FLAG];
+      w.history.replaceState(next, '');
+      w.history.back();
+    }
+  } catch {}
+}
+
 export function resetPanelState() {
   panelCreated = false;
   panelOpen = false;
+  // 扩展被禁用/重载时面板 DOM 已被移除，等于关闭面板：把压入的历史记录一并弹掉
+  try { releaseBackGuard(); } catch {}
 }
 
 export function openPanel() {
@@ -1913,6 +1997,7 @@ export function openPanel() {
     try { if (panelOpenStartTs) trackRender(nowTs() - panelOpenStartTs); } catch {}
   });
   panelOpen = true;
+  try { armBackGuard(); } catch {}
   refreshUI();
   // Agent 模式用量对账（无 TauriTavern 时该模块立即返回，不产生任何 IPC）
   try { import('../services/agent-usage/collector').then(m => m.reconcileOnPanelOpen()).catch(() => {}); } catch {}
@@ -1928,6 +2013,8 @@ export function closePanel() {
   mobileOpen = false;
   syncMobileSidebar(doc);
   panelOpen = false;
+  // 关闭时弹出为返回键压入的历史记录，避免下次返回多退一步
+  try { releaseBackGuard(); } catch {}
   // 匿名使用统计：关闭面板时合并上报本次会话数据
   try { flushTelemetry('close'); } catch {}
 }

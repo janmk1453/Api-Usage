@@ -155,6 +155,40 @@ describe('仓库全量处理', () => {
     expect(relayWallets[0].endpointLabel).toBe('youzi.today');
     expect(state.history.map((item) => item.walletId)).toEqual([relayWallets[0].id, relayWallets[0].id]);
   });
+
+  it('重算只在金额真有变化时回写冷库', async () => {
+    await appendHistoryCold([entry(3, 30, 3)]);
+    state.history = [entry(4, 40, 4)];
+
+    // 首次重算：旧金额与真实计价不一致，必须改
+    await expect(repository.recalcAll()).resolves.toBe(true);
+    // 再算一次：金额已经一致，不应再报告变更（也就不再整份重写冷库）
+    await expect(repository.recalcAll()).resolves.toBe(false);
+  });
+
+  it('启动指纹负责跳过重复全量重算', async () => {
+    const settings = defaultSettings();
+    context.extensionSettings['api_usage_stat'] = {
+      _migrated: true,
+      history: [entry(5, 50, 5)],
+      wallets: [createDeepSeekWallet(settings, 1000)],
+      settings,
+    };
+    await appendHistoryCold([entry(6, 60, 6)]);
+
+    await repository.hydrate();
+    flushSaveHot();
+    const fingerprint = context.extensionSettings['api_usage_stat']._calcFingerprint;
+    expect(typeof fingerprint).toBe('string');
+    expect(fingerprint.length).toBeGreaterThan(0);
+    const coldAfterFirst = await loadHistoryCold();
+
+    // 计价输入（版本/钱包/峰谷）没变，第二次启动不应再动冷库
+    await repository.hydrate();
+    flushSaveHot();
+    expect(context.extensionSettings['api_usage_stat']._calcFingerprint).toBe(fingerprint);
+    expect(await loadHistoryCold()).toEqual(coldAfterFirst);
+  });
 });
 
 describe('峰值提示小圆点默认值', () => {
