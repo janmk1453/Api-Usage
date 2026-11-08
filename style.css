@@ -585,10 +585,10 @@
 /* 原侧栏抽屉的菜单按钮：仅在「移动端兼容 UI」关闭 + 窄屏显示（CSS 分支在文件末尾） */
 #aus-hamburger-btn { width:28px;height:28px;display:none;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;border-radius:9px; }
 /* 二级页（钱包/使用说明/关于）返回箭头：显隐由 panel.ts 按当前视图写 inline display */
-#aus-mobile-back { width:28px;height:28px;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;border-radius:9px; }
+#aus-mobile-back { width:32px;height:32px;align-items:center;justify-content:center;background:var(--ds-card-inner);border:1px solid var(--ds-border);cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;border-radius:8px; }
 @media (hover: hover) {
-  /* 仅鼠标设备才走 hover 淡化；触屏的反馈见文件末尾「底栏与返回箭头按压反馈」 */
-  #aus-mobile-back:hover,
+  /* 仅鼠标设备才走 hover 淡化；触屏的反馈见文件末尾「底栏与返回箭头按压反馈」。
+     返回箭头已有方块底色，悬停走底色与描边变化（见文件末尾），这里只管汉堡按钮。 */
   #aus-hamburger-btn:hover { opacity: 0.72; }
 }
 .aus-nav-item { transition: none; color: var(--ds-text-2); }
@@ -785,6 +785,9 @@
   [data-view="forecast"] #aus-forecast-chart,
   [data-view="forecast"] [id^="aus-forecast-"] { width:100% !important; max-width:100% !important; min-width:0 !important; box-sizing:border-box !important; }
   [data-view="forecast"] #aus-forecast-chat-btn { width:auto !important; max-width:100% !important; flex-wrap:nowrap !important; align-items:center !important; }
+  /* 「管理对话」是胶囊按钮，不参与上面那条 [id^="aus-forecast-"] 的满宽规则，
+     否则窄屏会被拉成整行横幅（实机反馈） */
+  [data-view="forecast"] #aus-forecast-chat-manage-btn { width:auto !important; max-width:100% !important; flex:0 0 auto !important; }
   [data-view="forecast"] #aus-forecast-chat-btn > span { white-space:nowrap !important; }
   [data-view="forecast"] #aus-forecast-chat-label { min-width:0 !important; }
   /* 设置页输入区不超出 */
@@ -2133,6 +2136,17 @@
   #aus-panel .aus-manage-chat-btn:hover { border-color: var(--ds-text-3); }
 }
 #aus-panel .aus-manage-chat-btn:active { background: var(--ds-nav-active-bg); }
+/* 管理页的「返回」按钮：比同排的「全部显示 / 全部隐藏」更显眼一点（描边提亮 + 加粗），
+   「颜色稍微明显一点」的需求落在这里；不改尺寸，窄屏依旧与另两颗同高。 */
+#aus-panel #aus-chat-manage-back {
+  color: var(--ds-text);
+  font-weight: 600;
+  border-color: var(--ds-text-3);
+}
+@media (hover: hover) {
+  #aus-panel #aus-chat-manage-back:hover { border-color: var(--ds-text); }
+}
+#aus-panel #aus-chat-manage-back:active { background: var(--aus-nav-active-bg); border-color: var(--ds-text); }
 /* 管理模式切换（表格展示 / 下拉选项）：两颗胶囊，选中态取侧栏选中底色 + 加粗 */
 #aus-panel #aus-chat-manage-modes {
   display: flex;
@@ -2426,10 +2440,13 @@
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
-#aus-hamburger-btn,
-#aus-mobile-back {
+#aus-hamburger-btn {
   border-radius: 9px;
   transition: background-color 120ms ease, transform 120ms ease, opacity 120ms ease;
+}
+#aus-mobile-back {
+  border-radius: 8px;
+  transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
 #aus-hamburger-btn[data-pressed="1"],
 #aus-hamburger-btn:active,
@@ -2441,7 +2458,7 @@
   transition-duration: 0ms;
 }
 @media (hover: hover) {
-  #aus-mobile-back:hover:not([data-pressed="1"]),
+  #aus-mobile-back:hover:not([data-pressed="1"]) { background: var(--aus-nav-active-bg); border-color: var(--ds-text-3); transition-duration: 120ms; }
   #aus-hamburger-btn:hover:not([data-pressed="1"]) { opacity: 0.72; transition-duration: 120ms; }
 }
 /* 设置入口：按下即时底色（列表行，需要落点反馈） */

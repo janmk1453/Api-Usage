@@ -9564,7 +9564,7 @@ function shellHTML() {
 		"<input id=\"aus-chat-manage-search\" type=\"text\" placeholder=\"搜索对话\" value=\"" + esc(keyword) + "\" />",
 		"<button id=\"aus-chat-manage-reset\" type=\"button\" class=\"aus-chat-manage-btn\">全部显示</button>",
 		"<button id=\"aus-chat-manage-hide-all\" type=\"button\" class=\"aus-chat-manage-btn\">全部隐藏</button>",
-		"<button id=\"aus-chat-manage-back\" type=\"button\" class=\"aus-chat-manage-btn\">返回</button>",
+		"<button id=\"aus-chat-manage-back\" type=\"button\" class=\"aus-chat-manage-btn\" title=\"回到进入本页之前的页面\">" + icon("chevron-left", 14) + "返回</button>",
 		"</div>",
 		"</div>",
 		"<div id=\"aus-chat-manage-modes\">",
@@ -11427,7 +11427,7 @@ function createPanel() {
 	panel.innerHTML = `
     <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;">
       <button id="aus-hamburger-btn" title="菜单" style="display:none;width:28px;height:28px;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;">${icon("menu", 22)}</button>
-      <button id="aus-mobile-back" title="返回设置" style="display:none;width:28px;height:28px;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;">${icon("chevron-left", 20)}</button>
+      <button id="aus-mobile-back" title="返回" style="display:none;">${icon("chevron-left", 20)}</button>
       <span id="aus-mobile-brand" style="margin-left:12px;font-size:var(--aus-fs-base);font-weight:700;color:var(--ds-text);white-space:nowrap;flex-shrink:0;">API用量统计</span>
       <span id="aus-mobile-page-title" style="margin-left:10px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text-2);">用量概览</span>
       <button id="aus-mobile-panel-close" title="关闭" style="margin-left:auto;width:32px;height:32px;padding:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:var(--aus-fs-base);">${icon("close", 16)}</button>
