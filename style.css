@@ -2136,6 +2136,9 @@
   #aus-panel .aus-manage-chat-btn:hover { border-color: var(--ds-text-3); }
 }
 #aus-panel .aus-manage-chat-btn:active { background: var(--ds-nav-active-bg); }
+/* 设置页「对话展示」入口要与同页其它胶囊按钮同尺寸（那几个内联按钮是 padding:6px 12px），
+   概览与趋势页的同类入口仍取上面的紧凑尺寸。 */
+#aus-panel #aus-settings-chat-manage { padding: 6px 12px; line-height: 17px; }
 /* 管理页的「返回」按钮：比同排的「全部显示 / 全部隐藏」更显眼一点（描边提亮 + 加粗），
    「颜色稍微明显一点」的需求落在这里；不改尺寸，窄屏依旧与另两颗同高。 */
 #aus-panel #aus-chat-manage-back {
