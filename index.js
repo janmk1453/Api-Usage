@@ -207,48 +207,27 @@ function normalizeImportData(raw) {
 		skipped: { entries: skipped }
 	};
 }
-async function applyImportedData(d, mode) {
-	if (mode === "overwrite") await repository.replaceAll({
-		history: d.history || [],
-		total_tokens: d.total_tokens ?? (d.history || []).reduce((a, h) => a + (h.total_tokens || 0), 0),
-		total_cost: d.total_cost ?? (d.history || []).reduce((a, h) => a + (h.cost || 0), 0),
-		input_tokens: d.input_tokens ?? 0,
-		output_tokens: d.output_tokens ?? 0,
-		cache_hit_tokens: d.cache_hit_tokens ?? 0,
-		cache_miss_tokens: d.cache_miss_tokens ?? 0,
-		input_cost: d.input_cost ?? 0,
-		output_cost: d.output_cost ?? 0,
-		rounds: d.rounds ?? 0,
-		startTime: d.startTime ?? Date.now(),
-		balance: d.balance,
-		customBalance: d.customBalance,
-		wallets: d.wallets,
-		walletIgnored: d.walletIgnored,
-		settings: d.settings,
-		messageCount: d.messageCount
-	}, { clearCold: true });
-	else {
-		const existing = await repository.getAllHistory();
-		const seen = new Set(existing.map((h) => historyRecordKey(h)));
-		const toAdd = [];
-		for (const h of d.history || []) {
-			const key = historyRecordKey(h);
-			if (!seen.has(key)) {
-				seen.add(key);
-				toAdd.push(h);
-			}
+async function applyImportedData(d) {
+	const existing = await repository.getAllHistory();
+	const seen = new Set(existing.map((h) => historyRecordKey(h)));
+	const toAdd = [];
+	for (const h of d.history || []) {
+		const key = historyRecordKey(h);
+		if (!seen.has(key)) {
+			seen.add(key);
+			toAdd.push(h);
 		}
-		const merged = [...toAdd, ...existing].sort((a, b) => b.timestamp - a.timestamp);
-		await repository.replaceAll({ history: merged });
-		if (Array.isArray(d.wallets)) await repository.replaceAll({
-			wallets: mergeWalletCollections(repository.getWallets(), d.wallets),
-			walletIgnored: Array.from(/* @__PURE__ */ new Set([...state$2.walletIgnored || [], ...d.walletIgnored || []]))
-		});
-		if (d.settings && typeof d.settings === "object") {
-			const mergedSettings = { ...d.settings };
-			mergedSettings.webdav = { ...state$2.settings?.webdav || {} };
-			await repository.replaceAll({ settings: mergedSettings });
-		}
+	}
+	const merged = [...toAdd, ...existing].sort((a, b) => b.timestamp - a.timestamp);
+	await repository.replaceAll({ history: merged });
+	if (Array.isArray(d.wallets)) await repository.replaceAll({
+		wallets: mergeWalletCollections(repository.getWallets(), d.wallets),
+		walletIgnored: Array.from(/* @__PURE__ */ new Set([...state$2.walletIgnored || [], ...d.walletIgnored || []]))
+	});
+	if (d.settings && typeof d.settings === "object") {
+		const mergedSettings = { ...d.settings };
+		mergedSettings.webdav = { ...state$2.settings?.webdav || {} };
+		await repository.replaceAll({ settings: mergedSettings });
 	}
 	await repository.recalcAll();
 	await repository.rebuildAggregates();
@@ -286,11 +265,10 @@ function triggerImport() {
 				if (!raw || raw.format !== "deepseek-stat-export") return alert("导入失败：文件格式不正确");
 				const res = normalizeImportData(raw);
 				if (res.error) return alert("导入失败：" + res.error);
-				const mode = confirm("导入方式：\n确定 = 合并导入（推荐：历史按记录去重，钱包与设置一并合并，保留本机 WebDAV 配置）\n取消 = 覆盖导入（替换全部数据）") ? "merge" : "overwrite";
-				if (mode === "overwrite" && !confirm("覆盖将删除现有全部统计并无法恢复，确定要覆盖？")) return;
+				if (!confirm("合并导入：历史按记录去重，钱包与设置一并合并，本机 WebDAV 配置保留。\n确定导入？取消则不导入。")) return;
 				try {
-					await applyImportedData(res.data, mode);
-					alert(mode === "overwrite" ? "已覆盖导入" : "已合并导入");
+					await applyImportedData(res.data);
+					alert("已合并导入");
 				} catch (error) {
 					alert("导入失败：" + (error?.message || error));
 				}

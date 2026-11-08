@@ -180,52 +180,30 @@ export function normalizeImportData(raw: any): { data?: any; error?: string; ski
   }, skipped: { entries: skipped } } as any;
 }
 
-export async function applyImportedData(d: any, mode: 'overwrite' | 'merge'): Promise<void> {
-  if (mode === 'overwrite') {
+export async function applyImportedData(d: any): Promise<void> {
+  // 合并：按记录身份去重，避免同一毫秒的跨钱包记录被误删
+  const existing = await repository.getAllHistory();
+  const seen = new Set(existing.map((h: any) => historyRecordKey(h)));
+  const toAdd: any[] = [];
+  for (const h of d.history || []) {
+    const key = historyRecordKey(h);
+    if (!seen.has(key)) { seen.add(key); toAdd.push(h); }
+  }
+  const merged = [...toAdd, ...existing].sort((a: any, b: any) => b.timestamp - a.timestamp);
+  // 合并时不覆盖余额/设置
+  await repository.replaceAll({ history: merged } as any);
+  if (Array.isArray(d.wallets)) {
     await repository.replaceAll({
-      history: (d.history || []),
-      total_tokens: d.total_tokens ?? (d.history || []).reduce((a: number, h: any) => a + (h.total_tokens || 0), 0),
-      total_cost: d.total_cost ?? (d.history || []).reduce((a: number, h: any) => a + (h.cost || 0), 0),
-      input_tokens: d.input_tokens ?? 0,
-      output_tokens: d.output_tokens ?? 0,
-      cache_hit_tokens: d.cache_hit_tokens ?? 0,
-      cache_miss_tokens: d.cache_miss_tokens ?? 0,
-      input_cost: d.input_cost ?? 0,
-      output_cost: d.output_cost ?? 0,
-      rounds: d.rounds ?? 0,
-      startTime: d.startTime ?? Date.now(),
-      balance: d.balance,
-      customBalance: d.customBalance,
-      wallets: d.wallets,
-      walletIgnored: d.walletIgnored,
-      settings: d.settings,
-      messageCount: d.messageCount,
-    } as any, { clearCold: true });
-  } else {
-    // 合并：按记录身份去重，避免同一毫秒的跨钱包记录被误删
-    const existing = await repository.getAllHistory();
-    const seen = new Set(existing.map((h: any) => historyRecordKey(h)));
-    const toAdd: any[] = [];
-    for (const h of d.history || []) {
-      const key = historyRecordKey(h);
-      if (!seen.has(key)) { seen.add(key); toAdd.push(h); }
-    }
-    const merged = [...toAdd, ...existing].sort((a: any, b: any) => b.timestamp - a.timestamp);
-    // 合并时不覆盖余额/设置
-    await repository.replaceAll({ history: merged } as any);
-    if (Array.isArray(d.wallets)) {
-      await repository.replaceAll({
-        wallets: mergeWalletCollections(repository.getWallets(), d.wallets),
-        walletIgnored: Array.from(new Set([...(state.walletIgnored || []), ...(d.walletIgnored || [])])),
-      } as any);
-    }
-    // 合并导入同样应用文件里的设置（否则跨设备恢复后颜色模式、统计小块、额外空闲日期等都不会跟过来）；
-    // 导出时 WebDAV 配置被刻意清空，这里保留本机已有配置，避免合并把本机同步配置抹掉。
-    if (d.settings && typeof d.settings === 'object') {
-      const mergedSettings: any = { ...d.settings };
-      mergedSettings.webdav = { ...((state.settings as any)?.webdav || {}) };
-      await repository.replaceAll({ settings: mergedSettings } as any);
-    }
+      wallets: mergeWalletCollections(repository.getWallets(), d.wallets),
+      walletIgnored: Array.from(new Set([...(state.walletIgnored || []), ...(d.walletIgnored || [])])),
+    } as any);
+  }
+  // 合并导入同样应用文件里的设置（否则跨设备恢复后颜色模式、统计小块、额外空闲日期等都不会跟过来）；
+  // 导出时 WebDAV 配置被刻意清空，这里保留本机已有配置，避免合并把本机同步配置抹掉。
+  if (d.settings && typeof d.settings === 'object') {
+    const mergedSettings: any = { ...d.settings };
+    mergedSettings.webdav = { ...((state.settings as any)?.webdav || {}) };
+    await repository.replaceAll({ settings: mergedSettings } as any);
   }
   await repository.recalcAll();
   await repository.rebuildAggregates();
@@ -257,12 +235,10 @@ function triggerImport() {
         if (!raw || raw.format !== 'deepseek-stat-export') return alert('导入失败：文件格式不正确');
         const res: any = normalizeImportData(raw);
         if (res.error) return alert('导入失败：' + res.error);
-        const merge = confirm('导入方式：\n确定 = 合并导入（推荐：历史按记录去重，钱包与设置一并合并，保留本机 WebDAV 配置）\n取消 = 覆盖导入（替换全部数据）');
-        const mode = merge ? 'merge' : 'overwrite';
-        if (mode === 'overwrite' && !confirm('覆盖将删除现有全部统计并无法恢复，确定要覆盖？')) return;
+        if (!confirm('合并导入：历史按记录去重，钱包与设置一并合并，本机 WebDAV 配置保留。\n确定导入？取消则不导入。')) return;
         try {
-          await applyImportedData(res.data, mode as any);
-          alert(mode === 'overwrite' ? '已覆盖导入' : '已合并导入');
+          await applyImportedData(res.data);
+          alert('已合并导入');
         } catch (error: any) {
           alert('导入失败：' + (error?.message || error));
         }

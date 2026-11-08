@@ -1620,7 +1620,7 @@
         </ul>
       </section>
 
-      <section class="doc-section" id="data-transfer" data-keywords="导入 导出 删除记录 清理 WebDAV 云同步 备份 恢复 合并 覆盖 去重">
+      <section class="doc-section" id="data-transfer" data-keywords="导入 导出 删除记录 清理 WebDAV 云同步 备份 恢复 合并 去重">
         <div class="section-kicker">数据管理</div>
         <h2 id="data-transfer-title">导入、导出、删除与 WebDAV</h2>
         <p class="lead">数据管理用于备份历史与钱包配置、恢复旧版数据、按范围清理记录，以及在多台设备之间保持统计一致。导入和同步都不会包含钱包校准密钥与聊天正文。</p>
@@ -1647,13 +1647,12 @@
           <table>
             <thead><tr><th>方式</th><th>行为</th><th>适合场景</th></tr></thead>
             <tbody>
-              <tr><td>合并</td><td>保留现有数据，导入不重复的记录；钱包与统计设置一并合并（本机 WebDAV 配置保留不动）。</td><td>从其他设备补齐历史，或恢复部分数据。</td></tr>
-              <tr><td>覆盖</td><td>用导入文件替换当前可导入的数据范围。</td><td>恢复完整备份，或清理当前统计后重新导入。</td></tr>
+              <tr><td>合并（唯一方式）</td><td>保留现有数据，只补入不重复的记录；钱包与统计设置一并合并（本机 WebDAV 配置保留不动）。</td><td>从其他设备补齐历史，或恢复备份数据。</td></tr>
               <tr><td>旧版数据</td><td>兼容旧版导出格式，并迁移到当前历史结构。</td><td>从早期脚本或旧版本扩展迁移。</td></tr>
             </tbody>
           </table>
         </div>
-        <div class="callout warning"><strong>导入前建议：</strong>先导出当前数据。覆盖操作不可通过简单的页面撤销恢复。</div>
+        <div class="callout"><strong>说明：</strong>导入只做合并，不会清空或替换现有统计；确认框点“取消”即中止导入。</div>
 
         <h3 id="data-transfer-dedupe">重复记录处理</h3>
         <p>历史记录会按时间、模型、Token、接入、钱包和密钥身份进行综合判断。完全重复的记录不会重复累加；同一请求在不同设备上的合并会尽量保留统计一致性。</p>
@@ -1949,7 +1948,6 @@
         <h4 id="privacy-destructive">C. 破坏性操作声明</h4>
         <p>本扩展存在以下<strong>不可恢复的删除操作</strong>，且全部<strong>仅作用于本扩展自身记录的统计数据</strong>，不涉及酒馆任何原生数据：</p>
         <ol class="steps">
-          <li><strong>覆盖导入：</strong>以导入文件替换全部现有统计（经两次确认弹窗后方可执行）；</li>
           <li><strong>清理记录：</strong>清空历史或移除调试记录，仅删除本扩展本地统计；</li>
           <li><strong>删除钱包 / 校准密钥：</strong>删除对应钱包配置及其本地保存的校准密钥；</li>
           <li><strong>卸载扩展：</strong>删除酒馆设置中本扩展命名空间的数据与本地缓存键。</li>
