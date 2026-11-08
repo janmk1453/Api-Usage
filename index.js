@@ -10047,6 +10047,31 @@ function openHistoryDetail(doc, panel, btn) {
 	const content = doc.getElementById("aus-content-body");
 	if (content) content.classList.add("has-history-detail");
 }
+/**
+* 在重绘列表期间保持 #aus-main 的滚动位置不变：翻页、异步补齐全量数据都只换内容，
+* 不允许把页面滚到别处（旧实现用 scrollIntoView 把列表拽回顶部）。
+*/
+function keepMainScrollPosition(doc, fn) {
+	const scroller = doc.getElementById("aus-main");
+	const top = scroller ? scroller.scrollTop : 0;
+	const left = scroller ? scroller.scrollLeft : 0;
+	fn();
+	if (!scroller) return;
+	const restore = () => {
+		try {
+			scroller.scrollTop = top;
+			scroller.scrollLeft = left;
+		} catch {}
+	};
+	restore();
+	try {
+		const view = doc.defaultView;
+		if (view && view.requestAnimationFrame) view.requestAnimationFrame(restore);
+		else setTimeout(restore, 0);
+	} catch {
+		setTimeout(restore, 0);
+	}
+}
 function renderHistoryInner(doc, fullHist) {
 	const host = doc.getElementById("aus-history");
 	if (!host) return;
@@ -10214,30 +10239,12 @@ function renderHistoryInner(doc, fullHist) {
 	const bindPager = (id) => {
 		const b = doc.getElementById(id);
 		if (!b) return;
-		if (id.includes("prev")) b.onclick = () => {
-			if (historyPage > 1) {
-				historyPage--;
-				renderHistoryInner(doc, fullHist);
-				try {
-					doc.getElementById("aus-history")?.scrollIntoView({
-						behavior: "smooth",
-						block: "start"
-					});
-				} catch {}
-			}
-		};
-		else b.onclick = () => {
-			const tp = Math.max(1, Math.ceil(fullHist.length / HISTORY_PAGE_SIZE));
-			if (historyPage < tp) {
-				historyPage++;
-				renderHistoryInner(doc, fullHist);
-				try {
-					doc.getElementById("aus-history")?.scrollIntoView({
-						behavior: "smooth",
-						block: "start"
-					});
-				} catch {}
-			}
+		b.onclick = () => {
+			const totalPages = Math.max(1, Math.ceil(fullHist.length / HISTORY_PAGE_SIZE));
+			const nextPage = historyPage + (id.includes("prev") ? -1 : 1);
+			if (nextPage < 1 || nextPage > totalPages) return;
+			historyPage = nextPage;
+			keepMainScrollPosition(doc, () => renderHistoryInner(doc, fullHist));
 		};
 	};
 	bindPager("aus-history-prev");
@@ -10352,8 +10359,10 @@ function renderHistory(doc, s) {
 			} catch {}
 			if (full.length <= hist.length) return;
 			historyFullCache = full;
-			renderHistoryFilters(full);
-			renderHistoryInner(doc, filteredHistoryForDisplay(full));
+			keepMainScrollPosition(doc, () => {
+				renderHistoryFilters(full);
+				renderHistoryInner(doc, filteredHistoryForDisplay(full));
+			});
 		} catch {} finally {
 			historyLoading = false;
 		}

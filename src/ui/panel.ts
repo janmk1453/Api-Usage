@@ -453,6 +453,26 @@ function openHistoryDetail(doc: Document, panel: HTMLElement, btn: HTMLElement) 
   if (content) content.classList.add('has-history-detail');
 }
 
+/**
+ * 在重绘列表期间保持 #aus-main 的滚动位置不变：翻页、异步补齐全量数据都只换内容，
+ * 不允许把页面滚到别处（旧实现用 scrollIntoView 把列表拽回顶部）。
+ */
+function keepMainScrollPosition(doc: Document, fn: () => void): void {
+  const scroller = doc.getElementById('aus-main') as HTMLElement | null;
+  const top = scroller ? scroller.scrollTop : 0;
+  const left = scroller ? scroller.scrollLeft : 0;
+  fn();
+  if (!scroller) return;
+  const restore = () => { try { scroller.scrollTop = top; scroller.scrollLeft = left; } catch {} };
+  restore();
+  // 列表重绘可能触发浏览器的滚动锚定，等布局稳定后再钉一次位置
+  try {
+    const view = doc.defaultView;
+    if (view && view.requestAnimationFrame) view.requestAnimationFrame(restore);
+    else setTimeout(restore, 0);
+  } catch { setTimeout(restore, 0); }
+}
+
 function renderHistoryInner(doc: Document, fullHist: any[]) {
   const host = doc.getElementById('aus-history');
   if (!host) return;
@@ -601,12 +621,17 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
     </div>
   `;
   }).join('') + pagerBottom;
-  // 分页按钮
+  // 分页按钮：翻页只替换列表内容，不允许移动页面滚动位置
   const bindPager = (id: string) => {
     const b = doc.getElementById(id) as HTMLButtonElement | null;
     if (!b) return;
-    if (id.includes('prev')) b.onclick = () => { if (historyPage > 1) { historyPage--; renderHistoryInner(doc, fullHist); try{ doc.getElementById('aus-history')?.scrollIntoView({ behavior:'smooth', block:'start'}); }catch{} } };
-    else b.onclick = () => { const tp = Math.max(1, Math.ceil(fullHist.length / HISTORY_PAGE_SIZE)); if (historyPage < tp) { historyPage++; renderHistoryInner(doc, fullHist); try{ doc.getElementById('aus-history')?.scrollIntoView({ behavior:'smooth', block:'start'}); }catch{} } };
+    b.onclick = () => {
+      const totalPages = Math.max(1, Math.ceil(fullHist.length / HISTORY_PAGE_SIZE));
+      const nextPage = historyPage + (id.includes('prev') ? -1 : 1);
+      if (nextPage < 1 || nextPage > totalPages) return;
+      historyPage = nextPage;
+      keepMainScrollPosition(doc, () => renderHistoryInner(doc, fullHist));
+    };
   };
   bindPager('aus-history-prev'); bindPager('aus-history-next'); bindPager('aus-history-prev-b'); bindPager('aus-history-next-b');
   host.querySelectorAll('.aus-detail-toggle').forEach((btn) => {
@@ -705,9 +730,11 @@ function renderHistory(doc: Document, s: any) {
       } catch {}
       if (full.length <= hist.length) return;
       historyFullCache = full;
-      // 若当前页仍指向热数据页，需保持页码但更新总数
-      renderHistoryFilters(full);
-      renderHistoryInner(doc, filteredHistoryForDisplay(full));
+      // 若当前页仍指向热数据页，需保持页码但更新总数；筛选栏与列表一起重绘，页面位置不许动
+      keepMainScrollPosition(doc, () => {
+        renderHistoryFilters(full);
+        renderHistoryInner(doc, filteredHistoryForDisplay(full));
+      });
     } catch {} finally { historyLoading = false; }
   })();
 }
