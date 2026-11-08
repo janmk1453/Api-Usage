@@ -1880,7 +1880,7 @@
 #aus-panel .aus-switch {
   --aus-switch-w: 44px;
   --aus-switch-h: 24px;
-  --aus-switch-thumb-size: 16px;
+  --aus-switch-thumb-size: 18px;
   --aus-switch-inset: 3px;
   position: relative;
   display: inline-flex;
@@ -1928,7 +1928,7 @@
   transition: background-color 160ms ease, border-color 160ms ease;
 }
 #aus-panel .aus-switch .aus-switch-thumb {
-  top: var(--aus-switch-inset);
+  top: calc((var(--aus-switch-h) - var(--aus-switch-thumb-size)) / 2);
   left: var(--aus-switch-inset);
   width: var(--aus-switch-thumb-size);
   height: var(--aus-switch-thumb-size);
@@ -1943,7 +1943,7 @@
   border-color: var(--aus-switch-on-border);
 }
 #aus-panel .aus-switch input:checked ~ .aus-switch-thumb {
-  transform: translateX(calc(var(--aus-switch-w) - var(--aus-switch-inset) * 2 - var(--aus-switch-thumb-size) - 2px));
+  transform: translateX(calc(var(--aus-switch-w) - var(--aus-switch-thumb-size) - var(--aus-switch-inset) * 2));
   border-color: var(--aus-switch-thumb-border-on);
 }
 @media (hover: hover) {
@@ -1964,7 +1964,7 @@
   #aus-panel .aus-switch {
     --aus-switch-w: 48px;
     --aus-switch-h: 26px;
-    --aus-switch-thumb-size: 18px;
+    --aus-switch-thumb-size: 20px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

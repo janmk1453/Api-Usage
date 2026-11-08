@@ -62,6 +62,23 @@ describe('统一胶囊开关：开 / 关必须是两套颜色', () => {
     expect(styleSrc).toMatch(/--aus-switch-thumb-border:/);
   });
 
+  it('滑钮在轨道里四边等距：垂直居中用 calc，位移不多减像素', () => {
+    // 回归：top 曾写死 3px（24 高轨道里上下不等距，滑钮偏上），
+    // 位移曾多减 2px（开启态右留白比左留白大，滑钮偏左）——两处都会让开关"点歪"。
+    expect(styleSrc).toMatch(
+      /\.aus-switch-thumb \{[^}]*top: calc\(\(var\(--aus-switch-h\) - var\(--aus-switch-thumb-size\)\) \/ 2\)/
+    );
+    const shift = styleSrc.match(/translateX\(calc\([^)]*\n?[^}]*\)\)/);
+    expect(shift).toBeTruthy();
+    expect(styleSrc).not.toMatch(/translateX\(calc\([^}]*?- 2px\)\)/);
+    expect(styleSrc).toMatch(
+      /translateX\(calc\(var\(--aus-switch-w\) - var\(--aus-switch-thumb-size\) - var\(--aus-switch-inset\) \* 2\)\)/
+    );
+    // 24 = 18 + 3 * 2、26 = 20 + 3 * 2：滑钮直径与轨道高、留白严格自洽
+    expect(styleSrc).toMatch(/--aus-switch-h: 24px[\s\S]{0,80}--aus-switch-thumb-size: 18px/);
+    expect(styleSrc).toMatch(/--aus-switch-h: 26px[\s\S]{0,80}--aus-switch-thumb-size: 20px/);
+  });
+
   it('触屏命中区与减少动效兜底都在', () => {
     expect(styleSrc).toMatch(/\.aus-switch::before \{[^}]*inset: -6px/);
     expect(styleSrc).toMatch(/prefers-reduced-motion: reduce/);
