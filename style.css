@@ -2108,11 +2108,64 @@
 }
 /* 概览「按对话统计」标题右侧的隐藏计数（0 个时不显示，由 paintChatManageBadge 控制） */
 #aus-chat-manage-count { font-variant-numeric: tabular-nums; }
-#aus-chat-manage-btn { font-family: inherit; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-@media (hover: hover) {
-  #aus-chat-manage-btn:hover { border-color: var(--ds-text-3); }
+/* 全站「管理对话」入口胶囊（同一页面的三个入口共用）：概览「按对话统计」标题右侧、
+   趋势预测工具栏、设置页「对话展示」设置项。样式只在 style.css，模板不写内联尺寸。 */
+#aus-panel .aus-manage-chat-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--ds-border);
+  border-radius: 999px;
+  background: var(--ds-card-inner);
+  color: var(--ds-text);
+  font-family: inherit;
+  font-size: var(--aus-fs-sm);
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
-#aus-chat-manage-btn:active { background: var(--ds-nav-active-bg); }
+#aus-panel .aus-manage-chat-btn > svg { flex: 0 0 auto; }
+@media (hover: hover) {
+  #aus-panel .aus-manage-chat-btn:hover { border-color: var(--ds-text-3); }
+}
+#aus-panel .aus-manage-chat-btn:active { background: var(--ds-nav-active-bg); }
+/* 管理模式切换（表格展示 / 下拉选项）：两颗胶囊，选中态取侧栏选中底色 + 加粗 */
+#aus-panel #aus-chat-manage-modes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  min-width: 0;
+}
+#aus-panel .aus-chat-manage-mode {
+  padding: 5px 12px;
+  border: 1px solid var(--ds-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ds-text-2);
+  font-family: inherit;
+  font-size: var(--aus-fs-sm);
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (hover: hover) {
+  #aus-panel .aus-chat-manage-mode:hover { border-color: var(--ds-text-3); color: var(--ds-text); }
+}
+#aus-panel .aus-chat-manage-mode[data-active="1"] {
+  background: var(--ds-nav-active-bg);
+  border-color: var(--ds-text-3);
+  color: var(--ds-text);
+  font-weight: 600;
+}
 /* 窄屏：头部改纵向堆叠——说明占满一行、工具行单独一行、搜索框吃掉剩余宽度，
    这样「全部显示」与「返回概览」永远落在视口内，不会被推到屏幕外；
    行内距与间距同时收一档，名称与摘要仍单行省略。两套断点（媒体 + 容器）必须同步。 */
@@ -2123,6 +2176,8 @@
   #aus-panel #aus-chat-manage-search { flex: 1 1 120px; width: auto; }
   #aus-panel .aus-chat-manage-row { padding: 8px 10px; gap: 8px; }
   #aus-panel .aus-chat-manage-state { padding: 1px 6px; }
+  #aus-panel #aus-chat-manage-modes { gap: 6px; margin-bottom: 10px; }
+  #aus-panel .aus-chat-manage-mode { padding: 4px 10px; }
 }
 @container ausbody (max-width: 760px) {
   #aus-panel #aus-chat-manage-head { flex-direction: column; align-items: stretch; gap: 10px; }
@@ -2131,6 +2186,8 @@
   #aus-panel #aus-chat-manage-search { flex: 1 1 120px; width: auto; }
   #aus-panel .aus-chat-manage-row { padding: 8px 10px; gap: 8px; }
   #aus-panel .aus-chat-manage-state { padding: 1px 6px; }
+  #aus-panel #aus-chat-manage-modes { gap: 6px; margin-bottom: 10px; }
+  #aus-panel .aus-chat-manage-mode { padding: 4px 10px; }
 }
 /* 行内所有子项都允许收缩到 0：宿主主题给 div 加 min-width 也撑不宽这一行 */
 #aus-panel .aus-chat-manage-row > * { min-width: 0; }

@@ -26,6 +26,7 @@ import { renderForecastView, initForecastView } from './forecast-view';
 import { disposeForecastCharts } from './forecast-chart';
 import { renderWalletView } from './wallet-view';
 import { initChatManageView, renderChatManageView } from './chat-manage';
+import { filterPickerRows } from './chat-visibility';
 import { bindChangelog, renderChangelogCard } from './changelog';
 import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
 import { initPillState } from './pill';
@@ -106,6 +107,8 @@ let panelOpen = false;
 let currentView: AppView = 'overview';
 /** 「设置」下最近打开的二级页（窄屏点回「设置」tab 时恢复到上次位置） */
 let settingsChildView: AppView | null = null;
+/** 「对话展示管理」的来源页：进入前记录的视图，页内「返回」与顶栏返回箭头都回到这里 */
+let chatManageOrigin: AppView = 'overview';
 /** 当前导航高亮键：窄屏二级页归到「设置」，桌面为视图本身 */
 let currentNavKey: AppView = 'overview';
 let collapsed = false;
@@ -259,10 +262,12 @@ function renderHistoryFilters(history: any[]) {
   if (historyFilters.model !== STATS_FILTER_ALL && !models.some((option) => option.id === historyFilters.model)) {
     historyFilters.model = STATS_FILTER_ALL;
   }
-  const chats = getHistoryChatOptions(historyFilterBase);
-  if (historyFilters.chat !== STATS_FILTER_ALL && !chats.some((option) => option.id === historyFilters.chat)) {
+  // 全量对话选项用于取值校验与名称回显；下拉里只列未被隐藏的（「对话展示管理」的「下拉选项」集合）
+  const chatOptions = getHistoryChatOptions(historyFilterBase);
+  if (historyFilters.chat !== STATS_FILTER_ALL && !chatOptions.some((option) => option.id === historyFilters.chat)) {
     historyFilters.chat = STATS_FILTER_ALL;
   }
+  const chats = filterPickerRows(chatOptions, (option) => option.id);
   const endpoints = getEndpointFilterOptions(historyFilterBase);
   if (historyFilters.endpoint !== STATS_FILTER_ALL && !endpoints.some((option) => option.id === historyFilters.endpoint)) {
     historyFilters.endpoint = STATS_FILTER_ALL;
@@ -277,7 +282,7 @@ function renderHistoryFilters(history: any[]) {
     model: historyFilters.model === STATS_FILTER_ALL ? '全部' : historyFilters.model,
     chat: historyFilters.chat === STATS_FILTER_ALL
       ? '全部'
-      : chats.find((option) => option.id === historyFilters.chat)?.label || historyFilters.chat,
+      : chatOptions.find((option) => option.id === historyFilters.chat)?.label || historyFilters.chat,
     endpoint: historyFilters.endpoint === STATS_FILTER_ALL
       ? '全部'
       : historyFilters.endpoint === STATS_FILTER_UNKNOWN
@@ -302,7 +307,7 @@ function renderHistoryFilters(history: any[]) {
     closeHistoryFilterDropdowns();
     renderHistory(doc, getSelectedSave());
   });
-  renderHistoryFilterDropdown('chat', historyFilters.chat, chats, '暂无对话', (value) => {
+  renderHistoryFilterDropdown('chat', historyFilters.chat, chats, chatOptions.length ? '对话已全部隐藏（可在「对话展示管理」中恢复）' : '暂无对话', (value) => {
     historyFilters.chat = value;
     historyPage = 1;
     closeHistoryFilterDropdowns();
@@ -1127,7 +1132,9 @@ function syncBottomNav(doc: Document, animate: boolean): void {
 function paintNavState(doc: Document, bottom: boolean, animate: boolean): void {
   // 底栏布局：一律归父级 tab（设置二级页 → settings、对话展示管理 → overview）；
   // 桌面侧栏：设置二级页有自己的导航项（要高亮自身），对话展示管理没有导航项，归到父级「概览」。
-  currentNavKey = bottom || !isSettingsChild(currentView) ? parentTabOf(currentView) : currentView;
+  // 「对话展示管理」没有导航项：底栏高亮跟着进入前的来源页走（从设置进入就高亮「设置」）
+  const navSource = currentView === 'chat-manage' ? chatManageOrigin : currentView;
+  currentNavKey = bottom || !isSettingsChild(currentView) ? parentTabOf(navSource) : navSource;
   try {
     doc.querySelectorAll('#aus-sidebar [data-nav]').forEach((el: any) => {
       const v = el.getAttribute('data-nav');
@@ -1156,7 +1163,7 @@ function handleBottomTabTap(target: AppView): void {
     return;
   }
   // 二级页重复点当前 tab：回到自己的父级根页（设置二级页 → 设置、对话展示管理 → 概览）
-  if (action === 'pop-root') { switchView(childParentOf(currentView) ?? 'settings'); return; }
+  if (action === 'pop-root') { switchView(returnFromChild()); return; }
   try {
     const main = doc.getElementById('aus-main') as HTMLElement | null;
     if (main) main.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
@@ -1202,6 +1209,18 @@ function syncMobileSidebar(doc: Document): void {
       }
     }
   } catch {}
+}
+
+/** 二级页「返回」目标：对话展示管理回到进入前的来源页，其余回到自己的父级根页 */
+function returnFromChild(): AppView {
+  if (currentView === 'chat-manage') return chatManageOrigin;
+  return childParentOf(currentView) ?? 'settings';
+}
+
+/** 进入对话展示管理页并记住来源（概览 / 趋势预测 / 设置三处入口共用） */
+function openChatManage(from: AppView): void {
+  chatManageOrigin = from;
+  switchView('chat-manage');
 }
 
 function switchView(view: AppView, opts?: { track?: boolean }) {
@@ -1419,7 +1438,7 @@ export function createPanel() {
                 <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">按对话统计</div>
                 <div style="display:flex;align-items:center;gap:8px;min-width:0;">
                   <span id="aus-chat-manage-count" style="display:none;font-size:var(--aus-fs-xs);color:var(--ds-text-3);white-space:nowrap;"></span>
-                  <button id="aus-chat-manage-btn" type="button" title="设置哪些对话出现在此表格（不影响其它页面统计）" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;line-height:1.4;white-space:nowrap;">${icon('menu', 14)}管理对话</button>
+                  <button id="aus-chat-manage-btn" type="button" class="aus-manage-chat-btn" title="设置哪些对话出现在按对话统计表与各页「对话」下拉中（不影响数据统计）">${icon('menu', 14)}管理对话</button>
                 </div>
               </div>
               <table style="width:100%;border-collapse:collapse;font-size:var(--aus-fs-sm);white-space:nowrap;min-width:720px;">
@@ -1523,6 +1542,7 @@ export function createPanel() {
                     <span class="aus-forecast-checkbox" aria-hidden="true"></span>
                     <span id="aus-forecast-compaction-label">压缩情景</span>
                   </label>
+                  <button id="aus-forecast-chat-manage-btn" type="button" class="aus-manage-chat-btn" title="设置哪些对话出现在「对话」下拉中（不影响数据统计）">${icon('menu', 14)}管理对话</button>
                 </div>
                 <div id="aus-forecast-sub" class="aus-forecast-sub"></div>
               </div>
@@ -1733,10 +1753,17 @@ export function createPanel() {
   });
   // 窄屏二级页顶栏返回箭头：回到「设置」根页
   // 窄屏二级页顶栏返回箭头：回到当前二级页自己的父级（设置二级页 → 设置、对话展示管理 → 概览）
-  doc.getElementById('aus-mobile-back')?.addEventListener('click', () => switchView(childParentOf(currentView) ?? 'settings'));
-  // 概览「按对话统计」→ 对话展示管理页（页面内的「返回概览」按钮由这里注入的导航回调驱动）
-  doc.getElementById('aus-chat-manage-btn')?.addEventListener('click', () => switchView('chat-manage'));
-  initChatManageView({ go: (v) => switchView(v) });
+  doc.getElementById('aus-mobile-back')?.addEventListener('click', () => switchView(returnFromChild()));
+  // 三处入口都进同一个「对话展示管理」页：概览表格标题右侧、趋势预测工具栏、设置页「对话展示」设置项
+  // （设置页内容在 renderSettings 里生成，这里用委托绑定，避免依赖渲染顺序）
+  doc.getElementById('aus-chat-manage-btn')?.addEventListener('click', () => openChatManage('overview'));
+  doc.getElementById('aus-forecast-chat-manage-btn')?.addEventListener('click', () => openChatManage('forecast'));
+  doc.getElementById('aus-panel')?.addEventListener('click', (e: any) => {
+    const target = e.target as HTMLElement | null;
+    if (target?.closest?.('#aus-settings-chat-manage')) openChatManage('settings');
+  });
+  // 页内「返回」按钮：回到进入前的来源页
+  initChatManageView({ go: () => switchView(chatManageOrigin) });
   const applyCollapsed = (v: boolean) => {
     collapsed = v;
     const sb = doc.getElementById('aus-sidebar') as HTMLElement | null;

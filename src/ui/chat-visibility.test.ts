@@ -3,12 +3,21 @@ import {
   CHAT_VISIBILITY_KEY,
   NULL_CHAT_KEY,
   chatVisibilityKey,
+  clearHiddenFor,
   clearHiddenKeys,
+  filterPickerRows,
   filterVisibleRows,
+  hiddenCountFor,
   hiddenKeyCount,
+  isHiddenFor,
   isHiddenKey,
   normalizeHiddenKeys,
+  normalizePrefs,
+  readHiddenFor,
   readHiddenKeys,
+  readHiddenPickerKeys,
+  setAllHiddenFor,
+  setHiddenFor,
   setHiddenKey,
 } from './chat-visibility';
 
@@ -32,7 +41,8 @@ beforeEach(() => {
   store = fakeStorage();
   Object.defineProperty(globalThis, 'localStorage', { value: store, configurable: true, writable: true });
   // 模块内还有一份内存态兜底，每个用例先清空，避免上一例的残留泄漏进来
-  clearHiddenKeys();
+  clearHiddenFor('table');
+  clearHiddenFor('picker');
 });
 
 afterEach(() => {
@@ -54,17 +64,27 @@ describe('chat-visibility', () => {
     expect(normalizeHiddenKeys([1, 'a', '', 'b', 'a', null, {}, 'c'])).toEqual(['a', 'b', 'c']);
   });
 
-  it('readHiddenKeys：无数据返回空数组，脏 JSON 不抛错', () => {
+  it('normalizePrefs：缺字段回落空数组，兼容旧版只有 hidden 的数据', () => {
+    expect(normalizePrefs(null)).toEqual({ hidden: [], hiddenPickers: [] });
+    expect(normalizePrefs({ hidden: ['a'] })).toEqual({ hidden: ['a'], hiddenPickers: [] });
+    expect(normalizePrefs({ hiddenPickers: ['b'] })).toEqual({ hidden: [], hiddenPickers: ['b'] });
+    expect(normalizePrefs({ hidden: ['a'], hiddenPickers: ['b'] })).toEqual({ hidden: ['a'], hiddenPickers: ['b'] });
+  });
+
+  it('readHiddenKeys：无数据返回空数组，脏 JSON 不抛错，旧格式照常读', () => {
     expect(readHiddenKeys()).toEqual([]);
     store.setItem(CHAT_VISIBILITY_KEY, '{ bad json');
     expect(readHiddenKeys()).toEqual([]);
     store.setItem(CHAT_VISIBILITY_KEY, JSON.stringify({ hidden: 'nope' }));
     expect(readHiddenKeys()).toEqual([]);
+    store.setItem(CHAT_VISIBILITY_KEY, JSON.stringify({ hidden: ['old'] }));
+    expect(readHiddenKeys()).toEqual(['old']);
+    expect(readHiddenPickerKeys()).toEqual([]);
   });
 
-  it('setHiddenKey 落盘为 { hidden: [...] }，可反复开关且不重复', () => {
+  it('setHiddenKey 落盘为 { hidden, hiddenPickers } 双字段，可反复开关且不重复', () => {
     setHiddenKey('a', true);
-    expect(JSON.parse(store.getItem(CHAT_VISIBILITY_KEY) as string)).toEqual({ hidden: ['a'] });
+    expect(JSON.parse(store.getItem(CHAT_VISIBILITY_KEY) as string)).toEqual({ hidden: ['a'], hiddenPickers: [] });
     setHiddenKey('a', true);
     expect(readHiddenKeys()).toEqual(['a']);
     setHiddenKey('b', true);
@@ -83,10 +103,46 @@ describe('chat-visibility', () => {
     setHiddenKey(NULL_CHAT_KEY, true);
     clearHiddenKeys();
     expect(readHiddenKeys()).toEqual([]);
-    expect(JSON.parse(store.getItem(CHAT_VISIBILITY_KEY) as string)).toEqual({ hidden: [] });
+    expect(JSON.parse(store.getItem(CHAT_VISIBILITY_KEY) as string)).toEqual({ hidden: [], hiddenPickers: [] });
   });
 
-  it('filterVisibleRows：按隐藏列表过滤且保持入参顺序与原型', () => {
+  it('两套集合互不影响：表格隐藏不动下拉，反之亦然', () => {
+    setHiddenFor('table', 'a', true);
+    expect(readHiddenKeys()).toEqual(['a']);
+    expect(readHiddenPickerKeys()).toEqual([]);
+    expect(isHiddenFor('table', 'a')).toBe(true);
+    expect(isHiddenFor('picker', 'a')).toBe(false);
+
+    setHiddenFor('picker', 'b', true);
+    expect(readHiddenKeys()).toEqual(['a']);
+    expect(readHiddenPickerKeys()).toEqual(['b']);
+    expect(hiddenCountFor('table')).toBe(1);
+    expect(hiddenCountFor('picker')).toBe(1);
+
+    // 只清其中一个位置，另一个保持
+    clearHiddenFor('picker');
+    expect(readHiddenKeys()).toEqual(['a']);
+    expect(readHiddenPickerKeys()).toEqual([]);
+  });
+
+  it('setAllHiddenFor：批量隐藏与批量恢复，保留未涉及项', () => {
+    setHiddenFor('picker', 'keep', true);
+    setAllHiddenFor('picker', ['a', 'b', 'a', ''], true);
+    expect(readHiddenPickerKeys()).toEqual(['keep', 'a', 'b']);
+    setAllHiddenFor('picker', ['a', 'b'], false);
+    expect(readHiddenPickerKeys()).toEqual(['keep']);
+    // 表格集合未被牵连
+    expect(readHiddenKeys()).toEqual([]);
+  });
+
+  it('readHiddenFor：返回副本，外部修改不影响存储', () => {
+    setHiddenFor('table', 'a', true);
+    const list = readHiddenFor('table');
+    list.push('b');
+    expect(readHiddenFor('table')).toEqual(['a']);
+  });
+
+  it('filterVisibleRows：按表格隐藏列表过滤且保持入参顺序与原型', () => {
     const rows = [
       { chatId: 'a', total: 3 },
       { chatId: 'b', total: 2 },
@@ -110,6 +166,22 @@ describe('chat-visibility', () => {
     expect(filterVisibleRows(rows, (r) => r.id).map((r) => r.id)).toEqual(['y']);
   });
 
+  it('filterPickerRows：只认下拉集合，默认取 row.chatId', () => {
+    const rows = [{ chatId: 'a' }, { chatId: 'b' }, { chatId: null }];
+    setHiddenFor('table', 'a', true);
+    // 表格集合不影响下拉
+    expect(filterPickerRows(rows).map((r) => r.chatId)).toEqual(['a', 'b', null]);
+    setHiddenFor('picker', 'a', true);
+    setHiddenFor('picker', NULL_CHAT_KEY, true);
+    expect(filterPickerRows(rows).map((r) => r.chatId)).toEqual(['b']);
+  });
+
+  it('filterPickerRows：可自定义取键函数（历史页选项自带 id）', () => {
+    setHiddenFor('picker', 'chat-1', true);
+    const options = [{ id: 'chat-1' }, { id: 'chat-2' }];
+    expect(filterPickerRows(options, (o) => o.id).map((o) => o.id)).toEqual(['chat-2']);
+  });
+
   it('localStorage 不可用时退化为内存态且不抛错', () => {
     Object.defineProperty(globalThis, 'localStorage', {
       value: { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } },
@@ -120,6 +192,9 @@ describe('chat-visibility', () => {
     expect(hiddenKeyCount()).toBe(0);
     // 探针失败 → 整体退化为内存态，本次会话内开关依旧有效
     setHiddenKey('mem', true);
+    expect(isHiddenKey('mem')).toBe(true);
+    setHiddenFor('picker', 'mem', true);
+    expect(isHiddenFor('picker', 'mem')).toBe(true);
     expect(isHiddenKey('mem')).toBe(true);
     setHiddenKey('mem', false);
     expect(isHiddenKey('mem')).toBe(false);

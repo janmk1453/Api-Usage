@@ -3,13 +3,13 @@ import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from ".
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { f as saveHot, p as historyRecordKey } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-BtwSe1u7.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-TFLNkRoE.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-Dsn2T9-Q.js";
-import { t as installInterception } from "./interception-CECrCOjs.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-BUV5_VFC.js";
-import { a as trackOpen, c as applyTheme, d as switchHTML, f as icon, i as initTelemetry, l as unwatchSystemTheme, o as trackPage, r as flushTelemetry, s as trackRender, t as renderSettings, u as watchSystemTheme } from "./settings-BTltuXh0.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-C3O8JPpr.js";
+import { t as installInterception } from "./interception-ClMjWeZH.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-ByHQ7uEp.js";
+import { a as trackOpen, c as applyTheme, d as switchHTML, f as icon, i as initTelemetry, l as unwatchSystemTheme, o as trackPage, r as flushTelemetry, s as trackRender, t as renderSettings, u as watchSystemTheme } from "./settings-C5UCW3Gw.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-DjF47F-6.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -1630,20 +1630,24 @@ function sortRows(rows, state, pick, tie) {
 //#endregion
 //#region src/ui/chat-visibility.ts
 /**
-* 「按对话统计」表格的对话显隐偏好（概览页专用）。
+* 对话显隐偏好（纯展示偏好，localStorage）。
 *
-* 定位与 `filter-prefs.ts` / `chart-prefs.ts` 一致：纯展示偏好，放 localStorage，
-* 不进 `settings`、不参与导出与 WebDAV 同步，也不影响任何统计口径——隐藏只是让
-* 该对话不出现在概览「按对话统计」表里，热力图、统计页、历史页、趋势预测、
-* 能耗评分等全部照旧按全量历史计算。
+* 定位与 `filter-prefs.ts` / `chart-prefs.ts` 一致：不进 `settings`、不参与导出与
+* WebDAV 同步，也不影响任何统计口径——隐藏只是让该对话不出现在某个展示位置，
+* 热力图、统计页、历史页、趋势预测、能耗评分等全部照旧按全量历史计算。
 *
-* 存储形态：`{ hidden: string[] }`，元素是「对话键」而不是 chatId 原值：
-* 无 chatId 的记录（旧数据/未分组）统一用 `NULL_CHAT_KEY`，与
-* `data/computed.ts#computeChatStats` 内部的聚合键保持一致，
-* 这样没有 chatId 的那一行也能被单独隐藏。
+* 两个互相独立的隐藏集合：
+* - `hidden`：概览「按对话统计」表格里不列出；
+* - `hiddenPickers`：统计页/历史页/趋势预测页的「对话」下拉胶囊里不列出。
+*   胶囊只是少一个可选项，数据统计口径不变（已选中的对话仍按全量计算）。
+*
+* 存储形态：`{ hidden: string[], hiddenPickers: string[] }`，元素是「对话键」而不是
+* chatId 原值：无 chatId 的记录（旧数据/未分组）统一用 `NULL_CHAT_KEY`，与
+* `data/computed.ts#computeChatStats` 内部的聚合键保持一致，这样没有 chatId 的
+* 那一行也能被单独隐藏。旧版只有 `{ hidden }` 的数据照常读取，缺的集合视为空。
 *
 * 读写全部包 try/catch：宿主禁用存储或隐私模式下静默退化为内存态
-* （本次会话有效，刷新后回到「全部显示」），不影响功能可用性。
+* （本次会话有效，刷新后回到全部显示），不影响功能可用性。
 */
 var CHAT_VISIBILITY_KEY = "aus_chat_visibility_v1";
 /** 无 chatId 的记录（旧数据/未分组）在所有统计里共用的聚合键 */
@@ -1662,6 +1666,14 @@ function normalizeHiddenKeys(value) {
 	}
 	return out;
 }
+/** 校验整份偏好：缺字段、脏字段一律回落为空数组（兼容旧版只有 hidden 的数据） */
+function normalizePrefs(value) {
+	const raw = value ?? {};
+	return {
+		hidden: normalizeHiddenKeys(raw.hidden),
+		hiddenPickers: normalizeHiddenKeys(raw.hiddenPickers)
+	};
+}
 function storage$2() {
 	try {
 		const store = globalThis.localStorage;
@@ -1673,52 +1685,97 @@ function storage$2() {
 	}
 }
 /** 内存态兜底（localStorage 不可用时本次会话仍可切换） */
-var memoryHidden = null;
-/** 读取隐藏键列表（只读副本，调用方可安全排序/遍历） */
-function readHiddenKeys() {
+var memoryPrefs = null;
+/** 读取整份偏好（每次返回新对象，调用方可安全修改） */
+function readPrefs() {
 	const store = storage$2();
-	if (!store) return memoryHidden ? memoryHidden.slice() : [];
+	if (!store) return normalizePrefs(memoryPrefs ?? {});
 	try {
 		const raw = store.getItem(CHAT_VISIBILITY_KEY);
-		if (!raw) return [];
-		return normalizeHiddenKeys(JSON.parse(raw)?.hidden);
+		if (!raw) return {
+			hidden: [],
+			hiddenPickers: []
+		};
+		return normalizePrefs(JSON.parse(raw));
 	} catch {
-		return [];
+		return {
+			hidden: [],
+			hiddenPickers: []
+		};
 	}
 }
-function writeHiddenKeys(keys) {
-	const clean = normalizeHiddenKeys(keys);
-	memoryHidden = clean;
+function writePrefs(prefs) {
+	const clean = normalizePrefs(prefs);
+	memoryPrefs = clean;
 	const store = storage$2();
 	if (!store) return;
 	try {
-		store.setItem(CHAT_VISIBILITY_KEY, JSON.stringify({ hidden: clean }));
+		store.setItem(CHAT_VISIBILITY_KEY, JSON.stringify(clean));
 	} catch {}
 }
-/** 该对话当前是否被隐藏（入参是存储键） */
-function isHiddenKey(key) {
-	return readHiddenKeys().includes(key);
+function listOf(prefs, target) {
+	return target === "picker" ? prefs.hiddenPickers : prefs.hidden;
 }
-/** 设置某个对话键的显隐；hidden=true 表示从「按对话统计」表里隐藏 */
-function setHiddenKey(key, hidden) {
+function writeList(target, keys) {
+	const prefs = readPrefs();
+	if (target === "picker") prefs.hiddenPickers = normalizeHiddenKeys(keys);
+	else prefs.hidden = normalizeHiddenKeys(keys);
+	writePrefs(prefs);
+}
+/** 读取某个展示位置的隐藏键列表（只读副本） */
+function readHiddenFor(target) {
+	return listOf(readPrefs(), target).slice();
+}
+/** 「按对话统计」表格的隐藏键列表 */
+function readHiddenKeys() {
+	return readHiddenFor("table");
+}
+/** 该对话在该位置是否被隐藏（入参是存储键） */
+function isHiddenFor(target, key) {
+	return listOf(readPrefs(), target).includes(key);
+}
+/** 设置某个对话键在某位置的显隐 */
+function setHiddenFor(target, key, hidden) {
 	if (!key) return;
-	const current = readHiddenKeys();
+	const current = readHiddenFor(target);
 	if (hidden === current.includes(key)) return;
-	writeHiddenKeys(hidden ? current.concat(key) : current.filter((k) => k !== key));
+	writeList(target, hidden ? current.concat(key) : current.filter((k) => k !== key));
 }
-/** 全部恢复显示 */
-function clearHiddenKeys() {
-	writeHiddenKeys([]);
+/** 一次写入多个键的显隐（「全部隐藏 / 全部显示」用，避免逐条读写存储） */
+function setAllHiddenFor(target, keys, hidden) {
+	const clean = normalizeHiddenKeys(keys);
+	const current = readHiddenFor(target);
+	if (hidden) {
+		const merged = current.slice();
+		for (const key of clean) if (!merged.includes(key)) merged.push(key);
+		writeList(target, merged);
+	} else {
+		const drop = new Set(clean);
+		writeList(target, current.filter((key) => !drop.has(key)));
+	}
 }
-/**
-* 过滤出应当展示的行（纯函数，按入参顺序、不改变排序）。
-* 传 keyOf 便于测试与复用；默认按 ChatSummaryRow.chatId 取键。
-*/
-function filterVisibleRows(rows, keyOf = (row) => chatVisibilityKey(row?.chatId ?? null)) {
-	const hidden = readHiddenKeys();
+/** 清空某个展示位置的隐藏项（全部恢复显示） */
+function clearHiddenFor(target) {
+	writeList(target, []);
+}
+function filterByHidden(rows, hidden, keyOf) {
 	if (!hidden.length) return rows.slice();
 	const set = new Set(hidden);
 	return rows.filter((row) => !set.has(keyOf(row)));
+}
+/**
+* 过滤出应当出现在「按对话统计」表中的行（纯函数，按入参顺序、不改变排序）。
+* 传 keyOf 便于测试与复用；默认按 ChatSummaryRow.chatId 取键。
+*/
+function filterVisibleRows(rows, keyOf = (row) => chatVisibilityKey(row?.chatId ?? null)) {
+	return filterByHidden(rows, readHiddenFor("table"), keyOf);
+}
+/**
+* 过滤出应当出现在「对话」下拉胶囊里的选项（纯函数，按入参顺序）。
+* 默认按选项的 chatId 取键；历史页的选项自己带 `id`（已是对话键），传 keyOf 取它。
+*/
+function filterPickerRows(rows, keyOf = (row) => chatVisibilityKey(row?.chatId ?? null)) {
+	return filterByHidden(rows, readHiddenFor("picker"), keyOf);
 }
 //#endregion
 //#region src/ui/chat-summary-table.ts
@@ -5045,8 +5102,9 @@ function renderChatPicker(chatHist) {
 	const dropdown = doc.getElementById("aus-chat-dropdown");
 	const label = doc.getElementById("aus-chat-label");
 	if (!dropdown || !label) return;
-	const list = chatHist ? getRecordedChatsFrom(chatHist) : getRecordedChatsFrom(getSelectedSave()?.history || []);
-	const find = list.find((c) => (c.chatId ?? "__null__") === selectedChat);
+	const fullList = chatHist ? getRecordedChatsFrom(chatHist) : getRecordedChatsFrom(getSelectedSave()?.history || []);
+	const list = filterPickerRows(fullList);
+	const find = fullList.find((c) => (c.chatId ?? "__null__") === selectedChat);
 	label.textContent = selectedChat === "__all__" ? "全部" : find?.displayName || selectedChat;
 	label.title = find?.chatId || find?.displayName || "";
 	let html = `<div data-chat="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${selectedChat === "__all__" ? "background:var(--ds-card);font-weight:600;" : ""}">全部</div>`;
@@ -5055,7 +5113,7 @@ function renderChatPicker(chatHist) {
 		const active = key === selectedChat ? "background:var(--ds-card);font-weight:600;" : "";
 		html += `<div data-chat="${esc(key)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}" title="${esc(c.chatId || "")}">${esc(c.displayName)}</div>`;
 	}
-	if (!list.length) html += "<div style=\"padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">暂无对话</div>";
+	if (!list.length) html += "<div style=\"padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">" + (fullList.length ? "对话已全部隐藏（可在「对话展示管理」中恢复）" : "暂无对话") + "</div>";
 	dropdown.innerHTML = html;
 	dropdown.querySelectorAll("[data-chat]").forEach((el) => {
 		el.onclick = () => {
@@ -7497,14 +7555,15 @@ function dropdownItem(attr, value, label, active, meta = "") {
 function renderChatDropdown(fullHist) {
 	const dropdown = getDoc$5().getElementById("aus-forecast-chat-dropdown");
 	if (!dropdown) return;
-	const chats = getRecordedChatsForForecast(fullHist);
+	const allChats = getRecordedChatsForForecast(fullHist);
+	const chats = filterPickerRows(allChats);
 	let html = dropdownItem("data-fchat", "__current__", "当前对话", selectedForecastKey === "__current__");
 	html += dropdownItem("data-fchat", "__all__", "全部", selectedForecastKey === "__all__");
 	for (const chat of chats) {
 		const key = chat.chatId ?? "__null__";
 		html += dropdownItem("data-fchat", key, chat.displayName, selectedForecastKey === key, chat.chatId ? "" : "旧数据");
 	}
-	if (!chats.length) html += "<div class=\"aus-forecast-dropdown-empty\">暂无对话</div>";
+	if (!chats.length) html += "<div class=\"aus-forecast-dropdown-empty\">" + (allChats.length ? "对话已全部隐藏（可在「对话展示管理」中恢复）" : "暂无对话") + "</div>";
 	dropdown.innerHTML = html;
 	dropdown.querySelectorAll("[data-fchat]").forEach((el) => {
 		el.onclick = (event) => {
@@ -9053,7 +9112,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-BUV5_VFC.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-ByHQ7uEp.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -9450,17 +9509,18 @@ function bindWalletView(doc) {
 //#endregion
 //#region src/ui/chat-manage.ts
 /**
-* 概览 → 「按对话统计」表格的对话展示管理页（`data-view="chat-manage"`）。
+* 对话展示管理页（`data-view="chat-manage"`）。
 *
-* 入口只有一处：概览表格标题右侧的「管理对话」胶囊按钮。页面本身是扁平同级视图，
-* 不挂在任何导航 tab 下（桌面侧栏没有它的条目），底栏布局下由
-* `nav-model.ts#CHILD_PARENT` 把它归到「概览」tab，因此底栏仍高亮概览、
-* 顶栏出现返回箭头并回到概览。
+* 入口三处，都进同一个页面：概览「按对话统计」标题右侧、趋势预测页顶部、
+* 设置页的「对话展示」设置项。页面本身是扁平同级视图，不挂在任何导航 tab 下，
+* 底栏布局下由 `nav-model.ts#CHILD_PARENT` 归到「概览」tab（底栏高亮与顶栏返回
+* 都回到进入前的来源页，来源由 `panel.ts` 记录并注入 `initChatManageView`）。
 *
-* 这里只改「该对话在按对话统计表里是否出现」这一件事：
-* 勾掉只是写进 localStorage 的隐藏列表（`chat-visibility.ts`），
-* 既不删数据，也不参与任何统计口径——热力图、统计、历史、趋势预测、
-* 能耗评分依旧按全量历史计算，与用户要求「不影响其余地方的数据统计和展示」一致。
+* 页面管两件事，两套独立的隐藏集合（`chat-visibility.ts`）：
+* - 「表格展示」：该对话是否出现在概览「按对话统计」表里；
+* - 「下拉选项」：该对话是否出现在统计页/历史页/趋势预测页的「对话」下拉胶囊里。
+* 两者都只改展示，不删数据、不参与任何统计口径——热力图、统计、历史、趋势预测、
+* 能耗评分依旧按全量历史计算，与用户要求「不影响数据统计展示」一致。
 */
 var navigator = null;
 /** 切页导航回调由 panel.ts 注册（避免 chat-manage 反向 import panel 造成循环依赖） */
@@ -9472,22 +9532,43 @@ function getDoc$2() {
 }
 /** 搜索关键词（只在本页内过滤显示，不进存储） */
 var keyword = "";
-/** 最近一次聚合结果，供搜索与重绘复用 */
+/** 最近一次聚合结果，供搜索、模式切换与重绘复用 */
 var rows = [];
+/** 当前管理模式：表格展示 / 下拉选项（只在本次会话内记忆） */
+var mode = "table";
 /** 渲染令牌：热数据先画、冷数据补全，快速切页时丢弃过期结果 */
 var renderToken = 0;
+var MODES = [{
+	key: "table",
+	label: "表格展示",
+	title: "控制哪些对话出现在概览「按对话统计」表格",
+	desc: "只控制「按对话统计」表格里是否列出该对话：隐藏不会删除任何数据，热力图、用量统计、历史记录与趋势预测仍按全部历史计算。"
+}, {
+	key: "picker",
+	label: "下拉选项",
+	title: "控制哪些对话出现在各页「对话」下拉胶囊",
+	desc: "只控制统计页、历史页与趋势预测页的「对话」下拉胶囊里是否列出该对话：隐藏不会删除任何数据，各页统计口径不变。"
+}];
+function modeInfo() {
+	return MODES.find((m) => m.key === mode) || MODES[0];
+}
 function shellHTML() {
+	const info = modeInfo();
 	return [
 		"<div id=\"aus-chat-manage-head\">",
 		"<div class=\"aus-chat-manage-lead\">",
 		"<div class=\"aus-chat-manage-title\">对话展示管理</div>",
-		"<div class=\"aus-chat-manage-desc\">只控制「按对话统计」表格里是否列出该对话：隐藏不会删除任何数据，热力图、用量统计、历史记录与趋势预测仍按全部历史计算。</div>",
+		"<div class=\"aus-chat-manage-desc\" id=\"aus-chat-manage-desc\">" + esc(info.desc) + "</div>",
 		"</div>",
 		"<div id=\"aus-chat-manage-tools\">",
 		"<input id=\"aus-chat-manage-search\" type=\"text\" placeholder=\"搜索对话\" value=\"" + esc(keyword) + "\" />",
 		"<button id=\"aus-chat-manage-reset\" type=\"button\" class=\"aus-chat-manage-btn\">全部显示</button>",
-		"<button id=\"aus-chat-manage-back\" type=\"button\" class=\"aus-chat-manage-btn\">返回概览</button>",
+		"<button id=\"aus-chat-manage-hide-all\" type=\"button\" class=\"aus-chat-manage-btn\">全部隐藏</button>",
+		"<button id=\"aus-chat-manage-back\" type=\"button\" class=\"aus-chat-manage-btn\">返回</button>",
 		"</div>",
+		"</div>",
+		"<div id=\"aus-chat-manage-modes\">",
+		MODES.map((m) => "<button type=\"button\" class=\"aus-chat-manage-mode\" data-manage-mode=\"" + m.key + "\" data-active=\"" + (m.key === mode ? "1" : "0") + "\" title=\"" + esc(m.title) + "\">" + esc(m.label) + "</button>").join(""),
 		"</div>",
 		"<div class=\"ds-card aus-chat-manage-card\">",
 		"<div id=\"aus-chat-manage-list\"></div>",
@@ -9497,12 +9578,13 @@ function shellHTML() {
 }
 function rowHTML(row, index) {
 	const key = chatVisibilityKey(row.chatId);
-	const hidden = isHiddenKey(key);
+	const hidden = isHiddenFor(mode, key);
 	let costTxt = "¥" + row.cost.toFixed(4);
 	try {
 		costTxt = formatMoney(row.cost, 4);
 	} catch {}
 	const meta = row.count + " 轮 · " + row.total.toLocaleString("zh-CN") + " tokens · " + costTxt;
+	const aria = row.displayName + "：" + (mode === "picker" ? "在「对话」下拉胶囊中展示" : "在按对话统计中展示");
 	return [
 		"<div class=\"aus-chat-manage-row\" data-chat-row=\"" + esc(key) + "\" data-chat-name=\"" + esc(row.displayName.toLowerCase()) + "\" data-hidden=\"" + (hidden ? "1" : "0") + "\">",
 		"<div class=\"aus-chat-manage-main\">",
@@ -9512,7 +9594,7 @@ function rowHTML(row, index) {
 		"<span class=\"aus-chat-manage-state\" data-state>" + (hidden ? "已隐藏" : "展示中") + "</span>",
 		switchHTML("aus-chat-sw-" + index, {
 			checked: !hidden,
-			ariaLabel: row.displayName + "：在按对话统计中展示"
+			ariaLabel: aria
 		}),
 		"</div>"
 	].join("");
@@ -9530,10 +9612,11 @@ function paintFoot(doc) {
 	const foot = doc.getElementById("aus-chat-manage-foot");
 	if (!foot) return;
 	const total = rows.length;
-	const hidden = rows.filter((r) => isHiddenKey(chatVisibilityKey(r.chatId))).length;
-	foot.textContent = total ? "共 " + total + " 个对话 · 已隐藏 " + hidden + " 个" + (hidden ? "（隐藏项不会出现在「按对话统计」表中）" : "") : "暂无对话数据";
+	const hidden = rows.filter((r) => isHiddenFor(mode, chatVisibilityKey(r.chatId))).length;
+	const where = mode === "picker" ? "「对话」下拉胶囊" : "「按对话统计」表";
+	foot.textContent = total ? "共 " + total + " 个对话 · 已隐藏 " + hidden + " 个" + (hidden ? "（隐藏项不会出现在" + where + "中）" : "") : "暂无对话数据";
 }
-/** 重画列表（数据或显隐变更后调用） */
+/** 重画列表（数据、模式或显隐变更后调用） */
 function paintList(doc) {
 	const list = doc.getElementById("aus-chat-manage-list");
 	if (!list) return;
@@ -9549,6 +9632,15 @@ function paintList(doc) {
 		paintChatManageBadge(doc);
 	} catch {}
 }
+/** 切换管理模式：重画描述、按钮选中态与整张列表 */
+function paintMode(doc) {
+	const desc = doc.getElementById("aus-chat-manage-desc");
+	if (desc) desc.textContent = modeInfo().desc;
+	doc.querySelectorAll("[data-manage-mode]").forEach((el) => {
+		el.setAttribute("data-active", el.getAttribute("data-manage-mode") === mode ? "1" : "0");
+	});
+	paintList(doc);
+}
 /** 绑定 shell 内的按钮与列表事件（幂等：只在首次构建 shell 时绑定一次） */
 function bindShell(doc) {
 	const list = doc.getElementById("aus-chat-manage-list");
@@ -9558,7 +9650,7 @@ function bindShell(doc) {
 		const rowEl = input.closest("[data-chat-row]");
 		const key = rowEl?.getAttribute("data-chat-row") || "";
 		if (!key) return;
-		setHiddenKey(key, !input.checked);
+		setHiddenFor(mode, key, !input.checked);
 		if (rowEl) {
 			rowEl.setAttribute("data-hidden", input.checked ? "0" : "1");
 			const stateEl = rowEl.querySelector("[data-state]");
@@ -9585,13 +9677,26 @@ function bindShell(doc) {
 		applyKeywordFilter(doc);
 	});
 	doc.getElementById("aus-chat-manage-reset")?.addEventListener("click", () => {
-		clearHiddenKeys();
+		clearHiddenFor(mode);
+		paintList(doc);
+	});
+	doc.getElementById("aus-chat-manage-hide-all")?.addEventListener("click", () => {
+		setAllHiddenFor(mode, rows.map((row) => chatVisibilityKey(row.chatId)), true);
 		paintList(doc);
 	});
 	doc.getElementById("aus-chat-manage-back")?.addEventListener("click", () => {
 		try {
-			navigator?.go("overview");
+			navigator?.go();
 		} catch {}
+	});
+	doc.querySelectorAll("[data-manage-mode]").forEach((el) => {
+		el.addEventListener("click", () => {
+			const next = el.getAttribute("data-manage-mode");
+			if (next !== "table" && next !== "picker") return;
+			if (next === mode) return;
+			mode = next;
+			paintMode(doc);
+		});
 	});
 }
 /**
@@ -9607,7 +9712,7 @@ async function renderChatManageView() {
 		try {
 			bindShell(doc);
 		} catch {}
-	}
+	} else paintMode(doc);
 	const token = ++renderToken;
 	const hot = state$2.history || [];
 	rows = computeChatStats(hot);
@@ -10027,6 +10132,8 @@ var panelOpen = false;
 var currentView = "overview";
 /** 「设置」下最近打开的二级页（窄屏点回「设置」tab 时恢复到上次位置） */
 var settingsChildView = null;
+/** 「对话展示管理」的来源页：进入前记录的视图，页内「返回」与顶栏返回箭头都回到这里 */
+var chatManageOrigin = "overview";
 /** 当前导航高亮键：窄屏二级页归到「设置」，桌面为视图本身 */
 var currentNavKey = "overview";
 var collapsed = false;
@@ -10176,8 +10283,9 @@ function renderHistoryFilters(history) {
 		label: id
 	}));
 	if (historyFilters.model !== "__all__" && !models.some((option) => option.id === historyFilters.model)) historyFilters.model = STATS_FILTER_ALL;
-	const chats = getHistoryChatOptions(historyFilterBase);
-	if (historyFilters.chat !== "__all__" && !chats.some((option) => option.id === historyFilters.chat)) historyFilters.chat = STATS_FILTER_ALL;
+	const chatOptions = getHistoryChatOptions(historyFilterBase);
+	if (historyFilters.chat !== "__all__" && !chatOptions.some((option) => option.id === historyFilters.chat)) historyFilters.chat = STATS_FILTER_ALL;
+	const chats = filterPickerRows(chatOptions, (option) => option.id);
 	const endpoints = getEndpointFilterOptions(historyFilterBase);
 	if (historyFilters.endpoint !== "__all__" && !endpoints.some((option) => option.id === historyFilters.endpoint)) {
 		historyFilters.endpoint = STATS_FILTER_ALL;
@@ -10187,7 +10295,7 @@ function renderHistoryFilters(history) {
 	if (historyFilters.credential !== "__all__" && !credentials.some((option) => option.id === historyFilters.credential)) historyFilters.credential = STATS_FILTER_ALL;
 	const labelMap = {
 		model: historyFilters.model === "__all__" ? "全部" : historyFilters.model,
-		chat: historyFilters.chat === "__all__" ? "全部" : chats.find((option) => option.id === historyFilters.chat)?.label || historyFilters.chat,
+		chat: historyFilters.chat === "__all__" ? "全部" : chatOptions.find((option) => option.id === historyFilters.chat)?.label || historyFilters.chat,
 		endpoint: historyFilters.endpoint === "__all__" ? "全部" : historyFilters.endpoint === "__unknown__" ? "未记录接入" : endpoints.find((option) => option.id === historyFilters.endpoint)?.label || historyFilters.endpoint,
 		credential: historyFilters.credential === "__all__" ? "全部" : historyFilters.credential === "__unknown__" ? "未识别密钥" : credentials.find((option) => option.id === historyFilters.credential)?.label || historyFilters.credential
 	};
@@ -10209,7 +10317,7 @@ function renderHistoryFilters(history) {
 		closeHistoryFilterDropdowns();
 		renderHistory(doc, getSelectedSave());
 	});
-	renderHistoryFilterDropdown("chat", historyFilters.chat, chats, "暂无对话", (value) => {
+	renderHistoryFilterDropdown("chat", historyFilters.chat, chats, chatOptions.length ? "对话已全部隐藏（可在「对话展示管理」中恢复）" : "暂无对话", (value) => {
 		historyFilters.chat = value;
 		historyPage = 1;
 		closeHistoryFilterDropdowns();
@@ -11073,7 +11181,8 @@ function syncBottomNav(doc, animate) {
 * bottom=false 是桌面侧栏或「移动端兼容 UI」关闭后的原侧栏抽屉，直接按当前视图高亮，也没有返回箭头。
 */
 function paintNavState(doc, bottom, animate) {
-	currentNavKey = bottom || !isSettingsChild(currentView) ? parentTabOf(currentView) : currentView;
+	const navSource = currentView === "chat-manage" ? chatManageOrigin : currentView;
+	currentNavKey = bottom || !isSettingsChild(currentView) ? parentTabOf(navSource) : navSource;
 	try {
 		doc.querySelectorAll("#aus-sidebar [data-nav]").forEach((el) => {
 			const v = el.getAttribute("data-nav");
@@ -11102,7 +11211,7 @@ function handleBottomTabTap(target) {
 		return;
 	}
 	if (action === "pop-root") {
-		switchView(childParentOf(currentView) ?? "settings");
+		switchView(returnFromChild());
 		return;
 	}
 	try {
@@ -11156,6 +11265,16 @@ function syncMobileSidebar(doc) {
 			}
 		}
 	} catch {}
+}
+/** 二级页「返回」目标：对话展示管理回到进入前的来源页，其余回到自己的父级根页 */
+function returnFromChild() {
+	if (currentView === "chat-manage") return chatManageOrigin;
+	return childParentOf(currentView) ?? "settings";
+}
+/** 进入对话展示管理页并记住来源（概览 / 趋势预测 / 设置三处入口共用） */
+function openChatManage(from) {
+	chatManageOrigin = from;
+	switchView("chat-manage");
 }
 function switchView(view, opts) {
 	const prevView = currentView;
@@ -11380,7 +11499,7 @@ function createPanel() {
                 <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">按对话统计</div>
                 <div style="display:flex;align-items:center;gap:8px;min-width:0;">
                   <span id="aus-chat-manage-count" style="display:none;font-size:var(--aus-fs-xs);color:var(--ds-text-3);white-space:nowrap;"></span>
-                  <button id="aus-chat-manage-btn" type="button" title="设置哪些对话出现在此表格（不影响其它页面统计）" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;line-height:1.4;white-space:nowrap;">${icon("menu", 14)}管理对话</button>
+                  <button id="aus-chat-manage-btn" type="button" class="aus-manage-chat-btn" title="设置哪些对话出现在按对话统计表与各页「对话」下拉中（不影响数据统计）">${icon("menu", 14)}管理对话</button>
                 </div>
               </div>
               <table style="width:100%;border-collapse:collapse;font-size:var(--aus-fs-sm);white-space:nowrap;min-width:720px;">
@@ -11484,6 +11603,7 @@ function createPanel() {
                     <span class="aus-forecast-checkbox" aria-hidden="true"></span>
                     <span id="aus-forecast-compaction-label">压缩情景</span>
                   </label>
+                  <button id="aus-forecast-chat-manage-btn" type="button" class="aus-manage-chat-btn" title="设置哪些对话出现在「对话」下拉中（不影响数据统计）">${icon("menu", 14)}管理对话</button>
                 </div>
                 <div id="aus-forecast-sub" class="aus-forecast-sub"></div>
               </div>
@@ -11690,9 +11810,13 @@ function createPanel() {
 			if (v) switchView(v);
 		});
 	});
-	doc.getElementById("aus-mobile-back")?.addEventListener("click", () => switchView(childParentOf(currentView) ?? "settings"));
-	doc.getElementById("aus-chat-manage-btn")?.addEventListener("click", () => switchView("chat-manage"));
-	initChatManageView({ go: (v) => switchView(v) });
+	doc.getElementById("aus-mobile-back")?.addEventListener("click", () => switchView(returnFromChild()));
+	doc.getElementById("aus-chat-manage-btn")?.addEventListener("click", () => openChatManage("overview"));
+	doc.getElementById("aus-forecast-chat-manage-btn")?.addEventListener("click", () => openChatManage("forecast"));
+	doc.getElementById("aus-panel")?.addEventListener("click", (e) => {
+		if (e.target?.closest?.("#aus-settings-chat-manage")) openChatManage("settings");
+	});
+	initChatManageView({ go: () => switchView(chatManageOrigin) });
 	const applyCollapsed = (v) => {
 		collapsed = v;
 		const sb = doc.getElementById("aus-sidebar");
@@ -12001,7 +12125,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-DEYBeiSF.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-AsRsaQYA.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-C0nJ98Sq.js").then((m) => m.maybeAutoCheck());
@@ -12226,10 +12350,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-CECrCOjs.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-ClMjWeZH.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-DEYBeiSF.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-AsRsaQYA.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -12237,10 +12361,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-CECrCOjs.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-ClMjWeZH.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-DEYBeiSF.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-AsRsaQYA.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -12330,13 +12454,13 @@ async function onDelete() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-BUV5_VFC.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-ByHQ7uEp.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-Dsn2T9-Q.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-C3O8JPpr.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-DjF47F-6.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 	try {
@@ -12363,19 +12487,19 @@ async function onDelete() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-CECrCOjs.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-ClMjWeZH.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-DEYBeiSF.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-AsRsaQYA.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-BUV5_VFC.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-ByHQ7uEp.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-Dsn2T9-Q.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-C3O8JPpr.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-DjF47F-6.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -12385,10 +12509,10 @@ async function onDisable() {
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-CECrCOjs.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-ClMjWeZH.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-DEYBeiSF.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-AsRsaQYA.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -12407,13 +12531,13 @@ async function onDisable() {
 		unwatchSystemTheme();
 	} catch {}
 	try {
-		(await import("./balance-BUV5_VFC.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-ByHQ7uEp.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-Dsn2T9-Q.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-C3O8JPpr.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-DjF47F-6.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -12446,19 +12570,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-BUV5_VFC.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-ByHQ7uEp.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-Dsn2T9-Q.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-C3O8JPpr.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-DjF47F-6.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-DEYBeiSF.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-AsRsaQYA.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -12480,7 +12604,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-C3O8JPpr.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-DjF47F-6.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

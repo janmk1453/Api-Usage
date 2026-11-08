@@ -23,6 +23,7 @@ import { findWalletForHistory, findWalletModel, walletBalanceToCny } from '../da
 import { esc } from '../utils/date';
 import { icon } from './icons';
 import { disposeForecastCharts, renderForecastCharts } from './forecast-chart';
+import { filterPickerRows } from './chat-visibility';
 
 type HitMode = 'global' | 'model' | 'manual';
 type EfficiencyScope = 'all' | 'chat';
@@ -339,14 +340,17 @@ function renderChatDropdown(fullHist: any[]): void {
   const doc = getDoc();
   const dropdown = doc.getElementById('aus-forecast-chat-dropdown') as HTMLElement | null;
   if (!dropdown) return;
-  const chats = getRecordedChatsForForecast(fullHist);
+  // 「对话展示管理」的「下拉选项」集合只过滤可选项；「当前对话」「全部」两个固定项始终保留，
+  // 统计与预测口径仍按全量历史，隐藏只是让该对话不出现在这个下拉里。
+  const allChats = getRecordedChatsForForecast(fullHist);
+  const chats = filterPickerRows(allChats);
   let html = dropdownItem('data-fchat', '__current__', '当前对话', selectedForecastKey === '__current__');
   html += dropdownItem('data-fchat', '__all__', '全部', selectedForecastKey === '__all__');
   for (const chat of chats) {
     const key = chat.chatId ?? '__null__';
     html += dropdownItem('data-fchat', key, chat.displayName, selectedForecastKey === key, chat.chatId ? '' : '旧数据');
   }
-  if (!chats.length) html += '<div class="aus-forecast-dropdown-empty">暂无对话</div>';
+  if (!chats.length) html += '<div class="aus-forecast-dropdown-empty">' + (allChats.length ? '对话已全部隐藏（可在「对话展示管理」中恢复）' : '暂无对话') + '</div>';
   dropdown.innerHTML = html;
   dropdown.querySelectorAll('[data-fchat]').forEach((el: any) => {
     el.onclick = (event: Event) => {
