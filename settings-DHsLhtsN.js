@@ -3,12 +3,12 @@ import { r as state } from "./store-TDK3YzRZ.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS } from "./pricing-Bc-qEvy8.js";
 import { a as getExtensionSettings, f as saveHot, o as isMigrationBackupKey, p as historyRecordKey, r as deleteMigrationBackups, u as saveExtensionSettings } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as mergeWalletCollections, a as decryptKey, d as calcCost, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, t as repository } from "./repository-B4XNV4w0.js";
+import { C as mergeWalletCollections, a as decryptKey, d as calcCost, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, t as repository } from "./repository-DJwQKayM.js";
 import { a as isUnsafeKey, o as isValidDayKey, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
 import { i as getDisplayCurrency, n as fetchLiveRate } from "./currency-Dsn2T9-Q.js";
-import { r as recalcAllCosts } from "./interception-CT7sLmuq.js";
-import { i as saveApiKey } from "./balance-CrVj16nD.js";
-import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-JPBvUS6R.js";
+import { r as recalcAllCosts } from "./interception-B0uQL7QV.js";
+import { i as saveApiKey } from "./balance-C2iwQj5J.js";
+import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-uaQh3c2q.js";
 //#region src/ui/icons.ts
 var PATHS = {
 	overview: "<rect width=\"7\" height=\"9\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"9\" x=\"14\" y=\"12\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"3\" y=\"16\" rx=\"1\"/>",
@@ -34,6 +34,18 @@ var PATHS = {
 */
 function icon(name, size = 20, strokeWidth = 1.9) {
 	return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:inline-block;vertical-align:middle;flex-shrink:0;">${PATHS[name]}</svg>`;
+}
+//#endregion
+//#region src/ui/switch.ts
+function escAttr(value) {
+	return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function switchHTML(id, opts = {}) {
+	const cls = ["aus-switch", opts.className || ""].filter(Boolean).join(" ");
+	const checked = opts.checked ? " checked" : "";
+	const disabled = opts.disabled ? " disabled" : "";
+	const aria = opts.ariaLabel ? ` aria-label="${escAttr(opts.ariaLabel)}"` : "";
+	return `<label class="${cls}"><input type="checkbox" id="${escAttr(id)}" role="switch"${checked}${disabled}${aria} /><span class="aus-switch-track" aria-hidden="true"></span><span class="aus-switch-thumb" aria-hidden="true"></span></label>`;
 }
 //#endregion
 //#region src/services/sync.ts
@@ -1978,7 +1990,10 @@ function renderSettings(doc) {
 
       <!-- 移动端兼容 UI：窄屏底栏（移动端默认） / 改造前的侧栏抽屉（桌面端默认） -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">移动端兼容UI</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-mobile-compat-ui" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-mobile-compat-ui-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">移动端兼容UI</span>${switchHTML("aus-mobile-compat-ui", {
+		checked: s.mobileCompatUi !== false,
+		ariaLabel: "移动端兼容UI"
+	})}</div>
         <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">开启后使用类似 APP 的底栏模式，便于单手操作，多次点按底栏按钮可以返回上一页，关闭后使用旧版的左侧汉堡菜单，桌面端不受本开关控制</div>
       </div>
 
@@ -2001,7 +2016,10 @@ function renderSettings(doc) {
 
       <!-- 匿名使用统计（默认开启，可随时关闭） -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">匿名使用统计</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-telemetry-enabled" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-telemetry-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">匿名使用统计</span>${switchHTML("aus-telemetry-enabled", {
+		checked: s.telemetryEnabled !== false,
+		ariaLabel: "匿名使用统计"
+	})}</div>
         <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">仅匿名上报浏览器环境参数（浏览器版本、系统、架构、语言、屏幕等）、渲染性能等开发数据；<strong>不含对话内容、密钥等任何隐私信息，数据经过匿名化处理，仅用于开发与完善兼容性。</strong>关闭后立即停止采集与上报。<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">隐私声明</a></div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;flex-wrap:wrap;"><span id="aus-telemetry-id" style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">匿名标识：待生成</span><button id="aus-telemetry-reset" style="padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">重置匿名标识</button></div>
         <div id="aus-telemetry-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;"></div>
@@ -2029,7 +2047,10 @@ function renderSettings(doc) {
 
       <!-- 调试 -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">调试模式（模拟数据，不计费）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-debug-mode" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-debug-mode-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">调试模式（模拟数据，不计费）</span>${switchHTML("aus-debug-mode", {
+		checked: !!s.debug,
+		ariaLabel: "调试模式"
+	})}</div>
         <div id="aus-debug-panel" style="display:${s.debug ? "grid" : "none"};margin-top:10px;gap:8px;">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">命中</div><input type="number" id="aus-debug-hit" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div><div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">未命中</div><input type="number" id="aus-debug-miss" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">输出</div><input type="number" id="aus-debug-output" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div><div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">模型</div><select id="aus-debug-model" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);"></select></div></div>
@@ -2040,7 +2061,10 @@ function renderSettings(doc) {
       </div>
 
       <!-- 峰值圆点 -->
-      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">峰值提示小圆点</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-peak-dot" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-peak-dot-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div><button id="aus-reset-dot" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">重置位置</button><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">开启后在酒馆中显示一个小圆点，按颜色区分当前峰谷</div></div>
+      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">峰值提示小圆点</span>${switchHTML("aus-peak-dot", {
+		checked: state.settings.peakDot !== false,
+		ariaLabel: "峰值提示小圆点"
+	})}</div><button id="aus-reset-dot" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">重置位置</button><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">开启后在酒馆中显示一个小圆点，按颜色区分当前峰谷</div></div>
 
       <!-- 记录数据管理 -->
       <div class="ds-card">
@@ -2084,22 +2108,14 @@ function renderSettings(doc) {
 	} catch {}
 	doc.getElementById("aus-custom-balance").value = state.customBalance || "";
 	const telemetryCb = doc.getElementById("aus-telemetry-enabled");
-	const telemetrySlider = doc.getElementById("aus-telemetry-slider");
 	if (telemetryCb) telemetryCb.checked = s.telemetryEnabled !== false;
-	if (telemetrySlider) telemetrySlider.style.left = s.telemetryEnabled !== false ? "23px" : "3px";
 	const mobileUiCb = doc.getElementById("aus-mobile-compat-ui");
-	const mobileUiSlider = doc.getElementById("aus-mobile-compat-ui-slider");
 	if (mobileUiCb) mobileUiCb.checked = s.mobileCompatUi !== false;
-	if (mobileUiSlider) mobileUiSlider.style.left = s.mobileCompatUi !== false ? "23px" : "3px";
 	renderTelemetryStatus(doc);
 	doc.getElementById("aus-peak-dot").checked = state.settings.peakDot !== false;
-	const peakSlider = doc.getElementById("aus-peak-dot-slider");
-	if (peakSlider) peakSlider.style.left = state.settings.peakDot !== false ? "23px" : "3px";
 	doc.getElementById("aus-balance-interval").value = String(s.balanceInterval ?? 10);
 	const dbgCb = doc.getElementById("aus-debug-mode");
-	const dbgSlider = doc.getElementById("aus-debug-mode-slider");
 	if (dbgCb) dbgCb.checked = !!s.debug;
-	if (dbgSlider) dbgSlider.style.left = s.debug ? "23px" : "3px";
 	doc.getElementById("aus-debug-hit").value = String(s.debugHit ?? 1e4);
 	doc.getElementById("aus-debug-miss").value = String(s.debugMiss ?? 5e3);
 	doc.getElementById("aus-debug-output").value = String(s.debugOutput ?? 2e3);
@@ -2256,12 +2272,11 @@ function renderSettings(doc) {
 		state.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state.settings });
 		try {
-			import("./balance-CrVj16nD.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-C2iwQj5J.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
 		state.settings.debug = dbgCb.checked;
-		if (dbgSlider) dbgSlider.style.left = dbgCb.checked ? "23px" : "3px";
 		doc.getElementById("aus-debug-panel").style.display = dbgCb.checked ? "grid" : "none";
 		const st = doc.getElementById("aus-debug-status");
 		if (st) st.textContent = dbgCb.checked ? "调试模式已开启，下次对话将使用模拟参数，不计费" : "";
@@ -2301,7 +2316,7 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-B4XNV4w0.js").then((n) => n.n);
+				const { repository } = await import("./repository-DJwQKayM.js").then((n) => n.n);
 				const { state: st } = await import("./store-TDK3YzRZ.js").then((n) => n.i);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
@@ -2316,8 +2331,6 @@ function renderSettings(doc) {
 	} catch {}
 	doc.getElementById("aus-peak-dot").onchange = (e) => {
 		state.settings.peakDot = e.target.checked;
-		const sl = doc.getElementById("aus-peak-dot-slider");
-		if (sl) sl.style.left = e.target.checked ? "23px" : "3px";
 		saveHot({ settings: state.settings });
 		try {
 			globalThis.ApiUsageStat?.updatePeakDot?.();
@@ -2342,8 +2355,6 @@ function renderSettings(doc) {
 			flushTelemetryOnDisable();
 		} catch {}
 		state.settings.telemetryEnabled = enabled;
-		const slider = doc.getElementById("aus-telemetry-slider");
-		if (slider) slider.style.left = enabled ? "23px" : "3px";
 		saveHot({ settings: state.settings });
 		renderTelemetryStatus(doc);
 	};
@@ -2351,8 +2362,6 @@ function renderSettings(doc) {
 	if (mobileUiToggle) mobileUiToggle.onchange = (e) => {
 		const enabled = !!e.target.checked;
 		state.settings.mobileCompatUi = enabled;
-		const slider = doc.getElementById("aus-mobile-compat-ui-slider");
-		if (slider) slider.style.left = enabled ? "23px" : "3px";
 		saveHot({ settings: state.settings });
 		try {
 			import("./index.js").then((n) => n.t).then((m) => m.applyMobileNavMode()).catch(() => {});
@@ -2456,7 +2465,7 @@ function renderSettings(doc) {
 					intervalDrop.style.display = "none";
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-JPBvUS6R.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./pricing-sync-uaQh3c2q.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 						import("./currency-Dsn2T9-Q.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};

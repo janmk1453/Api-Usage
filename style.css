@@ -46,6 +46,17 @@
   --ds-blue-bg: rgba(37,99,235,0.12);
   --ds-orange-bg: rgba(255,106,0,0.12);
   --ds-orange-bg-strong: rgba(255,106,0,0.16);
+  /* 胶囊开关（.aus-switch）：关闭态是中性灰——比 #F5F6F7 卡片底色明显深一档，滑钮另加 1px 描边保证轮廓；
+     开启态整条轨道换成品牌橙，与灰底形成最大色差，开 / 关不只靠滑钮位置区分。 */
+  --aus-switch-off: #C4CAD4;
+  --aus-switch-off-border: #AFB6C2;
+  --aus-switch-off-border-hover: #98A0AD;
+  --aus-switch-on: var(--ds-orange);
+  --aus-switch-on-border: #E85F00;
+  --aus-switch-on-border-hover: #D45700;
+  --aus-switch-thumb: #FFFFFF;
+  --aus-switch-thumb-border: rgba(17,24,39,0.16);
+  --aus-switch-thumb-border-on: rgba(120,42,0,0.30);
   --ds-green-soft: #DCFCE7;
   --ds-red: #DC2626;
   --ds-red-bg: #FEF2F2;
@@ -103,6 +114,16 @@
   --ds-blue-bg: rgba(126,166,255,0.16);
   --ds-orange-bg: rgba(255,122,61,0.18);
   --ds-orange-bg-strong: rgba(255,122,61,0.28);
+  /* 胶囊开关（深色）：关闭态比块面亮一档（近黑底上看得出轨道），开启态沿用提亮的品牌橙，两者互不混淆 */
+  --aus-switch-off: #52565E;
+  --aus-switch-off-border: #63676F;
+  --aus-switch-off-border-hover: #7B8088;
+  --aus-switch-on: var(--ds-orange);
+  --aus-switch-on-border: #FF8A55;
+  --aus-switch-on-border-hover: #FFA070;
+  --aus-switch-thumb: #F2F3F5;
+  --aus-switch-thumb-border: rgba(0,0,0,0.45);
+  --aus-switch-thumb-border-on: rgba(70,22,0,0.40);
   --ds-green-bg: #10362A;
   --ds-green: #3ED598;
   --ds-green-soft: #0B4B38;
@@ -1850,6 +1871,105 @@
 #aus-panel input[type="checkbox"].aus-checkbox:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* ── 统一胶囊开关（.aus-switch）：开 / 关同时改变颜色与滑钮位置 ──────────────────
+   视觉全部交给这一块 CSS，状态只由 input:checked 驱动；JS 只写 checked（见 src/ui/switch.ts），
+   不再像旧写法那样用内联样式改滑钮 left —— 否则开与关的轨道颜色完全相同，浅色下还会糊进卡片底色。
+   尺寸由 --aus-switch-* 局部变量描述，窄屏触屏整体放大一档，滑钮位移按宽度自动换算。 */
+#aus-panel .aus-switch {
+  --aus-switch-w: 44px;
+  --aus-switch-h: 24px;
+  --aus-switch-thumb-size: 16px;
+  --aus-switch-inset: 3px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  width: var(--aus-switch-w);
+  height: var(--aus-switch-h);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  vertical-align: middle;
+}
+/* 触屏：命中区四周各外扩 6px，视觉尺寸不变、不挤动布局，但更容易点中 */
+#aus-panel .aus-switch::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+}
+#aus-panel .aus-switch input[type="checkbox"] {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  opacity: 0 !important;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent !important;
+  border: 0 !important;
+  cursor: pointer;
+}
+#aus-panel .aus-switch .aus-switch-track,
+#aus-panel .aus-switch .aus-switch-thumb {
+  position: absolute;
+  pointer-events: none;
+}
+#aus-panel .aus-switch .aus-switch-track {
+  inset: 0;
+  border-radius: 999px;
+  background: var(--aus-switch-off);
+  border: 1px solid var(--aus-switch-off-border);
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+#aus-panel .aus-switch .aus-switch-thumb {
+  top: var(--aus-switch-inset);
+  left: var(--aus-switch-inset);
+  width: var(--aus-switch-thumb-size);
+  height: var(--aus-switch-thumb-size);
+  border-radius: 50%;
+  background: var(--aus-switch-thumb);
+  border: 1px solid var(--aus-switch-thumb-border);
+  transition: transform 180ms cubic-bezier(0.32, 0.72, 0.32, 1), background-color 160ms ease, border-color 160ms ease;
+}
+/* 开启：轨道整条换成品牌橙 + 滑钮滑到右侧，颜色与位置同时变化 */
+#aus-panel .aus-switch input:checked ~ .aus-switch-track {
+  background: var(--aus-switch-on);
+  border-color: var(--aus-switch-on-border);
+}
+#aus-panel .aus-switch input:checked ~ .aus-switch-thumb {
+  transform: translateX(calc(var(--aus-switch-w) - var(--aus-switch-inset) * 2 - var(--aus-switch-thumb-size) - 2px));
+  border-color: var(--aus-switch-thumb-border-on);
+}
+@media (hover: hover) {
+  #aus-panel .aus-switch:hover .aus-switch-track { border-color: var(--aus-switch-off-border-hover); }
+  #aus-panel .aus-switch:hover input:checked ~ .aus-switch-track { border-color: var(--aus-switch-on-border-hover); }
+}
+#aus-panel .aus-switch input:focus-visible ~ .aus-switch-track {
+  outline: 2px solid var(--ds-orange);
+  outline-offset: 2px;
+}
+#aus-panel .aus-switch input:disabled ~ .aus-switch-track,
+#aus-panel .aus-switch input:disabled ~ .aus-switch-thumb {
+  opacity: 0.45;
+}
+#aus-panel .aus-switch input:disabled { cursor: not-allowed; }
+/* 窄屏触屏：开关放大一档，色差与滑钮都更容易看清 */
+@media (max-width: 760px) and (pointer: coarse) {
+  #aus-panel .aus-switch {
+    --aus-switch-w: 48px;
+    --aus-switch-h: 26px;
+    --aus-switch-thumb-size: 18px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #aus-panel .aus-switch .aus-switch-track,
+  #aus-panel .aus-switch .aus-switch-thumb { transition: none !important; }
 }
 
 /* ── 统计页第一张图表：自绘 X 轴视窗滑块（长条 + 两端圆点，触屏可拖） ── */

@@ -1,4 +1,5 @@
 import { icon } from './icons';
+import { switchHTML } from './switch';
 import { state } from '../store/index';
 import { saveHot } from '../store/persistence';
 import { saveApiKey } from '../services/balance';
@@ -170,7 +171,7 @@ export function renderSettings(doc: Document) {
 
       <!-- 移动端兼容 UI：窄屏底栏（移动端默认） / 改造前的侧栏抽屉（桌面端默认） -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">移动端兼容UI</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-mobile-compat-ui" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-mobile-compat-ui-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">移动端兼容UI</span>${switchHTML('aus-mobile-compat-ui', { checked: s.mobileCompatUi !== false, ariaLabel: '移动端兼容UI' })}</div>
         <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">开启后使用类似 APP 的底栏模式，便于单手操作，多次点按底栏按钮可以返回上一页，关闭后使用旧版的左侧汉堡菜单，桌面端不受本开关控制</div>
       </div>
 
@@ -193,7 +194,7 @@ export function renderSettings(doc: Document) {
 
       <!-- 匿名使用统计（默认开启，可随时关闭） -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">匿名使用统计</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-telemetry-enabled" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-telemetry-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">匿名使用统计</span>${switchHTML('aus-telemetry-enabled', { checked: s.telemetryEnabled !== false, ariaLabel: '匿名使用统计' })}</div>
         <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">仅匿名上报浏览器环境参数（浏览器版本、系统、架构、语言、屏幕等）、渲染性能等开发数据；<strong>不含对话内容、密钥等任何隐私信息，数据经过匿名化处理，仅用于开发与完善兼容性。</strong>关闭后立即停止采集与上报。<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">隐私声明</a></div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;flex-wrap:wrap;"><span id="aus-telemetry-id" style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">匿名标识：待生成</span><button id="aus-telemetry-reset" style="padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">重置匿名标识</button></div>
         <div id="aus-telemetry-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;"></div>
@@ -221,7 +222,7 @@ export function renderSettings(doc: Document) {
 
       <!-- 调试 -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">调试模式（模拟数据，不计费）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-debug-mode" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-debug-mode-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">调试模式（模拟数据，不计费）</span>${switchHTML('aus-debug-mode', { checked: !!s.debug, ariaLabel: '调试模式' })}</div>
         <div id="aus-debug-panel" style="display:${s.debug ? 'grid':'none'};margin-top:10px;gap:8px;">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">命中</div><input type="number" id="aus-debug-hit" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div><div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">未命中</div><input type="number" id="aus-debug-miss" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">输出</div><input type="number" id="aus-debug-output" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div><div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">模型</div><select id="aus-debug-model" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);"></select></div></div>
@@ -232,7 +233,7 @@ export function renderSettings(doc: Document) {
       </div>
 
       <!-- 峰值圆点 -->
-      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">峰值提示小圆点</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-peak-dot" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-peak-dot-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div><button id="aus-reset-dot" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">重置位置</button><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">开启后在酒馆中显示一个小圆点，按颜色区分当前峰谷</div></div>
+      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">峰值提示小圆点</span>${switchHTML('aus-peak-dot', { checked: state.settings.peakDot !== false, ariaLabel: '峰值提示小圆点' })}</div><button id="aus-reset-dot" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">重置位置</button><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">开启后在酒馆中显示一个小圆点，按颜色区分当前峰谷</div></div>
 
       <!-- 记录数据管理 -->
       <div class="ds-card">
@@ -279,26 +280,18 @@ export function renderSettings(doc: Document) {
     }
   } catch {}
   (doc.getElementById('aus-custom-balance') as HTMLInputElement | null)!.value = state.customBalance || '';
-  // 匿名使用统计：开关状态与标识展示
+  // 匿名使用统计：开关状态与标识展示（颜色随 checked 由 .aus-switch 自动切换，不再手改滑钮位置）
   const telemetryCb = doc.getElementById('aus-telemetry-enabled') as HTMLInputElement | null;
-  const telemetrySlider = doc.getElementById('aus-telemetry-slider') as HTMLElement | null;
   if (telemetryCb) telemetryCb.checked = s.telemetryEnabled !== false;
-  if (telemetrySlider) telemetrySlider.style.left = s.telemetryEnabled !== false ? '23px' : '3px';
   // 移动端兼容 UI：开关状态回填
   const mobileUiCb = doc.getElementById('aus-mobile-compat-ui') as HTMLInputElement | null;
-  const mobileUiSlider = doc.getElementById('aus-mobile-compat-ui-slider') as HTMLElement | null;
   if (mobileUiCb) mobileUiCb.checked = s.mobileCompatUi !== false;
-  if (mobileUiSlider) mobileUiSlider.style.left = s.mobileCompatUi !== false ? '23px' : '3px';
   renderTelemetryStatus(doc);
   (doc.getElementById('aus-peak-dot') as HTMLInputElement | null)!.checked = state.settings.peakDot !== false;
-  const peakSlider = doc.getElementById('aus-peak-dot-slider') as HTMLElement | null;
-  if (peakSlider) peakSlider.style.left = state.settings.peakDot !== false ? '23px' : '3px';
 
   (doc.getElementById('aus-balance-interval') as HTMLInputElement | null)!.value = String(s.balanceInterval ?? 10);
   const dbgCb = doc.getElementById('aus-debug-mode') as HTMLInputElement | null;
-  const dbgSlider = doc.getElementById('aus-debug-mode-slider') as HTMLElement | null;
   if (dbgCb) dbgCb.checked = !!s.debug;
-  if (dbgSlider) dbgSlider.style.left = s.debug ? '23px' : '3px';
   (doc.getElementById('aus-debug-hit') as HTMLInputElement | null)!.value = String(s.debugHit ?? 10000);
   (doc.getElementById('aus-debug-miss') as HTMLInputElement | null)!.value = String(s.debugMiss ?? 5000);
   (doc.getElementById('aus-debug-output') as HTMLInputElement | null)!.value = String(s.debugOutput ?? 2000);
@@ -445,7 +438,6 @@ export function renderSettings(doc: Document) {
   };
   if (dbgCb) dbgCb.onchange = () => {
     state.settings.debug = dbgCb.checked;
-    if (dbgSlider) dbgSlider.style.left = dbgCb.checked ? '23px' : '3px';
     (doc.getElementById('aus-debug-panel') as HTMLElement).style.display = dbgCb.checked ? 'grid' : 'none';
     const st = doc.getElementById('aus-debug-status') as HTMLElement | null;
     if (st) st.textContent = dbgCb.checked ? '调试模式已开启，下次对话将使用模拟参数，不计费' : '';
@@ -475,7 +467,7 @@ export function renderSettings(doc: Document) {
       } catch {}
     };
   } catch {}
-  doc.getElementById('aus-peak-dot')!.onchange = (e: any) => { state.settings.peakDot = e.target.checked; const sl = doc.getElementById('aus-peak-dot-slider') as HTMLElement | null; if (sl) sl.style.left = e.target.checked ? '23px' : '3px'; saveHot({ settings: state.settings }); try { (globalThis as any).ApiUsageStat?.updatePeakDot?.(); } catch {} };
+  doc.getElementById('aus-peak-dot')!.onchange = (e: any) => { state.settings.peakDot = e.target.checked; saveHot({ settings: state.settings }); try { (globalThis as any).ApiUsageStat?.updatePeakDot?.(); } catch {} };
   doc.getElementById('aus-reset-dot')!.onclick = () => { try { localStorage.removeItem('ds_ds_peak_dot_pos'); const dot = (window.parent as any)?.document?.getElementById('aus-peak-dot-indicator') as HTMLElement | null; if (dot) { dot.style.left = ''; dot.style.top = '60px'; dot.style.right = '16px'; } } catch {} alert('已重置'); };
   const telemetryToggle = doc.getElementById('aus-telemetry-enabled') as HTMLInputElement | null;
   if (telemetryToggle) telemetryToggle.onchange = (e: any) => {
@@ -485,8 +477,6 @@ export function renderSettings(doc: Document) {
       try { flushTelemetryOnDisable(); } catch {}
     }
     (state.settings as any).telemetryEnabled = enabled;
-    const slider = doc.getElementById('aus-telemetry-slider') as HTMLElement | null;
-    if (slider) slider.style.left = enabled ? '23px' : '3px';
     saveHot({ settings: state.settings });
     renderTelemetryStatus(doc);
   };
@@ -495,8 +485,6 @@ export function renderSettings(doc: Document) {
   if (mobileUiToggle) mobileUiToggle.onchange = (e: any) => {
     const enabled = !!e.target.checked;
     (state.settings as any).mobileCompatUi = enabled;
-    const slider = doc.getElementById('aus-mobile-compat-ui-slider') as HTMLElement | null;
-    if (slider) slider.style.left = enabled ? '23px' : '3px';
     saveHot({ settings: state.settings });
     try { import('./panel').then(m => m.applyMobileNavMode()).catch(() => {}); } catch {}
   };
