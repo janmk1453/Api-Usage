@@ -9476,26 +9476,23 @@ var keyword = "";
 var rows = [];
 /** 渲染令牌：热数据先画、冷数据补全，快速切页时丢弃过期结果 */
 var renderToken = 0;
-function btnStyle() {
-	return "padding:5px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;line-height:1.4;";
-}
 function shellHTML() {
 	return [
-		"<div style=\"display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;\">",
-		"<div style=\"min-width:0;flex:1;\">",
-		"<div style=\"font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);\">对话展示管理</div>",
-		"<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:4px;line-height:1.7;max-width:640px;\">只控制「按对话统计」表格里是否列出该对话：隐藏不会删除任何数据，热力图、用量统计、历史记录与趋势预测仍按全部历史计算。</div>",
+		"<div id=\"aus-chat-manage-head\">",
+		"<div class=\"aus-chat-manage-lead\">",
+		"<div class=\"aus-chat-manage-title\">对话展示管理</div>",
+		"<div class=\"aus-chat-manage-desc\">只控制「按对话统计」表格里是否列出该对话：隐藏不会删除任何数据，热力图、用量统计、历史记录与趋势预测仍按全部历史计算。</div>",
 		"</div>",
-		"<div style=\"display:flex;align-items:center;gap:8px;flex-wrap:wrap;\">",
-		"<input id=\"aus-chat-manage-search\" type=\"text\" placeholder=\"搜索对话\" value=\"" + esc(keyword) + "\" style=\"width:150px;padding:5px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);outline:none;\" />",
-		"<button id=\"aus-chat-manage-reset\" type=\"button\" style=\"" + btnStyle() + "\">全部显示</button>",
-		"<button id=\"aus-chat-manage-back\" type=\"button\" style=\"" + btnStyle() + "\">返回概览</button>",
+		"<div id=\"aus-chat-manage-tools\">",
+		"<input id=\"aus-chat-manage-search\" type=\"text\" placeholder=\"搜索对话\" value=\"" + esc(keyword) + "\" />",
+		"<button id=\"aus-chat-manage-reset\" type=\"button\" class=\"aus-chat-manage-btn\">全部显示</button>",
+		"<button id=\"aus-chat-manage-back\" type=\"button\" class=\"aus-chat-manage-btn\">返回概览</button>",
 		"</div>",
 		"</div>",
-		"<div class=\"ds-card\" style=\"padding:0;overflow:hidden;\">",
+		"<div class=\"ds-card aus-chat-manage-card\">",
 		"<div id=\"aus-chat-manage-list\"></div>",
 		"</div>",
-		"<div id=\"aus-chat-manage-foot\" style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:8px;\"></div>"
+		"<div id=\"aus-chat-manage-foot\"></div>"
 	].join("");
 }
 function rowHTML(row, index) {
@@ -9508,7 +9505,7 @@ function rowHTML(row, index) {
 	const meta = row.count + " 轮 · " + row.total.toLocaleString("zh-CN") + " tokens · " + costTxt;
 	return [
 		"<div class=\"aus-chat-manage-row\" data-chat-row=\"" + esc(key) + "\" data-chat-name=\"" + esc(row.displayName.toLowerCase()) + "\" data-hidden=\"" + (hidden ? "1" : "0") + "\">",
-		"<div style=\"flex:1;min-width:0;\">",
+		"<div class=\"aus-chat-manage-main\">",
 		"<div class=\"aus-chat-manage-name\" title=\"" + esc(row.chatId || row.displayName) + "\">" + esc(row.displayName) + "</div>",
 		"<div class=\"aus-chat-manage-meta\">" + meta + "</div>",
 		"</div>",
@@ -9526,7 +9523,7 @@ function applyKeywordFilter(doc) {
 	const kw = keyword.trim().toLowerCase();
 	list.querySelectorAll("[data-chat-row]").forEach((el) => {
 		const name = el.getAttribute("data-chat-name") || "";
-		el.style.display = !kw || name.includes(kw) ? "flex" : "none";
+		el.style.display = !kw || name.includes(kw) ? "" : "none";
 	});
 }
 function paintFoot(doc) {
