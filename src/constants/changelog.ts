@@ -37,6 +37,24 @@ export const CHANGELOG_ENTRY_LIMIT = 5;
 /** 更新日志（最新在前） */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'r3.2.0',
+    date: '2026-11-08',
+    sections: [
+      {
+        kind: 'improve',
+        items: [
+          '启动更快，打开扩展时不再重复计算全部历史',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          '移动端按系统返回键会先关掉面板，不再直接退出酒馆页面',
+        ],
+      },
+    ],
+  },
+  {
     version: 'r3.1.9fix',
     date: '2026-11-04',
     sections: [
