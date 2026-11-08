@@ -9725,6 +9725,162 @@ async function renderChatManageView() {
 		paintList(doc);
 	} catch {}
 }
+//#endregion
+//#region src/ui/help-view.ts
+/** 完整使用文档（线上文档站）与隐私条款锚点，全站单一定义。 */
+var HELP_DOC_URL = "https://janmk1453.github.io/Api-Usage/";
+var HELP_PRIVACY_URL = "https://janmk1453.github.io/Api-Usage/#privacy";
+function guideCard(iconName, title, steps) {
+	return `<section class="ds-card aus-help-card">
+      <div class="aus-help-card-head"><span class="aus-help-card-icon">${icon(iconName, 16)}</span><span class="aus-help-card-title">${title}</span></div>
+      <ol class="aus-help-steps">${steps.map((text) => `<li>${text}</li>`).join("")}</ol>
+    </section>`;
+}
+function legalList(items) {
+	return `<ul class="aus-help-legal-list">${items.map((text) => `<li>${text}</li>`).join("")}</ul>`;
+}
+var PRIVACY_ITEMS = [
+	"扩展在酒馆里只能读到密钥条目的<strong>编号、备注与掩码末三位</strong>，仅用于区分请求来源，不会读取、保存或上传完整密钥。",
+	"你保存在酒馆里的密钥是安全的，扩展无法获取真实密钥。",
+	"你主动填入扩展的<strong>校准密钥</strong>是真实可用的密钥，只用于查询该钱包对应厂商的余额或套餐额度（DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita、智谱 GLM、MiniMax，以及你自填的 new-api 中转），不会额外扣费或消耗。",
+	"校准密钥经 XOR 混淆后存放在 SillyTavern，<strong>不进入历史记录、统计、日志、导入导出与 WebDAV</strong>。",
+	"查询由浏览器直连厂商接口，不经过第三方代理；未开放跨域（CORS）的厂商会直接失败并提示，扩展不会绕过该限制。",
+	"XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。",
+	"本扩展完整代码开源，可自行审查。"
+];
+var DISCLAIMER_ITEMS = [
+	"「价格来源」「自动同步」用到 <a href=\"https://models.dev\" target=\"_blank\" rel=\"noreferrer\">models.dev</a> 的数据，其中若出现商业化中转站，扩展不负责也不推荐；数据量太大难以完全筛净，与 models.dev 及任何中转站都没有商业往来，坚定反对商业化。",
+	"「套餐额度」中的本地估算基于本扩展记录推算，不含其他设备或其他客户端的消耗，可能与实际有偏差，<strong>仅供展示参考，不参与计费、导出与云同步，不能作为账单依据</strong>；对没有公开接口或未开放跨域的厂商（Claude Code、Codex、OpenCode、GitHub Copilot、Cursor、讯飞星辰等）不提供自动查询，也不会绕过限制。",
+	"界面中的厂商图标与名称商标归各自所有者，仅用于标识接入来源，不构成任何关联、合作或背书；图标数据内联自 simple-icons（CC0 发布）。",
+	"会尽可能维护扩展的安全与隐私性，但不对因酒馆或本扩展的安全漏洞及间接原因导致的密钥泄露与损失负责。"
+];
+var GUIDES = [
+	[
+		"brand",
+		"开始使用",
+		[
+			"在酒馆左下角打开魔法棒菜单，点「API用量统计」进入扩展面板。",
+			"之后正常对话即可，扩展会自动记录每次请求。",
+			"桌面用左侧栏切换页面，手机用底部标签栏切换。"
+		]
+	],
+	[
+		"overview",
+		"用量概览",
+		[
+			"顶部两张卡是充值余额与累计消费，余额旁的下拉可切换其它钱包。",
+			"8 个数据块、Token 热力图与按对话统计都按全部历史汇总。",
+			"「按对话统计」点表头可排序，右上角「管理对话」可隐藏不常看的对话。"
+		]
+	],
+	[
+		"stats",
+		"用量统计",
+		[
+			"用时间、模型、对话、接入类型、API 密钥五个胶囊筛选，模型可多选。",
+			"三块总量、四个小块、模型汇总表与全部图表都跟随筛选。",
+			"图表里可自选 Y 指标与 X 维度，Y 下拉底部可切自动 / 柱状 / 曲线 / 面积。",
+			"筛选结果会记住，点「重置筛选」可回到默认范围。"
+		]
+	],
+	[
+		"history",
+		"历史记录",
+		[
+			"列表按时间倒序，每页 30 条，可按模型、对话、接入类型与 API 密钥筛选。",
+			"点「详情」查看单条数据：请求参数、完整响应、Raw 用量与消息内容。",
+			"先对较早一条点「旧」、再对较晚一条点「新」，可对比两条消息的差异。",
+			"详情窗口在电脑端从右侧打开，手机端从屏幕下方弹出。"
+		]
+	],
+	[
+		"forecast",
+		"趋势预测",
+		[
+			"选好对话、计价模型与视界（预测未来几轮），页面给出下一轮预测、余额可撑轮数与三张趋势图。",
+			"对话内出现上下文压缩时，打开「压缩情景」可看压缩后的锯齿预测。",
+			"页面下方是模型效率表与对话健康评分。",
+			"工具栏「管理对话」可决定本页对话胶囊里显示哪些对话。"
+		]
+	],
+	[
+		"wallet",
+		"钱包",
+		[
+			"扩展按接入链接自动创建钱包，DeepSeek 官方钱包始终保留。",
+			"展开钱包可改名称、余额、模型价格、峰谷规则与价格来源。",
+			"勾选「自动校准」并填好该钱包的校准密钥后，会按设置里的间隔自动查余额。",
+			"点忽略后钱包进入「已忽略接入」，不参与合计，可在页面底部恢复显示。"
+		]
+	],
+	[
+		"settings",
+		"设置与数据",
+		[
+			"颜色模式、移动端兼容 UI、历史显示范围与匿名统计都在设置页顶部。",
+			"「对话展示」管理对话显示，「按范围删除记录」可按日期、模型、对话删除。",
+			"WebDAV 云同步可跨设备同步记录与钱包；「存储占用」里能清理旧版迁移备份。",
+			"峰谷规则与「额外空闲日期」决定费用计算，默认按 DeepSeek 官方规则。"
+		]
+	],
+	[
+		"menu",
+		"对话展示管理",
+		[
+			"从概览「按对话统计」右上角、趋势预测工具栏或设置页「对话展示」进入，返回时回到进入前的页面。",
+			"「表格展示」模式管概览统计表里显示哪些对话。",
+			"「下拉选项」模式管统计页、历史页、趋势预测页「对话」下拉里的选项。",
+			"支持搜索、全部显示、全部隐藏；只影响显示，不删除任何数据。"
+		]
+	]
+];
+/** 使用说明页整页 HTML（内容全部静态，交互由 style.css 与原生链接承担）。 */
+function helpViewHTML() {
+	const guides = GUIDES.map(([iconName, title, steps]) => guideCard(iconName, title, steps)).join("");
+	return `
+    <div id="aus-help-body">
+      <a class="aus-help-hero" href="${HELP_DOC_URL}" target="_blank" rel="noreferrer">
+        <span class="aus-help-hero-icon">${icon("help", 20)}</span>
+        <span class="aus-help-hero-main">
+          <span class="aus-help-hero-title">完整使用文档</span>
+          <span class="aus-help-hero-desc">逐页说明筛选、钱包与定价、云同步和常见问题</span>
+        </span>
+        <span class="aus-help-hero-arrow">${icon("chevron-right", 16)}</span>
+      </a>
+
+      <div class="ds-card" id="aus-help-legal">
+        <section class="aus-help-legal-block" data-kind="privacy">
+          <div class="aus-help-legal-head">
+            <span class="aus-help-legal-dot"></span>
+            <span class="aus-help-legal-title">隐私声明</span>
+            <a class="aus-help-legal-link" href="${HELP_PRIVACY_URL}" target="_blank" rel="noreferrer">完整版${icon("chevron-right", 12)}</a>
+          </div>
+          ${legalList(PRIVACY_ITEMS)}
+        </section>
+        <section class="aus-help-legal-block" data-kind="disclaimer">
+          <div class="aus-help-legal-head">
+            <span class="aus-help-legal-dot"></span>
+            <span class="aus-help-legal-title">免责声明</span>
+            <a class="aus-help-legal-link" href="${HELP_PRIVACY_URL}" target="_blank" rel="noreferrer">完整版${icon("chevron-right", 12)}</a>
+          </div>
+          ${legalList(DISCLAIMER_ITEMS)}
+        </section>
+      </div>
+
+      <div id="aus-help-guides">${guides}</div>
+
+      <div class="ds-card" id="aus-help-foot">
+        <div class="aus-help-foot-sec">
+          <div class="aus-help-foot-title">模型兼容</div>
+          <div class="aus-help-foot-text">完全兼容 DeepSeek 官方 API；其它厂商与渠道尽量兼容，部分模型可能没有缓存命中。数据异常时请携带完整请求与响应反馈。</div>
+        </div>
+        <div class="aus-help-foot-sec">
+          <div class="aus-help-foot-title">关于</div>
+          <div class="aus-help-foot-text">由原脚本 <a href="https://github.com/janmk1453/deepseek-tavern-script" target="_blank" rel="noreferrer">deepseek-tavern-script</a> 迁移重构 · <span style="color:var(--ds-text);">@janmk</span> · 仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">janmk1453/Api-Usage</a></div>
+        </div>
+      </div>
+    </div>`;
+}
 /** 更新日志（最新在前） */
 var CHANGELOG = [
 	{
@@ -11712,20 +11868,7 @@ function createPanel() {
             </div>
             <div id="aus-settings"></div>
           </div>
-          <div data-view="help" style="display:none;">
-            <div style="display:grid;gap:12px;">
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#FF6A00;font-weight:600;margin-bottom:6px;">完整使用文档</div><div style="color:var(--ds-text-2);">详细说明各页面、筛选、钱包、定价、同步、隐私与常见问题。</div><a href="https://janmk1453.github.io/Api-Usage/" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;margin-top:10px;padding:8px 14px;border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);text-decoration:none;font-size:var(--aus-fs-base);font-weight:600;">前往完整使用文档</a></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#DC2626;font-weight:600;margin-bottom:6px;">隐私声明（完整版：<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:#DC2626;text-decoration:underline;">https://janmk1453.github.io/Api-Usage/#privacy</a>）</div><div style="color:var(--ds-text-2);display:grid;gap:6px;"><div>本扩展有且只能获得用户在酒馆本身中填写的：密钥条目的编号、用户备注和掩码末三位，仅用于独立区分请求来源，不会且无法读取、保存或上传完整明文密钥。</div><div>用户储存在酒馆本身的密钥是安全的，本扩展无法获取真实密钥。</div><div>用户主动填入本扩展的校准密钥是实际可用的密钥，且仅会被用于查询该钱包所对应厂商的余额或套餐额度接口（DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita、智谱 GLM、MiniMax、以及用户自填的 new-api 中转站），不会额外造成扣费或消耗；它仅经 XOR 混淆后存放于 SillyTavern，不进入历史记录、统计、日志、导入导出或 WebDAV。查询由浏览器直连厂商接口，不经过任何第三方代理；对未开放跨域（CORS）的厂商会直接失败并提示，扩展不会绕过该限制。</div><div>XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。</div><div>本扩展完整代码开源可审查。</div><div style="margin-top:2px;padding-top:6px;border-top:1px solid var(--ds-border);font-weight:600;color:#DC2626;">免责声明（完整版见上方链接）</div><div>本扩展不对功能“价格来源”、“自动同步”等利用 <a href="https://models.dev" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 获取的数据中出现或可能出现的商业化中转站负责；我们不建议使用任何商业化中转站，尽管我们已经尽力筛选数据，但由于对大量数据进行完全筛选难以实现，因此我们不对可能出现的任何商业化中转站名称负责，不构成推荐，和 models.dev 或任何中转站没有商业往来，坚定不移的反对商业化。</div><div>「套餐额度」中的本地估算基于本扩展记录的历史数据推算，不包含其他设备或其他客户端的消耗，可能与实际剩余额度有偏差，仅供展示参考，不参与计费、导出与云同步，不能作为账单依据；对没有公开接口或未开放跨域的厂商（Claude Code、Codex、OpenCode、GitHub Copilot、Cursor、讯飞星辰等），扩展不提供、也不会绕过限制去提供自动查询。</div><div>界面中的厂商图标与名称商标归各自所有者，仅用于标识接入来源，不构成任何关联、合作或背书；图标数据内联自 simple-icons（CC0 发布）。</div><div>我们将尽可能维护扩展的安全和隐私性，但本扩展不对因酒馆/本扩展的安全漏洞或因间接原因导致的任何形式的密钥泄露及产生的损失负责。</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0BA25E;font-weight:600;margin-bottom:6px;">钱包</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 扩展按识别到的接入链接自动创建和汇总钱包，默认始终保留 DeepSeek 官方钱包；同名链接下识别的密钥和模型会归入同一钱包。</div><div>2. 每个钱包可独立维护名称、余额、模型价格、峰谷规则和价格来源；钱包默认收起，展开状态按钱包记忆。价格来源仅展示第一方模型厂商，不展示中转站或聚合平台；同步时只按钱包里已识别的模型名做模糊匹配后写入该模型价格，不会把供应商目录里的模型整批加入钱包。</div><div>3. 请求进入后会先匹配所属钱包，再使用该钱包的模型价格和峰谷规则计费，并从对应钱包余额预扣；未配置价格的模型先记零费用，保存或同步价格后自动重算冷热历史。</div><div>4. 余额查询按「查询适配器」工作：DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita 可查余额，智谱 GLM 与 MiniMax 可查套餐额度，new-api 中转可用「系统访问令牌 + 用户 ID」查订阅额度；密钥在该钱包内单独填写，多个密钥不会自动相加。</div><div>5. 删除钱包会进入“已忽略接入”，后续请求不会自动重建、不参与余额合计，历史记录仍保留归属，需要时可恢复显示。</div><div>6. 「套餐额度」只对能查询到额度的厂商显示，查到哪个展示哪个；本地估算需手动启用，仅作参考，不参与计费。</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（按钱包内的「查询适配器」查询，支持多家厂商）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前（DeepSeek）高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div><div>3. DeepSeek 官方规则：周一至周五（不含中国法定节假日）9:00-12:00、14:00-18:00 为高峰，其余时段（含周末、中国法定节假日全天）为空闲；调休上班的周末同样按空闲计费</div><div>4. 内置中国法定节假日数据覆盖 ${CN_HOLIDAY_COVERAGE_LABEL}，超出范围的年份可在设置中按日期补充“额外空闲日期”</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#DB2777;font-weight:600;margin-bottom:6px;">🔄 消息对比</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中找到想对比的两条消息，前者点“旧”，后者点“新”</div><div>2. 系统并排显示请求消息的文字差异</div><div>3. 差异点即缓存发散起始位置（前 N 条相同为缓存命中段）</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 切换时间、模型（可多选）、对话、接入类型和 API 密钥查看不同范围的统计</div><div>2. 多图表展示多模请求参数，悬浮查看分模型明细</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”，电脑端会在右侧打开约四分之一宽的窗口并压缩列表宽度，手机端会在屏幕下部弹出约四分之三高度的悬浮窗口</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 等详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0891B2;font-weight:600;margin-bottom:6px;">🧡 模型兼容</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 完全兼容 DeepSeek 官方 API</div><div>2. 尽量兼容不同厂商/渠道的请求格式，部分模型可能无缓存命中</div><div>3. 如数据异常，请携带完整请求与响应反馈</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);font-weight:600;margin-bottom:6px;">✨ 关于</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>本扩展由原脚本（<a href="https://github.com/janmk1453/deepseek-tavern-script" target="_blank" style="color:var(--ds-text);text-decoration:underline;">deepseek-tavern-script</a>）迁移重构。</div><div><span style="color:var(--ds-text);">@janmk</span> · 仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);text-decoration:underline;">janmk1453/Api-Usage</a></div></div></div>
-            </div>
-          </div>
+          <div data-view="help" style="display:none;">${helpViewHTML()}</div>
           <div data-view="about" style="display:none;">
             <div style="display:grid;gap:12px;">
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);color:var(--ds-text);">

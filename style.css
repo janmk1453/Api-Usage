@@ -2218,6 +2218,161 @@
   #aus-panel .aus-chat-manage-state { padding: 1px 5px; }
 }
 
+/* ── 使用说明页 ────────────────────────────────────────────────────────────
+   区块顺序固定：完整使用文档入口（第一高位）→ 隐私声明 / 免责声明（第二高位）
+   → 分门别类的操作说明 → 模型兼容与关于。布局全部写在这里，模板只给结构与文案，
+   窄屏只改列数与内距，不出现任何内联尺寸。 */
+#aus-panel #aus-help-body { display: grid; gap: 12px; min-width: 0; }
+
+/* 完整使用文档：整块可点，用黑底图标块强调它是第一入口 */
+#aus-panel .aus-help-hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px 16px;
+  border-radius: var(--ds-radius-card);
+  background: var(--ds-card);
+  color: var(--ds-text);
+  text-decoration: none;
+  transition: background-color 120ms;
+}
+@media (hover: hover) {
+  #aus-panel .aus-help-hero:hover { background: var(--ds-card-hover); }
+}
+#aus-panel .aus-help-hero:active { background: var(--ds-nav-active-bg); }
+#aus-panel .aus-help-hero-icon {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--ds-black);
+  color: var(--ds-black-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#aus-panel .aus-help-hero-main { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
+#aus-panel .aus-help-hero-title { font-size: 15px; font-weight: 600; color: var(--ds-text); }
+#aus-panel .aus-help-hero-desc { font-size: var(--aus-fs-sm); color: var(--ds-text-2); line-height: 1.5; }
+#aus-panel .aus-help-hero-arrow { flex: 0 0 auto; display: inline-flex; color: var(--ds-text-3); }
+
+/* 隐私声明 / 免责声明：灰块内两块白面，左侧一条语义色竖线做区分 */
+#aus-panel #aus-help-legal { display: grid; gap: 10px; min-width: 0; }
+#aus-panel .aus-help-legal-block {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--ds-card-inner);
+  border-left: 3px solid var(--ds-border);
+}
+#aus-panel .aus-help-legal-block[data-kind="privacy"] { border-left-color: var(--ds-red); }
+#aus-panel .aus-help-legal-block[data-kind="disclaimer"] { border-left-color: var(--ds-orange); }
+#aus-panel .aus-help-legal-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#aus-panel .aus-help-legal-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: var(--ds-text-3); }
+#aus-panel .aus-help-legal-block[data-kind="privacy"] .aus-help-legal-dot { background: var(--ds-red); }
+#aus-panel .aus-help-legal-block[data-kind="disclaimer"] .aus-help-legal-dot { background: var(--ds-orange); }
+#aus-panel .aus-help-legal-title { font-size: var(--aus-fs-base); font-weight: 600; color: var(--ds-text); white-space: nowrap; }
+#aus-panel .aus-help-legal-link {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--aus-fs-sm);
+  color: var(--ds-text-3);
+  text-decoration: none;
+  white-space: nowrap;
+}
+@media (hover: hover) {
+  #aus-panel .aus-help-legal-link:hover { color: var(--ds-text); }
+}
+#aus-panel .aus-help-legal-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; min-width: 0; }
+#aus-panel .aus-help-legal-list > li {
+  position: relative;
+  padding-left: 12px;
+  font-size: var(--aus-fs-sm);
+  line-height: 1.65;
+  color: var(--ds-text-2);
+  min-width: 0;
+}
+#aus-panel .aus-help-legal-list > li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.72em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ds-text-3);
+}
+#aus-panel .aus-help-legal-list strong { color: var(--ds-text); font-weight: 600; }
+#aus-panel .aus-help-legal-list a { color: var(--ds-text); text-decoration: underline; }
+
+/* 操作说明：两列卡片，每卡一条标题 + 编号步骤 */
+#aus-panel #aus-help-guides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0; }
+#aus-panel .aus-help-card { display: grid; gap: 10px; align-content: start; min-width: 0; }
+#aus-panel .aus-help-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#aus-panel .aus-help-card-icon {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--ds-card-inner);
+  color: var(--ds-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#aus-panel .aus-help-card-title { font-size: var(--aus-fs-base); font-weight: 600; color: var(--ds-text); min-width: 0; }
+#aus-panel .aus-help-steps { margin: 0; padding: 0; list-style: none; counter-reset: aus-help-step; display: grid; gap: 6px; min-width: 0; }
+#aus-panel .aus-help-steps > li {
+  counter-increment: aus-help-step;
+  position: relative;
+  padding-left: 20px;
+  font-size: var(--aus-fs-sm);
+  line-height: 1.6;
+  color: var(--ds-text-2);
+  min-width: 0;
+}
+#aus-panel .aus-help-steps > li::before {
+  content: counter(aus-help-step);
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ds-card-inner);
+  color: var(--ds-text-3);
+  font-size: 9px;
+  line-height: 14px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 底部：模型兼容与关于 */
+#aus-panel #aus-help-foot { display: grid; gap: 10px; min-width: 0; }
+#aus-panel .aus-help-foot-sec { display: grid; gap: 6px; min-width: 0; }
+#aus-panel .aus-help-foot-sec + .aus-help-foot-sec { padding-top: 10px; border-top: 1px solid var(--ds-border); }
+#aus-panel .aus-help-foot-title { font-size: var(--aus-fs-sm); font-weight: 600; color: var(--ds-text); }
+#aus-panel .aus-help-foot-text { font-size: var(--aus-fs-sm); line-height: 1.65; color: var(--ds-text-2); }
+#aus-panel .aus-help-foot-text a { color: var(--ds-text); text-decoration: underline; }
+
+/* 窄屏：说明卡改单列，头部与法务块内距收一档。两套断点（媒体 + 容器）必须同步 */
+@media (max-width: 760px) {
+  #aus-panel #aus-help-guides { grid-template-columns: 1fr; }
+  #aus-panel .aus-help-hero { padding: 12px 14px; gap: 10px; }
+  #aus-panel .aus-help-hero-icon { width: 32px; height: 32px; border-radius: 9px; }
+  #aus-panel .aus-help-legal-block { padding: 10px; }
+}
+@container ausbody (max-width: 760px) {
+  #aus-panel #aus-help-guides { grid-template-columns: 1fr; }
+  #aus-panel .aus-help-hero { padding: 12px 14px; gap: 10px; }
+  #aus-panel .aus-help-hero-icon { width: 32px; height: 32px; border-radius: 9px; }
+  #aus-panel .aus-help-legal-block { padding: 10px; }
+}
 /* ── 统计页第一张图表：自绘 X 轴视窗滑块（长条 + 两端圆点，触屏可拖） ── */
 #aus-stats-chart { position: relative; }
 .aus-range-zoom {
