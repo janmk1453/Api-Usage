@@ -2259,6 +2259,16 @@
 
 /* 隐私声明 / 免责声明：灰块内两块白面，左侧一条语义色竖线做区分 */
 #aus-panel #aus-help-legal { display: grid; gap: 10px; min-width: 0; }
+/* 声明前的准入提示：一行正文色小字，压在两块声明之上 */
+#aus-panel .aus-help-legal-notice {
+  margin: 0;
+  padding: 0 2px;
+  font-size: var(--aus-fs-sm);
+  line-height: 1.65;
+  color: var(--ds-text);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 #aus-panel .aus-help-legal-block {
   display: grid;
   gap: 8px;

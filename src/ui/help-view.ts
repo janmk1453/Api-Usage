@@ -97,6 +97,7 @@ export function helpViewHTML(): string {
       </a>
 
       <div class="ds-card" id="aus-help-legal">
+        <p class="aus-help-legal-notice">安装、启用或使用本扩展，即视为您已阅读、理解并同意本声明的全部内容。如不同意，请立即停止使用并卸载本扩展。</p>
         <section class="aus-help-legal-block" data-kind="privacy">
           <div class="aus-help-legal-head">
             <span class="aus-help-legal-dot"></span>

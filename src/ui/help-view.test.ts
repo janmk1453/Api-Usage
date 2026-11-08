@@ -17,6 +17,15 @@ describe('使用说明页', () => {
     expect(html.indexOf('免责声明')).toBeLessThan(guides);
   });
 
+  it('隐私与免责声明前有准入提示', () => {
+    const notice = '安装、启用或使用本扩展，即视为您已阅读、理解并同意本声明的全部内容。如不同意，请立即停止使用并卸载本扩展。';
+    expect(html).toContain(notice);
+    const noticeAt = html.indexOf('aus-help-legal-notice');
+    expect(noticeAt).toBeGreaterThan(html.indexOf('id="aus-help-legal"'));
+    expect(noticeAt).toBeLessThan(html.indexOf('data-kind="privacy"'));
+    expect(noticeAt).toBeLessThan(html.indexOf('data-kind="disclaimer"'));
+  });
+
   it('文档入口与隐私完整版链接指向线上文档站', () => {
     expect(html).toContain('href="' + HELP_DOC_URL + '"');
     expect(html).toContain('href="' + HELP_PRIVACY_URL + '"');
