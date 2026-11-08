@@ -111,6 +111,17 @@ describe('看板模板结构', () => {
     expect(html).toContain('.ov-stack > .split > .chart-card { order: 5; }');
   });
 
+  it('今日卡可在今日 / 昨日之间切换：昨日取日表同口径，环比对比前一天', () => {
+    // 切换器、日快照与绑定都在同一张卡内，不牵动概览其它图表
+    expect(html).toContain("S.seg('ovDay', [['today', '今日'], ['yesterday', '昨日']], mode)");
+    expect(html).toContain('function daySnapshot(offset) {');
+    expect(html).toContain('function dayCardView() {');
+    expect(html).toContain("const cur = C.daySnapshot(back);");
+    expect(html).toContain("const prev = C.daySnapshot(back + 1);");
+    expect(html).toContain("const rows = TEL.data.hourly.filter((r) => r.day === cur.date);");
+    expect(html).toContain("state.dayView = next;");
+    expect(html).toContain("day: state.dayView,");
+  });
   it('概览活跃趋势的指标能切回「新增」，且与趋势页的多指标选择互不干扰', () => {
     // 概览卡自己的单指标白名单，包含 newUsers（默认不再是趋势页残留的指标）
     expect(html).toContain("const OV_METRICS = ['users', 'newUsers', 'opens', 'duration', 'runtime'];");

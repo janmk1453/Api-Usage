@@ -437,6 +437,7 @@ html[data-theme="dark"] .seg button.on { background: var(--surface-3); }
 
 /* 今日卡 */
 .today-card .card-body { padding-top: 14px; }
+.today-card .card-head { align-items: center; }
 .today-nums { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 10px; }
 .tn { min-width: 0; }
 /* 5 项两列排布时末项独占整行，避免右侧留空 */
@@ -1238,7 +1239,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
         <button class="icon-btn only-mobile" data-act="more" aria-label="更多操作"><svg class="ic" aria-hidden="true"><use href="#i-more"></use></svg></button>
         <div class="tb-titles">
           <h1 id="pageTitle">概览</h1>
-          <p id="pageSub">一眼看清规模、增长与今日状态</p>
+          <p id="pageSub">一眼看清规模、增长与今日/昨日状态</p>
         </div>
       </div>
       <div class="tb-right">
@@ -1840,18 +1841,39 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     };
   }
 
-  function today() {
-    const t = D.totals;
-    const last = D.days[D.days.length - 1];
+  /**
+   * 当日快照：offset = 0 取今天，1 取昨天，依此类推。
+   * 今天沿用 /api/summary 的当日聚合（distinct 设备 / 当日首见），其余日期取日表同一口径，
+   * 保证「今日」与「昨日」两个视图字段含义完全一致。
+   */
+  function daySnapshot(offset) {
+    const back = Math.max(0, Math.floor(Number(offset) || 0));
+    const row = D.days[D.days.length - 1 - back];
+    if (!back) {
+      const t = D.totals;
+      return {
+        date: row ? row.day : END,
+        users: t.todayActiveUsers,
+        newUsers: t.todayUsers,
+        opens: t.todayOpens,
+        duration: t.todayDurMs / 3600000,
+        runtime: t.todayRunMs / 3600000,
+        devices: row ? row.devices : 0,
+      };
+    }
     return {
-      date: last.day,
-      users: t.todayActiveUsers,
-      newUsers: t.todayUsers,
-      opens: t.todayOpens,
-      duration: t.todayDurMs / 3600000,
-      runtime: t.todayRunMs / 3600000,
-      devices: last.devices,
+      date: row ? row.day : END,
+      users: row ? row.devices : 0,
+      newUsers: row ? row.newUsers : 0,
+      opens: row ? row.opens : 0,
+      duration: row ? row.durMs / 3600000 : 0,
+      runtime: row ? row.runMs / 3600000 : 0,
+      devices: row ? row.devices : 0,
     };
+  }
+
+  function today() {
+    return daySnapshot(0);
   }
 
   /* ------------------------------ 页面维度 ------------------------------- */
@@ -2080,6 +2102,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
         chart: state.chart,
         explore: state.explore,
         saved: state.saved,
+        day: state.dayView,
       }));
     } catch (e) { /* 隐私模式忽略 */ }
   }
@@ -2097,6 +2120,8 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     saved: Array.isArray(stored.saved) ? stored.saved : [],
     theme: stored.theme || 'system',
     rail: stored.rail || 'full',
+    /* 今日卡的日视图：today / yesterday，随偏好记忆 */
+    dayView: stored.day === 'yesterday' ? 'yesterday' : 'today',
     loading: false,
   };
   if (!Array.isArray(state.chart.metrics) || !state.chart.metrics.length) state.chart.metrics = ['users'];
@@ -2112,7 +2137,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     presetRange, allRange, normalizeRange, rangeDays, shiftRange, rangeLabel, rangeSub, renderWindowSub,
     daysIn, prevDaysIn, hourlyIn, canHour, series, hourlySeries, spark,
     METRICS, METRIC_ORDER, OV_METRICS, metricValue,
-    kpis, lifetime, today,
+    kpis, lifetime, today, daySnapshot,
     PAGE_KEYS, PAGE_LABELS, PAGE_COLORS, pagesIn, pageShareSeries, pageSpark,
     hourOfDay, hourWindow, mergeTail, dimensionItems, DIMENSIONS, explore,
     RENDER_LABELS, RENDER_COLORS, renderData, weightedRender,
@@ -3298,7 +3323,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
 
   /* -------------------------------- 路由 ---------------------------------- */
   const META = {
-    overview: ['概览', '一眼看清规模、增长与今日状态'],
+    overview: ['概览', '一眼看清规模、增长与今日/昨日状态'],
     trends: ['趋势', '拆解时间、指标与页面结构'],
     audience: ['用户', '设备、环境与使用深度'],
     performance: ['性能', '渲染耗时与版本质量'],
@@ -3383,7 +3408,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
         body: '<div class="about">'
           + '<p><b>API 用量统计 · 匿名遥测</b>看板：数据来自扩展的匿名上报，口径与 <code>cloudflare/summary.js</code> 一致，全部为设备维度的聚合计数，不含对话内容、模型名、密钥、金额与 IP。</p>'
           + '<h3>展示逻辑</h3><ul>'
-          + '<li><b>概览</b>：规模 → 本期变化 → 今日状态 → 结构与时段。</li>'
+          + '<li><b>概览</b>：规模 → 本期变化 → 今日/昨日状态 → 结构与时段。</li>'
           + '<li><b>趋势</b>：指标、粒度、对比、图表形态集中在一个画布，下面是分页面拆解。</li>'
           + '<li><b>用户</b>：设备与环境、软件版本、使用深度三层，不把 20 个维度铺成 20 张图。</li>'
           + '<li><b>性能</b>：先给结论（均值 / P50 / P90），再给版本分布与明细表。</li>'
@@ -3791,11 +3816,63 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     });
   }
 
+  /** 今日卡当前看哪一天：today / yesterday（其余取值一律回落到今天） */
+  function dayCardView() {
+    return state.dayView === 'yesterday' ? 'yesterday' : 'today';
+  }
+
+  /** 今日卡整块 HTML：数字块、24 小时图与环比全部按当前日视图取同一天 */
+  function dayCardHtml(withRise) {
+    const mode = dayCardView();
+    const word = mode === 'yesterday' ? '昨日' : '今日';
+    const back = mode === 'yesterday' ? 1 : 0;
+    const cur = C.daySnapshot(back);
+    const prev = C.daySnapshot(back + 1);
+    const peak = TEL.data.hourly.filter((r) => r.day === cur.date).slice().sort((a, b) => b.devices - a.devices)[0];
+    return '<section class="card today-card' + (withRise ? ' rise' : '') + '" id="todayCard">'
+      + S.head(word, '<span class="live"><i></i>北京时间 · ' + C.fmtDate(cur.date) + '</span>',
+        S.seg('ovDay', [['today', '今日'], ['yesterday', '昨日']], mode))
+      + '<div class="card-body">'
+      + '<div class="today-nums">'
+      + '<div class="tn"><span>活跃设备</span><b class="count" data-val="' + cur.users + '" data-format="int">' + C.fmtInt(cur.users) + '</b><em>' + S.deltaChip(C.delta(cur.users, prev.devices)) + '</em></div>'
+      + '<div class="tn"><span>新增用户</span><b class="count" data-val="' + cur.newUsers + '" data-format="int">' + C.fmtInt(cur.newUsers) + '</b><em class="muted">' + word + '首见</em></div>'
+      + '<div class="tn"><span>打开次数</span><b class="count" data-val="' + cur.opens + '" data-format="int">' + C.fmtInt(cur.opens) + '</b><em>' + S.deltaChip(C.delta(cur.opens, prev.opens)) + '</em></div>'
+      + '<div class="tn"><span>使用时长</span><b class="count" data-val="' + cur.duration + '" data-format="hours">' + C.fmtHours(cur.duration) + '</b><em>' + S.deltaChip(C.delta(cur.duration, prev.duration)) + '</em></div>'
+      + '<div class="tn"><span>酒馆运行</span><b class="count" data-val="' + cur.runtime + '" data-format="hours">' + C.fmtHours(cur.runtime) + '</b><em>' + S.deltaChip(C.delta(cur.runtime, prev.runtime)) + '</em></div>'
+      + '</div>'
+      + '<div class="today-chart-wrap"><div class="chart-host" id="todayChart" style="height:96px"></div></div>'
+      + '</div>'
+      + '<footer class="card-foot"><span class="foot-note">'
+      + (peak ? word + '峰值 ' + String(peak.h).padStart(2, '0') + ':00 · ' + C.fmtInt(peak.devices) + ' 台在线 · ' : '')
+      + '人均 ' + C.fmtDuration(cur.users ? (cur.duration * 3600000) / cur.users : 0) + '</span></footer>'
+      + '</section>';
+  }
+
+  /** 今日 / 昨日切换：只重绘这张卡，概览其它图表与滚动位置不受影响 */
+  function bindDayCard(root) {
+    const card = root.querySelector('#todayCard');
+    if (!card) return;
+    card.querySelectorAll('[data-seg="ovDay"] button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const next = btn.getAttribute('data-v') === 'yesterday' ? 'yesterday' : 'today';
+        if (next === dayCardView()) return;
+        state.dayView = next;
+        C.saveStore();
+        card.outerHTML = dayCardHtml(false);
+        const fresh = root.querySelector('#todayCard');
+        if (fresh) S.initCommon(fresh);
+        todayChart(root);
+        bindDayCard(root);
+      });
+    });
+  }
+
   function todayChart(root) {
     const host = root.querySelector('#todayChart');
     if (!host) return;
-    const day = C.END;
-    const rows = TEL.data.hourly.filter((r) => r.day === day);
+    const word = dayCardView() === 'yesterday' ? '昨日' : '今日';
+    const cur = C.daySnapshot(dayCardView() === 'yesterday' ? 1 : 0);
+    const rows = TEL.data.hourly.filter((r) => r.day === cur.date);
     TEL.charts.trend(host, {
       labels: rows.map((r) => String(r.h).padStart(2, '0')),
       series: [{ name: '活跃设备', values: rows.map((r) => r.devices), color: '--chart-1', type: 'area', areaOpacity: 0.16 }],
@@ -3803,17 +3880,16 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       smooth: true,
       yFormat: (v) => C.fmtCompact(v),
       xFormat: (v) => v + ':00',
-      tipFormat: (v) => '今日 ' + v + ':00',
-      aria: '今日 24 小时活跃设备',
+      tipFormat: (v) => word + ' ' + v + ':00',
+      aria: word + ' 24 小时活跃设备',
+      emptyText: word + '暂无小时数据',
     });
   }
 
   function page(root) {
     const kpis = C.kpis(state.range);
     const life = C.lifetime();
-    const today = C.today();
-    const yest = TEL.data.days[TEL.data.days.length - 2];
-    const todayPeak = TEL.data.hourly.filter((r) => r.day === C.END).slice().sort((a, b) => b.devices - a.devices)[0];
+
     const pages = C.pagesIn(state.range);
     const totalOpens = C.sum(pages, (p) => p.count);
     const hours = C.hourOfDay(state.range);
@@ -3867,22 +3943,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       + '<span class="foot-note">' + (state.compare ? '虚线为上一周期：' + U.esc(C.rangeSub(C.shiftRange(state.range))) : '对比已关闭') + '</span></footer>'
       + '</section>'
 
-      + '<section class="card today-card rise">'
-      + S.head('今日', '<span class="live"><i></i>北京时间 · ' + C.fmtDate(today.date) + '</span>')
-      + '<div class="card-body">'
-      + '<div class="today-nums">'
-      + '<div class="tn"><span>活跃设备</span><b class="count" data-val="' + today.users + '" data-format="int">' + C.fmtInt(today.users) + '</b><em>' + S.deltaChip(C.delta(today.users, yest.devices)) + '</em></div>'
-      + '<div class="tn"><span>新增用户</span><b class="count" data-val="' + today.newUsers + '" data-format="int">' + C.fmtInt(today.newUsers) + '</b><em class="muted">今日首见</em></div>'
-      + '<div class="tn"><span>打开次数</span><b class="count" data-val="' + today.opens + '" data-format="int">' + C.fmtInt(today.opens) + '</b><em>' + S.deltaChip(C.delta(today.opens, yest.opens)) + '</em></div>'
-      + '<div class="tn"><span>使用时长</span><b class="count" data-val="' + today.duration + '" data-format="hours">' + C.fmtHours(today.duration) + '</b><em>' + S.deltaChip(C.delta(today.duration, yest.durMs / 3600000)) + '</em></div>'
-      + '<div class="tn"><span>酒馆运行</span><b class="count" data-val="' + today.runtime + '" data-format="hours">' + C.fmtHours(today.runtime) + '</b><em>' + S.deltaChip(C.delta(today.runtime, yest.runMs / 3600000)) + '</em></div>'
-      + '</div>'
-      + '<div class="today-chart-wrap"><div class="chart-host" id="todayChart" style="height:96px"></div></div>'
-      + '</div>'
-      + '<footer class="card-foot"><span class="foot-note">'
-      + (todayPeak ? '今日峰值 ' + String(todayPeak.h).padStart(2, '0') + ':00 · ' + C.fmtInt(todayPeak.devices) + ' 台在线 · ' : '')
-      + '人均 ' + C.fmtDuration(today.users ? (today.duration * 3600000) / today.users : 0) + '</span></footer>'
-      + '</section>'
+      + dayCardHtml(true)
       + '</div>'
 
       /* 页面构成 + 时段 */
@@ -3956,6 +4017,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       aria: '页面打开次数占比',
     });
     todayChart(root);
+    bindDayCard(root);
     heat(root);
     S.initCommon(root);
   }
