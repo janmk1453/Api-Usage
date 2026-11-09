@@ -48,6 +48,38 @@ describe('写法差异：中文修饰段、小数点与分隔符', () => {
     }
   });
 
+  it('渠道前后缀与目录名的各种组合都能落到同一模型', () => {
+    const catalog = ['gemini-3.8-flash', 'gemini-3.8-flash-lite', 'gemini-3.1-pro', 'gemini-3.1-pro-preview'];
+    const locals = [
+      '抗截断-gemini-3.8-flash',
+      '流式保活抗截断-gemini-3.8-flash',
+      '原生流式-gemini-3.8-flash',
+      'build-st/抗截断-gemini-3.8-flash',
+      'build-st/gemini-3.8-flash',
+      'build/抗截断-gemini-3.8-flash',
+      'build/gemini-3.8-flash',
+    ];
+    for (const local of locals) {
+      const result = matchModelName(local, catalog);
+      expect(result.best?.model).toBe('gemini-3.8-flash');
+      expect(result.best?.score).toBe(1);
+      expect(result.ambiguous).toBe(false);
+    }
+    for (const local of ['抗截断-gemini-3.1-pro-preview', '原生流式-gemini-3.1-pro-preview']) {
+      expect(matchModelName(local, catalog).best?.model).toBe('gemini-3.1-pro-preview');
+    }
+  });
+
+  it('目录只登记正式名时，preview 之类中性后缀仍能对上', () => {
+    const catalog = ['gemini-3.1-pro', 'gemini-3.1-flash', 'gemini-3.8-flash'];
+    for (const local of ['抗截断-gemini-3.1-pro-preview', '流式保活抗截断-gemini-3.1-pro-preview', '原生流式-gemini-3.1-pro-preview']) {
+      const result = matchModelName(local, catalog);
+      expect(result.best?.model).toBe('gemini-3.1-pro');
+      expect(result.best?.score).toBeGreaterThanOrEqual(MODEL_MATCH_ACCEPT);
+      expect(result.ambiguous).toBe(false);
+    }
+  });
+
   it('放宽写法差异不能顺带放宽变体与版本差异', () => {
     expect(scoreModelName('抗截断-gemini-3.8-flash-lite', 'gemini-3.8-flash').score).toBeLessThan(MODEL_MATCH_ACCEPT);
     expect(scoreModelName('抗截断-gemini-3.8-pro', 'gemini-3.8-flash').score).toBeLessThan(MODEL_MATCH_ACCEPT);

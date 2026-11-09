@@ -156,8 +156,11 @@ export function scoreModelName(local: string, catalog: string): { score: number;
     const extra = longer.slice(shorter.length + 1).split('-').filter(Boolean);
     const neutral = extra.length > 0 && extra.every((token) => NEUTRAL_SUFFIX_TOKENS.has(token));
     const lengthRatio = shorter.length / longer.length;
-    if (neutral && lengthRatio >= 0.75) {
-      best = 0.95;
+    if (neutral) {
+      // 只多出 latest/preview/exp 这类中性修饰词就是同一模型，长度比不该成为拦路虎：
+      // 「gemini-3.1-pro-preview」对「gemini-3.1-pro」长度比只有 0.62，按老规则会被压到 0.6
+      // 而漏配；给 0.9（低于 1.0 但与第二名拉开 0.05 以上分差，不制造假歧义）
+      best = lengthRatio >= 0.75 ? 0.95 : 0.9;
       reason = 'prefix';
     } else if (lengthRatio >= 0.6) {
       // 变体后缀（mini/lite/pro/flash/plus…）或数字版本追加：可能是不同模型，重罚

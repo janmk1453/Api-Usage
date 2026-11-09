@@ -45,6 +45,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         items: [
           '新增「管理对话」，管理首页表格和下拉胶囊中的对话是否显示',
           '安卓设备现在使用系统返回手势时会返回酒馆',
+          '兼容TauriTavern 2.4.0',
         ],
       },
       {
@@ -52,6 +53,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         items: [
           '优化启动速度',
           '更新了使用说明页的内容',
+          '改进了价格匹配',
           '改进了很多视觉效果和UI细节',
         ],
       },
