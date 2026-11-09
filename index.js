@@ -2591,10 +2591,13 @@ function popViewTrail(trail, current) {
 * 底栏 tab 点击语义。
 * @param target 用户点到的 tab（根视图）
 * @param current 当前视图（可能是二级页）
-* @param currentIsChildView 当前视图是否为「设置」下的二级页
+* @param currentIsChildView 当前视图是否为二级页
+* @param currentTab 当前视图实际归属的 tab；默认按 `parentTabOf(current)`。
+*   对话展示管理这类「没有固定 tab」的页面必须传进入前的来源 tab（从趋势页进入就得传 forecast），
+*   否则它会被恒定算成概览 tab —— 用户点底栏「概览」会被误判成重复点当前 tab，只回上一页而不切页。
 */
-function resolveTabTap(target, current, currentIsChildView) {
-	if (target !== parentTabOf(current)) return "switch";
+function resolveTabTap(target, current, currentIsChildView, currentTab = parentTabOf(current)) {
+	if (target !== currentTab) return "switch";
 	if (currentIsChildView) return "pop-root";
 	return "scroll-top";
 }
@@ -9607,8 +9610,9 @@ function shellHTML() {
 		"<button id=\"aus-chat-manage-back\" type=\"button\" class=\"aus-chat-manage-btn\" title=\"回到进入本页之前的页面\">" + icon("chevron-left", 14) + "返回</button>",
 		"</div>",
 		"</div>",
-		"<div id=\"aus-chat-manage-modes\">",
-		MODES.map((m) => "<button type=\"button\" class=\"aus-chat-manage-mode\" data-manage-mode=\"" + m.key + "\" data-active=\"" + (m.key === mode ? "1" : "0") + "\" title=\"" + esc(m.title) + "\">" + esc(m.label) + "</button>").join(""),
+		"<div id=\"aus-chat-manage-modes\" data-mode=\"" + mode + "\" role=\"tablist\" aria-label=\"管理模式\">",
+		"<span class=\"aus-chat-manage-mode-thumb\" aria-hidden=\"true\"></span>",
+		MODES.map((m) => "<button type=\"button\" class=\"aus-chat-manage-mode\" role=\"tab\" data-manage-mode=\"" + m.key + "\" data-active=\"" + (m.key === mode ? "1" : "0") + "\" aria-selected=\"" + (m.key === mode ? "true" : "false") + "\" title=\"" + esc(m.title) + "\">" + esc(m.label) + "</button>").join(""),
 		"</div>",
 		"<div class=\"ds-card aus-chat-manage-card\">",
 		"<div id=\"aus-chat-manage-list\"></div>",
@@ -9672,13 +9676,62 @@ function paintList(doc) {
 		paintChatManageBadge(doc);
 	} catch {}
 }
-/** 切换管理模式：重画描述、按钮选中态与整张列表 */
+/**
+* 滑块定位：按当前选中按钮的实测几何写入 position/size（与底栏指示胶囊同一套思路）。
+* 不假设两项等宽、也不写死 50%，改文案、换字号、改内距都不会错位；首次定位关过渡，避免从左侧飞过来。
+*/
+function paintModeThumb(doc) {
+	const wrap = doc.getElementById("aus-chat-manage-modes");
+	if (!wrap) return;
+	const btn = wrap.querySelector("[data-manage-mode=\"" + mode + "\"]");
+	const thumb = wrap.querySelector(".aus-chat-manage-mode-thumb");
+	if (!btn || !thumb) return;
+	const wr = wrap.getBoundingClientRect();
+	const br = btn.getBoundingClientRect();
+	if (!wr.width || !br.width) {
+		thumb.style.opacity = "0";
+		return;
+	}
+	thumb.style.opacity = "1";
+	thumb.style.width = Math.round(br.width) + "px";
+	thumb.style.height = Math.round(br.height) + "px";
+	const next = "translate3d(" + Math.round(br.left - wr.left) + "px," + Math.round(br.top - wr.top) + "px,0)";
+	if (wrap.getAttribute("data-ready") !== "1") {
+		const prev = thumb.style.transition;
+		thumb.style.transition = "none";
+		thumb.style.transform = next;
+		thumb.offsetWidth;
+		thumb.style.transition = prev;
+		wrap.setAttribute("data-ready", "1");
+	} else thumb.style.transform = next;
+}
+/** 窗口尺寸变化（含窄屏断点切换内距）后重新贴合；同一容器只绑一次 */
+function bindModeThumbResize(doc) {
+	const wrap = doc.getElementById("aus-chat-manage-modes");
+	if (!wrap || wrap.getAttribute("data-thumb-resize") === "1") return;
+	wrap.setAttribute("data-thumb-resize", "1");
+	try {
+		doc.defaultView?.addEventListener("resize", () => {
+			try {
+				paintModeThumb(doc);
+			} catch {}
+		});
+	} catch {}
+}
+/** 切换管理模式：重画描述、滑块与其选中态，再重画整张列表 */
 function paintMode(doc) {
 	const desc = doc.getElementById("aus-chat-manage-desc");
 	if (desc) desc.textContent = modeInfo().desc;
+	const wrap = doc.getElementById("aus-chat-manage-modes");
+	if (wrap) wrap.setAttribute("data-mode", mode);
 	doc.querySelectorAll("[data-manage-mode]").forEach((el) => {
-		el.setAttribute("data-active", el.getAttribute("data-manage-mode") === mode ? "1" : "0");
+		const on = el.getAttribute("data-manage-mode") === mode;
+		el.setAttribute("data-active", on ? "1" : "0");
+		el.setAttribute("aria-selected", on ? "true" : "false");
 	});
+	try {
+		paintModeThumb(doc);
+	} catch {}
 	paintList(doc);
 }
 /** 绑定 shell 内的按钮与列表事件（幂等：只在首次构建 shell 时绑定一次） */
@@ -9751,6 +9804,12 @@ async function renderChatManageView() {
 		host.innerHTML = shellHTML();
 		try {
 			bindShell(doc);
+		} catch {}
+		try {
+			bindModeThumbResize(doc);
+		} catch {}
+		try {
+			paintModeThumb(doc);
 		} catch {}
 	} else paintMode(doc);
 	const token = ++renderToken;
@@ -11459,7 +11518,8 @@ function handleBottomTabTap(target) {
 		switchView(target);
 		return;
 	}
-	const action = resolveTabTap(target, currentView, isChildView(currentView));
+	const currentTab = currentView === "chat-manage" ? parentTabOf(chatManageOrigin) : parentTabOf(currentView);
+	const action = resolveTabTap(target, currentView, isChildView(currentView), currentTab);
 	if (action === "switch") {
 		switchView(target === "settings" && settingsChildView ? settingsChildView : target);
 		return;

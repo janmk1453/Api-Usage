@@ -2215,18 +2215,46 @@
   #aus-panel #aus-chat-manage-back:hover { border-color: var(--ds-text); }
 }
 #aus-panel #aus-chat-manage-back:active { background: var(--aus-nav-active-bg); border-color: var(--ds-text); }
-/* 管理模式切换（表格展示 / 下拉选项）：两颗胶囊，选中态取侧栏选中底色 + 加粗 */
+/* 管理模式切换（表格展示 / 下拉选项）：分段滑块 —— 灰底胶囊里一块白色滑块承载当前项，
+   对应「二选一、左右切换」的功能语义（与 DeepSeek 官网的分段控件同款）。
+   容器只画灰底与内距；滑块是绝对定位块，位置/宽高由 chat-manage.ts#paintModeThumb 按选中按钮的
+   实测几何写入 —— 不假设两项等宽、不靠 50% 换算，改文案或改字号都不会错位。
+   两项都设同一个 min-width，保证选中态加粗时按钮宽度不跳、滑块不会跟着抖。 */
 #aus-panel #aus-chat-manage-modes {
-  display: flex;
+  position: relative;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 0;
+  padding: 3px;
   margin-bottom: 12px;
+  border-radius: 999px;
+  background: var(--ds-card);
+  box-sizing: border-box;
   min-width: 0;
+  max-width: 100%;
+}
+#aus-panel .aus-chat-manage-mode-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  width: 0;
+  height: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--ds-border);
+  border-radius: 999px;
+  background: var(--ds-card-inner);
+  pointer-events: none;
+  opacity: 0;
+  transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1), width 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 #aus-panel .aus-chat-manage-mode {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  min-width: 84px;
   padding: 5px 12px;
-  border: 1px solid var(--ds-border);
+  border: 0;
   border-radius: 999px;
   background: transparent;
   color: var(--ds-text-2);
@@ -2234,19 +2262,25 @@
   font-size: var(--aus-fs-sm);
   font-weight: 400;
   line-height: 1.4;
+  text-align: center;
   white-space: nowrap;
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  transition: color 140ms ease;
 }
 @media (hover: hover) {
-  #aus-panel .aus-chat-manage-mode:hover { border-color: var(--ds-text-3); color: var(--ds-text); }
+  #aus-panel .aus-chat-manage-mode:hover { color: var(--ds-text); }
 }
+#aus-panel .aus-chat-manage-mode:active { color: var(--ds-text); }
 #aus-panel .aus-chat-manage-mode[data-active="1"] {
-  background: var(--ds-nav-active-bg);
-  border-color: var(--ds-text-3);
   color: var(--ds-text);
   font-weight: 600;
+}
+#aus-panel .aus-chat-manage-mode:focus-visible { outline: 2px solid var(--ds-orange); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) {
+  #aus-panel .aus-chat-manage-mode-thumb,
+  #aus-panel .aus-chat-manage-mode { transition: none !important; }
 }
 /* 窄屏：头部改纵向堆叠——说明占满一行、工具行单独一行、搜索框吃掉剩余宽度，
    这样「全部显示」与「返回概览」永远落在视口内，不会被推到屏幕外；
@@ -2258,8 +2292,8 @@
   #aus-panel #aus-chat-manage-search { flex: 1 1 120px; width: auto; }
   #aus-panel .aus-chat-manage-row { padding: 8px 10px; gap: 8px; }
   #aus-panel .aus-chat-manage-state { padding: 1px 6px; }
-  #aus-panel #aus-chat-manage-modes { gap: 6px; margin-bottom: 10px; }
-  #aus-panel .aus-chat-manage-mode { padding: 4px 10px; }
+  #aus-panel #aus-chat-manage-modes { padding: 2px; margin-bottom: 10px; }
+  #aus-panel .aus-chat-manage-mode { min-width: 74px; padding: 4px 10px; }
 }
 @container ausbody (max-width: 760px) {
   #aus-panel #aus-chat-manage-head { flex-direction: column; align-items: stretch; gap: 10px; }
@@ -2268,8 +2302,8 @@
   #aus-panel #aus-chat-manage-search { flex: 1 1 120px; width: auto; }
   #aus-panel .aus-chat-manage-row { padding: 8px 10px; gap: 8px; }
   #aus-panel .aus-chat-manage-state { padding: 1px 6px; }
-  #aus-panel #aus-chat-manage-modes { gap: 6px; margin-bottom: 10px; }
-  #aus-panel .aus-chat-manage-mode { padding: 4px 10px; }
+  #aus-panel #aus-chat-manage-modes { padding: 2px; margin-bottom: 10px; }
+  #aus-panel .aus-chat-manage-mode { min-width: 74px; padding: 4px 10px; }
 }
 /* 行内所有子项都允许收缩到 0：宿主主题给 div 加 min-width 也撑不宽这一行 */
 #aus-panel .aus-chat-manage-row > * { min-width: 0; }

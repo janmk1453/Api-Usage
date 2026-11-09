@@ -83,8 +83,9 @@ function shellHTML(): string {
     '<button id="aus-chat-manage-back" type="button" class="aus-chat-manage-btn" title="回到进入本页之前的页面">' + icon('chevron-left', 14) + '返回</button>',
     '</div>',
     '</div>',
-    '<div id="aus-chat-manage-modes">',
-    MODES.map((m) => '<button type="button" class="aus-chat-manage-mode" data-manage-mode="' + m.key + '" data-active="' + (m.key === mode ? '1' : '0') + '" title="' + esc(m.title) + '">' + esc(m.label) + '</button>').join(''),
+    '<div id="aus-chat-manage-modes" data-mode="' + mode + '" role="tablist" aria-label="管理模式">',
+    '<span class="aus-chat-manage-mode-thumb" aria-hidden="true"></span>',
+    MODES.map((m) => '<button type="button" class="aus-chat-manage-mode" role="tab" data-manage-mode="' + m.key + '" data-active="' + (m.key === mode ? '1' : '0') + '" aria-selected="' + (m.key === mode ? 'true' : 'false') + '" title="' + esc(m.title) + '">' + esc(m.label) + '</button>').join(''),
     '</div>',
     '<div class="ds-card aus-chat-manage-card">',
     '<div id="aus-chat-manage-list"></div>',
@@ -148,13 +149,61 @@ function paintList(doc: Document): void {
   try { paintChatManageBadge(doc); } catch {}
 }
 
-/** 切换管理模式：重画描述、按钮选中态与整张列表 */
+/**
+ * 滑块定位：按当前选中按钮的实测几何写入 position/size（与底栏指示胶囊同一套思路）。
+ * 不假设两项等宽、也不写死 50%，改文案、换字号、改内距都不会错位；首次定位关过渡，避免从左侧飞过来。
+ */
+function paintModeThumb(doc: Document): void {
+  const wrap = doc.getElementById('aus-chat-manage-modes') as HTMLElement | null;
+  if (!wrap) return;
+  const btn = wrap.querySelector('[data-manage-mode="' + mode + '"]') as HTMLElement | null;
+  const thumb = wrap.querySelector('.aus-chat-manage-mode-thumb') as HTMLElement | null;
+  if (!btn || !thumb) return;
+  const wr = wrap.getBoundingClientRect();
+  const br = btn.getBoundingClientRect();
+  // 页面还没显示（display:none）时量不到尺寸，等下次渲染再定位
+  if (!wr.width || !br.width) { thumb.style.opacity = '0'; return; }
+  thumb.style.opacity = '1';
+  thumb.style.width = Math.round(br.width) + 'px';
+  thumb.style.height = Math.round(br.height) + 'px';
+  const next = 'translate3d(' + Math.round(br.left - wr.left) + 'px,' + Math.round(br.top - wr.top) + 'px,0)';
+  const first = wrap.getAttribute('data-ready') !== '1';
+  if (first) {
+    const prev = thumb.style.transition;
+    thumb.style.transition = 'none';
+    thumb.style.transform = next;
+    void thumb.offsetWidth;
+    thumb.style.transition = prev;
+    wrap.setAttribute('data-ready', '1');
+  } else {
+    thumb.style.transform = next;
+  }
+}
+
+/** 窗口尺寸变化（含窄屏断点切换内距）后重新贴合；同一容器只绑一次 */
+function bindModeThumbResize(doc: Document): void {
+  const wrap = doc.getElementById('aus-chat-manage-modes') as HTMLElement | null;
+  if (!wrap || wrap.getAttribute('data-thumb-resize') === '1') return;
+  wrap.setAttribute('data-thumb-resize', '1');
+  try {
+    (doc.defaultView as any)?.addEventListener('resize', () => {
+      try { paintModeThumb(doc); } catch {}
+    });
+  } catch {}
+}
+
+/** 切换管理模式：重画描述、滑块与其选中态，再重画整张列表 */
 function paintMode(doc: Document): void {
   const desc = doc.getElementById('aus-chat-manage-desc');
   if (desc) desc.textContent = modeInfo().desc;
+  const wrap = doc.getElementById('aus-chat-manage-modes');
+  if (wrap) wrap.setAttribute('data-mode', mode);
   doc.querySelectorAll('[data-manage-mode]').forEach((el: any) => {
-    el.setAttribute('data-active', el.getAttribute('data-manage-mode') === mode ? '1' : '0');
+    const on = el.getAttribute('data-manage-mode') === mode;
+    el.setAttribute('data-active', on ? '1' : '0');
+    el.setAttribute('aria-selected', on ? 'true' : 'false');
   });
+  try { paintModeThumb(doc); } catch {}
   paintList(doc);
 }
 
@@ -225,6 +274,8 @@ export async function renderChatManageView(): Promise<void> {
   if (!host.firstChild) {
     host.innerHTML = shellHTML();
     try { bindShell(doc); } catch {}
+    try { bindModeThumbResize(doc); } catch {}
+    try { paintModeThumb(doc); } catch {}
   } else {
     paintMode(doc);
   }

@@ -148,14 +148,17 @@ export type TabTapAction = 'switch' | 'pop-root' | 'scroll-top';
  * 底栏 tab 点击语义。
  * @param target 用户点到的 tab（根视图）
  * @param current 当前视图（可能是二级页）
- * @param currentIsChildView 当前视图是否为「设置」下的二级页
+ * @param currentIsChildView 当前视图是否为二级页
+ * @param currentTab 当前视图实际归属的 tab；默认按 `parentTabOf(current)`。
+ *   对话展示管理这类「没有固定 tab」的页面必须传进入前的来源 tab（从趋势页进入就得传 forecast），
+ *   否则它会被恒定算成概览 tab —— 用户点底栏「概览」会被误判成重复点当前 tab，只回上一页而不切页。
  */
 export function resolveTabTap(
   target: AppView,
   current: AppView,
   currentIsChildView: boolean,
+  currentTab: AppView = parentTabOf(current),
 ): TabTapAction {
-  const currentTab = parentTabOf(current);
   if (target !== currentTab) return 'switch';
   if (currentIsChildView) return 'pop-root';
   return 'scroll-top';

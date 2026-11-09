@@ -1175,7 +1175,10 @@ function handleBottomTabTap(target: AppView): void {
   const doc = getDoc();
   // 底栏不显示（桌面 / 移动端兼容 UI 关闭）时它就是普通切页
   if (!bottomNavActive(doc)) { switchView(target); return; }
-  const action = resolveTabTap(target, currentView, isChildView(currentView));
+  // 「对话展示管理」没有自己的 tab：归属要按进入前的来源页算（从趋势进 → 趋势、从设置进 → 设置），
+  // 与 paintNavState 的底栏高亮保持同一口径；否则点「概览」会被误判成重复点当前 tab，只回上一页。
+  const currentTab = currentView === 'chat-manage' ? parentTabOf(chatManageOrigin) : parentTabOf(currentView);
+  const action = resolveTabTap(target, currentView, isChildView(currentView), currentTab);
   if (action === 'switch') {
     const to = target === 'settings' && settingsChildView ? settingsChildView : target;
     switchView(to);

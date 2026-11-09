@@ -109,6 +109,16 @@ describe('nav-model', () => {
     expect(resolveTabTap('overview', 'chat-manage', true)).toBe('pop-root');
   });
 
+  it('resolveTabTap：对话展示管理按来源 tab 归属——从趋势或设置进入时点别的 tab 要真的切页', () => {
+    // 回归：底栏高亮早已按进入前的来源页算，点击判定也必须同口径；
+    // 否则从趋势页进入后点「概览」会被当成重复点当前 tab，只回上一页。
+    expect(resolveTabTap('overview', 'chat-manage', true, 'forecast')).toBe('switch');
+    expect(resolveTabTap('stats', 'chat-manage', true, 'forecast')).toBe('switch');
+    expect(resolveTabTap('overview', 'chat-manage', true, 'settings')).toBe('switch');
+    expect(resolveTabTap('forecast', 'chat-manage', true, 'forecast')).toBe('pop-root');
+    expect(resolveTabTap('settings', 'chat-manage', true, 'settings')).toBe('pop-root');
+  });
+
   it('resolveTabTap：已在根页重复点则回到顶部', () => {
     expect(resolveTabTap('settings', 'settings', false)).toBe('scroll-top');
     expect(resolveTabTap('overview', 'overview', false)).toBe('scroll-top');
