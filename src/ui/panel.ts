@@ -460,10 +460,14 @@ function openHistoryDetail(doc: Document, panel: HTMLElement, btn: HTMLElement) 
   panel.style.borderTop = 'none';
   panel.style.paddingTop = '0';
   try { body.appendChild(panel); } catch {}
-  if (title) {
-    const model = btn.getAttribute('data-model') || '记录详情';
-    const time = btn.getAttribute('data-time') || '';
-    title.textContent = time ? `${model} · ${time}` : model;
+  // 标题两行：第一行模型名（过长省略），第二行记录时间，省掉「模型 · 时间」挤成一行后互相抢宽度
+  const sub = doc.getElementById('aus-history-detail-sub') as HTMLElement | null;
+  const modelName = btn.getAttribute('data-model') || '记录详情';
+  const recordTime = btn.getAttribute('data-time') || '';
+  if (title) title.textContent = modelName;
+  if (sub) {
+    sub.textContent = recordTime;
+    sub.style.display = recordTime ? '' : 'none';
   }
   btn.textContent = '收起';
   btn.style.background = 'var(--ds-card-inner)';
@@ -580,64 +584,69 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
         </div>
         <span style="color:var(--ds-text-2);">${total.toLocaleString()}t</span>
       </div>
-      <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;margin-top:8px;border-top:1px solid var(--ds-border);padding-top:8px;max-height:min(520px,60vh);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;flex-direction:column;gap:8px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;">
-            <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">基础信息</div>
-            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:6px;font-size:11px;">
-              <div><div style="color:var(--ds-text-2);font-size:10px;">模型</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${esc(h.model||'—')}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">时段</div><div style="font-weight:600;margin-top:2px;color:var(--ds-text);">${h.priceType==='new-peak'||h.priceType==='wallet-peak'?'高峰':h.priceType==='new-offpeak'||h.priceType==='wallet-offpeak'?'非高峰':h.priceType==='unpriced'?'待定价':'旧价格'}</div></div>
-              <div style="min-width:0;"><div style="color:var(--ds-text-2);font-size:10px;">钱包</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${esc(repository.getWallet(String(h.walletId||''))?.name || h.endpointLabel || '未归属钱包')}</div></div>
-              <div style="min-width:0;"><div style="color:var(--ds-text-2);font-size:10px;">计价来源</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${h.pricingSource==='wallet'?'钱包规则':h.pricingSource==='builtin'?'DeepSeek 内置':h.pricingSource==='unpriced'?'待定价':h.pricingSource==='legacy-match'?'旧数据同名价':h.pricingSource==='legacy'?'旧全局规则':'旧记录兜底'}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">日期</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${esc(recordDateText)}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">时间</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${esc(recordTimeText)}</div></div>
-            </div>
-          </div>
-            <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;">
-            <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">性能</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;font-size:11px;">
-              <div><div style="color:var(--ds-text-2);font-size:10px;">耗时</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${((h.duration||0)/1000).toFixed(1)}s</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">首字延迟</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${(h.ttft||0)>0?((h.ttft||0)/1000).toFixed(1)+'s':'—'}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">速率</div><div style="font-weight:600;margin-top:2px;color:${(h.tokenRate||0)>0?'var(--ds-green)':'var(--ds-text-3)'};">${(h.tokenRate||0)>0?h.tokenRate+' t/s':(h.streamed===false?'非流式':'—')}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">思维链耗时</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${(h.thinkTime||0)>0?((h.thinkTime||0)/1000).toFixed(1)+'s':'—'}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">思维链占比</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${(()=>{ const comp=h.completion_tokens||0, th=h.thinkTokens||0; if(!comp||!th) return '—'; return (th/comp*100).toFixed(1)+'%';})()}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">是否截断</div><div style="font-weight:600;margin-top:2px;color:${(isTruncatedFinish(h.finishReason)||h.isTruncated)?'var(--ds-red)':'var(--ds-text)'};">${(isTruncatedFinish(h.finishReason)||h.isTruncated)?'是 ('+(esc(h.finishReason||'length'))+')':'否'}</div></div>
-            </div>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;">
-            <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">Token 消耗</div>
-            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:6px;font-size:11px;">
-              <div><div style="color:var(--ds-text-2);font-size:10px;">缓存命中</div><div style="font-weight:600;color:var(--ds-green);margin-top:2px;">${(h.cache_hit_tokens||0).toLocaleString()}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">缓存未命中</div><div style="font-weight:600;color:var(--ds-red);margin-top:2px;">${(h.cache_miss_tokens||0).toLocaleString()}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">输出 Token</div><div style="font-weight:600;color:var(--ds-purple);margin-top:2px;">${(h.completion_tokens||0).toLocaleString()}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">总 Token</div><div style="font-weight:700;color:var(--ds-text);margin-top:2px;">${(h.total_tokens||0).toLocaleString()}</div></div>
-              <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">思维链 Token</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${h.thinkTokens||0}</div></div>
-            </div>
-          </div>
-          <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;">
-            <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">费用明细</div>
-            <div style="display:grid;gap:6px;margin-top:6px;font-size:11px;">
-              <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输入费用</span><span style="font-weight:600;color:var(--ds-text);">${in6}</span></div>
-              <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输出费用</span><span style="font-weight:600;color:var(--ds-text);">${out6}</span></div>
-              <div style="display:flex;justify-content:space-between;border-top:1px solid var(--ds-card);padding-top:6px;margin-top:2px;"><span style="color:var(--ds-text);font-weight:600;">总费用</span><span style="font-weight:700;color:var(--ds-text);">${c6}</span></div>
-            </div>
-          </div>
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button class="aus-tab-btn" data-tab="req" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:11px;cursor:pointer;">请求参数 (Request Body)</button>
-          <button class="aus-tab-btn" data-tab="res" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">API 完整响应 (Full Response)</button>
-          <button class="aus-tab-btn" data-tab="raw" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">原始 Token 用量 (Raw Usage)</button>
-          <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">消息内容 (Messages)</button>
-        </div>
-        <pre class="aus-tab-content" data-content="req-${h.timestamp}" style="flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : (h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : '（原文已清理，仅保留统计）'))}</pre>
-        <div class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;margin-top:2px;">
-          <pre style="margin:0;min-height:160px;max-height:360px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(prettyFullResponse(h.fullResponse))}</pre>
-          ${h.fullResponse ? `<div style="display:flex;justify-content:flex-end;margin-top:6px;"><button class="aus-res-raw-btn" data-ts="${h.timestamp}" style="padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">查看原始完整数据</button></div><pre class="aus-res-raw" data-ts="${h.timestamp}" style="display:none;margin:6px 0 0;max-height:360px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(typeof h.fullResponse === 'string' ? h.fullResponse : JSON.stringify(h.fullResponse, null, 2))}</pre>` : ''}
-        </div>
-        <pre class="aus-tab-content" data-content="raw-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
-        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.messages && (h as any).messages.length ? JSON.stringify(h.messages, null, 2) : '（原文已清理——仅最近 5 条保留，其余仅统计可用）')}</pre>
+      <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;">
+              <div class="aus-dt-row">
+                <section class="aus-dt-block">
+                  <div class="aus-dt-head">基础信息</div>
+                  <div class="aus-dt-grid">
+                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">模型</span><span class="aus-dt-val">${esc(h.model||'—')}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">时段</span><span class="aus-dt-val">${h.priceType==='new-peak'||h.priceType==='wallet-peak'?'高峰':h.priceType==='new-offpeak'||h.priceType==='wallet-offpeak'?'非高峰':h.priceType==='unpriced'?'待定价':'旧价格'}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">计价来源</span><span class="aus-dt-val">${h.pricingSource==='wallet'?'钱包规则':h.pricingSource==='builtin'?'DeepSeek 内置':h.pricingSource==='unpriced'?'待定价':h.pricingSource==='legacy-match'?'旧数据同名价':h.pricingSource==='legacy'?'旧全局规则':'旧记录兜底'}</span></div>
+                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">钱包</span><span class="aus-dt-val">${esc(repository.getWallet(String(h.walletId||''))?.name || h.endpointLabel || '未归属钱包')}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">日期</span><span class="aus-dt-val">${esc(recordDateText)}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">时间</span><span class="aus-dt-val">${esc(recordTimeText)}</span></div>
+                  </div>
+                </section>
+                <section class="aus-dt-block">
+                  <div class="aus-dt-head">性能</div>
+                  <div class="aus-dt-grid">
+                    <div class="aus-dt-item"><span class="aus-dt-label">耗时</span><span class="aus-dt-val">${((h.duration||0)/1000).toFixed(1)}s</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">首字延迟</span><span class="aus-dt-val">${(h.ttft||0)>0?((h.ttft||0)/1000).toFixed(1)+'s':'—'}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">速率</span><span class="aus-dt-val" style="color:${(h.tokenRate||0)>0?'var(--ds-green)':'var(--ds-text-3)'};">${(h.tokenRate||0)>0?h.tokenRate+' t/s':(h.streamed===false?'非流式':'—')}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">思维链耗时</span><span class="aus-dt-val">${(h.thinkTime||0)>0?((h.thinkTime||0)/1000).toFixed(1)+'s':'—'}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">思维链占比</span><span class="aus-dt-val">${(()=>{ const comp=h.completion_tokens||0, th=h.thinkTokens||0; if(!comp||!th) return '—'; return (th/comp*100).toFixed(1)+'%';})()}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">是否截断</span><span class="aus-dt-val" style="color:${(isTruncatedFinish(h.finishReason)||h.isTruncated)?'var(--ds-red)':'var(--ds-text)'};">${(isTruncatedFinish(h.finishReason)||h.isTruncated)?'是 ('+(esc(h.finishReason||'length'))+')':'否'}</span></div>
+                  </div>
+                </section>
+              </div>
+              <div class="aus-dt-row">
+                <section class="aus-dt-block">
+                  <div class="aus-dt-head">Token 消耗</div>
+                  <div class="aus-dt-bar" title="命中 ${hps}% · 未命中 ${mps}% · 输出 ${ops}%">
+                    <div style="width:${hp}%;background:var(--aus-token-hit);"></div>
+                    <div style="width:${mp}%;background:var(--aus-token-miss);"></div>
+                    <div style="width:${op}%;background:var(--aus-token-output);"></div>
+                  </div>
+                  <div class="aus-dt-grid">
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-hit);"></span>缓存命中</span><span class="aus-dt-val">${(h.cache_hit_tokens||0).toLocaleString()}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-miss);"></span>缓存未命中</span><span class="aus-dt-val">${(h.cache_miss_tokens||0).toLocaleString()}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-output);"></span>输出 Token</span><span class="aus-dt-val">${(h.completion_tokens||0).toLocaleString()}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">总 Token</span><span class="aus-dt-val is-strong">${(h.total_tokens||0).toLocaleString()}</span></div>
+                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">思维链 Token</span><span class="aus-dt-val">${h.thinkTokens||0}</span></div>
+                  </div>
+                </section>
+                <section class="aus-dt-block">
+                  <div class="aus-dt-head">费用明细</div>
+                  <div class="aus-dt-cost">
+                    <div class="aus-dt-cost-row"><span class="aus-dt-label">输入费用</span><span class="aus-dt-cost-val">${in6}</span></div>
+                    <div class="aus-dt-cost-row"><span class="aus-dt-label">输出费用</span><span class="aus-dt-cost-val">${out6}</span></div>
+                    <div class="aus-dt-cost-row is-total"><span>总费用</span><span class="aus-dt-cost-val">${c6}</span></div>
+                  </div>
+                </section>
+              </div>
+              <div class="aus-dt-tabs" role="tablist">
+                <button class="aus-tab-btn" data-tab="req" data-ts="${h.timestamp}" data-active="1" role="tab">请求参数</button>
+                <button class="aus-tab-btn" data-tab="res" data-ts="${h.timestamp}" role="tab">完整响应</button>
+                <button class="aus-tab-btn" data-tab="raw" data-ts="${h.timestamp}" role="tab">Raw 用量</button>
+                <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" role="tab">消息内容</button>
+              </div>
+              <pre class="aus-tab-content aus-dt-pre" data-content="req-${h.timestamp}" style="display:block;">${esc(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : (h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : '（原文已清理，仅保留统计）'))}</pre>
+              <div class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;">
+                <pre class="aus-dt-pre">${esc(prettyFullResponse(h.fullResponse))}</pre>
+                ${h.fullResponse ? `<div class="aus-dt-rawbar"><button class="aus-res-raw-btn" data-ts="${h.timestamp}">查看原始完整数据</button></div><pre class="aus-res-raw aus-dt-pre aus-dt-pre-raw" data-ts="${h.timestamp}" style="display:none;">${esc(typeof h.fullResponse === 'string' ? h.fullResponse : JSON.stringify(h.fullResponse, null, 2))}</pre>` : ''}
+              </div>
+              <pre class="aus-tab-content aus-dt-pre" data-content="raw-${h.timestamp}" style="display:none;">${esc(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
+              <pre class="aus-tab-content aus-dt-pre" data-content="msg-${h.timestamp}" style="display:none;">${esc(h.messages && (h as any).messages.length ? JSON.stringify(h.messages, null, 2) : '（原文已清理——仅最近 5 条保留，其余仅统计可用）')}</pre>
       </div>
     </div>
   `;
@@ -670,8 +679,9 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
       const tab = (btn as HTMLElement).getAttribute('data-tab');
       const root = (btn as HTMLElement).closest('.aus-detail-panel') as HTMLElement | null;
       if (!root) return;
-      root.querySelectorAll('.aus-tab-btn').forEach((b: any) => { b.style.background = 'var(--ds-card-inner)'; b.style.color = 'var(--ds-text)'; b.style.borderColor = 'var(--ds-border)'; });
-      (btn as HTMLElement).style.background = 'var(--ds-black)'; (btn as HTMLElement).style.color = 'var(--ds-black-text)'; (btn as HTMLElement).style.borderColor = 'var(--ds-black)';
+      // 选中态交给 CSS（[data-active="1"]），颜色过渡与内容淡入都由样式表负责
+      root.querySelectorAll('.aus-tab-btn').forEach((b: any) => b.removeAttribute('data-active'));
+      (btn as HTMLElement).setAttribute('data-active', '1');
       root.querySelectorAll('.aus-tab-content').forEach((c: any) => { c.style.display = 'none'; });
       const target = root.querySelector(`[data-content="${tab}-${ts}"]`) as HTMLElement | null;
       if (target) target.style.display = 'block';
@@ -1719,12 +1729,16 @@ export function createPanel() {
           </div>
         </div>
       </div>
-      <aside id="aus-history-detail" style="display:none;flex-direction:column;width:25%;min-width:300px;max-width:480px;flex-shrink:0;border-left:1px solid var(--ds-border);background:var(--ds-card-inner);overflow:hidden;">
-        <div style="flex-shrink:0;height:48px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 12px;border-bottom:1px solid var(--ds-border);">
-          <span id="aus-history-detail-title" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">记录详情</span>
-          <button id="aus-history-detail-close" title="关闭" style="width:28px;height:28px;flex-shrink:0;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card);color:var(--ds-text-2);cursor:pointer;line-height:1;padding:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;">${icon('close', 16)}</button>
+      <aside id="aus-history-detail" style="display:none;">
+        <div id="aus-history-detail-head">
+          <span id="aus-history-detail-grip" aria-hidden="true"></span>
+          <div id="aus-history-detail-heading">
+            <span id="aus-history-detail-title">记录详情</span>
+            <span id="aus-history-detail-sub"></span>
+          </div>
+          <button id="aus-history-detail-close" title="关闭" aria-label="关闭详情">${icon('close', 16)}</button>
         </div>
-        <div id="aus-history-detail-body" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:12px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;"></div>
+        <div id="aus-history-detail-body"></div>
       </aside>
     </div>
     </div>
