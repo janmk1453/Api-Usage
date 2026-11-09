@@ -171,104 +171,80 @@ describe('跨页长距离切换：胶囊先起跑再渲染', () => {
   });
 });
 
-describe('安卓返回键：先关浮层 → 退一级页面 → 根页才关面板', () => {
-  it('不再维护浏览栈，回退目标只按页面层级算', () => {
-    // 浏览历史栈会让「概览→设置→关于」按返回退回概览，用户要的是「关于→设置→关面板」
+describe('安卓返回键：按一次系统返回直接关面板回酒馆页面', () => {
+  const popStart = () => panelCode.indexOf('function onBackGuardPop(ev: any): void {');
+  const popBody = () => {
+    const start = popStart();
+    const end = panelCode.indexOf('function releaseBackGuard(stepBack = true): void {', start);
+    return panelCode.slice(start, end > start ? end : start + 2000);
+  };
+
+  it('系统返回一律直接关面板，不再逐层后退', () => {
+    const body = popBody();
+    expect(popStart()).toBeGreaterThan(-1);
+    expect(body).toContain('if (!panelOpen) { releaseBackGuard(false); return; }');
+    expect(body).toContain('try { closePanel(); } catch {}');
+    // 逐层后退的实现已经全部撤掉：浏览栈、层级回退目标、哨兵回收/补压
     expect(panelCode).not.toContain('viewTrail');
-    expect(panelCode).toContain('const target = backTargetOf(currentView, chatManageOrigin);');
-    expect(panelCode).toContain('if (!target || target === currentView) return false;');
+    expect(panelCode).not.toContain('goBackInPanel');
+    expect(panelCode).not.toContain('backTargetOf');
+    expect(panelCode).not.toContain('startBackGuardCleanup');
+    expect(panelCode).not.toContain('backGuardLive');
+    expect(panelCode).not.toContain('scheduleBackGuardTopUp');
   });
 
-  it('返回键按 浮层 → 上一页 → 关面板 的次序消费，且消费后延时补回缓冲', () => {
-    expect(panelCode).toContain('if (closeTopOverlay() || goBackInPanel()) {');
-    // 补压只能走定时器：在手势触发的 popstate 里同步 pushState 会被浏览器的
-    // 「历史操纵干预」忽略，下一次手势就直接跳过所有哨兵退进旧文档（整页重载）
-    expect(panelCode).toContain('scheduleBackGuardTopUp(700);');
-    const popStart = panelCode.indexOf('function onBackGuardPop(ev: any): void {');
-    // 只取 onBackGuardPop 本体：紧接着的 armBackGuard 里那句 fillBackGuard() 是合法的
-    const popEnd = panelCode.indexOf('function armBackGuard(): void {', popStart);
-    const popBody = panelCode.slice(popStart, popEnd > popStart ? popEnd : popStart + 4000);
-    expect(popBody).not.toContain('fillBackGuard();');
-    expect(popBody).not.toContain('topUpBackGuard();');
-    // 关面板必须是最后一步，不能再像改造前那样「按一次就关」
-    const pop = panelCode.indexOf('if (closeTopOverlay() || goBackInPanel()) {');
-    const close = panelCode.indexOf('try { closePanel(); } catch {}', pop);
-    expect(pop).toBeGreaterThan(-1);
-    expect(close).toBeGreaterThan(pop);
+  it('popstate 处理里绝不碰历史：不 pushState、不 go、不 replaceState', () => {
+    // 安卓侧滑手势触发的后退会被浏览器的「历史操纵干预」处理：事件里插入的记录会被
+    // 忽略，用户下一次手势就跳过哨兵退进旧文档，表现为整页重载（就是「退出酒馆」）
+    const body = popBody();
+    expect(body).not.toContain('history.go');
+    expect(body).not.toContain('pushState');
+    expect(body).not.toContain('replaceState');
   });
 
-  it('浮层优先收掉展开的下拉与历史详情窗口', () => {
-    expect(panelCode).toContain(`[data-aus-drop-open="1"]`);
+  it('展开的下拉与历史详情跟着面板一起收掉，下次打开是干净的', () => {
+    expect(panelCode).toContain('\'[data-aus-drop-open="1"]\'');
     expect(panelCode).toContain('for (const el of open) closeDropdownInstant(el);');
     expect(panelCode).toContain('if (activeHistoryDetailTs !== null) {');
+    const pop = popStart();
+    const overlay = panelCode.indexOf('try { closeTopOverlay(); } catch {}', pop);
+    const close = panelCode.indexOf('try { closePanel(); } catch {}', pop);
+    expect(overlay).toBeGreaterThan(pop);
+    expect(close).toBeGreaterThan(overlay);
   });
 
-  it('回退走 switchView(target, { back: true })', () => {
-    expect(panelCode).toContain('switchView(target, { back: true });');
+  it('打开面板只压一条哨兵，压之前先把当前记录洗成干净基线', () => {
+    expect(panelCode).toContain("from './back-guard';");
+    expect(panelCode).toContain('const base = stripGuardState(w.history.state);');
+    expect(panelCode).toContain('if (base) w.history.replaceState(base, \'\');');
+    expect(panelCode).toContain('w.history.pushState(nextGuardState(base ?? w.history.state, BACK_GUARD_DEPTH), \'\');');
+    // 一次性压满多条、按深度补差、延时补压的老做法全部不许回来
+    expect(panelCode).not.toContain('for (let depth = 1; depth <= BACK_GUARD_DEPTH; depth++) {');
+    expect(panelCode).not.toContain('topUpBackGuard');
+    expect(panelCode).not.toContain('fillBackGuard');
+  });
+
+  it('点关闭按钮关面板时才补退一条哨兵，且延时执行', () => {
+    const rel = panelCode.indexOf('function releaseBackGuard(stepBack = true): void {');
+    const body = panelCode.slice(rel, rel + 1400);
+    expect(rel).toBeGreaterThan(-1);
+    expect(body).toContain('if (!stepBack || !pushed) return;');
+    expect(body).toContain('depth = readGuardDepth(w.history?.state);');
+    // 延时执行，且执行前再读一次深度（为 0 就跳过，防止用户此刻已自己按过返回）
+    expect(body).toContain('setTimeout(() => {');
+    expect(body).toContain('if (left <= 0) return;');
+    expect(body).toContain('w.history.go(-left);');
+    expect(body).toContain('}, 250);');
+    // 串行回收那套（一次一条、由账面条数封顶）已经撤掉
+    expect(panelCode).not.toContain('runBackGuardCleanStep');
+    expect(panelCode).not.toContain('w.history.go(-1);');
   });
 
   it('平板横屏等宽度超过 760 的移动设备同样接管返回键', () => {
     expect(panelCode).toContain('return mobileDeviceHint();');
   });
 
-  it('预先压满多条哨兵，连按返回才不会一步越过酒馆页面', () => {
-    // 缓冲深度与纯逻辑都集中在 back-guard 模块，面板只管读写宿主历史
-    expect(panelCode).toContain("from './back-guard';");
-    // 打开面板时无条件压满整层缓冲：不按当前 state 的深度补差，因为刷新后历史里
-    // 残留的旧哨兵属于旧文档，照深度补差会少压，用户连按几次就退进旧文档区域
-    expect(panelCode).toContain('for (let depth = 1; depth <= BACK_GUARD_DEPTH; depth++) {');
-    // 账面还要算上打开面板前残留在历史里的旧哨兵，回收阶段才会一起清掉
-    expect(panelCode).toContain('backGuardLive = pushed + wasDepth;');
-    expect(panelCode).not.toContain('guardFillPlan(readGuardDepth(w.history.state), BACK_GUARD_DEPTH)');
-    expect(panelCode).toContain('nextGuardState(w.history.state, depth)');
-    // 落在自己压的哨兵条目上也要照常消费一层（老实现直接 return，表现为「按了没反应」）
-    expect(panelCode).not.toContain('if (ev?.state && ev.state[AUS_BACK_FLAG]) return;');
-    expect(panelCode).toContain('if (closeTopOverlay() || goBackInPanel()) {');
-  });
-
-  it('关面板时串行回收哨兵，一次只退一条且由账面条数封顶', () => {
-    // 一次性 go(-N) 依赖「历史里只多出 N 条」的假设：宿主自己也 pushState 过、
-    // 或某条 state 被 replaceState 洗掉标记时就会退过酒馆记录（表现为顺手退出了酒馆）。
-    const rel = panelCode.indexOf('function releaseBackGuard(stepBack = true): void {');
-    const body = panelCode.slice(rel, rel + 1800);
-    expect(rel).toBeGreaterThan(-1);
-    expect(body).toContain('startBackGuardCleanup(w)');
-    expect(panelCode).not.toContain('w.history.go(-depth);');
-    expect(panelCode).not.toContain('backGuardCleanLeft');
-    expect(panelCode).toContain('function runBackGuardCleanStep(): void {');
-    expect(panelCode).toContain('if (backGuardLive <= 0) { stopBackGuardCleanup(); return; }');
-    expect(panelCode).toContain('try { w.history.go(-1); } catch { stopBackGuardCleanup(); return; }');
-    expect(panelCode).toContain('backGuardLive--;');
-  });
-
-  it('回收动作靠 setTimeout 串行，先等浏览器把用户自己的后退处理完', () => {
-    // 在 popstate 里同步 go(-1) 会跟浏览器排队中的后退叠加，一次退多步越过酒馆记录
-    expect(panelCode).toContain('scheduleBackGuardCleanStep(140);');
-    expect(panelCode).toContain('scheduleBackGuardCleanStep(400);');
-    expect(panelCode).toContain('backGuardCleanTimer = setTimeout(');
-    expect(panelCode).not.toContain('stepBackGuardCleanup');
-  });
-
-  it('缓冲被打掉大半时靠延时定时器补回满层', () => {
-    expect(panelCode).toContain('function scheduleBackGuardTopUp(delay: number): void {');
-    expect(panelCode).toContain('backGuardTopUpTimer = setTimeout(');
-    expect(panelCode).toContain('let missing = BACK_GUARD_DEPTH - backGuardLive;');
-    // 脱管、关闭、重新接管时都要撤掉待执行的补压
-    expect(panelCode).toContain('clearBackGuardTopUpTimer();');
-  });
-
-  it('回收阶段的 popstate 只重排下一步，不在事件里同步 go', () => {
-    const pop = panelCode.indexOf('function onBackGuardPop(ev: any): void {');
-    const body = panelCode.slice(pop, pop + 3000);
-    expect(body).toContain('if (backGuardCleaning) {');
-    expect(body).toContain('if (backGuardCleanPending) backGuardCleanPending = false;');
-    expect(body).toContain('else backGuardLive = Math.max(0, backGuardLive - 1);');
-    expect(body).toContain('scheduleBackGuardCleanStep(140);');
-    // 回收分支里不能再出现 go(-1)（那是旧的同步调用）
-    expect(body.slice(0, body.indexOf('if (!panelOpen)'))).not.toContain('history.go');
-  });
-
-  it('面板内不再有跨次打开残留的浏览路径，关面板只负责弹掉哨兵', () => {
+  it('面板内不再有跨次打开残留的浏览路径，关面板只负责还掉那条哨兵', () => {
     const close = panelCode.indexOf('export function closePanel() {');
     const next = panelCode.indexOf('export function togglePanel()');
     const body = panelCode.slice(close, next);

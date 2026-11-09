@@ -116,23 +116,6 @@ export function viewTitle(view: AppView): string {
   return VIEW_TITLES[view] || VIEW_TITLES.overview;
 }
 
-/* ── 安卓返回键：按页面层级回退（纯逻辑） ────────────────────────────── */
-
-/**
- * 返回键要退到的页面：只按**页面层级**算，不按浏览历史算。
- * - 二级页（钱包 / 使用说明 / 关于）→ 回到「设置」
- * - 对话展示管理 → 回到进入前的来源页（概览 / 趋势预测 / 设置）
- * - 根页（概览 / 统计 / 历史 / 趋势预测 / 设置）→ null，表示已经没有上一级，该关面板了
- *
- * 刻意不用「浏览过的页面栈」：用户在概览→设置→关于之后按返回，应当「关于→设置→关面板」，
- * 而不是顺着浏览路径退回概览（那样每按一次就多退一个不相干的页面，最后还会退出酒馆）。
- */
-export function backTargetOf(view: AppView, chatManageOrigin: AppView = 'overview'): AppView | null {
-  if (!isChildView(view)) return null;
-  if (view === 'chat-manage') return chatManageOrigin === view ? null : chatManageOrigin;
-  return childParentOf(view);
-}
-
 export type TabTapAction = 'switch' | 'pop-root' | 'scroll-top';
 
 /**

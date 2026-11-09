@@ -6,7 +6,6 @@ import {
   MOBILE_TABS,
   SETTINGS_CHILD_VIEWS,
   SETTINGS_ENTRIES,
-  backTargetOf,
   childParentOf,
   isAppView,
   isChildView,
@@ -121,42 +120,5 @@ describe('nav-model', () => {
   it('resolveTabTap：已在根页重复点则回到顶部', () => {
     expect(resolveTabTap('settings', 'settings', false)).toBe('scroll-top');
     expect(resolveTabTap('overview', 'overview', false)).toBe('scroll-top');
-  });
-});
-
-describe('安卓返回键：按页面层级回退', () => {
-  it('二级页退到自己的上级根页', () => {
-    expect(backTargetOf('wallet')).toBe('settings');
-    expect(backTargetOf('help')).toBe('settings');
-    expect(backTargetOf('about')).toBe('settings');
-  });
-
-  it('对话展示管理回到进入前的来源页，不是固定回概览', () => {
-    expect(backTargetOf('chat-manage', 'overview')).toBe('overview');
-    expect(backTargetOf('chat-manage', 'forecast')).toBe('forecast');
-    expect(backTargetOf('chat-manage', 'settings')).toBe('settings');
-    // 来源页被写坏成自己时不允许原地打转
-    expect(backTargetOf('chat-manage', 'chat-manage')).toBeNull();
-  });
-
-  it('根页没有上一级，交给上层关面板（不按浏览历史退回别的页）', () => {
-    expect(backTargetOf('overview')).toBeNull();
-    expect(backTargetOf('stats')).toBeNull();
-    expect(backTargetOf('history')).toBeNull();
-    expect(backTargetOf('forecast')).toBeNull();
-    expect(backTargetOf('settings')).toBeNull();
-  });
-
-  it('概览→设置→关于之后按返回只退一层：关于→设置→关面板', () => {
-    let view: any = 'about';
-    const trail: any[] = [];
-    let target = backTargetOf(view, 'overview');
-    while (target) {
-      trail.push(target);
-      view = target;
-      target = backTargetOf(view, 'overview');
-    }
-    expect(trail).toEqual(['settings']);
-    expect(view).toBe('settings');
   });
 });
