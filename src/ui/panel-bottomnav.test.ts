@@ -213,14 +213,22 @@ describe('安卓返回键：先关浮层 → 退一级页面 → 根页才关面
     expect(panelCode).toContain('if (closeTopOverlay() || goBackInPanel()) {');
   });
 
-  it('关面板时按已知深度一次退干净，不留下一按没反应的哨兵', () => {
+  it('关面板时逐条回收哨兵，不按深度一次退干净', () => {
+    // 一次性 go(-N) 依赖「历史里只多出 N 条」的假设：宿主自己也 pushState 过、
+    // 或某条 state 被 replaceState 洗掉标记时就会退过酒馆记录（表现为顺手退出了酒馆）。
     const rel = panelCode.indexOf('function releaseBackGuard(stepBack = true): void {');
     const body = panelCode.slice(rel, rel + 1200);
     expect(rel).toBeGreaterThan(-1);
-    expect(body).toContain('w.history.go(-depth);');
-    expect(body).toContain('stripGuardState(w.history?.state)');
-    // 清理性后退回来的那次 popstate 必须放行
-    expect(body).toContain('backGuardSkipUntil = nowTs() + 400;');
+    expect(body).toContain('startBackGuardCleanup(w)');
+    expect(panelCode).not.toContain('w.history.go(-depth);');
+    expect(panelCode).toContain('try { w.history.go(-1); return; } catch {}');
+    expect(panelCode).toContain('if (cur > 0 && backGuardCleanLeft > 0) {');
+  });
+
+  it('回收阶段回来的 popstate 继续回收，不当成用户又按了一次返回', () => {
+    const pop = panelCode.indexOf('function onBackGuardPop(ev: any): void {');
+    const body = panelCode.slice(pop, pop + 900);
+    expect(body).toContain('if (backGuardCleaning) { stepBackGuardCleanup(); return; }');
   });
 
   it('面板内不再有跨次打开残留的浏览路径，关面板只负责弹掉哨兵', () => {

@@ -10109,15 +10109,6 @@ function guardFillPlan(current, buffer = 3) {
 	for (let depth = from + 1; depth <= to; depth++) plan.push(depth);
 	return plan;
 }
-/** 摘掉哨兵标记（退出接管时用）；本来就没有标记返回 null，且不修改传入对象 */
-function stripGuardState(state) {
-	if (!state || typeof state !== "object") return null;
-	const prev = state;
-	if (!("__ausBackGuard" in prev)) return null;
-	const next = { ...prev };
-	delete next[AUS_BACK_FLAG];
-	return next;
-}
 /** 更新日志（最新在前） */
 var CHANGELOG = [
 	{
@@ -12589,14 +12580,6 @@ function goBackInPanel() {
 		return false;
 	}
 }
-/** 当前这条历史记录距酒馆条目的步数（0 = 已经站在酒馆自己那条记录上） */
-function backGuardDepthNow() {
-	try {
-		return readGuardDepth(backGuardWin?.history?.state);
-	} catch {
-		return 0;
-	}
-}
 /**
 * 把哨兵缓冲补满：无论用户点得多快，垫在酒馆页面之上的记录都不少于 BACK_GUARD_DEPTH 条，
 * 连按返回时才有可能被一条条消费，而不是一步跨出去。
@@ -12609,7 +12592,59 @@ function fillBackGuard() {
 		for (const depth of guardFillPlan(readGuardDepth(w.history.state), 3)) w.history.pushState(nextGuardState(w.history.state, depth), "");
 	} catch {}
 }
+/** 回收阶段：面板已经关掉，正在把压上去的哨兵一条条弹回酒馆自己那条记录 */
+var backGuardCleaning = false;
+var backGuardCleanWin = null;
+var backGuardCleanLeft = 0;
+/** 回收收尾：彻底脱管 */
+function stopBackGuardCleanup() {
+	const w = backGuardCleanWin;
+	backGuardCleaning = false;
+	backGuardCleanWin = null;
+	backGuardCleanLeft = 0;
+	backGuardSkipUntil = nowTs() + 400;
+	if (w) try {
+		w.removeEventListener("popstate", onBackGuardPop);
+	} catch {}
+}
+/**
+* 回收阶段一次只退一条，落点不再是我们的哨兵就停手。
+* 刻意不推算「该退几条」：真实历史里可能夹着别的记录（宿主自己也 pushState 过、
+* 或某条 state 被 replaceState 洗掉了标记），一次性 go(-N) 就会退过酒馆自己那条记录，
+* 表现为「关面板顺手把酒馆也退出去了」。逐条退最坏只是少退（多留几条空记录），绝不会多退。
+*/
+function stepBackGuardCleanup() {
+	const w = backGuardCleanWin;
+	if (!w || !backGuardCleaning) {
+		stopBackGuardCleanup();
+		return;
+	}
+	let cur = 0;
+	try {
+		cur = readGuardDepth(w.history?.state);
+	} catch {}
+	if (cur > 0 && backGuardCleanLeft > 0) {
+		backGuardCleanLeft--;
+		try {
+			w.history.go(-1);
+			return;
+		} catch {}
+	}
+	stopBackGuardCleanup();
+}
+function startBackGuardCleanup(w) {
+	if (!w) return;
+	backGuardCleaning = true;
+	backGuardCleanWin = w;
+	backGuardCleanLeft = 9;
+	backGuardSkipUntil = nowTs() + 400;
+	stepBackGuardCleanup();
+}
 function onBackGuardPop(ev) {
+	if (backGuardCleaning) {
+		stepBackGuardCleanup();
+		return;
+	}
 	if (!panelOpen) {
 		releaseBackGuard(false);
 		return;
@@ -12624,13 +12659,19 @@ function onBackGuardPop(ev) {
 		return;
 	}
 	const w = backGuardWin;
-	releaseBackGuard(false);
-	try {
-		if (depth > 0 && w?.history?.go) w.history.go(-depth);
-	} catch {}
+	backGuardWin = null;
+	backGuardPushed = false;
 	try {
 		closePanel();
 	} catch {}
+	if (!w) return;
+	if (depth > 0) startBackGuardCleanup(w);
+	else {
+		backGuardSkipUntil = nowTs() + 400;
+		try {
+			w.removeEventListener("popstate", onBackGuardPop);
+		} catch {}
+	}
 }
 /**
 * 打开面板时压入一组哨兵历史记录，把返回键改成「先退面板内的页面层级」，退无可退才关面板。
@@ -12638,6 +12679,7 @@ function onBackGuardPop(ev) {
 */
 function armBackGuard() {
 	if (backGuardPushed) return;
+	if (backGuardCleaning) stopBackGuardCleanup();
 	if (!isNarrowViewport()) return;
 	const w = backGuardHost();
 	try {
@@ -12660,19 +12702,16 @@ function armBackGuard() {
 function releaseBackGuard(stepBack = true) {
 	const w = backGuardWin;
 	const pushed = backGuardPushed;
-	const depth = pushed ? backGuardDepthNow() : 0;
 	backGuardWin = null;
 	backGuardPushed = false;
+	if (backGuardCleaning) return;
 	if (!w) return;
+	if (stepBack && pushed) {
+		startBackGuardCleanup(w);
+		return;
+	}
 	try {
 		w.removeEventListener("popstate", onBackGuardPop);
-	} catch {}
-	if (!stepBack || !pushed || depth <= 0) return;
-	try {
-		const stripped = stripGuardState(w.history?.state);
-		if (stripped) w.history.replaceState(stripped, "");
-		backGuardSkipUntil = nowTs() + 400;
-		w.history.go(-depth);
 	} catch {}
 }
 function resetPanelState() {
