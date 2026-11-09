@@ -44,7 +44,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         kind: 'feature',
         items: [
           '新增「管理对话」，管理首页表格和下拉胶囊中的对话是否显示',
-          '安卓设备现在使用系统返回操作时会返回上一页',
+          '安卓设备现在使用系统返回手势时会返回酒馆',
         ],
       },
       {
