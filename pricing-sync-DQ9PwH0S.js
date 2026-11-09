@@ -3,7 +3,7 @@ import { r as state } from "./store-TDK3YzRZ.js";
 import { a as HIDDEN_PRICING_MODELS, d as PRICING_SYNC_SOURCE, l as PRICING, u as PRICING_SYNC_FALLBACK } from "./pricing-Bc-qEvy8.js";
 import { f as saveHot } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { _ as normalizeModel, m as isDeepSeekOfficialModel, t as repository, v as cloneWallet } from "./repository-Cf26MO-h.js";
+import { _ as normalizeModel, m as isDeepSeekOfficialModel, t as repository, v as cloneWallet } from "./repository-PAlDSghV.js";
 import { a as getWalletExchangeRate } from "./currency-Dsn2T9-Q.js";
 /** 已知同义模型名（仅做等价加分，不强绑）：归一化后仍不同但确为同一模型的写法 */
 var MODEL_ALIAS_HINTS = {
@@ -32,22 +32,26 @@ var DATE_SUFFIX_8 = /-\d{8}$/;
 var DATE_SUFFIX_DASHED = /-\d{4}-\d{2}-\d{2}$/;
 var DATE_SUFFIX_4 = /-\d{4}$/;
 var VERSION_SUFFIX = /-v\d+:\d+$/;
-/** 归一化模型名：去前缀/供应商路径/日期与版本后缀，统一分隔符与小数点 */
+/**
+* 归一化模型名：只保留字母数字与连字符。
+* 依次做：全角转半角 → 去方括号前缀 → 取供应商路径末段 → 去 :free 之类后缀 →
+* 去版本后缀 → **把中文等非 ASCII 段与一切分隔符（. _ 空格 , : – — 等）统一成 "-"**
+* → 去日期后缀 → 去 deepseek-ai- 前缀与 -latest 后缀 → 压平多余连字符。
+* 中文修饰段剥掉后若什么都不剩（如纯中文名）则返回空字符串，由调用方判为不可匹配。
+*/
 function normalizeModelName(raw) {
-	let key = String(raw ?? "").trim().toLowerCase();
+	let key = String(raw ?? "").trim().normalize("NFKC").toLowerCase();
 	if (!key) return "";
 	key = key.replace(/^\[[^\]]*\]\s*/, "");
 	key = key.split("/").pop() || key;
 	key = key.replace(/:(?:free|nitro|beta|extended|online)$/, "");
-	key = key.replace(/_/g, "-");
-	key = key.replace(/\s+/g, "-");
+	key = key.replace(VERSION_SUFFIX, "");
+	key = key.replace(/[^a-z0-9]+/g, "-");
 	key = key.replace(DATE_SUFFIX_8, "");
 	key = key.replace(DATE_SUFFIX_DASHED, "");
 	key = key.replace(DATE_SUFFIX_4, "");
-	key = key.replace(VERSION_SUFFIX, "");
 	key = key.replace(/^deepseek-ai-/, "");
 	key = key.replace(/-latest$/, "");
-	key = key.replace(/(\d)\.(\d)/g, "$1-$2");
 	key = key.replace(/-+/g, "-").replace(/^-|-$/g, "");
 	return key;
 }
@@ -114,6 +118,12 @@ function scoreModelName(local, catalog) {
 		reason: "exact"
 	};
 	if (a === b) return {
+		score: 1,
+		reason: "normalized"
+	};
+	const compactA = a.replace(/-/g, "");
+	const compactB = b.replace(/-/g, "");
+	if (compactA.length >= 6 && compactA === compactB) return {
 		score: 1,
 		reason: "normalized"
 	};
@@ -662,7 +672,7 @@ async function markLegacySyncedModels(opts) {
 			globalThis.ApiUsageStat?.refreshUI?.();
 		} catch {}
 		if (!opts?.skipRerender) try {
-			const { renderSettings } = await import("./settings-BBoJGXG-.js").then((n) => n.n);
+			const { renderSettings } = await import("./settings-6xoYjx6K.js").then((n) => n.n);
 			const doc = window.parent?.document ?? document;
 			if (doc?.getElementById("aus-settings")) renderSettings(doc);
 		} catch {}

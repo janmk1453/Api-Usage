@@ -18,6 +18,44 @@ describe('normalizeModelName', () => {
   });
 });
 
+describe('写法差异：中文修饰段、小数点与分隔符', () => {
+  it('剥掉中文等非 ASCII 修饰段后按本体识别', () => {
+    expect(normalizeModelName('抗截断-gemini-3.8-flash')).toBe('gemini-3-8-flash');
+    expect(normalizeModelName('gemini-3.8-flash-抗截断')).toBe('gemini-3-8-flash');
+    expect(normalizeModelName('[抗截断]gemini-3.8-flash')).toBe('gemini-3-8-flash');
+    expect(normalizeModelName('（抗截断）gemini-3.8-flash')).toBe('gemini-3-8-flash');
+  });
+
+  it('小数点 / 下划线 / 空格 / 全角写法都归一成同一串', () => {
+    for (const name of ['gemini-3.8-flash', 'gemini_3.8_flash', 'gemini 3.8 flash', 'gemini.3.8.flash', 'Gemini－３．８－Flash']) {
+      expect(normalizeModelName(name)).toBe('gemini-3-8-flash');
+    }
+  });
+
+  it('纯中文名剥完为空，不参与匹配', () => {
+    expect(normalizeModelName('抗截断')).toBe('');
+    expect(scoreModelName('抗截断', 'gemini-3.8-flash').score).toBe(0);
+    expect(matchModelName('抗截断', ['gemini-3.8-flash']).best).toBeNull();
+  });
+
+  it('带中文前缀、无连字符的写法也能认出目录模型', () => {
+    const catalog = ['gemini-3.8-flash', 'gemini-3.8-flash-lite', 'gemini-3.8-pro', 'gemini-3-flash'];
+    for (const local of ['抗截断-gemini-3.8-flash', '抗截断gemini-3.8-flash', '抗截断gemini3.8flash', 'gemini3.8flash']) {
+      const result = matchModelName(local, catalog);
+      expect(result.best?.model).toBe('gemini-3.8-flash');
+      expect(result.best?.score).toBe(1);
+      expect(result.ambiguous).toBe(false);
+    }
+  });
+
+  it('放宽写法差异不能顺带放宽变体与版本差异', () => {
+    expect(scoreModelName('抗截断-gemini-3.8-flash-lite', 'gemini-3.8-flash').score).toBeLessThan(MODEL_MATCH_ACCEPT);
+    expect(scoreModelName('抗截断-gemini-3.8-pro', 'gemini-3.8-flash').score).toBeLessThan(MODEL_MATCH_ACCEPT);
+    expect(scoreModelName('抗截断-gemini-3.8', 'gemini-3.8-flash').score).toBeLessThan(MODEL_MATCH_ACCEPT);
+    expect(scoreModelName('抗截断-gpt-4o-mini', 'gpt-4o').score).toBeLessThan(MODEL_MATCH_ACCEPT);
+  });
+});
+
 describe('scoreModelName', () => {
   it('归一化后完全相同视为 1.0', () => {
     expect(scoreModelName('claude-sonnet-4-5', 'claude-sonnet-4-5-20250929').score).toBe(1);

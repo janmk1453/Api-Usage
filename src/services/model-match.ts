@@ -4,6 +4,12 @@
  * 设计原则：**宁可漏配，不可错配**。价格错配会直接污染历史费用且难以察觉，
  * 因此对「版本号不同」「变体后缀不同（mini/lite/pro/flash）」一律重罚，
  * 低于 MODEL_MATCH_ACCEPT 的候选不会写入任何钱包。
+ *
+ * 归一化只抹掉「写法差异」，不抹「型号差异」：全角转半角、大小写、小数点/连字符/
+ * 下划线/空格等一切分隔符写法、供应商路径、方括号前缀、日期与版本后缀，以及**中文
+ * 等非 ASCII 修饰段**（如「抗截断-gemini-3.8-flash」里的中文前缀）都会被剥掉，
+ * 因此「抗截断-gemini-3.8-flash」「gemini_3.8_flash」「gemini3.8flash」都能认出是
+ * 目录里的 gemini-3.8-flash；但 mini/lite/pro 这类变体词与数字版本一律保留并加重罚。
  */
 
 export type ModelMatchReason = 'exact' | 'normalized' | 'alias' | 'prefix' | 'tokens' | 'fuzzy';
@@ -45,22 +51,26 @@ const DATE_SUFFIX_DASHED = /-\d{4}-\d{2}-\d{2}$/;
 const DATE_SUFFIX_4 = /-\d{4}$/;
 const VERSION_SUFFIX = /-v\d+:\d+$/;
 
-/** 归一化模型名：去前缀/供应商路径/日期与版本后缀，统一分隔符与小数点 */
+/**
+ * 归一化模型名：只保留字母数字与连字符。
+ * 依次做：全角转半角 → 去方括号前缀 → 取供应商路径末段 → 去 :free 之类后缀 →
+ * 去版本后缀 → **把中文等非 ASCII 段与一切分隔符（. _ 空格 , : – — 等）统一成 "-"**
+ * → 去日期后缀 → 去 deepseek-ai- 前缀与 -latest 后缀 → 压平多余连字符。
+ * 中文修饰段剥掉后若什么都不剩（如纯中文名）则返回空字符串，由调用方判为不可匹配。
+ */
 export function normalizeModelName(raw: unknown): string {
-  let key = String(raw ?? '').trim().toLowerCase();
+  let key = String(raw ?? '').trim().normalize('NFKC').toLowerCase();
   if (!key) return '';
   key = key.replace(/^\[[^\]]*\]\s*/, '');
   key = key.split('/').pop() || key;
   key = key.replace(/:(?:free|nitro|beta|extended|online)$/, '');
-  key = key.replace(/_/g, '-');
-  key = key.replace(/\s+/g, '-');
+  key = key.replace(VERSION_SUFFIX, '');
+  key = key.replace(/[^a-z0-9]+/g, '-');
   key = key.replace(DATE_SUFFIX_8, '');
   key = key.replace(DATE_SUFFIX_DASHED, '');
   key = key.replace(DATE_SUFFIX_4, '');
-  key = key.replace(VERSION_SUFFIX, '');
   key = key.replace(/^deepseek-ai-/, '');
   key = key.replace(/-latest$/, '');
-  key = key.replace(/(\d)\.(\d)/g, '$1-$2');
   key = key.replace(/-+/g, '-').replace(/^-|-$/g, '');
   return key;
 }
@@ -129,6 +139,11 @@ export function scoreModelName(local: string, catalog: string): { score: number;
     return { score: 1, reason: 'exact' };
   }
   if (a === b) return { score: 1, reason: 'normalized' };
+  // 有无分隔符的写法差异（gemini3.8flash / gemini-3-8-flash）也算同一模型；
+  // 只在去掉连字符后完全一致时成立，且要求足够长，避免 o1 / o-1 这类短名的巧合
+  const compactA = a.replace(/-/g, '');
+  const compactB = b.replace(/-/g, '');
+  if (compactA.length >= 6 && compactA === compactB) return { score: 1, reason: 'normalized' };
   if (aliasEquivalent(a, b)) return { score: 0.99, reason: 'alias' };
 
   let best = 0;
