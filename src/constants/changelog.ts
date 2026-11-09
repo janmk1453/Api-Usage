@@ -56,6 +56,7 @@ export const CHANGELOG: ChangelogEntry[] = [
           '更新了使用说明页的内容',
           '改进了价格匹配',
           '改进了很多视觉效果和UI细节',
+          '优化扩展卸载时的数据清理',
         ],
       },
       {

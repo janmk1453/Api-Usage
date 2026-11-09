@@ -1,15 +1,15 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { n as getSelectedSave, o as mobileDeviceHint, r as state$2, t as getHistoryForDisplay } from "./store-TDK3YzRZ.js";
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
-import { f as saveHot, p as historyRecordKey } from "./persistence-CaWdvByH.js";
+import { _ as saveHot, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-otwsI0kh.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-uubXA-z-.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
-import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-Dsn2T9-Q.js";
-import { t as installInterception } from "./interception-C6grYjUT.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-DiRCnqI_.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-CSGz1VA9.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-xv8kaXZK.js";
+import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-C7kzKPUW.js";
+import { t as installInterception } from "./interception-CrUoCjwA.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-B5ECIs6B.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-CTlyZrNF.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-4ycCjc3H.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -2517,7 +2517,7 @@ function renderChatSummaryOverview(fullHistory) {
 	if (fullHistory) return;
 	(async () => {
 		try {
-			const mod = await import("./persistence-CaWdvByH.js").then((n) => n.l);
+			const mod = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
 			if (!mod.getAllHistory) return;
 			const all = await mod.getAllHistory();
 			if (!all || all.length <= (state$2.history?.length || 0)) return;
@@ -6012,7 +6012,7 @@ async function getHistoryForStats() {
 	if (allHistoryPromise) return allHistoryPromise;
 	allHistoryPromise = (async () => {
 		try {
-			const mod = await import("./persistence-CaWdvByH.js").then((n) => n.l);
+			const mod = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
 			if (mod.getAllHistory) {
 				const result = await mod.getAllHistory() || hot;
 				cachedAllHistory = result;
@@ -9198,7 +9198,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-DiRCnqI_.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-B5ECIs6B.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -10319,7 +10319,8 @@ var CHANGELOG = [
 					"优化启动速度",
 					"更新了使用说明页的内容",
 					"改进了价格匹配",
-					"改进了很多视觉效果和UI细节"
+					"改进了很多视觉效果和UI细节",
+					"优化扩展卸载时的数据清理"
 				]
 			},
 			{
@@ -11365,7 +11366,7 @@ function renderHistory(doc, s) {
 	historyLoading = true;
 	(async () => {
 		try {
-			const mod = await import("./persistence-CaWdvByH.js").then((n) => n.l);
+			const mod = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
 			if (!mod.getAllHistory) return;
 			const all = await mod.getAllHistory();
 			if (!all || !all.length) return;
@@ -12901,7 +12902,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-BvXMeUW-.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-ifwKgsXU.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-DXjqScOj.js").then((m) => m.maybeAutoCheck());
@@ -13082,7 +13083,7 @@ function onEscapeKey(e) {
 }
 function onPageHide() {
 	try {
-		import("./persistence-CaWdvByH.js").then((n) => n.l).then((m) => m.flushSaveHot()).catch(() => {});
+		import("./persistence-DeIFgZp8.js").then((n) => n.m).then((m) => m.flushSaveHot()).catch(() => {});
 	} catch {}
 }
 function cleanupRuntimeBindings() {
@@ -13130,10 +13131,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-C6grYjUT.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-CrUoCjwA.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-BvXMeUW-.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-ifwKgsXU.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -13141,10 +13142,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-C6grYjUT.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-CrUoCjwA.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-BvXMeUW-.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-ifwKgsXU.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -13204,10 +13205,42 @@ function ensureWandEntry() {
 		}
 	}, 500);
 }
+/** 运行时收尾：卸载拦截器与采集、拆掉面板 DOM、停全部定时器与事件监听（数据一律不动） */
+async function teardownRuntime() {
+	try {
+		import("./interception-CrUoCjwA.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+	} catch {}
+	try {
+		import("./collector-ifwKgsXU.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+	} catch {}
+	try {
+		const doc = getDoc();
+		doc.getElementById("aus-overlay")?.remove();
+		doc.getElementById("aus-panel")?.remove();
+		doc.getElementById("aus_wand_container")?.remove();
+		doc.getElementById("aus-peak-dot-indicator")?.remove();
+	} catch {}
+	try {
+		resetPanelState();
+	} catch {}
+	try {
+		stopPeakDot();
+	} catch {}
+	try {
+		(await import("./balance-B5ECIs6B.js").then((n) => n.t)).stopBalanceTimer?.();
+	} catch {}
+	try {
+		(await import("./currency-C7kzKPUW.js").then((n) => n.t)).stopRateTimer?.();
+	} catch {}
+	try {
+		(await import("./pricing-sync-4ycCjc3H.js").then((n) => n.a)).stopPricingSyncTimer?.();
+	} catch {}
+	cleanupRuntimeBindings();
+}
 async function onInstall() {
 	log.debug("installed");
 	try {
-		const { loadHot } = await import("./persistence-CaWdvByH.js").then((n) => n.l);
+		const { loadHot } = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
 		await loadHot();
 	} catch {}
 }
@@ -13217,109 +13250,64 @@ async function onUpdate() {
 async function onDelete() {
 	log.debug("deleted");
 	try {
-		const { flushSaveHot } = await import("./persistence-CaWdvByH.js").then((n) => n.l);
+		const { flushSaveHot } = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
 		flushSaveHot();
 	} catch {}
-	try {
-		const doc = getDoc();
-		doc.getElementById("aus-overlay")?.remove();
-		doc.getElementById("aus-panel")?.remove();
-		doc.getElementById("aus_wand_container")?.remove();
-		doc.getElementById("aus-peak-dot-indicator")?.remove();
-	} catch {}
-	try {
-		resetPanelState();
-	} catch {}
-	try {
-		stopPeakDot();
-	} catch {}
-	try {
-		(await import("./balance-DiRCnqI_.js").then((n) => n.t)).stopBalanceTimer?.();
-	} catch {}
-	try {
-		(await import("./currency-Dsn2T9-Q.js").then((n) => n.t)).stopRateTimer?.();
-	} catch {}
-	try {
-		(await import("./pricing-sync-xv8kaXZK.js").then((n) => n.a)).stopPricingSyncTimer?.();
-	} catch {}
-	cleanupRuntimeBindings();
-	try {
-		localStorage.removeItem("ds_ds_webdav_pass");
-	} catch {}
-	try {
-		localStorage.removeItem("ds_ds_peak_dot_pos");
-	} catch {}
-	try {
-		localStorage.removeItem("ds_debug_log");
-	} catch {}
-	try {
-		const ctx = globalThis.SillyTavern?.getContext?.();
-		if (ctx?.extensionSettings) {
-			delete ctx.extensionSettings["api_usage_stat"];
-			ctx.saveSettingsDebounced?.();
-		}
-	} catch {}
+	await teardownRuntime();
 	try {
 		delete globalThis.ApiUsageStat;
 		delete globalThis.ApiUsageStatInterceptor;
 	} catch {}
 }
+/**
+* 卸载前彻底清除本扩展留下的数据（memory/settings/IndexedDB/localStorage 全清）。
+* 触发条件：酒馆 > 扩展管理 > 删除扩展时勾选「同时清理扩展数据」，
+* 或点该扩展的「清理数据」按钮；两者都由酒馆前端在删目录前调用本钩子。
+* 注意：这是不可恢复的操作，酒馆给钩子的超时是 5 秒。
+*/
+async function onClean() {
+	log.debug("cleaning");
+	try {
+		const { flushSaveHot } = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
+		flushSaveHot();
+	} catch {}
+	await teardownRuntime();
+	try {
+		const { wipeAllExtensionData } = await import("./wipe-data-CUS4ikCP.js");
+		const report = await wipeAllExtensionData();
+		log.debug("cleaned", report);
+	} catch (err) {
+		log.debug("clean failed", err);
+	}
+}
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-C6grYjUT.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-CrUoCjwA.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-BvXMeUW-.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-ifwKgsXU.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-DiRCnqI_.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-B5ECIs6B.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
-		import("./currency-Dsn2T9-Q.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+		import("./currency-C7kzKPUW.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-xv8kaXZK.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-4ycCjc3H.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
 	log.debug("disabled");
 	try {
-		const { flushSaveHot } = await import("./persistence-CaWdvByH.js").then((n) => n.l);
+		const { flushSaveHot } = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
 		flushSaveHot();
 	} catch {}
-	try {
-		import("./interception-C6grYjUT.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
-	} catch {}
-	try {
-		import("./collector-BvXMeUW-.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
-	} catch {}
-	try {
-		const doc = getDoc();
-		doc.getElementById("aus-overlay")?.remove();
-		doc.getElementById("aus-panel")?.remove();
-		doc.getElementById("aus_wand_container")?.remove();
-		doc.getElementById("aus-peak-dot-indicator")?.remove();
-	} catch {}
-	try {
-		resetPanelState();
-	} catch {}
-	try {
-		stopPeakDot();
-	} catch {}
+	await teardownRuntime();
 	try {
 		unwatchSystemTheme();
 	} catch {}
-	try {
-		(await import("./balance-DiRCnqI_.js").then((n) => n.t)).stopBalanceTimer?.();
-	} catch {}
-	try {
-		(await import("./currency-Dsn2T9-Q.js").then((n) => n.t)).stopRateTimer?.();
-	} catch {}
-	try {
-		(await import("./pricing-sync-xv8kaXZK.js").then((n) => n.a)).stopPricingSyncTimer?.();
-	} catch {}
-	cleanupRuntimeBindings();
 }
 async function onActivate() {
 	ensureStyleScope();
@@ -13350,19 +13338,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-DiRCnqI_.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-B5ECIs6B.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-Dsn2T9-Q.js").then((n) => n.t)).restartRateTimer?.();
+		(await import("./currency-C7kzKPUW.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-xv8kaXZK.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-4ycCjc3H.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-BvXMeUW-.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-ifwKgsXU.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -13384,7 +13372,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-xv8kaXZK.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-4ycCjc3H.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();
@@ -13431,4 +13419,4 @@ async function init() {
 }
 init();
 //#endregion
-export { onActivate, onDelete, onDisable, onEnable, onInstall, onUpdate, panel_exports as t };
+export { onActivate, onClean, onDelete, onDisable, onEnable, onInstall, onUpdate, panel_exports as t };

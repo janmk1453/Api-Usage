@@ -19,6 +19,7 @@
     "delete": "onDelete",
     "enable": "onEnable",
     "disable": "onDisable",
-    "activate": "onActivate"
+    "activate": "onActivate",
+    "clean": "onClean"
   }
 }

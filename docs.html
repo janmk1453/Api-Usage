@@ -1859,7 +1859,7 @@
         </div>
       </section>
 
-      <section class="doc-section" id="privacy" data-keywords="隐私 密钥 校准密钥 XOR WebDAV models.dev 数据上传 聊天内容 网络请求 域名 权限 删除 匿名使用统计 遥测 上报 匿名标识 关闭">
+      <section class="doc-section" id="privacy" data-keywords="隐私 密钥 校准密钥 XOR WebDAV models.dev 数据上传 聊天内容 网络请求 域名 权限 删除 匿名使用统计 遥测 上报 匿名标识 关闭 卸载 清理数据">
         <div class="section-kicker">隐私声明</div>
         <h2 id="privacy-title">隐私声明</h2>
         <p class="lead">本扩展是纯前端、本地运行的 SillyTavern 原生扩展，完整代码开源（MIT 许可证），可随时审查。本声明基于实际代码行为编写，逐项如实披露本扩展的全部网络请求与敏感操作。</p>
@@ -1949,7 +1949,7 @@
               <tr><td>读取 + 写入</td><td>酒馆扩展设置中本扩展自己的命名空间（<span class="code">api_usage_stat</span>）</td><td>保存本扩展的设置项、最近的热区历史记录、XOR 混淆的校准密钥与 WebDAV 密码、匿名使用统计的匿名标识与待重发上报数据；该命名空间随酒馆自身设置保存在用户本地服务端，本扩展不写入其他扩展的命名空间</td></tr>
               <tr><td>读取 + 写入 + 删除</td><td>浏览器 IndexedDB（数据库名 <span class="code">api_usage_stat_db</span>）与 localStorage</td><td>存储超出热区的冷历史记录（明细已剥离）、更新检查时间戳、峰值圆点位置、调试日志等本扩展自身数据；删除仅针对本扩展自己的键</td></tr>
               <tr><td>读取 + 写入</td><td>用户配置的 WebDAV 服务器上<strong>用户指定路径</strong>下的单一同步文件（<span class="code">DeepSeekStatSync.json</span>）</td><td>备份与多设备合并同步；不会读取、覆盖或删除该路径之外的任何文件；仅在用户显式配置并手动触发时执行</td></tr>
-              <tr><td>删除</td><td>仅限本扩展自身数据</td><td>卸载扩展时（<span class="code">onDelete</span> 钩子）清理酒馆设置中本扩展命名空间的数据及本地缓存键</td></tr>
+              <tr><td>删除</td><td>仅限本扩展自身数据</td><td>卸载扩展时（<span class="code">onDelete</span> 钩子）只移除界面与运行时、数据保留；在酒馆删除确认框里勾选“同时清理扩展数据”后，再由 <span class="code">onClean</span> 钩子删除酒馆设置中本扩展命名空间的数据、浏览器 IndexedDB 中的冷历史与迁移备份、以及全部本地缓存键（不可恢复）</td></tr>
             </tbody>
           </table>
         </div>
@@ -1972,7 +1972,7 @@
         <ol class="steps">
           <li><strong>清理记录：</strong>清空历史或移除调试记录，仅删除本扩展本地统计；</li>
           <li><strong>删除钱包 / 校准密钥：</strong>删除对应钱包配置及其本地保存的校准密钥；</li>
-          <li><strong>卸载扩展：</strong>删除酒馆设置中本扩展命名空间的数据与本地缓存键。</li>
+          <li><strong>卸载扩展：</strong>默认只移除界面与运行时，统计、设置与钱包配置原样保留（重新安装后仍能看到之前的数据）；只有删除确认框里的“同时清理扩展数据”被勾选时，才会连酒馆设置中本扩展命名空间的数据、浏览器 IndexedDB 中的冷历史与迁移备份、以及全部本地缓存键一起删除，该操作<strong>不可恢复</strong>。</li>
         </ol>
 
         <h3 id="privacy-storage">八、数据存储、留存与删除</h3>
@@ -1982,7 +1982,7 @@
           <li><strong>明细：</strong>消息与响应快照仅对最近 5 条记录保留，其余自动剥离，且永不导出；</li>
           <li><strong>调试日志：</strong>仅存于本地 localStorage，可随时清除，不含聊天正文；</li>
           <li><strong>旧版迁移备份：</strong>升级到当前数据结构时会留下一份包含旧版存档、设置、余额与旧密钥字段的原始字符串快照，存于浏览器 IndexedDB（键名 <span class="code">migration_backup_&lt;时间戳&gt;</span>）。程序不会读取它，用户可在设置页“存储占用”中一键清理（二次确认，仅删除该键）；升级前仍想找回旧数据时再保留。</li>
-          <li><strong>卸载行为：</strong>卸载扩展会清除酒馆设置中本扩展的数据与上述本地缓存键；但浏览器 IndexedDB 中的冷历史备份<strong>不会随卸载自动删除</strong>，如需彻底清除，请在浏览器「清除站点数据、存储」中一并清理；</li>
+          <li><strong>卸载行为：</strong>默认卸载只移除界面与运行时，酒馆设置中本扩展的数据、IndexedDB 中的冷历史与迁移备份、以及上述本地缓存键都会保留；在酒馆的删除确认框里勾选“同时清理扩展数据”，才会把这三处一并删除（<strong>不可恢复</strong>，建议先导出备份）。酒馆版本低于 1.18.0 时不会出现该勾选项，此时需要彻底清除请在浏览器「清除站点数据、存储」中清理；</li>
           <li>用户可随时通过导出功能取得全部统计数据的明文 JSON 副本。</li>
         </ul>
 

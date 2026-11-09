@@ -1,10 +1,10 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { a as defaultSettings, n as getSelectedSave, o as mobileDeviceHint, r as state } from "./store-TDK3YzRZ.js";
 import { a as HIDDEN_PRICING_MODELS, c as PRICE_HISTORY, l as PRICING, r as DEFAULT_PEAK_HOURS, s as MAX_HISTORY, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
-import { a as getExtensionSettings, c as loadHot, d as saveHistoryCold, f as saveHot, i as getAllHistory, n as clearHistoryCold, p as historyRecordKey, s as loadHistoryCold, t as appendHistoryCold, u as saveExtensionSettings } from "./persistence-CaWdvByH.js";
+import { _ as saveHot, a as clearHistoryCold, f as loadHistoryCold, g as saveHistoryCold, h as saveExtensionSettings, l as getAllHistory, p as loadHot, r as appendHistoryCold, u as getExtensionSettings, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
 import { a as isUnsafeKey, c as localDay, i as isPeakHour$1, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay } from "./date-Dsu8hrMO.js";
-import { a as getWalletExchangeRate } from "./currency-Dsn2T9-Q.js";
+import { a as getWalletExchangeRate } from "./currency-C7kzKPUW.js";
 //#region src/types/wallet.ts
 var DEEPSEEK_WALLET_ID = "wallet:deepseek-official";
 var WALLET_CATALOG_PROVIDERS = [
@@ -2276,7 +2276,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && !!wallet.catalogProvider) try {
-						import("./pricing-sync-xv8kaXZK.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-4ycCjc3H.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;

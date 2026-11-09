@@ -126,55 +126,63 @@ function ensureWandEntry() {
   }, 500);
 }
 
+/** 运行时收尾：卸载拦截器与采集、拆掉面板 DOM、停全部定时器与事件监听（数据一律不动） */
+async function teardownRuntime(): Promise<void> {
+  try { import('./services/interception').then(m => (m as any).uninstallInterception?.()); } catch {}
+  try { import('./services/agent-usage/collector').then(m => (m as any).uninstallAgentUsage?.()).catch(() => {}); } catch {}
+  try {
+    const doc = getDoc();
+    doc.getElementById('aus-overlay')?.remove();
+    doc.getElementById('aus-panel')?.remove();
+    doc.getElementById('aus_wand_container')?.remove();
+    doc.getElementById('aus-peak-dot-indicator')?.remove();
+  } catch {}
+  try { resetPanelState(); } catch {}
+  try { stopPeakDot(); } catch {}
+  try { const m2 = await import('./services/balance'); (m2 as any).stopBalanceTimer?.(); } catch {}
+  try { const m3 = await import('./services/currency'); (m3 as any).stopRateTimer?.(); } catch {}
+  try { const m4 = await import('./services/pricing-sync'); (m4 as any).stopPricingSyncTimer?.(); } catch {}
+  cleanupRuntimeBindings();
+}
+
 export async function onInstall() { log.debug('installed'); try { const { loadHot } = await import('./store/persistence'); await loadHot(); } catch {} }
 export async function onUpdate() { log.debug('updated'); }
 export async function onDelete() {
   log.debug('deleted');
+  // 只清运行时，数据一律保留：重装后历史、钱包配置与偏好都还在。
+  // 想连数据一起删，需在酒馆「删除扩展」的确认框里勾选「同时清理扩展数据」（走 onClean 钩子）。
   try { const { flushSaveHot } = await import('./store/persistence'); flushSaveHot(); } catch {}
-  try {
-    const doc = getDoc();
-    doc.getElementById('aus-overlay')?.remove();
-    doc.getElementById('aus-panel')?.remove();
-    doc.getElementById('aus_wand_container')?.remove();
-    doc.getElementById('aus-peak-dot-indicator')?.remove();
-  } catch {}
-  try { resetPanelState(); } catch {}
-  try { stopPeakDot(); } catch {}
-  try { const m2 = await import('./services/balance'); (m2 as any).stopBalanceTimer?.(); } catch {}
-  try { const m3 = await import('./services/currency'); (m3 as any).stopRateTimer?.(); } catch {}
-  try { const m4 = await import('./services/pricing-sync'); (m4 as any).stopPricingSyncTimer?.(); } catch {}
-  cleanupRuntimeBindings();
-  // 清理卸载残留
-  try { localStorage.removeItem('ds_ds_webdav_pass'); } catch {}
-  try { localStorage.removeItem('ds_ds_peak_dot_pos'); } catch {}
-  try { localStorage.removeItem('ds_debug_log'); } catch {}
-  try {
-    const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
-    if (ctx?.extensionSettings) { delete ctx.extensionSettings['api_usage_stat']; ctx.saveSettingsDebounced?.(); }
-  } catch {}
+  await teardownRuntime();
   try { delete (globalThis as any).ApiUsageStat; delete (globalThis as any).ApiUsageStatInterceptor; } catch {}
 }
+
+/**
+ * 卸载前彻底清除本扩展留下的数据（memory/settings/IndexedDB/localStorage 全清）。
+ * 触发条件：酒馆 > 扩展管理 > 删除扩展时勾选「同时清理扩展数据」，
+ * 或点该扩展的「清理数据」按钮；两者都由酒馆前端在删目录前调用本钩子。
+ * 注意：这是不可恢复的操作，酒馆给钩子的超时是 5 秒。
+ */
+export async function onClean() {
+  log.debug('cleaning');
+  try { const { flushSaveHot } = await import('./store/persistence'); flushSaveHot(); } catch {}
+  await teardownRuntime();
+  try {
+    const { wipeAllExtensionData } = await import('./services/wipe-data');
+    const report = await wipeAllExtensionData();
+    log.debug('cleaned', report);
+  } catch (err) {
+    log.debug('clean failed', err);
+  }
+}
+
 export function onEnable() { log.debug('enabled'); try { import('./services/interception').then(m=>m.installInterception()); } catch {} try { import('./services/agent-usage/collector').then(m=>m.initAgentUsage()).catch(() => {}); } catch {} try { import('./services/balance').then(m=> (m as any).restartBalanceTimer?.()); } catch {} try { import('./services/currency').then(m=> (m as any).restartRateTimer?.()); } catch {} try { import('./services/pricing-sync').then(m=> (m as any).restartPricingSyncTimer?.()); } catch {} }
 export async function onDisable() {
   log.debug('disabled');
   try { const { flushSaveHot } = await import('./store/persistence'); flushSaveHot(); } catch {}
-  try { import('./services/interception').then(m=> (m as any).uninstallInterception?.()); } catch {}
-  try { import('./services/agent-usage/collector').then(m=> (m as any).uninstallAgentUsage?.()).catch(() => {}); } catch {}
-  try {
-    const doc = getDoc();
-    doc.getElementById('aus-overlay')?.remove();
-    doc.getElementById('aus-panel')?.remove();
-    doc.getElementById('aus_wand_container')?.remove();
-    doc.getElementById('aus-peak-dot-indicator')?.remove();
-  } catch {}
-  try { resetPanelState(); } catch {}
-  try { stopPeakDot(); } catch {}
+  await teardownRuntime();
   try { unwatchSystemTheme(); } catch {}
-  try { const m2 = await import('./services/balance'); (m2 as any).stopBalanceTimer?.(); } catch {}
-  try { const m3 = await import('./services/currency'); (m3 as any).stopRateTimer?.(); } catch {}
-  try { const m4 = await import('./services/pricing-sync'); (m4 as any).stopPricingSyncTimer?.(); } catch {}
-  cleanupRuntimeBindings();
 }
+
 export async function onActivate() {
   ensureStyleScope();
   try { injectWandEntry(); ensureWandEntry(); } catch {}
