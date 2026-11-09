@@ -2010,7 +2010,13 @@ const NARROW_VIEWPORT_MAX = 760;
 
 let backGuardPushed = false;
 let backGuardWin: any = null;
-/** 关闭面板时我们用 history.go(-深度) 清哨兵，它回来的一次 popstate 必须放行、不能再消费一层 */
+/**
+ * 账面：我们自己压上去、还没被消费掉的哨兵条数（用 history.length 压入前后差分统计）。
+ * 这是回收阶段唯一可信的「还能退几步」依据——读 state 出来的深度可能因为宿主自己
+ * pushState、或某条 state 被 replaceState 洗掉标记而失真，照它一次退到位会退过酒馆记录。
+ */
+let backGuardLive = 0;
+/** 关闭面板后回收哨兵期间回来的 popstate 必须放行、不能再消费一层 */
 let backGuardSkipUntil = 0;
 
 /** 历史记录属于宿主窗口（扩展通常跑在 iframe 里），跨源时回退到自身窗口 */
@@ -2081,75 +2087,114 @@ function fillBackGuard(): void {
     if (!w.history?.pushState) return;
     for (const depth of guardFillPlan(readGuardDepth(w.history.state), BACK_GUARD_DEPTH)) {
       w.history.pushState(nextGuardState(w.history.state, depth), '');
+      backGuardLive++;
     }
+    if (backGuardLive > BACK_GUARD_DEPTH) backGuardLive = BACK_GUARD_DEPTH;
   } catch {}
 }
 
 /** 回收阶段：面板已经关掉，正在把压上去的哨兵一条条弹回酒馆自己那条记录 */
 let backGuardCleaning = false;
 let backGuardCleanWin: any = null;
-let backGuardCleanLeft = 0;
+let backGuardCleanTimer: any = null;
+/** 我们刚发过 history.go(-1)、还在等它回声：这次 popstate 是回收自己的动作，不该再扣账面 */
+let backGuardCleanPending = false;
+
+function clearBackGuardCleanTimer(): void {
+  if (backGuardCleanTimer) {
+    clearTimeout(backGuardCleanTimer);
+    backGuardCleanTimer = null;
+  }
+}
 
 /** 回收收尾：彻底脱管 */
 function stopBackGuardCleanup(): void {
   const w = backGuardCleanWin;
   backGuardCleaning = false;
   backGuardCleanWin = null;
-  backGuardCleanLeft = 0;
+  backGuardCleanPending = false;
+  clearBackGuardCleanTimer();
+  backGuardLive = 0;
   backGuardSkipUntil = nowTs() + 400;
   if (w) { try { w.removeEventListener('popstate', onBackGuardPop); } catch {} }
 }
 
+function scheduleBackGuardCleanStep(delay: number): void {
+  clearBackGuardCleanTimer();
+  if (!backGuardCleaning) return;
+  backGuardCleanTimer = setTimeout(() => {
+    backGuardCleanTimer = null;
+    runBackGuardCleanStep();
+  }, delay);
+}
+
 /**
- * 回收阶段一次只退一条，落点不再是我们的哨兵就停手。
- * 刻意不推算「该退几条」：真实历史里可能夹着别的记录（宿主自己也 pushState 过、
- * 或某条 state 被 replaceState 洗掉了标记），一次性 go(-N) 就会退过酒馆自己那条记录，
- * 表现为「关面板顺手把酒馆也退出去了」。逐条退最坏只是少退（多留几条空记录），绝不会多退。
+ * 回收阶段一次只退一条，并且只在「浏览器把上一个后退动作处理完」之后才动手。
+ * 两条硬约束（都踩过）：
+ *   ① 不推算「该退几条」：真实历史里可能夹着别的记录（宿主自己也 pushState 过、或某条
+ *      state 被 replaceState 洗掉标记），一次性 go(-N) 会退过酒馆自己那条记录；
+ *   ② 不在 popstate 里同步 go(-1)：用户连按返回时浏览器会把多次后退打包处理，同步再 go
+ *      会跟排队中的后退叠加，一次退多步照样越过酒馆记录（连按场景已实测复现）。
+ * 所以这里用 setTimeout 串行：先等 140ms 让用户自己的后退落地，之后每退一条等 400ms
+ * 兜底再决定下一步，退出条数由账面 backGuardLive 封顶——最坏只是少退（多留几条空记录），
+ * 绝不多退一步。
  */
-function stepBackGuardCleanup(): void {
+function runBackGuardCleanStep(): void {
   const w = backGuardCleanWin;
   if (!w || !backGuardCleaning) { stopBackGuardCleanup(); return; }
+  backGuardCleanPending = false;
+  if (backGuardLive <= 0) { stopBackGuardCleanup(); return; }
   let cur = 0;
   try { cur = readGuardDepth(w.history?.state); } catch {}
-  if (cur > 0 && backGuardCleanLeft > 0) {
-    backGuardCleanLeft--;
-    try { w.history.go(-1); return; } catch {}
-  }
-  stopBackGuardCleanup();
+  if (cur <= 0) { stopBackGuardCleanup(); return; }
+  backGuardLive--;
+  backGuardCleanPending = true;
+  try { w.history.go(-1); } catch { stopBackGuardCleanup(); return; }
+  scheduleBackGuardCleanStep(400);
 }
 
 function startBackGuardCleanup(w: any): void {
   if (!w) return;
   backGuardCleaning = true;
   backGuardCleanWin = w;
-  // 安全阀：只用来防死循环，够退掉整组哨兵即可（正常 3 步就落到酒馆记录）
-  backGuardCleanLeft = BACK_GUARD_DEPTH * 3;
   backGuardSkipUntil = nowTs() + 400;
-  stepBackGuardCleanup();
+  // 先让浏览器把用户刚触发的那次后退（可能还在队列里）处理完，再开始串行回收
+  scheduleBackGuardCleanStep(140);
 }
 
 function onBackGuardPop(ev: any): void {
-  if (backGuardCleaning) { stepBackGuardCleanup(); return; }
+  if (backGuardCleaning) {
+    // 回收期间的历史变动分两种：我们刚发的 go(-1) 的回声（不扣账面），或用户又按了一次
+    // 返回（扣一条账面）。两种都只重排下一步，绝不在事件里同步 go，避免跟排队中的后退叠加。
+    if (backGuardCleanPending) backGuardCleanPending = false;
+    else backGuardLive = Math.max(0, backGuardLive - 1);
+    scheduleBackGuardCleanStep(140);
+    return;
+  }
   if (!panelOpen) { releaseBackGuard(false); return; }
   // 刚收完哨兵时回来的余波：不算「用户按了返回」（面板若被立刻重开会收到它）
   if (backGuardSkipUntil && nowTs() < backGuardSkipUntil) { backGuardSkipUntil = 0; return; }
   // 落点是不是我们自己压的哨兵都要照常消费一层：老实现落在哨兵上直接 return，
   // 表现为「按了没反应」，紧接着再按一次就越过酒馆页面退出去了。
   const depth = readGuardDepth(ev?.state);
+  backGuardLive = Math.max(0, backGuardLive - 1);
   // 依次消费：浮层 → 上一级页面 → 已经在根页才关面板
   if (closeTopOverlay() || goBackInPanel()) {
     fillBackGuard();
     return;
   }
   // 关面板：先把事件状态摘干净（面板若被立刻重开，旧哨兵不该被当成缓冲），
-  // 再交给回收阶段一条条弹回去
+  // 再交给回收阶段串行弹回去
   const w = backGuardWin;
   backGuardWin = null;
   backGuardPushed = false;
   try { closePanel(); } catch {}
   if (!w) return;
-  if (depth > 0) startBackGuardCleanup(w);
-  else { backGuardSkipUntil = nowTs() + 400; try { w.removeEventListener('popstate', onBackGuardPop); } catch {} }
+  if (backGuardLive > 0) startBackGuardCleanup(w);
+  else {
+    backGuardSkipUntil = nowTs() + 400;
+    try { w.removeEventListener('popstate', onBackGuardPop); } catch {}
+  }
 }
 
 /**
@@ -2165,29 +2210,32 @@ function armBackGuard(): void {
     if (!w?.history?.pushState) return;
     backGuardWin = w;
     backGuardPushed = true;
+    backGuardLive = 0;
     w.addEventListener('popstate', onBackGuardPop);
     fillBackGuard();
   } catch {
     backGuardPushed = false;
     backGuardWin = null;
+    backGuardLive = 0;
   }
 }
 
 /**
  * 解除接管。
- * stepBack=true（点关闭按钮 / 按 Esc / 切换视图重置）时把我们压的哨兵一次性退干净，
+ * stepBack=true（点关闭按钮 / 按 Esc / 切换视图重置）时把我们压的哨兵串行退干净，
  * 否则它们会留在历史里，让「关掉面板后按返回」变成按好几次都没反应；
- * 由返回键触发时传 false，因为历史已经退过去了，调用方会按剩余深度自行清理。
+ * 由返回键触发时传 false，因为历史已经退过去了，调用方会按剩余账面自行回收。
  */
 function releaseBackGuard(stepBack = true): void {
   const w = backGuardWin;
   const pushed = backGuardPushed;
   backGuardWin = null;
   backGuardPushed = false;
-  // 已经在回收阶段：历史由 stepBackGuardCleanup 逐条负责，这里只脱管
+  // 已经在回收阶段：历史由 runBackGuardCleanStep 串行负责，这里只脱管
   if (backGuardCleaning) return;
   if (!w) return;
   if (stepBack && pushed) { startBackGuardCleanup(w); return; }
+  backGuardLive = 0;
   try { w.removeEventListener('popstate', onBackGuardPop); } catch {}
 }
 
