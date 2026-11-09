@@ -57,7 +57,7 @@ Api-Usage/
 ├── src/
 │   ├── index.ts           # 入口：repository.hydrate + 魔法棒注入 + 全屏面板 + 峰值圆点（ST 未就绪时轮询重试 installInterception）+ 汇率/定价格式同步定时器（24h）+ 延迟自动检查更新
 │   ├── constants/pricing.ts  # PRICING/DEFAULT_PEAK_HOURS/MAX_HISTORY/DETAIL_KEEP/STORAGE_KEYS + PRICING_SYNC_SOURCE/FALLBACK/DEFAULT_EXCHANGE_RATE + PRICE_HISTORY/PriceSegment + FLASH_PRICE_CUTOFF(2026-09-10 12:00)（内置模型多段价格历史：deepseek-v4-flash 新旧两段、deepseek-v4-pro 持续定价单段、deepseek-flash 单段；V4.1 Flash 现役模型名为 deepseek-flash，V4 Pro 继续提供调用并保持现价）
-│   ├── constants/holidays.ts # 中国法定节假日放假日内置数据（2024-2026，源自国务院办公厅通知）：isChinaHolidayDate/hasChinaHolidayData + CN_HOLIDAY_DATA_YEARS/CN_HOLIDAY_COVERAGE_LABEL；只收录放假日，调休上班的周末无需维护（周末本身即空闲）
+│   ├── constants/holidays.ts # 中国法定节假日放假日内置数据（2024-2027，源自国务院办公厅通知）：isChinaHolidayDate/hasChinaHolidayData + CN_HOLIDAY_DATA_YEARS/CN_HOLIDAY_COVERAGE_LABEL；只收录放假日，调休上班的周末无需维护（周末本身即空闲）
 │   ├── constants/changelog.ts # 关于页「更新日志」唯一数据源（手动维护，最新版本在前）：ChangelogEntry/ChangelogSection/ChangelogSectionKind + CHANGELOG/CHANGELOG_ENTRY_LIMIT/getRecentChangelog；只放面向用户的文案，禁止 commit hash / 文件路径 / 内部实现；当前由用户手动维护，未经用户当轮明确要求不得增删条目
 │   ├── types/save.ts, settings.ts, wallet.ts # HistoryEntry 含 sourceType/endpointId/endpointLabel/credentialId/credentialLabel/walletId/pricingSource；settings 含 overviewWalletId/overviewWalletManuallySet 与 PricingSyncSettings；wallet.ts 定义 WalletConfig/WalletModel/WalletPriceRule/币种与 catalogProvider 映射
 │   ├── data/              # ★ 统一数据框架（所有存/取/算/展的唯一通路）
@@ -138,7 +138,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **入口**：桌面侧边栏 `钱包`，窄屏走 `设置` 页顶部入口行，`data-view="wallet"` 独立页；页面顶部为钱包汇总卡，下面按接入链接展示钱包，最后展示已忽略接入口
 - **钱包粒度**：一个 `endpointId` 对应一个钱包，同一链接下多个密钥归入同一钱包；默认始终有不可删除的 DeepSeek 官方钱包。历史中已有识别的接入会在迁移时回填，新请求首次出现未忽略接入时自动创建钱包并命名成接入地址
 - **固定与可编辑**：接入地址、接入类型、已识别密钥身份只读；钱包名称、模型名、价格、价格来源、峰谷规则、手工余额和忽略状态可编辑。模型改名会保留旧名别名，旧请求仍能命中规则
-- **官方峰谷规则**：DeepSeek 官方内置定价按北京时间判断——周一至周五（不含中国法定节假日）`9:00-12:00`、`14:00-18:00` 为高峰，其余时段（含周末、中国法定节假日全天）为空闲；调休上班的周末同样按空闲计费。节假日数据在 `src/constants/holidays.ts`（内置覆盖 2024-2026），`settings.extraOffDays` 可补充额外空闲日期；官方钱包的自定义价格规则同样应用节假日豁免，中转钱包仍按自身峰谷配置
+- **官方峰谷规则**：DeepSeek 官方内置定价按北京时间判断——周一至周五（不含中国法定节假日）`9:00-12:00`、`14:00-18:00` 为高峰，其余时段（含周末、中国法定节假日全天）为空闲；调休上班的周末同样按空闲计费。节假日数据在 `src/constants/holidays.ts`（内置覆盖 2024-2027），`settings.extraOffDays` 可补充额外空闲日期；官方钱包的自定义价格规则同样应用节假日豁免，中转钱包仍按自身峰谷配置
 - **默认收起**：每个钱包默认 `collapsed=true`；宽屏收起态为单行卡片——左侧 `44px` 方形标识（取钱包名首个有意义字符，剥离 `http(s)://`、`www.`、`api.` 前缀，`--ds-black` 底 + `--ds-black-text` 字）、中间名称（无边框标题态输入，hover/focus 才显底色与描边）与副标题（接入地址 · 来源）、右侧只外显**余额**与**模型数**两项指标（密钥数/请求数/费用不外显），操作收为 `30px` 图标按钮（展开/收起 `chevron-down`/`chevron-up`、同步 `refresh`、忽略 `close`，均 `16px` SVG，仅可忽略项显示忽略），待定价数显示为状态徽标。展开状态按钱包独立记忆并随导入导出/WebDAV 同步
 - **余额**：币种首版支持 `CNY/USD`，手工余额可直接填写；自动校准只开放给 DeepSeek 官方直连钱包，默认使用钱包内单独保存的校准密钥，可选一个主密钥作为账号身份。多密钥不会自动相加。钱包余额在每次请求按当前币种预扣，成功校准后覆盖为服务端余额。**自动校准没有全局开关**：钱包页勾选「自动校准」即按设置页的校准间隔轮询（`restartBalanceTimer` 仅在存在已勾选且未忽略的钱包时启动定时器）
 - **密钥隐私**：普通官方接口只记录酒馆密钥条目编号、标签和掩码末三位；反向代理 `proxy_password` 与 `custom_include_headers` 继续不读取、不比较、不持久化，因此按“未识别密钥”处理

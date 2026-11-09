@@ -1,5 +1,5 @@
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { t as esc } from "./date-BJI2m6dS.js";
+import { t as esc } from "./date-Dsu8hrMO.js";
 //#region src/services/update.ts
 var CURRENT_VERSION = "3.2.0";
 var REPO = "janmk1453/Api-Usage";
