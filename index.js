@@ -10170,11 +10170,22 @@ function snapshot() {
 		const panel = doc?.getElementById("aus-panel");
 		if (panel) {
 			out.panel = panel.style.display || "shown";
-			const view = panel.querySelector("[data-view]:not([style*=\"display: none\"])")?.getAttribute("data-view");
+			const view = Array.from(panel.querySelectorAll("[data-view]")).find((el) => {
+				try {
+					return el.getClientRects().length > 0;
+				} catch {
+					return false;
+				}
+			})?.getAttribute("data-view");
 			if (view) out.view = view;
 		}
 		if (doc) out.vis = doc.visibilityState;
 	} catch {}
+	try {
+		out.iframe = typeof window !== "undefined" && window.parent !== window;
+	} catch {
+		out.iframe = null;
+	}
 	return out;
 }
 /** 记一条诊断日志（不出错、不阻塞） */
@@ -10246,6 +10257,12 @@ function installBackDebug(target) {
 		w.addEventListener("pageshow", () => backDebug("pageshow"));
 	} catch {}
 	try {
+		w.addEventListener("beforeunload", () => backDebug("beforeunload"));
+	} catch {}
+	try {
+		w.addEventListener("unload", () => backDebug("unload"));
+	} catch {}
+	try {
 		w.document?.addEventListener?.("visibilitychange", () => backDebug("visibility", { vis: w.document.visibilityState }));
 	} catch {}
 	backDebug("init", { href: String(w.location?.href || "") });
@@ -10272,24 +10289,13 @@ function readGuardDepth(state) {
 	const raw = state[AUS_BACK_FLAG];
 	const n = typeof raw === "number" ? raw : Number(raw);
 	if (!Number.isFinite(n) || n <= 0) return 0;
-	return Math.min(Math.floor(n), 3);
+	return Math.min(Math.floor(n), 6);
 }
 /** 以 base 为底生成「深度为 depth」的哨兵 state；不修改传入的 base */
 function nextGuardState(base, depth) {
 	const next = base && typeof base === "object" ? { ...base } : {};
-	next[AUS_BACK_FLAG] = Math.max(1, Math.min((Number.isFinite(depth) ? Math.floor(depth) : 0) || 1, 3));
+	next[AUS_BACK_FLAG] = Math.max(1, Math.min((Number.isFinite(depth) ? Math.floor(depth) : 0) || 1, 6));
 	return next;
-}
-/**
-* 当前深度为 current 时还需要依次压入哪些深度；空数组表示缓冲已满。
-* 返回序列由浅到深，调用方按顺序 pushState 即可把缓冲补满。
-*/
-function guardFillPlan(current, buffer = 3) {
-	const from = Number.isFinite(current) ? Math.max(0, Math.floor(current)) : 0;
-	const to = Number.isFinite(buffer) ? Math.max(0, Math.floor(buffer)) : 0;
-	const plan = [];
-	for (let depth = from + 1; depth <= to; depth++) plan.push(depth);
-	return plan;
 }
 /** 更新日志（最新在前） */
 var CHANGELOG = [
@@ -12708,7 +12714,7 @@ var NARROW_VIEWPORT_MAX = 760;
 var backGuardPushed = false;
 var backGuardWin = null;
 /**
-* 账面：我们自己压上去、还没被消费掉的哨兵条数（用 history.length 压入前后差分统计）。
+* 账面：还能从历史里回收几条哨兵（本次压入的 + 打开面板前就残留在下面的旧哨兵）。
 * 这是回收阶段唯一可信的「还能退几步」依据——读 state 出来的深度可能因为宿主自己
 * pushState、或某条 state 被 replaceState 洗掉标记而失真，照它一次退到位会退过酒馆记录。
 */
@@ -12779,12 +12785,11 @@ function fillBackGuard() {
 		if (!w.history?.pushState) return;
 		const wasDepth = readGuardDepth(w.history.state);
 		let pushed = 0;
-		for (const depth of guardFillPlan(readGuardDepth(w.history.state), 3)) {
+		for (let depth = 1; depth <= 6; depth++) {
 			w.history.pushState(nextGuardState(w.history.state, depth), "");
-			backGuardLive++;
 			pushed++;
 		}
-		if (backGuardLive > 3) backGuardLive = 3;
+		backGuardLive = pushed + wasDepth;
 		backDebug("fill", {
 			fromDepth: wasDepth,
 			pushed,
@@ -12793,6 +12798,42 @@ function fillBackGuard() {
 	} catch (e) {
 		backDebug("fill-error", { msg: String(e) });
 	}
+}
+/**
+* 延时补压：面板内连按很多次（把 6 条哨兵吃掉大半）时补回满层。
+* 只能用定时器，**绝不能在 popstate 里同步 pushState**（见文件头注释①）。
+*/
+var backGuardTopUpTimer = null;
+function clearBackGuardTopUpTimer() {
+	if (backGuardTopUpTimer) {
+		clearTimeout(backGuardTopUpTimer);
+		backGuardTopUpTimer = null;
+	}
+}
+function topUpBackGuard() {
+	const w = backGuardWin;
+	if (!w || !backGuardPushed || backGuardCleaning) return;
+	try {
+		if (!w.history?.pushState) return;
+		let missing = 6 - backGuardLive;
+		if (missing <= 0) return;
+		while (missing-- > 0) {
+			w.history.pushState(nextGuardState(w.history.state, backGuardLive + 1), "");
+			backGuardLive++;
+		}
+		backDebug("fill-late", { live: backGuardLive });
+	} catch (e) {
+		backDebug("fill-late-error", { msg: String(e) });
+	}
+}
+function scheduleBackGuardTopUp(delay) {
+	clearBackGuardTopUpTimer();
+	if (!panelOpen || backGuardCleaning) return;
+	backGuardTopUpTimer = setTimeout(() => {
+		backGuardTopUpTimer = null;
+		if (!panelOpen || backGuardCleaning || !backGuardPushed) return;
+		topUpBackGuard();
+	}, delay);
 }
 /** 回收阶段：面板已经关掉，正在把压上去的哨兵一条条弹回酒馆自己那条记录 */
 var backGuardCleaning = false;
@@ -12817,6 +12858,7 @@ function stopBackGuardCleanup() {
 	backGuardCleanWin = null;
 	backGuardCleanPending = false;
 	clearBackGuardCleanTimer();
+	clearBackGuardTopUpTimer();
 	backGuardLive = 0;
 	backGuardSkipUntil = nowTs() + 400;
 	if (w) try {
@@ -12917,7 +12959,7 @@ function onBackGuardPop(ev) {
 			depth,
 			live: backGuardLive
 		});
-		fillBackGuard();
+		scheduleBackGuardTopUp(700);
 		return;
 	}
 	const w = backGuardWin;
@@ -12943,6 +12985,7 @@ function onBackGuardPop(ev) {
 function armBackGuard() {
 	if (backGuardPushed) return;
 	if (backGuardCleaning) stopBackGuardCleanup();
+	clearBackGuardTopUpTimer();
 	if (!isNarrowViewport()) {
 		backDebug("arm-skip-wide");
 		return;
@@ -12980,6 +13023,7 @@ function releaseBackGuard(stepBack = true) {
 	});
 	backGuardWin = null;
 	backGuardPushed = false;
+	clearBackGuardTopUpTimer();
 	if (backGuardCleaning) return;
 	if (!w) return;
 	if (stepBack && pushed) {

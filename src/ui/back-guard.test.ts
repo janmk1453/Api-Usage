@@ -44,17 +44,18 @@ describe('返回键哨兵深度', () => {
 });
 
 describe('哨兵缓冲补压计划', () => {
-  it('空缓冲一次补满，已满则不再压', () => {
-    expect(guardFillPlan(0)).toEqual([1, 2, 3]);
-    expect(guardFillPlan(1)).toEqual([2, 3]);
-    expect(guardFillPlan(2)).toEqual([3]);
+  it('缓冲深度是 6，空缓冲一次补满、已满则不再压', () => {
+    expect(BACK_GUARD_DEPTH).toBe(6);
+    expect(guardFillPlan(0)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(guardFillPlan(1)).toEqual([2, 3, 4, 5, 6]);
+    expect(guardFillPlan(2)).toEqual([3, 4, 5, 6]);
     expect(guardFillPlan(BACK_GUARD_DEPTH)).toEqual([]);
   });
 
   it('连按到越界（深度读不到）时重新补满，保证下一次返回仍有垫底', () => {
     expect(guardFillPlan(0, 2)).toEqual([1, 2]);
     expect(guardFillPlan(9)).toEqual([]);
-    expect(guardFillPlan(Number.NaN)).toEqual([1, 2, 3]);
+    expect(guardFillPlan(Number.NaN)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 });
 

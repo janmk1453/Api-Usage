@@ -179,9 +179,17 @@ describe('安卓返回键：先关浮层 → 退一级页面 → 根页才关面
     expect(panelCode).toContain('if (!target || target === currentView) return false;');
   });
 
-  it('返回键按 浮层 → 上一页 → 关面板 的次序消费，且每次消费后把哨兵缓冲补满', () => {
+  it('返回键按 浮层 → 上一页 → 关面板 的次序消费，且消费后延时补回缓冲', () => {
     expect(panelCode).toContain('if (closeTopOverlay() || goBackInPanel()) {');
-    expect(panelCode).toContain('fillBackGuard();');
+    // 补压只能走定时器：在手势触发的 popstate 里同步 pushState 会被浏览器的
+    // 「历史操纵干预」忽略，下一次手势就直接跳过所有哨兵退进旧文档（整页重载）
+    expect(panelCode).toContain('scheduleBackGuardTopUp(700);');
+    const popStart = panelCode.indexOf('function onBackGuardPop(ev: any): void {');
+    // 只取 onBackGuardPop 本体：紧接着的 armBackGuard 里那句 fillBackGuard() 是合法的
+    const popEnd = panelCode.indexOf('function armBackGuard(): void {', popStart);
+    const popBody = panelCode.slice(popStart, popEnd > popStart ? popEnd : popStart + 4000);
+    expect(popBody).not.toContain('fillBackGuard();');
+    expect(popBody).not.toContain('topUpBackGuard();');
     // 关面板必须是最后一步，不能再像改造前那样「按一次就关」
     const pop = panelCode.indexOf('if (closeTopOverlay() || goBackInPanel()) {');
     const close = panelCode.indexOf('try { closePanel(); } catch {}', pop);
@@ -203,10 +211,15 @@ describe('安卓返回键：先关浮层 → 退一级页面 → 根页才关面
     expect(panelCode).toContain('return mobileDeviceHint();');
   });
 
-  it('预先压多条哨兵，连按返回才不会一步越过酒馆页面', () => {
+  it('预先压满多条哨兵，连按返回才不会一步越过酒馆页面', () => {
     // 缓冲深度与纯逻辑都集中在 back-guard 模块，面板只管读写宿主历史
     expect(panelCode).toContain("from './back-guard';");
-    expect(panelCode).toContain('guardFillPlan(readGuardDepth(w.history.state), BACK_GUARD_DEPTH)');
+    // 打开面板时无条件压满整层缓冲：不按当前 state 的深度补差，因为刷新后历史里
+    // 残留的旧哨兵属于旧文档，照深度补差会少压，用户连按几次就退进旧文档区域
+    expect(panelCode).toContain('for (let depth = 1; depth <= BACK_GUARD_DEPTH; depth++) {');
+    // 账面还要算上打开面板前残留在历史里的旧哨兵，回收阶段才会一起清掉
+    expect(panelCode).toContain('backGuardLive = pushed + wasDepth;');
+    expect(panelCode).not.toContain('guardFillPlan(readGuardDepth(w.history.state), BACK_GUARD_DEPTH)');
     expect(panelCode).toContain('nextGuardState(w.history.state, depth)');
     // 落在自己压的哨兵条目上也要照常消费一层（老实现直接 return，表现为「按了没反应」）
     expect(panelCode).not.toContain('if (ev?.state && ev.state[AUS_BACK_FLAG]) return;');
@@ -234,6 +247,14 @@ describe('安卓返回键：先关浮层 → 退一级页面 → 根页才关面
     expect(panelCode).toContain('scheduleBackGuardCleanStep(400);');
     expect(panelCode).toContain('backGuardCleanTimer = setTimeout(');
     expect(panelCode).not.toContain('stepBackGuardCleanup');
+  });
+
+  it('缓冲被打掉大半时靠延时定时器补回满层', () => {
+    expect(panelCode).toContain('function scheduleBackGuardTopUp(delay: number): void {');
+    expect(panelCode).toContain('backGuardTopUpTimer = setTimeout(');
+    expect(panelCode).toContain('let missing = BACK_GUARD_DEPTH - backGuardLive;');
+    // 脱管、关闭、重新接管时都要撤掉待执行的补压
+    expect(panelCode).toContain('clearBackGuardTopUpTimer();');
   });
 
   it('回收阶段的 popstate 只重排下一步，不在事件里同步 go', () => {

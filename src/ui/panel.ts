@@ -31,7 +31,7 @@ import { chartCardHTML } from './chart-picker';
 import { filterPickerRows } from './chat-visibility';
 import { backDebug } from './back-debug';
 import { afterNextPaint, closeDropdownInstant } from './dropdown-close';
-import { BACK_GUARD_DEPTH, guardFillPlan, nextGuardState, readGuardDepth } from './back-guard';
+import { BACK_GUARD_DEPTH, nextGuardState, readGuardDepth } from './back-guard';
 import { mobileDeviceHint } from '../utils/device';
 import { bindChangelog, renderChangelogCard } from './changelog';
 import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
@@ -2002,8 +2002,15 @@ export function createPanel() {
  *   ③ 栈空才关面板，不离开酒馆。
  * 历史上的实现只压一条记录、消费后补压一条，看起来「深度恒定」，但当用户连按返回时
  * 浏览器会把多次后退一次性解析成「后退 N 步」，补压还没生效就已经越过酒馆页面退出去了。
- * 因此这里预先压 BACK_GUARD_DEPTH 条哨兵，每条 state 自带「距酒馆条目的步数」，
- * 消费一次就补满缓冲，退出接管时一条条弹回酒馆记录（见 ui/back-guard.ts）。
+ * 因此这里在打开面板时一次性压满 BACK_GUARD_DEPTH 条哨兵，每条 state 自带
+ * 「距酒馆条目的步数」，退出接管时一条条弹回酒馆记录（见 ui/back-guard.ts）。
+ * 两条硬约束（真机日志换来的）：
+ *   ① **不要在 popstate 里同步 pushState 补压**：安卓侧滑手势触发的后退会被浏览器
+ *      「历史操纵干预」处理——页面在事件里插入的记录会被忽略，用户再滑一次就直接
+ *      跳过所有哨兵退进旧文档，表现为整页重载（就是「退出酒馆」）。要补压只能用
+ *      延时定时器，且缓冲本身压得足够多，正常连按压根用不到补压；
+ *   ② 压满时**不按当前 state 的深度推算缺口**：页面刷新后历史里会残留上次会话的
+ *      哨兵（属于旧文档），照深度补差会少压，用户连按几次就退进那片旧文档区域。
  * 面板已关闭时一律放行，不干扰酒馆自身的路由；桌面端不接管，
  * 保持「后退 = 回上一页」的原生语义。
  * ------------------------------------------------------------------- */
@@ -2012,7 +2019,7 @@ const NARROW_VIEWPORT_MAX = 760;
 let backGuardPushed = false;
 let backGuardWin: any = null;
 /**
- * 账面：我们自己压上去、还没被消费掉的哨兵条数（用 history.length 压入前后差分统计）。
+ * 账面：还能从历史里回收几条哨兵（本次压入的 + 打开面板前就残留在下面的旧哨兵）。
  * 这是回收阶段唯一可信的「还能退几步」依据——读 state 出来的深度可能因为宿主自己
  * pushState、或某条 state 被 replaceState 洗掉标记而失真，照它一次退到位会退过酒馆记录。
  */
@@ -2088,14 +2095,55 @@ function fillBackGuard(): void {
     if (!w.history?.pushState) return;
     const wasDepth = readGuardDepth(w.history.state);
     let pushed = 0;
-    for (const depth of guardFillPlan(readGuardDepth(w.history.state), BACK_GUARD_DEPTH)) {
+    // 无条件压满整层缓冲：不拿当前 state 的深度算缺口（见文件头注释②）。
+    // 打开面板时窗口后面垫着的记录越多，用户连按时才越不可能一步跨过酒馆页面。
+    for (let depth = 1; depth <= BACK_GUARD_DEPTH; depth++) {
       w.history.pushState(nextGuardState(w.history.state, depth), '');
-      backGuardLive++;
       pushed++;
     }
-    if (backGuardLive > BACK_GUARD_DEPTH) backGuardLive = BACK_GUARD_DEPTH;
+    // 账面 = 本次压入的条数 + 打开面板前残留在历史里的旧哨兵深度：
+    // 后者属于上一次会话（页面刷新后仍在），也是要由回收阶段清掉的真实记录。
+    backGuardLive = pushed + wasDepth;
     backDebug('fill', { fromDepth: wasDepth, pushed, live: backGuardLive });
   } catch (e) { backDebug('fill-error', { msg: String(e) }); }
+}
+
+/**
+ * 延时补压：面板内连按很多次（把 6 条哨兵吃掉大半）时补回满层。
+ * 只能用定时器，**绝不能在 popstate 里同步 pushState**（见文件头注释①）。
+ */
+let backGuardTopUpTimer: any = null;
+
+function clearBackGuardTopUpTimer(): void {
+  if (backGuardTopUpTimer) {
+    clearTimeout(backGuardTopUpTimer);
+    backGuardTopUpTimer = null;
+  }
+}
+
+function topUpBackGuard(): void {
+  const w = backGuardWin;
+  if (!w || !backGuardPushed || backGuardCleaning) return;
+  try {
+    if (!w.history?.pushState) return;
+    let missing = BACK_GUARD_DEPTH - backGuardLive;
+    if (missing <= 0) return;
+    while (missing-- > 0) {
+      w.history.pushState(nextGuardState(w.history.state, backGuardLive + 1), '');
+      backGuardLive++;
+    }
+    backDebug('fill-late', { live: backGuardLive });
+  } catch (e) { backDebug('fill-late-error', { msg: String(e) }); }
+}
+
+function scheduleBackGuardTopUp(delay: number): void {
+  clearBackGuardTopUpTimer();
+  if (!panelOpen || backGuardCleaning) return;
+  backGuardTopUpTimer = setTimeout(() => {
+    backGuardTopUpTimer = null;
+    if (!panelOpen || backGuardCleaning || !backGuardPushed) return;
+    topUpBackGuard();
+  }, delay);
 }
 
 /** 回收阶段：面板已经关掉，正在把压上去的哨兵一条条弹回酒馆自己那条记录 */
@@ -2120,6 +2168,7 @@ function stopBackGuardCleanup(): void {
   backGuardCleanWin = null;
   backGuardCleanPending = false;
   clearBackGuardCleanTimer();
+  clearBackGuardTopUpTimer();
   backGuardLive = 0;
   backGuardSkipUntil = nowTs() + 400;
   if (w) { try { w.removeEventListener('popstate', onBackGuardPop); } catch {} }
@@ -2198,7 +2247,8 @@ function onBackGuardPop(ev: any): void {
   // 依次消费：浮层 → 上一级页面 → 已经在根页才关面板
   if (closeTopOverlay() || goBackInPanel()) {
     backDebug('pop-consume', { depth, live: backGuardLive });
-    fillBackGuard();
+    // 面板还开着：缓冲被吃掉一部分，等手势那一下彻底落地后再补回满层
+    scheduleBackGuardTopUp(700);
     return;
   }
   // 关面板：先把事件状态摘干净（面板若被立刻重开，旧哨兵不该被当成缓冲），
@@ -2223,6 +2273,7 @@ function onBackGuardPop(ev: any): void {
 function armBackGuard(): void {
   if (backGuardPushed) return;
   if (backGuardCleaning) stopBackGuardCleanup();
+  clearBackGuardTopUpTimer();
   if (!isNarrowViewport()) { backDebug('arm-skip-wide'); return; }
   const w = backGuardHost();
   try {
@@ -2253,6 +2304,7 @@ function releaseBackGuard(stepBack = true): void {
   backDebug('release', { stepBack, pushed, live: backGuardLive, cleaning: backGuardCleaning });
   backGuardWin = null;
   backGuardPushed = false;
+  clearBackGuardTopUpTimer();
   // 已经在回收阶段：历史由 runBackGuardCleanStep 串行负责，这里只脱管
   if (backGuardCleaning) return;
   if (!w) return;

@@ -37,6 +37,8 @@ export interface BackDebugRecord {
   view?: string;
   /** document.visibilityState */
   vis?: string;
+  /** 扩展是否跑在 iframe 里（真机实测是同一窗口，false） */
+  iframe?: boolean | null;
   [key: string]: unknown;
 }
 
@@ -134,12 +136,21 @@ function snapshot(): Partial<BackDebugRecord> {
     const panel = doc?.getElementById('aus-panel');
     if (panel) {
       out.panel = (panel as HTMLElement).style.display || 'shown';
-      const active = panel.querySelector('[data-view]:not([style*="display: none"])');
+      // 只认真正有布局盒子的视图：容器自身可能没有 inline display，按选择器取第一个会误报
+      const views = Array.from(panel.querySelectorAll('[data-view]')) as HTMLElement[];
+      const active = views.find((el) => {
+        try { return el.getClientRects().length > 0; } catch { return false; }
+      });
       const view = active?.getAttribute('data-view');
       if (view) out.view = view;
     }
     if (doc) out.vis = doc.visibilityState;
   } catch {}
+  try {
+    out.iframe = typeof window !== 'undefined' && window.parent !== window;
+  } catch {
+    out.iframe = null;
+  }
   return out;
 }
 
@@ -202,6 +213,12 @@ export function installBackDebug(target?: any): void {
   } catch {}
   try {
     w.addEventListener('pageshow', () => backDebug('pageshow'));
+  } catch {}
+  try {
+    w.addEventListener('beforeunload', () => backDebug('beforeunload'));
+  } catch {}
+  try {
+    w.addEventListener('unload', () => backDebug('unload'));
   } catch {}
   try {
     w.document?.addEventListener?.('visibilitychange', () => backDebug('visibility', { vis: w.document.visibilityState }));
