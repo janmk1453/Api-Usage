@@ -12895,7 +12895,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-BCuK7bhd.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-BU5-uoIw.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-C0nJ98Sq.js").then((m) => m.maybeAutoCheck());
@@ -13127,7 +13127,7 @@ function onAppReady() {
 		import("./interception-BzsoKaEQ.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-BCuK7bhd.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BU5-uoIw.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -13138,7 +13138,7 @@ function onAppInitialized() {
 		import("./interception-BzsoKaEQ.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-BCuK7bhd.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BU5-uoIw.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -13264,7 +13264,7 @@ function onEnable() {
 		import("./interception-BzsoKaEQ.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-BCuK7bhd.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BU5-uoIw.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./balance-DwuYkZLE.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
@@ -13286,7 +13286,7 @@ async function onDisable() {
 		import("./interception-BzsoKaEQ.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-BCuK7bhd.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-BU5-uoIw.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -13356,7 +13356,7 @@ async function init() {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-BCuK7bhd.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BU5-uoIw.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {

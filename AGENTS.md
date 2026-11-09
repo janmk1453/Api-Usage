@@ -69,6 +69,7 @@ Api-Usage/
 │   │   └── events.ts      # DataEvents.UPDATED/HISTORY_ADDED/SETTINGS_CHANGED
 │   ├── store/index.ts, persistence.ts # 单一历史聚合（已废弃多存档，saves 仅作迁移兼容；append/getAllHistory 指纹去重 timestamp|model|total）
 │   ├── services/pricing.ts, interception.ts(fetch透传+TTFT/思维链/截断解析+请求开始快照连接身份，GENERATION_ENDED主路径，install/uninstall幂等), think-timing.ts(思维链耗时口径：按 JSON 增量识别首个「非空思维链帧」与首个「非空正文帧」，流式时序快照与 usage 解耦), connection-identity.ts(接入地址规范化/官方名称/酒馆密钥条目映射/严格隐私模式，不读取 proxy_password 与 custom_include_headers), wallet-secrets.ts(钱包校准密钥 XOR 存取与旧 apiKey 迁移), balance.ts(钱包余额手工/DeepSeek 官方自动校准和定时器), import-export.ts(单一历史+钱包配置+清洗，不导出密钥), sync.ts(单一历史+钱包合并+清洗), debug.ts, theme.ts(applyTheme 同步 overlay), update.ts(检查更新，目标分支 main/dev 可选且默认 main、提交哈希与服务端仓库状态优先、失败回退目标分支 manifest 版本对比，跨分支先 /api/extensions/switch 再调用 /api/extensions/update 扩展内一键更新并刷新，自动检查 1h 节流；**强制更新（救援通道）**见「强制更新」条：`update-policy.json` 策略 + 启动期静默探测 + 命中即安装并刷新，无本地开关), currency.ts(USD↔CNY 动态换算、walletDrivenCurrency 钱包驱动显示币种/getDisplayCurrency/formatMoney/getWalletExchangeRate/fetchLiveRate 双源 24h), pricing-sync.ts(按钱包 catalogProvider 从 models.dev 拉取、无全局开关、hasSyncableWallet 无来源不联网、USD→CNY*rate、add-missing/overwrite-unlocked/overwrite-all 和锁定保护)
+│   ├── services/agent-usage/(**TauriTavern Agent 模式用量采集，只服务宿主兼容层，酒馆侧采集代码不得改动**：tt-agent-api.ts 门面适配（`isTauriTavern`/`getHostAbiVersion`/`getAgentApi`）、collector.ts 事件接线（GENERATE_AFTER_DATA 起点识别 + MESSAGE_RECEIVED 取 runId + 补采对账）、normalize.ts 归一化、snapshot-probe.ts 快照封口探测，详见「TauriTavern Agent 模式用量采集」条)
 │   ├── stats/forecast.ts, forecast-series.ts, model-efficiency.ts, energyScore.ts # 预测核心：兼容旧分段回归/二次方程求 R；新序列核心负责压缩识别、增长拟合、命中率回退、成本/余额逐轮模拟与模型效率聚合；能耗评分 A-G
 │   ├── utils/device.ts(设备判定单一来源：UA 关键字 + iPadOS 桌面模式触控点数 + 粗指针；`mobileDeviceHint()` 会话内缓存，`set/resetMobileDeviceHint` 供注入与测试；「移动端兼容 UI」默认值据此只决定一次), date.ts, crypto.ts(XOR+UTF-8), logger.ts
 │   ├── **/*.test.ts       # Vitest 核心纯逻辑测试，不进入 Vite 入口构建
@@ -161,6 +162,22 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - 已迁出钱包页：API 密钥、手工余额、模型与价格编辑。旧 API 密钥、旧余额和旧 `customModels` 由 `repository.hydrate` 自动迁移到 DeepSeek 官方钱包；隐藏兼容控件不参与新增配置
 - `models.dev` 同步已改为逐钱包写入，预览和状态显示总新增/更新/跳过/待定价数量；**不存在全局同步开关**（旧 pricingSync.enabled 已删除）：是否同步只看该钱包有没有选价格来源，hasSyncableWallet 为假时静默跳过且不联网
 - 显示币种由钱包驱动：`currency.ts#walletDrivenCurrency` 在「未忽略钱包全部为 USD」时返回 USD，否则返回 CNY（`getDisplayCurrency` 据此选美元或人民币符号），改钱包币种即刻全站生效，没有独立币种开关；钱包余额汇总固定使用 `pricingSync.exchangeRate`（`getWalletExchangeRate`），与展示币种解耦，永不回退为 1
+
+## TauriTavern Agent 模式用量采集（兼容层，禁止改动酒馆侧采集）
+
+TauriTavern 的 Agent 模式把「一次 Run 的多次模型调用」交给宿主自己记账，酒馆侧的 `GENERATION_ENDED` 根本不会触发，所以 `src/services/agent-usage/` 单独走宿主 API 采集。**这条通道只为兼容 TauriTavern 存在：任何适配逻辑都必须落在 `src/services/agent-usage/` 内，服务于酒馆本身的采集代码（`interception.ts` 等）一律不动**——用户明确要求。
+
+- **门面**：`window.__TAURITAVERN__`（`tt-agent-api.ts` 的 `getTauriTavernRoot/isTauriTavern/getHostAbiVersion/getAgentApi`）。2.4.0 新增的 Web Host 不注入该门面 → `getAgentApi()` 返回 `null` → 采集静默关闭，不得报错。
+- **起点识别（两条路径，按 ABI 分流）**：
+  - `HOST_ABI_VERSION = 1`（TauriTavern ≤ 2.3.x）：`GENERATE_AFTER_DATA` 回调时 `generate_data.frozenRunInputSnapshot` 已封口 → 直接 `markPending()`；
+  - `HOST_ABI_VERSION = 2`（TauriTavern 2.4.0 起）：快照改到事件**之后**才封口 → 回调里只 `snapshotProbe.remember(data)` 留引用，等下一个真实酒馆事件（`MESSAGE_RECEIVED` / `CHAT_CHANGED` / `APP_READY` / 打开面板）时 `flushSnapshotProbe()` 对比**同一个对象**是否已出现 `frozenRunInputSnapshot`，出现即补一次 `scheduleReconcile(300)`。
+  - **禁止用 `setTimeout` / `setInterval` 轮询等快照**（延时方案已被用户否决）：只在真实事件到来时顺手比一次；待查引用环形只留最近 2 个（`createFrozenSnapshotProbe(2)`）。
+  - `needsSnapshotProbe(abi)`：`abi === 1` → `false`，其余（0 / 未知 / ≥2）→ `true`——未知版本按新语义探测，宁可多探测一次也不漏记。
+  - `hasFrozenRunSnapshot(data)` 只认对象自身属性（`hasOwnProperty`），不认原型链。
+  - ABI 常量来源：宿主 `src/tauri/main/bootstrap.js` 的 `HOST_ABI_VERSION`（v2.3.0 = 1 / v2.4.0 = 2）。宿主再改封口时机时要同步 `snapshot-probe.ts#SNAPSHOT_SEALED_AFTER_EVENT_ABI`。
+- **对账**（`reconcileAgentRuns`）：一律扫最近 20 条，**不再按 `aus_agent_watermark_v1` 水位提前 `break`**（水位只保留首次初始化用途）——否则「失败 / 取消且没提交聊天」的 Run 永远补不回来；已记录的由 `hasRecordedAgentRun` 跳过，不会重复写。
+- **卸载**（`uninstallAgentUsage`）要 `snapshotProbe.clear()`，别把上次会话的引用留到下一次。
+- **测试**：`snapshot-probe.test.ts`（ABI 判定与探测单元）、`tt-agent-api.test.ts`（版本号读取容错）、`collector-wiring.test.ts`（`?raw` 源码字符串断言，守住「两条路径 + 不许出现定时器 + 对账不按水位收手」）。改 `collector.ts` 必须同步核对这几个断言。
 
 ## 强制更新（救援通道）
 

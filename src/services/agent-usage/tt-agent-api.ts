@@ -47,6 +47,27 @@ export function isTauriTavern(): boolean {
   return !!getTauriTavernRoot();
 }
 
+/**
+ * 宿主 ABI 版本（`window.__TAURITAVERN__.abiVersion`）。
+ *
+ * 取值对照（源码 `src/tauri/main/bootstrap.js` 的 `HOST_ABI_VERSION`）：
+ * TauriTavern 2.3.0 = 1，2.4.0 = 2。读不到或不是正数时返回 0（未知）。
+ *
+ * 已知用法：ABI 2 起 `generate_data.frozenRunInputSnapshot` 改为在
+ * `GENERATE_AFTER_DATA` 之后才封口，Agent 起点识别需换一条路径，
+ * 见 `snapshot-probe.ts`。
+ */
+export function getHostAbiVersion(): number {
+  try {
+    const raw = getTauriTavernRoot()?.abiVersion;
+    const num = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(num) || num <= 0) return 0;
+    return Math.floor(num);
+  } catch {
+    return 0;
+  }
+}
+
 /** Agent ABI 是否可用：listRuns / readEvents 是采集的必要条件 */
 export function getAgentApi(): any {
   const root = getTauriTavernRoot();
