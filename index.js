@@ -2029,6 +2029,34 @@ function renderHeatmap(filtered) {
 	}, 50);
 }
 //#endregion
+//#region src/ui/dropdown-placement.ts
+function placeDropdownRelativeToHost(input) {
+	const gap = input.gap ?? 6;
+	const margin = input.margin ?? 8;
+	const minWidth = input.minWidth ?? 160;
+	const maxWidth = input.maxWidth ?? 280;
+	const minHeight = input.minHeight ?? 120;
+	const { anchor, host, bounds } = input;
+	const boundsWidth = Math.max(0, bounds.right - bounds.left);
+	const width = Math.min(maxWidth, Math.max(minWidth, boundsWidth - margin * 2));
+	let left = Math.round(anchor.right - width);
+	left = Math.min(left, Math.round(bounds.right - margin - width));
+	left = Math.max(left, Math.round(bounds.left + margin));
+	const below = bounds.bottom - margin - (anchor.bottom + gap);
+	const above = anchor.top - gap - (bounds.top + margin);
+	const openUp = below < input.estimatedHeight && above > below;
+	const room = openUp ? above : below;
+	const height = Math.max(minHeight, Math.min(input.estimatedHeight, Math.floor(room)));
+	const top = openUp ? Math.round(anchor.top - gap - height) : Math.round(anchor.bottom + gap);
+	return {
+		left: left - Math.round(host.left),
+		top: top - Math.round(host.top),
+		width: Math.round(width),
+		maxHeight: Math.round(height),
+		openUp
+	};
+}
+//#endregion
 //#region src/ui/overview.ts
 function getDoc$10() {
 	return window.parent?.document ?? document;
@@ -2283,24 +2311,53 @@ function bindOverviewWalletViewport() {
 }
 function positionOverviewWalletDropdown(btn, dropdown) {
 	try {
-		const panelRect = getDoc$10().getElementById("aus-panel")?.getBoundingClientRect();
+		const doc = getDoc$10();
+		const hostEl = btn.closest(".aus-overview-balance-card") || btn.parentElement;
+		if (!hostEl) return;
+		try {
+			if ((doc.defaultView ?? window).getComputedStyle(hostEl).position === "static") hostEl.style.position = "relative";
+		} catch {}
+		const hostRect = hostEl.getBoundingClientRect();
 		const btnRect = btn.getBoundingClientRect();
-		const viewportWidth = window.parent?.innerWidth ?? window.innerWidth;
-		const viewportHeight = window.parent?.innerHeight ?? window.innerHeight;
-		const available = Math.max(180, Math.min(280, viewportWidth - 16));
-		dropdown.style.position = "fixed";
-		dropdown.style.width = `${available}px`;
+		const mainRect = doc.getElementById("aus-main")?.getBoundingClientRect();
+		const vv = window.visualViewport;
+		const viewportRight = (vv?.offsetLeft ?? 0) + (vv?.width ?? window.innerWidth);
+		const viewportBottom = (vv?.offsetTop ?? 0) + (vv?.height ?? window.innerHeight);
+		const bounds = mainRect ? {
+			left: mainRect.left,
+			right: Math.min(mainRect.right, viewportRight),
+			top: mainRect.top,
+			bottom: Math.min(mainRect.bottom, viewportBottom)
+		} : {
+			left: 0,
+			right: viewportRight,
+			top: 0,
+			bottom: viewportBottom
+		};
+		const placed = placeDropdownRelativeToHost({
+			anchor: {
+				left: btnRect.left,
+				right: btnRect.right,
+				top: btnRect.top,
+				bottom: btnRect.bottom
+			},
+			host: {
+				left: hostRect.left + hostEl.clientLeft,
+				top: hostRect.top + hostEl.clientTop
+			},
+			bounds,
+			estimatedHeight: Math.min(dropdown.scrollHeight || 220, 320)
+		});
+		dropdown.style.position = "absolute";
+		dropdown.style.width = placed.width + "px";
 		dropdown.style.minWidth = "0";
-		dropdown.style.maxWidth = `${viewportWidth - 16}px`;
-		dropdown.style.maxHeight = `${Math.max(120, viewportHeight - 24)}px`;
-		const left = Math.max(8, Math.min(btnRect.right - available, viewportWidth - available - 8));
-		const estimatedHeight = Math.min(dropdown.scrollHeight || 220, viewportHeight - 24);
-		const top = btnRect.bottom + 6 + estimatedHeight > viewportHeight - 8 ? Math.max(8, btnRect.top - estimatedHeight - 6) : btnRect.bottom + 6;
-		dropdown.style.top = `${Math.round(top)}px`;
-		dropdown.style.left = `${Math.round(left)}px`;
+		dropdown.style.maxWidth = placed.width + "px";
+		dropdown.style.maxHeight = placed.maxHeight + "px";
+		dropdown.style.top = placed.top + "px";
+		dropdown.style.left = placed.left + "px";
 		dropdown.style.right = "auto";
-		dropdown.style.zIndex = "100500";
-		if (panelRect) dropdown.style.pointerEvents = "auto";
+		dropdown.style.bottom = "auto";
+		dropdown.style.zIndex = "40";
 	} catch {}
 }
 function bindFour() {

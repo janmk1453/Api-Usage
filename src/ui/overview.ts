@@ -9,6 +9,7 @@ import type { OverviewFourKey } from '../types/settings';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 import { repository } from '../data/repository';
 import { closeDropdownThenPaint } from './dropdown-close';
+import { placeDropdownRelativeToHost } from './dropdown-placement';
 
 function getDoc(): Document {
   return (window.parent as any)?.document ?? document;
@@ -146,30 +147,49 @@ function bindOverviewWalletViewport(): void {
 
 function positionOverviewWalletDropdown(btn: HTMLElement, dropdown: HTMLElement): void {
   try {
-    const panel = getDoc().getElementById('aus-panel') as HTMLElement | null;
-    const panelRect = panel?.getBoundingClientRect();
+    const doc = getDoc();
+    // 浮层挂在余额卡片里用 absolute 定位：坐标由「视口矩形之差」得出，
+    // 因此不再依赖 fixed 的包含块（被 transform/filter 祖先劫持后会整体错位，移动端高频踩坑）。
+    const hostEl = (btn.closest('.aus-overview-balance-card') as HTMLElement | null)
+      || (btn.parentElement as HTMLElement | null);
+    if (!hostEl) return;
+    // absolute 子级以「定位祖先的 padding box」为原点：静态定位的宿主先补 relative，
+    // 坐标基准取 rect + clientLeft/clientTop，否则卡片 1px 边框会让浮层整体偏 1px。
+    try {
+      const hostView = doc.defaultView ?? window;
+      if (hostView.getComputedStyle(hostEl).position === 'static') hostEl.style.position = 'relative';
+    } catch {}
+    const hostRect = hostEl.getBoundingClientRect();
     const btnRect = btn.getBoundingClientRect();
-    const viewportWidth = ((window.parent as any)?.innerWidth ?? window.innerWidth);
-    const viewportHeight = ((window.parent as any)?.innerHeight ?? window.innerHeight);
-    const available = Math.max(180, Math.min(280, viewportWidth - 16));
-    dropdown.style.position = 'fixed';
-    dropdown.style.width = `${available}px`;
+    const mainRect = (doc.getElementById('aus-main') as HTMLElement | null)?.getBoundingClientRect();
+    const vv: any = (window as any).visualViewport;
+    const viewportRight = (vv?.offsetLeft ?? 0) + (vv?.width ?? window.innerWidth);
+    const viewportBottom = (vv?.offsetTop ?? 0) + (vv?.height ?? window.innerHeight);
+    // 可用范围取 #aus-main 的可见部分（横滑/滚动容器内不越界），拿不到时退回视口
+    const bounds = mainRect
+      ? {
+        left: mainRect.left,
+        right: Math.min(mainRect.right, viewportRight),
+        top: mainRect.top,
+        bottom: Math.min(mainRect.bottom, viewportBottom),
+      }
+      : { left: 0, right: viewportRight, top: 0, bottom: viewportBottom };
+    const placed = placeDropdownRelativeToHost({
+      anchor: { left: btnRect.left, right: btnRect.right, top: btnRect.top, bottom: btnRect.bottom },
+      host: { left: hostRect.left + hostEl.clientLeft, top: hostRect.top + hostEl.clientTop },
+      bounds,
+      estimatedHeight: Math.min(dropdown.scrollHeight || 220, 320),
+    });
+    dropdown.style.position = 'absolute';
+    dropdown.style.width = placed.width + 'px';
     dropdown.style.minWidth = '0';
-    dropdown.style.maxWidth = `${viewportWidth - 16}px`;
-    dropdown.style.maxHeight = `${Math.max(120, viewportHeight - 24)}px`;
-    const left = Math.max(8, Math.min(btnRect.right - available, viewportWidth - available - 8));
-    const estimatedHeight = Math.min(dropdown.scrollHeight || 220, viewportHeight - 24);
-    const openUp = btnRect.bottom + 6 + estimatedHeight > viewportHeight - 8;
-    const top = openUp
-      ? Math.max(8, btnRect.top - estimatedHeight - 6)
-      : btnRect.bottom + 6;
-    dropdown.style.top = `${Math.round(top)}px`;
-    dropdown.style.left = `${Math.round(left)}px`;
+    dropdown.style.maxWidth = placed.width + 'px';
+    dropdown.style.maxHeight = placed.maxHeight + 'px';
+    dropdown.style.top = placed.top + 'px';
+    dropdown.style.left = placed.left + 'px';
     dropdown.style.right = 'auto';
-    dropdown.style.zIndex = '100500';
-    if (panelRect) {
-      dropdown.style.pointerEvents = 'auto';
-    }
+    dropdown.style.bottom = 'auto';
+    dropdown.style.zIndex = '40';
   } catch {}
 }
 function bindFour() {

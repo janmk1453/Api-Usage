@@ -588,6 +588,13 @@
 #aus-overview-wallet-dropdown {
   z-index: 100 !important;
 }
+/* 余额口径下拉以余额卡片为定位参照（absolute，见 ui/dropdown-placement.ts），
+   而窄屏有「概览页卡片一律 overflow:hidden」的规则（特异性 0,2,0 压过单类选择器），
+   会把浮层裁掉一半。这里用 ID 前缀把可见性要回来，浮层才能露出卡片边框。 */
+#aus-panel [data-view="overview"] .aus-overview-balance-card,
+#aus-panel #aus-overview-wallet-dropdown {
+  overflow: visible !important;
+}
 [data-wallet-card] {
   position: relative;
   z-index: 1;
