@@ -29,6 +29,7 @@ import { initChatManageView, renderChatManageView } from './chat-manage';
 import { helpViewHTML } from './help-view';
 import { chartCardHTML } from './chart-picker';
 import { filterPickerRows } from './chat-visibility';
+import { backDebug } from './back-debug';
 import { afterNextPaint, closeDropdownInstant } from './dropdown-close';
 import { BACK_GUARD_DEPTH, guardFillPlan, nextGuardState, readGuardDepth } from './back-guard';
 import { mobileDeviceHint } from '../utils/device';
@@ -2085,12 +2086,16 @@ function fillBackGuard(): void {
   if (!w || !backGuardPushed) return;
   try {
     if (!w.history?.pushState) return;
+    const wasDepth = readGuardDepth(w.history.state);
+    let pushed = 0;
     for (const depth of guardFillPlan(readGuardDepth(w.history.state), BACK_GUARD_DEPTH)) {
       w.history.pushState(nextGuardState(w.history.state, depth), '');
       backGuardLive++;
+      pushed++;
     }
     if (backGuardLive > BACK_GUARD_DEPTH) backGuardLive = BACK_GUARD_DEPTH;
-  } catch {}
+    backDebug('fill', { fromDepth: wasDepth, pushed, live: backGuardLive });
+  } catch (e) { backDebug('fill-error', { msg: String(e) }); }
 }
 
 /** 回收阶段：面板已经关掉，正在把压上去的哨兵一条条弹回酒馆自己那条记录 */
@@ -2110,6 +2115,7 @@ function clearBackGuardCleanTimer(): void {
 /** 回收收尾：彻底脱管 */
 function stopBackGuardCleanup(): void {
   const w = backGuardCleanWin;
+  backDebug('clean-stop', { live: backGuardLive, pending: backGuardCleanPending });
   backGuardCleaning = false;
   backGuardCleanWin = null;
   backGuardCleanPending = false;
@@ -2141,6 +2147,7 @@ function scheduleBackGuardCleanStep(delay: number): void {
  */
 function runBackGuardCleanStep(): void {
   const w = backGuardCleanWin;
+  backDebug('clean-step', { live: backGuardLive, hasWin: !!w, cleaning: backGuardCleaning });
   if (!w || !backGuardCleaning) { stopBackGuardCleanup(); return; }
   backGuardCleanPending = false;
   if (backGuardLive <= 0) { stopBackGuardCleanup(); return; }
@@ -2155,6 +2162,7 @@ function runBackGuardCleanStep(): void {
 
 function startBackGuardCleanup(w: any): void {
   if (!w) return;
+  backDebug('clean-start', { live: backGuardLive });
   backGuardCleaning = true;
   backGuardCleanWin = w;
   backGuardSkipUntil = nowTs() + 400;
@@ -2163,23 +2171,33 @@ function startBackGuardCleanup(w: any): void {
 }
 
 function onBackGuardPop(ev: any): void {
+  backDebug('pop-enter', {
+    evDepth: readGuardDepth(ev?.state),
+    cleaning: backGuardCleaning,
+    pending: backGuardCleanPending,
+    open: panelOpen,
+    live: backGuardLive,
+    skipIn: backGuardSkipUntil ? Math.max(0, backGuardSkipUntil - nowTs()) : 0,
+  });
   if (backGuardCleaning) {
     // 回收期间的历史变动分两种：我们刚发的 go(-1) 的回声（不扣账面），或用户又按了一次
     // 返回（扣一条账面）。两种都只重排下一步，绝不在事件里同步 go，避免跟排队中的后退叠加。
     if (backGuardCleanPending) backGuardCleanPending = false;
     else backGuardLive = Math.max(0, backGuardLive - 1);
+    backDebug('pop-cleaning', { live: backGuardLive });
     scheduleBackGuardCleanStep(140);
     return;
   }
-  if (!panelOpen) { releaseBackGuard(false); return; }
+  if (!panelOpen) { backDebug('pop-closed-panel'); releaseBackGuard(false); return; }
   // 刚收完哨兵时回来的余波：不算「用户按了返回」（面板若被立刻重开会收到它）
-  if (backGuardSkipUntil && nowTs() < backGuardSkipUntil) { backGuardSkipUntil = 0; return; }
+  if (backGuardSkipUntil && nowTs() < backGuardSkipUntil) { backDebug('pop-skip'); backGuardSkipUntil = 0; return; }
   // 落点是不是我们自己压的哨兵都要照常消费一层：老实现落在哨兵上直接 return，
   // 表现为「按了没反应」，紧接着再按一次就越过酒馆页面退出去了。
   const depth = readGuardDepth(ev?.state);
   backGuardLive = Math.max(0, backGuardLive - 1);
   // 依次消费：浮层 → 上一级页面 → 已经在根页才关面板
   if (closeTopOverlay() || goBackInPanel()) {
+    backDebug('pop-consume', { depth, live: backGuardLive });
     fillBackGuard();
     return;
   }
@@ -2188,6 +2206,7 @@ function onBackGuardPop(ev: any): void {
   const w = backGuardWin;
   backGuardWin = null;
   backGuardPushed = false;
+  backDebug('pop-close-panel', { live: backGuardLive });
   try { closePanel(); } catch {}
   if (!w) return;
   if (backGuardLive > 0) startBackGuardCleanup(w);
@@ -2204,7 +2223,7 @@ function onBackGuardPop(ev: any): void {
 function armBackGuard(): void {
   if (backGuardPushed) return;
   if (backGuardCleaning) stopBackGuardCleanup();
-  if (!isNarrowViewport()) return;
+  if (!isNarrowViewport()) { backDebug('arm-skip-wide'); return; }
   const w = backGuardHost();
   try {
     if (!w?.history?.pushState) return;
@@ -2212,8 +2231,10 @@ function armBackGuard(): void {
     backGuardPushed = true;
     backGuardLive = 0;
     w.addEventListener('popstate', onBackGuardPop);
+    backDebug('arm');
     fillBackGuard();
-  } catch {
+  } catch (e) {
+    backDebug('arm-error', { msg: String(e) });
     backGuardPushed = false;
     backGuardWin = null;
     backGuardLive = 0;
@@ -2229,6 +2250,7 @@ function armBackGuard(): void {
 function releaseBackGuard(stepBack = true): void {
   const w = backGuardWin;
   const pushed = backGuardPushed;
+  backDebug('release', { stepBack, pushed, live: backGuardLive, cleaning: backGuardCleaning });
   backGuardWin = null;
   backGuardPushed = false;
   // 已经在回收阶段：历史由 runBackGuardCleanStep 串行负责，这里只脱管
@@ -2271,6 +2293,7 @@ export function openPanel() {
     try { if (panelOpenStartTs) trackRender(nowTs() - panelOpenStartTs); } catch {}
   });
   panelOpen = true;
+  backDebug('open-panel');
   try { armBackGuard(); } catch {}
   refreshUI();
   // Agent 模式用量对账（无 TauriTavern 时该模块立即返回，不产生任何 IPC）
@@ -2287,8 +2310,8 @@ export function closePanel() {
   mobileOpen = false;
   syncMobileSidebar(doc);
   panelOpen = false;
+  backDebug('close-panel', { live: backGuardLive, cleaning: backGuardCleaning });
   // 关闭时弹出为返回键压入的历史记录，避免下次返回多退一步
-
   try { releaseBackGuard(); } catch {}
   // 匿名使用统计：关闭面板时合并上报本次会话数据
   try { flushTelemetry('close'); } catch {}

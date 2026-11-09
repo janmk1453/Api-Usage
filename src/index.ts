@@ -11,6 +11,10 @@ import { createPeakDot, updatePeakDot, stopPeakDot } from './ui/peak-dot';
 import { applyTheme, watchSystemTheme, unwatchSystemTheme } from './services/theme';
 import { initTelemetry } from './services/telemetry';
 import { log } from './utils/logger';
+import { installBackDebug } from './ui/back-debug';
+
+// 返回键诊断日志（临时排查用）：入口尽早安装，面板打开之前的返回事件也要记上
+try { installBackDebug(); } catch {}
 
 const MODULE = 'api_usage_stat';
 let wandRetryTimer: any = null;

@@ -1674,7 +1674,7 @@ function normalizePrefs(value) {
 		hiddenPickers: normalizeHiddenKeys(raw.hiddenPickers)
 	};
 }
-function storage$2() {
+function storage$3() {
 	try {
 		const store = globalThis.localStorage;
 		if (!store || typeof store.getItem !== "function" || typeof store.setItem !== "function") return null;
@@ -1688,7 +1688,7 @@ function storage$2() {
 var memoryPrefs = null;
 /** 读取整份偏好（每次返回新对象，调用方可安全修改） */
 function readPrefs() {
-	const store = storage$2();
+	const store = storage$3();
 	if (!store) return normalizePrefs(memoryPrefs ?? {});
 	try {
 		const raw = store.getItem(CHAT_VISIBILITY_KEY);
@@ -1707,7 +1707,7 @@ function readPrefs() {
 function writePrefs(prefs) {
 	const clean = normalizePrefs(prefs);
 	memoryPrefs = clean;
-	const store = storage$2();
+	const store = storage$3();
 	if (!store) return;
 	try {
 		store.setItem(CHAT_VISIBILITY_KEY, JSON.stringify(clean));
@@ -2669,7 +2669,7 @@ var WEEKDAY = [
 	"周五",
 	"周六"
 ];
-var pad = (n) => String(n).padStart(2, "0");
+var pad$1 = (n) => String(n).padStart(2, "0");
 var num = (v) => {
 	const n = Number(v);
 	return Number.isFinite(n) && n > 0 ? n : 0;
@@ -2679,7 +2679,7 @@ function chartDate(ts) {
 	const t = num(ts);
 	if (!t) return "";
 	const d = new Date(t);
-	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+	return `${d.getFullYear()}-${pad$1(d.getMonth() + 1)}-${pad$1(d.getDate())}`;
 }
 /** 2026-10-23 周五 */
 function chartDateWeek(ts) {
@@ -2692,14 +2692,14 @@ function chartDateTime(ts) {
 	const t = num(ts);
 	if (!t) return "";
 	const d = new Date(t);
-	return chartDate(t) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+	return chartDate(t) + " " + pad$1(d.getHours()) + ":" + pad$1(d.getMinutes());
 }
 /** 19:12:33 */
 function chartClock(ts) {
 	const t = num(ts);
 	if (!t) return "";
 	const d = new Date(t);
-	return pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+	return pad$1(d.getHours()) + ":" + pad$1(d.getMinutes()) + ":" + pad$1(d.getSeconds());
 }
 /** ISO 周键：2026-W43 */
 function isoWeekKey(ts) {
@@ -2711,7 +2711,7 @@ function isoWeekKey(ts) {
 	tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
 	const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
 	const weekNo = Math.ceil(((tmp - yearStart) / 864e5 + 1) / 7);
-	return tmp.getUTCFullYear() + "-W" + pad(weekNo);
+	return tmp.getUTCFullYear() + "-W" + pad$1(weekNo);
 }
 /** 单条记录的悬浮标题：2026-10-23 19:12:33 */
 function entryTip(entry) {
@@ -2738,8 +2738,8 @@ function bucketTip(x, firstTs, lastTs) {
 	const last = num(lastTs) || first;
 	if (x === "hour") {
 		const d = new Date(first);
-		const from = pad(d.getHours()) + ":00";
-		const to = pad((d.getHours() + 1) % 24) + ":00";
+		const from = pad$1(d.getHours()) + ":00";
+		const to = pad$1((d.getHours() + 1) % 24) + ":00";
 		return chartDateWeek(first) + " " + from + "–" + to;
 	}
 	if (x === "day") return chartDateWeek(first);
@@ -2786,7 +2786,7 @@ var CHART_PREFS_KEY = "aus_stats_chart_prefs_v1";
 function isPlainObject$1(value) {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function storage$1() {
+function storage$2() {
 	try {
 		const store = globalThis.localStorage;
 		return store && typeof store.getItem === "function" && typeof store.setItem === "function" ? store : null;
@@ -2802,7 +2802,7 @@ function normalizeExtra(value) {
 }
 /** 读取全部图表配置；损坏数据或不可用存储统一回退为空对象（调用方按默认值处理） */
 function readChartPrefs() {
-	const store = storage$1();
+	const store = storage$2();
 	if (store) try {
 		const raw = store.getItem(CHART_PREFS_KEY);
 		if (raw) {
@@ -2822,7 +2822,7 @@ function readChartPrefs() {
 }
 /** 按块合并写入（只覆盖 patch 里出现的字段与图表，其余保持不变） */
 function writeChartPrefs(patch) {
-	const store = storage$1();
+	const store = storage$2();
 	if (!store) return;
 	try {
 		const current = readChartPrefs();
@@ -4783,7 +4783,7 @@ var HISTORY_KEYS = [
 function isPlainObject(value) {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function storage() {
+function storage$1() {
 	try {
 		const store = globalThis.localStorage;
 		return store && typeof store.getItem === "function" && typeof store.setItem === "function" ? store : null;
@@ -4843,7 +4843,7 @@ function normalizeHistoryPrefs(value) {
 }
 /** 读取全部筛选偏好；损坏数据或不可用存储统一回退为空对象（调用方按默认值处理） */
 function readFilterPrefs() {
-	const store = storage();
+	const store = storage$1();
 	if (store) try {
 		const raw = store.getItem(FILTER_PREFS_KEY);
 		if (raw) {
@@ -4861,7 +4861,7 @@ function readFilterPrefs() {
 }
 /** 按分片合并写入（只覆盖 patch 里出现的字段与分片，其余保持不变；内容无变化时跳过写入） */
 function writeFilterPrefs(patch) {
-	const store = storage();
+	const store = storage$1();
 	if (!store) return;
 	try {
 		const raw = store.getItem(FILTER_PREFS_KEY);
@@ -10069,6 +10069,188 @@ function chartCardHTML(spec) {
 	return `<div class="ds-card aus-chart-card"${cardId}><div class="aus-chart-card-head"><span class="aus-chart-card-title">${escText(spec.title)}</span>` + pills + `</div><div id="${escText(spec.chartId)}" style="height:${height}px;"></div></div>`;
 }
 //#endregion
+//#region src/ui/back-debug.ts
+/**
+* 返回键诊断日志（临时排查用）。
+*
+* 为什么要有这个文件：安卓返回键在真机上「从二级页返回后再按一次就退出酒馆」的现象
+* 没法在桌面无头浏览器里复现（`input keyevent`/`input swipe` 的手势序列与真手指不同），
+* 只能把扩展内部的关键事件现场记下来，事后再读。
+*
+* 记录方式（两条互相独立、互为兜底）：
+*   1. `localStorage[aus_back_debug_v1]`：环形缓冲最多 {@link BACK_DEBUG_MAX} 条，
+*      页面被卸载/重载后依然能读到（同源持久化）；
+*   2. `console.log('[aus-back]', json)`：可用 DevTools / chrome://inspect 实时观察。
+*
+* 读取方式：`window.__ausBackDebug.dump()` 取全部记录，`clear()` 清空。
+* 关闭记录：`localStorage.setItem('aus_back_debug_off', '1')`，刷新后不再写。
+*
+* 本模块只做记录，不参与任何业务判断；所有操作都包在 try/catch 里，出错绝不外溢。
+*/
+var BACK_DEBUG_KEY = "aus_back_debug_v1";
+var BACK_DEBUG_OFF_KEY = "aus_back_debug_off";
+var ring = [];
+var loaded = false;
+var installed = false;
+var flushTimer = null;
+var bootTs = Date.now();
+function storage() {
+	try {
+		return typeof localStorage !== "undefined" ? localStorage : null;
+	} catch {
+		return null;
+	}
+}
+function pad(n, w = 2) {
+	return String(n).padStart(w, "0");
+}
+function stamp() {
+	const d = /* @__PURE__ */ new Date();
+	return pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()) + "." + pad(d.getMilliseconds(), 3);
+}
+function shortState(state) {
+	if (state === null || state === void 0) return null;
+	try {
+		const text = JSON.stringify(state);
+		if (typeof text !== "string") return null;
+		return text.length > 160 ? text.slice(0, 160) + "…" : text;
+	} catch {
+		return null;
+	}
+}
+/** 首次调用时把上次会话残留的日志读回环形缓冲（页面重载不丢） */
+function loadOnce() {
+	if (loaded) return;
+	loaded = true;
+	const ls = storage();
+	if (!ls) return;
+	try {
+		const raw = ls.getItem(BACK_DEBUG_KEY);
+		const arr = raw ? JSON.parse(raw) : null;
+		if (Array.isArray(arr)) ring = arr.slice(-300);
+	} catch {
+		ring = [];
+	}
+}
+function flushNow() {
+	flushTimer = null;
+	const ls = storage();
+	if (!ls) return;
+	try {
+		ls.setItem(BACK_DEBUG_KEY, JSON.stringify(ring));
+	} catch {}
+}
+function scheduleFlush() {
+	if (flushTimer) return;
+	try {
+		flushTimer = setTimeout(flushNow, 120);
+	} catch {
+		flushTimer = null;
+	}
+}
+function debugDisabled() {
+	const ls = storage();
+	if (!ls) return false;
+	try {
+		return ls.getItem(BACK_DEBUG_OFF_KEY) === "1";
+	} catch {
+		return false;
+	}
+}
+function snapshot() {
+	const out = {};
+	try {
+		if (typeof history !== "undefined") {
+			out.len = history.length;
+			out.st = shortState(history.state);
+		}
+	} catch {}
+	try {
+		const doc = typeof document !== "undefined" ? document : null;
+		const panel = doc?.getElementById("aus-panel");
+		if (panel) {
+			out.panel = panel.style.display || "shown";
+			const view = panel.querySelector("[data-view]:not([style*=\"display: none\"])")?.getAttribute("data-view");
+			if (view) out.view = view;
+		}
+		if (doc) out.vis = doc.visibilityState;
+	} catch {}
+	return out;
+}
+/** 记一条诊断日志（不出错、不阻塞） */
+function backDebug(kind, extra) {
+	try {
+		if (debugDisabled()) return;
+		loadOnce();
+		const rec = {
+			t: stamp(),
+			ms: Date.now() - bootTs,
+			k: kind,
+			...snapshot(),
+			...extra || {}
+		};
+		ring.push(rec);
+		if (ring.length > 300) ring.splice(0, ring.length - 300);
+		scheduleFlush();
+		try {
+			console.log("[aus-back]", JSON.stringify(rec));
+		} catch {}
+	} catch {}
+}
+/** 取全部记录（副本） */
+function backDebugDump() {
+	try {
+		loadOnce();
+		return ring.slice();
+	} catch {
+		return [];
+	}
+}
+/** 清空记录（内存 + localStorage） */
+function backDebugClear() {
+	ring = [];
+	loaded = true;
+	flushNow();
+	return "cleared";
+}
+/**
+* 注册页面级监听并挂出读取入口。幂等；由 index.ts 在入口尽早调用，
+* 保证面板还没打开时的返回事件也会被记上。
+*/
+function installBackDebug(target) {
+	if (installed) return;
+	installed = true;
+	loadOnce();
+	const w = target || (typeof window !== "undefined" ? window : null);
+	if (!w) return;
+	try {
+		w.__ausBackDebug = {
+			dump: backDebugDump,
+			clear: backDebugClear,
+			log: backDebug,
+			key: BACK_DEBUG_KEY
+		};
+	} catch {}
+	try {
+		w.addEventListener("popstate", (ev) => {
+			backDebug("pop-raw", {
+				evSt: shortState(ev?.state),
+				evLen: w.history?.length
+			});
+		});
+	} catch {}
+	try {
+		w.addEventListener("pagehide", () => backDebug("pagehide"));
+	} catch {}
+	try {
+		w.addEventListener("pageshow", () => backDebug("pageshow"));
+	} catch {}
+	try {
+		w.document?.addEventListener?.("visibilitychange", () => backDebug("visibility", { vis: w.document.visibilityState }));
+	} catch {}
+	backDebug("init", { href: String(w.location?.href || "") });
+}
+//#endregion
 //#region src/ui/back-guard.ts
 /**
 * 安卓返回键接管用到的纯逻辑 —— 只做状态换算，不碰 DOM 与 history，
@@ -12595,12 +12777,22 @@ function fillBackGuard() {
 	if (!w || !backGuardPushed) return;
 	try {
 		if (!w.history?.pushState) return;
+		const wasDepth = readGuardDepth(w.history.state);
+		let pushed = 0;
 		for (const depth of guardFillPlan(readGuardDepth(w.history.state), 3)) {
 			w.history.pushState(nextGuardState(w.history.state, depth), "");
 			backGuardLive++;
+			pushed++;
 		}
 		if (backGuardLive > 3) backGuardLive = 3;
-	} catch {}
+		backDebug("fill", {
+			fromDepth: wasDepth,
+			pushed,
+			live: backGuardLive
+		});
+	} catch (e) {
+		backDebug("fill-error", { msg: String(e) });
+	}
 }
 /** 回收阶段：面板已经关掉，正在把压上去的哨兵一条条弹回酒馆自己那条记录 */
 var backGuardCleaning = false;
@@ -12617,6 +12809,10 @@ function clearBackGuardCleanTimer() {
 /** 回收收尾：彻底脱管 */
 function stopBackGuardCleanup() {
 	const w = backGuardCleanWin;
+	backDebug("clean-stop", {
+		live: backGuardLive,
+		pending: backGuardCleanPending
+	});
 	backGuardCleaning = false;
 	backGuardCleanWin = null;
 	backGuardCleanPending = false;
@@ -12648,6 +12844,11 @@ function scheduleBackGuardCleanStep(delay) {
 */
 function runBackGuardCleanStep() {
 	const w = backGuardCleanWin;
+	backDebug("clean-step", {
+		live: backGuardLive,
+		hasWin: !!w,
+		cleaning: backGuardCleaning
+	});
 	if (!w || !backGuardCleaning) {
 		stopBackGuardCleanup();
 		return;
@@ -12677,35 +12878,52 @@ function runBackGuardCleanStep() {
 }
 function startBackGuardCleanup(w) {
 	if (!w) return;
+	backDebug("clean-start", { live: backGuardLive });
 	backGuardCleaning = true;
 	backGuardCleanWin = w;
 	backGuardSkipUntil = nowTs() + 400;
 	scheduleBackGuardCleanStep(140);
 }
 function onBackGuardPop(ev) {
+	backDebug("pop-enter", {
+		evDepth: readGuardDepth(ev?.state),
+		cleaning: backGuardCleaning,
+		pending: backGuardCleanPending,
+		open: panelOpen,
+		live: backGuardLive,
+		skipIn: backGuardSkipUntil ? Math.max(0, backGuardSkipUntil - nowTs()) : 0
+	});
 	if (backGuardCleaning) {
 		if (backGuardCleanPending) backGuardCleanPending = false;
 		else backGuardLive = Math.max(0, backGuardLive - 1);
+		backDebug("pop-cleaning", { live: backGuardLive });
 		scheduleBackGuardCleanStep(140);
 		return;
 	}
 	if (!panelOpen) {
+		backDebug("pop-closed-panel");
 		releaseBackGuard(false);
 		return;
 	}
 	if (backGuardSkipUntil && nowTs() < backGuardSkipUntil) {
+		backDebug("pop-skip");
 		backGuardSkipUntil = 0;
 		return;
 	}
-	readGuardDepth(ev?.state);
+	const depth = readGuardDepth(ev?.state);
 	backGuardLive = Math.max(0, backGuardLive - 1);
 	if (closeTopOverlay() || goBackInPanel()) {
+		backDebug("pop-consume", {
+			depth,
+			live: backGuardLive
+		});
 		fillBackGuard();
 		return;
 	}
 	const w = backGuardWin;
 	backGuardWin = null;
 	backGuardPushed = false;
+	backDebug("pop-close-panel", { live: backGuardLive });
 	try {
 		closePanel();
 	} catch {}
@@ -12725,7 +12943,10 @@ function onBackGuardPop(ev) {
 function armBackGuard() {
 	if (backGuardPushed) return;
 	if (backGuardCleaning) stopBackGuardCleanup();
-	if (!isNarrowViewport()) return;
+	if (!isNarrowViewport()) {
+		backDebug("arm-skip-wide");
+		return;
+	}
 	const w = backGuardHost();
 	try {
 		if (!w?.history?.pushState) return;
@@ -12733,8 +12954,10 @@ function armBackGuard() {
 		backGuardPushed = true;
 		backGuardLive = 0;
 		w.addEventListener("popstate", onBackGuardPop);
+		backDebug("arm");
 		fillBackGuard();
-	} catch {
+	} catch (e) {
+		backDebug("arm-error", { msg: String(e) });
 		backGuardPushed = false;
 		backGuardWin = null;
 		backGuardLive = 0;
@@ -12749,6 +12972,12 @@ function armBackGuard() {
 function releaseBackGuard(stepBack = true) {
 	const w = backGuardWin;
 	const pushed = backGuardPushed;
+	backDebug("release", {
+		stepBack,
+		pushed,
+		live: backGuardLive,
+		cleaning: backGuardCleaning
+	});
 	backGuardWin = null;
 	backGuardPushed = false;
 	if (backGuardCleaning) return;
@@ -12800,6 +13029,7 @@ function openPanel() {
 		} catch {}
 	});
 	panelOpen = true;
+	backDebug("open-panel");
 	try {
 		armBackGuard();
 	} catch {}
@@ -12825,6 +13055,10 @@ function closePanel() {
 	mobileOpen = false;
 	syncMobileSidebar(doc);
 	panelOpen = false;
+	backDebug("close-panel", {
+		live: backGuardLive,
+		cleaning: backGuardCleaning
+	});
 	try {
 		releaseBackGuard();
 	} catch {}
@@ -12973,6 +13207,9 @@ function createPeakDot() {
 * 入口：酒馆左下角魔法棒（#extensionsMenu） → 点击打开全屏用量页
 * 面板：独立于酒馆的 #aus-overlay + #aus-panel 全屏页面，DeepSeek 浅色风格
 */
+try {
+	installBackDebug();
+} catch {}
 var MODULE = "api_usage_stat";
 var wandRetryTimer = null;
 var mountRetryTimer = null;

@@ -217,7 +217,7 @@ describe('安卓返回键：先关浮层 → 退一级页面 → 根页才关面
     // 一次性 go(-N) 依赖「历史里只多出 N 条」的假设：宿主自己也 pushState 过、
     // 或某条 state 被 replaceState 洗掉标记时就会退过酒馆记录（表现为顺手退出了酒馆）。
     const rel = panelCode.indexOf('function releaseBackGuard(stepBack = true): void {');
-    const body = panelCode.slice(rel, rel + 1200);
+    const body = panelCode.slice(rel, rel + 1800);
     expect(rel).toBeGreaterThan(-1);
     expect(body).toContain('startBackGuardCleanup(w)');
     expect(panelCode).not.toContain('w.history.go(-depth);');
@@ -238,7 +238,7 @@ describe('安卓返回键：先关浮层 → 退一级页面 → 根页才关面
 
   it('回收阶段的 popstate 只重排下一步，不在事件里同步 go', () => {
     const pop = panelCode.indexOf('function onBackGuardPop(ev: any): void {');
-    const body = panelCode.slice(pop, pop + 1200);
+    const body = panelCode.slice(pop, pop + 3000);
     expect(body).toContain('if (backGuardCleaning) {');
     expect(body).toContain('if (backGuardCleanPending) backGuardCleanPending = false;');
     expect(body).toContain('else backGuardLive = Math.max(0, backGuardLive - 1);');
