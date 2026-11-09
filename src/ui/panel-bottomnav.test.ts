@@ -177,9 +177,9 @@ describe('安卓返回键：先关浮层 → 逐页回退 → 栈空才关面板
     expect(panelCode).toContain('const viewTrail: AppView[] = [];');
   });
 
-  it('返回键按 浮层 → 上一页 → 关面板 的次序消费，且每次都补压一条历史记录', () => {
+  it('返回键按 浮层 → 上一页 → 关面板 的次序消费，且每次消费后把哨兵缓冲补满', () => {
     expect(panelCode).toContain('if (closeTopOverlay() || goBackInPanel()) {');
-    expect(panelCode).toContain('rearmBackGuard();');
+    expect(panelCode).toContain('fillBackGuard();');
     // 关面板必须是最后一步，不能再像改造前那样「按一次就关」
     const pop = panelCode.indexOf('if (closeTopOverlay() || goBackInPanel()) {');
     const close = panelCode.indexOf('try { closePanel(); } catch {}', pop);
@@ -199,6 +199,26 @@ describe('安卓返回键：先关浮层 → 逐页回退 → 栈空才关面板
 
   it('平板横屏等宽度超过 760 的移动设备同样接管返回键', () => {
     expect(panelCode).toContain('return mobileDeviceHint();');
+  });
+
+  it('预先压多条哨兵，连按返回才不会一步越过酒馆页面', () => {
+    // 缓冲深度与纯逻辑都集中在 back-guard 模块，面板只管读写宿主历史
+    expect(panelCode).toContain("from './back-guard';");
+    expect(panelCode).toContain('guardFillPlan(readGuardDepth(w.history.state), BACK_GUARD_DEPTH)');
+    expect(panelCode).toContain('nextGuardState(w.history.state, depth)');
+    // 落在自己压的哨兵条目上也要照常消费一层（老实现直接 return，表现为「按了没反应」）
+    expect(panelCode).not.toContain('if (ev?.state && ev.state[AUS_BACK_FLAG]) return;');
+    expect(panelCode).toContain('if (closeTopOverlay() || goBackInPanel()) {');
+  });
+
+  it('关面板时按已知深度一次退干净，不留下一按没反应的哨兵', () => {
+    const rel = panelCode.indexOf('function releaseBackGuard(stepBack = true): void {');
+    const body = panelCode.slice(rel, rel + 1200);
+    expect(rel).toBeGreaterThan(-1);
+    expect(body).toContain('w.history.go(-depth);');
+    expect(body).toContain('stripGuardState(w.history?.state)');
+    // 清理性后退回来的那次 popstate 必须放行
+    expect(body).toContain('backGuardSkipUntil = nowTs() + 400;');
   });
 
   it('打开与关闭面板都清空浏览栈，避免下次打开残留上次路径', () => {

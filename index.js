@@ -10068,6 +10068,56 @@ function chartCardHTML(spec) {
 	const height = spec.height ?? 220;
 	return `<div class="ds-card aus-chart-card"${cardId}><div class="aus-chart-card-head"><span class="aus-chart-card-title">${escText(spec.title)}</span>` + pills + `</div><div id="${escText(spec.chartId)}" style="height:${height}px;"></div></div>`;
 }
+//#endregion
+//#region src/ui/back-guard.ts
+/**
+* 安卓返回键接管用到的纯逻辑 —— 只做状态换算，不碰 DOM 与 history，
+* 真正的 pushState / 事件监听留在 `ui/panel.ts`。
+*
+* 为什么需要「深度缓冲」：浏览器会把用户连按的后退一次性解析成「后退 N 步」，
+* 而 popstate 处理里补压的 pushState 要等这一轮任务跑完才生效。只压一条哨兵时，
+* 连按两次后退就会一跳越过酒馆页面直接退出（已实测复现），因此必须预先压多条，
+* 并让每条哨兵自带「距酒馆条目的步数」，用来精确补压与退出清理。
+*/
+/** 哨兵历史记录在 state 上的标记键 */
+var AUS_BACK_FLAG = "__ausBackGuard";
+/**
+* 读取某条历史 state 的哨兵深度（= 它距酒馆自己那条记录的步数）。
+* 不是我们压的记录、或值非法一律返回 0（0 表示「就在酒馆页面上」）。
+*/
+function readGuardDepth(state) {
+	if (!state || typeof state !== "object") return 0;
+	const raw = state[AUS_BACK_FLAG];
+	const n = typeof raw === "number" ? raw : Number(raw);
+	if (!Number.isFinite(n) || n <= 0) return 0;
+	return Math.min(Math.floor(n), 3);
+}
+/** 以 base 为底生成「深度为 depth」的哨兵 state；不修改传入的 base */
+function nextGuardState(base, depth) {
+	const next = base && typeof base === "object" ? { ...base } : {};
+	next[AUS_BACK_FLAG] = Math.max(1, Math.min((Number.isFinite(depth) ? Math.floor(depth) : 0) || 1, 3));
+	return next;
+}
+/**
+* 当前深度为 current 时还需要依次压入哪些深度；空数组表示缓冲已满。
+* 返回序列由浅到深，调用方按顺序 pushState 即可把缓冲补满。
+*/
+function guardFillPlan(current, buffer = 3) {
+	const from = Number.isFinite(current) ? Math.max(0, Math.floor(current)) : 0;
+	const to = Number.isFinite(buffer) ? Math.max(0, Math.floor(buffer)) : 0;
+	const plan = [];
+	for (let depth = from + 1; depth <= to; depth++) plan.push(depth);
+	return plan;
+}
+/** 摘掉哨兵标记（退出接管时用）；本来就没有标记返回 null，且不修改传入对象 */
+function stripGuardState(state) {
+	if (!state || typeof state !== "object") return null;
+	const prev = state;
+	if (!("__ausBackGuard" in prev)) return null;
+	const next = { ...prev };
+	delete next[AUS_BACK_FLAG];
+	return next;
+}
 /** 更新日志（最新在前） */
 var CHANGELOG = [
 	{
@@ -10076,14 +10126,14 @@ var CHANGELOG = [
 		sections: [
 			{
 				kind: "feature",
-				items: ["新增「管理对话」，管理首页表格和下拉胶囊中的对话是否显示", "安卓设备现在使用系统返回时会退出扩展"]
+				items: ["新增「管理对话」，管理首页表格和下拉胶囊中的对话是否显示", "安卓设备现在使用系统返回操作时会返回上一页"]
 			},
 			{
 				kind: "improve",
 				items: [
 					"优化启动速度",
 					"更新了使用说明页的内容",
-					"改进部分组件UI细节和可视性"
+					"改进了很多视觉效果和UI细节"
 				]
 			},
 			{
@@ -12484,10 +12534,11 @@ function createPanel() {
 	switchView("overview", { track: false });
 	refreshUI();
 }
-var AUS_BACK_FLAG = "__ausBackGuard";
 var NARROW_VIEWPORT_MAX = 760;
 var backGuardPushed = false;
 var backGuardWin = null;
+/** 关闭面板时我们用 history.go(-深度) 清哨兵，它回来的一次 popstate 必须放行、不能再消费一层 */
+var backGuardSkipUntil = 0;
 /** 历史记录属于宿主窗口（扩展通常跑在 iframe 里），跨源时回退到自身窗口 */
 function backGuardHost() {
 	try {
@@ -12537,16 +12588,24 @@ function goBackInPanel() {
 		return false;
 	}
 }
-/** 消费掉一条历史记录后立刻补压一条，保持「总能再退一步」 */
-function rearmBackGuard() {
+/** 当前这条历史记录距酒馆条目的步数（0 = 已经站在酒馆自己那条记录上） */
+function backGuardDepthNow() {
+	try {
+		return readGuardDepth(backGuardWin?.history?.state);
+	} catch {
+		return 0;
+	}
+}
+/**
+* 把哨兵缓冲补满：无论用户点得多快，垫在酒馆页面之上的记录都不少于 BACK_GUARD_DEPTH 条，
+* 连按返回时才有可能被一条条消费，而不是一步跨出去。
+*/
+function fillBackGuard() {
 	const w = backGuardWin;
 	if (!w || !backGuardPushed) return;
 	try {
 		if (!w.history?.pushState) return;
-		const prev = w.history.state;
-		const next = prev && typeof prev === "object" ? { ...prev } : {};
-		next[AUS_BACK_FLAG] = 1;
-		w.history.pushState(next, "");
+		for (const depth of guardFillPlan(readGuardDepth(w.history.state), 3)) w.history.pushState(nextGuardState(w.history.state, depth), "");
 	} catch {}
 }
 function onBackGuardPop(ev) {
@@ -12554,55 +12613,65 @@ function onBackGuardPop(ev) {
 		releaseBackGuard(false);
 		return;
 	}
-	if (ev?.state && ev.state[AUS_BACK_FLAG]) return;
-	if (closeTopOverlay() || goBackInPanel()) {
-		rearmBackGuard();
+	if (backGuardSkipUntil && nowTs() < backGuardSkipUntil) {
+		backGuardSkipUntil = 0;
 		return;
 	}
+	const depth = readGuardDepth(ev?.state);
+	if (closeTopOverlay() || goBackInPanel()) {
+		fillBackGuard();
+		return;
+	}
+	const w = backGuardWin;
 	releaseBackGuard(false);
+	try {
+		if (depth > 0 && w?.history?.go) w.history.go(-depth);
+	} catch {}
 	try {
 		closePanel();
 	} catch {}
 }
-/** 打开面板时压一条历史记录，把返回键变成「关闭面板」 */
+/**
+* 打开面板时压入一组哨兵历史记录，把返回键变成「先退面板内的浏览历史」。
+* 桌面端不接管，保持「后退 = 回上一页」的原生语义。
+*/
 function armBackGuard() {
 	if (backGuardPushed) return;
 	if (!isNarrowViewport()) return;
 	const w = backGuardHost();
 	try {
 		if (!w?.history?.pushState) return;
-		const prev = w.history.state;
-		const next = prev && typeof prev === "object" ? { ...prev } : {};
-		next[AUS_BACK_FLAG] = 1;
-		w.history.pushState(next, "");
 		backGuardWin = w;
 		backGuardPushed = true;
 		w.addEventListener("popstate", onBackGuardPop);
-	} catch {}
+		fillBackGuard();
+	} catch {
+		backGuardPushed = false;
+		backGuardWin = null;
+	}
 }
 /**
 * 解除接管。
-* stepBack=true（点关闭按钮 / 按 Esc / 切换视图重置）时把我们压的那条记录弹掉，
-* 避免下次返回多退一步；由返回键触发时传 false，因为历史已经退过去了。
+* stepBack=true（点关闭按钮 / 按 Esc / 切换视图重置）时把我们压的哨兵一次性退干净，
+* 否则它们会留在历史里，让「关掉面板后按返回」变成按好几次都没反应；
+* 由返回键触发时传 false，因为历史已经退过去了，调用方会按剩余深度自行清理。
 */
 function releaseBackGuard(stepBack = true) {
 	const w = backGuardWin;
 	const pushed = backGuardPushed;
+	const depth = pushed ? backGuardDepthNow() : 0;
 	backGuardWin = null;
 	backGuardPushed = false;
 	if (!w) return;
 	try {
 		w.removeEventListener("popstate", onBackGuardPop);
 	} catch {}
-	if (!stepBack || !pushed) return;
+	if (!stepBack || !pushed || depth <= 0) return;
 	try {
-		const st = w.history?.state;
-		if (st && st[AUS_BACK_FLAG]) {
-			const next = { ...st };
-			delete next[AUS_BACK_FLAG];
-			w.history.replaceState(next, "");
-			w.history.back();
-		}
+		const stripped = stripGuardState(w.history?.state);
+		if (stripped) w.history.replaceState(stripped, "");
+		backGuardSkipUntil = nowTs() + 400;
+		w.history.go(-depth);
 	} catch {}
 }
 function resetPanelState() {
