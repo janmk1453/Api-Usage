@@ -148,7 +148,10 @@ describe('跨页长距离切换：胶囊先起跑再渲染', () => {
     expect(panelCode).toContain('function renderAfterPillStart(doc: Document, run: () => void): void {');
     // 第一帧强制一次样式计算，让 transform 过渡真正起跑
     expect(panelCode).toContain('void ind.getBoundingClientRect();');
-    expect(panelCode).toContain('if (bottom && view !== prevView) renderAfterPillStart(doc, renderTargetView);');
+    expect(panelCode).toContain('const animateIn = view !== prevView;');
+    expect(panelCode).toContain('if (animateIn && bottom) renderAfterPillStart(doc, renderTargetView);');
+    // 桌面端同样不把动画起跑与建 DOM 挤在同一个任务里，否则首绘时动画已推进到中段
+    expect(panelCode).toContain('requestAnimationFrame(renderTargetView);');
     // 快速连点只渲染最后停留的那页
     expect(panelCode).toContain('if (currentView !== view) return;');
     // 后台标签页里 rAF 会被暂停，必须有兜底计时器
@@ -165,5 +168,44 @@ describe('跨页长距离切换：胶囊先起跑再渲染', () => {
     expect(start).toBeGreaterThan(-1);
     const block = cssSrc.slice(start, cssSrc.indexOf('}', start));
     expect(block).toContain('will-change: transform;');
+  });
+});
+
+describe('安卓返回键：先关浮层 → 逐页回退 → 栈空才关面板', () => {
+  it('切页时把上一页压进浏览栈，由返回键触发的回退不再入栈', () => {
+    expect(panelCode).toContain('if (!opts?.back) pushViewTrail(viewTrail, prevView, view);');
+    expect(panelCode).toContain('const viewTrail: AppView[] = [];');
+  });
+
+  it('返回键按 浮层 → 上一页 → 关面板 的次序消费，且每次都补压一条历史记录', () => {
+    expect(panelCode).toContain('if (closeTopOverlay() || goBackInPanel()) {');
+    expect(panelCode).toContain('rearmBackGuard();');
+    // 关面板必须是最后一步，不能再像改造前那样「按一次就关」
+    const pop = panelCode.indexOf('if (closeTopOverlay() || goBackInPanel()) {');
+    const close = panelCode.indexOf('try { closePanel(); } catch {}', pop);
+    expect(pop).toBeGreaterThan(-1);
+    expect(close).toBeGreaterThan(pop);
+  });
+
+  it('浮层优先收掉展开的下拉与历史详情窗口', () => {
+    expect(panelCode).toContain(`[data-aus-drop-open="1"]`);
+    expect(panelCode).toContain('for (const el of open) closeDropdownInstant(el);');
+    expect(panelCode).toContain('if (activeHistoryDetailTs !== null) {');
+  });
+
+  it('回退走 switchView(prev, { back: true })，不会把回退动作再压栈', () => {
+    expect(panelCode).toContain('switchView(prev, { back: true });');
+  });
+
+  it('平板横屏等宽度超过 760 的移动设备同样接管返回键', () => {
+    expect(panelCode).toContain('return mobileDeviceHint();');
+  });
+
+  it('打开与关闭面板都清空浏览栈，避免下次打开残留上次路径', () => {
+    const open = panelCode.indexOf('export function openPanel() {');
+    const close = panelCode.indexOf('export function closePanel() {');
+    expect(panelCode.slice(open, close)).toContain('viewTrail.length = 0;');
+    const next = panelCode.indexOf('export function togglePanel()');
+    expect(panelCode.slice(close, next)).toContain('viewTrail.length = 0;');
   });
 });

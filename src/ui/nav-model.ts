@@ -116,6 +116,32 @@ export function viewTitle(view: AppView): string {
   return VIEW_TITLES[view] || VIEW_TITLES.overview;
 }
 
+/* ── 面板内浏览栈（安卓返回键逐页回退用，纯逻辑） ────────────────────── */
+
+/** 栈深上限：面板只有 9 个视图，留一点余量足够，避免长会话无限增长 */
+export const VIEW_TRAIL_MAX = 24;
+
+/** 主动切页时压入上一页；与目标页相同则不入栈 */
+export function pushViewTrail(
+  trail: AppView[],
+  prev: AppView,
+  next: AppView,
+  max: number = VIEW_TRAIL_MAX,
+): void {
+  if (prev === next) return;
+  trail.push(prev);
+  if (max > 0 && trail.length > max) trail.splice(0, trail.length - max);
+}
+
+/** 弹出一页可回退的上次视图；返回 null 表示已经回到底，可交给上层关面板 */
+export function popViewTrail(trail: AppView[], current: AppView): AppView | null {
+  while (trail.length) {
+    const prev = trail.pop() as AppView;
+    if (prev !== current) return prev;
+  }
+  return null;
+}
+
 export type TabTapAction = 'switch' | 'pop-root' | 'scroll-top';
 
 /**

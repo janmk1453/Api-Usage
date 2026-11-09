@@ -1,5 +1,5 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from "./store-TDK3YzRZ.js";
+import { n as getSelectedSave, o as mobileDeviceHint, r as state$2, t as getHistoryForDisplay } from "./store-TDK3YzRZ.js";
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { f as saveHot, p as historyRecordKey } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
@@ -2572,6 +2572,20 @@ var VIEW_TITLES = {
 };
 function viewTitle(view) {
 	return VIEW_TITLES[view] || VIEW_TITLES.overview;
+}
+/** 主动切页时压入上一页；与目标页相同则不入栈 */
+function pushViewTrail(trail, prev, next, max = 24) {
+	if (prev === next) return;
+	trail.push(prev);
+	if (max > 0 && trail.length > max) trail.splice(0, trail.length - max);
+}
+/** 弹出一页可回退的上次视图；返回 null 表示已经回到底，可交给上层关面板 */
+function popViewTrail(trail, current) {
+	while (trail.length) {
+		const prev = trail.pop();
+		if (prev !== current) return prev;
+	}
+	return null;
 }
 /**
 * 底栏 tab 点击语义。
@@ -10360,6 +10374,8 @@ var settingsChildView = null;
 var chatManageOrigin = "overview";
 /** 当前导航高亮键：窄屏二级页归到「设置」，桌面为视图本身 */
 var currentNavKey = "overview";
+/** 面板内浏览栈：安卓返回键逐页回退（栈空才关面板），打开/关闭面板时清空 */
+var viewTrail = [];
 var collapsed = false;
 function refreshUI() {
 	try {
@@ -11314,7 +11330,11 @@ function prefersReducedMotion() {
 		return false;
 	}
 }
-/** 窄屏页面切换入场动画（桌面端维持原样，不启用）；移除 class + 强制回流保证连续切换可重播 */
+/**
+* 页面切换入场动画（桌面与窄屏共用，观感对齐遥测看板的 pageIn）。
+* 移除 class + 强制一次回流，保证连续切换（哪怕切回同一页）都能重新播放。
+* prefers-reduced-motion 由 style.css 的 `animation:none` 兜底，这里不做判断。
+*/
 function playViewEnter(el) {
 	if (!el) return;
 	try {
@@ -11512,6 +11532,7 @@ function openChatManage(from) {
 }
 function switchView(view, opts) {
 	const prevView = currentView;
+	if (!opts?.back) pushViewTrail(viewTrail, prevView, view);
 	currentView = view;
 	if (isSettingsChild(view)) settingsChildView = view;
 	else if (view === "settings") settingsChildView = null;
@@ -11531,7 +11552,7 @@ function switchView(view, opts) {
 			el.style.transition = "none";
 			el.style.opacity = "1";
 		}
-		if (on && bottom) playViewEnter(el);
+		if (on && view !== prevView) playViewEnter(el);
 	});
 	try {
 		for (const id of ["aus-main", "aus-content-body"]) {
@@ -11561,8 +11582,12 @@ function switchView(view, opts) {
 			} else if (view === "chat-manage") Promise.resolve(renderChatManageView()).catch(() => {});
 		} catch {}
 	};
-	if (bottom && view !== prevView) renderAfterPillStart(doc, renderTargetView);
-	else renderTargetView();
+	const animateIn = view !== prevView;
+	if (animateIn && bottom) renderAfterPillStart(doc, renderTargetView);
+	else if (animateIn) {
+		if (typeof requestAnimationFrame === "function") requestAnimationFrame(renderTargetView);
+		else renderTargetView();
+	} else renderTargetView();
 	if (view === "stats" || view === "forecast") requestAnimationFrame(() => {
 		try {
 			const chartEl = doc.getElementById(view === "stats" ? "aus-stats-chart" : "aus-forecast-main-chart");
@@ -12354,14 +12379,58 @@ function backGuardHost() {
 	} catch {}
 	return window;
 }
+/**
+* 是否该接管返回键：窄屏（手机竖屏 / 小窗）或本身就是移动设备
+* （平板横屏、折叠屏展开后宽度会超过 760，但返回键行为与手机一致）。
+*/
 function isNarrowViewport() {
 	try {
 		const w = backGuardHost();
 		const width = Number(w?.innerWidth || window.innerWidth || 0);
-		return width > 0 && width <= NARROW_VIEWPORT_MAX;
+		if (width > 0 && width <= NARROW_VIEWPORT_MAX) return true;
+		return mobileDeviceHint();
 	} catch {
 		return false;
 	}
+}
+/** 关掉面板内最上面的一层浮层（展开的胶囊下拉 / 历史详情窗口），关掉了返回 true */
+function closeTopOverlay() {
+	const doc = getDoc$1();
+	try {
+		const open = Array.from(doc.querySelectorAll("[data-aus-drop-open=\"1\"]"));
+		if (open.length) {
+			for (const el of open) closeDropdownInstant(el);
+			return true;
+		}
+	} catch {}
+	if (activeHistoryDetailTs !== null) try {
+		closeHistoryDetail(doc);
+		return true;
+	} catch {}
+	return false;
+}
+/** 退到面板内的上一页；没有上一页返回 false（交给上层关面板） */
+function goBackInPanel() {
+	const prev = popViewTrail(viewTrail, currentView);
+	if (!prev) return false;
+	try {
+		switchView(prev, { back: true });
+		return true;
+	} catch {
+		return false;
+	}
+}
+/** 消费掉一条历史记录后立刻补压一条，保持「总能再退一步」 */
+function rearmBackGuard() {
+	const w = backGuardWin;
+	if (!w || !backGuardPushed) return;
+	try {
+		if (!w.history?.pushState) return;
+		const prev = w.history.state;
+		const next = prev && typeof prev === "object" ? { ...prev } : {};
+		next[AUS_BACK_FLAG] = 1;
+		w.history.pushState(next, "");
+	} catch {}
 }
 function onBackGuardPop(ev) {
 	if (!panelOpen) {
@@ -12369,6 +12438,10 @@ function onBackGuardPop(ev) {
 		return;
 	}
 	if (ev?.state && ev.state[AUS_BACK_FLAG]) return;
+	if (closeTopOverlay() || goBackInPanel()) {
+		rearmBackGuard();
+		return;
+	}
 	releaseBackGuard(false);
 	try {
 		closePanel();
@@ -12418,12 +12491,14 @@ function releaseBackGuard(stepBack = true) {
 function resetPanelState() {
 	panelCreated = false;
 	panelOpen = false;
+	viewTrail.length = 0;
 	try {
 		releaseBackGuard();
 	} catch {}
 }
 function openPanel() {
 	const doc = getDoc$1();
+	viewTrail.length = 0;
 	panelOpenStartTs = nowTs();
 	try {
 		trackOpen();
@@ -12478,6 +12553,7 @@ function closePanel() {
 	mobileOpen = false;
 	syncMobileSidebar(doc);
 	panelOpen = false;
+	viewTrail.length = 0;
 	try {
 		releaseBackGuard();
 	} catch {}

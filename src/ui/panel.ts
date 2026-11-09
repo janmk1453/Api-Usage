@@ -15,6 +15,8 @@ import {
   isChildView,
   isSettingsChild,
   parentTabOf,
+  popViewTrail,
+  pushViewTrail,
   resolveTabTap,
   viewTitle,
 } from './nav-model';
@@ -29,6 +31,7 @@ import { helpViewHTML } from './help-view';
 import { chartCardHTML } from './chart-picker';
 import { filterPickerRows } from './chat-visibility';
 import { afterNextPaint, closeDropdownInstant } from './dropdown-close';
+import { mobileDeviceHint } from '../utils/device';
 import { bindChangelog, renderChangelogCard } from './changelog';
 import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
 import { initPillState } from './pill';
@@ -113,6 +116,8 @@ let settingsChildView: AppView | null = null;
 let chatManageOrigin: AppView = 'overview';
 /** 当前导航高亮键：窄屏二级页归到「设置」，桌面为视图本身 */
 let currentNavKey: AppView = 'overview';
+/** 面板内浏览栈：安卓返回键逐页回退（栈空才关面板），打开/关闭面板时清空 */
+const viewTrail: AppView[] = [];
 let collapsed = false;
 
 export function refreshUI() {
@@ -1043,7 +1048,11 @@ function prefersReducedMotion(): boolean {
   try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch { return false; }
 }
 
-/** 窄屏页面切换入场动画（桌面端维持原样，不启用）；移除 class + 强制回流保证连续切换可重播 */
+/**
+ * 页面切换入场动画（桌面与窄屏共用，观感对齐遥测看板的 pageIn）。
+ * 移除 class + 强制一次回流，保证连续切换（哪怕切回同一页）都能重新播放。
+ * prefers-reduced-motion 由 style.css 的 `animation:none` 兜底，这里不做判断。
+ */
 function playViewEnter(el: HTMLElement | null): void {
   if (!el) return;
   try {
@@ -1233,8 +1242,10 @@ function openChatManage(from: AppView): void {
   switchView('chat-manage');
 }
 
-function switchView(view: AppView, opts?: { track?: boolean }) {
+function switchView(view: AppView, opts?: { track?: boolean; back?: boolean }) {
   const prevView = currentView;
+  // 用户主动切页时把上一页压进浏览栈，供安卓返回键逐页后退；由返回键触发的回退不再入栈
+  if (!opts?.back) pushViewTrail(viewTrail, prevView, view);
   currentView = view;
   // 「设置」下的二级页记忆：点回设置 tab 时恢复到上次位置；主动切回设置根页（重复点 tab / 返回箭头）则清空
   if (isSettingsChild(view)) settingsChildView = view;
@@ -1257,8 +1268,8 @@ function switchView(view: AppView, opts?: { track?: boolean }) {
     el.style.display = on ? 'block' : 'none';
     // 瞬时切换：不再走"先透明再淡入"，避免点击后有一小段延迟感
     if (on) { el.style.transition = 'none'; el.style.opacity = '1'; }
-    // 入场动画只在底栏布局（窄屏 + 兼容 UI 开启）播放，桌面与原侧栏抽屉保持瞬时切换
-    if (on && bottom) playViewEnter(el as HTMLElement);
+    // 入场动画桌面与窄屏都播（原先只有底栏布局播，桌面是硬切）
+    if (on && view !== prevView) playViewEnter(el as HTMLElement);
   });
   // 所有视图共用 #aus-main 作为滚动容器，切换页面时必须把滚动位置归零，
   // 否则会沿用上一页的 scrollTop，出现"切过去直接显示页面中部"的问题。
@@ -1292,9 +1303,15 @@ function switchView(view: AppView, opts?: { track?: boolean }) {
       else if (view === 'chat-manage') Promise.resolve(renderChatManageView()).catch(() => {});
     } catch {}
   };
-  // 底栏布局下切到别的页时，先把指示胶囊送上轨道（原因见 renderAfterPillStart 注释）
-  if (bottom && view !== prevView) renderAfterPillStart(doc, renderTargetView);
-  else renderTargetView();
+  // 底栏布局下切到别的页时，先把指示胶囊送上轨道（原因见 renderAfterPillStart 注释）；
+  // 桌面端同样不把「动画起跑」和「建 DOM / 建 ECharts」挤在同一个任务里——
+  // 否则主线程被渲染占住，浏览器首次绘制时动画已推进到中段，看起来就是"内容直接出现"。
+  const animateIn = view !== prevView;
+  if (animateIn && bottom) renderAfterPillStart(doc, renderTargetView);
+  else if (animateIn) {
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(renderTargetView);
+    else renderTargetView();
+  } else renderTargetView();
   // 图表容器宽度兜底：首次显示若尚未完成布局，下一帧补渲染一次（替代原先 60ms/80ms 定时器）
   if (view === 'stats' || view === 'forecast') {
     requestAnimationFrame(() => {
@@ -1978,9 +1995,14 @@ export function createPanel() {
 
 /* ── 返回键接管 ─────────────────────────────────────────────────────────
  * 面板是覆盖全屏的浮层，移动端按系统返回键（安卓物理返回、浏览器后退手势）
- * 默认会直接退出酒馆页面。这里在窄屏打开面板时往宿主窗口压一条历史记录，
- * 用户按返回时只关面板、不离开酒馆；面板已关闭时一律放行，不干扰酒馆自身的路由。
- * 桌面端不接管，保持「后退 = 回上一页」的原生语义。
+ * 默认会直接退出酒馆页面。这里在移动端打开面板时往宿主窗口压一条历史记录，
+ * 把返回键变成「先退面板内的浏览历史」：
+ *   ① 有展开的下拉 / 历史详情浮层 → 只关这一层；
+ *   ② 否则弹出面板内浏览栈的上一页（概览 → 统计 → 历史 这样逐页后退）；
+ *   ③ 栈空才关面板，不离开酒馆。
+ * 每消费一次返回都要补压一条历史记录（深度恒定），否则第二次起就没有可退条目。
+ * 面板已关闭时一律放行，不干扰酒馆自身的路由；桌面端不接管，
+ * 保持「后退 = 回上一页」的原生语义。
  * ------------------------------------------------------------------- */
 const AUS_BACK_FLAG = '__ausBackGuard';
 const NARROW_VIEWPORT_MAX = 760;
@@ -1997,21 +2019,72 @@ function backGuardHost(): any {
   return window;
 }
 
+/**
+ * 是否该接管返回键：窄屏（手机竖屏 / 小窗）或本身就是移动设备
+ * （平板横屏、折叠屏展开后宽度会超过 760，但返回键行为与手机一致）。
+ */
 function isNarrowViewport(): boolean {
   try {
     const w = backGuardHost();
     const width = Number(w?.innerWidth || window.innerWidth || 0);
-    return width > 0 && width <= NARROW_VIEWPORT_MAX;
+    if (width > 0 && width <= NARROW_VIEWPORT_MAX) return true;
+    return mobileDeviceHint();
   } catch {
     return false;
   }
+}
+
+/** 关掉面板内最上面的一层浮层（展开的胶囊下拉 / 历史详情窗口），关掉了返回 true */
+function closeTopOverlay(): boolean {
+  const doc = getDoc();
+  try {
+    const open = Array.from(doc.querySelectorAll('[data-aus-drop-open="1"]')) as HTMLElement[];
+    if (open.length) {
+      // 同一时刻一般只有一个下拉是展开的，这里一并收掉，算一次「返回」
+      for (const el of open) closeDropdownInstant(el);
+      return true;
+    }
+  } catch {}
+  if (activeHistoryDetailTs !== null) {
+    try { closeHistoryDetail(doc); return true; } catch {}
+  }
+  return false;
+}
+
+/** 退到面板内的上一页；没有上一页返回 false（交给上层关面板） */
+function goBackInPanel(): boolean {
+  const prev = popViewTrail(viewTrail, currentView);
+  if (!prev) return false;
+  try {
+    switchView(prev, { back: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 消费掉一条历史记录后立刻补压一条，保持「总能再退一步」 */
+function rearmBackGuard(): void {
+  const w = backGuardWin;
+  if (!w || !backGuardPushed) return;
+  try {
+    if (!w.history?.pushState) return;
+    const prev = w.history.state;
+    const next: any = prev && typeof prev === 'object' ? { ...prev } : {};
+    next[AUS_BACK_FLAG] = 1;
+    w.history.pushState(next, '');
+  } catch {}
 }
 
 function onBackGuardPop(ev: any): void {
   if (!panelOpen) { releaseBackGuard(false); return; }
   // 落回我们自己压入的条目（重复入栈）时继续保持接管
   if (ev?.state && ev.state[AUS_BACK_FLAG]) return;
-  // 用户按了返回：只关面板，不再继续回退酒馆页面
+  // 依次消费：浮层 → 上一页视图 → 都退完了才关面板
+  if (closeTopOverlay() || goBackInPanel()) {
+    rearmBackGuard();
+    return;
+  }
   releaseBackGuard(false);
   try { closePanel(); } catch {}
 }
@@ -2061,12 +2134,15 @@ function releaseBackGuard(stepBack = true): void {
 export function resetPanelState() {
   panelCreated = false;
   panelOpen = false;
+  viewTrail.length = 0;
   // 扩展被禁用/重载时面板 DOM 已被移除，等于关闭面板：把压入的历史记录一并弹掉
   try { releaseBackGuard(); } catch {}
 }
 
 export function openPanel() {
   const doc = getDoc();
+  // 每次打开都从干净的浏览栈开始：上次的浏览路径不再参与返回键回退
+  viewTrail.length = 0;
   panelOpenStartTs = nowTs();
   try { trackOpen(); } catch {}
   let ov = doc.getElementById('aus-overlay') as HTMLElement | null;
@@ -2106,7 +2182,8 @@ export function closePanel() {
   mobileOpen = false;
   syncMobileSidebar(doc);
   panelOpen = false;
-  // 关闭时弹出为返回键压入的历史记录，避免下次返回多退一步
+  // 关闭时弹出为返回键压入的历史记录，避免下次返回多退一步；浏览栈一并清空
+  viewTrail.length = 0;
   try { releaseBackGuard(); } catch {}
   // 匿名使用统计：关闭面板时合并上报本次会话数据
   try { flushTelemetry('close'); } catch {}

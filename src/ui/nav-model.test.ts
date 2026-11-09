@@ -11,6 +11,8 @@ import {
   isChildView,
   isSettingsChild,
   parentTabOf,
+  popViewTrail,
+  pushViewTrail,
   resolveTabTap,
   viewTitle,
 } from './nav-model';
@@ -110,5 +112,41 @@ describe('nav-model', () => {
   it('resolveTabTap：已在根页重复点则回到顶部', () => {
     expect(resolveTabTap('settings', 'settings', false)).toBe('scroll-top');
     expect(resolveTabTap('overview', 'overview', false)).toBe('scroll-top');
+  });
+});
+
+describe('面板内浏览栈', () => {
+  it('主动切页压入上一页，切到同一页不入栈', () => {
+    const trail: any[] = [];
+    pushViewTrail(trail, 'overview', 'stats');
+    pushViewTrail(trail, 'stats', 'stats');
+    pushViewTrail(trail, 'stats', 'history');
+    expect(trail).toEqual(['overview', 'stats']);
+  });
+
+  it('返回时逐页回退，到底返回 null', () => {
+    const trail: any[] = [];
+    pushViewTrail(trail, 'overview', 'stats');
+    pushViewTrail(trail, 'stats', 'history');
+    expect(popViewTrail(trail, 'history')).toBe('stats');
+    expect(popViewTrail(trail, 'stats')).toBe('overview');
+    expect(popViewTrail(trail, 'overview')).toBeNull();
+    expect(trail).toEqual([]);
+  });
+
+  it('栈里出现的当前页会被跳过，不会原地打转', () => {
+    // 栈顶正好是当前页（比如用户手动切回了该页）时继续往下弹，而不是回退到自己
+    const trail: any[] = ['overview', 'stats'];
+    expect(popViewTrail(trail, 'stats')).toBe('overview');
+    expect(trail).toEqual([]);
+  });
+
+  it('超出上限时从最旧的一端裁剪', () => {
+    const trail: any[] = [];
+    pushViewTrail(trail, 'overview', 'stats', 3);
+    pushViewTrail(trail, 'stats', 'history', 3);
+    pushViewTrail(trail, 'history', 'forecast', 3);
+    pushViewTrail(trail, 'forecast', 'settings', 3);
+    expect(trail).toEqual(['stats', 'history', 'forecast']);
   });
 });
