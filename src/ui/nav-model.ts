@@ -116,30 +116,21 @@ export function viewTitle(view: AppView): string {
   return VIEW_TITLES[view] || VIEW_TITLES.overview;
 }
 
-/* ── 面板内浏览栈（安卓返回键逐页回退用，纯逻辑） ────────────────────── */
+/* ── 安卓返回键：按页面层级回退（纯逻辑） ────────────────────────────── */
 
-/** 栈深上限：面板只有 9 个视图，留一点余量足够，避免长会话无限增长 */
-export const VIEW_TRAIL_MAX = 24;
-
-/** 主动切页时压入上一页；与目标页相同则不入栈 */
-export function pushViewTrail(
-  trail: AppView[],
-  prev: AppView,
-  next: AppView,
-  max: number = VIEW_TRAIL_MAX,
-): void {
-  if (prev === next) return;
-  trail.push(prev);
-  if (max > 0 && trail.length > max) trail.splice(0, trail.length - max);
-}
-
-/** 弹出一页可回退的上次视图；返回 null 表示已经回到底，可交给上层关面板 */
-export function popViewTrail(trail: AppView[], current: AppView): AppView | null {
-  while (trail.length) {
-    const prev = trail.pop() as AppView;
-    if (prev !== current) return prev;
-  }
-  return null;
+/**
+ * 返回键要退到的页面：只按**页面层级**算，不按浏览历史算。
+ * - 二级页（钱包 / 使用说明 / 关于）→ 回到「设置」
+ * - 对话展示管理 → 回到进入前的来源页（概览 / 趋势预测 / 设置）
+ * - 根页（概览 / 统计 / 历史 / 趋势预测 / 设置）→ null，表示已经没有上一级，该关面板了
+ *
+ * 刻意不用「浏览过的页面栈」：用户在概览→设置→关于之后按返回，应当「关于→设置→关面板」，
+ * 而不是顺着浏览路径退回概览（那样每按一次就多退一个不相干的页面，最后还会退出酒馆）。
+ */
+export function backTargetOf(view: AppView, chatManageOrigin: AppView = 'overview'): AppView | null {
+  if (!isChildView(view)) return null;
+  if (view === 'chat-manage') return chatManageOrigin === view ? null : chatManageOrigin;
+  return childParentOf(view);
 }
 
 export type TabTapAction = 'switch' | 'pop-root' | 'scroll-top';

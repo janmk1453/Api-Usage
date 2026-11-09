@@ -11,12 +11,11 @@ import { icon } from './icons';
 import {
   MOBILE_TABS,
   SETTINGS_ENTRIES,
+  backTargetOf,
   childParentOf,
   isChildView,
   isSettingsChild,
   parentTabOf,
-  popViewTrail,
-  pushViewTrail,
   resolveTabTap,
   viewTitle,
 } from './nav-model';
@@ -117,8 +116,6 @@ let settingsChildView: AppView | null = null;
 let chatManageOrigin: AppView = 'overview';
 /** 当前导航高亮键：窄屏二级页归到「设置」，桌面为视图本身 */
 let currentNavKey: AppView = 'overview';
-/** 面板内浏览栈：安卓返回键逐页回退（栈空才关面板），打开/关闭面板时清空 */
-const viewTrail: AppView[] = [];
 let collapsed = false;
 
 export function refreshUI() {
@@ -1248,8 +1245,6 @@ function openChatManage(from: AppView): void {
 
 function switchView(view: AppView, opts?: { track?: boolean; back?: boolean }) {
   const prevView = currentView;
-  // 用户主动切页时把上一页压进浏览栈，供安卓返回键逐页后退；由返回键触发的回退不再入栈
-  if (!opts?.back) pushViewTrail(viewTrail, prevView, view);
   currentView = view;
   // 「设置」下的二级页记忆：点回设置 tab 时恢复到上次位置；主动切回设置根页（重复点 tab / 返回箭头）则清空
   if (isSettingsChild(view)) settingsChildView = view;
@@ -2059,12 +2054,16 @@ function closeTopOverlay(): boolean {
   return false;
 }
 
-/** 退到面板内的上一页；没有上一页返回 false（交给上层关面板） */
+/**
+ * 按页面层级退一级：二级页回到自己的上级（对话展示管理回到进入前的来源页），
+ * 已经在根页（概览 / 统计 / 历史 / 趋势 / 设置）就返回 false，交给上层关面板。
+ * 这里刻意不看浏览历史：从概览进到设置、再进到关于，返回应当是「关于 → 设置 → 关面板」。
+ */
 function goBackInPanel(): boolean {
-  const prev = popViewTrail(viewTrail, currentView);
-  if (!prev) return false;
+  const target = backTargetOf(currentView, chatManageOrigin);
+  if (!target || target === currentView) return false;
   try {
-    switchView(prev, { back: true });
+    switchView(target, { back: true });
     return true;
   } catch {
     return false;
@@ -2098,7 +2097,7 @@ function onBackGuardPop(ev: any): void {
   // 落点是不是我们自己压的哨兵都要照常消费一层：老实现落在哨兵上直接 return，
   // 表现为「按了没反应」，紧接着再按一次就越过酒馆页面退出去了。
   const depth = readGuardDepth(ev?.state);
-  // 依次消费：浮层 → 上一页视图 → 都退完了才关面板
+  // 依次消费：浮层 → 上一级页面 → 已经在根页才关面板
   if (closeTopOverlay() || goBackInPanel()) {
     fillBackGuard();
     return;
@@ -2110,7 +2109,7 @@ function onBackGuardPop(ev: any): void {
 }
 
 /**
- * 打开面板时压入一组哨兵历史记录，把返回键变成「先退面板内的浏览历史」。
+ * 打开面板时压入一组哨兵历史记录，把返回键改成「先退面板内的页面层级」，退无可退才关面板。
  * 桌面端不接管，保持「后退 = 回上一页」的原生语义。
  */
 function armBackGuard(): void {
@@ -2157,15 +2156,12 @@ function releaseBackGuard(stepBack = true): void {
 export function resetPanelState() {
   panelCreated = false;
   panelOpen = false;
-  viewTrail.length = 0;
   // 扩展被禁用/重载时面板 DOM 已被移除，等于关闭面板：把压入的历史记录一并弹掉
   try { releaseBackGuard(); } catch {}
 }
 
 export function openPanel() {
   const doc = getDoc();
-  // 每次打开都从干净的浏览栈开始：上次的浏览路径不再参与返回键回退
-  viewTrail.length = 0;
   panelOpenStartTs = nowTs();
   try { trackOpen(); } catch {}
   let ov = doc.getElementById('aus-overlay') as HTMLElement | null;
@@ -2205,8 +2201,8 @@ export function closePanel() {
   mobileOpen = false;
   syncMobileSidebar(doc);
   panelOpen = false;
-  // 关闭时弹出为返回键压入的历史记录，避免下次返回多退一步；浏览栈一并清空
-  viewTrail.length = 0;
+  // 关闭时弹出为返回键压入的历史记录，避免下次返回多退一步
+
   try { releaseBackGuard(); } catch {}
   // 匿名使用统计：关闭面板时合并上报本次会话数据
   try { flushTelemetry('close'); } catch {}

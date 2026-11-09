@@ -2630,19 +2630,19 @@ var VIEW_TITLES = {
 function viewTitle(view) {
 	return VIEW_TITLES[view] || VIEW_TITLES.overview;
 }
-/** 主动切页时压入上一页；与目标页相同则不入栈 */
-function pushViewTrail(trail, prev, next, max = 24) {
-	if (prev === next) return;
-	trail.push(prev);
-	if (max > 0 && trail.length > max) trail.splice(0, trail.length - max);
-}
-/** 弹出一页可回退的上次视图；返回 null 表示已经回到底，可交给上层关面板 */
-function popViewTrail(trail, current) {
-	while (trail.length) {
-		const prev = trail.pop();
-		if (prev !== current) return prev;
-	}
-	return null;
+/**
+* 返回键要退到的页面：只按**页面层级**算，不按浏览历史算。
+* - 二级页（钱包 / 使用说明 / 关于）→ 回到「设置」
+* - 对话展示管理 → 回到进入前的来源页（概览 / 趋势预测 / 设置）
+* - 根页（概览 / 统计 / 历史 / 趋势预测 / 设置）→ null，表示已经没有上一级，该关面板了
+*
+* 刻意不用「浏览过的页面栈」：用户在概览→设置→关于之后按返回，应当「关于→设置→关面板」，
+* 而不是顺着浏览路径退回概览（那样每按一次就多退一个不相干的页面，最后还会退出酒馆）。
+*/
+function backTargetOf(view, chatManageOrigin = "overview") {
+	if (!isChildView(view)) return null;
+	if (view === "chat-manage") return chatManageOrigin === view ? null : chatManageOrigin;
+	return childParentOf(view);
 }
 /**
 * 底栏 tab 点击语义。
@@ -10540,8 +10540,6 @@ var settingsChildView = null;
 var chatManageOrigin = "overview";
 /** 当前导航高亮键：窄屏二级页归到「设置」，桌面为视图本身 */
 var currentNavKey = "overview";
-/** 面板内浏览栈：安卓返回键逐页回退（栈空才关面板），打开/关闭面板时清空 */
-var viewTrail = [];
 var collapsed = false;
 function refreshUI() {
 	try {
@@ -11699,7 +11697,6 @@ function openChatManage(from) {
 }
 function switchView(view, opts) {
 	const prevView = currentView;
-	if (!opts?.back) pushViewTrail(viewTrail, prevView, view);
 	currentView = view;
 	if (isSettingsChild(view)) settingsChildView = view;
 	else if (view === "settings") settingsChildView = null;
@@ -12577,12 +12574,16 @@ function closeTopOverlay() {
 	} catch {}
 	return false;
 }
-/** 退到面板内的上一页；没有上一页返回 false（交给上层关面板） */
+/**
+* 按页面层级退一级：二级页回到自己的上级（对话展示管理回到进入前的来源页），
+* 已经在根页（概览 / 统计 / 历史 / 趋势 / 设置）就返回 false，交给上层关面板。
+* 这里刻意不看浏览历史：从概览进到设置、再进到关于，返回应当是「关于 → 设置 → 关面板」。
+*/
 function goBackInPanel() {
-	const prev = popViewTrail(viewTrail, currentView);
-	if (!prev) return false;
+	const target = backTargetOf(currentView, chatManageOrigin);
+	if (!target || target === currentView) return false;
 	try {
-		switchView(prev, { back: true });
+		switchView(target, { back: true });
 		return true;
 	} catch {
 		return false;
@@ -12632,7 +12633,7 @@ function onBackGuardPop(ev) {
 	} catch {}
 }
 /**
-* 打开面板时压入一组哨兵历史记录，把返回键变成「先退面板内的浏览历史」。
+* 打开面板时压入一组哨兵历史记录，把返回键改成「先退面板内的页面层级」，退无可退才关面板。
 * 桌面端不接管，保持「后退 = 回上一页」的原生语义。
 */
 function armBackGuard() {
@@ -12677,14 +12678,12 @@ function releaseBackGuard(stepBack = true) {
 function resetPanelState() {
 	panelCreated = false;
 	panelOpen = false;
-	viewTrail.length = 0;
 	try {
 		releaseBackGuard();
 	} catch {}
 }
 function openPanel() {
 	const doc = getDoc$1();
-	viewTrail.length = 0;
 	panelOpenStartTs = nowTs();
 	try {
 		trackOpen();
@@ -12739,7 +12738,6 @@ function closePanel() {
 	mobileOpen = false;
 	syncMobileSidebar(doc);
 	panelOpen = false;
-	viewTrail.length = 0;
 	try {
 		releaseBackGuard();
 	} catch {}

@@ -6,13 +6,12 @@ import {
   MOBILE_TABS,
   SETTINGS_CHILD_VIEWS,
   SETTINGS_ENTRIES,
+  backTargetOf,
   childParentOf,
   isAppView,
   isChildView,
   isSettingsChild,
   parentTabOf,
-  popViewTrail,
-  pushViewTrail,
   resolveTabTap,
   viewTitle,
 } from './nav-model';
@@ -125,38 +124,39 @@ describe('nav-model', () => {
   });
 });
 
-describe('面板内浏览栈', () => {
-  it('主动切页压入上一页，切到同一页不入栈', () => {
-    const trail: any[] = [];
-    pushViewTrail(trail, 'overview', 'stats');
-    pushViewTrail(trail, 'stats', 'stats');
-    pushViewTrail(trail, 'stats', 'history');
-    expect(trail).toEqual(['overview', 'stats']);
+describe('安卓返回键：按页面层级回退', () => {
+  it('二级页退到自己的上级根页', () => {
+    expect(backTargetOf('wallet')).toBe('settings');
+    expect(backTargetOf('help')).toBe('settings');
+    expect(backTargetOf('about')).toBe('settings');
   });
 
-  it('返回时逐页回退，到底返回 null', () => {
-    const trail: any[] = [];
-    pushViewTrail(trail, 'overview', 'stats');
-    pushViewTrail(trail, 'stats', 'history');
-    expect(popViewTrail(trail, 'history')).toBe('stats');
-    expect(popViewTrail(trail, 'stats')).toBe('overview');
-    expect(popViewTrail(trail, 'overview')).toBeNull();
-    expect(trail).toEqual([]);
+  it('对话展示管理回到进入前的来源页，不是固定回概览', () => {
+    expect(backTargetOf('chat-manage', 'overview')).toBe('overview');
+    expect(backTargetOf('chat-manage', 'forecast')).toBe('forecast');
+    expect(backTargetOf('chat-manage', 'settings')).toBe('settings');
+    // 来源页被写坏成自己时不允许原地打转
+    expect(backTargetOf('chat-manage', 'chat-manage')).toBeNull();
   });
 
-  it('栈里出现的当前页会被跳过，不会原地打转', () => {
-    // 栈顶正好是当前页（比如用户手动切回了该页）时继续往下弹，而不是回退到自己
-    const trail: any[] = ['overview', 'stats'];
-    expect(popViewTrail(trail, 'stats')).toBe('overview');
-    expect(trail).toEqual([]);
+  it('根页没有上一级，交给上层关面板（不按浏览历史退回别的页）', () => {
+    expect(backTargetOf('overview')).toBeNull();
+    expect(backTargetOf('stats')).toBeNull();
+    expect(backTargetOf('history')).toBeNull();
+    expect(backTargetOf('forecast')).toBeNull();
+    expect(backTargetOf('settings')).toBeNull();
   });
 
-  it('超出上限时从最旧的一端裁剪', () => {
+  it('概览→设置→关于之后按返回只退一层：关于→设置→关面板', () => {
+    let view: any = 'about';
     const trail: any[] = [];
-    pushViewTrail(trail, 'overview', 'stats', 3);
-    pushViewTrail(trail, 'stats', 'history', 3);
-    pushViewTrail(trail, 'history', 'forecast', 3);
-    pushViewTrail(trail, 'forecast', 'settings', 3);
-    expect(trail).toEqual(['stats', 'history', 'forecast']);
+    let target = backTargetOf(view, 'overview');
+    while (target) {
+      trail.push(target);
+      view = target;
+      target = backTargetOf(view, 'overview');
+    }
+    expect(trail).toEqual(['settings']);
+    expect(view).toBe('settings');
   });
 });

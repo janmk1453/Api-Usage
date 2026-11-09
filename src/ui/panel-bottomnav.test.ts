@@ -171,10 +171,12 @@ describe('跨页长距离切换：胶囊先起跑再渲染', () => {
   });
 });
 
-describe('安卓返回键：先关浮层 → 逐页回退 → 栈空才关面板', () => {
-  it('切页时把上一页压进浏览栈，由返回键触发的回退不再入栈', () => {
-    expect(panelCode).toContain('if (!opts?.back) pushViewTrail(viewTrail, prevView, view);');
-    expect(panelCode).toContain('const viewTrail: AppView[] = [];');
+describe('安卓返回键：先关浮层 → 退一级页面 → 根页才关面板', () => {
+  it('不再维护浏览栈，回退目标只按页面层级算', () => {
+    // 浏览历史栈会让「概览→设置→关于」按返回退回概览，用户要的是「关于→设置→关面板」
+    expect(panelCode).not.toContain('viewTrail');
+    expect(panelCode).toContain('const target = backTargetOf(currentView, chatManageOrigin);');
+    expect(panelCode).toContain('if (!target || target === currentView) return false;');
   });
 
   it('返回键按 浮层 → 上一页 → 关面板 的次序消费，且每次消费后把哨兵缓冲补满', () => {
@@ -193,8 +195,8 @@ describe('安卓返回键：先关浮层 → 逐页回退 → 栈空才关面板
     expect(panelCode).toContain('if (activeHistoryDetailTs !== null) {');
   });
 
-  it('回退走 switchView(prev, { back: true })，不会把回退动作再压栈', () => {
-    expect(panelCode).toContain('switchView(prev, { back: true });');
+  it('回退走 switchView(target, { back: true })', () => {
+    expect(panelCode).toContain('switchView(target, { back: true });');
   });
 
   it('平板横屏等宽度超过 760 的移动设备同样接管返回键', () => {
@@ -221,11 +223,11 @@ describe('安卓返回键：先关浮层 → 逐页回退 → 栈空才关面板
     expect(body).toContain('backGuardSkipUntil = nowTs() + 400;');
   });
 
-  it('打开与关闭面板都清空浏览栈，避免下次打开残留上次路径', () => {
-    const open = panelCode.indexOf('export function openPanel() {');
+  it('面板内不再有跨次打开残留的浏览路径，关面板只负责弹掉哨兵', () => {
     const close = panelCode.indexOf('export function closePanel() {');
-    expect(panelCode.slice(open, close)).toContain('viewTrail.length = 0;');
     const next = panelCode.indexOf('export function togglePanel()');
-    expect(panelCode.slice(close, next)).toContain('viewTrail.length = 0;');
+    const body = panelCode.slice(close, next);
+    expect(body).toContain('releaseBackGuard();');
+    expect(body).not.toContain('viewTrail');
   });
 });
