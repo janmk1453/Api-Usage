@@ -3,12 +3,12 @@ import { r as state } from "./store-TDK3YzRZ.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS } from "./pricing-Bc-qEvy8.js";
 import { a as getExtensionSettings, f as saveHot, o as isMigrationBackupKey, p as historyRecordKey, r as deleteMigrationBackups, u as saveExtensionSettings } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as mergeWalletCollections, a as decryptKey, d as calcCost, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, t as repository } from "./repository-TFLNkRoE.js";
+import { C as mergeWalletCollections, a as decryptKey, d as calcCost, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, t as repository } from "./repository-Cf26MO-h.js";
 import { a as isUnsafeKey, o as isValidDayKey, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
 import { i as getDisplayCurrency, n as fetchLiveRate } from "./currency-Dsn2T9-Q.js";
-import { r as recalcAllCosts } from "./interception-ClMjWeZH.js";
-import { i as saveApiKey } from "./balance-ByHQ7uEp.js";
-import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-DjF47F-6.js";
+import { r as recalcAllCosts } from "./interception-BzsoKaEQ.js";
+import { i as saveApiKey } from "./balance-DwuYkZLE.js";
+import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-LRQyOkr3.js";
 //#region src/ui/icons.ts
 var PATHS = {
 	overview: "<rect width=\"7\" height=\"9\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"9\" x=\"14\" y=\"12\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"3\" y=\"16\" rx=\"1\"/>",
@@ -1063,6 +1063,65 @@ function generateDebugBatch() {
 		globalThis.ApiUsageStat?.refreshUI?.();
 	} catch {}
 	alert("已生成 " + generated + " 条模拟数据");
+}
+//#endregion
+//#region src/ui/dropdown-close.ts
+/**
+* 胶囊下拉的「点选项 → 关闭 → 重绘」统一收口。
+*
+* 历史问题：选项处理器习惯写成
+*   drop.style.display = 'none';
+*   renderStatsView();          // 内部重建整页 + 重画 ECharts
+* 两件事挤在同一个任务里，浏览器必须等整段 JS 跑完才首次绘制，于是下拉的关闭状态一直画不出来，
+* 用户看到的是「点了没反应，等一下才突然消失」。反过来先只写 display 也不够：浮层是 90ms 的
+* 淡出过渡，元素在过渡期间仍占着旧画面。所以这里拆成两步：
+*   1) closeDropdownInstant：临时关掉过渡再把 display 写成 none，让浮层当场消失（不参与淡出）；
+*   2) closeDropdownThenPaint：把重绘推到下一帧之后，先让屏幕把「已经关了」画出来，再付重绘的钱。
+*
+* 只给「选中某一项后要重绘」的路径使用；点外部关闭、按钮互斥关闭继续走 CSS 淡出（见 style.css
+* 「胶囊下拉浮层：开 / 合过渡」的关闭态规则），不要换成瞬时关闭，否则失去淡出手感。
+*/
+/** 立即把浮层关掉，不参与 CSS 淡出（临时把 transition 置为 none，写完 display 再还原）。 */
+function closeDropdownInstant(drop) {
+	if (!drop) return;
+	const style = drop.style;
+	if (style.display === "none") return;
+	const prev = style.transition;
+	style.transition = "none";
+	style.display = "none";
+	drop.getBoundingClientRect().width;
+	if (prev) style.transition = prev;
+	else style.removeProperty("transition");
+}
+/** 下一帧（双 requestAnimationFrame）之后再执行，另带 120ms 兜底（后台标签页 rAF 会暂停）。只执行一次。 */
+function afterNextPaint(run, schedule) {
+	let done = false;
+	const fire = () => {
+		if (done) return;
+		done = true;
+		try {
+			run();
+		} catch (err) {
+			console.error("[aus] 下拉关闭后的重绘失败", err);
+		}
+	};
+	const sched = schedule || defaultSchedule;
+	try {
+		sched(fire);
+	} catch {
+		setTimeout(fire, 120);
+	}
+}
+function defaultSchedule(run) {
+	const raf = typeof requestAnimationFrame === "function" ? requestAnimationFrame : null;
+	if (raf) raf(() => raf(run));
+	else setTimeout(run, 0);
+	setTimeout(run, 120);
+}
+/** 瞬时关闭浮层，再把重绘推到下一帧之后。 */
+function closeDropdownThenPaint(drop, run, schedule) {
+	closeDropdownInstant(drop);
+	afterNextPaint(run, schedule);
 }
 var IDENTITY_KEY = "telemetry";
 /** 关闭面板触发上报的最小间隔（吃掉反复开关面板造成的抖动） */
@@ -2176,13 +2235,15 @@ function renderSettings(doc) {
 				const v = el.getAttribute("data-theme");
 				state.settings.theme = v;
 				saveHot({ settings: state.settings });
+				closeDropdownInstant(dropdown);
 				applyTheme(v);
 				syncThemeWatcher();
-				dropdown.style.display = "none";
 				renderThemePicker();
-				try {
-					globalThis.ApiUsageStat?.refreshUI?.();
-				} catch {}
+				afterNextPaint(() => {
+					try {
+						globalThis.ApiUsageStat?.refreshUI?.();
+					} catch {}
+				});
 			};
 		});
 	}
@@ -2217,11 +2278,13 @@ function renderSettings(doc) {
 				const v = el.getAttribute("data-scope");
 				state.settings.historyScope = v;
 				saveHot({ settings: state.settings });
-				dropdown.style.display = "none";
+				closeDropdownInstant(dropdown);
 				renderScopePicker();
-				try {
-					globalThis.ApiUsageStat?.refreshUI?.();
-				} catch {}
+				afterNextPaint(() => {
+					try {
+						globalThis.ApiUsageStat?.refreshUI?.();
+					} catch {}
+				});
 			};
 		});
 	}
@@ -2278,7 +2341,7 @@ function renderSettings(doc) {
 		state.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state.settings });
 		try {
-			import("./balance-ByHQ7uEp.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-DwuYkZLE.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2322,7 +2385,7 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-TFLNkRoE.js").then((n) => n.n);
+				const { repository } = await import("./repository-Cf26MO-h.js").then((n) => n.n);
 				const { state: st } = await import("./store-TDK3YzRZ.js").then((n) => n.i);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
@@ -2438,7 +2501,7 @@ function renderSettings(doc) {
 				el.onclick = () => {
 					state.settings.pricingSync.mode = el.getAttribute("data-mode");
 					saveHot({ settings: state.settings });
-					modeDrop.style.display = "none";
+					closeDropdownInstant(modeDrop);
 					if (modeLabel) modeLabel.textContent = modeMap[state.settings.pricingSync.mode] || el.getAttribute("data-mode");
 					modeDrop.innerHTML = Object.entries(modeMap).map(([k, l]) => `<div data-mode="${k}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${state.settings.pricingSync.mode === k ? "background:var(--ds-card);font-weight:600;" : ""}">${l}</div>`).join("");
 				};
@@ -2468,10 +2531,10 @@ function renderSettings(doc) {
 				el.onclick = () => {
 					state.settings.pricingSync.autoIntervalHours = parseInt(el.getAttribute("data-interval")) || 0;
 					saveHot({ settings: state.settings });
-					intervalDrop.style.display = "none";
+					closeDropdownInstant(intervalDrop);
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-DjF47F-6.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./pricing-sync-LRQyOkr3.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 						import("./currency-Dsn2T9-Q.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};
@@ -2956,4 +3019,4 @@ function fillDebugModelSelect(doc) {
 	sel.value = state.settings.debugModel;
 }
 //#endregion
-export { trackOpen as a, applyTheme as c, switchHTML as d, icon as f, initTelemetry as i, unwatchSystemTheme as l, settings_exports as n, trackPage as o, flushTelemetry as r, trackRender as s, renderSettings as t, watchSystemTheme as u };
+export { trackOpen as a, afterNextPaint as c, applyTheme as d, unwatchSystemTheme as f, icon as h, initTelemetry as i, closeDropdownInstant as l, switchHTML as m, settings_exports as n, trackPage as o, watchSystemTheme as p, flushTelemetry as r, trackRender as s, renderSettings as t, closeDropdownThenPaint as u };

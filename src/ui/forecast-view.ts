@@ -18,6 +18,7 @@ import type { ModelEfficiencyRow } from '../stats/model-efficiency';
 import { energyScore, topPowerChats } from '../stats/energyScore';
 import { ctxLimitForModel } from '../stats/forecast';
 import { getPricing, isPeakHour, isWalletPeakHour } from '../services/pricing';
+import { afterNextPaint, closeDropdownInstant } from './dropdown-close';
 import { formatMoney, getDisplayCurrency, getWalletExchangeRate } from '../services/currency';
 import { findWalletForHistory, findWalletModel, walletBalanceToCny } from '../data/wallets';
 import { esc } from '../utils/date';
@@ -308,6 +309,15 @@ function closeAllDropdowns(): void {
   openDropdown = null;
 }
 
+/** 选中某一项后要整页重绘时用：先把五个浮层全部瞬时关掉，重绘留到下一帧。 */
+function closeAllDropdownsInstant(): void {
+  const doc = getDoc();
+  for (const name of ['chat', 'model', 'horizon', 'hit', 'scope']) {
+    closeDropdownInstant(doc.getElementById(`aus-forecast-${name}-dropdown`) as HTMLElement | null);
+  }
+  openDropdown = null;
+}
+
 function toggleDropdown(name: string): void {
   const doc = getDoc();
   if (openDropdown === name) {
@@ -357,8 +367,8 @@ function renderChatDropdown(fullHist: any[]): void {
       event.stopPropagation();
       selectedForecastKey = el.getAttribute('data-fchat') || '__current__';
       selectedForecastModel = null;
-      closeAllDropdowns();
-      renderForecastView();
+      closeAllDropdownsInstant();
+      afterNextPaint(() => renderForecastView());
     };
   });
 }
@@ -378,8 +388,8 @@ function renderModelDropdown(options: ModelOption[]): void {
     el.onclick = (event: Event) => {
       event.stopPropagation();
       selectedForecastModel = el.getAttribute('data-fmodel') || null;
-      closeAllDropdowns();
-      renderForecastView();
+      closeAllDropdownsInstant();
+      afterNextPaint(() => renderForecastView());
     };
   });
 }
@@ -401,8 +411,8 @@ function renderHorizonDropdown(): void {
       const value = Number(el.getAttribute('data-fhorizon'));
       if (HORIZONS.includes(value)) horizon = value;
       savePreferences();
-      closeAllDropdowns();
-      renderForecastView();
+      closeAllDropdownsInstant();
+      afterNextPaint(() => renderForecastView());
     };
   });
 }
@@ -465,8 +475,8 @@ function renderHitControl(
         const mode = el.getAttribute('data-fhit');
         if (mode === 'global' || mode === 'model' || mode === 'manual') hitMode = mode;
         savePreferences();
-        closeAllDropdowns();
-        renderForecastView();
+        closeAllDropdownsInstant();
+        afterNextPaint(() => renderForecastView());
       };
     });
   }
@@ -758,8 +768,8 @@ function renderEfficiency(history: any[], scopeLabel: string): void {
         const value = el.getAttribute('data-fscope');
         if (value === 'all' || value === 'chat') efficiencyScope = value;
         savePreferences();
-        closeAllDropdowns();
-        renderForecastView();
+        closeAllDropdownsInstant();
+        afterNextPaint(() => renderForecastView());
       };
     });
   }
@@ -843,8 +853,8 @@ function renderEfficiency(history: any[], scopeLabel: string): void {
       if (!model) return;
       if (!getModelOptions(lastEffectiveHistory).some((option) => option.model === model)) return;
       selectedForecastModel = model;
-      closeAllDropdowns();
-      renderForecastView();
+      closeAllDropdownsInstant();
+      afterNextPaint(() => renderForecastView());
     };
   });
 }

@@ -14,6 +14,7 @@ import { openWalletSyncPreview } from './wallet-sync-preview';
 import { resolveVendor, vendorById, vendorInitialFallback } from '../services/provider-registry';
 import { BALANCE_ADAPTERS, resolveBalanceAdapter } from '../services/balance-adapters';
 import { renderPlanBlock, bindPlanBlock, hasPlanCapability } from './wallet-plan';
+import { afterNextPaint, closeDropdownInstant } from './dropdown-close';
 import { vendorIconSvg } from './vendor-icons';
 import { toast } from '../utils/logger';
 import { esc } from '../utils/date';
@@ -62,6 +63,14 @@ function closeDropdowns(): void {
   const doc = getDoc();
   doc.querySelectorAll('[data-wallet-dropdown]').forEach((el: any) => {
     el.style.display = 'none';
+  });
+}
+
+/** 选中某一项后要重建钱包页时用：先瞬时收掉全部浮层，重绘留到下一帧。 */
+function closeDropdownsInstant(): void {
+  const doc = getDoc();
+  doc.querySelectorAll('[data-wallet-dropdown]').forEach((el: any) => {
+    closeDropdownInstant(el);
   });
 }
 
@@ -816,8 +825,8 @@ function bindWalletView(doc: Document): void {
       } else if (kind === 'credential') {
         repository.updateWallet(walletId, (wallet) => { wallet.balance.primaryCredentialId = value || null; });
       }
-      closeDropdowns();
-      renderWalletView();
+      closeDropdownsInstant();
+      afterNextPaint(() => renderWalletView());
     };
   });
 

@@ -23,6 +23,7 @@ import { historyRecordKey } from '../utils/history-key';
 import { toast } from '../utils/logger';
 import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
 import { filterPickerRows } from './chat-visibility';
+import { closeDropdownInstant, closeDropdownThenPaint } from './dropdown-close';
 
 type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom' | 'all';
 // 默认时间维度：工具栏「重置筛选」与首次进入共用同一口径
@@ -251,7 +252,7 @@ function renderModelPicker(modelsHist?: any[]) {
   if (allInput) {
     allInput.onchange = () => {
       selectedModels = [];
-      renderStatsView();
+      closeDropdownThenPaint(dropdown, () => renderStatsView());
     };
   }
   dropdown.querySelectorAll('input[data-model]').forEach((el: any) => {
@@ -263,7 +264,7 @@ function renderModelPicker(modelsHist?: any[]) {
       } else {
         selectedModels = selectedModels.filter((item) => item !== model);
       }
-      renderStatsView();
+      closeDropdownThenPaint(dropdown, () => renderStatsView());
     };
   });
 }
@@ -296,9 +297,11 @@ function renderChatPicker(chatHist?: any[]) {
     el.onclick = () => {
       selectedChat = el.getAttribute('data-chat') || '__all__';
       chatPickerOpen = false;
-      dropdown.style.display = 'none';
-      renderChatPicker(chatHist);
-      renderStatsView();
+      // 先瞬时关掉浮层、下一帧再重建页面：否则关与重绘挤在同一个任务里，浮层要等整页重画完才消失
+      closeDropdownThenPaint(dropdown, () => {
+        renderChatPicker(chatHist);
+        renderStatsView();
+      });
     };
   });
 }
@@ -329,8 +332,7 @@ function renderEndpointPicker(history?: any[]) {
       selectedEndpoint = el.getAttribute('data-endpoint') || STATS_FILTER_ALL;
       selectedCredential = STATS_FILTER_ALL;
       endpointPickerOpen = false;
-      dropdown.style.display = 'none';
-      renderStatsView();
+      closeDropdownThenPaint(dropdown, () => renderStatsView());
     };
   });
 }
@@ -360,8 +362,7 @@ function renderCredentialPicker(history?: any[], endpoint = selectedEndpoint) {
     el.onclick = () => {
       selectedCredential = el.getAttribute('data-credential') || STATS_FILTER_ALL;
       credentialPickerOpen = false;
-      dropdown.style.display = 'none';
-      renderStatsView();
+      closeDropdownThenPaint(dropdown, () => renderStatsView());
     };
   });
 }
@@ -433,9 +434,9 @@ function bindPicker() {
         currentRange = r;
         if (r !== 'custom') { customStart=''; customEnd=''; }
         pickerOpen = false;
-        dropdown.style.display = 'none';
+        // 标签先就地改字（浮层已消失，标签必须立刻跟上），页面重建推到下一帧
         updatePickerLabel();
-        renderStatsView();
+        closeDropdownThenPaint(dropdown, () => renderStatsView());
       };
     });
   }
@@ -569,22 +570,28 @@ function renderChartSelectors() {
   yDrop.querySelectorAll('input[data-ykey]').forEach((el: any)=>{
     el.onchange = () => {
       toggleY(el.getAttribute('data-ykey') as any);
-      renderChartSelectors();
-      renderStatsView();
+      closeDropdownThenPaint(yDrop, () => {
+        renderChartSelectors();
+        renderStatsView();
+      });
     };
   });
   yDrop.querySelectorAll('[data-chart-type]').forEach((el: any)=>{
     el.onclick = () => {
       setChartType(el.getAttribute('data-chart-type') as any);
-      renderChartSelectors();
-      renderStatsView();
+      closeDropdownThenPaint(yDrop, () => {
+        renderChartSelectors();
+        renderStatsView();
+      });
     };
   });
   yDrop.querySelectorAll('[data-axis-label]').forEach((el: any)=>{
     el.onclick = () => {
       setAxisLabelMode(el.getAttribute('data-axis-label') as any);
-      renderChartSelectors();
-      renderStatsView();
+      closeDropdownThenPaint(yDrop, () => {
+        renderChartSelectors();
+        renderStatsView();
+      });
     };
   });
   // X 单选
@@ -600,9 +607,11 @@ function renderChartSelectors() {
   xDrop.querySelectorAll('[data-xkey]').forEach((el:any)=>{
     el.onclick = () => {
       setXSelected(el.getAttribute('data-xkey') as any);
-      chartXOpen=false; xDrop.style.display='none';
-      renderChartSelectors();
-      renderStatsView();
+      chartXOpen=false;
+      closeDropdownThenPaint(xDrop, () => {
+        renderChartSelectors();
+        renderStatsView();
+      });
     };
   });
 }
@@ -1087,8 +1096,7 @@ function openStatsFourDrop(idx:number, v:any) {
       arr[at] = key as any;
       (state.settings as any).statsFour = arr;
       try { saveHot({ settings: state.settings }); } catch {}
-      drop.style.display='none';
-      renderStatsView();
+      closeDropdownThenPaint(drop, () => renderStatsView());
     };
   });
   drop.style.display = drop.style.display==='block' ? 'none' : 'block';

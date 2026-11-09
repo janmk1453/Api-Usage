@@ -8,6 +8,7 @@ import { esc } from '../utils/date';
 import type { OverviewFourKey } from '../types/settings';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 import { repository } from '../data/repository';
+import { closeDropdownThenPaint } from './dropdown-close';
 
 function getDoc(): Document {
   return (window.parent as any)?.document ?? document;
@@ -203,8 +204,7 @@ function openFourDrop(idx:number, v:any) {
       arr[at] = key;
       (state.settings as any).overviewFour = arr;
       try { saveHot({ settings: state.settings }); } catch {}
-      drop.style.display='none';
-      renderOverview();
+      closeDropdownThenPaint(drop, () => renderOverview());
     };
   });
   drop.style.display = drop.style.display==='block' ? 'none' : 'block';
@@ -238,8 +238,7 @@ export function renderOverview(fullHistory?: any[]) {
         (state.settings as any).overviewWalletId = el.getAttribute('data-overview-wallet') || 'all';
         (state.settings as any).overviewWalletManuallySet = true;
         try { saveHot({ settings: state.settings }); } catch {}
-        walletDrop.style.display = 'none';
-        renderOverview();
+        closeDropdownThenPaint(walletDrop, () => renderOverview());
       };
     });
   }

@@ -12,6 +12,7 @@ import { CN_HOLIDAY_COVERAGE_LABEL } from '../constants/holidays';
 import { isValidDayKey, esc } from '../utils/date';
 import { recalcAllCosts } from '../services/interception';
 import { generateDebugBatch } from '../services/debug';
+import { afterNextPaint, closeDropdownInstant } from './dropdown-close';
 import { getDisplayCurrency } from '../services/currency';
 import { getPricing as resolvePricing } from '../services/pricing';
 import { syncPricingFromModelsDev, buildSyncPlan, fetchModelsDevCatalog, removeSyncedModels, isSyncedCustomModel } from '../services/pricing-sync';
@@ -350,11 +351,14 @@ export function renderSettings(doc: Document) {
         const v = el.getAttribute('data-theme') as any;
         (state.settings as any).theme = v;
         saveHot({ settings: state.settings });
+        // 先把浮层瞬时收掉，再切主题变量；全站刷新留到下一帧，别让关下拉等整页重绘
+        closeDropdownInstant(dropdown);
         applyTheme(v);
         syncThemeWatcher();
-        dropdown.style.display = 'none';
         renderThemePicker();
-        try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+        afterNextPaint(() => {
+          try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+        });
       };
     });
   }
@@ -387,9 +391,11 @@ export function renderSettings(doc: Document) {
         const v = el.getAttribute('data-scope') as any;
         (state.settings as any).historyScope = v;
         saveHot({ settings: state.settings });
-        dropdown.style.display = 'none';
+        closeDropdownInstant(dropdown);
         renderScopePicker();
-        try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+        afterNextPaint(() => {
+          try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
+        });
       };
     });
   }
@@ -545,7 +551,7 @@ export function renderSettings(doc: Document) {
         el.onclick = () => {
           (state.settings as any).pricingSync.mode = el.getAttribute('data-mode');
           saveHot({ settings: state.settings });
-          modeDrop.style.display = 'none';
+          closeDropdownInstant(modeDrop);
           if (modeLabel) modeLabel.textContent = modeMap[(state.settings as any).pricingSync.mode] || el.getAttribute('data-mode');
           modeDrop.innerHTML = Object.entries(modeMap).map(([k, l]: any) => `<div data-mode="${k}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${(state.settings as any).pricingSync.mode===k?'background:var(--ds-card);font-weight:600;':''}">${l}</div>`).join('');
         };
@@ -569,7 +575,7 @@ export function renderSettings(doc: Document) {
         el.onclick=()=>{
           (state.settings as any).pricingSync.autoIntervalHours = parseInt(el.getAttribute('data-interval'))||0;
           saveHot({settings:state.settings});
-          intervalDrop.style.display='none';
+          closeDropdownInstant(intervalDrop);
           if(intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute('data-interval')]||el.getAttribute('data-interval');
           try{ import('../services/pricing-sync').then(m=> (m as any).restartPricingSyncTimer?.()); import('../services/currency').then(m=> (m as any).restartRateTimer?.()); }catch{}
         };

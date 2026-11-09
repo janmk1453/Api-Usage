@@ -6,6 +6,7 @@ import { Y_OPTIONS, X_OPTIONS, X_OPTIONS_WITHOUT_ROUND, getYSelected as getMainY
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 import { attachChartZoom, detachChartZoom, getChartRange } from './range-zoom';
 import { readChartPrefs, writeChartPrefs } from './chart-prefs';
+import { afterNextPaint, closeDropdownThenPaint } from './dropdown-close';
 
 type ChartId = 'token'|'cost'|'hit'|'req'|'dur'|'pie';
 type XKey = 'round'|'hour'|'day'|'week'|'month';
@@ -475,8 +476,9 @@ function renderExtraY(id:ChartId){
       const k=el.getAttribute('data-y'), cid=el.getAttribute('data-chart') as ChartId;
       if (el.checked) state[cid].y.add(k); else { if (state[cid].y.size>1) state[cid].y.delete(k); else el.checked=true; }
       persistExtraPrefs(cid);
+      // 多选下拉保持打开：先就地重画勾选态（瞬间反馈），图表留到下一帧再画，免得勾选像卡住
       renderExtraY(cid);
-      renderOne(cid, lastFiltered);
+      afterNextPaint(() => renderOne(cid, lastFiltered));
     };
   });
 }
@@ -498,9 +500,10 @@ function renderExtraX(id:ChartId){
       const k=el.getAttribute('data-x') as XKey, cid=el.getAttribute('data-chart') as ChartId;
       state[cid].x = k;
       persistExtraPrefs(cid);
-      drop.style.display='none';
-      renderExtraX(cid);
-      renderOne(cid, lastFiltered);
+      closeDropdownThenPaint(drop, () => {
+        renderExtraX(cid);
+        renderOne(cid, lastFiltered);
+      });
     };
   });
 }

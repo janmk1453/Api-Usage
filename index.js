@@ -3,13 +3,13 @@ import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from ".
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { f as saveHot, p as historyRecordKey } from "./persistence-CaWdvByH.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-TFLNkRoE.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-Cf26MO-h.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-Dsn2T9-Q.js";
-import { t as installInterception } from "./interception-ClMjWeZH.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-ByHQ7uEp.js";
-import { a as trackOpen, c as applyTheme, d as switchHTML, f as icon, i as initTelemetry, l as unwatchSystemTheme, o as trackPage, r as flushTelemetry, s as trackRender, t as renderSettings, u as watchSystemTheme } from "./settings-C5UCW3Gw.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-DjF47F-6.js";
+import { t as installInterception } from "./interception-BzsoKaEQ.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-DwuYkZLE.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-BBoJGXG-.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-LRQyOkr3.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -2334,8 +2334,7 @@ function openFourDrop(idx, v) {
 			try {
 				saveHot({ settings: state$2.settings });
 			} catch {}
-			drop.style.display = "none";
-			renderOverview();
+			closeDropdownThenPaint(drop, () => renderOverview());
 		};
 	});
 	drop.style.display = drop.style.display === "block" ? "none" : "block";
@@ -2364,8 +2363,7 @@ function renderOverview(fullHistory) {
 				try {
 					saveHot({ settings: state$2.settings });
 				} catch {}
-				walletDrop.style.display = "none";
-				renderOverview();
+				closeDropdownThenPaint(walletDrop, () => renderOverview());
 			};
 		});
 	}
@@ -4302,7 +4300,7 @@ function renderExtraY(id) {
 			else el.checked = true;
 			persistExtraPrefs(cid);
 			renderExtraY(cid);
-			renderOne$1(cid, lastFiltered$1);
+			afterNextPaint(() => renderOne$1(cid, lastFiltered$1));
 		};
 	});
 }
@@ -4323,9 +4321,10 @@ function renderExtraX(id) {
 			const k = el.getAttribute("data-x"), cid = el.getAttribute("data-chart");
 			state$1[cid].x = k;
 			persistExtraPrefs(cid);
-			drop.style.display = "none";
-			renderExtraX(cid);
-			renderOne$1(cid, lastFiltered$1);
+			closeDropdownThenPaint(drop, () => {
+				renderExtraX(cid);
+				renderOne$1(cid, lastFiltered$1);
+			});
 		};
 	});
 }
@@ -4669,9 +4668,10 @@ function renderXDrop(id) {
 		el.onclick = () => {
 			const k = el.getAttribute("data-x"), tid = el.getAttribute("data-trend");
 			state[tid].x = k;
-			drop.style.display = "none";
-			renderXDrop(tid);
-			renderOne(tid, lastFiltered);
+			closeDropdownThenPaint(drop, () => {
+				renderXDrop(tid);
+				renderOne(tid, lastFiltered);
+			});
 		};
 	});
 }
@@ -5088,7 +5088,7 @@ function renderModelPicker(modelsHist) {
 	const allInput = dropdown.querySelector("[data-model-all]");
 	if (allInput) allInput.onchange = () => {
 		selectedModels = [];
-		renderStatsView();
+		closeDropdownThenPaint(dropdown, () => renderStatsView());
 	};
 	dropdown.querySelectorAll("input[data-model]").forEach((el) => {
 		el.onchange = () => {
@@ -5097,7 +5097,7 @@ function renderModelPicker(modelsHist) {
 			if (el.checked) {
 				if (!selectedModels.includes(model)) selectedModels.push(model);
 			} else selectedModels = selectedModels.filter((item) => item !== model);
-			renderStatsView();
+			closeDropdownThenPaint(dropdown, () => renderStatsView());
 		};
 	});
 }
@@ -5123,9 +5123,10 @@ function renderChatPicker(chatHist) {
 		el.onclick = () => {
 			selectedChat = el.getAttribute("data-chat") || "__all__";
 			chatPickerOpen = false;
-			dropdown.style.display = "none";
-			renderChatPicker(chatHist);
-			renderStatsView();
+			closeDropdownThenPaint(dropdown, () => {
+				renderChatPicker(chatHist);
+				renderStatsView();
+			});
 		};
 	});
 }
@@ -5151,8 +5152,7 @@ function renderEndpointPicker(history) {
 			selectedEndpoint = el.getAttribute("data-endpoint") || "__all__";
 			selectedCredential = STATS_FILTER_ALL;
 			endpointPickerOpen = false;
-			dropdown.style.display = "none";
-			renderStatsView();
+			closeDropdownThenPaint(dropdown, () => renderStatsView());
 		};
 	});
 }
@@ -5177,8 +5177,7 @@ function renderCredentialPicker$1(history, endpoint = selectedEndpoint) {
 		el.onclick = () => {
 			selectedCredential = el.getAttribute("data-credential") || "__all__";
 			credentialPickerOpen = false;
-			dropdown.style.display = "none";
-			renderStatsView();
+			closeDropdownThenPaint(dropdown, () => renderStatsView());
 		};
 	});
 }
@@ -5249,9 +5248,8 @@ function bindPicker() {
 					customEnd = "";
 				}
 				pickerOpen = false;
-				dropdown.style.display = "none";
 				updatePickerLabel();
-				renderStatsView();
+				closeDropdownThenPaint(dropdown, () => renderStatsView());
 			};
 		});
 	}
@@ -5401,22 +5399,28 @@ function renderChartSelectors() {
 	yDrop.querySelectorAll("input[data-ykey]").forEach((el) => {
 		el.onchange = () => {
 			toggleY(el.getAttribute("data-ykey"));
-			renderChartSelectors();
-			renderStatsView();
+			closeDropdownThenPaint(yDrop, () => {
+				renderChartSelectors();
+				renderStatsView();
+			});
 		};
 	});
 	yDrop.querySelectorAll("[data-chart-type]").forEach((el) => {
 		el.onclick = () => {
 			setChartType(el.getAttribute("data-chart-type"));
-			renderChartSelectors();
-			renderStatsView();
+			closeDropdownThenPaint(yDrop, () => {
+				renderChartSelectors();
+				renderStatsView();
+			});
 		};
 	});
 	yDrop.querySelectorAll("[data-axis-label]").forEach((el) => {
 		el.onclick = () => {
 			setAxisLabelMode(el.getAttribute("data-axis-label"));
-			renderChartSelectors();
-			renderStatsView();
+			closeDropdownThenPaint(yDrop, () => {
+				renderChartSelectors();
+				renderStatsView();
+			});
 		};
 	});
 	const xSel = getXSelected();
@@ -5438,9 +5442,10 @@ function renderChartSelectors() {
 		el.onclick = () => {
 			setXSelected(el.getAttribute("data-xkey"));
 			chartXOpen = false;
-			xDrop.style.display = "none";
-			renderChartSelectors();
-			renderStatsView();
+			closeDropdownThenPaint(xDrop, () => {
+				renderChartSelectors();
+				renderStatsView();
+			});
 		};
 	});
 }
@@ -6091,8 +6096,7 @@ function openStatsFourDrop(idx, v) {
 			try {
 				saveHot({ settings: state$2.settings });
 			} catch {}
-			drop.style.display = "none";
-			renderStatsView();
+			closeDropdownThenPaint(drop, () => renderStatsView());
 		};
 	});
 	drop.style.display = drop.style.display === "block" ? "none" : "block";
@@ -7531,6 +7535,18 @@ function closeAllDropdowns() {
 	}
 	openDropdown = null;
 }
+/** 选中某一项后要整页重绘时用：先把五个浮层全部瞬时关掉，重绘留到下一帧。 */
+function closeAllDropdownsInstant() {
+	const doc = getDoc$5();
+	for (const name of [
+		"chat",
+		"model",
+		"horizon",
+		"hit",
+		"scope"
+	]) closeDropdownInstant(doc.getElementById(`aus-forecast-${name}-dropdown`));
+	openDropdown = null;
+}
 function toggleDropdown(name) {
 	const doc = getDoc$5();
 	if (openDropdown === name) {
@@ -7574,8 +7590,8 @@ function renderChatDropdown(fullHist) {
 			event.stopPropagation();
 			selectedForecastKey = el.getAttribute("data-fchat") || "__current__";
 			selectedForecastModel = null;
-			closeAllDropdowns();
-			renderForecastView();
+			closeAllDropdownsInstant();
+			afterNextPaint(() => renderForecastView());
 		};
 	});
 }
@@ -7587,8 +7603,8 @@ function renderModelDropdown(options) {
 		el.onclick = (event) => {
 			event.stopPropagation();
 			selectedForecastModel = el.getAttribute("data-fmodel") || null;
-			closeAllDropdowns();
-			renderForecastView();
+			closeAllDropdownsInstant();
+			afterNextPaint(() => renderForecastView());
 		};
 	});
 }
@@ -7602,8 +7618,8 @@ function renderHorizonDropdown() {
 			const value = Number(el.getAttribute("data-fhorizon"));
 			if (HORIZONS.includes(value)) horizon = value;
 			savePreferences();
-			closeAllDropdowns();
-			renderForecastView();
+			closeAllDropdownsInstant();
+			afterNextPaint(() => renderForecastView());
 		};
 	});
 }
@@ -7656,8 +7672,8 @@ function renderHitControl(fullHist, model, series, globalRate, modelRate) {
 				const mode = el.getAttribute("data-fhit");
 				if (mode === "global" || mode === "model" || mode === "manual") hitMode = mode;
 				savePreferences();
-				closeAllDropdowns();
-				renderForecastView();
+				closeAllDropdownsInstant();
+				afterNextPaint(() => renderForecastView());
 			};
 		});
 	}
@@ -7884,8 +7900,8 @@ function renderEfficiency(history, scopeLabel) {
 				const value = el.getAttribute("data-fscope");
 				if (value === "all" || value === "chat") efficiencyScope = value;
 				savePreferences();
-				closeAllDropdowns();
-				renderForecastView();
+				closeAllDropdownsInstant();
+				afterNextPaint(() => renderForecastView());
 			};
 		});
 	}
@@ -7965,8 +7981,8 @@ function renderEfficiency(history, scopeLabel) {
 			if (!model) return;
 			if (!getModelOptions(lastEffectiveHistory).some((option) => option.model === model)) return;
 			selectedForecastModel = model;
-			closeAllDropdowns();
-			renderForecastView();
+			closeAllDropdownsInstant();
+			afterNextPaint(() => renderForecastView());
 		};
 	});
 }
@@ -8696,6 +8712,12 @@ function closeDropdowns() {
 		el.style.display = "none";
 	});
 }
+/** 选中某一项后要重建钱包页时用：先瞬时收掉全部浮层，重绘留到下一帧。 */
+function closeDropdownsInstant() {
+	getDoc$3().querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
+		closeDropdownInstant(el);
+	});
+}
 function closeOtherDropdowns(id) {
 	getDoc$3().querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
 		if (el.id !== id) el.style.display = "none";
@@ -9116,7 +9138,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-ByHQ7uEp.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-DwuYkZLE.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -9453,8 +9475,8 @@ function bindWalletView(doc) {
 			else if (kind === "credential") repository.updateWallet(walletId, (wallet) => {
 				wallet.balance.primaryCredentialId = value || null;
 			});
-			closeDropdowns();
-			renderWalletView();
+			closeDropdownsInstant();
+			afterNextPaint(() => renderWalletView());
 		};
 	});
 	const searchInput = doc.querySelector("[data-wallet-search]");
@@ -10462,6 +10484,16 @@ function closeHistoryFilterDropdowns() {
 		if (dropdown) dropdown.style.display = "none";
 	}
 }
+/** 选中某一项后要重建列表时用：先把四个浮层瞬时收掉，重绘留到下一帧。 */
+function closeHistoryFilterDropdownsInstant() {
+	const doc = getDoc$1();
+	for (const kind of [
+		"model",
+		"chat",
+		"endpoint",
+		"credential"
+	]) closeDropdownInstant(doc.getElementById(`aus-history-${kind}-dropdown`));
+}
 function renderHistoryFilterDropdown(kind, selected, options, emptyText, onSelect) {
 	const dropdown = getDoc$1().getElementById(`aus-history-${kind}-dropdown`);
 	if (!dropdown) return;
@@ -10516,27 +10548,27 @@ function renderHistoryFilters(history) {
 	renderHistoryFilterDropdown("model", historyFilters.model, models, "暂无模型", (value) => {
 		historyFilters.model = value;
 		historyPage = 1;
-		closeHistoryFilterDropdowns();
-		renderHistory(doc, getSelectedSave());
+		closeHistoryFilterDropdownsInstant();
+		afterNextPaint(() => renderHistory(doc, getSelectedSave()));
 	});
 	renderHistoryFilterDropdown("chat", historyFilters.chat, chats, chatOptions.length ? "对话已全部隐藏（可在「对话展示管理」中恢复）" : "暂无对话", (value) => {
 		historyFilters.chat = value;
 		historyPage = 1;
-		closeHistoryFilterDropdowns();
-		renderHistory(doc, getSelectedSave());
+		closeHistoryFilterDropdownsInstant();
+		afterNextPaint(() => renderHistory(doc, getSelectedSave()));
 	});
 	renderHistoryFilterDropdown("endpoint", historyFilters.endpoint, endpoints, "暂无接入记录", (value) => {
 		historyFilters.endpoint = value;
 		historyFilters.credential = STATS_FILTER_ALL;
 		historyPage = 1;
-		closeHistoryFilterDropdowns();
-		renderHistory(doc, getSelectedSave());
+		closeHistoryFilterDropdownsInstant();
+		afterNextPaint(() => renderHistory(doc, getSelectedSave()));
 	});
 	renderHistoryFilterDropdown("credential", historyFilters.credential, credentials, "暂无密钥记录", (value) => {
 		historyFilters.credential = value;
 		historyPage = 1;
-		closeHistoryFilterDropdowns();
-		renderHistory(doc, getSelectedSave());
+		closeHistoryFilterDropdownsInstant();
+		afterNextPaint(() => renderHistory(doc, getSelectedSave()));
 	});
 	writeFilterPrefs({ history: {
 		model: historyFilters.model,
@@ -12244,7 +12276,7 @@ function createPanel() {
 					if (branch !== "main" && branch !== "dev") return;
 					m.setUpdateBranch(branch);
 					renderBranch();
-					branchDrop.style.display = "none";
+					closeDropdownInstant(branchDrop);
 					m.checkUpdate(true);
 				};
 			});
@@ -12426,7 +12458,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-AsRsaQYA.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-BCuK7bhd.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-C0nJ98Sq.js").then((m) => m.maybeAutoCheck());
@@ -12651,10 +12683,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-ClMjWeZH.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-BzsoKaEQ.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-AsRsaQYA.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BCuK7bhd.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -12662,10 +12694,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-ClMjWeZH.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-BzsoKaEQ.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-AsRsaQYA.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BCuK7bhd.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -12755,13 +12787,13 @@ async function onDelete() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-ByHQ7uEp.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-DwuYkZLE.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-Dsn2T9-Q.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DjF47F-6.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-LRQyOkr3.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 	try {
@@ -12788,19 +12820,19 @@ async function onDelete() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-ClMjWeZH.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-BzsoKaEQ.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-AsRsaQYA.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BCuK7bhd.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-ByHQ7uEp.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-DwuYkZLE.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-Dsn2T9-Q.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-DjF47F-6.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-LRQyOkr3.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -12810,10 +12842,10 @@ async function onDisable() {
 		flushSaveHot();
 	} catch {}
 	try {
-		import("./interception-ClMjWeZH.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-BzsoKaEQ.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-AsRsaQYA.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-BCuK7bhd.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -12832,13 +12864,13 @@ async function onDisable() {
 		unwatchSystemTheme();
 	} catch {}
 	try {
-		(await import("./balance-ByHQ7uEp.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-DwuYkZLE.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-Dsn2T9-Q.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DjF47F-6.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-LRQyOkr3.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -12871,19 +12903,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-ByHQ7uEp.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-DwuYkZLE.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-Dsn2T9-Q.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DjF47F-6.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-LRQyOkr3.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-AsRsaQYA.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BCuK7bhd.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -12905,7 +12937,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-DjF47F-6.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-LRQyOkr3.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

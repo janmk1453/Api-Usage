@@ -28,6 +28,7 @@ import { initChatManageView, renderChatManageView } from './chat-manage';
 import { helpViewHTML } from './help-view';
 import { chartCardHTML } from './chart-picker';
 import { filterPickerRows } from './chat-visibility';
+import { afterNextPaint, closeDropdownInstant } from './dropdown-close';
 import { bindChangelog, renderChangelogCard } from './changelog';
 import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
 import { initPillState } from './pill';
@@ -231,6 +232,14 @@ function closeHistoryFilterDropdowns() {
   }
 }
 
+/** 选中某一项后要重建列表时用：先把四个浮层瞬时收掉，重绘留到下一帧。 */
+function closeHistoryFilterDropdownsInstant() {
+  const doc = getDoc();
+  for (const kind of ['model', 'chat', 'endpoint', 'credential'] as HistoryFilterKind[]) {
+    closeDropdownInstant(doc.getElementById(`aus-history-${kind}-dropdown`) as HTMLElement | null);
+  }
+}
+
 function renderHistoryFilterDropdown(
   kind: HistoryFilterKind,
   selected: string,
@@ -305,27 +314,27 @@ function renderHistoryFilters(history: any[]) {
   renderHistoryFilterDropdown('model', historyFilters.model, models, '暂无模型', (value) => {
     historyFilters.model = value;
     historyPage = 1;
-    closeHistoryFilterDropdowns();
-    renderHistory(doc, getSelectedSave());
+    closeHistoryFilterDropdownsInstant();
+    afterNextPaint(() => renderHistory(doc, getSelectedSave()));
   });
   renderHistoryFilterDropdown('chat', historyFilters.chat, chats, chatOptions.length ? '对话已全部隐藏（可在「对话展示管理」中恢复）' : '暂无对话', (value) => {
     historyFilters.chat = value;
     historyPage = 1;
-    closeHistoryFilterDropdowns();
-    renderHistory(doc, getSelectedSave());
+    closeHistoryFilterDropdownsInstant();
+    afterNextPaint(() => renderHistory(doc, getSelectedSave()));
   });
   renderHistoryFilterDropdown('endpoint', historyFilters.endpoint, endpoints, '暂无接入记录', (value) => {
     historyFilters.endpoint = value;
     historyFilters.credential = STATS_FILTER_ALL;
     historyPage = 1;
-    closeHistoryFilterDropdowns();
-    renderHistory(doc, getSelectedSave());
+    closeHistoryFilterDropdownsInstant();
+    afterNextPaint(() => renderHistory(doc, getSelectedSave()));
   });
   renderHistoryFilterDropdown('credential', historyFilters.credential, credentials, '暂无密钥记录', (value) => {
     historyFilters.credential = value;
     historyPage = 1;
-    closeHistoryFilterDropdowns();
-    renderHistory(doc, getSelectedSave());
+    closeHistoryFilterDropdownsInstant();
+    afterNextPaint(() => renderHistory(doc, getSelectedSave()));
   });
   // 纯展示偏好：每次渲染筛选器后落盘（含校验剔除后的值），供下次打开还原
   writeFilterPrefs({
@@ -1895,7 +1904,7 @@ export function createPanel() {
           if (branch !== 'main' && branch !== 'dev') return;
           m.setUpdateBranch(branch);
           renderBranch();
-          branchDrop.style.display = 'none';
+          closeDropdownInstant(branchDrop);
           m.checkUpdate(true);
         };
       });

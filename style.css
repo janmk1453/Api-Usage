@@ -243,11 +243,18 @@
   }
 }
 /* 关闭瞬间 inline display 已写成 none（属性选择器立刻命中），但视觉上还在淡出：
-   此时不再拦截点击，避免"刚点关闭又点旁边"被残影吃掉。 */
+   此时不再拦截点击，避免"刚点关闭又点旁边"被残影吃掉。
+   ★ 必须在这里显式写出淡出的「终止值」：元素关闭后仍匹配上面那条常态规则（opacity:1 /
+   transform:none），过渡就成了「1→1」毫无变化，只剩 display 的离散过渡，于是浮层原样停满
+   90ms 再被抽走——用户看到的就是「点了没反应，等一下才关」。给出 0 / 微缩之后才是真淡出。
+   时长写死 90ms：关闭时 pill.ts 的 data-aus-drop-open 可能还没摘掉，不能沿用展开的 140ms。 */
 #aus-panel [id$="-dropdown"][style*="display: none"],
 #aus-panel [id*="-drop-"][style*="display: none"],
 #aus-panel [data-wallet-dropdown][style*="display: none"],
 #aus-panel .aus-forecast-dropdown[style*="display: none"] {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.97);
+  transition-duration: 90ms;
   pointer-events: none;
 }
 /* 展开态由 src/ui/pill.ts 打标：打开用更慢的 140ms，关闭沿用上面的 90ms */

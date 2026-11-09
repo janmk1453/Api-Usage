@@ -2,6 +2,7 @@ import { esc, localDay } from '../utils/date';
 import { X_OPTIONS } from './chart-config';
 import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
 import { attachChartZoom, detachChartZoom, getChartRange } from './range-zoom';
+import { closeDropdownThenPaint } from './dropdown-close';
 
 type XKey = 'round'|'hour'|'day'|'week'|'month';
 type TrendId = 'token'|'req';
@@ -239,9 +240,10 @@ function renderXDrop(id:TrendId){
     el.onclick=()=>{
       const k=el.getAttribute('data-x') as XKey, tid=el.getAttribute('data-trend') as TrendId;
       state[tid].x = k;
-      drop.style.display='none';
-      renderXDrop(tid);
-      renderOne(tid, lastFiltered);
+      closeDropdownThenPaint(drop, () => {
+        renderXDrop(tid);
+        renderOne(tid, lastFiltered);
+      });
     };
   });
 }
