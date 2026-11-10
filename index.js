@@ -12440,7 +12440,6 @@ function createPanel() {
                   </div>
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:var(--aus-fs-sm);">检查更新</button>
                   <button id="aus-run-update" class="ds-btn-pill" style="display:none;padding:6px 14px;font-size:var(--aus-fs-sm);">立即更新</button>
-                  <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">当前 v${appVersionText()} · 每 10 分钟自动检查</span>
                 </div>
                 <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">可选择 main（稳定）或 dev（测试）分支获取更新，默认 main；更新完成后自动刷新网页。</div>
               </div>
