@@ -1115,7 +1115,7 @@ export function renderStatsFour(filtered:any[]) {
     return `<div class="ds-card" style="padding:14px;position:relative;overflow:visible;">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
         <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.title}</div>
-        <button id="aus-stats-four-btn-${i}" title="切换指标" class="aus-pill-xs" style="flex-shrink:0;color:var(--ds-text-2);">${icon('chevron-down', 14)}</button>
+        <button id="aus-stats-four-btn-${i}" title="切换指标" style="flex-shrink:0;padding:4px 7px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;line-height:1;">${icon('chevron-down', 14)}</button>
         <div id="aus-stats-four-drop-${i}" style="display:none;position:absolute;top:38px;right:8px;z-index:6;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:180px;max-height:260px;overflow:auto;"></div>
       </div>
       <div style="font-size:18px;font-weight:600;color:${valColor};margin-top:6px;word-break:break-all;">${d.html}</div>

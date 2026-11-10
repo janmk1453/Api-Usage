@@ -2485,7 +2485,7 @@ function renderOverview(fullHistory) {
 			return `<div class="ds-card" style="padding:14px;position:relative;overflow:visible;">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
           <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.title}</div>
-          <button id="aus-four-btn-${i}" title="切换指标" class="aus-pill-xs" style="flex-shrink:0;color:var(--ds-text-2);">${icon("chevron-down", 14)}</button>
+          <button id="aus-four-btn-${i}" title="切换指标" style="flex-shrink:0;padding:4px 7px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;line-height:1;">${icon("chevron-down", 14)}</button>
           <div id="aus-four-drop-${i}" style="display:none;position:absolute;top:38px;right:8px;z-index:6;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:180px;max-height:260px;overflow:auto;"></div>
         </div>
         <div style="font-size:18px;font-weight:600;color:${valColor};margin-top:6px;word-break:break-all;">${d.html}</div>
@@ -6174,7 +6174,7 @@ function renderStatsFour(filtered) {
 		return `<div class="ds-card" style="padding:14px;position:relative;overflow:visible;">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
         <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.title}</div>
-        <button id="aus-stats-four-btn-${i}" title="切换指标" class="aus-pill-xs" style="flex-shrink:0;color:var(--ds-text-2);">${icon("chevron-down", 14)}</button>
+        <button id="aus-stats-four-btn-${i}" title="切换指标" style="flex-shrink:0;padding:4px 7px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;line-height:1;">${icon("chevron-down", 14)}</button>
         <div id="aus-stats-four-drop-${i}" style="display:none;position:absolute;top:38px;right:8px;z-index:6;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:180px;max-height:260px;overflow:auto;"></div>
       </div>
       <div style="font-size:18px;font-weight:600;color:${valColor};margin-top:6px;word-break:break-all;">${d.html}</div>
@@ -8856,7 +8856,7 @@ function renderPeakRows(wallet) {
 function renderCredentialPicker(wallet) {
 	const current = wallet.credentials.find((item) => item.id === wallet.balance.primaryCredentialId);
 	return `
-    <button data-wallet-credential-btn="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill-sm" style="flex-shrink:0;gap:7px;padding:7px 10px;max-width:100%;">
+    <button data-wallet-credential-btn="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill aus-pill-sm" style="flex-shrink:0;gap:7px;padding:7px 10px;max-width:100%;">
       <span style="color:var(--ds-text-2);">主密钥</span>
       <span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;">${esc(current?.label || "未指定")}</span>
       ${icon("chevron-down", 14)}
@@ -8880,7 +8880,7 @@ function renderCatalogPicker(wallet) {
 	const status = walletSyncStatus(wallet);
 	return `
     <div class="aus-wallet-catalog-picker" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:0 0 auto;min-width:0;max-width:100%;">
-    <button type="button" class="aus-wallet-catalog-btn" data-wallet-catalog-btn="1" data-wallet-id="${esc(wallet.id)}" title="选择价格来源" class="aus-pill-sm" style="flex:0 0 auto;gap:7px;max-width:100%;box-sizing:border-box;min-height:30px;padding:7px 10px;">
+    <button type="button" data-wallet-catalog-btn="1" data-wallet-id="${esc(wallet.id)}" title="选择价格来源" class="aus-wallet-catalog-btn aus-pill aus-pill-sm" style="flex:0 0 auto;gap:7px;max-width:100%;box-sizing:border-box;min-height:30px;padding:7px 10px;">
       <span style="color:var(--ds-text-2);flex:0 0 auto;">价格来源</span>
       ${providerIcon ? "<span style=\"display:inline-flex;flex:0 0 auto;color:var(--ds-text-2);\">" + providerIcon + "</span>" : ""}
       <span style="font-weight:600;min-width:0;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(current?.label || "不自动同步")}</span>
@@ -8904,7 +8904,7 @@ function renderAdapterPicker(wallet) {
 	const current = BALANCE_ADAPTERS.find((item) => item.id === wallet.balance.adapter);
 	return `
     <div style="position:relative;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-      <button data-wallet-adapter-btn="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill-sm" style="gap:6px;padding:6px 9px;">
+      <button data-wallet-adapter-btn="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill aus-pill-sm" style="gap:6px;padding:6px 9px;">
         <span style="color:var(--ds-text-2);">查询适配器</span>
         <span style="font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(current?.label || "自动识别")}</span>
         ${icon("chevron-down", 14)}
@@ -8983,7 +8983,7 @@ function renderWalletCard(wallet, history) {
           </div>
           <div style="display:flex;gap:6px;align-items:center;position:relative;">
             <input data-wallet-balance-amount="1" data-wallet-id="${esc(wallet.id)}" value="${esc(wallet.balance.amount ?? "")}" placeholder="手工余额" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-            <button data-wallet-currency-btn="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill-sm" style="padding:7px 10px;">${wallet.balance.currency}${icon("chevron-down", 14)}</button>
+            <button data-wallet-currency-btn="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill aus-pill-sm" style="gap:4px;padding:7px 10px;">${wallet.balance.currency}${icon("chevron-down", 14)}</button>
             <div id="aus-wallet-currency-drop-${esc(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;right:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:6px;min-width:110px;">
               ${dropdownHtml(wallet.id, "currency", [{
 		id: "CNY",
@@ -9003,7 +9003,7 @@ function renderWalletCard(wallet, history) {
             </div>
             <div style="display:flex;gap:6px;">
               <input type="password" data-wallet-api-key="1" data-wallet-id="${esc(wallet.id)}" value="" placeholder="${getWalletApiKey(wallet.id) ? "已保存钱包校准密钥（留空不修改）" : "填写钱包校准密钥"}" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-              <button data-wallet-save-key="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill-sm" style="padding:7px 10px;">保存密钥</button>
+              <button data-wallet-save-key="1" data-wallet-id="${esc(wallet.id)}" style="padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">保存密钥</button>
             </div>
             <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">查询方式：${esc(balanceAdapter?.label || "无")}${balanceAdapter?.note ? "（" + esc(balanceAdapter.note) + "）" : ""}；勾选「自动校准」后按设置页校准间隔轮询；主密钥：${esc(selectedCredential?.label || "未指定")}</div>
             <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc(item.label)).join("、") : "未识别"}</div>

@@ -2089,14 +2089,6 @@
   min-height: 0;
   font-size: var(--aus-fs-sm);
 }
-/* 更小的胶囊变体：概览 / 统计「四小块」右上角的指标切换按钮，以及钱包卡内的下拉胶囊 */
-#aus-panel .aus-pill-xs {
-  gap: 4px;
-  padding: 4px 7px;
-  min-height: 0;
-  font-size: var(--aus-fs-sm);
-  line-height: 1;
-}
 @media (max-width: 760px) {
   #aus-panel .aus-pill {
     padding: 6px 10px;
@@ -2105,7 +2097,6 @@
     gap: 6px;
   }
   #aus-panel .aus-pill-sm { min-height: 0; }
-  #aus-panel .aus-pill-xs { min-height: 0; padding: 4px 7px; }
 }
 
 /* 钱包卡内文本统一左对齐，避免继承宿主正文居中导致余额/标签居中漂浮 */
