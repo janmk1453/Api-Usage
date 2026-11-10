@@ -1720,7 +1720,7 @@ export function createPanel() {
                   </div>
                   <button id="aus-check-update" class="ds-btn-pill" style="padding:6px 14px;font-size:var(--aus-fs-sm);">检查更新</button>
                   <button id="aus-run-update" class="ds-btn-pill" style="display:none;padding:6px 14px;font-size:var(--aus-fs-sm);">立即更新</button>
-                  <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">当前 v${appVersionText()} · 每 1 小时自动检查</span>
+                  <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">当前 v${appVersionText()} · 每 10 分钟自动检查</span>
                 </div>
                 <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">可选择 main（稳定）或 dev（测试）分支获取更新，默认 main；更新完成后自动刷新网页。</div>
               </div>
@@ -2178,7 +2178,7 @@ export function openPanel() {
   refreshUI();
   // Agent 模式用量对账（无 TauriTavern 时该模块立即返回，不产生任何 IPC）
   try { import('../services/agent-usage/collector').then(m => m.reconcileOnPanelOpen()).catch(() => {}); } catch {}
-  // 先按持久化状态回填徽标/横幅（刷新后不再丢失），再按 1 小时节流做一次自动检查
+  // 先按持久化状态回填徽标/横幅（刷新后不再丢失），再按 10 分钟节流做一次自动检查
   try {
     import('../services/update').then(m => {
       m.syncUpdateIndicators?.();

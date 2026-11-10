@@ -5,7 +5,8 @@ declare const __APP_VERSION__: string;
 const CURRENT_VERSION: string = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '';
 const REPO = 'janmk1453/Api-Usage';
 const EXTENSION_FOLDER = 'Api-Usage';
-const INTERVAL_MS = 60 * 60 * 1000;
+/** 自动检查节流：每 10 分钟内首次打开面板才真正联网检查一次 */
+const INTERVAL_MS = 10 * 60 * 1000;
 const TIMEOUT_MS = 5 * 1000;
 const LOCAL_TIMEOUT_MS = 15000;
 const LAST_CHECK_KEY = 'aus_update_last_check';
@@ -597,7 +598,7 @@ export async function updateSelf(): Promise<SelfUpdateResult> {
 }
 
 export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean; current: string; remote: string } | null> {
-  // 自动检查 1 小时内最多一次；手动检查不受节流
+  // 自动检查 10 分钟内最多一次；手动检查不受节流
   if (!manual) {
     const last = getStoredLastCheck();
     if (Date.now() - last < INTERVAL_MS) return null;
@@ -712,7 +713,8 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
     return { hasUpdate, current: CURRENT_VERSION, remote: remoteVer };
   } catch (e: any) {
     log.debug('检查更新失败', e?.message || e);
-    toast('error', '检查更新失败：' + (e?.message || String(e)));
+    // 自动检查失败保持静默：打开面板不该因为一次网络抖动冒出红条
+    if (manual) toast('error', '检查更新失败：' + (e?.message || String(e)));
     return null;
   }
 }

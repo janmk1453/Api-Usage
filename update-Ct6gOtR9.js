@@ -4,7 +4,8 @@ import { t as esc } from "./date-Dsu8hrMO.js";
 var CURRENT_VERSION = "3.2.0";
 var REPO = "janmk1453/Api-Usage";
 var EXTENSION_FOLDER = "Api-Usage";
-var INTERVAL_MS = 36e5;
+/** 自动检查节流：每 10 分钟内首次打开面板才真正联网检查一次 */
+var INTERVAL_MS = 6e5;
 var TIMEOUT_MS = 5e3;
 var LOCAL_TIMEOUT_MS = 15e3;
 var LAST_CHECK_KEY = "aus_update_last_check";
@@ -767,7 +768,7 @@ async function checkUpdate(manual = false) {
 		};
 	} catch (e) {
 		log.debug("检查更新失败", e?.message || e);
-		toast("error", "检查更新失败：" + (e?.message || String(e)));
+		if (manual) toast("error", "检查更新失败：" + (e?.message || String(e)));
 		return null;
 	}
 }
