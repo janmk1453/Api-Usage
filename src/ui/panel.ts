@@ -1760,7 +1760,7 @@ export function createPanel() {
   panel.appendChild(sbOverlay);
   doc.body.appendChild(overlay);
   doc.body.appendChild(panel);
-  // 面板可能晚于更新检查创建：挂载后按当前更新状态同步导航徽标
+  // 面板可能晚于更新检查创建：挂载后按当前（含持久化）更新状态同步徽标 + 横幅 + 「立即更新」按钮
   try { import('../services/update').then((mod: any) => mod.syncUpdateIndicators?.()); } catch {}
   try { applyTheme(theme); } catch {}
   try {
@@ -2178,7 +2178,13 @@ export function openPanel() {
   refreshUI();
   // Agent 模式用量对账（无 TauriTavern 时该模块立即返回，不产生任何 IPC）
   try { import('../services/agent-usage/collector').then(m => m.reconcileOnPanelOpen()).catch(() => {}); } catch {}
-  try { import('../services/update').then(m => m.maybeAutoCheck()); } catch {}
+  // 先按持久化状态回填徽标/横幅（刷新后不再丢失），再按 1 小时节流做一次自动检查
+  try {
+    import('../services/update').then(m => {
+      m.syncUpdateIndicators?.();
+      m.maybeAutoCheck();
+    });
+  } catch {}
 }
 export function closePanel() {
   const doc = getDoc();
