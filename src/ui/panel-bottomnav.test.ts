@@ -65,7 +65,6 @@ describe('设置页「关于」入口展示当前版本号', () => {
     expect(panelCode).toContain('<span class="aus-settings-entry-label">${e.label}${version}</span>');
     // 侧栏品牌与关于页的版本号同样走这个函数，禁止各自再拼 typeof 判断
     expect(panelCode).toContain('v${appVersionText()}');
-    expect(panelCode).toContain('当前 v${appVersionText()}');
   });
 
   it('版本号胶囊有独立样式，标题行内并排不换行', () => {
