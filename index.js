@@ -9088,17 +9088,12 @@ async function renderWalletView() {
 			id: "plan",
 			label: "可查套餐",
 			count: planCapable.length
-		},
-		{
-			id: "official",
-			label: "官方",
-			count: active.filter((wallet) => wallet.id === DEEPSEEK_WALLET_ID).length
 		}
 	];
+	if (!filters.some((item) => item.id === walletFilter)) walletFilter = "all";
 	const matchesFilter = (wallet) => {
 		if (walletFilter === "pending") return walletPendingModelCount(wallet) > 0;
 		if (walletFilter === "plan") return resolveBalanceAdapter(wallet)?.supports.plan === true;
-		if (walletFilter === "official") return wallet.id === DEEPSEEK_WALLET_ID;
 		return true;
 	};
 	const anyCollapsed = active.some((wallet) => wallet.collapsed);

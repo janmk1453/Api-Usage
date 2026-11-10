@@ -378,12 +378,12 @@ export async function renderWalletView(): Promise<void> {
     { id: 'all', label: '全部', count: active.length },
     { id: 'pending', label: '有待定价', count: active.filter((wallet) => walletPendingModelCount(wallet) > 0).length },
     { id: 'plan', label: '可查套餐', count: planCapable.length },
-    { id: 'official', label: '官方', count: active.filter((wallet) => wallet.id === DEEPSEEK_WALLET_ID).length },
   ];
+  // 兼容旧存档：曾被移除的筛选值（如 official）一律回落「全部」，避免列表看起来是空的
+  if (!filters.some((item) => item.id === walletFilter)) walletFilter = 'all';
   const matchesFilter = (wallet: WalletConfig) => {
     if (walletFilter === 'pending') return walletPendingModelCount(wallet) > 0;
     if (walletFilter === 'plan') return resolveBalanceAdapter(wallet)?.supports.plan === true;
-    if (walletFilter === 'official') return wallet.id === DEEPSEEK_WALLET_ID;
     return true;
   };
   // 「展开全部 / 收起全部」合并成一个切换胶囊：只要还有收起的钱包就显示「展开全部」
