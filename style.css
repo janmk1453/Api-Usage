@@ -2038,7 +2038,28 @@
 }
 #aus-nav-update-badge[data-on="1"],
 .aus-entry-badge[data-on="1"] { display: inline-flex; }
-#aus-sidebar[data-collapsed="1"] #aus-nav-update-badge { display: none !important; }
+/* 折叠态（60px 侧栏）：整颗胶囊放不下，改成图标右上角的小蓝点 —— 只显示圆点、文字与内距全部收掉，
+   [data-on="1"] 限定保证只有真的有更新才出现；展开后仍回到上面的胶囊形态。 */
+#aus-sidebar[data-collapsed="1"] .aus-nav-item { position: relative; }
+#aus-sidebar[data-collapsed="1"] #aus-nav-update-badge[data-on="1"] {
+  display: block !important;
+  position: absolute;
+  left: calc(50% + 8px);
+  top: calc(50% - 17px);
+  width: 6px;
+  height: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 2px solid var(--ds-sidebar-bg, var(--ds-bg));
+  border-radius: 50%;
+  background: #2563EB;
+  box-sizing: content-box;
+  color: transparent;
+  font-size: 0;
+  line-height: 0;
+  overflow: hidden;
+}
 /* 窄屏底栏「设置」上的新版本提示：有更新时用它顶掉「设置」两个字（父项 data-has-update
    由 services/update.ts#paintBadge 写入），胶囊外观与侧栏/设置页徽标同源，只缩小尺寸塞进底栏 */
 .aus-bottom-badge {

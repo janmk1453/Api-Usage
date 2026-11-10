@@ -4,7 +4,8 @@ import { t as esc } from "./date-Dsu8hrMO.js";
 var CURRENT_VERSION = "3.2.0";
 var REPO = "janmk1453/Api-Usage";
 var EXTENSION_FOLDER = "Api-Usage";
-var INTERVAL_MS = 36e5;
+/** 自动检查节流：每 10 分钟内首次打开面板才真正联网检查一次 */
+var INTERVAL_MS = 6e5;
 var TIMEOUT_MS = 5e3;
 var LOCAL_TIMEOUT_MS = 15e3;
 var LAST_CHECK_KEY = "aus_update_last_check";
@@ -18,6 +19,9 @@ var FORCE_RETRY_MS = 18e5;
 var FORCE_PROBE_INTERVAL_MS = 72e5;
 var POLICY_TIMEOUT_MS = 5e3;
 var POLICY_PATH = "update-policy.json";
+/** 「有新版本」状态的持久化：刷新页面后仍能点亮徽标/横幅，直到下次检查覆盖或超过有效期 */
+var STATE_KEY = "aus_update_state_v1";
+var STATE_TTL_MS = 6048e5;
 function getUpdateBranch() {
 	try {
 		const value = localStorage.getItem(UPDATE_BRANCH_KEY);
@@ -135,6 +139,34 @@ function getLastNotified() {
 function setLastNotified(v) {
 	try {
 		localStorage.setItem(LAST_NOTIFIED_KEY, v);
+	} catch {}
+}
+/** 读持久化的「有新版本」状态；过期、关闭态或脏数据一律当作没有 */
+function readSavedState() {
+	try {
+		const raw = localStorage.getItem(STATE_KEY);
+		if (!raw) return null;
+		const data = JSON.parse(raw);
+		if (!data || typeof data !== "object" || data.on !== true) return null;
+		const at = Number(data.at) || 0;
+		if (!at || Date.now() - at > STATE_TTL_MS) return null;
+		return {
+			on: true,
+			label: String(data.label || "").slice(0, 120),
+			at
+		};
+	} catch {
+		return null;
+	}
+}
+function saveBadgeState(on, label = "") {
+	try {
+		if (on) localStorage.setItem(STATE_KEY, JSON.stringify({
+			on: true,
+			label: String(label).slice(0, 120),
+			at: Date.now()
+		}));
+		else localStorage.removeItem(STATE_KEY);
 	} catch {}
 }
 async function fetchLocalCommit() {
@@ -389,8 +421,9 @@ function setUpdateButtonVisible(visible) {
 	if (!btn) return;
 	btn.style.display = visible ? "inline-flex" : "none";
 }
-/** 最近一次检查得到的新版本状态：面板可能晚于检查创建，用于回填导航徽标 */
-var pendingUpdate = false;
+/** 最近一次检查得到的新版本状态：面板可能晚于检查创建，用于回填导航徽标；
+*  初值取持久化状态，页面刷新后不会因为「1 小时节流内不再检查」而一直不亮 */
+var pendingUpdate = readSavedState() !== null;
 /**
 * 收集面板内所有「有新版本」指示位。
 * 同一个更新状态现在有三处要去：桌面侧栏「关于」的蓝色徽标、窄屏底栏「设置」上的新版本胶囊、
@@ -422,19 +455,26 @@ function paintBadge(badge, on) {
 /**
 * 「有新版本」指示位同步。
 * 侧栏徽标在导航项内部，点击时事件冒泡到 .aus-nav-item → 与点击「关于」完全一致；
-* 折叠态（60px 侧栏）由 style.css 按 #aus-sidebar[data-collapsed="1"] 隐藏。
+* 折叠态（60px 侧栏）由 style.css 收成图标右上角的小蓝点，仍随 data-on 亮灭。
 */
-function setNavBadge(visible) {
+function setNavBadge(visible, label = "") {
 	pendingUpdate = visible;
+	saveBadgeState(visible, label);
 	const on = visible ? "1" : "0";
 	for (const badge of getNavBadges()) paintBadge(badge, on);
 }
-/** 面板创建晚于更新检查时调用：把当前更新状态回填到全部指示位 */
+/**
+* 面板创建晚于更新检查、或页面刷新重建面板时调用：把当前更新状态回填到全部指示位。
+* 除了三处徽标，横幅与「立即更新」按钮也要一起回填 —— 只亮徽标的话，
+* 用户点进关于页看不到任何提示与可操作按钮，等于提示断了半截。
+*/
 function syncUpdateIndicators() {
-	const badges = getNavBadges();
-	if (!badges.length) return;
-	const on = pendingUpdate ? "1" : "0";
-	for (const badge of badges) paintBadge(badge, on);
+	const saved = readSavedState();
+	if (saved) pendingUpdate = true;
+	for (const badge of getNavBadges()) paintBadge(badge, pendingUpdate ? "1" : "0");
+	if (!pendingUpdate) return;
+	if (saved?.label) showBanner(`检测到新版本 <b>${esc(saved.label)}</b>，可在本页直接更新`);
+	setUpdateButtonVisible(true);
 }
 function showBanner(message) {
 	const banner = getBanner();
@@ -596,6 +636,7 @@ async function updateSelf() {
 		const changed = switchedBranch || !!loadedBranch && !!observedBranch && loadedBranch !== observedBranch || !isUpToDate;
 		const message = isUpToDate ? changed ? `已切换到 ${targetBranch} 分支${commit ? "（" + commit + "）" : ""}` : `${targetBranch} 分支已是最新版本，无需更新` : `已更新到 ${targetBranch} 分支${commit ? "（" + commit + "）" : ""}`;
 		toast(changed ? "success" : "info", message);
+		if (changed) setNavBadge(false);
 		return {
 			ok: true,
 			isUpToDate,
@@ -674,7 +715,7 @@ async function checkUpdate(manual = false) {
 				}
 				if (banner) showBanner(needsSwitch ? `当前 <b>${esc(localLabel)}</b>，目标分支 <b>${esc(targetBranch)}</b>，点击“立即更新”将切换并更新` : remoteLabel ? `发现新提交 <b>${esc(remoteLabel)}</b>（当前 ${esc(localLabel)}），可在本页直接更新` : `当前 <b>${esc(localLabel)}</b> 落后于 <b>${esc(targetBranch)}</b> 分支，点击“立即更新”拉取最新提交`);
 				setUpdateButtonVisible(true);
-				setNavBadge(true);
+				setNavBadge(true, needsSwitch ? `${targetBranch}（可切换）` : remoteLabel || `${targetBranch} 新提交`);
 			} else {
 				if (manual) toast("info", `已是最新版本（${localLabel}，目标 ${targetBranch}）`);
 				hideBanner();
@@ -713,7 +754,7 @@ async function checkUpdate(manual = false) {
 			}
 			if (banner) showBanner(`发现 <b>${esc(targetBranch)}</b> 分支新版本 <b>v${esc(remoteVer)}</b>（当前 v${esc(CURRENT_VERSION)}）${updateHint}`);
 			setUpdateButtonVisible(!isNonGitInstall);
-			setNavBadge(true);
+			setNavBadge(true, `v${remoteVer}`);
 		} else {
 			if (manual) toast("info", `已是最新版本 v${CURRENT_VERSION}（目标 ${targetBranch}）`);
 			hideBanner();
@@ -727,13 +768,13 @@ async function checkUpdate(manual = false) {
 		};
 	} catch (e) {
 		log.debug("检查更新失败", e?.message || e);
-		toast("error", "检查更新失败：" + (e?.message || String(e)));
+		if (manual) toast("error", "检查更新失败：" + (e?.message || String(e)));
 		return null;
 	}
 }
 function maybeAutoCheck() {
 	try {
-		checkUpdate(false);
+		checkUpdate(false).catch(() => {});
 	} catch {}
 }
 //#endregion
