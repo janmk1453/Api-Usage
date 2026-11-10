@@ -20,9 +20,11 @@ import { calcCost, normalizeModel } from '../pricing';
 import { buildEndpointContext, type HistoryConnection } from '../connection-identity';
 import { findWalletForConnection } from '../../data/wallets';
 import { normalizeUsage } from './normalize';
+import { createFrozenSnapshotProbe, hasFrozenRunSnapshot, needsSnapshotProbe } from './snapshot-probe';
 import type { AgentRunEntryInput, AgentRunStatus, AgentTurnDetail, AgentWalletShare } from '../../types/agent';
 import {
   getAgentApi,
+  getHostAbiVersion,
   getStableChatId,
   hasAgentSupport,
   isTauriTavern,
@@ -56,6 +58,8 @@ let pendingDeadline = 0;
 let activeUnsubscribe: (() => void) | null = null;
 let activeRunId: string | null = null;
 let reconcileTimer: any = null;
+/** 「事件前后对比」用的快照探测：见 snapshot-probe.ts */
+const snapshotProbe = createFrozenSnapshotProbe();
 
 function switchOn(): boolean {
   try {
@@ -83,13 +87,35 @@ function pendingExpired(): boolean {
   return agentPending && pendingDeadline > 0 && Date.now() > pendingDeadline;
 }
 
-/** 由 GENERATE_AFTER_DATA 调用：仅 Agent 模式会带 frozenRunInputSnapshot */
+/**
+ * 由 GENERATE_AFTER_DATA 调用：仅 Agent 模式会带 frozenRunInputSnapshot。
+ *
+ * 宿主 ABI 1（TauriTavern ≤ 2.3.0）在事件前就封口，同步读即可判定；
+ * ABI 2（2.4.0 起）改为事件后才封口，同步读必然落空，于是把这次 generate_data
+ * 的引用交给 snapshotProbe，等下一个酒馆事件再对比同一对象（见 flushSnapshotProbe）。
+ */
 export function notifyGenerateAfterData(data: any, dryRun?: boolean): void {
   try {
     if (dryRun === true) return;
     if (!data || typeof data !== 'object') return;
-    if (!Object.prototype.hasOwnProperty.call(data, 'frozenRunInputSnapshot')) return;
-    markPending();
+    flushSnapshotProbe();
+    if (hasFrozenRunSnapshot(data)) {
+      markPending();
+      return;
+    }
+    if (needsSnapshotProbe(getHostAbiVersion())) snapshotProbe.remember(data);
+  } catch {}
+}
+
+/**
+ * 复查上一次生成：事件前没有快照、事件后出现了，说明那次是 Agent 生成（ABI 2 的封口时机）。
+ * 不排定时器：只在真实酒馆事件到来时顺手对比一次。
+ */
+function flushSnapshotProbe(): void {
+  try {
+    if (!snapshotProbe.flush()) return;
+    log.debug('Agent 生成已确认（快照在事件后封口），补一次对账');
+    scheduleReconcile(300);
   } catch {}
 }
 
@@ -188,6 +214,7 @@ export function extractAgentRunId(message: any): string | null {
 /** MESSAGE_RECEIVED 入口：Agent 提交消息后必然带 runId */
 export async function notifyMessageReceived(messageId?: number): Promise<void> {
   try {
+    flushSnapshotProbe();
     const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
     const chat: any[] = ctx?.chat || [];
     const index = typeof messageId === 'number' ? messageId : chat.length - 1;
@@ -581,8 +608,9 @@ export async function reconcileAgentRuns(limit = MAX_RECONCILE_RUNS): Promise<nu
       if (!runId) continue;
       if (!TERMINAL_STATUSES.has(String(run?.status || ''))) continue;
       if (hasRecordedAgentRun(runId)) continue;
-      const created = Date.parse(String(run?.createdAt || ''));
-      if (!firstRun && Number.isFinite(created) && Number.isFinite(watermark) && created <= watermark) break;
+      // 水位只保留首次初始化用途：ABI 2（TauriTavern 2.4.0 起）无法在生成开始时识别
+      // Agent 模式，「失败/取消且未提交聊天」的 Run 只能靠这里补采，因此不再按水位
+      // 提前收手，一律扫完最近 20 条（已记录的被 hasRecordedAgentRun 跳过，不会重复写入）。
       if (await captureAgentRun(runId, run)) count += 1;
     }
     if (firstRun && runs[0]?.createdAt && stableChatId) {
@@ -624,8 +652,8 @@ export function initAgentUsage(): boolean {
 
     generateAfterDataHandler = (data: any, dryRun?: boolean) => notifyGenerateAfterData(data, dryRun);
     messageReceivedHandler = (messageId?: number) => { void notifyMessageReceived(messageId); };
-    chatChangedHandler = () => { clearPending(); cancelActiveRun(); scheduleReconcile(1500); };
-    appReadyHandler = () => { scheduleReconcile(2500); };
+    chatChangedHandler = () => { flushSnapshotProbe(); clearPending(); cancelActiveRun(); scheduleReconcile(1500); };
+    appReadyHandler = () => { flushSnapshotProbe(); scheduleReconcile(2500); };
 
     if (et.GENERATE_AFTER_DATA) es.on(et.GENERATE_AFTER_DATA, generateAfterDataHandler);
     if (et.MESSAGE_RECEIVED) es.on(et.MESSAGE_RECEIVED, messageReceivedHandler);
@@ -655,6 +683,7 @@ export function uninstallAgentUsage(): void {
   } catch {}
   clearPending();
   cancelActiveRun();
+  snapshotProbe.clear();
   if (reconcileTimer) {
     try { clearTimeout(reconcileTimer); } catch {}
     reconcileTimer = null;
@@ -665,6 +694,7 @@ export function uninstallAgentUsage(): void {
 /** 打开面板时触发一次对账（上限 5 条，无额外 IPC 峰值） */
 export function reconcileOnPanelOpen(): void {
   if (!isAgentChannelAvailable()) return;
+  flushSnapshotProbe();
   scheduleReconcile(600);
 }
 

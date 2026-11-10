@@ -27,9 +27,13 @@ function historyRecordKey(entry) {
 * 已废弃多存档，迁移时将所有旧 saves 合并为单一历史
 */
 var persistence_exports = /* @__PURE__ */ __exportAll({
+	DB_NAME: () => DB_NAME,
 	HOT_KEEP: () => 50,
+	MODULE_NAME: () => MODULE_NAME,
 	appendHistoryCold: () => appendHistoryCold,
+	blockPersistentWrites: () => blockPersistentWrites,
 	clearHistoryCold: () => clearHistoryCold,
+	closeDB: () => closeDB,
 	deleteMigrationBackups: () => deleteMigrationBackups,
 	flushSaveHot: () => flushSaveHot,
 	getAllHistory: () => getAllHistory,
@@ -44,6 +48,7 @@ var persistence_exports = /* @__PURE__ */ __exportAll({
 	saveHot: () => saveHot
 });
 var MODULE = "api_usage_stat";
+var MODULE_NAME = MODULE;
 var DB_NAME = "api_usage_stat_db";
 var STORE_NAME = "kv";
 var dbPromise = null;
@@ -270,6 +275,14 @@ function loadLegacy(key) {
 		return null;
 	}
 }
+/**
+* 写盘闸门：数据已被清除时置位，避免节流保存把设置又写回 settings.json。
+* 只在卸载清理（onClean 钩子）里打开，正常使用期间始终为 false。
+*/
+var writesBlocked = false;
+function blockPersistentWrites(blocked = true) {
+	writesBlocked = blocked;
+}
 function getExtensionSettings() {
 	try {
 		return globalThis.SillyTavern?.getContext?.().extensionSettings?.[MODULE] ?? null;
@@ -278,6 +291,7 @@ function getExtensionSettings() {
 	}
 }
 function saveExtensionSettings(data) {
+	if (writesBlocked) return;
 	try {
 		const ctx = globalThis.SillyTavern?.getContext?.();
 		if (!ctx) return;
@@ -288,6 +302,7 @@ function saveExtensionSettings(data) {
 var saveTimer = null;
 var pendingPatch = null;
 function saveHot(patch) {
+	if (writesBlocked) return;
 	pendingPatch = {
 		...pendingPatch || {},
 		...patch
@@ -303,6 +318,15 @@ function saveHot(patch) {
 		pendingPatch = null;
 		saveExtensionSettings(merged);
 	}, 300);
+}
+/** 关闭 IndexedDB 连接：删库（清理扩展数据）前必须先断开，否则 deleteDatabase 会被 blocked */
+async function closeDB() {
+	const pending = dbPromise;
+	dbPromise = null;
+	if (!pending) return;
+	try {
+		(await pending).close();
+	} catch {}
 }
 function flushSaveHot() {
 	if (!saveTimer && !pendingPatch) return;
@@ -603,4 +627,4 @@ async function getAllHistory() {
 	return dedup;
 }
 //#endregion
-export { getExtensionSettings as a, loadHot as c, saveHistoryCold as d, saveHot as f, getAllHistory as i, persistence_exports as l, clearHistoryCold as n, isMigrationBackupKey as o, historyRecordKey as p, deleteMigrationBackups as r, loadHistoryCold as s, appendHistoryCold as t, saveExtensionSettings as u };
+export { saveHot as _, clearHistoryCold as a, flushSaveHot as c, isMigrationBackupKey as d, loadHistoryCold as f, saveHistoryCold as g, saveExtensionSettings as h, blockPersistentWrites as i, getAllHistory as l, persistence_exports as m, MODULE_NAME as n, closeDB as o, loadHot as p, appendHistoryCold as r, deleteMigrationBackups as s, DB_NAME as t, getExtensionSettings as u, historyRecordKey as v };

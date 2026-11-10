@@ -514,6 +514,23 @@ function applyCostPatch(entry: any, cost: ReturnType<typeof calcCost>): void {
   entry.pricingSource = entry.legacyPricingWalletId ? 'legacy-match' : cost.source;
 }
 
+/** 命中率（%）口径统一，热/冷重算共用 */
+function hitRateOf(entry: any): number {
+  const hit = Number(entry?.cache_hit_tokens) || 0;
+  const miss = Number(entry?.cache_miss_tokens) || 0;
+  return hit + miss > 0 ? (hit / (hit + miss) * 100) : 0;
+}
+
+/** 计价结果与记录现值是否有差异：无差异就不必回写整份冷库 */
+function costPatchDiffers(entry: any, cost: { input: number; output: number; total: number; priceType: string; source: string }): boolean {
+  const source = entry?.legacyPricingWalletId ? 'legacy-match' : cost.source;
+  return (Number(entry?.input_cost) || 0) !== (cost.input || 0)
+    || (Number(entry?.output_cost) || 0) !== (cost.output || 0)
+    || (Number(entry?.cost) || 0) !== (cost.total || 0)
+    || entry?.priceType !== cost.priceType
+    || entry?.pricingSource !== source;
+}
+
 function applyTotalDelta(previous: { input: number; output: number; total: number }, next: { input: number; output: number; total: number }): void {
   state.input_cost += (next.input || 0) - (previous.input || 0);
   state.output_cost += (next.output || 0) - (previous.output || 0);
@@ -568,8 +585,55 @@ function applyAggregate(next: ReturnType<typeof aggregateHistory>): void {
   state.rounds = next.rounds;
 }
 
-async function rebuildAggregates(): Promise<void> {
-  const cold = await loadHistoryCold();
+/**
+ * 启动重算指纹：只把「会改变历史计价结果」的输入压成短串——扩展版本号、钱包规则与
+ * 忽略列表、峰谷/额外空闲日/旧自定义价。这些一变，历史金额就必须重算；一变不变，
+ * 上次数值依然成立。刻意不包含历史条目本身，避免日常只是多了几条记录就整库重算。
+ */
+const CALC_FINGERPRINT_KEY = '_calcFingerprint';
+
+function fnv1a(hash: number, text: string): number {
+  let h = hash >>> 0;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+
+function safeAppVersion(): string {
+  try {
+    return typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '';
+  } catch {
+    return '';
+  }
+}
+
+function computeCalcFingerprint(): string {
+  let h = 2166136261 >>> 0;
+  h = fnv1a(h, 'v1|' + safeAppVersion());
+  try {
+    h = fnv1a(h, '|w|' + JSON.stringify(state.wallets || []));
+    h = fnv1a(h, '|i|' + JSON.stringify(state.walletIgnored || []));
+  } catch {
+    h = fnv1a(h, '|w!');
+  }
+  try {
+    const s: any = state.settings || {};
+    h = fnv1a(h, '|p|' + JSON.stringify(s.peakHours || null) + '|' + JSON.stringify(s.extraOffDays || null) + '|' + JSON.stringify(s.customModels || null));
+  } catch {
+    h = fnv1a(h, '|p!');
+  }
+  return h.toString(36);
+}
+
+/** 把当前计价输入写入热设置，供下次启动比对（失败静默，下次启动只会多算一次） */
+function refreshCalcFingerprint(): void {
+  try { saveHot({ [CALC_FINGERPRINT_KEY]: computeCalcFingerprint() } as any); } catch {}
+}
+
+async function rebuildAggregates(preloadedCold?: any[]): Promise<void> {
+  const cold = Array.isArray(preloadedCold) ? preloadedCold : await loadHistoryCold();
   const merged = [...(state.history || []), ...cold].sort((a: any, b: any) => b.timestamp - a.timestamp);
   const keyOf = historyRecordKey;
   const seen = new Set<string>();
@@ -1328,7 +1392,8 @@ export const repository = {
     return entry;
   },
 
-  async recalcAll(): Promise<void> {
+  async recalcAll(preloadedCold?: any[]): Promise<boolean> {
+    let changed = false;
     for (const h of state.history || []) {
       const wallet = findWalletForHistory(state.wallets, h);
       const previous = {
@@ -1337,12 +1402,19 @@ export const repository = {
         total: Number(h.cost) || 0,
       };
       const c = recalcEntryCost(h, wallet);
+      if (costPatchDiffers(h, c)) changed = true;
       applyCostPatch(h, c);
       applyTotalDelta(previous, c);
-      h.cache_hit_rate = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) > 0 ? ((h.cache_hit_tokens || 0) / ((h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0)) * 100) : 0;
+      const rate = hitRateOf(h);
+      if (h.cache_hit_rate !== rate) {
+        h.cache_hit_rate = rate;
+        changed = true;
+      }
     }
+    const providedCold = Array.isArray(preloadedCold);
     try {
-      const cold = await loadHistoryCold();
+      // 调用方已读过冷库就直接复用，避免同一轮启动反复 JSON.parse 整份冷历史
+      const cold = providedCold ? (preloadedCold as any[]) : await loadHistoryCold();
       let coldChanged = false;
       for (const h of cold) {
         const wallet = findWalletForHistory(state.wallets, h);
@@ -1352,16 +1424,26 @@ export const repository = {
           total: Number(h.cost) || 0,
         };
         const c = recalcEntryCost(h, wallet);
+        if (costPatchDiffers(h, c)) coldChanged = true;
         applyCostPatch(h, c);
         applyTotalDelta(previous, c);
-        h.cache_hit_rate = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0) > 0 ? ((h.cache_hit_tokens || 0) / ((h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0)) * 100) : 0;
-        coldChanged = true;
+        const rate = hitRateOf(h);
+        if (h.cache_hit_rate !== rate) {
+          h.cache_hit_rate = rate;
+          coldChanged = true;
+        }
       }
-      if (coldChanged) await saveHistoryCold(cold);
+      if (coldChanged) {
+        changed = true;
+        // 传入冷库时由调用方统一落盘（可和清洗/迁移的改动合并成一次写）
+        if (!providedCold) await saveHistoryCold(cold);
+      }
     } catch (error) {
       log.error('冷历史重算失败', error);
     }
     persist();
+    if (!providedCold) refreshCalcFingerprint();
+    return changed;
   },
 
   async rebuildAggregates(): Promise<void> {
@@ -1624,53 +1706,60 @@ export const repository = {
         try{ saveHot({settings:state.settings}); }catch{}
       } catch {}
     }
-    // 迁移：旧历史补 finishReason 并重算 isTruncated（兼容 sensitive/content_filter 等非正常结束）
-    try {
-      let need = false;
-      for (const h of state.history as any[]) {
-        if ((h as any).finishReason === undefined) { (h as any).finishReason = (h as any).raw_usage?.__finish_reason ?? null; need = true; }
-        const t = isTruncatedFinish((h as any).finishReason);
-        if ((h as any).isTruncated !== t) { (h as any).isTruncated = t; need = true; }
-      }
-      if (need) try { saveHot({ history: state.history } as any); } catch {}
-    } catch {}
-    // 迁移：旧历史无 chatId 时尝试回填（无法精确回溯则保留 null，按 all 展示）
-    let needPersistChatId = false;
-    for (const h of state.history || []) {
-      if ((h as any).chatId === undefined) {
-        (h as any).chatId = null;
-        (h as any).chatName = null;
-        needPersistChatId = true;
-      }
-    }
-    if (needPersistChatId) try { saveHot({ history: state.history }); } catch {}
-    let coldForWalletMigration: any[] = [];
-    try { coldForWalletMigration = await loadHistoryCold(); } catch {}
-    // 迁移：清洗非流式/假流式造成的异常速率与失真 TTFT（>1000 t/s，或 TTFT≈总耗时）
-    try {
-      let hotFixed = false;
+    // 冷历史全程只读一次：清洗 / 钱包迁移 / 重算 / 聚合都复用这份数组，不再反复 JSON.parse 整份冷库
+    let cold: any[] = [];
+    try { cold = await loadHistoryCold(); } catch (error) { log.error('冷历史读取失败', error); }
+    // 启动重算门控：拿「计价输入指纹」与上次落盘值比对。一致说明版本、钱包规则与峰谷都没动，
+    // 老记录的金额依然有效，整段清洗/迁移/重算都可以跳过；不一致（首次升级、改价、改峰谷、
+    // 指纹缺失）才走完整流程。日常只是历史变多不再触发整库重算与整份重写。
+    const storedFingerprint = hot && typeof hot[CALC_FINGERPRINT_KEY] === 'string' ? String(hot[CALC_FINGERPRINT_KEY]) : '';
+    const needFullRecalc = storedFingerprint !== computeCalcFingerprint();
+    let coldDirty = false;
+    if (needFullRecalc) {
+      // 迁移：旧历史补 finishReason 并重算 isTruncated（兼容 sensitive/content_filter 等非正常结束）
+      try {
+        let need = false;
+        for (const h of state.history as any[]) {
+          if ((h as any).finishReason === undefined) { (h as any).finishReason = (h as any).raw_usage?.__finish_reason ?? null; need = true; }
+          const t = isTruncatedFinish((h as any).finishReason);
+          if ((h as any).isTruncated !== t) { (h as any).isTruncated = t; need = true; }
+        }
+        if (need) try { saveHot({ history: state.history } as any); } catch {}
+      } catch {}
+      // 迁移：旧历史无 chatId 时尝试回填（无法精确回溯则保留 null，按 all 展示）
+      let needPersistChatId = false;
       for (const h of state.history || []) {
-        if (sanitizeHistoryTiming(h)) hotFixed = true;
+        if ((h as any).chatId === undefined) {
+          (h as any).chatId = null;
+          (h as any).chatName = null;
+          needPersistChatId = true;
+        }
       }
-      let coldFixed = false;
-      for (const h of coldForWalletMigration || []) {
-        if (sanitizeHistoryTiming(h)) coldFixed = true;
+      if (needPersistChatId) try { saveHot({ history: state.history }); } catch {}
+      // 迁移：清洗非流式/假流式造成的异常速率与失真 TTFT（>1000 t/s，或 TTFT≈总耗时）
+      try {
+        for (const h of state.history || []) sanitizeHistoryTiming(h);
+        for (const h of cold) {
+          if (sanitizeHistoryTiming(h)) coldDirty = true;
+        }
+      } catch {}
+      if (migrateWallets(hot, cold)) {
+        try { saveHot({ wallets: state.wallets, walletIgnored: state.walletIgnored }); } catch {}
+        // 冷条目可能被补了 endpointId / walletId，稍后与重算结果合并写一次
+        if (cold.length) coldDirty = true;
       }
-      if (hotFixed) try { saveHot({ history: state.history }); } catch {}
-      if (coldFixed) try { await saveHistoryCold(coldForWalletMigration); } catch {}
-    } catch {}
-    if (migrateWallets(hot, coldForWalletMigration)) {
-      try { saveHot({ wallets: state.wallets, walletIgnored: state.walletIgnored }); } catch {}
-      if (coldForWalletMigration.length) {
-        try { await saveHistoryCold(coldForWalletMigration); } catch {}
-      }
+      // 自动清理历史中的全 0 污染条目（由之前 token_count 误判产生）
+      try { this.pruneZeroEntries(); } catch {}
+      // 对历史成本按归一化模型重算，修复 [masa]/[OR] 前缀导致的 0 费用
+      try { if (await this.recalcAll(cold)) coldDirty = true; } catch {}
     }
-    // 自动清理历史中的全 0 污染条目（由之前 token_count 误判产生）
-    try { this.pruneZeroEntries(); } catch {}
-    // 对历史成本按归一化模型重算，修复 [masa]/[OR] 前缀导致的 0 费用
-    try { await this.recalcAll(); } catch {}
+    // 冷库只在确有改动时写一次（原来无论是否变化都整份重写）
+    if (coldDirty) { try { await saveHistoryCold(cold); } catch {} }
     // 热缓存聚合字段必须与热+冷全量历史一致，避免概览与统计页出现两套总额
-    try { await rebuildAggregates(); persist(); } catch {}
+    try { await rebuildAggregates(cold); } catch {}
+    persist();
+    // 计价输入全部处理完才落指纹，下次启动一致即整段跳过
+    if (needFullRecalc) refreshCalcFingerprint();
     emit(DataEvents.UPDATED);
     return this.snapshot();
   },

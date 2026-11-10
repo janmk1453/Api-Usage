@@ -7,8 +7,9 @@ import { historyRecordKey } from '../utils/history-key';
 import { log } from '../utils/logger';
 
 const MODULE = 'api_usage_stat';
+export const MODULE_NAME = MODULE;
 export const HOT_KEEP = 50;
-const DB_NAME = 'api_usage_stat_db';
+export const DB_NAME = 'api_usage_stat_db';
 const STORE_NAME = 'kv';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -208,10 +209,18 @@ function loadLegacy(key: string): string | null {
   try { return localStorage.getItem('ds_' + key) ?? localStorage.getItem(key); } catch { return null; }
 }
 
+/**
+ * 写盘闸门：数据已被清除时置位，避免节流保存把设置又写回 settings.json。
+ * 只在卸载清理（onClean 钩子）里打开，正常使用期间始终为 false。
+ */
+let writesBlocked = false;
+export function blockPersistentWrites(blocked = true): void { writesBlocked = blocked; }
+
 export function getExtensionSettings(): any {
   try { return (globalThis as any).SillyTavern?.getContext?.().extensionSettings?.[MODULE] ?? null; } catch { return null; }
 }
 export function saveExtensionSettings(data: any) {
+  if (writesBlocked) return;
   try {
     const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
     if (!ctx) return;
@@ -223,6 +232,7 @@ export function saveExtensionSettings(data: any) {
 let saveTimer: any = null;
 let pendingPatch: Record<string, any> | null = null;
 export function saveHot(patch: Record<string, any>) {
+  if (writesBlocked) return;
   pendingPatch = { ...(pendingPatch || {}), ...patch };
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
@@ -232,6 +242,17 @@ export function saveHot(patch: Record<string, any>) {
     pendingPatch = null;
     saveExtensionSettings(merged);
   }, 300);
+}
+
+/** 关闭 IndexedDB 连接：删库（清理扩展数据）前必须先断开，否则 deleteDatabase 会被 blocked */
+export async function closeDB(): Promise<void> {
+  const pending = dbPromise;
+  dbPromise = null;
+  if (!pending) return;
+  try {
+    const db = await pending;
+    db.close();
+  } catch {}
 }
 
 export function flushSaveHot() {

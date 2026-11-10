@@ -8,14 +8,11 @@ import { icon } from './icons';
 import { collectStorageReport, formatBytes, type StorageReport } from '../services/storage-usage';
 import { getExtensionSettings, deleteMigrationBackups } from '../store/persistence';
 import { toast } from '../utils/logger';
+import { esc } from '../utils/date';
 
 const MODULE = 'api_usage_stat';
 /** 小于该体积的条目归入「其他」，避免十几个几十字节的小项把列表撑长 */
 const SMALL_ITEM_BYTES = 1024;
-
-function esc(s: string) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
 
 type RowOpts = {
   /** 明细行：左侧留白 + 浅底，表示归属于上方条目 */

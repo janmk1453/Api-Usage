@@ -37,6 +37,37 @@ export const CHANGELOG_ENTRY_LIMIT = 5;
 /** 更新日志（最新在前） */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'r3.2.0',
+    date: '2026-11-08',
+    sections: [
+      {
+        kind: 'feature',
+        items: [
+          '新增「管理对话」，管理首页表格和下拉胶囊中的对话是否显示',
+          '安卓设备现在使用系统返回手势时会返回酒馆',
+          '兼容TauriTavern 2.4.0',
+          '更新2027年法定节假日数据',
+        ],
+      },
+      {
+        kind: 'improve',
+        items: [
+          '优化启动速度',
+          '更新了使用说明页的内容',
+          '改进了价格匹配',
+          '改进了很多视觉效果和UI细节',
+          '优化扩展卸载时的数据清理',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          '修复了一些已知问题',
+        ],
+      },
+    ],
+  },
+  {
     version: 'r3.1.9fix',
     date: '2026-11-04',
     sections: [

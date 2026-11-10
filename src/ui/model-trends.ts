@@ -2,6 +2,7 @@ import { esc, localDay } from '../utils/date';
 import { X_OPTIONS } from './chart-config';
 import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
 import { attachChartZoom, detachChartZoom, getChartRange } from './range-zoom';
+import { closeDropdownThenPaint } from './dropdown-close';
 
 type XKey = 'round'|'hour'|'day'|'week'|'month';
 type TrendId = 'token'|'req';
@@ -205,7 +206,7 @@ async function renderOne(id:TrendId, filtered:any[]){
 export function initModelTrends(){
   const doc=getDoc();
   for (const id of ['token','req'] as TrendId[]){
-    const btn=doc.getElementById(`aus-modeltrends-x-${id}`);
+    const btn=doc.getElementById(`aus-modeltrends-x-btn-${id}`);
     const drop=doc.getElementById(`aus-modeltrends-x-drop-${id}`);
     if (btn && drop){
       btn.onclick=()=>{
@@ -217,9 +218,9 @@ export function initModelTrends(){
   doc.addEventListener('click', (e:any)=>{
     const t=e.target as HTMLElement;
     for (const id of ['token','req'] as TrendId[]){
-      const btn=doc.getElementById(`aus-modeltrends-x-${id}`);
+      const btn=doc.getElementById(`aus-modeltrends-x-btn-${id}`);
       const drop=doc.getElementById(`aus-modeltrends-x-drop-${id}`);
-      if (btn && drop && !t.closest(`#aus-modeltrends-x-${id}`) && !t.closest(`#aus-modeltrends-x-drop-${id}`)) drop.style.display='none';
+      if (btn && drop && !t.closest(`#aus-modeltrends-x-btn-${id}`) && !t.closest(`#aus-modeltrends-x-drop-${id}`)) drop.style.display='none';
     }
   });
 }
@@ -239,9 +240,10 @@ function renderXDrop(id:TrendId){
     el.onclick=()=>{
       const k=el.getAttribute('data-x') as XKey, tid=el.getAttribute('data-trend') as TrendId;
       state[tid].x = k;
-      drop.style.display='none';
-      renderXDrop(tid);
-      renderOne(tid, lastFiltered);
+      closeDropdownThenPaint(drop, () => {
+        renderXDrop(tid);
+        renderOne(tid, lastFiltered);
+      });
     };
   });
 }

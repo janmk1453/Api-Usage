@@ -148,7 +148,10 @@ describe('跨页长距离切换：胶囊先起跑再渲染', () => {
     expect(panelCode).toContain('function renderAfterPillStart(doc: Document, run: () => void): void {');
     // 第一帧强制一次样式计算，让 transform 过渡真正起跑
     expect(panelCode).toContain('void ind.getBoundingClientRect();');
-    expect(panelCode).toContain('if (bottom && view !== prevView) renderAfterPillStart(doc, renderTargetView);');
+    expect(panelCode).toContain('const animateIn = view !== prevView;');
+    expect(panelCode).toContain('if (animateIn && bottom) renderAfterPillStart(doc, renderTargetView);');
+    // 桌面端同样不把动画起跑与建 DOM 挤在同一个任务里，否则首绘时动画已推进到中段
+    expect(panelCode).toContain('requestAnimationFrame(renderTargetView);');
     // 快速连点只渲染最后停留的那页
     expect(panelCode).toContain('if (currentView !== view) return;');
     // 后台标签页里 rAF 会被暂停，必须有兜底计时器
@@ -165,5 +168,87 @@ describe('跨页长距离切换：胶囊先起跑再渲染', () => {
     expect(start).toBeGreaterThan(-1);
     const block = cssSrc.slice(start, cssSrc.indexOf('}', start));
     expect(block).toContain('will-change: transform;');
+  });
+});
+
+describe('安卓返回键：按一次系统返回直接关面板回酒馆页面', () => {
+  const popStart = () => panelCode.indexOf('function onBackGuardPop(ev: any): void {');
+  const popBody = () => {
+    const start = popStart();
+    const end = panelCode.indexOf('function releaseBackGuard(stepBack = true): void {', start);
+    return panelCode.slice(start, end > start ? end : start + 2000);
+  };
+
+  it('系统返回一律直接关面板，不再逐层后退', () => {
+    const body = popBody();
+    expect(popStart()).toBeGreaterThan(-1);
+    expect(body).toContain('if (!panelOpen) { releaseBackGuard(false); return; }');
+    expect(body).toContain('try { closePanel(); } catch {}');
+    // 逐层后退的实现已经全部撤掉：浏览栈、层级回退目标、哨兵回收/补压
+    expect(panelCode).not.toContain('viewTrail');
+    expect(panelCode).not.toContain('goBackInPanel');
+    expect(panelCode).not.toContain('backTargetOf');
+    expect(panelCode).not.toContain('startBackGuardCleanup');
+    expect(panelCode).not.toContain('backGuardLive');
+    expect(panelCode).not.toContain('scheduleBackGuardTopUp');
+  });
+
+  it('popstate 处理里绝不碰历史：不 pushState、不 go、不 replaceState', () => {
+    // 安卓侧滑手势触发的后退会被浏览器的「历史操纵干预」处理：事件里插入的记录会被
+    // 忽略，用户下一次手势就跳过哨兵退进旧文档，表现为整页重载（就是「退出酒馆」）
+    const body = popBody();
+    expect(body).not.toContain('history.go');
+    expect(body).not.toContain('pushState');
+    expect(body).not.toContain('replaceState');
+  });
+
+  it('展开的下拉与历史详情跟着面板一起收掉，下次打开是干净的', () => {
+    expect(panelCode).toContain('\'[data-aus-drop-open="1"]\'');
+    expect(panelCode).toContain('for (const el of open) closeDropdownInstant(el);');
+    expect(panelCode).toContain('if (activeHistoryDetailTs !== null) {');
+    const pop = popStart();
+    const overlay = panelCode.indexOf('try { closeTopOverlay(); } catch {}', pop);
+    const close = panelCode.indexOf('try { closePanel(); } catch {}', pop);
+    expect(overlay).toBeGreaterThan(pop);
+    expect(close).toBeGreaterThan(overlay);
+  });
+
+  it('打开面板只压一条哨兵，压之前先把当前记录洗成干净基线', () => {
+    expect(panelCode).toContain("from './back-guard';");
+    expect(panelCode).toContain('const base = stripGuardState(w.history.state);');
+    expect(panelCode).toContain('if (base) w.history.replaceState(base, \'\');');
+    expect(panelCode).toContain('w.history.pushState(nextGuardState(base ?? w.history.state, BACK_GUARD_DEPTH), \'\');');
+    // 一次性压满多条、按深度补差、延时补压的老做法全部不许回来
+    expect(panelCode).not.toContain('for (let depth = 1; depth <= BACK_GUARD_DEPTH; depth++) {');
+    expect(panelCode).not.toContain('topUpBackGuard');
+    expect(panelCode).not.toContain('fillBackGuard');
+  });
+
+  it('点关闭按钮关面板时才补退一条哨兵，且延时执行', () => {
+    const rel = panelCode.indexOf('function releaseBackGuard(stepBack = true): void {');
+    const body = panelCode.slice(rel, rel + 1400);
+    expect(rel).toBeGreaterThan(-1);
+    expect(body).toContain('if (!stepBack || !pushed) return;');
+    expect(body).toContain('depth = readGuardDepth(w.history?.state);');
+    // 延时执行，且执行前再读一次深度（为 0 就跳过，防止用户此刻已自己按过返回）
+    expect(body).toContain('setTimeout(() => {');
+    expect(body).toContain('if (left <= 0) return;');
+    expect(body).toContain('w.history.go(-left);');
+    expect(body).toContain('}, 250);');
+    // 串行回收那套（一次一条、由账面条数封顶）已经撤掉
+    expect(panelCode).not.toContain('runBackGuardCleanStep');
+    expect(panelCode).not.toContain('w.history.go(-1);');
+  });
+
+  it('平板横屏等宽度超过 760 的移动设备同样接管返回键', () => {
+    expect(panelCode).toContain('return mobileDeviceHint();');
+  });
+
+  it('面板内不再有跨次打开残留的浏览路径，关面板只负责还掉那条哨兵', () => {
+    const close = panelCode.indexOf('export function closePanel() {');
+    const next = panelCode.indexOf('export function togglePanel()');
+    const body = panelCode.slice(close, next);
+    expect(body).toContain('releaseBackGuard();');
+    expect(body).not.toContain('viewTrail');
   });
 });

@@ -14,6 +14,7 @@ import { openWalletSyncPreview } from './wallet-sync-preview';
 import { resolveVendor, vendorById, vendorInitialFallback } from '../services/provider-registry';
 import { BALANCE_ADAPTERS, resolveBalanceAdapter } from '../services/balance-adapters';
 import { renderPlanBlock, bindPlanBlock, hasPlanCapability } from './wallet-plan';
+import { afterNextPaint, closeDropdownInstant } from './dropdown-close';
 import { vendorIconSvg } from './vendor-icons';
 import { toast } from '../utils/logger';
 import { esc } from '../utils/date';
@@ -62,6 +63,14 @@ function closeDropdowns(): void {
   const doc = getDoc();
   doc.querySelectorAll('[data-wallet-dropdown]').forEach((el: any) => {
     el.style.display = 'none';
+  });
+}
+
+/** 选中某一项后要重建钱包页时用：先瞬时收掉全部浮层，重绘留到下一帧。 */
+function closeDropdownsInstant(): void {
+  const doc = getDoc();
+  doc.querySelectorAll('[data-wallet-dropdown]').forEach((el: any) => {
+    closeDropdownInstant(el);
   });
 }
 
@@ -164,7 +173,7 @@ function renderPeakRows(wallet: WalletConfig): string {
 function renderCredentialPicker(wallet: WalletConfig): string {
   const current = wallet.credentials.find((item) => item.id === wallet.balance.primaryCredentialId);
   return `
-    <button data-wallet-credential-btn="1" data-wallet-id="${esc(wallet.id)}" style="display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;max-width:100%;">
+    <button data-wallet-credential-btn="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill aus-pill-sm" style="flex-shrink:0;gap:7px;padding:7px 10px;max-width:100%;">
       <span style="color:var(--ds-text-2);">主密钥</span>
       <span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;">${esc(current?.label || '未指定')}</span>
       ${icon('chevron-down', 14)}
@@ -184,7 +193,7 @@ function renderCatalogPicker(wallet: WalletConfig): string {
   const status = walletSyncStatus(wallet);
   return `
     <div class="aus-wallet-catalog-picker" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:0 0 auto;min-width:0;max-width:100%;">
-    <button type="button" class="aus-wallet-catalog-btn" data-wallet-catalog-btn="1" data-wallet-id="${esc(wallet.id)}" title="选择价格来源" style="display:flex;align-items:center;gap:7px;flex:0 0 auto;max-width:100%;box-sizing:border-box;min-height:30px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
+    <button type="button" data-wallet-catalog-btn="1" data-wallet-id="${esc(wallet.id)}" title="选择价格来源" class="aus-wallet-catalog-btn aus-pill aus-pill-sm" style="flex:0 0 auto;gap:7px;max-width:100%;box-sizing:border-box;min-height:30px;padding:7px 10px;">
       <span style="color:var(--ds-text-2);flex:0 0 auto;">价格来源</span>
       ${providerIcon ? '<span style="display:inline-flex;flex:0 0 auto;color:var(--ds-text-2);">' + providerIcon + '</span>' : ''}
       <span style="font-weight:600;min-width:0;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(current?.label || '不自动同步')}</span>
@@ -204,7 +213,7 @@ function renderAdapterPicker(wallet: WalletConfig): string {
   const current = BALANCE_ADAPTERS.find((item) => item.id === wallet.balance.adapter);
   return `
     <div style="position:relative;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-      <button data-wallet-adapter-btn="1" data-wallet-id="${esc(wallet.id)}" style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
+      <button data-wallet-adapter-btn="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill aus-pill-sm" style="gap:6px;padding:6px 9px;">
         <span style="color:var(--ds-text-2);">查询适配器</span>
         <span style="font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(current?.label || '自动识别')}</span>
         ${icon('chevron-down', 14)}
@@ -279,7 +288,7 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
           </div>
           <div style="display:flex;gap:6px;align-items:center;position:relative;">
             <input data-wallet-balance-amount="1" data-wallet-id="${esc(wallet.id)}" value="${esc(wallet.balance.amount ?? '')}" placeholder="手工余额" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-            <button data-wallet-currency-btn="1" data-wallet-id="${esc(wallet.id)}" style="padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">${wallet.balance.currency}${icon('chevron-down', 14)}</button>
+            <button data-wallet-currency-btn="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill aus-pill-sm" style="gap:4px;padding:7px 10px;">${wallet.balance.currency}${icon('chevron-down', 14)}</button>
             <div id="aus-wallet-currency-drop-${esc(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;right:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:6px;min-width:110px;">
               ${dropdownHtml(wallet.id, 'currency', [{ id: 'CNY', label: 'CNY', active: wallet.balance.currency === 'CNY' }, { id: 'USD', label: 'USD', active: wallet.balance.currency === 'USD' }])}
             </div>
@@ -369,12 +378,12 @@ export async function renderWalletView(): Promise<void> {
     { id: 'all', label: '全部', count: active.length },
     { id: 'pending', label: '有待定价', count: active.filter((wallet) => walletPendingModelCount(wallet) > 0).length },
     { id: 'plan', label: '可查套餐', count: planCapable.length },
-    { id: 'official', label: '官方', count: active.filter((wallet) => wallet.id === DEEPSEEK_WALLET_ID).length },
   ];
+  // 兼容旧存档：曾被移除的筛选值（如 official）一律回落「全部」，避免列表看起来是空的
+  if (!filters.some((item) => item.id === walletFilter)) walletFilter = 'all';
   const matchesFilter = (wallet: WalletConfig) => {
     if (walletFilter === 'pending') return walletPendingModelCount(wallet) > 0;
     if (walletFilter === 'plan') return resolveBalanceAdapter(wallet)?.supports.plan === true;
-    if (walletFilter === 'official') return wallet.id === DEEPSEEK_WALLET_ID;
     return true;
   };
   // 「展开全部 / 收起全部」合并成一个切换胶囊：只要还有收起的钱包就显示「展开全部」
@@ -816,8 +825,8 @@ function bindWalletView(doc: Document): void {
       } else if (kind === 'credential') {
         repository.updateWallet(walletId, (wallet) => { wallet.balance.primaryCredentialId = value || null; });
       }
-      closeDropdowns();
-      renderWalletView();
+      closeDropdownsInstant();
+      afterNextPaint(() => renderWalletView());
     };
   });
 

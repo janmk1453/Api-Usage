@@ -3,11 +3,16 @@
  *
  * 与「用量统计 → 模型汇总」共用 sort-header 的排序交互，
  * 默认顺序仍是 computeChatStats 的总 Tokens 倒序，用户点表头后才改。
+ *
+ * 显隐过滤也在这里做：用户在「对话展示管理」页勾掉的对话只在本表消失，
+ * 入参 rows 保持完整（排序与切换显隐后重排都基于全量行），渲染前才过滤，
+ * 因此隐藏/恢复不需要重新聚合，也不会影响任何其它页面的统计口径。
  */
 import { type ChatSummaryRow } from '../data/computed';
 import { bindSortableHeaders, paintSortHeader, sortRows, type SortState } from './sort-header';
 import { esc } from '../utils/date';
 import { formatMoney } from '../services/currency';
+import { chatVisibilityKey, filterVisibleRows, readHiddenKeys } from './chat-visibility';
 
 type ChatSortKey = 'count' | 'hit' | 'miss' | 'out' | 'total' | 'cost' | 'avgTokens' | 'avgHitRate';
 
@@ -42,17 +47,34 @@ export function bindChatSummarySort(doc: Document): void {
   paintSortHeader(doc, TABLE_ID, sortState);
 }
 
+/** 概览表格标题右侧「管理对话」按钮上的隐藏计数（0 个时整块隐藏） */
+export function paintChatManageBadge(doc: Document): void {
+  const badge = doc.getElementById('aus-chat-manage-count') as HTMLElement | null;
+  if (!badge) return;
+  // 只读一次 localStorage：隐藏集合对整表是同一份
+  const hiddenSet = new Set(readHiddenKeys());
+  const hidden = lastRows.filter((r) => hiddenSet.has(chatVisibilityKey(r.chatId))).length;
+  badge.textContent = hidden ? '已隐藏 ' + hidden + ' 个' : '';
+  badge.style.display = hidden ? 'inline' : 'none';
+}
+
 /** 渲染表体：先按当前排序状态排序，未选列时保持入参顺序 */
 export function renderChatSummaryTable(doc: Document, rows: ChatSummaryRow[]): void {
   const tbody = doc.getElementById(TBODY_ID) as HTMLElement | null;
   if (!tbody) return;
   lastRows = rows || [];
   try { bindChatSummarySort(doc); } catch {}
+  try { paintChatManageBadge(doc); } catch {}
   if (!lastRows.length) {
     tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr>';
     return;
   }
-  const sorted = sortRows(lastRows, sortState, pickChatSortValue, (row) => row.displayName);
+  const visible = filterVisibleRows(lastRows);
+  if (!visible.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:16px;color:var(--ds-text-3);">全部对话都已隐藏 · 点击右上角「管理对话」恢复显示</td></tr>';
+    return;
+  }
+  const sorted = sortRows(visible, sortState, pickChatSortValue, (row) => row.displayName);
   tbody.innerHTML = sorted.map((r) => {
     const avgRate = r.avgHitRate > 0 ? r.avgHitRate.toFixed(1) + '%' : '—';
     const colorRate = r.avgHitRate >= 50 ? 'var(--ds-green)' : r.avgHitRate > 0 ? 'var(--ds-text)' : 'var(--ds-text-3)';

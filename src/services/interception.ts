@@ -499,6 +499,6 @@ export function processUsage(usage: any, model: string, messages: any[], startTi
   refresh();
 }
 
-export function recalcAllCosts(): Promise<void> {
+export function recalcAllCosts(): Promise<boolean> {
   return repository.recalcAll();
 }

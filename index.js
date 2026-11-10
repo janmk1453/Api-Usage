@@ -1,15 +1,15 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { n as getSelectedSave, r as state$2, t as getHistoryForDisplay } from "./store-TDK3YzRZ.js";
+import { n as getSelectedSave, o as mobileDeviceHint, r as state$2, t as getHistoryForDisplay } from "./store-TDK3YzRZ.js";
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
-import { f as saveHot, p as historyRecordKey } from "./persistence-CaWdvByH.js";
+import { _ as saveHot, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-Dq4qsP3r.js";
-import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
-import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-Dsn2T9-Q.js";
-import { t as installInterception } from "./interception-_-wOz23M.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-BdsjuDiq.js";
-import { a as trackOpen, c as applyTheme, d as icon, i as initTelemetry, l as unwatchSystemTheme, o as trackPage, r as flushTelemetry, s as trackRender, t as renderSettings, u as watchSystemTheme } from "./settings-BhH88qcZ.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-DDNV-dji.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-hoZEFuvR.js";
+import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
+import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-C7kzKPUW.js";
+import { t as installInterception } from "./interception-DyZ5Oo8Z.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-6oTd4dyg.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-BPXcU2xs.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-BI6SnohY.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -53,7 +53,7 @@ async function exportHistory() {
 		path: "",
 		proxy: ""
 	};
-	const _appVer = "3.1.9";
+	const _appVer = "3.2.0";
 	let fullHist = [];
 	try {
 		fullHist = await repository.getAllHistory();
@@ -207,48 +207,27 @@ function normalizeImportData(raw) {
 		skipped: { entries: skipped }
 	};
 }
-async function applyImportedData(d, mode) {
-	if (mode === "overwrite") await repository.replaceAll({
-		history: d.history || [],
-		total_tokens: d.total_tokens ?? (d.history || []).reduce((a, h) => a + (h.total_tokens || 0), 0),
-		total_cost: d.total_cost ?? (d.history || []).reduce((a, h) => a + (h.cost || 0), 0),
-		input_tokens: d.input_tokens ?? 0,
-		output_tokens: d.output_tokens ?? 0,
-		cache_hit_tokens: d.cache_hit_tokens ?? 0,
-		cache_miss_tokens: d.cache_miss_tokens ?? 0,
-		input_cost: d.input_cost ?? 0,
-		output_cost: d.output_cost ?? 0,
-		rounds: d.rounds ?? 0,
-		startTime: d.startTime ?? Date.now(),
-		balance: d.balance,
-		customBalance: d.customBalance,
-		wallets: d.wallets,
-		walletIgnored: d.walletIgnored,
-		settings: d.settings,
-		messageCount: d.messageCount
-	}, { clearCold: true });
-	else {
-		const existing = await repository.getAllHistory();
-		const seen = new Set(existing.map((h) => historyRecordKey(h)));
-		const toAdd = [];
-		for (const h of d.history || []) {
-			const key = historyRecordKey(h);
-			if (!seen.has(key)) {
-				seen.add(key);
-				toAdd.push(h);
-			}
+async function applyImportedData(d) {
+	const existing = await repository.getAllHistory();
+	const seen = new Set(existing.map((h) => historyRecordKey(h)));
+	const toAdd = [];
+	for (const h of d.history || []) {
+		const key = historyRecordKey(h);
+		if (!seen.has(key)) {
+			seen.add(key);
+			toAdd.push(h);
 		}
-		const merged = [...toAdd, ...existing].sort((a, b) => b.timestamp - a.timestamp);
-		await repository.replaceAll({ history: merged });
-		if (Array.isArray(d.wallets)) await repository.replaceAll({
-			wallets: mergeWalletCollections(repository.getWallets(), d.wallets),
-			walletIgnored: Array.from(/* @__PURE__ */ new Set([...state$2.walletIgnored || [], ...d.walletIgnored || []]))
-		});
-		if (d.settings && typeof d.settings === "object") {
-			const mergedSettings = { ...d.settings };
-			mergedSettings.webdav = { ...state$2.settings?.webdav || {} };
-			await repository.replaceAll({ settings: mergedSettings });
-		}
+	}
+	const merged = [...toAdd, ...existing].sort((a, b) => b.timestamp - a.timestamp);
+	await repository.replaceAll({ history: merged });
+	if (Array.isArray(d.wallets)) await repository.replaceAll({
+		wallets: mergeWalletCollections(repository.getWallets(), d.wallets),
+		walletIgnored: Array.from(/* @__PURE__ */ new Set([...state$2.walletIgnored || [], ...d.walletIgnored || []]))
+	});
+	if (d.settings && typeof d.settings === "object") {
+		const mergedSettings = { ...d.settings };
+		mergedSettings.webdav = { ...state$2.settings?.webdav || {} };
+		await repository.replaceAll({ settings: mergedSettings });
 	}
 	await repository.recalcAll();
 	await repository.rebuildAggregates();
@@ -286,11 +265,10 @@ function triggerImport() {
 				if (!raw || raw.format !== "deepseek-stat-export") return alert("导入失败：文件格式不正确");
 				const res = normalizeImportData(raw);
 				if (res.error) return alert("导入失败：" + res.error);
-				const mode = confirm("导入方式：\n确定 = 合并导入（推荐：历史按记录去重，钱包与设置一并合并，保留本机 WebDAV 配置）\n取消 = 覆盖导入（替换全部数据）") ? "merge" : "overwrite";
-				if (mode === "overwrite" && !confirm("覆盖将删除现有全部统计并无法恢复，确定要覆盖？")) return;
+				if (!confirm("合并导入：历史按记录去重，钱包与设置一并合并，本机 WebDAV 配置保留。\n确定导入？取消则不导入。")) return;
 				try {
-					await applyImportedData(res.data, mode);
-					alert(mode === "overwrite" ? "已覆盖导入" : "已合并导入");
+					await applyImportedData(res.data);
+					alert("已合并导入");
 				} catch (error) {
 					alert("导入失败：" + (error?.message || error));
 				}
@@ -305,7 +283,7 @@ function triggerImport() {
 //#region src/ui/compare.ts
 var selOld = null;
 var selNew = null;
-function getDoc$11() {
+function getDoc$12() {
 	return window.parent?.document ?? document;
 }
 function diffMessages(oldMsgs, newMsgs) {
@@ -319,7 +297,7 @@ function diffMessages(oldMsgs, newMsgs) {
 	return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${esc(a.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-red-bg);color:var(--ds-red);padding:0 2px;border-radius:3px;\">" + esc(a.slice(i, i + 200)) + "</span>" + esc(a.slice(i + 200, i + 280))}</div><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${esc(b.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-green-bg);color:var(--ds-green);padding:0 2px;border-radius:3px;\">" + esc(b.slice(i, i + 200)) + "</span>" + esc(b.slice(i + 200, i + 280))}</div></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
 }
 function bindHistoryCompare() {
-	const doc = getDoc$11();
+	const doc = getDoc$12();
 	doc.addEventListener("click", (e) => {
 		const t = e.target;
 		if (!t) return;
@@ -336,7 +314,7 @@ function bindHistoryCompare() {
 	});
 }
 function renderDiff() {
-	const host = getDoc$11().getElementById("aus-diff");
+	const host = getDoc$12().getElementById("aus-diff");
 	if (!host) return;
 	if (selOld == null || selNew == null) {
 		host.innerHTML = "<div style=\"text-align:center;padding:16px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">已选 " + (selOld != null ? "旧 " : "") + (selNew != null ? "新 " : "") + "，请在历史中各选一条 旧/新 进行对比</div>";
@@ -1650,6 +1628,156 @@ function sortRows(rows, state, pick, tie) {
 	});
 }
 //#endregion
+//#region src/ui/chat-visibility.ts
+/**
+* 对话显隐偏好（纯展示偏好，localStorage）。
+*
+* 定位与 `filter-prefs.ts` / `chart-prefs.ts` 一致：不进 `settings`、不参与导出与
+* WebDAV 同步，也不影响任何统计口径——隐藏只是让该对话不出现在某个展示位置，
+* 热力图、统计页、历史页、趋势预测、能耗评分等全部照旧按全量历史计算。
+*
+* 两个互相独立的隐藏集合：
+* - `hidden`：概览「按对话统计」表格里不列出；
+* - `hiddenPickers`：统计页/历史页/趋势预测页的「对话」下拉胶囊里不列出。
+*   胶囊只是少一个可选项，数据统计口径不变（已选中的对话仍按全量计算）。
+*
+* 存储形态：`{ hidden: string[], hiddenPickers: string[] }`，元素是「对话键」而不是
+* chatId 原值：无 chatId 的记录（旧数据/未分组）统一用 `NULL_CHAT_KEY`，与
+* `data/computed.ts#computeChatStats` 内部的聚合键保持一致，这样没有 chatId 的
+* 那一行也能被单独隐藏。旧版只有 `{ hidden }` 的数据照常读取，缺的集合视为空。
+*
+* 读写全部包 try/catch：宿主禁用存储或隐私模式下静默退化为内存态
+* （本次会话有效，刷新后回到全部显示），不影响功能可用性。
+*/
+var CHAT_VISIBILITY_KEY = "aus_chat_visibility_v1";
+/** 无 chatId 的记录（旧数据/未分组）在所有统计里共用的聚合键 */
+var NULL_CHAT_KEY = "__null__";
+/** chatId → 存储键：空值统一落到 NULL_CHAT_KEY */
+function chatVisibilityKey(chatId) {
+	return chatId ? String(chatId) : NULL_CHAT_KEY;
+}
+/** 校验并去重：只保留非空字符串，非法输入一律丢弃 */
+function normalizeHiddenKeys(value) {
+	if (!Array.isArray(value)) return [];
+	const out = [];
+	for (const item of value) {
+		if (typeof item !== "string" || !item) continue;
+		if (!out.includes(item)) out.push(item);
+	}
+	return out;
+}
+/** 校验整份偏好：缺字段、脏字段一律回落为空数组（兼容旧版只有 hidden 的数据） */
+function normalizePrefs(value) {
+	const raw = value ?? {};
+	return {
+		hidden: normalizeHiddenKeys(raw.hidden),
+		hiddenPickers: normalizeHiddenKeys(raw.hiddenPickers)
+	};
+}
+function storage$3() {
+	try {
+		const store = globalThis.localStorage;
+		if (!store || typeof store.getItem !== "function" || typeof store.setItem !== "function") return null;
+		store.getItem(CHAT_VISIBILITY_KEY);
+		return store;
+	} catch {
+		return null;
+	}
+}
+/** 内存态兜底（localStorage 不可用时本次会话仍可切换） */
+var memoryPrefs = null;
+/** 读取整份偏好（每次返回新对象，调用方可安全修改） */
+function readPrefs() {
+	const store = storage$3();
+	if (!store) return normalizePrefs(memoryPrefs ?? {});
+	try {
+		const raw = store.getItem(CHAT_VISIBILITY_KEY);
+		if (!raw) return {
+			hidden: [],
+			hiddenPickers: []
+		};
+		return normalizePrefs(JSON.parse(raw));
+	} catch {
+		return {
+			hidden: [],
+			hiddenPickers: []
+		};
+	}
+}
+function writePrefs(prefs) {
+	const clean = normalizePrefs(prefs);
+	memoryPrefs = clean;
+	const store = storage$3();
+	if (!store) return;
+	try {
+		store.setItem(CHAT_VISIBILITY_KEY, JSON.stringify(clean));
+	} catch {}
+}
+function listOf(prefs, target) {
+	return target === "picker" ? prefs.hiddenPickers : prefs.hidden;
+}
+function writeList(target, keys) {
+	const prefs = readPrefs();
+	if (target === "picker") prefs.hiddenPickers = normalizeHiddenKeys(keys);
+	else prefs.hidden = normalizeHiddenKeys(keys);
+	writePrefs(prefs);
+}
+/** 读取某个展示位置的隐藏键列表（只读副本） */
+function readHiddenFor(target) {
+	return listOf(readPrefs(), target).slice();
+}
+/** 「按对话统计」表格的隐藏键列表 */
+function readHiddenKeys() {
+	return readHiddenFor("table");
+}
+/** 该对话在该位置是否被隐藏（入参是存储键） */
+function isHiddenFor(target, key) {
+	return listOf(readPrefs(), target).includes(key);
+}
+/** 设置某个对话键在某位置的显隐 */
+function setHiddenFor(target, key, hidden) {
+	if (!key) return;
+	const current = readHiddenFor(target);
+	if (hidden === current.includes(key)) return;
+	writeList(target, hidden ? current.concat(key) : current.filter((k) => k !== key));
+}
+/** 一次写入多个键的显隐（「全部隐藏 / 全部显示」用，避免逐条读写存储） */
+function setAllHiddenFor(target, keys, hidden) {
+	const clean = normalizeHiddenKeys(keys);
+	const current = readHiddenFor(target);
+	if (hidden) {
+		const merged = current.slice();
+		for (const key of clean) if (!merged.includes(key)) merged.push(key);
+		writeList(target, merged);
+	} else {
+		const drop = new Set(clean);
+		writeList(target, current.filter((key) => !drop.has(key)));
+	}
+}
+/** 清空某个展示位置的隐藏项（全部恢复显示） */
+function clearHiddenFor(target) {
+	writeList(target, []);
+}
+function filterByHidden(rows, hidden, keyOf) {
+	if (!hidden.length) return rows.slice();
+	const set = new Set(hidden);
+	return rows.filter((row) => !set.has(keyOf(row)));
+}
+/**
+* 过滤出应当出现在「按对话统计」表中的行（纯函数，按入参顺序、不改变排序）。
+* 传 keyOf 便于测试与复用；默认按 ChatSummaryRow.chatId 取键。
+*/
+function filterVisibleRows(rows, keyOf = (row) => chatVisibilityKey(row?.chatId ?? null)) {
+	return filterByHidden(rows, readHiddenFor("table"), keyOf);
+}
+/**
+* 过滤出应当出现在「对话」下拉胶囊里的选项（纯函数，按入参顺序）。
+* 默认按选项的 chatId 取键；历史页的选项自己带 `id`（已是对话键），传 keyOf 取它。
+*/
+function filterPickerRows(rows, keyOf = (row) => chatVisibilityKey(row?.chatId ?? null)) {
+	return filterByHidden(rows, readHiddenFor("picker"), keyOf);
+}
+//#endregion
 //#region src/ui/chat-summary-table.ts
 /** 排序状态：key 为 null 时保持数据源默认顺序（总 Tokens 倒序） */
 var sortState = {
@@ -1681,6 +1809,15 @@ function bindChatSummarySort(doc) {
 	});
 	paintSortHeader(doc, TABLE_ID, sortState);
 }
+/** 概览表格标题右侧「管理对话」按钮上的隐藏计数（0 个时整块隐藏） */
+function paintChatManageBadge(doc) {
+	const badge = doc.getElementById("aus-chat-manage-count");
+	if (!badge) return;
+	const hiddenSet = new Set(readHiddenKeys());
+	const hidden = lastRows.filter((r) => hiddenSet.has(chatVisibilityKey(r.chatId))).length;
+	badge.textContent = hidden ? "已隐藏 " + hidden + " 个" : "";
+	badge.style.display = hidden ? "inline" : "none";
+}
 /** 渲染表体：先按当前排序状态排序，未选列时保持入参顺序 */
 function renderChatSummaryTable(doc, rows) {
 	const tbody = doc.getElementById(TBODY_ID);
@@ -1689,11 +1826,19 @@ function renderChatSummaryTable(doc, rows) {
 	try {
 		bindChatSummarySort(doc);
 	} catch {}
+	try {
+		paintChatManageBadge(doc);
+	} catch {}
 	if (!lastRows.length) {
 		tbody.innerHTML = "<tr><td colspan=\"9\" style=\"text-align:center;padding:16px;color:var(--ds-text-3);\">暂无数据</td></tr>";
 		return;
 	}
-	tbody.innerHTML = sortRows(lastRows, sortState, pickChatSortValue, (row) => row.displayName).map((r) => {
+	const visible = filterVisibleRows(lastRows);
+	if (!visible.length) {
+		tbody.innerHTML = "<tr><td colspan=\"9\" style=\"text-align:center;padding:16px;color:var(--ds-text-3);\">全部对话都已隐藏 · 点击右上角「管理对话」恢复显示</td></tr>";
+		return;
+	}
+	tbody.innerHTML = sortRows(visible, sortState, pickChatSortValue, (row) => row.displayName).map((r) => {
 		const avgRate = r.avgHitRate > 0 ? r.avgHitRate.toFixed(1) + "%" : "—";
 		const colorRate = r.avgHitRate >= 50 ? "var(--ds-green)" : r.avgHitRate > 0 ? "var(--ds-text)" : "var(--ds-text-3)";
 		let costTxt = "¥" + r.cost.toFixed(4);
@@ -1717,18 +1862,18 @@ function renderChatSummaryTable(doc, rows) {
 }
 //#endregion
 //#region src/ui/heatmap.ts
-function getDoc$10() {
+function getDoc$11() {
 	return window.parent?.document ?? document;
 }
 function themeIsDark() {
 	try {
-		return getDoc$10().getElementById("aus-panel")?.getAttribute("data-ds-theme") === "dark";
+		return getDoc$11().getElementById("aus-panel")?.getAttribute("data-ds-theme") === "dark";
 	} catch {
 		return false;
 	}
 }
 function renderHeatmap(filtered) {
-	const doc = getDoc$10();
+	const doc = getDoc$11();
 	const container = doc.getElementById("aus-heatmap-container-overview") || doc.getElementById("aus-heatmap-container");
 	const legendEl = doc.getElementById("aus-heatmap-legend-overview") || doc.getElementById("aus-heatmap-legend");
 	const labelsEl = doc.getElementById("aus-heatmap-labels-overview") || doc.getElementById("aus-heatmap-labels");
@@ -1884,8 +2029,36 @@ function renderHeatmap(filtered) {
 	}, 50);
 }
 //#endregion
+//#region src/ui/dropdown-placement.ts
+function placeDropdownRelativeToHost(input) {
+	const gap = input.gap ?? 6;
+	const margin = input.margin ?? 8;
+	const minWidth = input.minWidth ?? 160;
+	const maxWidth = input.maxWidth ?? 280;
+	const minHeight = input.minHeight ?? 120;
+	const { anchor, host, bounds } = input;
+	const boundsWidth = Math.max(0, bounds.right - bounds.left);
+	const width = Math.min(maxWidth, Math.max(minWidth, boundsWidth - margin * 2));
+	let left = Math.round(anchor.right - width);
+	left = Math.min(left, Math.round(bounds.right - margin - width));
+	left = Math.max(left, Math.round(bounds.left + margin));
+	const below = bounds.bottom - margin - (anchor.bottom + gap);
+	const above = anchor.top - gap - (bounds.top + margin);
+	const openUp = below < input.estimatedHeight && above > below;
+	const room = openUp ? above : below;
+	const height = Math.max(minHeight, Math.min(input.estimatedHeight, Math.floor(room)));
+	const top = openUp ? Math.round(anchor.top - gap - height) : Math.round(anchor.bottom + gap);
+	return {
+		left: left - Math.round(host.left),
+		top: top - Math.round(host.top),
+		width: Math.round(width),
+		maxHeight: Math.round(height),
+		openUp
+	};
+}
+//#endregion
 //#region src/ui/overview.ts
-function getDoc$9() {
+function getDoc$10() {
 	return window.parent?.document ?? document;
 }
 function fmt(n) {
@@ -2120,7 +2293,7 @@ var overviewWalletBound = false;
 var overviewWalletViewportBound = false;
 var overviewAsyncToken = 0;
 function closeOverviewWalletDropdown() {
-	const dropdown = getDoc$9().getElementById("aus-overview-wallet-dropdown");
+	const dropdown = getDoc$10().getElementById("aus-overview-wallet-dropdown");
 	if (dropdown) dropdown.style.display = "none";
 }
 function bindOverviewWalletViewport() {
@@ -2133,29 +2306,58 @@ function bindOverviewWalletViewport() {
 		window.addEventListener("resize", closeOverviewWalletDropdown, { passive: true });
 	} catch {}
 	try {
-		getDoc$9().getElementById("aus-main")?.addEventListener("scroll", closeOverviewWalletDropdown, { passive: true });
+		getDoc$10().getElementById("aus-main")?.addEventListener("scroll", closeOverviewWalletDropdown, { passive: true });
 	} catch {}
 }
 function positionOverviewWalletDropdown(btn, dropdown) {
 	try {
-		const panelRect = getDoc$9().getElementById("aus-panel")?.getBoundingClientRect();
+		const doc = getDoc$10();
+		const hostEl = btn.closest(".aus-overview-balance-card") || btn.parentElement;
+		if (!hostEl) return;
+		try {
+			if ((doc.defaultView ?? window).getComputedStyle(hostEl).position === "static") hostEl.style.position = "relative";
+		} catch {}
+		const hostRect = hostEl.getBoundingClientRect();
 		const btnRect = btn.getBoundingClientRect();
-		const viewportWidth = window.parent?.innerWidth ?? window.innerWidth;
-		const viewportHeight = window.parent?.innerHeight ?? window.innerHeight;
-		const available = Math.max(180, Math.min(280, viewportWidth - 16));
-		dropdown.style.position = "fixed";
-		dropdown.style.width = `${available}px`;
+		const mainRect = doc.getElementById("aus-main")?.getBoundingClientRect();
+		const vv = window.visualViewport;
+		const viewportRight = (vv?.offsetLeft ?? 0) + (vv?.width ?? window.innerWidth);
+		const viewportBottom = (vv?.offsetTop ?? 0) + (vv?.height ?? window.innerHeight);
+		const bounds = mainRect ? {
+			left: mainRect.left,
+			right: Math.min(mainRect.right, viewportRight),
+			top: mainRect.top,
+			bottom: Math.min(mainRect.bottom, viewportBottom)
+		} : {
+			left: 0,
+			right: viewportRight,
+			top: 0,
+			bottom: viewportBottom
+		};
+		const placed = placeDropdownRelativeToHost({
+			anchor: {
+				left: btnRect.left,
+				right: btnRect.right,
+				top: btnRect.top,
+				bottom: btnRect.bottom
+			},
+			host: {
+				left: hostRect.left + hostEl.clientLeft,
+				top: hostRect.top + hostEl.clientTop
+			},
+			bounds,
+			estimatedHeight: Math.min(dropdown.scrollHeight || 220, 320)
+		});
+		dropdown.style.position = "absolute";
+		dropdown.style.width = placed.width + "px";
 		dropdown.style.minWidth = "0";
-		dropdown.style.maxWidth = `${viewportWidth - 16}px`;
-		dropdown.style.maxHeight = `${Math.max(120, viewportHeight - 24)}px`;
-		const left = Math.max(8, Math.min(btnRect.right - available, viewportWidth - available - 8));
-		const estimatedHeight = Math.min(dropdown.scrollHeight || 220, viewportHeight - 24);
-		const top = btnRect.bottom + 6 + estimatedHeight > viewportHeight - 8 ? Math.max(8, btnRect.top - estimatedHeight - 6) : btnRect.bottom + 6;
-		dropdown.style.top = `${Math.round(top)}px`;
-		dropdown.style.left = `${Math.round(left)}px`;
+		dropdown.style.maxWidth = placed.width + "px";
+		dropdown.style.maxHeight = placed.maxHeight + "px";
+		dropdown.style.top = placed.top + "px";
+		dropdown.style.left = placed.left + "px";
 		dropdown.style.right = "auto";
-		dropdown.style.zIndex = "100500";
-		if (panelRect) dropdown.style.pointerEvents = "auto";
+		dropdown.style.bottom = "auto";
+		dropdown.style.zIndex = "40";
 	} catch {}
 }
 function bindFour() {
@@ -2189,8 +2391,7 @@ function openFourDrop(idx, v) {
 			try {
 				saveHot({ settings: state$2.settings });
 			} catch {}
-			drop.style.display = "none";
-			renderOverview();
+			closeDropdownThenPaint(drop, () => renderOverview());
 		};
 	});
 	drop.style.display = drop.style.display === "block" ? "none" : "block";
@@ -2219,8 +2420,7 @@ function renderOverview(fullHistory) {
 				try {
 					saveHot({ settings: state$2.settings });
 				} catch {}
-				walletDrop.style.display = "none";
-				renderOverview();
+				closeDropdownThenPaint(walletDrop, () => renderOverview());
 			};
 		});
 	}
@@ -2317,7 +2517,7 @@ function renderChatSummaryOverview(fullHistory) {
 	if (fullHistory) return;
 	(async () => {
 		try {
-			const mod = await import("./persistence-CaWdvByH.js").then((n) => n.l);
+			const mod = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
 			if (!mod.getAllHistory) return;
 			const all = await mod.getAllHistory();
 			if (!all || all.length <= (state$2.history?.length || 0)) return;
@@ -2383,15 +2583,37 @@ var SETTINGS_CHILD_VIEWS = [
 	"help",
 	"about"
 ];
+/** 所有二级视图 → 父级根视图（用于底栏高亮、返回箭头、重复点 tab 回根页） */
+var CHILD_PARENT = {
+	wallet: "settings",
+	help: "settings",
+	about: "settings",
+	"chat-manage": "overview"
+};
+/** 二级视图清单（顺序即声明顺序） */
+var CHILD_VIEWS = [
+	"wallet",
+	"help",
+	"about",
+	"chat-manage"
+];
 function isSettingsChild(view) {
 	return SETTINGS_CHILD_VIEWS.includes(view);
 }
+/** 任意二级页判定（含挂在概览下的对话展示管理） */
+function isChildView(view) {
+	return CHILD_VIEWS.includes(view);
+}
+/** 二级页的父级根视图；非二级页返回 null */
+function childParentOf(view) {
+	return CHILD_PARENT[view] ?? null;
+}
 /**
-* 视图所属的底栏 tab：二级页归到「设置」，其余自身。
+* 视图所属的底栏 tab：二级页归到父级（设置 / 概览），其余自身。
 * 底栏高亮与「重复点当前 tab」判定都以它为准。
 */
 function parentTabOf(view) {
-	return isSettingsChild(view) ? "settings" : view;
+	return CHILD_PARENT[view] ?? view;
 }
 /** 页面标题（全称）：桌面顶栏与窄屏 header 共用 */
 var VIEW_TITLES = {
@@ -2402,7 +2624,8 @@ var VIEW_TITLES = {
 	wallet: "钱包",
 	settings: "设置",
 	help: "使用说明",
-	about: "关于"
+	about: "关于",
+	"chat-manage": "对话展示管理"
 };
 function viewTitle(view) {
 	return VIEW_TITLES[view] || VIEW_TITLES.overview;
@@ -2411,10 +2634,13 @@ function viewTitle(view) {
 * 底栏 tab 点击语义。
 * @param target 用户点到的 tab（根视图）
 * @param current 当前视图（可能是二级页）
-* @param currentIsChildView 当前视图是否为「设置」下的二级页
+* @param currentIsChildView 当前视图是否为二级页
+* @param currentTab 当前视图实际归属的 tab；默认按 `parentTabOf(current)`。
+*   对话展示管理这类「没有固定 tab」的页面必须传进入前的来源 tab（从趋势页进入就得传 forecast），
+*   否则它会被恒定算成概览 tab —— 用户点底栏「概览」会被误判成重复点当前 tab，只回上一页而不切页。
 */
-function resolveTabTap(target, current, currentIsChildView) {
-	if (target !== parentTabOf(current)) return "switch";
+function resolveTabTap(target, current, currentIsChildView, currentTab = parentTabOf(current)) {
+	if (target !== currentTab) return "switch";
 	if (currentIsChildView) return "pop-root";
 	return "scroll-top";
 }
@@ -2429,7 +2655,7 @@ var WEEKDAY = [
 	"周五",
 	"周六"
 ];
-var pad = (n) => String(n).padStart(2, "0");
+var pad$1 = (n) => String(n).padStart(2, "0");
 var num = (v) => {
 	const n = Number(v);
 	return Number.isFinite(n) && n > 0 ? n : 0;
@@ -2439,7 +2665,7 @@ function chartDate(ts) {
 	const t = num(ts);
 	if (!t) return "";
 	const d = new Date(t);
-	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+	return `${d.getFullYear()}-${pad$1(d.getMonth() + 1)}-${pad$1(d.getDate())}`;
 }
 /** 2026-10-23 周五 */
 function chartDateWeek(ts) {
@@ -2452,14 +2678,14 @@ function chartDateTime(ts) {
 	const t = num(ts);
 	if (!t) return "";
 	const d = new Date(t);
-	return chartDate(t) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+	return chartDate(t) + " " + pad$1(d.getHours()) + ":" + pad$1(d.getMinutes());
 }
 /** 19:12:33 */
 function chartClock(ts) {
 	const t = num(ts);
 	if (!t) return "";
 	const d = new Date(t);
-	return pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+	return pad$1(d.getHours()) + ":" + pad$1(d.getMinutes()) + ":" + pad$1(d.getSeconds());
 }
 /** ISO 周键：2026-W43 */
 function isoWeekKey(ts) {
@@ -2471,7 +2697,7 @@ function isoWeekKey(ts) {
 	tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
 	const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
 	const weekNo = Math.ceil(((tmp - yearStart) / 864e5 + 1) / 7);
-	return tmp.getUTCFullYear() + "-W" + pad(weekNo);
+	return tmp.getUTCFullYear() + "-W" + pad$1(weekNo);
 }
 /** 单条记录的悬浮标题：2026-10-23 19:12:33 */
 function entryTip(entry) {
@@ -2498,8 +2724,8 @@ function bucketTip(x, firstTs, lastTs) {
 	const last = num(lastTs) || first;
 	if (x === "hour") {
 		const d = new Date(first);
-		const from = pad(d.getHours()) + ":00";
-		const to = pad((d.getHours() + 1) % 24) + ":00";
+		const from = pad$1(d.getHours()) + ":00";
+		const to = pad$1((d.getHours() + 1) % 24) + ":00";
 		return chartDateWeek(first) + " " + from + "–" + to;
 	}
 	if (x === "day") return chartDateWeek(first);
@@ -2546,7 +2772,7 @@ var CHART_PREFS_KEY = "aus_stats_chart_prefs_v1";
 function isPlainObject$1(value) {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function storage$1() {
+function storage$2() {
 	try {
 		const store = globalThis.localStorage;
 		return store && typeof store.getItem === "function" && typeof store.setItem === "function" ? store : null;
@@ -2562,7 +2788,7 @@ function normalizeExtra(value) {
 }
 /** 读取全部图表配置；损坏数据或不可用存储统一回退为空对象（调用方按默认值处理） */
 function readChartPrefs() {
-	const store = storage$1();
+	const store = storage$2();
 	if (store) try {
 		const raw = store.getItem(CHART_PREFS_KEY);
 		if (raw) {
@@ -2582,7 +2808,7 @@ function readChartPrefs() {
 }
 /** 按块合并写入（只覆盖 patch 里出现的字段与图表，其余保持不变） */
 function writeChartPrefs(patch) {
-	const store = storage$1();
+	const store = storage$2();
 	if (!store) return;
 	try {
 		const current = readChartPrefs();
@@ -3466,12 +3692,12 @@ function persistExtraPrefs(id) {
 		x: state$1[id].x
 	} } });
 }
-function getDoc$8() {
+function getDoc$9() {
 	return window.parent?.document ?? document;
 }
 function themeColor$3(name, fallback) {
 	try {
-		const doc = getDoc$8();
+		const doc = getDoc$9();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -3580,7 +3806,7 @@ function shortModelName(name, max = 16) {
 }
 async function renderOne$1(id, filtered) {
 	try {
-		const doc = getDoc$8();
+		const doc = getDoc$9();
 		const el = doc.getElementById(`aus-chart-${id}`);
 		if (!el) return;
 		if (id === "req" && state$1[id].x === "round") state$1[id].x = "day";
@@ -3799,7 +4025,7 @@ async function renderOne$1(id, filtered) {
 	} catch (e) {
 		dropChart(id);
 		try {
-			const el2 = getDoc$8().getElementById(`aus-chart-${id}`);
+			const el2 = getDoc$9().getElementById(`aus-chart-${id}`);
 			if (el2) el2.innerHTML = "<div style=\"text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);\">图表加载失败: " + (e?.message || e) + "</div>";
 		} catch {}
 		try {
@@ -4033,7 +4259,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 		}
 		c.setOption(opts, true);
 		attachChartZoom({
-			doc: getDoc$8(),
+			doc: getDoc$9(),
 			chart: c,
 			container: el,
 			left: 40,
@@ -4058,7 +4284,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 	}
 }
 function initExtraCharts() {
-	const doc = getDoc$8();
+	const doc = getDoc$9();
 	for (const id of Object.keys(CHART_DEFS)) {
 		if (!CHART_DEFS[id].hasX) continue;
 		renderExtraY(id);
@@ -4066,9 +4292,9 @@ function initExtraCharts() {
 	}
 	for (const id of Object.keys(CHART_DEFS)) {
 		if (!CHART_DEFS[id].hasX) continue;
-		const yBtn = doc.getElementById(`aus-extra-y-${id}`);
+		const yBtn = doc.getElementById(`aus-extra-y-btn-${id}`);
 		const yDrop = doc.getElementById(`aus-extra-y-drop-${id}`);
-		const xBtn = doc.getElementById(`aus-extra-x-${id}`);
+		const xBtn = doc.getElementById(`aus-extra-x-btn-${id}`);
 		const xDrop = doc.getElementById(`aus-extra-x-drop-${id}`);
 		if (yBtn && yDrop) yBtn.onclick = () => {
 			const willOpen = yDrop.style.display !== "block";
@@ -4088,11 +4314,15 @@ function initExtraCharts() {
 		};
 	}
 	const pieToggle = doc.getElementById("aus-pie-toggle");
+	const pieToggleVal = doc.getElementById("aus-pie-toggle-val");
 	if (pieToggle) {
-		pieToggle.textContent = state$1.pie.pieMode === "token" ? "Token" : "次数";
+		const paintPieToggle = () => {
+			if (pieToggleVal) pieToggleVal.textContent = state$1.pie.pieMode === "token" ? "Token" : "次数";
+		};
+		paintPieToggle();
 		pieToggle.onclick = () => {
 			state$1.pie.pieMode = state$1.pie.pieMode === "token" ? "count" : "token";
-			pieToggle.textContent = state$1.pie.pieMode === "token" ? "Token" : "次数";
+			paintPieToggle();
 			persistExtraPrefs("pie");
 			renderOne$1("pie", lastFiltered$1);
 		};
@@ -4102,16 +4332,16 @@ function initExtraCharts() {
 		for (const id of Object.keys(CHART_DEFS)) {
 			if (!CHART_DEFS[id].hasX) continue;
 			const yDrop = doc.getElementById(`aus-extra-y-drop-${id}`);
-			const yBtn = doc.getElementById(`aus-extra-y-${id}`);
+			const yBtn = doc.getElementById(`aus-extra-y-btn-${id}`);
 			const xDrop = doc.getElementById(`aus-extra-x-drop-${id}`);
-			const xBtn = doc.getElementById(`aus-extra-x-${id}`);
-			if (yDrop && yBtn && !t.closest(`#aus-extra-y-drop-${id}`) && !t.closest(`#aus-extra-y-${id}`)) yDrop.style.display = "none";
-			if (xDrop && xBtn && !t.closest(`#aus-extra-x-drop-${id}`) && !t.closest(`#aus-extra-x-${id}`)) xDrop.style.display = "none";
+			const xBtn = doc.getElementById(`aus-extra-x-btn-${id}`);
+			if (yDrop && yBtn && !t.closest(`#aus-extra-y-drop-${id}`) && !t.closest(`#aus-extra-y-btn-${id}`)) yDrop.style.display = "none";
+			if (xDrop && xBtn && !t.closest(`#aus-extra-x-drop-${id}`) && !t.closest(`#aus-extra-x-btn-${id}`)) xDrop.style.display = "none";
 		}
 	});
 }
 function renderExtraY(id) {
-	const doc = getDoc$8();
+	const doc = getDoc$9();
 	const drop = doc.getElementById(`aus-extra-y-drop-${id}`);
 	const label = doc.getElementById(`aus-extra-y-label-${id}`);
 	if (!drop) return;
@@ -4120,7 +4350,7 @@ function renderExtraY(id) {
 	if (label) label.textContent = sel.size ? `${sel.size} 项` : "选择";
 	drop.innerHTML = opts.map((o) => {
 		const checked = sel.has(o.key);
-		return `<label style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--aus-fs-sm);${checked ? "background:var(--ds-active-bg);" : ""}"><input type="checkbox" data-y="${o.key}" data-chart="${id}" ${checked ? "checked" : ""} class="aus-checkbox" /><span style="width:8px;height:8px;background:${o.color};border-radius:2px;"></span>${o.label}</label>`;
+		return `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--aus-fs-sm);${checked ? "background:var(--ds-card);" : ""}"><input type="checkbox" data-y="${o.key}" data-chart="${id}" ${checked ? "checked" : ""} class="aus-checkbox" /><span style="display:inline-block;width:8px;height:8px;background:${o.color};border-radius:2px;"></span>${o.label}<span style="margin-left:auto;color:var(--ds-text-3);font-size:var(--aus-fs-sm);">${o.unit}</span></label>`;
 	}).join("");
 	drop.querySelectorAll("input[data-y]").forEach((el) => {
 		el.onchange = () => {
@@ -4130,12 +4360,12 @@ function renderExtraY(id) {
 			else el.checked = true;
 			persistExtraPrefs(cid);
 			renderExtraY(cid);
-			renderOne$1(cid, lastFiltered$1);
+			afterNextPaint(() => renderOne$1(cid, lastFiltered$1));
 		};
 	});
 }
 function renderExtraX(id) {
-	const doc = getDoc$8();
+	const doc = getDoc$9();
 	const drop = doc.getElementById(`aus-extra-x-drop-${id}`);
 	const label = doc.getElementById(`aus-extra-x-label-${id}`);
 	if (!drop) return;
@@ -4144,16 +4374,17 @@ function renderExtraX(id) {
 	if (label) label.textContent = options.find((o) => o.key === cur)?.label || cur;
 	drop.innerHTML = options.map((o) => {
 		const active = o.key === cur;
-		return `<div data-x="${o.key}" data-chart="${id}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active ? "background:var(--ds-active-bg);font-weight:600;" : ""}">${o.label}</div>`;
+		return `<div data-x="${o.key}" data-chart="${id}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active ? "background:var(--ds-card);font-weight:600;" : ""}">${o.label}</div>`;
 	}).join("");
 	drop.querySelectorAll("[data-x]").forEach((el) => {
 		el.onclick = () => {
 			const k = el.getAttribute("data-x"), cid = el.getAttribute("data-chart");
 			state$1[cid].x = k;
 			persistExtraPrefs(cid);
-			drop.style.display = "none";
-			renderExtraX(cid);
-			renderOne$1(cid, lastFiltered$1);
+			closeDropdownThenPaint(drop, () => {
+				renderExtraX(cid);
+				renderOne$1(cid, lastFiltered$1);
+			});
 		};
 	});
 }
@@ -4181,12 +4412,12 @@ var state = {
 	token: { x: "day" },
 	req: { x: "day" }
 };
-function getDoc$7() {
+function getDoc$8() {
 	return window.parent?.document ?? document;
 }
 function themeColor$2(name, fallback) {
 	try {
-		const doc = getDoc$7();
+		const doc = getDoc$8();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -4239,7 +4470,7 @@ function renderModelTrends(filtered) {
 }
 async function renderOne(id, filtered) {
 	try {
-		const doc = getDoc$7();
+		const doc = getDoc$8();
 		const el = doc.getElementById(`aus-chart-model-${id}`);
 		if (!el) return;
 		const xKey = state[id].x;
@@ -4455,7 +4686,7 @@ async function renderOne(id, filtered) {
 			charts[id] = null;
 		}
 		try {
-			const el2 = getDoc$7().getElementById(`aus-chart-model-${id}`);
+			const el2 = getDoc$8().getElementById(`aus-chart-model-${id}`);
 			if (el2) el2.innerHTML = "<div style=\"text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);\">图表加载失败</div>";
 		} catch {}
 		try {
@@ -4464,9 +4695,9 @@ async function renderOne(id, filtered) {
 	}
 }
 function initModelTrends() {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	for (const id of ["token", "req"]) {
-		const btn = doc.getElementById(`aus-modeltrends-x-${id}`);
+		const btn = doc.getElementById(`aus-modeltrends-x-btn-${id}`);
 		const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
 		if (btn && drop) btn.onclick = () => {
 			drop.style.display = drop.style.display === "block" ? "none" : "block";
@@ -4476,14 +4707,14 @@ function initModelTrends() {
 	doc.addEventListener("click", (e) => {
 		const t = e.target;
 		for (const id of ["token", "req"]) {
-			const btn = doc.getElementById(`aus-modeltrends-x-${id}`);
+			const btn = doc.getElementById(`aus-modeltrends-x-btn-${id}`);
 			const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
-			if (btn && drop && !t.closest(`#aus-modeltrends-x-${id}`) && !t.closest(`#aus-modeltrends-x-drop-${id}`)) drop.style.display = "none";
+			if (btn && drop && !t.closest(`#aus-modeltrends-x-btn-${id}`) && !t.closest(`#aus-modeltrends-x-drop-${id}`)) drop.style.display = "none";
 		}
 	});
 }
 function renderXDrop(id) {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
 	const label = doc.getElementById(`aus-modeltrends-x-label-${id}`);
 	if (!drop) return;
@@ -4497,9 +4728,10 @@ function renderXDrop(id) {
 		el.onclick = () => {
 			const k = el.getAttribute("data-x"), tid = el.getAttribute("data-trend");
 			state[tid].x = k;
-			drop.style.display = "none";
-			renderXDrop(tid);
-			renderOne(tid, lastFiltered);
+			closeDropdownThenPaint(drop, () => {
+				renderXDrop(tid);
+				renderOne(tid, lastFiltered);
+			});
 		};
 	});
 }
@@ -4537,7 +4769,7 @@ var HISTORY_KEYS = [
 function isPlainObject(value) {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function storage() {
+function storage$1() {
 	try {
 		const store = globalThis.localStorage;
 		return store && typeof store.getItem === "function" && typeof store.setItem === "function" ? store : null;
@@ -4597,7 +4829,7 @@ function normalizeHistoryPrefs(value) {
 }
 /** 读取全部筛选偏好；损坏数据或不可用存储统一回退为空对象（调用方按默认值处理） */
 function readFilterPrefs() {
-	const store = storage();
+	const store = storage$1();
 	if (store) try {
 		const raw = store.getItem(FILTER_PREFS_KEY);
 		if (raw) {
@@ -4615,7 +4847,7 @@ function readFilterPrefs() {
 }
 /** 按分片合并写入（只覆盖 patch 里出现的字段与分片，其余保持不变；内容无变化时跳过写入） */
 function writeFilterPrefs(patch) {
-	const store = storage();
+	const store = storage$1();
 	if (!store) return;
 	try {
 		const raw = store.getItem(FILTER_PREFS_KEY);
@@ -4671,7 +4903,7 @@ function persistStatsFilters() {
 	} });
 }
 function resetStatsFilters() {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	currentRange = DEFAULT_RANGE;
 	customStart = "";
 	customEnd = "";
@@ -4703,19 +4935,19 @@ var summarySort = {
 };
 var lastSummaryFiltered = null;
 function updateSummarySortHeader() {
-	paintSortHeader(getDoc$6(), "aus-model-summary", summarySort);
+	paintSortHeader(getDoc$7(), "aus-model-summary", summarySort);
 }
 function bindSummarySort() {
-	bindSortableHeaders(getDoc$6(), "aus-model-summary", summarySort, () => {
+	bindSortableHeaders(getDoc$7(), "aus-model-summary", summarySort, () => {
 		if (lastSummaryFiltered) renderModelSummary(lastSummaryFiltered);
 	});
 }
-function getDoc$6() {
+function getDoc$7() {
 	return window.parent?.document ?? document;
 }
 function themeColor$1(name, fallback) {
 	try {
-		const doc = getDoc$6();
+		const doc = getDoc$7();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -4830,7 +5062,7 @@ function currentStatsFilter() {
 	};
 }
 function updateRangeHighlight() {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	doc.querySelectorAll("[data-range]").forEach((el) => {
 		if (el.getAttribute("data-range") === currentRange) {
 			el.style.background = "var(--ds-card)";
@@ -4844,7 +5076,7 @@ function updateRangeHighlight() {
 	if (calWrap) calWrap.style.display = currentRange === "custom" ? "block" : "none";
 }
 function renderCalendar() {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const cal = doc.getElementById("aus-date-calendar");
 	if (!cal) return;
 	updateRangeHighlight();
@@ -4879,7 +5111,7 @@ function renderCalendar() {
 	if (applyBtn) applyBtn.onclick = apply;
 }
 function updatePickerLabel() {
-	const label = getDoc$6().getElementById("aus-range-label");
+	const label = getDoc$7().getElementById("aus-range-label");
 	if (!label) return;
 	const map = {
 		all: "全部",
@@ -4896,7 +5128,7 @@ function updatePickerLabel() {
 	updateRangeHighlight();
 }
 function renderModelPicker(modelsHist) {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const dropdown = doc.getElementById("aus-model-dropdown");
 	const label = doc.getElementById("aus-model-label");
 	if (!dropdown || !label) return;
@@ -4916,7 +5148,7 @@ function renderModelPicker(modelsHist) {
 	const allInput = dropdown.querySelector("[data-model-all]");
 	if (allInput) allInput.onchange = () => {
 		selectedModels = [];
-		renderStatsView();
+		closeDropdownThenPaint(dropdown, () => renderStatsView());
 	};
 	dropdown.querySelectorAll("input[data-model]").forEach((el) => {
 		el.onchange = () => {
@@ -4925,17 +5157,18 @@ function renderModelPicker(modelsHist) {
 			if (el.checked) {
 				if (!selectedModels.includes(model)) selectedModels.push(model);
 			} else selectedModels = selectedModels.filter((item) => item !== model);
-			renderStatsView();
+			closeDropdownThenPaint(dropdown, () => renderStatsView());
 		};
 	});
 }
 function renderChatPicker(chatHist) {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const dropdown = doc.getElementById("aus-chat-dropdown");
 	const label = doc.getElementById("aus-chat-label");
 	if (!dropdown || !label) return;
-	const list = chatHist ? getRecordedChatsFrom(chatHist) : getRecordedChatsFrom(getSelectedSave()?.history || []);
-	const find = list.find((c) => (c.chatId ?? "__null__") === selectedChat);
+	const fullList = chatHist ? getRecordedChatsFrom(chatHist) : getRecordedChatsFrom(getSelectedSave()?.history || []);
+	const list = filterPickerRows(fullList);
+	const find = fullList.find((c) => (c.chatId ?? "__null__") === selectedChat);
 	label.textContent = selectedChat === "__all__" ? "全部" : find?.displayName || selectedChat;
 	label.title = find?.chatId || find?.displayName || "";
 	let html = `<div data-chat="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${selectedChat === "__all__" ? "background:var(--ds-card);font-weight:600;" : ""}">全部</div>`;
@@ -4944,20 +5177,21 @@ function renderChatPicker(chatHist) {
 		const active = key === selectedChat ? "background:var(--ds-card);font-weight:600;" : "";
 		html += `<div data-chat="${esc(key)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}" title="${esc(c.chatId || "")}">${esc(c.displayName)}</div>`;
 	}
-	if (!list.length) html += "<div style=\"padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">暂无对话</div>";
+	if (!list.length) html += "<div style=\"padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">" + (fullList.length ? "对话已全部隐藏（可在「对话展示管理」中恢复）" : "暂无对话") + "</div>";
 	dropdown.innerHTML = html;
 	dropdown.querySelectorAll("[data-chat]").forEach((el) => {
 		el.onclick = () => {
 			selectedChat = el.getAttribute("data-chat") || "__all__";
 			chatPickerOpen = false;
-			dropdown.style.display = "none";
-			renderChatPicker(chatHist);
-			renderStatsView();
+			closeDropdownThenPaint(dropdown, () => {
+				renderChatPicker(chatHist);
+				renderStatsView();
+			});
 		};
 	});
 }
 function renderEndpointPicker(history) {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const dropdown = doc.getElementById("aus-endpoint-dropdown");
 	const label = doc.getElementById("aus-endpoint-label");
 	if (!dropdown || !label) return;
@@ -4978,13 +5212,12 @@ function renderEndpointPicker(history) {
 			selectedEndpoint = el.getAttribute("data-endpoint") || "__all__";
 			selectedCredential = STATS_FILTER_ALL;
 			endpointPickerOpen = false;
-			dropdown.style.display = "none";
-			renderStatsView();
+			closeDropdownThenPaint(dropdown, () => renderStatsView());
 		};
 	});
 }
 function renderCredentialPicker$1(history, endpoint = selectedEndpoint) {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const dropdown = doc.getElementById("aus-credential-dropdown");
 	const label = doc.getElementById("aus-credential-label");
 	if (!dropdown || !label) return;
@@ -5004,14 +5237,13 @@ function renderCredentialPicker$1(history, endpoint = selectedEndpoint) {
 		el.onclick = () => {
 			selectedCredential = el.getAttribute("data-credential") || "__all__";
 			credentialPickerOpen = false;
-			dropdown.style.display = "none";
-			renderStatsView();
+			closeDropdownThenPaint(dropdown, () => renderStatsView());
 		};
 	});
 }
 function positionFilterDropdown(btn, dropdown) {
 	try {
-		const panel = getDoc$6().getElementById("aus-panel");
+		const panel = getDoc$7().getElementById("aus-panel");
 		if (!panel) return;
 		const panelRect = panel.getBoundingClientRect();
 		const btnRect = btn.getBoundingClientRect();
@@ -5026,7 +5258,7 @@ function positionFilterDropdown(btn, dropdown) {
 	} catch {}
 }
 function closeFilterDropdowns(except) {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	if (except !== "range") {
 		pickerOpen = false;
 		const el = doc.getElementById("aus-range-dropdown");
@@ -5054,7 +5286,7 @@ function closeFilterDropdowns(except) {
 	}
 }
 function bindPicker() {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const btn = doc.getElementById("aus-range-btn");
 	const dropdown = doc.getElementById("aus-range-dropdown");
 	if (btn && dropdown) {
@@ -5076,9 +5308,8 @@ function bindPicker() {
 					customEnd = "";
 				}
 				pickerOpen = false;
-				dropdown.style.display = "none";
 				updatePickerLabel();
-				renderStatsView();
+				closeDropdownThenPaint(dropdown, () => renderStatsView());
 			};
 		});
 	}
@@ -5166,7 +5397,7 @@ function bindPicker() {
 var chartYOpen = false;
 var chartXOpen = false;
 function renderChartSelectors() {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const yBtn = doc.getElementById("aus-chart-y-btn");
 	const xBtn = doc.getElementById("aus-chart-x-btn");
 	const yDrop = doc.getElementById("aus-chart-y-dropdown");
@@ -5228,22 +5459,28 @@ function renderChartSelectors() {
 	yDrop.querySelectorAll("input[data-ykey]").forEach((el) => {
 		el.onchange = () => {
 			toggleY(el.getAttribute("data-ykey"));
-			renderChartSelectors();
-			renderStatsView();
+			closeDropdownThenPaint(yDrop, () => {
+				renderChartSelectors();
+				renderStatsView();
+			});
 		};
 	});
 	yDrop.querySelectorAll("[data-chart-type]").forEach((el) => {
 		el.onclick = () => {
 			setChartType(el.getAttribute("data-chart-type"));
-			renderChartSelectors();
-			renderStatsView();
+			closeDropdownThenPaint(yDrop, () => {
+				renderChartSelectors();
+				renderStatsView();
+			});
 		};
 	});
 	yDrop.querySelectorAll("[data-axis-label]").forEach((el) => {
 		el.onclick = () => {
 			setAxisLabelMode(el.getAttribute("data-axis-label"));
-			renderChartSelectors();
-			renderStatsView();
+			closeDropdownThenPaint(yDrop, () => {
+				renderChartSelectors();
+				renderStatsView();
+			});
 		};
 	});
 	const xSel = getXSelected();
@@ -5265,14 +5502,15 @@ function renderChartSelectors() {
 		el.onclick = () => {
 			setXSelected(el.getAttribute("data-xkey"));
 			chartXOpen = false;
-			xDrop.style.display = "none";
-			renderChartSelectors();
-			renderStatsView();
+			closeDropdownThenPaint(xDrop, () => {
+				renderChartSelectors();
+				renderStatsView();
+			});
 		};
 	});
 }
 function bindChartSelectors() {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const yBtn = doc.getElementById("aus-chart-y-btn");
 	const yDrop = doc.getElementById("aus-chart-y-dropdown");
 	const xBtn = doc.getElementById("aus-chart-x-btn");
@@ -5319,7 +5557,7 @@ function bindChartSelectors() {
 var chart = null;
 var rangeZoom = null;
 async function renderChart(filteredRaw) {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const el = doc.getElementById("aus-stats-chart");
 	if (!el) return;
 	const { labels, series, tips } = aggregateForChart(filteredRaw, getYSelected(), getXSelected());
@@ -5655,7 +5893,7 @@ async function renderChart(filteredRaw) {
 	}, 60);
 }
 function renderModelSummary(filtered) {
-	const tbody = getDoc$6().getElementById("aus-summary-tbody");
+	const tbody = getDoc$7().getElementById("aus-summary-tbody");
 	if (!tbody) return;
 	lastSummaryFiltered = filtered;
 	try {
@@ -5774,7 +6012,7 @@ async function getHistoryForStats() {
 	if (allHistoryPromise) return allHistoryPromise;
 	allHistoryPromise = (async () => {
 		try {
-			const mod = await import("./persistence-CaWdvByH.js").then((n) => n.l);
+			const mod = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
 			if (mod.getAllHistory) {
 				const result = await mod.getAllHistory() || hot;
 				cachedAllHistory = result;
@@ -5816,7 +6054,7 @@ function currentZoomSignature() {
 	].join("|");
 }
 async function renderStatsView() {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	if (!getSelectedSave()) return;
 	const allHistory = await getHistoryForStats();
 	lastStatsHistory = allHistory;
@@ -5890,7 +6128,7 @@ var statsFourBound = false;
 function bindStatsFour() {
 	if (statsFourBound) return;
 	statsFourBound = true;
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	doc.addEventListener("click", (e) => {
 		const t = e.target;
 		for (let i = 0; i < 4; i++) {
@@ -5901,7 +6139,7 @@ function bindStatsFour() {
 	});
 }
 function openStatsFourDrop(idx, v) {
-	const drop = getDoc$6().getElementById(`aus-stats-four-drop-${idx}`);
+	const drop = getDoc$7().getElementById(`aus-stats-four-drop-${idx}`);
 	if (!drop) return;
 	const cur = ensureStatsFour()[idx];
 	drop.innerHTML = FOUR_OPTIONS.map((o) => {
@@ -5918,14 +6156,13 @@ function openStatsFourDrop(idx, v) {
 			try {
 				saveHot({ settings: state$2.settings });
 			} catch {}
-			drop.style.display = "none";
-			renderStatsView();
+			closeDropdownThenPaint(drop, () => renderStatsView());
 		};
 	});
 	drop.style.display = drop.style.display === "block" ? "none" : "block";
 }
 function renderStatsFour(filtered) {
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const host = doc.getElementById("aus-stats-four");
 	if (!host) return;
 	const v = computeStatsFour(filtered || []);
@@ -6313,12 +6550,12 @@ var instances = {};
 var echartsPromise = null;
 var resizeObserver = null;
 var resizeBound = false;
-function getDoc$5() {
+function getDoc$6() {
 	return window.parent?.document ?? document;
 }
 function themeColor(name, fallback) {
 	try {
-		const doc = getDoc$5();
+		const doc = getDoc$6();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -6363,7 +6600,7 @@ function axisMoney(currency, cnyValue) {
 	return currency.symbol + n.toFixed(4);
 }
 async function initChart(id, echarts) {
-	const el = getDoc$5().getElementById(id);
+	const el = getDoc$6().getElementById(id);
 	if (!el) return null;
 	if (!el.clientWidth || !el.clientHeight) return null;
 	if (instances[id]) {
@@ -6383,7 +6620,7 @@ async function initChart(id, echarts) {
 }
 function ensureResizeObserver() {
 	if (resizeObserver || typeof ResizeObserver === "undefined") return;
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const targets = [
 		"aus-forecast-main-chart",
 		"aus-forecast-hit-chart",
@@ -7137,7 +7374,7 @@ var compactionEnabled = true;
 var efficiencyScope = "all";
 var showTop = false;
 var openDropdown = null;
-var renderToken = 0;
+var renderToken$1 = 0;
 var globalCloseBound = false;
 var hitRefreshTimer = null;
 var lastFullHistory = [];
@@ -7145,7 +7382,7 @@ var lastEffectiveHistory = [];
 var lastEfficiencyHistory = [];
 var lastEfficiencyLabel = "全部历史";
 var efficiencySort = null;
-function getDoc$4() {
+function getDoc$5() {
 	return window.parent?.document ?? document;
 }
 function currentChatId() {
@@ -7345,7 +7582,7 @@ function hitSourceText(series) {
 	}
 }
 function closeAllDropdowns() {
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	for (const name of [
 		"chat",
 		"model",
@@ -7358,8 +7595,20 @@ function closeAllDropdowns() {
 	}
 	openDropdown = null;
 }
+/** 选中某一项后要整页重绘时用：先把五个浮层全部瞬时关掉，重绘留到下一帧。 */
+function closeAllDropdownsInstant() {
+	const doc = getDoc$5();
+	for (const name of [
+		"chat",
+		"model",
+		"horizon",
+		"hit",
+		"scope"
+	]) closeDropdownInstant(doc.getElementById(`aus-forecast-${name}-dropdown`));
+	openDropdown = null;
+}
 function toggleDropdown(name) {
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	if (openDropdown === name) {
 		closeAllDropdowns();
 		return;
@@ -7374,7 +7623,7 @@ function bindGlobalClose() {
 	if (globalCloseBound) return;
 	globalCloseBound = true;
 	try {
-		getDoc$4().addEventListener("click", () => closeAllDropdowns());
+		getDoc$5().addEventListener("click", () => closeAllDropdowns());
 	} catch {}
 }
 function dropdownItem(attr, value, label, active, meta = "") {
@@ -7384,42 +7633,43 @@ function dropdownItem(attr, value, label, active, meta = "") {
   </div>`;
 }
 function renderChatDropdown(fullHist) {
-	const dropdown = getDoc$4().getElementById("aus-forecast-chat-dropdown");
+	const dropdown = getDoc$5().getElementById("aus-forecast-chat-dropdown");
 	if (!dropdown) return;
-	const chats = getRecordedChatsForForecast(fullHist);
+	const allChats = getRecordedChatsForForecast(fullHist);
+	const chats = filterPickerRows(allChats);
 	let html = dropdownItem("data-fchat", "__current__", "当前对话", selectedForecastKey === "__current__");
 	html += dropdownItem("data-fchat", "__all__", "全部", selectedForecastKey === "__all__");
 	for (const chat of chats) {
 		const key = chat.chatId ?? "__null__";
 		html += dropdownItem("data-fchat", key, chat.displayName, selectedForecastKey === key, chat.chatId ? "" : "旧数据");
 	}
-	if (!chats.length) html += "<div class=\"aus-forecast-dropdown-empty\">暂无对话</div>";
+	if (!chats.length) html += "<div class=\"aus-forecast-dropdown-empty\">" + (allChats.length ? "对话已全部隐藏（可在「对话展示管理」中恢复）" : "暂无对话") + "</div>";
 	dropdown.innerHTML = html;
 	dropdown.querySelectorAll("[data-fchat]").forEach((el) => {
 		el.onclick = (event) => {
 			event.stopPropagation();
 			selectedForecastKey = el.getAttribute("data-fchat") || "__current__";
 			selectedForecastModel = null;
-			closeAllDropdowns();
-			renderForecastView();
+			closeAllDropdownsInstant();
+			afterNextPaint(() => renderForecastView());
 		};
 	});
 }
 function renderModelDropdown(options) {
-	const dropdown = getDoc$4().getElementById("aus-forecast-model-dropdown");
+	const dropdown = getDoc$5().getElementById("aus-forecast-model-dropdown");
 	if (!dropdown) return;
 	dropdown.innerHTML = options.map((option) => dropdownItem("data-fmodel", option.model, option.model, selectedForecastModel === option.model, `${option.count} 轮`)).join("") || "<div class=\"aus-forecast-dropdown-empty\">暂无模型</div>";
 	dropdown.querySelectorAll("[data-fmodel]").forEach((el) => {
 		el.onclick = (event) => {
 			event.stopPropagation();
 			selectedForecastModel = el.getAttribute("data-fmodel") || null;
-			closeAllDropdowns();
-			renderForecastView();
+			closeAllDropdownsInstant();
+			afterNextPaint(() => renderForecastView());
 		};
 	});
 }
 function renderHorizonDropdown() {
-	const dropdown = getDoc$4().getElementById("aus-forecast-horizon-dropdown");
+	const dropdown = getDoc$5().getElementById("aus-forecast-horizon-dropdown");
 	if (!dropdown) return;
 	dropdown.innerHTML = HORIZONS.map((value) => dropdownItem("data-fhorizon", String(value), `${value} 轮`, horizon === value, value === 10 ? "默认" : "")).join("");
 	dropdown.querySelectorAll("[data-fhorizon]").forEach((el) => {
@@ -7428,8 +7678,8 @@ function renderHorizonDropdown() {
 			const value = Number(el.getAttribute("data-fhorizon"));
 			if (HORIZONS.includes(value)) horizon = value;
 			savePreferences();
-			closeAllDropdowns();
-			renderForecastView();
+			closeAllDropdownsInstant();
+			afterNextPaint(() => renderForecastView());
 		};
 	});
 }
@@ -7439,7 +7689,7 @@ function hitModeLabel(mode, globalRate, modelRate) {
 	return globalRate == null ? "全站平均 —" : `全站平均 ${pct(globalRate)}`;
 }
 function renderHitControl(fullHist, model, series, globalRate, modelRate) {
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	const host = doc.getElementById("aus-forecast-hit-control");
 	if (!host) return;
 	if (selectedForecastKey === "__all__" || !model) {
@@ -7482,8 +7732,8 @@ function renderHitControl(fullHist, model, series, globalRate, modelRate) {
 				const mode = el.getAttribute("data-fhit");
 				if (mode === "global" || mode === "model" || mode === "manual") hitMode = mode;
 				savePreferences();
-				closeAllDropdowns();
-				renderForecastView();
+				closeAllDropdownsInstant();
+				afterNextPaint(() => renderForecastView());
 			};
 		});
 	}
@@ -7504,7 +7754,7 @@ function renderHitControl(fullHist, model, series, globalRate, modelRate) {
 	}
 }
 function renderToolbar(fullHist, effective, modelOptions, model, priceContext, series, globalRate, modelRate) {
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	bindGlobalClose();
 	const chatLabel = doc.getElementById("aus-forecast-chat-label");
 	if (chatLabel) chatLabel.textContent = getForecastLabel(fullHist);
@@ -7568,7 +7818,7 @@ function kpiCard(label, value, sub, tone = "default", title = "") {
   </div>`;
 }
 function renderKpis(series, priceContext, ctxLimit, options, balance) {
-	const host = getDoc$4().getElementById("aus-forecast-kpis");
+	const host = getDoc$5().getElementById("aus-forecast-kpis");
 	if (!host) return;
 	const remaining = balance != null ? simulateRemainingRounds(balance, series, options) : null;
 	const ctxRounds = contextRoundsFor(series, ctxLimit, options.compaction);
@@ -7595,7 +7845,7 @@ function renderKpis(series, priceContext, ctxLimit, options, balance) {
 	].join("");
 }
 function renderHealth(history, model) {
-	const host = getDoc$4().getElementById("aus-forecast-health");
+	const host = getDoc$5().getElementById("aus-forecast-health");
 	if (!host) return;
 	if (!history.length) {
 		host.innerHTML = "<div class=\"aus-forecast-empty\">暂无数据</div>";
@@ -7641,7 +7891,7 @@ function renderHealth(history, model) {
   `;
 }
 function renderCompaction(series, options) {
-	const host = getDoc$4().getElementById("aus-forecast-compaction");
+	const host = getDoc$5().getElementById("aus-forecast-compaction");
 	if (!host) return;
 	const forecast = series.compactionForecast;
 	if (!forecast.detected) {
@@ -7690,7 +7940,7 @@ function sortEfficiencyRows(rows) {
 	});
 }
 function renderEfficiency(history, scopeLabel) {
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	const host = doc.getElementById("aus-forecast-efficiency");
 	const sub = doc.getElementById("aus-forecast-efficiency-sub");
 	const scopeButton = doc.getElementById("aus-forecast-scope-btn");
@@ -7710,8 +7960,8 @@ function renderEfficiency(history, scopeLabel) {
 				const value = el.getAttribute("data-fscope");
 				if (value === "all" || value === "chat") efficiencyScope = value;
 				savePreferences();
-				closeAllDropdowns();
-				renderForecastView();
+				closeAllDropdownsInstant();
+				afterNextPaint(() => renderForecastView());
 			};
 		});
 	}
@@ -7791,8 +8041,8 @@ function renderEfficiency(history, scopeLabel) {
 			if (!model) return;
 			if (!getModelOptions(lastEffectiveHistory).some((option) => option.model === model)) return;
 			selectedForecastModel = model;
-			closeAllDropdowns();
-			renderForecastView();
+			closeAllDropdownsInstant();
+			afterNextPaint(() => renderForecastView());
 		};
 	});
 }
@@ -7802,7 +8052,7 @@ function chatDisplayNameMap(fullHist) {
 	return map;
 }
 function renderTop(fullHist) {
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	const host = doc.getElementById("aus-forecast-top");
 	const toggle = doc.getElementById("aus-forecast-top-toggle");
 	if (!host || !toggle) return;
@@ -7847,7 +8097,7 @@ function renderTop(fullHist) {
 }
 function clearCharts(message) {
 	disposeForecastCharts();
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	for (const id of [
 		"aus-forecast-main-chart",
 		"aus-forecast-hit-chart",
@@ -7858,7 +8108,7 @@ function clearCharts(message) {
 	}
 }
 function renderNoticeCards(message) {
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	const kpis = doc.getElementById("aus-forecast-kpis");
 	if (kpis) kpis.innerHTML = `<div class="ds-card aus-forecast-notice">${esc(message)}</div>`;
 	const health = doc.getElementById("aus-forecast-health");
@@ -7869,17 +8119,17 @@ function renderNoticeCards(message) {
 function renderAllNotice() {
 	renderNoticeCards("当前选择“全部”历史。逐轮预测、压缩与健康度需要单个对话的时间序列；请从上方对话胶囊选择具体对话。下方模型效率对比仍可查看。");
 	clearCharts("请选择单个对话以查看逐轮预测");
-	const mainSub = getDoc$4().getElementById("aus-forecast-main-sub");
+	const mainSub = getDoc$5().getElementById("aus-forecast-main-sub");
 	if (mainSub) mainSub.textContent = "逐轮预测需要指定单个对话";
 }
 function renderNoSeries(message) {
 	renderNoticeCards(message);
 	clearCharts(message);
-	const mainSub = getDoc$4().getElementById("aus-forecast-main-sub");
+	const mainSub = getDoc$5().getElementById("aus-forecast-main-sub");
 	if (mainSub) mainSub.textContent = message;
 }
 function renderMainSub(series, ctxLimit) {
-	const mainSub = getDoc$4().getElementById("aus-forecast-main-sub");
+	const mainSub = getDoc$5().getElementById("aus-forecast-main-sub");
 	if (!mainSub) return;
 	const future = series.future.length;
 	const parts = [
@@ -7892,14 +8142,14 @@ function renderMainSub(series, ctxLimit) {
 	mainSub.textContent = parts.join(" · ");
 }
 async function renderForecastView() {
-	const token = ++renderToken;
+	const token = ++renderToken$1;
 	let fullHist = [];
 	try {
 		fullHist = await repository.getAllHistory();
 	} catch {
 		fullHist = state$2.history || [];
 	}
-	if (token !== renderToken) return;
+	if (token !== renderToken$1) return;
 	lastFullHistory = fullHist;
 	bindGlobalClose();
 	const effective = getEffectiveHist(fullHist);
@@ -8013,7 +8263,7 @@ var MODE_LABELS = [
 		label: "全部覆盖"
 	}
 ];
-function getDoc$3() {
+function getDoc$4() {
 	return window.parent?.document ?? document;
 }
 function money$1(value) {
@@ -8048,7 +8298,7 @@ function tierText(row) {
 	return "<span style=\"color:var(--ds-text-3);text-decoration:line-through;\">" + before + "</span> → <b>" + after + "</b>";
 }
 async function openWalletSyncPreview(options = {}) {
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	const existing = doc.getElementById(OVERLAY_ID);
 	if (existing) existing.remove();
 	const overlay = doc.createElement("div");
@@ -8489,7 +8739,7 @@ function bindPlanBlock(doc, walletId, onChange) {
 }
 //#endregion
 //#region src/ui/wallet-view.ts
-function getDoc$2() {
+function getDoc$3() {
 	return window.parent?.document ?? document;
 }
 function money(cny, digits = 4) {
@@ -8518,12 +8768,18 @@ function cnyToDisplay(value) {
 	return String(Math.round(result * 1e6) / 1e6);
 }
 function closeDropdowns() {
-	getDoc$2().querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
+	getDoc$3().querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
 		el.style.display = "none";
 	});
 }
+/** 选中某一项后要重建钱包页时用：先瞬时收掉全部浮层，重绘留到下一帧。 */
+function closeDropdownsInstant() {
+	getDoc$3().querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
+		closeDropdownInstant(el);
+	});
+}
 function closeOtherDropdowns(id) {
-	getDoc$2().querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
+	getDoc$3().querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
 		if (el.id !== id) el.style.display = "none";
 	});
 }
@@ -8600,7 +8856,7 @@ function renderPeakRows(wallet) {
 function renderCredentialPicker(wallet) {
 	const current = wallet.credentials.find((item) => item.id === wallet.balance.primaryCredentialId);
 	return `
-    <button data-wallet-credential-btn="1" data-wallet-id="${esc(wallet.id)}" style="display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;max-width:100%;">
+    <button data-wallet-credential-btn="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill aus-pill-sm" style="flex-shrink:0;gap:7px;padding:7px 10px;max-width:100%;">
       <span style="color:var(--ds-text-2);">主密钥</span>
       <span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;">${esc(current?.label || "未指定")}</span>
       ${icon("chevron-down", 14)}
@@ -8624,7 +8880,7 @@ function renderCatalogPicker(wallet) {
 	const status = walletSyncStatus(wallet);
 	return `
     <div class="aus-wallet-catalog-picker" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:0 0 auto;min-width:0;max-width:100%;">
-    <button type="button" class="aus-wallet-catalog-btn" data-wallet-catalog-btn="1" data-wallet-id="${esc(wallet.id)}" title="选择价格来源" style="display:flex;align-items:center;gap:7px;flex:0 0 auto;max-width:100%;box-sizing:border-box;min-height:30px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
+    <button type="button" data-wallet-catalog-btn="1" data-wallet-id="${esc(wallet.id)}" title="选择价格来源" class="aus-wallet-catalog-btn aus-pill aus-pill-sm" style="flex:0 0 auto;gap:7px;max-width:100%;box-sizing:border-box;min-height:30px;padding:7px 10px;">
       <span style="color:var(--ds-text-2);flex:0 0 auto;">价格来源</span>
       ${providerIcon ? "<span style=\"display:inline-flex;flex:0 0 auto;color:var(--ds-text-2);\">" + providerIcon + "</span>" : ""}
       <span style="font-weight:600;min-width:0;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(current?.label || "不自动同步")}</span>
@@ -8648,7 +8904,7 @@ function renderAdapterPicker(wallet) {
 	const current = BALANCE_ADAPTERS.find((item) => item.id === wallet.balance.adapter);
 	return `
     <div style="position:relative;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-      <button data-wallet-adapter-btn="1" data-wallet-id="${esc(wallet.id)}" style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
+      <button data-wallet-adapter-btn="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill aus-pill-sm" style="gap:6px;padding:6px 9px;">
         <span style="color:var(--ds-text-2);">查询适配器</span>
         <span style="font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(current?.label || "自动识别")}</span>
         ${icon("chevron-down", 14)}
@@ -8727,7 +8983,7 @@ function renderWalletCard(wallet, history) {
           </div>
           <div style="display:flex;gap:6px;align-items:center;position:relative;">
             <input data-wallet-balance-amount="1" data-wallet-id="${esc(wallet.id)}" value="${esc(wallet.balance.amount ?? "")}" placeholder="手工余额" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-            <button data-wallet-currency-btn="1" data-wallet-id="${esc(wallet.id)}" style="padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">${wallet.balance.currency}${icon("chevron-down", 14)}</button>
+            <button data-wallet-currency-btn="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill aus-pill-sm" style="gap:4px;padding:7px 10px;">${wallet.balance.currency}${icon("chevron-down", 14)}</button>
             <div id="aus-wallet-currency-drop-${esc(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;right:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:6px;min-width:110px;">
               ${dropdownHtml(wallet.id, "currency", [{
 		id: "CNY",
@@ -8799,7 +9055,7 @@ function renderIgnoredWallets(ignored, wallets) {
 }
 var walletRenderToken = 0;
 async function renderWalletView() {
-	const doc = getDoc$2();
+	const doc = getDoc$3();
 	const host = doc.getElementById("aus-wallet");
 	if (!host) return;
 	const token = ++walletRenderToken;
@@ -8832,17 +9088,12 @@ async function renderWalletView() {
 			id: "plan",
 			label: "可查套餐",
 			count: planCapable.length
-		},
-		{
-			id: "official",
-			label: "官方",
-			count: active.filter((wallet) => wallet.id === DEEPSEEK_WALLET_ID).length
 		}
 	];
+	if (!filters.some((item) => item.id === walletFilter)) walletFilter = "all";
 	const matchesFilter = (wallet) => {
 		if (walletFilter === "pending") return walletPendingModelCount(wallet) > 0;
 		if (walletFilter === "plan") return resolveBalanceAdapter(wallet)?.supports.plan === true;
-		if (walletFilter === "official") return wallet.id === DEEPSEEK_WALLET_ID;
 		return true;
 	};
 	const anyCollapsed = active.some((wallet) => wallet.collapsed);
@@ -8942,7 +9193,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-BdsjuDiq.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-6oTd4dyg.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -9279,8 +9530,8 @@ function bindWalletView(doc) {
 			else if (kind === "credential") repository.updateWallet(walletId, (wallet) => {
 				wallet.balance.primaryCredentialId = value || null;
 			});
-			closeDropdowns();
-			renderWalletView();
+			closeDropdownsInstant();
+			afterNextPaint(() => renderWalletView());
 		};
 	});
 	const searchInput = doc.querySelector("[data-wallet-search]");
@@ -9336,8 +9587,743 @@ function bindWalletView(doc) {
 		});
 	}
 }
+//#endregion
+//#region src/ui/chat-manage.ts
+/**
+* 对话展示管理页（`data-view="chat-manage"`）。
+*
+* 入口三处，都进同一个页面：概览「按对话统计」标题右侧、趋势预测页顶部、
+* 设置页的「对话展示」设置项。页面本身是扁平同级视图，不挂在任何导航 tab 下，
+* 底栏布局下由 `nav-model.ts#CHILD_PARENT` 归到「概览」tab（底栏高亮与顶栏返回
+* 都回到进入前的来源页，来源由 `panel.ts` 记录并注入 `initChatManageView`）。
+*
+* 页面管两件事，两套独立的隐藏集合（`chat-visibility.ts`）：
+* - 「表格展示」：该对话是否出现在概览「按对话统计」表里；
+* - 「下拉选项」：该对话是否出现在统计页/历史页/趋势预测页的「对话」下拉胶囊里。
+* 两者都只改展示，不删数据、不参与任何统计口径——热力图、统计、历史、趋势预测、
+* 能耗评分依旧按全量历史计算，与用户要求「不影响数据统计展示」一致。
+*/
+var navigator = null;
+/** 切页导航回调由 panel.ts 注册（避免 chat-manage 反向 import panel 造成循环依赖） */
+function initChatManageView(opts) {
+	navigator = opts;
+}
+function getDoc$2() {
+	return window.parent?.document ?? document;
+}
+/** 搜索关键词（只在本页内过滤显示，不进存储） */
+var keyword = "";
+/** 最近一次聚合结果，供搜索、模式切换与重绘复用 */
+var rows = [];
+/** 当前管理模式：表格展示 / 下拉选项（只在本次会话内记忆） */
+var mode = "table";
+/** 渲染令牌：热数据先画、冷数据补全，快速切页时丢弃过期结果 */
+var renderToken = 0;
+var MODES = [{
+	key: "table",
+	label: "表格展示",
+	title: "控制哪些对话出现在概览「按对话统计」表格",
+	desc: "只控制「按对话统计」表格里是否列出该对话：隐藏不会删除任何数据，热力图、用量统计、历史记录与趋势预测仍按全部历史计算。"
+}, {
+	key: "picker",
+	label: "下拉选项",
+	title: "控制哪些对话出现在各页「对话」下拉胶囊",
+	desc: "只控制统计页、历史页与趋势预测页的「对话」下拉胶囊里是否列出该对话：隐藏不会删除任何数据，各页统计口径不变。"
+}];
+function modeInfo() {
+	return MODES.find((m) => m.key === mode) || MODES[0];
+}
+function shellHTML() {
+	const info = modeInfo();
+	return [
+		"<div id=\"aus-chat-manage-head\">",
+		"<div class=\"aus-chat-manage-lead\">",
+		"<div class=\"aus-chat-manage-title\">对话展示管理</div>",
+		"<div class=\"aus-chat-manage-desc\" id=\"aus-chat-manage-desc\">" + esc(info.desc) + "</div>",
+		"</div>",
+		"<div id=\"aus-chat-manage-tools\">",
+		"<input id=\"aus-chat-manage-search\" type=\"text\" placeholder=\"搜索对话\" value=\"" + esc(keyword) + "\" />",
+		"<button id=\"aus-chat-manage-reset\" type=\"button\" class=\"aus-chat-manage-btn\">全部显示</button>",
+		"<button id=\"aus-chat-manage-hide-all\" type=\"button\" class=\"aus-chat-manage-btn\">全部隐藏</button>",
+		"<button id=\"aus-chat-manage-back\" type=\"button\" class=\"aus-chat-manage-btn\" title=\"回到进入本页之前的页面\">" + icon("chevron-left", 14) + "返回</button>",
+		"</div>",
+		"</div>",
+		"<div id=\"aus-chat-manage-modes\" data-mode=\"" + mode + "\" role=\"tablist\" aria-label=\"管理模式\">",
+		"<span class=\"aus-chat-manage-mode-thumb\" aria-hidden=\"true\"></span>",
+		MODES.map((m) => "<button type=\"button\" class=\"aus-chat-manage-mode\" role=\"tab\" data-manage-mode=\"" + m.key + "\" data-active=\"" + (m.key === mode ? "1" : "0") + "\" aria-selected=\"" + (m.key === mode ? "true" : "false") + "\" title=\"" + esc(m.title) + "\">" + esc(m.label) + "</button>").join(""),
+		"</div>",
+		"<div class=\"ds-card aus-chat-manage-card\">",
+		"<div id=\"aus-chat-manage-list\"></div>",
+		"</div>",
+		"<div id=\"aus-chat-manage-foot\"></div>"
+	].join("");
+}
+function rowHTML(row, index) {
+	const key = chatVisibilityKey(row.chatId);
+	const hidden = isHiddenFor(mode, key);
+	let costTxt = "¥" + row.cost.toFixed(4);
+	try {
+		costTxt = formatMoney(row.cost, 4);
+	} catch {}
+	const meta = row.count + " 轮 · " + row.total.toLocaleString("zh-CN") + " tokens · " + costTxt;
+	const aria = row.displayName + "：" + (mode === "picker" ? "在「对话」下拉胶囊中展示" : "在按对话统计中展示");
+	return [
+		"<div class=\"aus-chat-manage-row\" data-chat-row=\"" + esc(key) + "\" data-chat-name=\"" + esc(row.displayName.toLowerCase()) + "\" data-hidden=\"" + (hidden ? "1" : "0") + "\">",
+		"<div class=\"aus-chat-manage-main\">",
+		"<div class=\"aus-chat-manage-name\" title=\"" + esc(row.chatId || row.displayName) + "\">" + esc(row.displayName) + "</div>",
+		"<div class=\"aus-chat-manage-meta\">" + meta + "</div>",
+		"</div>",
+		"<span class=\"aus-chat-manage-state\" data-state>" + (hidden ? "已隐藏" : "展示中") + "</span>",
+		switchHTML("aus-chat-sw-" + index, {
+			checked: !hidden,
+			ariaLabel: aria
+		}),
+		"</div>"
+	].join("");
+}
+function applyKeywordFilter(doc) {
+	const list = doc.getElementById("aus-chat-manage-list");
+	if (!list) return;
+	const kw = keyword.trim().toLowerCase();
+	list.querySelectorAll("[data-chat-row]").forEach((el) => {
+		const name = el.getAttribute("data-chat-name") || "";
+		el.style.display = !kw || name.includes(kw) ? "" : "none";
+	});
+}
+function paintFoot(doc) {
+	const foot = doc.getElementById("aus-chat-manage-foot");
+	if (!foot) return;
+	const total = rows.length;
+	const hidden = rows.filter((r) => isHiddenFor(mode, chatVisibilityKey(r.chatId))).length;
+	const where = mode === "picker" ? "「对话」下拉胶囊" : "「按对话统计」表";
+	foot.textContent = total ? "共 " + total + " 个对话 · 已隐藏 " + hidden + " 个" + (hidden ? "（隐藏项不会出现在" + where + "中）" : "") : "暂无对话数据";
+}
+/** 重画列表（数据、模式或显隐变更后调用） */
+function paintList(doc) {
+	const list = doc.getElementById("aus-chat-manage-list");
+	if (!list) return;
+	if (!rows.length) {
+		list.innerHTML = "<div style=\"padding:20px 16px;text-align:center;color:var(--ds-text-3);font-size:var(--aus-fs-sm);\">暂无可管理的对话，产生用量记录后即可在此设置</div>";
+		paintFoot(doc);
+		return;
+	}
+	list.innerHTML = rows.map((row, i) => rowHTML(row, i)).join("");
+	applyKeywordFilter(doc);
+	paintFoot(doc);
+	try {
+		paintChatManageBadge(doc);
+	} catch {}
+}
+/**
+* 滑块定位：按当前选中按钮的实测几何写入 position/size（与底栏指示胶囊同一套思路）。
+* 不假设两项等宽、也不写死 50%，改文案、换字号、改内距都不会错位；首次定位关过渡，避免从左侧飞过来。
+*/
+function paintModeThumb(doc) {
+	const wrap = doc.getElementById("aus-chat-manage-modes");
+	if (!wrap) return;
+	const btn = wrap.querySelector("[data-manage-mode=\"" + mode + "\"]");
+	const thumb = wrap.querySelector(".aus-chat-manage-mode-thumb");
+	if (!btn || !thumb) return;
+	const wr = wrap.getBoundingClientRect();
+	const br = btn.getBoundingClientRect();
+	if (!wr.width || !br.width) {
+		thumb.style.opacity = "0";
+		return;
+	}
+	thumb.style.opacity = "1";
+	thumb.style.width = Math.round(br.width) + "px";
+	thumb.style.height = Math.round(br.height) + "px";
+	const next = "translate3d(" + Math.round(br.left - wr.left) + "px," + Math.round(br.top - wr.top) + "px,0)";
+	if (wrap.getAttribute("data-ready") !== "1") {
+		const prev = thumb.style.transition;
+		thumb.style.transition = "none";
+		thumb.style.transform = next;
+		thumb.offsetWidth;
+		thumb.style.transition = prev;
+		wrap.setAttribute("data-ready", "1");
+	} else thumb.style.transform = next;
+}
+/** 窗口尺寸变化（含窄屏断点切换内距）后重新贴合；同一容器只绑一次 */
+function bindModeThumbResize(doc) {
+	const wrap = doc.getElementById("aus-chat-manage-modes");
+	if (!wrap || wrap.getAttribute("data-thumb-resize") === "1") return;
+	wrap.setAttribute("data-thumb-resize", "1");
+	try {
+		doc.defaultView?.addEventListener("resize", () => {
+			try {
+				paintModeThumb(doc);
+			} catch {}
+		});
+	} catch {}
+}
+/** 切换管理模式：重画描述、滑块与其选中态，再重画整张列表 */
+function paintMode(doc) {
+	const desc = doc.getElementById("aus-chat-manage-desc");
+	if (desc) desc.textContent = modeInfo().desc;
+	const wrap = doc.getElementById("aus-chat-manage-modes");
+	if (wrap) wrap.setAttribute("data-mode", mode);
+	doc.querySelectorAll("[data-manage-mode]").forEach((el) => {
+		const on = el.getAttribute("data-manage-mode") === mode;
+		el.setAttribute("data-active", on ? "1" : "0");
+		el.setAttribute("aria-selected", on ? "true" : "false");
+	});
+	try {
+		paintModeThumb(doc);
+	} catch {}
+	paintList(doc);
+}
+/** 绑定 shell 内的按钮与列表事件（幂等：只在首次构建 shell 时绑定一次） */
+function bindShell(doc) {
+	const list = doc.getElementById("aus-chat-manage-list");
+	list?.addEventListener("change", (e) => {
+		const input = e.target;
+		if (!input || input.type !== "checkbox") return;
+		const rowEl = input.closest("[data-chat-row]");
+		const key = rowEl?.getAttribute("data-chat-row") || "";
+		if (!key) return;
+		setHiddenFor(mode, key, !input.checked);
+		if (rowEl) {
+			rowEl.setAttribute("data-hidden", input.checked ? "0" : "1");
+			const stateEl = rowEl.querySelector("[data-state]");
+			if (stateEl) stateEl.textContent = input.checked ? "展示中" : "已隐藏";
+		}
+		paintFoot(doc);
+		try {
+			paintChatManageBadge(doc);
+		} catch {}
+	});
+	list?.addEventListener("click", (e) => {
+		const target = e.target;
+		if (!target || target.closest("label.aus-switch")) return;
+		const rowEl = target.closest("[data-chat-row]");
+		if (!rowEl) return;
+		const input = rowEl.querySelector("input[type=\"checkbox\"]");
+		if (!input) return;
+		input.checked = !input.checked;
+		input.dispatchEvent(new doc.defaultView.Event("change", { bubbles: true }));
+	});
+	const search = doc.getElementById("aus-chat-manage-search");
+	search?.addEventListener("input", () => {
+		keyword = search.value || "";
+		applyKeywordFilter(doc);
+	});
+	doc.getElementById("aus-chat-manage-reset")?.addEventListener("click", () => {
+		clearHiddenFor(mode);
+		paintList(doc);
+	});
+	doc.getElementById("aus-chat-manage-hide-all")?.addEventListener("click", () => {
+		setAllHiddenFor(mode, rows.map((row) => chatVisibilityKey(row.chatId)), true);
+		paintList(doc);
+	});
+	doc.getElementById("aus-chat-manage-back")?.addEventListener("click", () => {
+		try {
+			navigator?.go();
+		} catch {}
+	});
+	doc.querySelectorAll("[data-manage-mode]").forEach((el) => {
+		el.addEventListener("click", () => {
+			const next = el.getAttribute("data-manage-mode");
+			if (next !== "table" && next !== "picker") return;
+			if (next === mode) return;
+			mode = next;
+			paintMode(doc);
+		});
+	});
+}
+/**
+* 渲染管理页：先用热数据（最近 50 条）立即出图，再异步用冷存储全量补全，
+* 避免打开页面时空白等待 IndexedDB（与概览「按对话统计」同一套补全思路）。
+*/
+async function renderChatManageView() {
+	const doc = getDoc$2();
+	const host = doc.getElementById("aus-chat-manage-body");
+	if (!host) return;
+	if (!host.firstChild) {
+		host.innerHTML = shellHTML();
+		try {
+			bindShell(doc);
+		} catch {}
+		try {
+			bindModeThumbResize(doc);
+		} catch {}
+		try {
+			paintModeThumb(doc);
+		} catch {}
+	} else paintMode(doc);
+	const token = ++renderToken;
+	const hot = state$2.history || [];
+	rows = computeChatStats(hot);
+	paintList(doc);
+	try {
+		const all = await repository.getAllHistory();
+		if (token !== renderToken) return;
+		if (!all || !all.length || all.length <= hot.length) return;
+		rows = computeChatStats(all);
+		paintList(doc);
+	} catch {}
+}
+//#endregion
+//#region src/ui/help-view.ts
+/** 完整使用文档（线上文档站）与隐私条款锚点，全站单一定义。 */
+var HELP_DOC_URL = "https://janmk1453.github.io/Api-Usage/";
+var HELP_PRIVACY_URL = "https://janmk1453.github.io/Api-Usage/#privacy";
+function guideCard(iconName, title, steps) {
+	return `<section class="ds-card aus-help-card">
+      <div class="aus-help-card-head"><span class="aus-help-card-icon">${icon(iconName, 16)}</span><span class="aus-help-card-title">${title}</span></div>
+      <ol class="aus-help-steps">${steps.map((text) => `<li>${text}</li>`).join("")}</ol>
+    </section>`;
+}
+function legalList(items) {
+	return `<ul class="aus-help-legal-list">${items.map((text) => `<li>${text}</li>`).join("")}</ul>`;
+}
+var PRIVACY_ITEMS = [
+	"扩展在酒馆里只能读到密钥条目的<strong>编号、备注与掩码末三位</strong>，仅用于区分请求来源，不会读取、保存或上传完整密钥。",
+	"你保存在酒馆里的密钥是安全的，扩展无法获取真实密钥。",
+	"你主动填入扩展的<strong>校准密钥</strong>是真实可用的密钥，只用于查询该钱包对应厂商的余额或套餐额度（DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita、智谱 GLM、MiniMax，以及你自填的 new-api 中转），不会额外扣费或消耗。",
+	"校准密钥经 XOR 混淆后存放在 SillyTavern，<strong>不进入历史记录、统计、日志、导入导出与 WebDAV</strong>。",
+	"查询由浏览器直连厂商接口，不经过第三方代理；未开放跨域（CORS）的厂商会直接失败并提示，扩展不会绕过该限制。",
+	"XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。",
+	"本扩展完整代码开源，可自行审查。"
+];
+var DISCLAIMER_ITEMS = [
+	"「价格来源」「自动同步」用到 <a href=\"https://models.dev\" target=\"_blank\" rel=\"noreferrer\">models.dev</a> 的数据，其中若出现商业化中转站，扩展不负责也不推荐；数据量太大难以完全筛净，与 models.dev 及任何中转站都没有商业往来，坚定反对商业化。",
+	"「套餐额度」中的本地估算基于本扩展记录推算，不含其他设备或其他客户端的消耗，可能与实际有偏差，<strong>仅供展示参考，不参与计费、导出与云同步，不能作为账单依据</strong>；对没有公开接口或未开放跨域的厂商（Claude Code、Codex、OpenCode、GitHub Copilot、Cursor、讯飞星辰等）不提供自动查询，也不会绕过限制。",
+	"界面中的厂商图标与名称商标归各自所有者，仅用于标识接入来源，不构成任何关联、合作或背书；图标数据内联自 simple-icons（CC0 发布）。",
+	"会尽可能维护扩展的安全与隐私性，但不对因酒馆或本扩展的安全漏洞及间接原因导致的密钥泄露与损失负责。"
+];
+var GUIDES = [
+	[
+		"brand",
+		"开始使用",
+		[
+			"在酒馆左下角打开魔法棒菜单，点「API用量统计」进入扩展面板。",
+			"之后正常对话即可，扩展会自动记录每次请求。",
+			"桌面用左侧栏切换页面，手机用底部标签栏切换。"
+		]
+	],
+	[
+		"overview",
+		"用量概览",
+		[
+			"顶部两张卡是充值余额与累计消费，余额旁的下拉可切换其它钱包。",
+			"8 个数据块、Token 热力图与按对话统计都按全部历史汇总。",
+			"「按对话统计」点表头可排序，右上角「管理对话」可隐藏不常看的对话。"
+		]
+	],
+	[
+		"stats",
+		"用量统计",
+		[
+			"用时间、模型、对话、接入类型、API 密钥五个胶囊筛选，模型可多选。",
+			"三块总量、四个小块、模型汇总表与全部图表都跟随筛选。",
+			"图表里可自选 Y 指标与 X 维度，Y 下拉底部可切自动 / 柱状 / 曲线 / 面积。",
+			"筛选结果会记住，点「重置筛选」可回到默认范围。"
+		]
+	],
+	[
+		"history",
+		"历史记录",
+		[
+			"列表按时间倒序，每页 30 条，可按模型、对话、接入类型与 API 密钥筛选。",
+			"点「详情」查看单条数据：请求参数、完整响应、Raw 用量与消息内容。",
+			"先对较早一条点「旧」、再对较晚一条点「新」，可对比两条消息的差异。",
+			"详情窗口在电脑端从右侧打开，手机端从屏幕下方弹出。"
+		]
+	],
+	[
+		"forecast",
+		"趋势预测",
+		[
+			"选好对话、计价模型与视界（预测未来几轮），页面给出下一轮预测、余额可撑轮数与三张趋势图。",
+			"对话内出现上下文压缩时，打开「压缩情景」可看压缩后的锯齿预测。",
+			"页面下方是模型效率表与对话健康评分。",
+			"工具栏「管理对话」可决定本页对话胶囊里显示哪些对话。"
+		]
+	],
+	[
+		"wallet",
+		"钱包",
+		[
+			"扩展按接入链接自动创建钱包，DeepSeek 官方钱包始终保留。",
+			"展开钱包可改名称、余额、模型价格、峰谷规则与价格来源。",
+			"勾选「自动校准」并填好该钱包的校准密钥后，会按设置里的间隔自动查余额。",
+			"点忽略后钱包进入「已忽略接入」，不参与合计，可在页面底部恢复显示。"
+		]
+	],
+	[
+		"settings",
+		"设置与数据",
+		[
+			"颜色模式、移动端兼容 UI、历史显示范围与匿名统计都在设置页顶部。",
+			"「对话展示」管理对话显示，「按范围删除记录」可按日期、模型、对话删除。",
+			"WebDAV 云同步可跨设备同步记录与钱包；「存储占用」里能清理旧版迁移备份。",
+			"峰谷规则与「额外空闲日期」决定费用计算，默认按 DeepSeek 官方规则。"
+		]
+	],
+	[
+		"menu",
+		"对话展示管理",
+		[
+			"从概览「按对话统计」右上角、趋势预测工具栏或设置页「对话展示」进入，返回时回到进入前的页面。",
+			"「表格展示」模式管概览统计表里显示哪些对话。",
+			"「下拉选项」模式管统计页、历史页、趋势预测页「对话」下拉里的选项。",
+			"支持搜索、全部显示、全部隐藏；只影响显示，不删除任何数据。"
+		]
+	]
+];
+/** 使用说明页整页 HTML（内容全部静态，交互由 style.css 与原生链接承担）。 */
+function helpViewHTML() {
+	const guides = GUIDES.map(([iconName, title, steps]) => guideCard(iconName, title, steps)).join("");
+	return `
+    <div id="aus-help-body">
+      <a class="aus-help-hero" href="${HELP_DOC_URL}" target="_blank" rel="noreferrer">
+        <span class="aus-help-hero-icon">${icon("help", 20)}</span>
+        <span class="aus-help-hero-main">
+          <span class="aus-help-hero-title">完整使用文档</span>
+          <span class="aus-help-hero-desc">逐页说明筛选、钱包与定价、云同步和常见问题</span>
+        </span>
+        <span class="aus-help-hero-arrow">${icon("chevron-right", 16)}</span>
+      </a>
+
+      <div class="ds-card" id="aus-help-legal">
+        <p class="aus-help-legal-notice">安装、启用或使用本扩展，即视为您已阅读、理解并同意本声明的全部内容。如不同意，请立即停止使用并卸载本扩展。</p>
+        <section class="aus-help-legal-block" data-kind="privacy">
+          <div class="aus-help-legal-head">
+            <span class="aus-help-legal-dot"></span>
+            <span class="aus-help-legal-title">隐私声明</span>
+            <a class="aus-help-legal-link" href="${HELP_PRIVACY_URL}" target="_blank" rel="noreferrer">完整版${icon("chevron-right", 12)}</a>
+          </div>
+          ${legalList(PRIVACY_ITEMS)}
+        </section>
+        <section class="aus-help-legal-block" data-kind="disclaimer">
+          <div class="aus-help-legal-head">
+            <span class="aus-help-legal-dot"></span>
+            <span class="aus-help-legal-title">免责声明</span>
+            <a class="aus-help-legal-link" href="${HELP_PRIVACY_URL}" target="_blank" rel="noreferrer">完整版${icon("chevron-right", 12)}</a>
+          </div>
+          ${legalList(DISCLAIMER_ITEMS)}
+        </section>
+      </div>
+
+      <div id="aus-help-guides">${guides}</div>
+
+      <div class="ds-card" id="aus-help-foot">
+        <div class="aus-help-foot-sec">
+          <div class="aus-help-foot-title">模型兼容</div>
+          <div class="aus-help-foot-text">完全兼容 DeepSeek 官方 API；其它厂商与渠道尽量兼容，部分模型可能没有缓存命中。数据异常时请携带完整请求与响应反馈。</div>
+        </div>
+        <div class="aus-help-foot-sec">
+          <div class="aus-help-foot-title">关于</div>
+          <div class="aus-help-foot-text">由原脚本 <a href="https://github.com/janmk1453/deepseek-tavern-script" target="_blank" rel="noreferrer">deepseek-tavern-script</a> 迁移重构 · <span style="color:var(--ds-text);">@janmk</span> · 仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">janmk1453/Api-Usage</a></div>
+        </div>
+      </div>
+    </div>`;
+}
+//#endregion
+//#region src/ui/chart-picker.ts
+var ESCAPE = {
+	"&": "&amp;",
+	"\"": "&quot;",
+	"<": "&lt;",
+	">": "&gt;"
+};
+var escText = (value) => String(value).replace(/[&"<>]/g, (ch) => ESCAPE[ch] || ch);
+/** 单枚轴设置胶囊；箭头只在真有下拉时出现（箭头永远是最后一个 svg，pill.ts 旋转它） */
+function chartPillHTML(pill) {
+	const hasDrop = pill.dropdown !== false;
+	return `<button type="button" class="aus-chart-pill" id="${escText(pill.btnId)}" data-axis-key="${escText(pill.key)}"><span class="aus-chart-pill-key">${escText(pill.key)}</span><span class="aus-chart-pill-val" id="${escText(pill.labelId)}">${escText(pill.label)}</span>` + (hasDrop ? icon("chevron-down", 14) : "") + "</button>";
+}
+/** 下拉浮层；data-axis 决定从胶囊左端（Y）还是右端（X）展开 */
+function chartDropdownHTML(pill) {
+	const axis = pill.key === "X" ? "x" : "y";
+	return `<div class="aus-chart-dropdown" id="${escText(pill.dropId)}" data-axis="${axis}" style="display:none;"></div>`;
+}
+/** 右上角设置区：胶囊并排 + 各自的绝对定位下拉（同一个 relative 容器里，位置随胶囊走） */
+function chartAxisPickerHTML(pills) {
+	return `<div class="aus-chart-picker">${pills.map(chartPillHTML).join("")}${pills.filter((pill) => pill.dropdown !== false).map(chartDropdownHTML).join("")}</div>`;
+}
+/** 统计页图表卡片：标题行 + 图表容器 */
+function chartCardHTML(spec) {
+	const pills = spec.pills && spec.pills.length ? chartAxisPickerHTML(spec.pills) : "";
+	const cardId = spec.cardId ? ` id="${escText(spec.cardId)}"` : "";
+	const height = spec.height ?? 220;
+	return `<div class="ds-card aus-chart-card"${cardId}><div class="aus-chart-card-head"><span class="aus-chart-card-title">${escText(spec.title)}</span>` + pills + `</div><div id="${escText(spec.chartId)}" style="height:${height}px;"></div></div>`;
+}
+//#endregion
+//#region src/ui/back-debug.ts
+/**
+* 返回键诊断日志（临时排查用）。
+*
+* 为什么要有这个文件：安卓返回键在真机上「从二级页返回后再按一次就退出酒馆」的现象
+* 没法在桌面无头浏览器里复现（`input keyevent`/`input swipe` 的手势序列与真手指不同），
+* 只能把扩展内部的关键事件现场记下来，事后再读。
+*
+* 记录方式（两条互相独立、互为兜底）：
+*   1. `localStorage[aus_back_debug_v1]`：环形缓冲最多 {@link BACK_DEBUG_MAX} 条，
+*      页面被卸载/重载后依然能读到（同源持久化）；
+*   2. `console.log('[aus-back]', json)`：可用 DevTools / chrome://inspect 实时观察。
+*
+* 读取方式：`window.__ausBackDebug.dump()` 取全部记录，`clear()` 清空。
+* 关闭记录：`localStorage.setItem('aus_back_debug_off', '1')`，刷新后不再写。
+*
+* 本模块只做记录，不参与任何业务判断；所有操作都包在 try/catch 里，出错绝不外溢。
+*/
+var BACK_DEBUG_KEY = "aus_back_debug_v1";
+var BACK_DEBUG_OFF_KEY = "aus_back_debug_off";
+var ring = [];
+var loaded = false;
+var installed = false;
+var flushTimer = null;
+var bootTs = Date.now();
+function storage() {
+	try {
+		return typeof localStorage !== "undefined" ? localStorage : null;
+	} catch {
+		return null;
+	}
+}
+function pad(n, w = 2) {
+	return String(n).padStart(w, "0");
+}
+function stamp() {
+	const d = /* @__PURE__ */ new Date();
+	return pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()) + "." + pad(d.getMilliseconds(), 3);
+}
+function shortState(state) {
+	if (state === null || state === void 0) return null;
+	try {
+		const text = JSON.stringify(state);
+		if (typeof text !== "string") return null;
+		return text.length > 160 ? text.slice(0, 160) + "…" : text;
+	} catch {
+		return null;
+	}
+}
+/** 首次调用时把上次会话残留的日志读回环形缓冲（页面重载不丢） */
+function loadOnce() {
+	if (loaded) return;
+	loaded = true;
+	const ls = storage();
+	if (!ls) return;
+	try {
+		const raw = ls.getItem(BACK_DEBUG_KEY);
+		const arr = raw ? JSON.parse(raw) : null;
+		if (Array.isArray(arr)) ring = arr.slice(-300);
+	} catch {
+		ring = [];
+	}
+}
+function flushNow() {
+	flushTimer = null;
+	const ls = storage();
+	if (!ls) return;
+	try {
+		ls.setItem(BACK_DEBUG_KEY, JSON.stringify(ring));
+	} catch {}
+}
+function scheduleFlush() {
+	if (flushTimer) return;
+	try {
+		flushTimer = setTimeout(flushNow, 120);
+	} catch {
+		flushTimer = null;
+	}
+}
+function debugDisabled() {
+	const ls = storage();
+	if (!ls) return false;
+	try {
+		return ls.getItem(BACK_DEBUG_OFF_KEY) === "1";
+	} catch {
+		return false;
+	}
+}
+function snapshot() {
+	const out = {};
+	try {
+		if (typeof history !== "undefined") {
+			out.len = history.length;
+			out.st = shortState(history.state);
+		}
+	} catch {}
+	try {
+		const doc = typeof document !== "undefined" ? document : null;
+		const panel = doc?.getElementById("aus-panel");
+		if (panel) {
+			out.panel = panel.style.display || "shown";
+			const view = Array.from(panel.querySelectorAll("[data-view]")).find((el) => {
+				try {
+					return el.getClientRects().length > 0;
+				} catch {
+					return false;
+				}
+			})?.getAttribute("data-view");
+			if (view) out.view = view;
+		}
+		if (doc) out.vis = doc.visibilityState;
+	} catch {}
+	try {
+		out.iframe = typeof window !== "undefined" && window.parent !== window;
+	} catch {
+		out.iframe = null;
+	}
+	return out;
+}
+/** 记一条诊断日志（不出错、不阻塞） */
+function backDebug(kind, extra) {
+	try {
+		if (debugDisabled()) return;
+		loadOnce();
+		const rec = {
+			t: stamp(),
+			ms: Date.now() - bootTs,
+			k: kind,
+			...snapshot(),
+			...extra || {}
+		};
+		ring.push(rec);
+		if (ring.length > 300) ring.splice(0, ring.length - 300);
+		scheduleFlush();
+		try {
+			console.log("[aus-back]", JSON.stringify(rec));
+		} catch {}
+	} catch {}
+}
+/** 取全部记录（副本） */
+function backDebugDump() {
+	try {
+		loadOnce();
+		return ring.slice();
+	} catch {
+		return [];
+	}
+}
+/** 清空记录（内存 + localStorage） */
+function backDebugClear() {
+	ring = [];
+	loaded = true;
+	flushNow();
+	return "cleared";
+}
+/**
+* 注册页面级监听并挂出读取入口。幂等；由 index.ts 在入口尽早调用，
+* 保证面板还没打开时的返回事件也会被记上。
+*/
+function installBackDebug(target) {
+	if (installed) return;
+	installed = true;
+	loadOnce();
+	const w = target || (typeof window !== "undefined" ? window : null);
+	if (!w) return;
+	try {
+		w.__ausBackDebug = {
+			dump: backDebugDump,
+			clear: backDebugClear,
+			log: backDebug,
+			key: BACK_DEBUG_KEY
+		};
+	} catch {}
+	try {
+		w.addEventListener("popstate", (ev) => {
+			backDebug("pop-raw", {
+				evSt: shortState(ev?.state),
+				evLen: w.history?.length
+			});
+		});
+	} catch {}
+	try {
+		w.addEventListener("pagehide", () => backDebug("pagehide"));
+	} catch {}
+	try {
+		w.addEventListener("pageshow", () => backDebug("pageshow"));
+	} catch {}
+	try {
+		w.addEventListener("beforeunload", () => backDebug("beforeunload"));
+	} catch {}
+	try {
+		w.addEventListener("unload", () => backDebug("unload"));
+	} catch {}
+	try {
+		w.document?.addEventListener?.("visibilitychange", () => backDebug("visibility", { vis: w.document.visibilityState }));
+	} catch {}
+	backDebug("init", { href: String(w.location?.href || "") });
+}
+//#endregion
+//#region src/ui/back-guard.ts
+/**
+* 安卓返回键接管用到的纯逻辑 —— 只做状态换算，不碰 DOM 与 history，
+* 真正的 pushState / 事件监听留在 `ui/panel.ts`。
+*
+* 现在的语义很简单：窄屏打开面板时，往酒馆当前记录之上压**一条**哨兵，
+* 用户按一次系统返回就关掉面板、留在酒馆页面，不再做「逐层后退」。
+*
+* 为什么不再压多层、也不再补压（真机日志换来的结论）：
+*   ① 在 popstate 里 pushState 补压会被浏览器的「历史操纵干预」吃掉——页面在事件里
+*      插入的记录会被忽略，用户下一次手势直接跳过哨兵退进旧文档，表现就是整页重载，
+*      也就是用户说的「退出酒馆」；
+*   ② 压得越多，关面板后留在历史里的空记录越多，用户回上一页要多按好几次。
+* 一条哨兵就够隔开「一次返回」，所以 BACK_GUARD_DEPTH 固定为 1。
+*/
+/** 哨兵历史记录在 state 上的标记键 */
+var AUS_BACK_FLAG = "__ausBackGuard";
+/**
+* 读取某条历史 state 的哨兵深度（= 它距酒馆自己那条记录的步数）。
+* 不是我们压的记录、或值非法一律返回 0（0 表示「就在酒馆页面上」）。
+* 旧版本压过 3/6 条，残留标记会被夹到 1，按「一条哨兵」处理。
+*/
+function readGuardDepth(state) {
+	if (!state || typeof state !== "object") return 0;
+	const raw = state[AUS_BACK_FLAG];
+	const n = typeof raw === "number" ? raw : Number(raw);
+	if (!Number.isFinite(n) || n <= 0) return 0;
+	return Math.min(Math.floor(n), 1);
+}
+/** 以 base 为底生成「深度为 depth」的哨兵 state；不修改传入的 base */
+function nextGuardState(base, depth) {
+	const next = base && typeof base === "object" ? { ...base } : {};
+	next[AUS_BACK_FLAG] = Math.max(1, Math.min((Number.isFinite(depth) ? Math.floor(depth) : 0) || 1, 1));
+	return next;
+}
+/** 摘掉哨兵标记（压新哨兵前把当前记录洗成干净基线）；本来就没有标记返回 null，且不修改传入对象 */
+function stripGuardState(state) {
+	if (!state || typeof state !== "object") return null;
+	const prev = state;
+	if (!("__ausBackGuard" in prev)) return null;
+	const next = { ...prev };
+	delete next[AUS_BACK_FLAG];
+	return next;
+}
 /** 更新日志（最新在前） */
 var CHANGELOG = [
+	{
+		version: "r3.2.0",
+		date: "2026-11-08",
+		sections: [
+			{
+				kind: "feature",
+				items: [
+					"新增「管理对话」，管理首页表格和下拉胶囊中的对话是否显示",
+					"安卓设备现在使用系统返回手势时会返回酒馆",
+					"兼容TauriTavern 2.4.0",
+					"更新2027年法定节假日数据"
+				]
+			},
+			{
+				kind: "improve",
+				items: [
+					"优化启动速度",
+					"更新了使用说明页的内容",
+					"改进了价格匹配",
+					"改进了很多视觉效果和UI细节",
+					"优化扩展卸载时的数据清理"
+				]
+			},
+			{
+				kind: "fix",
+				items: ["修复了一些已知问题"]
+			}
+		]
+	},
 	{
 		version: "r3.1.9fix",
 		date: "2026-11-04",
@@ -9672,7 +10658,7 @@ function nowTs() {
 }
 /** 当前扩展版本号（构建时由 manifest.version 注入）：侧栏品牌、设置页「关于」入口与关于页共用 */
 function appVersionText() {
-	return String("3.1.9");
+	return String("3.2.0");
 }
 function getDoc$1() {
 	return window.parent?.document ?? document;
@@ -9732,6 +10718,8 @@ var panelOpen = false;
 var currentView = "overview";
 /** 「设置」下最近打开的二级页（窄屏点回「设置」tab 时恢复到上次位置） */
 var settingsChildView = null;
+/** 「对话展示管理」的来源页：进入前记录的视图，页内「返回」与顶栏返回箭头都回到这里 */
+var chatManageOrigin = "overview";
 /** 当前导航高亮键：窄屏二级页归到「设置」，桌面为视图本身 */
 var currentNavKey = "overview";
 var collapsed = false;
@@ -9858,6 +10846,16 @@ function closeHistoryFilterDropdowns() {
 		if (dropdown) dropdown.style.display = "none";
 	}
 }
+/** 选中某一项后要重建列表时用：先把四个浮层瞬时收掉，重绘留到下一帧。 */
+function closeHistoryFilterDropdownsInstant() {
+	const doc = getDoc$1();
+	for (const kind of [
+		"model",
+		"chat",
+		"endpoint",
+		"credential"
+	]) closeDropdownInstant(doc.getElementById(`aus-history-${kind}-dropdown`));
+}
 function renderHistoryFilterDropdown(kind, selected, options, emptyText, onSelect) {
 	const dropdown = getDoc$1().getElementById(`aus-history-${kind}-dropdown`);
 	if (!dropdown) return;
@@ -9881,8 +10879,9 @@ function renderHistoryFilters(history) {
 		label: id
 	}));
 	if (historyFilters.model !== "__all__" && !models.some((option) => option.id === historyFilters.model)) historyFilters.model = STATS_FILTER_ALL;
-	const chats = getHistoryChatOptions(historyFilterBase);
-	if (historyFilters.chat !== "__all__" && !chats.some((option) => option.id === historyFilters.chat)) historyFilters.chat = STATS_FILTER_ALL;
+	const chatOptions = getHistoryChatOptions(historyFilterBase);
+	if (historyFilters.chat !== "__all__" && !chatOptions.some((option) => option.id === historyFilters.chat)) historyFilters.chat = STATS_FILTER_ALL;
+	const chats = filterPickerRows(chatOptions, (option) => option.id);
 	const endpoints = getEndpointFilterOptions(historyFilterBase);
 	if (historyFilters.endpoint !== "__all__" && !endpoints.some((option) => option.id === historyFilters.endpoint)) {
 		historyFilters.endpoint = STATS_FILTER_ALL;
@@ -9892,7 +10891,7 @@ function renderHistoryFilters(history) {
 	if (historyFilters.credential !== "__all__" && !credentials.some((option) => option.id === historyFilters.credential)) historyFilters.credential = STATS_FILTER_ALL;
 	const labelMap = {
 		model: historyFilters.model === "__all__" ? "全部" : historyFilters.model,
-		chat: historyFilters.chat === "__all__" ? "全部" : chats.find((option) => option.id === historyFilters.chat)?.label || historyFilters.chat,
+		chat: historyFilters.chat === "__all__" ? "全部" : chatOptions.find((option) => option.id === historyFilters.chat)?.label || historyFilters.chat,
 		endpoint: historyFilters.endpoint === "__all__" ? "全部" : historyFilters.endpoint === "__unknown__" ? "未记录接入" : endpoints.find((option) => option.id === historyFilters.endpoint)?.label || historyFilters.endpoint,
 		credential: historyFilters.credential === "__all__" ? "全部" : historyFilters.credential === "__unknown__" ? "未识别密钥" : credentials.find((option) => option.id === historyFilters.credential)?.label || historyFilters.credential
 	};
@@ -9911,27 +10910,27 @@ function renderHistoryFilters(history) {
 	renderHistoryFilterDropdown("model", historyFilters.model, models, "暂无模型", (value) => {
 		historyFilters.model = value;
 		historyPage = 1;
-		closeHistoryFilterDropdowns();
-		renderHistory(doc, getSelectedSave());
+		closeHistoryFilterDropdownsInstant();
+		afterNextPaint(() => renderHistory(doc, getSelectedSave()));
 	});
-	renderHistoryFilterDropdown("chat", historyFilters.chat, chats, "暂无对话", (value) => {
+	renderHistoryFilterDropdown("chat", historyFilters.chat, chats, chatOptions.length ? "对话已全部隐藏（可在「对话展示管理」中恢复）" : "暂无对话", (value) => {
 		historyFilters.chat = value;
 		historyPage = 1;
-		closeHistoryFilterDropdowns();
-		renderHistory(doc, getSelectedSave());
+		closeHistoryFilterDropdownsInstant();
+		afterNextPaint(() => renderHistory(doc, getSelectedSave()));
 	});
 	renderHistoryFilterDropdown("endpoint", historyFilters.endpoint, endpoints, "暂无接入记录", (value) => {
 		historyFilters.endpoint = value;
 		historyFilters.credential = STATS_FILTER_ALL;
 		historyPage = 1;
-		closeHistoryFilterDropdowns();
-		renderHistory(doc, getSelectedSave());
+		closeHistoryFilterDropdownsInstant();
+		afterNextPaint(() => renderHistory(doc, getSelectedSave()));
 	});
 	renderHistoryFilterDropdown("credential", historyFilters.credential, credentials, "暂无密钥记录", (value) => {
 		historyFilters.credential = value;
 		historyPage = 1;
-		closeHistoryFilterDropdowns();
-		renderHistory(doc, getSelectedSave());
+		closeHistoryFilterDropdownsInstant();
+		afterNextPaint(() => renderHistory(doc, getSelectedSave()));
 	});
 	writeFilterPrefs({ history: {
 		model: historyFilters.model,
@@ -10045,10 +11044,13 @@ function openHistoryDetail(doc, panel, btn) {
 	try {
 		body.appendChild(panel);
 	} catch {}
-	if (title) {
-		const model = btn.getAttribute("data-model") || "记录详情";
-		const time = btn.getAttribute("data-time") || "";
-		title.textContent = time ? `${model} · ${time}` : model;
+	const sub = doc.getElementById("aus-history-detail-sub");
+	const modelName = btn.getAttribute("data-model") || "记录详情";
+	const recordTime = btn.getAttribute("data-time") || "";
+	if (title) title.textContent = modelName;
+	if (sub) {
+		sub.textContent = recordTime;
+		sub.style.display = recordTime ? "" : "none";
 	}
 	btn.textContent = "收起";
 	btn.style.background = "var(--ds-card-inner)";
@@ -10057,6 +11059,31 @@ function openHistoryDetail(doc, panel, btn) {
 	drawer.style.display = "flex";
 	const content = doc.getElementById("aus-content-body");
 	if (content) content.classList.add("has-history-detail");
+}
+/**
+* 在重绘列表期间保持 #aus-main 的滚动位置不变：翻页、异步补齐全量数据都只换内容，
+* 不允许把页面滚到别处（旧实现用 scrollIntoView 把列表拽回顶部）。
+*/
+function keepMainScrollPosition(doc, fn) {
+	const scroller = doc.getElementById("aus-main");
+	const top = scroller ? scroller.scrollTop : 0;
+	const left = scroller ? scroller.scrollLeft : 0;
+	fn();
+	if (!scroller) return;
+	const restore = () => {
+		try {
+			scroller.scrollTop = top;
+			scroller.scrollLeft = left;
+		} catch {}
+	};
+	restore();
+	try {
+		const view = doc.defaultView;
+		if (view && view.requestAnimationFrame) view.requestAnimationFrame(restore);
+		else setTimeout(restore, 0);
+	} catch {
+		setTimeout(restore, 0);
+	}
 }
 function renderHistoryInner(doc, fullHist) {
 	const host = doc.getElementById("aus-history");
@@ -10156,68 +11183,73 @@ function renderHistoryInner(doc, fullHist) {
         </div>
         <span style="color:var(--ds-text-2);">${total.toLocaleString()}t</span>
       </div>
-      <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;margin-top:8px;border-top:1px solid var(--ds-border);padding-top:8px;max-height:min(520px,60vh);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;flex-direction:column;gap:8px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;">
-            <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">基础信息</div>
-            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:6px;font-size:11px;">
-              <div><div style="color:var(--ds-text-2);font-size:10px;">模型</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${esc(h.model || "—")}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">时段</div><div style="font-weight:600;margin-top:2px;color:var(--ds-text);">${h.priceType === "new-peak" || h.priceType === "wallet-peak" ? "高峰" : h.priceType === "new-offpeak" || h.priceType === "wallet-offpeak" ? "非高峰" : h.priceType === "unpriced" ? "待定价" : "旧价格"}</div></div>
-              <div style="min-width:0;"><div style="color:var(--ds-text-2);font-size:10px;">钱包</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${esc(repository.getWallet(String(h.walletId || ""))?.name || h.endpointLabel || "未归属钱包")}</div></div>
-              <div style="min-width:0;"><div style="color:var(--ds-text-2);font-size:10px;">计价来源</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;word-break:break-all;">${h.pricingSource === "wallet" ? "钱包规则" : h.pricingSource === "builtin" ? "DeepSeek 内置" : h.pricingSource === "unpriced" ? "待定价" : h.pricingSource === "legacy-match" ? "旧数据同名价" : h.pricingSource === "legacy" ? "旧全局规则" : "旧记录兜底"}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">日期</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${esc(recordDateText)}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">时间</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${esc(recordTimeText)}</div></div>
-            </div>
-          </div>
-            <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;">
-            <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">性能</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;font-size:11px;">
-              <div><div style="color:var(--ds-text-2);font-size:10px;">耗时</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${((h.duration || 0) / 1e3).toFixed(1)}s</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">首字延迟</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${(h.ttft || 0) > 0 ? ((h.ttft || 0) / 1e3).toFixed(1) + "s" : "—"}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">速率</div><div style="font-weight:600;margin-top:2px;color:${(h.tokenRate || 0) > 0 ? "var(--ds-green)" : "var(--ds-text-3)"};">${(h.tokenRate || 0) > 0 ? h.tokenRate + " t/s" : h.streamed === false ? "非流式" : "—"}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">思维链耗时</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${(h.thinkTime || 0) > 0 ? ((h.thinkTime || 0) / 1e3).toFixed(1) + "s" : "—"}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">思维链占比</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${(() => {
+      <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;">
+              <div class="aus-dt-row">
+                <section class="aus-dt-block">
+                  <div class="aus-dt-head">基础信息</div>
+                  <div class="aus-dt-grid">
+                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">模型</span><span class="aus-dt-val">${esc(h.model || "—")}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">时段</span><span class="aus-dt-val">${h.priceType === "new-peak" || h.priceType === "wallet-peak" ? "高峰" : h.priceType === "new-offpeak" || h.priceType === "wallet-offpeak" ? "非高峰" : h.priceType === "unpriced" ? "待定价" : "旧价格"}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">计价来源</span><span class="aus-dt-val">${h.pricingSource === "wallet" ? "钱包规则" : h.pricingSource === "builtin" ? "DeepSeek 内置" : h.pricingSource === "unpriced" ? "待定价" : h.pricingSource === "legacy-match" ? "旧数据同名价" : h.pricingSource === "legacy" ? "旧全局规则" : "旧记录兜底"}</span></div>
+                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">钱包</span><span class="aus-dt-val">${esc(repository.getWallet(String(h.walletId || ""))?.name || h.endpointLabel || "未归属钱包")}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">日期</span><span class="aus-dt-val">${esc(recordDateText)}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">时间</span><span class="aus-dt-val">${esc(recordTimeText)}</span></div>
+                  </div>
+                </section>
+                <section class="aus-dt-block">
+                  <div class="aus-dt-head">性能</div>
+                  <div class="aus-dt-grid">
+                    <div class="aus-dt-item"><span class="aus-dt-label">耗时</span><span class="aus-dt-val">${((h.duration || 0) / 1e3).toFixed(1)}s</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">首字延迟</span><span class="aus-dt-val">${(h.ttft || 0) > 0 ? ((h.ttft || 0) / 1e3).toFixed(1) + "s" : "—"}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">速率</span><span class="aus-dt-val" style="color:${(h.tokenRate || 0) > 0 ? "var(--ds-green)" : "var(--ds-text-3)"};">${(h.tokenRate || 0) > 0 ? h.tokenRate + " t/s" : h.streamed === false ? "非流式" : "—"}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">思维链耗时</span><span class="aus-dt-val">${(h.thinkTime || 0) > 0 ? ((h.thinkTime || 0) / 1e3).toFixed(1) + "s" : "—"}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">思维链占比</span><span class="aus-dt-val">${(() => {
 			const comp = h.completion_tokens || 0, th = h.thinkTokens || 0;
 			if (!comp || !th) return "—";
 			return (th / comp * 100).toFixed(1) + "%";
-		})()}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">是否截断</div><div style="font-weight:600;margin-top:2px;color:${isTruncatedFinish(h.finishReason) || h.isTruncated ? "var(--ds-red)" : "var(--ds-text)"};">${isTruncatedFinish(h.finishReason) || h.isTruncated ? "是 (" + esc(h.finishReason || "length") + ")" : "否"}</div></div>
-            </div>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;">
-            <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">Token 消耗</div>
-            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:6px;font-size:11px;">
-              <div><div style="color:var(--ds-text-2);font-size:10px;">缓存命中</div><div style="font-weight:600;color:var(--ds-green);margin-top:2px;">${(h.cache_hit_tokens || 0).toLocaleString()}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">缓存未命中</div><div style="font-weight:600;color:var(--ds-red);margin-top:2px;">${(h.cache_miss_tokens || 0).toLocaleString()}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">输出 Token</div><div style="font-weight:600;color:var(--ds-purple);margin-top:2px;">${(h.completion_tokens || 0).toLocaleString()}</div></div>
-              <div><div style="color:var(--ds-text-2);font-size:10px;">总 Token</div><div style="font-weight:700;color:var(--ds-text);margin-top:2px;">${(h.total_tokens || 0).toLocaleString()}</div></div>
-              <div style="grid-column:1/-1;"><div style="color:var(--ds-text-2);font-size:10px;">思维链 Token</div><div style="font-weight:600;color:var(--ds-text);margin-top:2px;">${h.thinkTokens || 0}</div></div>
-            </div>
-          </div>
-          <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;">
-            <div style="font-size:10px;color:var(--ds-text-3);font-weight:600;letter-spacing:0.5px;">费用明细</div>
-            <div style="display:grid;gap:6px;margin-top:6px;font-size:11px;">
-              <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输入费用</span><span style="font-weight:600;color:var(--ds-text);">${in6}</span></div>
-              <div style="display:flex;justify-content:space-between;"><span style="color:var(--ds-text-2);">输出费用</span><span style="font-weight:600;color:var(--ds-text);">${out6}</span></div>
-              <div style="display:flex;justify-content:space-between;border-top:1px solid var(--ds-card);padding-top:6px;margin-top:2px;"><span style="color:var(--ds-text);font-weight:600;">总费用</span><span style="font-weight:700;color:var(--ds-text);">${c6}</span></div>
-            </div>
-          </div>
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button class="aus-tab-btn" data-tab="req" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:11px;cursor:pointer;">请求参数 (Request Body)</button>
-          <button class="aus-tab-btn" data-tab="res" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">API 完整响应 (Full Response)</button>
-          <button class="aus-tab-btn" data-tab="raw" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">原始 Token 用量 (Raw Usage)</button>
-          <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">消息内容 (Messages)</button>
-        </div>
-        <pre class="aus-tab-content" data-content="req-${h.timestamp}" style="flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : "（原文已清理，仅保留统计）")}</pre>
-        <div class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;margin-top:2px;">
-          <pre style="margin:0;min-height:160px;max-height:360px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(prettyFullResponse(h.fullResponse))}</pre>
-          ${h.fullResponse ? `<div style="display:flex;justify-content:flex-end;margin-top:6px;"><button class="aus-res-raw-btn" data-ts="${h.timestamp}" style="padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:11px;cursor:pointer;">查看原始完整数据</button></div><pre class="aus-res-raw" data-ts="${h.timestamp}" style="display:none;margin:6px 0 0;max-height:360px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(typeof h.fullResponse === "string" ? h.fullResponse : JSON.stringify(h.fullResponse, null, 2))}</pre>` : ""}
-        </div>
-        <pre class="aus-tab-content" data-content="raw-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
-        <pre class="aus-tab-content" data-content="msg-${h.timestamp}" style="display:none;flex:1;min-height:160px;margin-top:2px;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:10px;font-size:11px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">${esc(h.messages && h.messages.length ? JSON.stringify(h.messages, null, 2) : "（原文已清理——仅最近 5 条保留，其余仅统计可用）")}</pre>
+		})()}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">是否截断</span><span class="aus-dt-val" style="color:${isTruncatedFinish(h.finishReason) || h.isTruncated ? "var(--ds-red)" : "var(--ds-text)"};">${isTruncatedFinish(h.finishReason) || h.isTruncated ? "是 (" + esc(h.finishReason || "length") + ")" : "否"}</span></div>
+                  </div>
+                </section>
+              </div>
+              <div class="aus-dt-row">
+                <section class="aus-dt-block">
+                  <div class="aus-dt-head">Token 消耗</div>
+                  <div class="aus-dt-bar" title="命中 ${hps}% · 未命中 ${mps}% · 输出 ${ops}%">
+                    <div style="width:${hp}%;background:var(--aus-token-hit);"></div>
+                    <div style="width:${mp}%;background:var(--aus-token-miss);"></div>
+                    <div style="width:${op}%;background:var(--aus-token-output);"></div>
+                  </div>
+                  <div class="aus-dt-grid">
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-hit);"></span>缓存命中</span><span class="aus-dt-val">${(h.cache_hit_tokens || 0).toLocaleString()}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-miss);"></span>缓存未命中</span><span class="aus-dt-val">${(h.cache_miss_tokens || 0).toLocaleString()}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-output);"></span>输出 Token</span><span class="aus-dt-val">${(h.completion_tokens || 0).toLocaleString()}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">总 Token</span><span class="aus-dt-val is-strong">${(h.total_tokens || 0).toLocaleString()}</span></div>
+                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">思维链 Token</span><span class="aus-dt-val">${h.thinkTokens || 0}</span></div>
+                  </div>
+                </section>
+                <section class="aus-dt-block">
+                  <div class="aus-dt-head">费用明细</div>
+                  <div class="aus-dt-cost">
+                    <div class="aus-dt-cost-row"><span class="aus-dt-label">输入费用</span><span class="aus-dt-cost-val">${in6}</span></div>
+                    <div class="aus-dt-cost-row"><span class="aus-dt-label">输出费用</span><span class="aus-dt-cost-val">${out6}</span></div>
+                    <div class="aus-dt-cost-row is-total"><span>总费用</span><span class="aus-dt-cost-val">${c6}</span></div>
+                  </div>
+                </section>
+              </div>
+              <div class="aus-dt-tabs" role="tablist">
+                <button class="aus-tab-btn" data-tab="req" data-ts="${h.timestamp}" data-active="1" role="tab">请求参数</button>
+                <button class="aus-tab-btn" data-tab="res" data-ts="${h.timestamp}" role="tab">完整响应</button>
+                <button class="aus-tab-btn" data-tab="raw" data-ts="${h.timestamp}" role="tab">Raw 用量</button>
+                <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" role="tab">消息内容</button>
+              </div>
+              <pre class="aus-tab-content aus-dt-pre" data-content="req-${h.timestamp}" style="display:block;">${esc(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : "（原文已清理，仅保留统计）")}</pre>
+              <div class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;">
+                <pre class="aus-dt-pre">${esc(prettyFullResponse(h.fullResponse))}</pre>
+                ${h.fullResponse ? `<div class="aus-dt-rawbar"><button class="aus-res-raw-btn" data-ts="${h.timestamp}">查看原始完整数据</button></div><pre class="aus-res-raw aus-dt-pre aus-dt-pre-raw" data-ts="${h.timestamp}" style="display:none;">${esc(typeof h.fullResponse === "string" ? h.fullResponse : JSON.stringify(h.fullResponse, null, 2))}</pre>` : ""}
+              </div>
+              <pre class="aus-tab-content aus-dt-pre" data-content="raw-${h.timestamp}" style="display:none;">${esc(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
+              <pre class="aus-tab-content aus-dt-pre" data-content="msg-${h.timestamp}" style="display:none;">${esc(h.messages && h.messages.length ? JSON.stringify(h.messages, null, 2) : "（原文已清理——仅最近 5 条保留，其余仅统计可用）")}</pre>
       </div>
     </div>
   `;
@@ -10225,30 +11257,12 @@ function renderHistoryInner(doc, fullHist) {
 	const bindPager = (id) => {
 		const b = doc.getElementById(id);
 		if (!b) return;
-		if (id.includes("prev")) b.onclick = () => {
-			if (historyPage > 1) {
-				historyPage--;
-				renderHistoryInner(doc, fullHist);
-				try {
-					doc.getElementById("aus-history")?.scrollIntoView({
-						behavior: "smooth",
-						block: "start"
-					});
-				} catch {}
-			}
-		};
-		else b.onclick = () => {
-			const tp = Math.max(1, Math.ceil(fullHist.length / HISTORY_PAGE_SIZE));
-			if (historyPage < tp) {
-				historyPage++;
-				renderHistoryInner(doc, fullHist);
-				try {
-					doc.getElementById("aus-history")?.scrollIntoView({
-						behavior: "smooth",
-						block: "start"
-					});
-				} catch {}
-			}
+		b.onclick = () => {
+			const totalPages = Math.max(1, Math.ceil(fullHist.length / HISTORY_PAGE_SIZE));
+			const nextPage = historyPage + (id.includes("prev") ? -1 : 1);
+			if (nextPage < 1 || nextPage > totalPages) return;
+			historyPage = nextPage;
+			keepMainScrollPosition(doc, () => renderHistoryInner(doc, fullHist));
 		};
 	};
 	bindPager("aus-history-prev");
@@ -10273,14 +11287,8 @@ function renderHistoryInner(doc, fullHist) {
 			const tab = btn.getAttribute("data-tab");
 			const root = btn.closest(".aus-detail-panel");
 			if (!root) return;
-			root.querySelectorAll(".aus-tab-btn").forEach((b) => {
-				b.style.background = "var(--ds-card-inner)";
-				b.style.color = "var(--ds-text)";
-				b.style.borderColor = "var(--ds-border)";
-			});
-			btn.style.background = "var(--ds-black)";
-			btn.style.color = "var(--ds-black-text)";
-			btn.style.borderColor = "var(--ds-black)";
+			root.querySelectorAll(".aus-tab-btn").forEach((b) => b.removeAttribute("data-active"));
+			btn.setAttribute("data-active", "1");
 			root.querySelectorAll(".aus-tab-content").forEach((c) => {
 				c.style.display = "none";
 			});
@@ -10353,7 +11361,7 @@ function renderHistory(doc, s) {
 	historyLoading = true;
 	(async () => {
 		try {
-			const mod = await import("./persistence-CaWdvByH.js").then((n) => n.l);
+			const mod = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
 			if (!mod.getAllHistory) return;
 			const all = await mod.getAllHistory();
 			if (!all || !all.length) return;
@@ -10363,8 +11371,10 @@ function renderHistory(doc, s) {
 			} catch {}
 			if (full.length <= hist.length) return;
 			historyFullCache = full;
-			renderHistoryFilters(full);
-			renderHistoryInner(doc, filteredHistoryForDisplay(full));
+			keepMainScrollPosition(doc, () => {
+				renderHistoryFilters(full);
+				renderHistoryInner(doc, filteredHistoryForDisplay(full));
+			});
 		} catch {} finally {
 			historyLoading = false;
 		}
@@ -10668,7 +11678,11 @@ function prefersReducedMotion() {
 		return false;
 	}
 }
-/** 窄屏页面切换入场动画（桌面端维持原样，不启用）；移除 class + 强制回流保证连续切换可重播 */
+/**
+* 页面切换入场动画（桌面与窄屏共用，观感对齐遥测看板的 pageIn）。
+* 移除 class + 强制一次回流，保证连续切换（哪怕切回同一页）都能重新播放。
+* prefers-reduced-motion 由 style.css 的 `animation:none` 兜底，这里不做判断。
+*/
 function playViewEnter(el) {
 	if (!el) return;
 	try {
@@ -10769,7 +11783,8 @@ function syncBottomNav(doc, animate) {
 * bottom=false 是桌面侧栏或「移动端兼容 UI」关闭后的原侧栏抽屉，直接按当前视图高亮，也没有返回箭头。
 */
 function paintNavState(doc, bottom, animate) {
-	currentNavKey = bottom ? parentTabOf(currentView) : currentView;
+	const navSource = currentView === "chat-manage" ? chatManageOrigin : currentView;
+	currentNavKey = bottom || !isSettingsChild(currentView) ? parentTabOf(navSource) : navSource;
 	try {
 		doc.querySelectorAll("#aus-sidebar [data-nav]").forEach((el) => {
 			const v = el.getAttribute("data-nav");
@@ -10778,7 +11793,7 @@ function paintNavState(doc, bottom, animate) {
 	} catch {}
 	if (bottom) syncBottomNav(doc, animate);
 	const backBtn = doc.getElementById("aus-mobile-back");
-	if (backBtn) backBtn.style.display = bottom && isSettingsChild(currentView) ? "flex" : "none";
+	if (backBtn) backBtn.style.display = bottom && isChildView(currentView) ? "flex" : "none";
 }
 /**
 * 底栏 tab 点击语义：
@@ -10792,13 +11807,14 @@ function handleBottomTabTap(target) {
 		switchView(target);
 		return;
 	}
-	const action = resolveTabTap(target, currentView, isSettingsChild(currentView));
+	const currentTab = currentView === "chat-manage" ? parentTabOf(chatManageOrigin) : parentTabOf(currentView);
+	const action = resolveTabTap(target, currentView, isChildView(currentView), currentTab);
 	if (action === "switch") {
 		switchView(target === "settings" && settingsChildView ? settingsChildView : target);
 		return;
 	}
 	if (action === "pop-root") {
-		switchView("settings");
+		switchView(returnFromChild());
 		return;
 	}
 	try {
@@ -10853,6 +11869,16 @@ function syncMobileSidebar(doc) {
 		}
 	} catch {}
 }
+/** 二级页「返回」目标：对话展示管理回到进入前的来源页，其余回到自己的父级根页 */
+function returnFromChild() {
+	if (currentView === "chat-manage") return chatManageOrigin;
+	return childParentOf(currentView) ?? "settings";
+}
+/** 进入对话展示管理页并记住来源（概览 / 趋势预测 / 设置三处入口共用） */
+function openChatManage(from) {
+	chatManageOrigin = from;
+	switchView("chat-manage");
+}
 function switchView(view, opts) {
 	const prevView = currentView;
 	currentView = view;
@@ -10874,7 +11900,7 @@ function switchView(view, opts) {
 			el.style.transition = "none";
 			el.style.opacity = "1";
 		}
-		if (on && bottom) playViewEnter(el);
+		if (on && view !== prevView) playViewEnter(el);
 	});
 	try {
 		for (const id of ["aus-main", "aus-content-body"]) {
@@ -10901,11 +11927,15 @@ function switchView(view, opts) {
 			else if (view === "history") {
 				const s = getSelectedSave();
 				if (s) renderHistory(doc, s);
-			}
+			} else if (view === "chat-manage") Promise.resolve(renderChatManageView()).catch(() => {});
 		} catch {}
 	};
-	if (bottom && view !== prevView) renderAfterPillStart(doc, renderTargetView);
-	else renderTargetView();
+	const animateIn = view !== prevView;
+	if (animateIn && bottom) renderAfterPillStart(doc, renderTargetView);
+	else if (animateIn) {
+		if (typeof requestAnimationFrame === "function") requestAnimationFrame(renderTargetView);
+		else renderTargetView();
+	} else renderTargetView();
 	if (view === "stats" || view === "forecast") requestAnimationFrame(() => {
 		try {
 			const chartEl = doc.getElementById(view === "stats" ? "aus-stats-chart" : "aus-forecast-main-chart");
@@ -11004,7 +12034,7 @@ function createPanel() {
 	panel.innerHTML = `
     <div id="aus-mobile-header" style="display:none;height:56px;align-items:center;padding:0 16px;flex-shrink:0;">
       <button id="aus-hamburger-btn" title="菜单" style="display:none;width:28px;height:28px;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;">${icon("menu", 22)}</button>
-      <button id="aus-mobile-back" title="返回设置" style="display:none;width:28px;height:28px;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--ds-text);padding:0;flex-shrink:0;">${icon("chevron-left", 20)}</button>
+      <button id="aus-mobile-back" title="返回" style="display:none;">${icon("chevron-left", 20)}</button>
       <span id="aus-mobile-brand" style="margin-left:12px;font-size:var(--aus-fs-base);font-weight:700;color:var(--ds-text);white-space:nowrap;flex-shrink:0;">API用量统计</span>
       <span id="aus-mobile-page-title" style="margin-left:10px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text-2);">用量概览</span>
       <button id="aus-mobile-panel-close" title="关闭" style="margin-left:auto;width:32px;height:32px;padding:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;font-size:var(--aus-fs-base);">${icon("close", 16)}</button>
@@ -11047,7 +12077,7 @@ function createPanel() {
         <div style="max-width:1100px;margin:0 auto;display:grid;gap:16px;">
           <div data-view="overview">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div class="ds-card aus-overview-balance-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div class="ds-card-title">充值余额</div><div id="aus-overview-wallet-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span style="color:var(--ds-text-2);">余额口径</span><span id="aus-overview-wallet-label" style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部钱包合计</span>${icon("chevron-down", 14)}</div><div id="aus-overview-wallet-dropdown" style="display:none;position:absolute;top:44px;right:10px;z-index:20;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:190px;max-height:260px;overflow:auto;"></div></div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div id="aus-balance-remaining" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;min-height:16px;"></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:var(--aus-fs-sm);">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">导出记录</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">导入记录</button></div></div>
+              <div class="ds-card aus-overview-balance-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div class="ds-card-title">充值余额</div><div id="aus-overview-wallet-btn" class="aus-pill aus-pill-sm"><span style="color:var(--ds-text-2);">余额口径</span><span id="aus-overview-wallet-label" style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部钱包合计</span>${icon("chevron-down", 14)}</div><div id="aus-overview-wallet-dropdown" style="display:none;position:absolute;top:44px;right:10px;z-index:20;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:190px;max-height:260px;overflow:auto;"></div></div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div id="aus-balance-remaining" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;min-height:16px;"></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:var(--aus-fs-sm);">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">导出记录</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">导入记录</button></div></div>
               <div class="ds-card"><div class="ds-card-title">累计消费</div><div class="ds-card-val" id="aus-total-cost">¥0.0000<small>CNY</small></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;" id="aus-total-tokens">0 tokens</div></div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
@@ -11072,18 +12102,27 @@ function createPanel() {
               </div>
             </div>
             <div id="aus-chat-summary-overview" class="ds-card" style="margin-top:12px;overflow:auto;">
-              <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:8px;">按对话统计</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+                <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">按对话统计</div>
+                <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                  <span id="aus-chat-manage-count" style="display:none;font-size:var(--aus-fs-xs);color:var(--ds-text-3);white-space:nowrap;"></span>
+                  <button id="aus-chat-manage-btn" type="button" class="aus-manage-chat-btn" title="设置哪些对话出现在按对话统计表与各页「对话」下拉中（不影响数据统计）">${icon("menu", 14)}管理对话</button>
+                </div>
+              </div>
               <table style="width:100%;border-collapse:collapse;font-size:var(--aus-fs-sm);white-space:nowrap;min-width:720px;">
                 <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">对话</th><th data-sort-key="count" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">轮次<span class="aus-sort-ind"></span></th><th data-sort-key="hit" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">命中<span class="aus-sort-ind"></span></th><th data-sort-key="miss" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">未命中<span class="aus-sort-ind"></span></th><th data-sort-key="out" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输出<span class="aus-sort-ind"></span></th><th data-sort-key="total" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总 Tokens<span class="aus-sort-ind"></span></th><th data-sort-key="cost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总费用<span class="aus-sort-ind"></span></th><th data-sort-key="avgTokens" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均 Token/轮<span class="aus-sort-ind"></span></th><th data-sort-key="avgHitRate" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均命中率<span class="aus-sort-ind"></span></th></tr></thead>
                 <tbody id="aus-chat-summary-tbody"><tr><td colspan="9" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
               </table>
-              <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">默认按总 Tokens 倒序，点击表头可切换排序 · 数据来源为全部历史（不受统计页筛选影响）</div>
+              <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">默认按总 Tokens 倒序，点击表头可切换排序 · 数据来源为全部历史（不受统计页筛选影响）· 点「管理对话」可隐藏不常看的对话</div>
             </div>
             </div>
+           <div data-view="chat-manage" style="display:none;">
+             <div id="aus-chat-manage-body"></div>
+           </div>
            <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div class="aus-stats-filter">
-                <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-range-btn" class="aus-pill"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-range-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);overflow:hidden;flex-direction:row;">
                   <div style="min-width:120px;border-right:1px solid var(--ds-card);padding:8px;display:grid;gap:2px;">
                     <div data-range="all" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);color:var(--ds-text);">全部</div>
@@ -11099,19 +12138,19 @@ function createPanel() {
                 </div>
               </div>
               <div class="aus-stats-filter">
-                <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-model-btn" class="aus-pill"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div class="aus-stats-filter">
-                <div id="aus-chat-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">对话</span><span id="aus-chat-label" style="font-weight:600;color:var(--ds-text);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-chat-btn" class="aus-pill"><span style="color:var(--ds-text-2);">对话</span><span id="aus-chat-label" style="font-weight:600;color:var(--ds-text);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-chat-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div class="aus-stats-filter">
-                <div id="aus-endpoint-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">接入类型</span><span id="aus-endpoint-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-endpoint-btn" class="aus-pill"><span style="color:var(--ds-text-2);">接入类型</span><span id="aus-endpoint-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-endpoint-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div class="aus-stats-filter">
-                <div id="aus-credential-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-credential-btn" class="aus-pill"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div id="aus-stats-filter-reset" class="aus-filter-reset" title="重置筛选" aria-label="重置筛选" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);font-size:var(--aus-fs-base);cursor:pointer;margin-left:auto;">${icon("refresh", 14)}<span>重置筛选</span></div>
@@ -11129,18 +12168,130 @@ function createPanel() {
                 <tbody id="aus-summary-tbody"><tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
               </table>
             </div>
-            <div class="ds-card" style="margin-top:12px;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">自定义图表</span><div style="display:flex;gap:8px;position:relative;"><div id="aus-chart-y-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span style="color:var(--ds-text-2);">Y</span><span id="aus-chart-y-label" style="font-weight:600;color:var(--ds-text);">5 项</span>${icon("chevron-down", 14)}</div><div id="aus-chart-x-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span style="color:var(--ds-text-2);">X</span><span id="aus-chart-x-label" style="font-weight:600;color:var(--ds-text);">轮次</span>${icon("chevron-down", 14)}</div><div id="aus-chart-y-dropdown" style="display:none;position:absolute;top:34px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;"></div><div id="aus-chart-x-dropdown" style="display:none;position:absolute;top:34px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:140px;"></div></div></div><div id="aus-stats-chart" style="height:300px;"></div></div>
+            <div style="margin-top:12px;">
+              ${chartCardHTML({
+		title: "自定义图表",
+		chartId: "aus-stats-chart",
+		height: 300,
+		pills: [{
+			key: "Y",
+			btnId: "aus-chart-y-btn",
+			labelId: "aus-chart-y-label",
+			dropId: "aus-chart-y-dropdown",
+			label: "5 项"
+		}, {
+			key: "X",
+			btnId: "aus-chart-x-btn",
+			labelId: "aus-chart-x-label",
+			dropId: "aus-chart-x-dropdown",
+			label: "轮次"
+		}]
+	})}
+            </div>
             <div id="aus-extra-charts" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px;">
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">Token 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-y-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-y-label-token">3 项</span>${icon("chevron-down", 14)}</div><div id="aus-extra-x-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-token">轮次</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-y-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:180px;max-height:200px;overflow:auto;"></div><div id="aus-extra-x-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-token" style="height:220px;"></div></div>
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">费用 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-y-cost" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-y-label-cost">1 项</span>${icon("chevron-down", 14)}</div><div id="aus-extra-x-cost" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-cost">轮次</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-y-drop-cost" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:180px;max-height:200px;overflow:auto;"></div><div id="aus-extra-x-drop-cost" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-cost" style="height:220px;"></div></div>
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">缓存命中 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-x-hit" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-hit">轮次</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-x-drop-hit" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-hit" style="height:220px;"></div></div>
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">API请求数 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-x-req" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-req">每日</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-x-drop-req" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-req" style="height:220px;"></div></div>
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">耗时与速率 趋势</span><div style="display:flex;gap:6px;"><div id="aus-extra-x-dur" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-extra-x-label-dur">轮次</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-extra-x-drop-dur" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-dur" style="height:220px;"></div></div>
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">模型用量占比</span><div id="aus-pie-toggle" style="padding:4px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;">Token</div></div><div id="aus-chart-pie" style="height:220px;"></div></div>
+              ${chartCardHTML({
+		title: "Token 趋势",
+		chartId: "aus-chart-token",
+		pills: [{
+			key: "Y",
+			btnId: "aus-extra-y-btn-token",
+			labelId: "aus-extra-y-label-token",
+			dropId: "aus-extra-y-drop-token",
+			label: "3 项"
+		}, {
+			key: "X",
+			btnId: "aus-extra-x-btn-token",
+			labelId: "aus-extra-x-label-token",
+			dropId: "aus-extra-x-drop-token",
+			label: "轮次"
+		}]
+	})}
+              ${chartCardHTML({
+		title: "费用 趋势",
+		chartId: "aus-chart-cost",
+		pills: [{
+			key: "Y",
+			btnId: "aus-extra-y-btn-cost",
+			labelId: "aus-extra-y-label-cost",
+			dropId: "aus-extra-y-drop-cost",
+			label: "1 项"
+		}, {
+			key: "X",
+			btnId: "aus-extra-x-btn-cost",
+			labelId: "aus-extra-x-label-cost",
+			dropId: "aus-extra-x-drop-cost",
+			label: "轮次"
+		}]
+	})}
+              ${chartCardHTML({
+		title: "缓存命中 趋势",
+		chartId: "aus-chart-hit",
+		pills: [{
+			key: "X",
+			btnId: "aus-extra-x-btn-hit",
+			labelId: "aus-extra-x-label-hit",
+			dropId: "aus-extra-x-drop-hit",
+			label: "轮次"
+		}]
+	})}
+              ${chartCardHTML({
+		title: "API请求数 趋势",
+		chartId: "aus-chart-req",
+		pills: [{
+			key: "X",
+			btnId: "aus-extra-x-btn-req",
+			labelId: "aus-extra-x-label-req",
+			dropId: "aus-extra-x-drop-req",
+			label: "每日"
+		}]
+	})}
+              ${chartCardHTML({
+		title: "耗时与速率 趋势",
+		chartId: "aus-chart-dur",
+		pills: [{
+			key: "X",
+			btnId: "aus-extra-x-btn-dur",
+			labelId: "aus-extra-x-label-dur",
+			dropId: "aus-extra-x-drop-dur",
+			label: "轮次"
+		}]
+	})}
+              ${chartCardHTML({
+		title: "模型用量占比",
+		chartId: "aus-chart-pie",
+		pills: [{
+			key: "口径",
+			btnId: "aus-pie-toggle",
+			labelId: "aus-pie-toggle-val",
+			dropId: "",
+			label: "Token",
+			dropdown: false
+		}]
+	})}
             </div>
             <div id="aus-model-trends" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px;">
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">模型 Token 趋势</span><div style="display:flex;gap:6px;"><div id="aus-modeltrends-x-token" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-modeltrends-x-label-token">每日</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-modeltrends-x-drop-token" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-model-token" style="height:220px;"></div></div>
-              <div class="ds-card" style="position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;"><span style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">模型调用次数趋势</span><div style="display:flex;gap:6px;"><div id="aus-modeltrends-x-req" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span id="aus-modeltrends-x-label-req">每日</span>${icon("chevron-down", 14)}</div></div></div><div id="aus-modeltrends-x-drop-req" style="display:none;position:absolute;top:32px;right:8px;z-index:5;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:8px;padding:4px;min-width:120px;"></div><div id="aus-chart-model-req" style="height:220px;"></div></div>
+              ${chartCardHTML({
+		title: "模型 Token 趋势",
+		chartId: "aus-chart-model-token",
+		pills: [{
+			key: "X",
+			btnId: "aus-modeltrends-x-btn-token",
+			labelId: "aus-modeltrends-x-label-token",
+			dropId: "aus-modeltrends-x-drop-token",
+			label: "每日"
+		}]
+	})}
+              ${chartCardHTML({
+		title: "模型调用次数趋势",
+		chartId: "aus-chart-model-req",
+		pills: [{
+			key: "X",
+			btnId: "aus-modeltrends-x-btn-req",
+			labelId: "aus-modeltrends-x-label-req",
+			dropId: "aus-modeltrends-x-drop-req",
+			label: "每日"
+		}]
+	})}
             </div>
           </div>
           <div data-view="forecast" style="display:none;">
@@ -11171,6 +12322,7 @@ function createPanel() {
                     <span class="aus-forecast-checkbox" aria-hidden="true"></span>
                     <span id="aus-forecast-compaction-label">压缩情景</span>
                   </label>
+                  <button id="aus-forecast-chat-manage-btn" type="button" class="aus-manage-chat-btn" title="设置哪些对话出现在「对话」下拉中（不影响数据统计）">${icon("menu", 14)}管理对话</button>
                 </div>
                 <div id="aus-forecast-sub" class="aus-forecast-sub"></div>
               </div>
@@ -11231,19 +12383,19 @@ function createPanel() {
           <div data-view="history" style="display:none;">
             <div id="aus-history-filter-host" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div class="aus-stats-filter">
-                <div id="aus-history-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-history-model-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-history-model-btn" class="aus-pill"><span style="color:var(--ds-text-2);">模型</span><span id="aus-history-model-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-history-model-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div class="aus-stats-filter">
-                <div id="aus-history-chat-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">对话</span><span id="aus-history-chat-label" style="font-weight:600;color:var(--ds-text);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-history-chat-btn" class="aus-pill"><span style="color:var(--ds-text-2);">对话</span><span id="aus-history-chat-label" style="font-weight:600;color:var(--ds-text);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-history-chat-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div class="aus-stats-filter">
-                <div id="aus-history-endpoint-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">接入类型</span><span id="aus-history-endpoint-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-history-endpoint-btn" class="aus-pill"><span style="color:var(--ds-text-2);">接入类型</span><span id="aus-history-endpoint-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-history-endpoint-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div class="aus-stats-filter">
-                <div id="aus-history-credential-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-history-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-history-credential-btn" class="aus-pill"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-history-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-history-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div id="aus-history-filter-reset" class="aus-filter-reset" title="重置筛选" aria-label="重置筛选" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);font-size:var(--aus-fs-base);cursor:pointer;margin-left:auto;">${icon("refresh", 14)}<span>重置筛选</span></div>
@@ -11268,21 +12420,7 @@ function createPanel() {
             </div>
             <div id="aus-settings"></div>
           </div>
-          <div data-view="help" style="display:none;">
-            <div style="display:grid;gap:12px;">
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#FF6A00;font-weight:600;margin-bottom:6px;">完整使用文档</div><div style="color:var(--ds-text-2);">详细说明各页面、筛选、钱包、定价、同步、隐私与常见问题。</div><a href="https://janmk1453.github.io/Api-Usage/" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;margin-top:10px;padding:8px 14px;border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);text-decoration:none;font-size:var(--aus-fs-base);font-weight:600;">前往完整使用文档</a></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0070F3;font-weight:600;margin-bottom:6px;">🧭 导航（手机端）</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 窄屏改用底部标签栏：概览 / 统计 / 历史 / 趋势 / 设置；再点一次当前标签可回到页面顶部</div><div>2. 钱包、使用说明、关于都收在「设置」页顶部的入口里，进入后点左上角返回箭头回到设置</div><div>3. 从别的标签回到「设置」时会回到上次停留的那个页面（钱包/使用说明/关于）；桌面端仍是左侧可折叠侧边栏，入口位置不变</div><div>4. 不习惯底栏？去「设置 → 移动端兼容UI」关掉开关，窄屏立刻变回原来的侧栏抽屉（左上角菜单按钮），桌面端不受影响</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#DC2626;font-weight:600;margin-bottom:6px;">隐私声明（完整版：<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:#DC2626;text-decoration:underline;">https://janmk1453.github.io/Api-Usage/#privacy</a>）</div><div style="color:var(--ds-text-2);display:grid;gap:6px;"><div>本扩展有且只能获得用户在酒馆本身中填写的：密钥条目的编号、用户备注和掩码末三位，仅用于独立区分请求来源，不会且无法读取、保存或上传完整明文密钥。</div><div>用户储存在酒馆本身的密钥是安全的，本扩展无法获取真实密钥。</div><div>用户主动填入本扩展的校准密钥是实际可用的密钥，且仅会被用于查询该钱包所对应厂商的余额或套餐额度接口（DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita、智谱 GLM、MiniMax、以及用户自填的 new-api 中转站），不会额外造成扣费或消耗；它仅经 XOR 混淆后存放于 SillyTavern，不进入历史记录、统计、日志、导入导出或 WebDAV。查询由浏览器直连厂商接口，不经过任何第三方代理；对未开放跨域（CORS）的厂商会直接失败并提示，扩展不会绕过该限制。</div><div>XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。</div><div>本扩展完整代码开源可审查。</div><div style="margin-top:2px;padding-top:6px;border-top:1px solid var(--ds-border);font-weight:600;color:#DC2626;">免责声明（完整版见上方链接）</div><div>本扩展不对功能“价格来源”、“自动同步”等利用 <a href="https://models.dev" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 获取的数据中出现或可能出现的商业化中转站负责；我们不建议使用任何商业化中转站，尽管我们已经尽力筛选数据，但由于对大量数据进行完全筛选难以实现，因此我们不对可能出现的任何商业化中转站名称负责，不构成推荐，和 models.dev 或任何中转站没有商业往来，坚定不移的反对商业化。</div><div>「套餐额度」中的本地估算基于本扩展记录的历史数据推算，不包含其他设备或其他客户端的消耗，可能与实际剩余额度有偏差，仅供展示参考，不参与计费、导出与云同步，不能作为账单依据；对没有公开接口或未开放跨域的厂商（Claude Code、Codex、OpenCode、GitHub Copilot、Cursor、讯飞星辰等），扩展不提供、也不会绕过限制去提供自动查询。</div><div>界面中的厂商图标与名称商标归各自所有者，仅用于标识接入来源，不构成任何关联、合作或背书；图标数据内联自 simple-icons（CC0 发布）。</div><div>我们将尽可能维护扩展的安全和隐私性，但本扩展不对因酒馆/本扩展的安全漏洞或因间接原因导致的任何形式的密钥泄露及产生的损失负责。</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0BA25E;font-weight:600;margin-bottom:6px;">钱包</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 扩展按识别到的接入链接自动创建和汇总钱包，默认始终保留 DeepSeek 官方钱包；同名链接下识别的密钥和模型会归入同一钱包。</div><div>2. 每个钱包可独立维护名称、余额、模型价格、峰谷规则和价格来源；钱包默认收起，展开状态按钱包记忆。价格来源仅展示第一方模型厂商，不展示中转站或聚合平台；同步时只按钱包里已识别的模型名做模糊匹配后写入该模型价格，不会把供应商目录里的模型整批加入钱包。</div><div>3. 请求进入后会先匹配所属钱包，再使用该钱包的模型价格和峰谷规则计费，并从对应钱包余额预扣；未配置价格的模型先记零费用，保存或同步价格后自动重算冷热历史。</div><div>4. 余额查询按「查询适配器」工作：DeepSeek、Moonshot/Kimi、硅基流动、OpenRouter、阶跃星辰、Novita 可查余额，智谱 GLM 与 MiniMax 可查套餐额度，new-api 中转可用「系统访问令牌 + 用户 ID」查订阅额度；密钥在该钱包内单独填写，多个密钥不会自动相加。</div><div>5. 删除钱包会进入“已忽略接入”，后续请求不会自动重建、不参与余额合计，历史记录仍保留归属，需要时可恢复显示。</div><div>6. 「套餐额度」只对能查询到额度的厂商显示，查到哪个展示哪个；本地估算需手动启用，仅作参考，不参与计费。</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#2563EB;font-weight:600;margin-bottom:6px;">📊 使用统计 / 预测</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 输入 API 密钥并保存后点击“查询”获取余额（按钱包内的「查询适配器」查询，支持多家厂商）</div><div>2. 正常对话，扩展自动记录每次请求的费用、token 数及缓存命中等统计数据</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:var(--ds-green);font-weight:600;margin-bottom:6px;">💡 高峰时间提示</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 设置中可开启峰值提示小圆点，直观显示当前（DeepSeek）高低峰状态</div><div>2. 圆点可拖动，位置自动记忆，找不到时可在设置中重置</div><div>3. DeepSeek 官方规则：周一至周五（不含中国法定节假日）9:00-12:00、14:00-18:00 为高峰，其余时段（含周末、中国法定节假日全天）为空闲；调休上班的周末同样按空闲计费</div><div>4. 内置中国法定节假日数据覆盖 ${CN_HOLIDAY_COVERAGE_LABEL}，超出范围的年份可在设置中按日期补充“额外空闲日期”</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#DB2777;font-weight:600;margin-bottom:6px;">🔄 消息对比</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中找到想对比的两条消息，前者点“旧”，后者点“新”</div><div>2. 系统并排显示请求消息的文字差异</div><div>3. 差异点即缓存发散起始位置（前 N 条相同为缓存命中段）</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#D97706;font-weight:600;margin-bottom:6px;">📈 统计图表</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 切换时间、模型（可多选）、对话、接入类型和 API 密钥查看不同范围的统计</div><div>2. 多图表展示多模请求参数，悬浮查看分模型明细</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#7C3AED;font-weight:600;margin-bottom:6px;">💾 请求详细参数</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 在历史记录中点击某条的“详情”，电脑端会在右侧打开约四分之一宽的窗口并压缩列表宽度，手机端会在屏幕下部弹出约四分之三高度的悬浮窗口</div><div>2. 查看：模型/时间/耗时/首字延迟/思维链/费用/Token 等详情及四类原始数据（请求参数/完整响应/Raw Usage/Messages）</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:#0891B2;font-weight:600;margin-bottom:6px;">🧡 模型兼容</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>1. 完全兼容 DeepSeek 官方 API</div><div>2. 尽量兼容不同厂商/渠道的请求格式，部分模型可能无缓存命中</div><div>3. 如数据异常，请携带完整请求与响应反馈</div></div></div>
-              <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);"><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);font-weight:600;margin-bottom:6px;">✨ 关于</div><div style="color:var(--ds-text-2);display:grid;gap:4px;"><div>本扩展由原脚本（<a href="https://github.com/janmk1453/deepseek-tavern-script" target="_blank" style="color:var(--ds-text);text-decoration:underline;">deepseek-tavern-script</a>）迁移重构。</div><div><span style="color:var(--ds-text);">@janmk</span> · 仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);text-decoration:underline;">janmk1453/Api-Usage</a></div></div></div>
-            </div>
-          </div>
+          <div data-view="help" style="display:none;">${helpViewHTML()}</div>
           <div data-view="about" style="display:none;">
             <div style="display:grid;gap:12px;">
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);color:var(--ds-text);">
@@ -11311,12 +12449,16 @@ function createPanel() {
           </div>
         </div>
       </div>
-      <aside id="aus-history-detail" style="display:none;flex-direction:column;width:25%;min-width:300px;max-width:480px;flex-shrink:0;border-left:1px solid var(--ds-border);background:var(--ds-card-inner);overflow:hidden;">
-        <div style="flex-shrink:0;height:48px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 12px;border-bottom:1px solid var(--ds-border);">
-          <span id="aus-history-detail-title" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">记录详情</span>
-          <button id="aus-history-detail-close" title="关闭" style="width:28px;height:28px;flex-shrink:0;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card);color:var(--ds-text-2);cursor:pointer;line-height:1;padding:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;">${icon("close", 16)}</button>
+      <aside id="aus-history-detail" style="display:none;">
+        <div id="aus-history-detail-head">
+          <span id="aus-history-detail-grip" aria-hidden="true"></span>
+          <div id="aus-history-detail-heading">
+            <span id="aus-history-detail-title">记录详情</span>
+            <span id="aus-history-detail-sub"></span>
+          </div>
+          <button id="aus-history-detail-close" title="关闭" aria-label="关闭详情">${icon("close", 16)}</button>
         </div>
-        <div id="aus-history-detail-body" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:12px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;"></div>
+        <div id="aus-history-detail-body"></div>
       </aside>
     </div>
     </div>
@@ -11338,7 +12480,7 @@ function createPanel() {
 	doc.body.appendChild(overlay);
 	doc.body.appendChild(panel);
 	try {
-		import("./update-BbAlyrkl.js").then((mod) => mod.syncUpdateIndicators?.());
+		import("./update-DXjqScOj.js").then((mod) => mod.syncUpdateIndicators?.());
 	} catch {}
 	try {
 		applyTheme(theme);
@@ -11378,7 +12520,13 @@ function createPanel() {
 			if (v) switchView(v);
 		});
 	});
-	doc.getElementById("aus-mobile-back")?.addEventListener("click", () => switchView("settings"));
+	doc.getElementById("aus-mobile-back")?.addEventListener("click", () => switchView(returnFromChild()));
+	doc.getElementById("aus-chat-manage-btn")?.addEventListener("click", () => openChatManage("overview"));
+	doc.getElementById("aus-forecast-chat-manage-btn")?.addEventListener("click", () => openChatManage("forecast"));
+	doc.getElementById("aus-panel")?.addEventListener("click", (e) => {
+		if (e.target?.closest?.("#aus-settings-chat-manage")) openChatManage("settings");
+	});
+	initChatManageView({ go: () => switchView(chatManageOrigin) });
 	const applyCollapsed = (v) => {
 		collapsed = v;
 		const sb = doc.getElementById("aus-sidebar");
@@ -11480,7 +12628,7 @@ function createPanel() {
 		initForecastView();
 	} catch {}
 	try {
-		import("./update-BbAlyrkl.js").then((m) => {
+		import("./update-DXjqScOj.js").then((m) => {
 			const branchBtn = doc.getElementById("aus-update-branch-btn");
 			const branchLabel = doc.getElementById("aus-update-branch-label");
 			const branchDrop = doc.getElementById("aus-update-branch-dropdown");
@@ -11505,7 +12653,7 @@ function createPanel() {
 					if (branch !== "main" && branch !== "dev") return;
 					m.setUpdateBranch(branch);
 					renderBranch();
-					branchDrop.style.display = "none";
+					closeDropdownInstant(branchDrop);
 					m.checkUpdate(true);
 				};
 			});
@@ -11519,7 +12667,7 @@ function createPanel() {
 		if (updBtn) updBtn.onclick = () => {
 			updBtn.textContent = "检查中…";
 			updBtn.setAttribute("disabled", "");
-			import("./update-BbAlyrkl.js").then((m) => m.checkUpdate(true).finally(() => {
+			import("./update-DXjqScOj.js").then((m) => m.checkUpdate(true).finally(() => {
 				updBtn.textContent = "检查更新";
 				updBtn.removeAttribute("disabled");
 			}));
@@ -11529,7 +12677,7 @@ function createPanel() {
 			if (runUpdBtn.hasAttribute("disabled")) return;
 			runUpdBtn.textContent = "更新中…";
 			runUpdBtn.setAttribute("disabled", "");
-			import("./update-BbAlyrkl.js").then((m) => m.updateSelf()).then((res) => {
+			import("./update-DXjqScOj.js").then((m) => m.updateSelf()).then((res) => {
 				if (res.ok && res.changed) {
 					const bannerEl = doc.getElementById("aus-update-banner");
 					if (bannerEl) {
@@ -11571,9 +12719,146 @@ function createPanel() {
 	switchView("overview", { track: false });
 	refreshUI();
 }
+var NARROW_VIEWPORT_MAX = 760;
+var backGuardPushed = false;
+var backGuardWin = null;
+/** 历史记录属于宿主窗口（扩展通常跑在 iframe 里），跨源时回退到自身窗口 */
+function backGuardHost() {
+	try {
+		const w = window.parent;
+		if (w && w !== window && w.history) return w;
+	} catch {}
+	return window;
+}
+/**
+* 是否该接管返回键：窄屏（手机竖屏 / 小窗）或本身就是移动设备
+* （平板横屏、折叠屏展开后宽度会超过 760，但返回键行为与手机一致）。
+*/
+function isNarrowViewport() {
+	try {
+		const w = backGuardHost();
+		const width = Number(w?.innerWidth || window.innerWidth || 0);
+		if (width > 0 && width <= NARROW_VIEWPORT_MAX) return true;
+		return mobileDeviceHint();
+	} catch {
+		return false;
+	}
+}
+/** 关掉面板内最上面的一层浮层（展开的胶囊下拉 / 历史详情窗口），关掉了返回 true */
+function closeTopOverlay() {
+	const doc = getDoc$1();
+	try {
+		const open = Array.from(doc.querySelectorAll("[data-aus-drop-open=\"1\"]"));
+		if (open.length) {
+			for (const el of open) closeDropdownInstant(el);
+			return true;
+		}
+	} catch {}
+	if (activeHistoryDetailTs !== null) try {
+		closeHistoryDetail(doc);
+		return true;
+	} catch {}
+	return false;
+}
+/**
+* 打开面板时压入唯一一条哨兵：把「系统返回」从「退出酒馆」改成「关掉面板」。
+* 桌面端不接管，保持「后退 = 回上一页」的原生语义。
+*/
+function armBackGuard() {
+	if (backGuardPushed) return;
+	if (!isNarrowViewport()) {
+		backDebug("arm-skip-wide");
+		return;
+	}
+	const w = backGuardHost();
+	try {
+		if (!w?.history?.pushState) return;
+		backGuardWin = w;
+		backGuardPushed = true;
+		w.addEventListener("popstate", onBackGuardPop);
+		const base = stripGuardState(w.history.state);
+		if (base) w.history.replaceState(base, "");
+		w.history.pushState(nextGuardState(base ?? w.history.state, 1), "");
+		backDebug("arm", {
+			depth: 1,
+			len: w.history.length
+		});
+	} catch (e) {
+		backDebug("arm-error", { msg: String(e) });
+		backGuardPushed = false;
+		backGuardWin = null;
+	}
+}
+/**
+* 系统返回：直接把面板关掉，回到酒馆页面。
+* 这里**不做任何历史操作**（约束①）——用户这一下已经退回酒馆那条记录了，
+* 剩下的收尾只是关 DOM，历史一动就可能在下次手势里被吃掉。
+*/
+function onBackGuardPop(ev) {
+	backDebug("pop-enter", {
+		evDepth: readGuardDepth(ev?.state),
+		open: panelOpen
+	});
+	if (!panelOpen) {
+		releaseBackGuard(false);
+		return;
+	}
+	const w = backGuardWin;
+	backGuardWin = null;
+	backGuardPushed = false;
+	if (w) try {
+		w.removeEventListener("popstate", onBackGuardPop);
+	} catch {}
+	backDebug("pop-close-panel");
+	try {
+		closeTopOverlay();
+	} catch {}
+	try {
+		closePanel();
+	} catch {}
+}
+/**
+* 解除接管。
+* stepBack=true（点关闭按钮 / 按 Esc）时把还压在上面的那条哨兵退回去，
+* 否则它会留在历史里，让「关掉面板后按返回」第一下什么都不发生；
+* 由返回键触发时传 false——那时用户这一下已经退到酒馆记录上了，绝不能再去 go。
+*/
+function releaseBackGuard(stepBack = true) {
+	const w = backGuardWin;
+	const pushed = backGuardPushed;
+	backGuardWin = null;
+	backGuardPushed = false;
+	backDebug("release", {
+		stepBack,
+		pushed
+	});
+	if (!w) return;
+	try {
+		w.removeEventListener("popstate", onBackGuardPop);
+	} catch {}
+	if (!stepBack || !pushed) return;
+	let depth = 0;
+	try {
+		depth = readGuardDepth(w.history?.state);
+	} catch {}
+	if (depth <= 0) return;
+	setTimeout(() => {
+		let left = 0;
+		try {
+			left = readGuardDepth(w.history?.state);
+		} catch {}
+		if (left <= 0) return;
+		try {
+			w.history.go(-left);
+		} catch {}
+	}, 250);
+}
 function resetPanelState() {
 	panelCreated = false;
 	panelOpen = false;
+	try {
+		releaseBackGuard();
+	} catch {}
 }
 function openPanel() {
 	const doc = getDoc$1();
@@ -11606,12 +12891,16 @@ function openPanel() {
 		} catch {}
 	});
 	panelOpen = true;
+	backDebug("open-panel");
+	try {
+		armBackGuard();
+	} catch {}
 	refreshUI();
 	try {
-		import("./collector-DTy0_F8v.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-H6rMCUjK.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
-		import("./update-BbAlyrkl.js").then((m) => m.maybeAutoCheck());
+		import("./update-DXjqScOj.js").then((m) => m.maybeAutoCheck());
 	} catch {}
 }
 function closePanel() {
@@ -11628,6 +12917,10 @@ function closePanel() {
 	mobileOpen = false;
 	syncMobileSidebar(doc);
 	panelOpen = false;
+	backDebug("close-panel");
+	try {
+		releaseBackGuard();
+	} catch {}
 	try {
 		flushTelemetry("close");
 	} catch {}
@@ -11773,6 +13066,9 @@ function createPeakDot() {
 * 入口：酒馆左下角魔法棒（#extensionsMenu） → 点击打开全屏用量页
 * 面板：独立于酒馆的 #aus-overlay + #aus-panel 全屏页面，DeepSeek 浅色风格
 */
+try {
+	installBackDebug();
+} catch {}
 var MODULE = "api_usage_stat";
 var wandRetryTimer = null;
 var mountRetryTimer = null;
@@ -11782,7 +13078,7 @@ function onEscapeKey(e) {
 }
 function onPageHide() {
 	try {
-		import("./persistence-CaWdvByH.js").then((n) => n.l).then((m) => m.flushSaveHot()).catch(() => {});
+		import("./persistence-DeIFgZp8.js").then((n) => n.m).then((m) => m.flushSaveHot()).catch(() => {});
 	} catch {}
 }
 function cleanupRuntimeBindings() {
@@ -11830,10 +13126,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-_-wOz23M.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DyZ5Oo8Z.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-DTy0_F8v.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-H6rMCUjK.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -11841,10 +13137,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-_-wOz23M.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DyZ5Oo8Z.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-DTy0_F8v.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-H6rMCUjK.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -11904,10 +13200,42 @@ function ensureWandEntry() {
 		}
 	}, 500);
 }
+/** 运行时收尾：卸载拦截器与采集、拆掉面板 DOM、停全部定时器与事件监听（数据一律不动） */
+async function teardownRuntime() {
+	try {
+		import("./interception-DyZ5Oo8Z.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+	} catch {}
+	try {
+		import("./collector-H6rMCUjK.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+	} catch {}
+	try {
+		const doc = getDoc();
+		doc.getElementById("aus-overlay")?.remove();
+		doc.getElementById("aus-panel")?.remove();
+		doc.getElementById("aus_wand_container")?.remove();
+		doc.getElementById("aus-peak-dot-indicator")?.remove();
+	} catch {}
+	try {
+		resetPanelState();
+	} catch {}
+	try {
+		stopPeakDot();
+	} catch {}
+	try {
+		(await import("./balance-6oTd4dyg.js").then((n) => n.t)).stopBalanceTimer?.();
+	} catch {}
+	try {
+		(await import("./currency-C7kzKPUW.js").then((n) => n.t)).stopRateTimer?.();
+	} catch {}
+	try {
+		(await import("./pricing-sync-BI6SnohY.js").then((n) => n.a)).stopPricingSyncTimer?.();
+	} catch {}
+	cleanupRuntimeBindings();
+}
 async function onInstall() {
 	log.debug("installed");
 	try {
-		const { loadHot } = await import("./persistence-CaWdvByH.js").then((n) => n.l);
+		const { loadHot } = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
 		await loadHot();
 	} catch {}
 }
@@ -11917,109 +13245,64 @@ async function onUpdate() {
 async function onDelete() {
 	log.debug("deleted");
 	try {
-		const { flushSaveHot } = await import("./persistence-CaWdvByH.js").then((n) => n.l);
+		const { flushSaveHot } = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
 		flushSaveHot();
 	} catch {}
-	try {
-		const doc = getDoc();
-		doc.getElementById("aus-overlay")?.remove();
-		doc.getElementById("aus-panel")?.remove();
-		doc.getElementById("aus_wand_container")?.remove();
-		doc.getElementById("aus-peak-dot-indicator")?.remove();
-	} catch {}
-	try {
-		resetPanelState();
-	} catch {}
-	try {
-		stopPeakDot();
-	} catch {}
-	try {
-		(await import("./balance-BdsjuDiq.js").then((n) => n.t)).stopBalanceTimer?.();
-	} catch {}
-	try {
-		(await import("./currency-Dsn2T9-Q.js").then((n) => n.t)).stopRateTimer?.();
-	} catch {}
-	try {
-		(await import("./pricing-sync-DDNV-dji.js").then((n) => n.a)).stopPricingSyncTimer?.();
-	} catch {}
-	cleanupRuntimeBindings();
-	try {
-		localStorage.removeItem("ds_ds_webdav_pass");
-	} catch {}
-	try {
-		localStorage.removeItem("ds_ds_peak_dot_pos");
-	} catch {}
-	try {
-		localStorage.removeItem("ds_debug_log");
-	} catch {}
-	try {
-		const ctx = globalThis.SillyTavern?.getContext?.();
-		if (ctx?.extensionSettings) {
-			delete ctx.extensionSettings["api_usage_stat"];
-			ctx.saveSettingsDebounced?.();
-		}
-	} catch {}
+	await teardownRuntime();
 	try {
 		delete globalThis.ApiUsageStat;
 		delete globalThis.ApiUsageStatInterceptor;
 	} catch {}
 }
+/**
+* 卸载前彻底清除本扩展留下的数据（memory/settings/IndexedDB/localStorage 全清）。
+* 触发条件：酒馆 > 扩展管理 > 删除扩展时勾选「同时清理扩展数据」，
+* 或点该扩展的「清理数据」按钮；两者都由酒馆前端在删目录前调用本钩子。
+* 注意：这是不可恢复的操作，酒馆给钩子的超时是 5 秒。
+*/
+async function onClean() {
+	log.debug("cleaning");
+	try {
+		const { flushSaveHot } = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
+		flushSaveHot();
+	} catch {}
+	await teardownRuntime();
+	try {
+		const { wipeAllExtensionData } = await import("./wipe-data-CUS4ikCP.js");
+		const report = await wipeAllExtensionData();
+		log.debug("cleaned", report);
+	} catch (err) {
+		log.debug("clean failed", err);
+	}
+}
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-_-wOz23M.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-DyZ5Oo8Z.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-DTy0_F8v.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-H6rMCUjK.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-BdsjuDiq.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-6oTd4dyg.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
-		import("./currency-Dsn2T9-Q.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+		import("./currency-C7kzKPUW.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-DDNV-dji.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-BI6SnohY.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
 	log.debug("disabled");
 	try {
-		const { flushSaveHot } = await import("./persistence-CaWdvByH.js").then((n) => n.l);
+		const { flushSaveHot } = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
 		flushSaveHot();
 	} catch {}
-	try {
-		import("./interception-_-wOz23M.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
-	} catch {}
-	try {
-		import("./collector-DTy0_F8v.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
-	} catch {}
-	try {
-		const doc = getDoc();
-		doc.getElementById("aus-overlay")?.remove();
-		doc.getElementById("aus-panel")?.remove();
-		doc.getElementById("aus_wand_container")?.remove();
-		doc.getElementById("aus-peak-dot-indicator")?.remove();
-	} catch {}
-	try {
-		resetPanelState();
-	} catch {}
-	try {
-		stopPeakDot();
-	} catch {}
+	await teardownRuntime();
 	try {
 		unwatchSystemTheme();
 	} catch {}
-	try {
-		(await import("./balance-BdsjuDiq.js").then((n) => n.t)).stopBalanceTimer?.();
-	} catch {}
-	try {
-		(await import("./currency-Dsn2T9-Q.js").then((n) => n.t)).stopRateTimer?.();
-	} catch {}
-	try {
-		(await import("./pricing-sync-DDNV-dji.js").then((n) => n.a)).stopPricingSyncTimer?.();
-	} catch {}
-	cleanupRuntimeBindings();
 }
 async function onActivate() {
 	ensureStyleScope();
@@ -12035,7 +13318,7 @@ async function init() {
 	ensureStyleScope();
 	try {
 		setTimeout(() => {
-			import("./update-BbAlyrkl.js").then((m) => m.probeForcedUpdateAtStartup()).catch(() => {});
+			import("./update-DXjqScOj.js").then((m) => m.probeForcedUpdateAtStartup()).catch(() => {});
 		}, 3e3);
 	} catch {}
 	try {
@@ -12050,19 +13333,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-BdsjuDiq.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-6oTd4dyg.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-Dsn2T9-Q.js").then((n) => n.t)).restartRateTimer?.();
+		(await import("./currency-C7kzKPUW.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DDNV-dji.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-BI6SnohY.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-DTy0_F8v.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-H6rMCUjK.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -12084,7 +13367,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-DDNV-dji.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-BI6SnohY.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();
@@ -12131,4 +13414,4 @@ async function init() {
 }
 init();
 //#endregion
-export { onActivate, onDelete, onDisable, onEnable, onInstall, onUpdate, panel_exports as t };
+export { onActivate, onClean, onDelete, onDisable, onEnable, onInstall, onUpdate, panel_exports as t };

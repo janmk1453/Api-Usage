@@ -22,6 +22,8 @@ import { FOUR_OPTIONS, getFourDisplay } from './overview';
 import { historyRecordKey } from '../utils/history-key';
 import { toast } from '../utils/logger';
 import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
+import { filterPickerRows } from './chat-visibility';
+import { closeDropdownInstant, closeDropdownThenPaint } from './dropdown-close';
 
 type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom' | 'all';
 // 默认时间维度：工具栏「重置筛选」与首次进入共用同一口径
@@ -250,7 +252,7 @@ function renderModelPicker(modelsHist?: any[]) {
   if (allInput) {
     allInput.onchange = () => {
       selectedModels = [];
-      renderStatsView();
+      closeDropdownThenPaint(dropdown, () => renderStatsView());
     };
   }
   dropdown.querySelectorAll('input[data-model]').forEach((el: any) => {
@@ -262,7 +264,7 @@ function renderModelPicker(modelsHist?: any[]) {
       } else {
         selectedModels = selectedModels.filter((item) => item !== model);
       }
-      renderStatsView();
+      closeDropdownThenPaint(dropdown, () => renderStatsView());
     };
   });
 }
@@ -272,8 +274,11 @@ function renderChatPicker(chatHist?: any[]) {
   const dropdown = doc.getElementById('aus-chat-dropdown');
   const label = doc.getElementById('aus-chat-label');
   if (!dropdown || !label) return;
-  const list = chatHist ? getRecordedChatsFrom(chatHist) : getRecordedChatsFrom((getSelectedSave() as any)?.history || []);
-  const find = list.find(c => (c.chatId ?? '__null__') === selectedChat);
+  const fullList = chatHist ? getRecordedChatsFrom(chatHist) : getRecordedChatsFrom((getSelectedSave() as any)?.history || []);
+  // 下拉只列出未被隐藏的对话（「对话展示管理」的「下拉选项」集合）；
+  // 选中项即使被隐藏也照常按名称显示，统计口径始终按全量历史计算。
+  const list = filterPickerRows(fullList);
+  const find = fullList.find(c => (c.chatId ?? '__null__') === selectedChat);
   label.textContent = selectedChat === '__all__' ? '全部' : (find?.displayName || selectedChat);
   label.title = find?.chatId || find?.displayName || '';
   let html = `<div data-chat="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${selectedChat==='__all__'?'background:var(--ds-card);font-weight:600;':''}">全部</div>`;
@@ -282,15 +287,21 @@ function renderChatPicker(chatHist?: any[]) {
     const active = key === selectedChat ? 'background:var(--ds-card);font-weight:600;' : '';
     html += `<div data-chat="${esc(key)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}" title="${esc(c.chatId || '')}">${esc(c.displayName)}</div>`;
   }
-  if (!list.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);">暂无对话</div>';
+  if (!list.length) {
+    html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);">'
+      + (fullList.length ? '对话已全部隐藏（可在「对话展示管理」中恢复）' : '暂无对话')
+      + '</div>';
+  }
   dropdown.innerHTML = html;
   dropdown.querySelectorAll('[data-chat]').forEach((el: any) => {
     el.onclick = () => {
       selectedChat = el.getAttribute('data-chat') || '__all__';
       chatPickerOpen = false;
-      dropdown.style.display = 'none';
-      renderChatPicker(chatHist);
-      renderStatsView();
+      // 先瞬时关掉浮层、下一帧再重建页面：否则关与重绘挤在同一个任务里，浮层要等整页重画完才消失
+      closeDropdownThenPaint(dropdown, () => {
+        renderChatPicker(chatHist);
+        renderStatsView();
+      });
     };
   });
 }
@@ -321,8 +332,7 @@ function renderEndpointPicker(history?: any[]) {
       selectedEndpoint = el.getAttribute('data-endpoint') || STATS_FILTER_ALL;
       selectedCredential = STATS_FILTER_ALL;
       endpointPickerOpen = false;
-      dropdown.style.display = 'none';
-      renderStatsView();
+      closeDropdownThenPaint(dropdown, () => renderStatsView());
     };
   });
 }
@@ -352,8 +362,7 @@ function renderCredentialPicker(history?: any[], endpoint = selectedEndpoint) {
     el.onclick = () => {
       selectedCredential = el.getAttribute('data-credential') || STATS_FILTER_ALL;
       credentialPickerOpen = false;
-      dropdown.style.display = 'none';
-      renderStatsView();
+      closeDropdownThenPaint(dropdown, () => renderStatsView());
     };
   });
 }
@@ -425,9 +434,9 @@ function bindPicker() {
         currentRange = r;
         if (r !== 'custom') { customStart=''; customEnd=''; }
         pickerOpen = false;
-        dropdown.style.display = 'none';
+        // 标签先就地改字（浮层已消失，标签必须立刻跟上），页面重建推到下一帧
         updatePickerLabel();
-        renderStatsView();
+        closeDropdownThenPaint(dropdown, () => renderStatsView());
       };
     });
   }
@@ -561,22 +570,28 @@ function renderChartSelectors() {
   yDrop.querySelectorAll('input[data-ykey]').forEach((el: any)=>{
     el.onchange = () => {
       toggleY(el.getAttribute('data-ykey') as any);
-      renderChartSelectors();
-      renderStatsView();
+      closeDropdownThenPaint(yDrop, () => {
+        renderChartSelectors();
+        renderStatsView();
+      });
     };
   });
   yDrop.querySelectorAll('[data-chart-type]').forEach((el: any)=>{
     el.onclick = () => {
       setChartType(el.getAttribute('data-chart-type') as any);
-      renderChartSelectors();
-      renderStatsView();
+      closeDropdownThenPaint(yDrop, () => {
+        renderChartSelectors();
+        renderStatsView();
+      });
     };
   });
   yDrop.querySelectorAll('[data-axis-label]').forEach((el: any)=>{
     el.onclick = () => {
       setAxisLabelMode(el.getAttribute('data-axis-label') as any);
-      renderChartSelectors();
-      renderStatsView();
+      closeDropdownThenPaint(yDrop, () => {
+        renderChartSelectors();
+        renderStatsView();
+      });
     };
   });
   // X 单选
@@ -592,9 +607,11 @@ function renderChartSelectors() {
   xDrop.querySelectorAll('[data-xkey]').forEach((el:any)=>{
     el.onclick = () => {
       setXSelected(el.getAttribute('data-xkey') as any);
-      chartXOpen=false; xDrop.style.display='none';
-      renderChartSelectors();
-      renderStatsView();
+      chartXOpen=false;
+      closeDropdownThenPaint(xDrop, () => {
+        renderChartSelectors();
+        renderStatsView();
+      });
     };
   });
 }
@@ -1079,8 +1096,7 @@ function openStatsFourDrop(idx:number, v:any) {
       arr[at] = key as any;
       (state.settings as any).statsFour = arr;
       try { saveHot({ settings: state.settings }); } catch {}
-      drop.style.display='none';
-      renderStatsView();
+      closeDropdownThenPaint(drop, () => renderStatsView());
     };
   });
   drop.style.display = drop.style.display==='block' ? 'none' : 'block';

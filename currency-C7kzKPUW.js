@@ -1,7 +1,7 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { r as state } from "./store-TDK3YzRZ.js";
 import { i as EXCHANGE_RATE_FETCH_INTERVAL, n as DEFAULT_EXCHANGE_RATE } from "./pricing-Bc-qEvy8.js";
-import { f as saveHot } from "./persistence-CaWdvByH.js";
+import { _ as saveHot } from "./persistence-DeIFgZp8.js";
 //#region src/services/currency.ts
 var currency_exports = /* @__PURE__ */ __exportAll({
 	cnyToDisplay: () => cnyToDisplay,

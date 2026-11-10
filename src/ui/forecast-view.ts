@@ -18,11 +18,13 @@ import type { ModelEfficiencyRow } from '../stats/model-efficiency';
 import { energyScore, topPowerChats } from '../stats/energyScore';
 import { ctxLimitForModel } from '../stats/forecast';
 import { getPricing, isPeakHour, isWalletPeakHour } from '../services/pricing';
+import { afterNextPaint, closeDropdownInstant } from './dropdown-close';
 import { formatMoney, getDisplayCurrency, getWalletExchangeRate } from '../services/currency';
 import { findWalletForHistory, findWalletModel, walletBalanceToCny } from '../data/wallets';
 import { esc } from '../utils/date';
 import { icon } from './icons';
 import { disposeForecastCharts, renderForecastCharts } from './forecast-chart';
+import { filterPickerRows } from './chat-visibility';
 
 type HitMode = 'global' | 'model' | 'manual';
 type EfficiencyScope = 'all' | 'chat';
@@ -307,6 +309,15 @@ function closeAllDropdowns(): void {
   openDropdown = null;
 }
 
+/** 选中某一项后要整页重绘时用：先把五个浮层全部瞬时关掉，重绘留到下一帧。 */
+function closeAllDropdownsInstant(): void {
+  const doc = getDoc();
+  for (const name of ['chat', 'model', 'horizon', 'hit', 'scope']) {
+    closeDropdownInstant(doc.getElementById(`aus-forecast-${name}-dropdown`) as HTMLElement | null);
+  }
+  openDropdown = null;
+}
+
 function toggleDropdown(name: string): void {
   const doc = getDoc();
   if (openDropdown === name) {
@@ -339,22 +350,25 @@ function renderChatDropdown(fullHist: any[]): void {
   const doc = getDoc();
   const dropdown = doc.getElementById('aus-forecast-chat-dropdown') as HTMLElement | null;
   if (!dropdown) return;
-  const chats = getRecordedChatsForForecast(fullHist);
+  // 「对话展示管理」的「下拉选项」集合只过滤可选项；「当前对话」「全部」两个固定项始终保留，
+  // 统计与预测口径仍按全量历史，隐藏只是让该对话不出现在这个下拉里。
+  const allChats = getRecordedChatsForForecast(fullHist);
+  const chats = filterPickerRows(allChats);
   let html = dropdownItem('data-fchat', '__current__', '当前对话', selectedForecastKey === '__current__');
   html += dropdownItem('data-fchat', '__all__', '全部', selectedForecastKey === '__all__');
   for (const chat of chats) {
     const key = chat.chatId ?? '__null__';
     html += dropdownItem('data-fchat', key, chat.displayName, selectedForecastKey === key, chat.chatId ? '' : '旧数据');
   }
-  if (!chats.length) html += '<div class="aus-forecast-dropdown-empty">暂无对话</div>';
+  if (!chats.length) html += '<div class="aus-forecast-dropdown-empty">' + (allChats.length ? '对话已全部隐藏（可在「对话展示管理」中恢复）' : '暂无对话') + '</div>';
   dropdown.innerHTML = html;
   dropdown.querySelectorAll('[data-fchat]').forEach((el: any) => {
     el.onclick = (event: Event) => {
       event.stopPropagation();
       selectedForecastKey = el.getAttribute('data-fchat') || '__current__';
       selectedForecastModel = null;
-      closeAllDropdowns();
-      renderForecastView();
+      closeAllDropdownsInstant();
+      afterNextPaint(() => renderForecastView());
     };
   });
 }
@@ -374,8 +388,8 @@ function renderModelDropdown(options: ModelOption[]): void {
     el.onclick = (event: Event) => {
       event.stopPropagation();
       selectedForecastModel = el.getAttribute('data-fmodel') || null;
-      closeAllDropdowns();
-      renderForecastView();
+      closeAllDropdownsInstant();
+      afterNextPaint(() => renderForecastView());
     };
   });
 }
@@ -397,8 +411,8 @@ function renderHorizonDropdown(): void {
       const value = Number(el.getAttribute('data-fhorizon'));
       if (HORIZONS.includes(value)) horizon = value;
       savePreferences();
-      closeAllDropdowns();
-      renderForecastView();
+      closeAllDropdownsInstant();
+      afterNextPaint(() => renderForecastView());
     };
   });
 }
@@ -461,8 +475,8 @@ function renderHitControl(
         const mode = el.getAttribute('data-fhit');
         if (mode === 'global' || mode === 'model' || mode === 'manual') hitMode = mode;
         savePreferences();
-        closeAllDropdowns();
-        renderForecastView();
+        closeAllDropdownsInstant();
+        afterNextPaint(() => renderForecastView());
       };
     });
   }
@@ -754,8 +768,8 @@ function renderEfficiency(history: any[], scopeLabel: string): void {
         const value = el.getAttribute('data-fscope');
         if (value === 'all' || value === 'chat') efficiencyScope = value;
         savePreferences();
-        closeAllDropdowns();
-        renderForecastView();
+        closeAllDropdownsInstant();
+        afterNextPaint(() => renderForecastView());
       };
     });
   }
@@ -839,8 +853,8 @@ function renderEfficiency(history: any[], scopeLabel: string): void {
       if (!model) return;
       if (!getModelOptions(lastEffectiveHistory).some((option) => option.model === model)) return;
       selectedForecastModel = model;
-      closeAllDropdowns();
-      renderForecastView();
+      closeAllDropdownsInstant();
+      afterNextPaint(() => renderForecastView());
     };
   });
 }

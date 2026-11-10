@@ -17,7 +17,7 @@ const panelCode = stripComments(panelSrc);
 
 describe('匿名统计：页面浏览只在真正打开面板/切换页面时计数', () => {
   it('switchView 支持跳过计数，且默认仍然计数', () => {
-    expect(panelCode).toContain('function switchView(view: AppView, opts?: { track?: boolean })');
+    expect(panelCode).toContain('function switchView(view: AppView, opts?: { track?: boolean; back?: boolean })');
     expect(panelCode).toContain('if (opts?.track !== false) { try { trackPage(view); } catch {} }');
     // 回归防线：不能再出现无条件 trackPage(view)
     expect(panelCode).not.toMatch(/\n\s*try \{ trackPage\(view\); \} catch \{\}/);

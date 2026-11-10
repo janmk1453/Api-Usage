@@ -47,8 +47,12 @@ describe('日期与峰谷工具', () => {
     // 2026-10-10 周六为调休上班日，仍按空闲
     expect(isWeekendDay(new Date(2026, 9, 10))).toBe(true);
     expect(isPeakHour(new Date(2026, 9, 10, 10).getTime(), hours)).toBe(false);
+    // 2027 年数据已纳入（元旦、春节末天、端午）
+    expect(isChinaHoliday(new Date(2027, 0, 1, 10))).toBe(true);
+    expect(isChinaHoliday(new Date(2027, 1, 13, 10))).toBe(true);
+    expect(isChinaHoliday(new Date(2027, 5, 9, 10))).toBe(true);
     // 内置数据范围外的年份不误判
-    expect(isChinaHoliday(new Date(2027, 0, 1, 10))).toBe(false);
+    expect(isChinaHoliday(new Date(2028, 0, 1, 10))).toBe(false);
   });
 
   it('支持补充额外空闲日期并校验日期键', () => {

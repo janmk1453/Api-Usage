@@ -1,14 +1,14 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { r as state } from "./store-TDK3YzRZ.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS } from "./pricing-Bc-qEvy8.js";
-import { a as getExtensionSettings, f as saveHot, o as isMigrationBackupKey, p as historyRecordKey, r as deleteMigrationBackups, u as saveExtensionSettings } from "./persistence-CaWdvByH.js";
+import { _ as saveHot, d as isMigrationBackupKey, h as saveExtensionSettings, s as deleteMigrationBackups, u as getExtensionSettings, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as mergeWalletCollections, a as decryptKey, d as calcCost, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, t as repository } from "./repository-Dq4qsP3r.js";
-import { a as isUnsafeKey, o as isValidDayKey, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-BJI2m6dS.js";
-import { i as getDisplayCurrency, n as fetchLiveRate } from "./currency-Dsn2T9-Q.js";
-import { r as recalcAllCosts } from "./interception-_-wOz23M.js";
-import { i as saveApiKey } from "./balance-BdsjuDiq.js";
-import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-DDNV-dji.js";
+import { C as mergeWalletCollections, a as decryptKey, d as calcCost, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, t as repository } from "./repository-hoZEFuvR.js";
+import { a as isUnsafeKey, o as isValidDayKey, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
+import { i as getDisplayCurrency, n as fetchLiveRate } from "./currency-C7kzKPUW.js";
+import { r as recalcAllCosts } from "./interception-DyZ5Oo8Z.js";
+import { i as saveApiKey } from "./balance-6oTd4dyg.js";
+import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-BI6SnohY.js";
 //#region src/ui/icons.ts
 var PATHS = {
 	overview: "<rect width=\"7\" height=\"9\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"9\" x=\"14\" y=\"12\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"3\" y=\"16\" rx=\"1\"/>",
@@ -34,6 +34,18 @@ var PATHS = {
 */
 function icon(name, size = 20, strokeWidth = 1.9) {
 	return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:inline-block;vertical-align:middle;flex-shrink:0;">${PATHS[name]}</svg>`;
+}
+//#endregion
+//#region src/ui/switch.ts
+function escAttr(value) {
+	return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function switchHTML(id, opts = {}) {
+	const cls = ["aus-switch", opts.className || ""].filter(Boolean).join(" ");
+	const checked = opts.checked ? " checked" : "";
+	const disabled = opts.disabled ? " disabled" : "";
+	const aria = opts.ariaLabel ? ` aria-label="${escAttr(opts.ariaLabel)}"` : "";
+	return `<label class="${cls}"><input type="checkbox" id="${escAttr(id)}" role="switch"${checked}${disabled}${aria} /><span class="aus-switch-track" aria-hidden="true"></span><span class="aus-switch-thumb" aria-hidden="true"></span></label>`;
 }
 //#endregion
 //#region src/services/sync.ts
@@ -795,26 +807,23 @@ async function collectStorageReport(opts = {}) {
 var MODULE = "api_usage_stat";
 /** 小于该体积的条目归入「其他」，避免十几个几十字节的小项把列表撑长 */
 var SMALL_ITEM_BYTES = 1024;
-function esc$1(s) {
-	return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
 /** 单项行：名称 + 数值，数值用等宽数字避免跳动 */
 function row(item, total, opts = {}) {
 	const pctRaw = total > 0 && item.bytes != null ? item.bytes / total * 100 : null;
 	const pct = pctRaw != null && !opts.sub && pctRaw >= .5 ? Math.round(pctRaw) : null;
-	const detailHtml = item.detail && opts.toggle ? `<span data-others-count>${esc$1(item.detail)}</span>` : esc$1(item.detail || "");
+	const detailHtml = item.detail && opts.toggle ? `<span data-others-count>${esc(item.detail)}</span>` : esc(item.detail || "");
 	const sub = item.detail ? `<div ${opts.toggle ? "data-others-hint" : ""} style="font-size:var(--aus-fs-xs);color:var(--ds-text-3);margin-top:2px;line-height:1.4;">${detailHtml}</div>` : "";
 	const indent = opts.sub ? "padding-left:16px;background:color-mix(in srgb, var(--ds-text) 3%, transparent);" : "";
 	const clickStyle = opts.toggle ? "cursor:pointer;user-select:none;" : "";
 	return `<div class="aus-storage-row"${opts.toggle ? ` id="${opts.toggle.id}" role="button" tabindex="0" aria-expanded="${opts.toggle.expanded}"` : ""} style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--ds-border);${indent}${clickStyle}">
     <div style="min-width:0;flex:1 1 auto;">
-      <div class="aus-storage-row-label" style="font-size:var(--aus-fs-base);color:var(--ds-text);line-height:1.5;overflow-wrap:anywhere;">${esc$1(item.label)}</div>
+      <div class="aus-storage-row-label" style="font-size:var(--aus-fs-base);color:var(--ds-text);line-height:1.5;overflow-wrap:anywhere;">${esc(item.label)}</div>
       ${sub}
     </div>
     <div style="flex:0 0 auto;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;">
       <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">${formatBytes(item.bytes)}</div>
       ${pct != null ? `<div style="font-size:var(--aus-fs-xs);color:var(--ds-text-3);margin-top:2px;">${pct}%</div>` : ""}
-      ${opts.action ? `<button id="${opts.action.id}" type="button" data-armed="0" title="${esc$1(opts.action.title || "")}" style="margin-top:5px;padding:3px 10px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-xs);cursor:pointer;line-height:1.5;white-space:nowrap;">${esc$1(opts.action.label)}</button>` : ""}
+      ${opts.action ? `<button id="${opts.action.id}" type="button" data-armed="0" title="${esc(opts.action.title || "")}" style="margin-top:5px;padding:3px 10px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-xs);cursor:pointer;line-height:1.5;white-space:nowrap;">${esc(opts.action.label)}</button>` : ""}
     </div>
   </div>`;
 }
@@ -899,7 +908,7 @@ async function refreshStorageUsage(doc) {
 		body.innerHTML = bodyHtml(report);
 		bindStorageUsageCard(doc);
 	} catch (e) {
-		if (seq === renderSeq) body.innerHTML = `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);padding:8px 0;">统计失败：${esc$1(e?.message || "未知错误")}</div>`;
+		if (seq === renderSeq) body.innerHTML = `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);padding:8px 0;">统计失败：${esc(e?.message || "未知错误")}</div>`;
 	} finally {
 		if (seq === renderSeq && btn) {
 			btn.disabled = false;
@@ -1054,6 +1063,65 @@ function generateDebugBatch() {
 		globalThis.ApiUsageStat?.refreshUI?.();
 	} catch {}
 	alert("已生成 " + generated + " 条模拟数据");
+}
+//#endregion
+//#region src/ui/dropdown-close.ts
+/**
+* 胶囊下拉的「点选项 → 关闭 → 重绘」统一收口。
+*
+* 历史问题：选项处理器习惯写成
+*   drop.style.display = 'none';
+*   renderStatsView();          // 内部重建整页 + 重画 ECharts
+* 两件事挤在同一个任务里，浏览器必须等整段 JS 跑完才首次绘制，于是下拉的关闭状态一直画不出来，
+* 用户看到的是「点了没反应，等一下才突然消失」。反过来先只写 display 也不够：浮层是 90ms 的
+* 淡出过渡，元素在过渡期间仍占着旧画面。所以这里拆成两步：
+*   1) closeDropdownInstant：临时关掉过渡再把 display 写成 none，让浮层当场消失（不参与淡出）；
+*   2) closeDropdownThenPaint：把重绘推到下一帧之后，先让屏幕把「已经关了」画出来，再付重绘的钱。
+*
+* 只给「选中某一项后要重绘」的路径使用；点外部关闭、按钮互斥关闭继续走 CSS 淡出（见 style.css
+* 「胶囊下拉浮层：开 / 合过渡」的关闭态规则），不要换成瞬时关闭，否则失去淡出手感。
+*/
+/** 立即把浮层关掉，不参与 CSS 淡出（临时把 transition 置为 none，写完 display 再还原）。 */
+function closeDropdownInstant(drop) {
+	if (!drop) return;
+	const style = drop.style;
+	if (style.display === "none") return;
+	const prev = style.transition;
+	style.transition = "none";
+	style.display = "none";
+	drop.getBoundingClientRect().width;
+	if (prev) style.transition = prev;
+	else style.removeProperty("transition");
+}
+/** 下一帧（双 requestAnimationFrame）之后再执行，另带 120ms 兜底（后台标签页 rAF 会暂停）。只执行一次。 */
+function afterNextPaint(run, schedule) {
+	let done = false;
+	const fire = () => {
+		if (done) return;
+		done = true;
+		try {
+			run();
+		} catch (err) {
+			console.error("[aus] 下拉关闭后的重绘失败", err);
+		}
+	};
+	const sched = schedule || defaultSchedule;
+	try {
+		sched(fire);
+	} catch {
+		setTimeout(fire, 120);
+	}
+}
+function defaultSchedule(run) {
+	const raf = typeof requestAnimationFrame === "function" ? requestAnimationFrame : null;
+	if (raf) raf(() => raf(run));
+	else setTimeout(run, 0);
+	setTimeout(run, 120);
+}
+/** 瞬时关闭浮层，再把重绘推到下一帧之后。 */
+function closeDropdownThenPaint(drop, run, schedule) {
+	closeDropdownInstant(drop);
+	afterNextPaint(run, schedule);
 }
 var IDENTITY_KEY = "telemetry";
 /** 关闭面板触发上报的最小间隔（吃掉反复开关面板造成的抖动） */
@@ -1257,7 +1325,7 @@ var inFlight = false;
 var bound = false;
 function appVersion() {
 	try {
-		return String("3.1.9");
+		return String("3.2.0");
 	} catch {
 		return "";
 	}
@@ -1826,9 +1894,6 @@ function initTelemetry() {
 //#endregion
 //#region src/ui/settings.ts
 var settings_exports = /* @__PURE__ */ __exportAll({ renderSettings: () => renderSettings });
-function esc(s) {
-	return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-}
 /** 刷新「匿名使用统计」卡片上的标识与状态文案 */
 function renderTelemetryStatus(doc) {
 	const idEl = doc.getElementById("aus-telemetry-id");
@@ -1980,16 +2045,25 @@ function renderSettings(doc) {
 	host.innerHTML = `
     <div style="display:grid;gap:12px;">
       <!-- 颜色模式（与用量统计·模型选择一致的胶囊下拉） -->
-      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">颜色模式</span><div id="aus-theme-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">模式</span><span id="aus-theme-label" style="font-weight:600;color:var(--ds-text);">浅色</span>${icon("chevron-down", 14)}</div></div><div id="aus-theme-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:140px;padding:8px;"></div><div id="aus-theme-hint" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">切换后立即生效，深色模式针对夜间可读性优化</div></div>
+      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">颜色模式</span><div id="aus-theme-btn" class="aus-pill"><span style="color:var(--ds-text-2);">模式</span><span id="aus-theme-label" style="font-weight:600;color:var(--ds-text);">浅色</span>${icon("chevron-down", 14)}</div></div><div id="aus-theme-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:140px;padding:8px;"></div><div id="aus-theme-hint" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">切换扩展颜色模式</div></div>
 
       <!-- 移动端兼容 UI：窄屏底栏（移动端默认） / 改造前的侧栏抽屉（桌面端默认） -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">移动端兼容UI</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-mobile-compat-ui" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-mobile-compat-ui-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">移动端兼容UI</span>${switchHTML("aus-mobile-compat-ui", {
+		checked: s.mobileCompatUi !== false,
+		ariaLabel: "移动端兼容UI"
+	})}</div>
         <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">开启后使用类似 APP 的底栏模式，便于单手操作，多次点按底栏按钮可以返回上一页，关闭后使用旧版的左侧汉堡菜单，桌面端不受本开关控制</div>
       </div>
 
       <!-- 历史显示范围 -->
-      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">历史显示范围</span><div id="aus-history-scope-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">范围</span><span id="aus-history-scope-label" style="font-weight:600;color:var(--ds-text);">全部历史</span>${icon("chevron-down", 14)}</div></div><div id="aus-history-scope-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">调整历史记录页的默认展示范围</div></div>
+      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">历史显示范围</span><div id="aus-history-scope-btn" class="aus-pill"><span style="color:var(--ds-text-2);">范围</span><span id="aus-history-scope-label" style="font-weight:600;color:var(--ds-text);">全部历史</span>${icon("chevron-down", 14)}</div></div><div id="aus-history-scope-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">调整历史记录页的默认展示范围</div></div>
+
+      <!-- 对话展示：控制按对话统计表与各页「对话」下拉胶囊里展示哪些对话（只影响显示） -->
+      <div class="ds-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">对话展示</span><button id="aus-settings-chat-manage" type="button" class="aus-manage-chat-btn" title="管理对话在表格与下拉胶囊中的显示">${icon("menu", 14)}管理对话</button></div>
+        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">管理哪些对话出现在概览列表与「对话」下拉胶囊中；只影响显示隐藏，不影响数据统计</div>
+      </div>
 
       <!-- API 密钥 -->
       <div class="ds-card" style="display:none;"><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);font-weight:500;margin-bottom:6px;">API 密钥</div><div style="display:flex;gap:8px;"><input id="aus-api-key" type="password" placeholder="输入 DeepSeek API 密钥" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);outline:none;" /><button id="aus-save-key" class="ds-btn-pill" style="padding:8px 14px;">保存</button></div><div id="aus-key-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;"></div></div>
@@ -1998,7 +2072,7 @@ function renderSettings(doc) {
       <div class="ds-card">
         <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">自动校准余额</span><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);color:var(--ds-text);">校准间隔（分钟）</span>
           <input type="number" id="aus-balance-interval" min="1" max="1440" style="width:90px;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);text-align:center;" /></div></div>
-        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">在钱包中勾选「自动校准」后按此间隔自动查询余额（暂仅 DeepSeek 官方支持）</div>
+        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">在钱包中勾选「自动校准」后按此间隔自动查询余额</div>
         <div style="display:none;margin-top:12px;"><input id="aus-custom-balance" /><button id="aus-save-balance"></button><button id="aus-clear-balance"></button><div id="aus-balance-status"></div></div>
       </div>
 
@@ -2007,7 +2081,10 @@ function renderSettings(doc) {
 
       <!-- 匿名使用统计（默认开启，可随时关闭） -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">匿名使用统计</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-telemetry-enabled" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-telemetry-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">匿名使用统计</span>${switchHTML("aus-telemetry-enabled", {
+		checked: s.telemetryEnabled !== false,
+		ariaLabel: "匿名使用统计"
+	})}</div>
         <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">仅匿名上报浏览器环境参数（浏览器版本、系统、架构、语言、屏幕等）、渲染性能等开发数据；<strong>不含对话内容、密钥等任何隐私信息，数据经过匿名化处理，仅用于开发与完善兼容性。</strong>关闭后立即停止采集与上报。<a href="https://janmk1453.github.io/Api-Usage/#privacy" target="_blank" rel="noreferrer" style="color:var(--ds-text);text-decoration:underline;">隐私声明</a></div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;flex-wrap:wrap;"><span id="aus-telemetry-id" style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">匿名标识：待生成</span><button id="aus-telemetry-reset" style="padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">重置匿名标识</button></div>
         <div id="aus-telemetry-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;"></div>
@@ -2018,8 +2095,8 @@ function renderSettings(doc) {
       <!-- 汇率与价格同步（models.dev）：无总开关，同步与币种都由各钱包自己的设置决定 -->
       <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">汇率与价格同步（models.dev）</span></div>
         <div id="aus-pricing-sync-panel" style="display:grid;margin-top:10px;gap:10px;">
-          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;"><b style="color:var(--ds-text);">价格同步没有总开关</b>：在钱包页为某个钱包选定「价格来源」后，该钱包里已识别的模型才会按 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 价格同步；未选来源的钱包不参与，也不会联网。同步只按模型名模糊匹配写入该模型的价格，不会把供应商目录整批塞进钱包；DeepSeek 峰价按谷价 2× 合成。<br /><b style="color:var(--ds-text);">显示币种同样由钱包决定</b>：未忽略的钱包全部为美元时全站按 $ 显示（按下方汇率换算），否则按 ¥ CNY；内部计价单位始终是人民币。下表开关只是同步行为与汇率参数，钱包中锁定或手工维护的价格受同步模式保护。</div>
-          <div style="display:flex;align-items:center;justify-content:space-between;position:relative;"><span style="font-size:var(--aus-fs-base);color:var(--ds-text);">同步模式</span><div id="aus-pricing-sync-mode-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);cursor:pointer;"><span id="aus-pricing-sync-mode-label" style="font-weight:600;color:var(--ds-text);">仅新增</span>${icon("chevron-down", 14)}</div><div id="aus-pricing-sync-mode-dropdown" style="display:none;position:absolute;top:40px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div></div>
+          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;"><b style="color:var(--ds-text);">价格同步没有总开关</b>：在钱包页为某个钱包选定「价格来源」后，该钱包里已识别的模型才会按 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 价格同步；DeepSeek 峰价按谷价 2× 合成。<br /><b style="color:var(--ds-text);">显示币种同样由钱包决定</b>：未忽略的钱包全部为美元时全站按 $ 显示（按下方汇率换算），否则按 ¥ CNY；</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;position:relative;"><span style="font-size:var(--aus-fs-base);color:var(--ds-text);">同步模式</span><div id="aus-pricing-sync-mode-btn" class="aus-pill"><span id="aus-pricing-sync-mode-label" style="font-weight:600;color:var(--ds-text);">仅新增</span>${icon("chevron-down", 14)}</div><div id="aus-pricing-sync-mode-dropdown" style="display:none;position:absolute;top:40px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
             <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">汇率 USD→CNY</div><input id="aus-exchange-rate" type="number" step="0.0001" min="0" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div>
             <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">自动同步间隔</div><div id="aus-pricing-sync-interval-btn" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);cursor:pointer;"><span id="aus-pricing-sync-interval-label" style="font-weight:600;">仅手动</span>${icon("chevron-down", 14)}</div><div id="aus-pricing-sync-interval-dropdown" style="display:none;position:absolute;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:140px;padding:8px;"></div></div>
@@ -2035,7 +2112,10 @@ function renderSettings(doc) {
 
       <!-- 调试 -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">调试模式（模拟数据，不计费）</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-debug-mode" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-debug-mode-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">调试模式（模拟数据，不计费）</span>${switchHTML("aus-debug-mode", {
+		checked: !!s.debug,
+		ariaLabel: "调试模式"
+	})}</div>
         <div id="aus-debug-panel" style="display:${s.debug ? "grid" : "none"};margin-top:10px;gap:8px;">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">命中</div><input type="number" id="aus-debug-hit" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div><div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">未命中</div><input type="number" id="aus-debug-miss" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">输出</div><input type="number" id="aus-debug-output" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div><div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">模型</div><select id="aus-debug-model" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);"></select></div></div>
@@ -2046,7 +2126,10 @@ function renderSettings(doc) {
       </div>
 
       <!-- 峰值圆点 -->
-      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">峰值提示小圆点</span><label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;"><input type="checkbox" id="aus-peak-dot" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:var(--ds-border);border-radius:12px;transition:0.2s;"><span id="aus-peak-dot-slider" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--ds-card-inner);border-radius:50%;transition:0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span></span></label></div><button id="aus-reset-dot" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">重置位置</button><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">开启后在酒馆中显示一个小圆点，按颜色区分当前峰谷</div></div>
+      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">峰值提示小圆点</span>${switchHTML("aus-peak-dot", {
+		checked: state.settings.peakDot !== false,
+		ariaLabel: "峰值提示小圆点"
+	})}</div><button id="aus-reset-dot" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">重置位置</button><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">开启后在酒馆中显示一个小圆点，按颜色区分当前峰谷</div></div>
 
       <!-- 记录数据管理 -->
       <div class="ds-card">
@@ -2068,14 +2151,17 @@ function renderSettings(doc) {
       <!-- 存储占用 -->
       ${renderStorageUsageCard(doc)}
 
-      <!-- WebDAV -->
-      <div class="ds-card"><div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:6px;">WebDAV 云同步</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:8px;">双向合并，仅同步统计/设置/余额，不含聊天内容与密钥。强制 https。</div>
-        <div style="display:grid;gap:8px;">
-          <input id="aus-webdav-url" placeholder="https://dav.jianguoyun.com/dav/" style="padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" />
-          <div style="display:flex;gap:8px;"><input id="aus-webdav-user" placeholder="用户名" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /><input id="aus-webdav-pass" type="password" placeholder="应用密码" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /><button id="aus-webdav-pass-clear" type="button" style="padding:8px 12px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">清除密码</button></div>
-          <input id="aus-webdav-path" placeholder="远程子路径（可空）" style="padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" />
-          <input id="aus-webdav-proxy" placeholder="CORS 代理（可选，http://127.0.0.1:8000/proxy?url=）" style="padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" />
-          <button id="aus-webdav-sync" class="ds-btn-pill">☁️ 立即同步</button>
+      <!-- WebDAV（可折叠，默认收起） -->
+      <div class="ds-card"><div id="aus-webdav-header" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;gap:8px;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">WebDAV 云同步</span><span id="aus-webdav-toggle" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;user-select:none;line-height:1;">${icon("chevron-down", 14)} 展开</span></div>
+        <div id="aus-webdav-body" style="display:none;">
+          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin:8px 0;">双向合并，仅同步统计/设置/余额，不含聊天内容与密钥。强制 https。</div>
+          <div style="display:grid;gap:8px;">
+            <input id="aus-webdav-url" placeholder="https://dav.jianguoyun.com/dav/" style="padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" />
+            <div style="display:flex;gap:8px;"><input id="aus-webdav-user" placeholder="用户名" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /><input id="aus-webdav-pass" type="password" placeholder="应用密码" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /><button id="aus-webdav-pass-clear" type="button" style="padding:8px 12px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">清除密码</button></div>
+            <input id="aus-webdav-path" placeholder="远程子路径（可空）" style="padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" />
+            <input id="aus-webdav-proxy" placeholder="CORS 代理（可选，http://127.0.0.1:8000/proxy?url=）" style="padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" />
+            <button id="aus-webdav-sync" class="ds-btn-pill">☁️ 立即同步</button>
+          </div>
         </div>
       </div>
     </div>
@@ -2090,22 +2176,14 @@ function renderSettings(doc) {
 	} catch {}
 	doc.getElementById("aus-custom-balance").value = state.customBalance || "";
 	const telemetryCb = doc.getElementById("aus-telemetry-enabled");
-	const telemetrySlider = doc.getElementById("aus-telemetry-slider");
 	if (telemetryCb) telemetryCb.checked = s.telemetryEnabled !== false;
-	if (telemetrySlider) telemetrySlider.style.left = s.telemetryEnabled !== false ? "23px" : "3px";
 	const mobileUiCb = doc.getElementById("aus-mobile-compat-ui");
-	const mobileUiSlider = doc.getElementById("aus-mobile-compat-ui-slider");
 	if (mobileUiCb) mobileUiCb.checked = s.mobileCompatUi !== false;
-	if (mobileUiSlider) mobileUiSlider.style.left = s.mobileCompatUi !== false ? "23px" : "3px";
 	renderTelemetryStatus(doc);
 	doc.getElementById("aus-peak-dot").checked = state.settings.peakDot !== false;
-	const peakSlider = doc.getElementById("aus-peak-dot-slider");
-	if (peakSlider) peakSlider.style.left = state.settings.peakDot !== false ? "23px" : "3px";
 	doc.getElementById("aus-balance-interval").value = String(s.balanceInterval ?? 10);
 	const dbgCb = doc.getElementById("aus-debug-mode");
-	const dbgSlider = doc.getElementById("aus-debug-mode-slider");
 	if (dbgCb) dbgCb.checked = !!s.debug;
-	if (dbgSlider) dbgSlider.style.left = s.debug ? "23px" : "3px";
 	doc.getElementById("aus-debug-hit").value = String(s.debugHit ?? 1e4);
 	doc.getElementById("aus-debug-miss").value = String(s.debugMiss ?? 5e3);
 	doc.getElementById("aus-debug-output").value = String(s.debugOutput ?? 2e3);
@@ -2136,7 +2214,7 @@ function renderSettings(doc) {
 		const cur = state.settings.theme || "light";
 		label.textContent = cur === "dark" ? "深色" : cur === "auto" ? "跟随系统" : "浅色";
 		const hint = doc.getElementById("aus-theme-hint");
-		if (hint) hint.textContent = "切换后立即生效，深色模式针对夜间可读性优化";
+		if (hint) hint.textContent = "切换扩展颜色模式";
 		if (!dropdown) return;
 		dropdown.innerHTML = [
 			{
@@ -2160,13 +2238,15 @@ function renderSettings(doc) {
 				const v = el.getAttribute("data-theme");
 				state.settings.theme = v;
 				saveHot({ settings: state.settings });
+				closeDropdownInstant(dropdown);
 				applyTheme(v);
 				syncThemeWatcher();
-				dropdown.style.display = "none";
 				renderThemePicker();
-				try {
-					globalThis.ApiUsageStat?.refreshUI?.();
-				} catch {}
+				afterNextPaint(() => {
+					try {
+						globalThis.ApiUsageStat?.refreshUI?.();
+					} catch {}
+				});
 			};
 		});
 	}
@@ -2201,11 +2281,13 @@ function renderSettings(doc) {
 				const v = el.getAttribute("data-scope");
 				state.settings.historyScope = v;
 				saveHot({ settings: state.settings });
-				dropdown.style.display = "none";
+				closeDropdownInstant(dropdown);
 				renderScopePicker();
-				try {
-					globalThis.ApiUsageStat?.refreshUI?.();
-				} catch {}
+				afterNextPaint(() => {
+					try {
+						globalThis.ApiUsageStat?.refreshUI?.();
+					} catch {}
+				});
 			};
 		});
 	}
@@ -2262,12 +2344,11 @@ function renderSettings(doc) {
 		state.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state.settings });
 		try {
-			import("./balance-BdsjuDiq.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-6oTd4dyg.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
 		state.settings.debug = dbgCb.checked;
-		if (dbgSlider) dbgSlider.style.left = dbgCb.checked ? "23px" : "3px";
 		doc.getElementById("aus-debug-panel").style.display = dbgCb.checked ? "grid" : "none";
 		const st = doc.getElementById("aus-debug-status");
 		if (st) st.textContent = dbgCb.checked ? "调试模式已开启，下次对话将使用模拟参数，不计费" : "";
@@ -2307,7 +2388,7 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-Dq4qsP3r.js").then((n) => n.n);
+				const { repository } = await import("./repository-hoZEFuvR.js").then((n) => n.n);
 				const { state: st } = await import("./store-TDK3YzRZ.js").then((n) => n.i);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
@@ -2322,8 +2403,6 @@ function renderSettings(doc) {
 	} catch {}
 	doc.getElementById("aus-peak-dot").onchange = (e) => {
 		state.settings.peakDot = e.target.checked;
-		const sl = doc.getElementById("aus-peak-dot-slider");
-		if (sl) sl.style.left = e.target.checked ? "23px" : "3px";
 		saveHot({ settings: state.settings });
 		try {
 			globalThis.ApiUsageStat?.updatePeakDot?.();
@@ -2348,8 +2427,6 @@ function renderSettings(doc) {
 			flushTelemetryOnDisable();
 		} catch {}
 		state.settings.telemetryEnabled = enabled;
-		const slider = doc.getElementById("aus-telemetry-slider");
-		if (slider) slider.style.left = enabled ? "23px" : "3px";
 		saveHot({ settings: state.settings });
 		renderTelemetryStatus(doc);
 	};
@@ -2357,8 +2434,6 @@ function renderSettings(doc) {
 	if (mobileUiToggle) mobileUiToggle.onchange = (e) => {
 		const enabled = !!e.target.checked;
 		state.settings.mobileCompatUi = enabled;
-		const slider = doc.getElementById("aus-mobile-compat-ui-slider");
-		if (slider) slider.style.left = enabled ? "23px" : "3px";
 		saveHot({ settings: state.settings });
 		try {
 			import("./index.js").then((n) => n.t).then((m) => m.applyMobileNavMode()).catch(() => {});
@@ -2429,7 +2504,7 @@ function renderSettings(doc) {
 				el.onclick = () => {
 					state.settings.pricingSync.mode = el.getAttribute("data-mode");
 					saveHot({ settings: state.settings });
-					modeDrop.style.display = "none";
+					closeDropdownInstant(modeDrop);
 					if (modeLabel) modeLabel.textContent = modeMap[state.settings.pricingSync.mode] || el.getAttribute("data-mode");
 					modeDrop.innerHTML = Object.entries(modeMap).map(([k, l]) => `<div data-mode="${k}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${state.settings.pricingSync.mode === k ? "background:var(--ds-card);font-weight:600;" : ""}">${l}</div>`).join("");
 				};
@@ -2459,11 +2534,11 @@ function renderSettings(doc) {
 				el.onclick = () => {
 					state.settings.pricingSync.autoIntervalHours = parseInt(el.getAttribute("data-interval")) || 0;
 					saveHot({ settings: state.settings });
-					intervalDrop.style.display = "none";
+					closeDropdownInstant(intervalDrop);
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-DDNV-dji.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
-						import("./currency-Dsn2T9-Q.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+						import("./pricing-sync-BI6SnohY.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./currency-C7kzKPUW.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};
 			});
@@ -2492,7 +2567,7 @@ function renderSettings(doc) {
 			state.settings.pricingSync.useLiveRate = liveEl.checked;
 			saveHot({ settings: state.settings });
 			try {
-				import("./currency-Dsn2T9-Q.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+				import("./currency-C7kzKPUW.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 			} catch {}
 		};
 		if (recalcEl) recalcEl.onchange = () => {
@@ -2627,6 +2702,25 @@ function renderSettings(doc) {
 				if (t) t.innerHTML = icon("chevron-up", 14) + " 收起";
 			}, 30);
 		});
+	} catch {}
+	try {
+		const wdBody = doc.getElementById("aus-webdav-body");
+		const wdToggle = doc.getElementById("aus-webdav-toggle");
+		const wdHeader = doc.getElementById("aus-webdav-header");
+		const setWdCollapsed = (next) => {
+			if (wdBody) wdBody.style.display = next ? "none" : "block";
+			if (wdToggle) wdToggle.innerHTML = next ? icon("chevron-down", 14) + " 展开" : icon("chevron-up", 14) + " 收起";
+		};
+		setWdCollapsed(true);
+		const flipWd = () => setWdCollapsed(wdBody?.style.display !== "none");
+		if (wdToggle) wdToggle.onclick = (e) => {
+			e.stopPropagation();
+			flipWd();
+		};
+		if (wdHeader) wdHeader.onclick = (e) => {
+			if (e.target.closest("#aus-webdav-toggle")) return;
+			flipWd();
+		};
 	} catch {}
 }
 function renderPeakHoursEditor(doc) {
@@ -2947,4 +3041,4 @@ function fillDebugModelSelect(doc) {
 	sel.value = state.settings.debugModel;
 }
 //#endregion
-export { trackOpen as a, applyTheme as c, icon as d, initTelemetry as i, unwatchSystemTheme as l, settings_exports as n, trackPage as o, flushTelemetry as r, trackRender as s, renderSettings as t, watchSystemTheme as u };
+export { trackOpen as a, afterNextPaint as c, applyTheme as d, unwatchSystemTheme as f, icon as h, initTelemetry as i, closeDropdownInstant as l, switchHTML as m, settings_exports as n, trackPage as o, watchSystemTheme as p, flushTelemetry as r, trackRender as s, renderSettings as t, closeDropdownThenPaint as u };

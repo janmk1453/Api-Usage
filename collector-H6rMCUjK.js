@@ -1,6 +1,6 @@
 import { r as state } from "./store-TDK3YzRZ.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { E as buildEndpointContext, _ as normalizeModel, b as findWalletForConnection, d as calcCost, t as repository } from "./repository-Dq4qsP3r.js";
+import { E as buildEndpointContext, _ as normalizeModel, b as findWalletForConnection, d as calcCost, t as repository } from "./repository-hoZEFuvR.js";
 //#region src/services/agent-usage/normalize.ts
 /** 取第一个可用的有限数值；0 是有效值，undefined/null/NaN 才跳过 */
 function firstNumber(...values) {
@@ -60,6 +60,42 @@ function normalizeUsage(raw) {
 	};
 }
 //#endregion
+//#region src/services/agent-usage/snapshot-probe.ts
+/** `generate_data` 上是否已经挂上 Agent 快照（自身属性，不认原型链） */
+function hasFrozenRunSnapshot(data) {
+	if (!data || typeof data !== "object") return false;
+	return Object.prototype.hasOwnProperty.call(data, "frozenRunInputSnapshot");
+}
+/** 该 ABI 版本是否需要「事件前后对比」兜底探测（未知版本号按需要处理） */
+function needsSnapshotProbe(abiVersion) {
+	return (Number.isFinite(abiVersion) ? Math.floor(abiVersion) : 0) !== 1;
+}
+/** 只保留最近几次生成：连续多次生成时，旧引用的封口窗口早已过去 */
+function createFrozenSnapshotProbe(limit = 2) {
+	const max = Math.max(1, Math.floor(Number.isFinite(limit) ? limit : 1));
+	let pending = [];
+	return {
+		remember(data) {
+			if (!data || typeof data !== "object") return;
+			if (pending.indexOf(data) >= 0) return;
+			pending.push(data);
+			while (pending.length > max) pending.shift();
+		},
+		flush() {
+			if (!pending.length) return false;
+			const hit = pending.some((item) => hasFrozenRunSnapshot(item));
+			pending = [];
+			return hit;
+		},
+		clear() {
+			pending = [];
+		},
+		size() {
+			return pending.length;
+		}
+	};
+}
+//#endregion
 //#region src/services/agent-usage/tt-agent-api.ts
 function globalScope() {
 	try {
@@ -82,6 +118,26 @@ function getTauriTavernRoot() {
 }
 function isTauriTavern() {
 	return !!getTauriTavernRoot();
+}
+/**
+* 宿主 ABI 版本（`window.__TAURITAVERN__.abiVersion`）。
+*
+* 取值对照（源码 `src/tauri/main/bootstrap.js` 的 `HOST_ABI_VERSION`）：
+* TauriTavern 2.3.0 = 1，2.4.0 = 2。读不到或不是正数时返回 0（未知）。
+*
+* 已知用法：ABI 2 起 `generate_data.frozenRunInputSnapshot` 改为在
+* `GENERATE_AFTER_DATA` 之后才封口，Agent 起点识别需换一条路径，
+* 见 `snapshot-probe.ts`。
+*/
+function getHostAbiVersion() {
+	try {
+		const raw = getTauriTavernRoot()?.abiVersion;
+		const num = typeof raw === "number" ? raw : Number(raw);
+		if (!Number.isFinite(num) || num <= 0) return 0;
+		return Math.floor(num);
+	} catch {
+		return 0;
+	}
 }
 /** Agent ABI 是否可用：listRuns / readEvents 是采集的必要条件 */
 function getAgentApi() {
@@ -311,6 +367,8 @@ var pendingDeadline = 0;
 var activeUnsubscribe = null;
 var activeRunId = null;
 var reconcileTimer = null;
+/** 「事件前后对比」用的快照探测：见 snapshot-probe.ts */
+var snapshotProbe = createFrozenSnapshotProbe();
 function switchOn() {
 	try {
 		return localStorage.getItem(SWITCH_KEY) !== "0";
@@ -329,13 +387,34 @@ function isAgentChannelAvailable() {
 function pendingExpired() {
 	return agentPending && pendingDeadline > 0 && Date.now() > pendingDeadline;
 }
-/** 由 GENERATE_AFTER_DATA 调用：仅 Agent 模式会带 frozenRunInputSnapshot */
+/**
+* 由 GENERATE_AFTER_DATA 调用：仅 Agent 模式会带 frozenRunInputSnapshot。
+*
+* 宿主 ABI 1（TauriTavern ≤ 2.3.0）在事件前就封口，同步读即可判定；
+* ABI 2（2.4.0 起）改为事件后才封口，同步读必然落空，于是把这次 generate_data
+* 的引用交给 snapshotProbe，等下一个酒馆事件再对比同一对象（见 flushSnapshotProbe）。
+*/
 function notifyGenerateAfterData(data, dryRun) {
 	try {
 		if (dryRun === true) return;
 		if (!data || typeof data !== "object") return;
-		if (!Object.prototype.hasOwnProperty.call(data, "frozenRunInputSnapshot")) return;
-		markPending();
+		flushSnapshotProbe();
+		if (hasFrozenRunSnapshot(data)) {
+			markPending();
+			return;
+		}
+		if (needsSnapshotProbe(getHostAbiVersion())) snapshotProbe.remember(data);
+	} catch {}
+}
+/**
+* 复查上一次生成：事件前没有快照、事件后出现了，说明那次是 Agent 生成（ABI 2 的封口时机）。
+* 不排定时器：只在真实酒馆事件到来时顺手对比一次。
+*/
+function flushSnapshotProbe() {
+	try {
+		if (!snapshotProbe.flush()) return;
+		log.debug("Agent 生成已确认（快照在事件后封口），补一次对账");
+		scheduleReconcile(300);
 	} catch {}
 }
 function markPending() {
@@ -439,6 +518,7 @@ function extractAgentRunId(message) {
 /** MESSAGE_RECEIVED 入口：Agent 提交消息后必然带 runId */
 async function notifyMessageReceived(messageId) {
 	try {
+		flushSnapshotProbe();
 		const chat = (globalThis.SillyTavern?.getContext?.())?.chat || [];
 		const runId = extractAgentRunId(chat[typeof messageId === "number" ? messageId : chat.length - 1] || chat[chat.length - 1]);
 		if (!runId) return;
@@ -796,8 +876,6 @@ async function reconcileAgentRuns(limit = MAX_RECONCILE_RUNS) {
 			if (!runId) continue;
 			if (!TERMINAL_STATUSES.has(String(run?.status || ""))) continue;
 			if (hasRecordedAgentRun(runId)) continue;
-			const created = Date.parse(String(run?.createdAt || ""));
-			if (!firstRun && Number.isFinite(created) && Number.isFinite(watermark) && created <= watermark) break;
 			if (await captureAgentRun(runId, run)) count += 1;
 		}
 		if (firstRun && runs[0]?.createdAt && stableChatId) updateWatermark(stableChatId, String(runs[0].createdAt));
@@ -832,11 +910,13 @@ function initAgentUsage() {
 			notifyMessageReceived(messageId);
 		};
 		chatChangedHandler = () => {
+			flushSnapshotProbe();
 			clearPending();
 			cancelActiveRun();
 			scheduleReconcile(1500);
 		};
 		appReadyHandler = () => {
+			flushSnapshotProbe();
 			scheduleReconcile(2500);
 		};
 		if (et.GENERATE_AFTER_DATA) es.on(et.GENERATE_AFTER_DATA, generateAfterDataHandler);
@@ -873,6 +953,7 @@ function uninstallAgentUsage() {
 	} catch {}
 	clearPending();
 	cancelActiveRun();
+	snapshotProbe.clear();
 	if (reconcileTimer) {
 		try {
 			clearTimeout(reconcileTimer);
@@ -884,6 +965,7 @@ function uninstallAgentUsage() {
 /** 打开面板时触发一次对账（上限 5 条，无额外 IPC 峰值） */
 function reconcileOnPanelOpen() {
 	if (!isAgentChannelAvailable()) return;
+	flushSnapshotProbe();
 	scheduleReconcile(600);
 }
 //#endregion

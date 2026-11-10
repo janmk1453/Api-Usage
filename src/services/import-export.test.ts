@@ -51,17 +51,16 @@ describe('钱包导入兼容', () => {
     expect(item).not.toHaveProperty('polluted');
   });
 
-  it('覆盖导入会要求清空冷库', async () => {
+  it('导入只走合并：不清空冷库，也不替换现有统计', async () => {
+    vi.spyOn(repository, 'getAllHistory').mockResolvedValue([]);
     const replaceSpy = vi.spyOn(repository, 'replaceAll').mockResolvedValue();
-    vi.spyOn(repository, 'recalcAll').mockResolvedValue();
+    vi.spyOn(repository, 'recalcAll').mockResolvedValue(false);
     vi.spyOn(repository, 'rebuildAggregates').mockResolvedValue();
 
-    await applyImportedData({ history: [] }, 'overwrite');
+    await applyImportedData({ history: [] });
 
-    expect(replaceSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ history: [] }),
-      { clearCold: true },
-    );
+    expect(replaceSpy).toHaveBeenCalledWith(expect.objectContaining({ history: [] }));
+    expect(replaceSpy.mock.calls.some((call) => (call[1] as any)?.clearCold)).toBe(false);
   });
 });
 
@@ -111,13 +110,13 @@ describe('合并导入会带上设置', () => {
   it('应用文件中的设置，同时保留本机 WebDAV 配置', async () => {
     vi.spyOn(repository, 'getAllHistory').mockResolvedValue([]);
     const replaceSpy = vi.spyOn(repository, 'replaceAll').mockResolvedValue();
-    vi.spyOn(repository, 'recalcAll').mockResolvedValue();
+    vi.spyOn(repository, 'recalcAll').mockResolvedValue(false);
     vi.spyOn(repository, 'rebuildAggregates').mockResolvedValue();
 
     state.settings = { ...defaultSettings(), webdav: { url: 'https://dav.local/dav', username: 'me', path: 'p', proxy: '' } };
     const importedSettings = { ...defaultSettings(), theme: 'dark', peakDot: false, webdav: { url: '', username: '', path: '', proxy: '' } };
 
-    await applyImportedData({ history: [], settings: importedSettings } as any, 'merge');
+    await applyImportedData({ history: [], settings: importedSettings } as any);
 
     const call = replaceSpy.mock.calls.find((entry) => (entry[0] as any)?.settings);
     expect(call).toBeTruthy();
