@@ -3,13 +3,13 @@ import { n as getSelectedSave, o as mobileDeviceHint, r as state$2, t as getHist
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-uubXA-z-.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-hoZEFuvR.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-C7kzKPUW.js";
-import { t as installInterception } from "./interception-CrUoCjwA.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-B5ECIs6B.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-CTlyZrNF.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-4ycCjc3H.js";
+import { t as installInterception } from "./interception-DyZ5Oo8Z.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-6oTd4dyg.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-BPXcU2xs.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-BI6SnohY.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -2485,7 +2485,7 @@ function renderOverview(fullHistory) {
 			return `<div class="ds-card" style="padding:14px;position:relative;overflow:visible;">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
           <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.title}</div>
-          <button id="aus-four-btn-${i}" title="切换指标" style="flex-shrink:0;padding:4px 7px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;line-height:1;">${icon("chevron-down", 14)}</button>
+          <button id="aus-four-btn-${i}" title="切换指标" class="aus-pill-xs" style="flex-shrink:0;color:var(--ds-text-2);">${icon("chevron-down", 14)}</button>
           <div id="aus-four-drop-${i}" style="display:none;position:absolute;top:38px;right:8px;z-index:6;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:180px;max-height:260px;overflow:auto;"></div>
         </div>
         <div style="font-size:18px;font-weight:600;color:${valColor};margin-top:6px;word-break:break-all;">${d.html}</div>
@@ -6174,7 +6174,7 @@ function renderStatsFour(filtered) {
 		return `<div class="ds-card" style="padding:14px;position:relative;overflow:visible;">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
         <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.title}</div>
-        <button id="aus-stats-four-btn-${i}" title="切换指标" style="flex-shrink:0;padding:4px 7px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;line-height:1;">${icon("chevron-down", 14)}</button>
+        <button id="aus-stats-four-btn-${i}" title="切换指标" class="aus-pill-xs" style="flex-shrink:0;color:var(--ds-text-2);">${icon("chevron-down", 14)}</button>
         <div id="aus-stats-four-drop-${i}" style="display:none;position:absolute;top:38px;right:8px;z-index:6;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:180px;max-height:260px;overflow:auto;"></div>
       </div>
       <div style="font-size:18px;font-weight:600;color:${valColor};margin-top:6px;word-break:break-all;">${d.html}</div>
@@ -8856,7 +8856,7 @@ function renderPeakRows(wallet) {
 function renderCredentialPicker(wallet) {
 	const current = wallet.credentials.find((item) => item.id === wallet.balance.primaryCredentialId);
 	return `
-    <button data-wallet-credential-btn="1" data-wallet-id="${esc(wallet.id)}" style="display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;max-width:100%;">
+    <button data-wallet-credential-btn="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill-sm" style="flex-shrink:0;gap:7px;padding:7px 10px;max-width:100%;">
       <span style="color:var(--ds-text-2);">主密钥</span>
       <span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;">${esc(current?.label || "未指定")}</span>
       ${icon("chevron-down", 14)}
@@ -8880,7 +8880,7 @@ function renderCatalogPicker(wallet) {
 	const status = walletSyncStatus(wallet);
 	return `
     <div class="aus-wallet-catalog-picker" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:0 0 auto;min-width:0;max-width:100%;">
-    <button type="button" class="aus-wallet-catalog-btn" data-wallet-catalog-btn="1" data-wallet-id="${esc(wallet.id)}" title="选择价格来源" style="display:flex;align-items:center;gap:7px;flex:0 0 auto;max-width:100%;box-sizing:border-box;min-height:30px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
+    <button type="button" class="aus-wallet-catalog-btn" data-wallet-catalog-btn="1" data-wallet-id="${esc(wallet.id)}" title="选择价格来源" class="aus-pill-sm" style="flex:0 0 auto;gap:7px;max-width:100%;box-sizing:border-box;min-height:30px;padding:7px 10px;">
       <span style="color:var(--ds-text-2);flex:0 0 auto;">价格来源</span>
       ${providerIcon ? "<span style=\"display:inline-flex;flex:0 0 auto;color:var(--ds-text-2);\">" + providerIcon + "</span>" : ""}
       <span style="font-weight:600;min-width:0;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(current?.label || "不自动同步")}</span>
@@ -8904,7 +8904,7 @@ function renderAdapterPicker(wallet) {
 	const current = BALANCE_ADAPTERS.find((item) => item.id === wallet.balance.adapter);
 	return `
     <div style="position:relative;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-      <button data-wallet-adapter-btn="1" data-wallet-id="${esc(wallet.id)}" style="display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">
+      <button data-wallet-adapter-btn="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill-sm" style="gap:6px;padding:6px 9px;">
         <span style="color:var(--ds-text-2);">查询适配器</span>
         <span style="font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(current?.label || "自动识别")}</span>
         ${icon("chevron-down", 14)}
@@ -8983,7 +8983,7 @@ function renderWalletCard(wallet, history) {
           </div>
           <div style="display:flex;gap:6px;align-items:center;position:relative;">
             <input data-wallet-balance-amount="1" data-wallet-id="${esc(wallet.id)}" value="${esc(wallet.balance.amount ?? "")}" placeholder="手工余额" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-            <button data-wallet-currency-btn="1" data-wallet-id="${esc(wallet.id)}" style="padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">${wallet.balance.currency}${icon("chevron-down", 14)}</button>
+            <button data-wallet-currency-btn="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill-sm" style="padding:7px 10px;">${wallet.balance.currency}${icon("chevron-down", 14)}</button>
             <div id="aus-wallet-currency-drop-${esc(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;right:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:6px;min-width:110px;">
               ${dropdownHtml(wallet.id, "currency", [{
 		id: "CNY",
@@ -9003,7 +9003,7 @@ function renderWalletCard(wallet, history) {
             </div>
             <div style="display:flex;gap:6px;">
               <input type="password" data-wallet-api-key="1" data-wallet-id="${esc(wallet.id)}" value="" placeholder="${getWalletApiKey(wallet.id) ? "已保存钱包校准密钥（留空不修改）" : "填写钱包校准密钥"}" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-              <button data-wallet-save-key="1" data-wallet-id="${esc(wallet.id)}" style="padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">保存密钥</button>
+              <button data-wallet-save-key="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill-sm" style="padding:7px 10px;">保存密钥</button>
             </div>
             <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">查询方式：${esc(balanceAdapter?.label || "无")}${balanceAdapter?.note ? "（" + esc(balanceAdapter.note) + "）" : ""}；勾选「自动校准」后按设置页校准间隔轮询；主密钥：${esc(selectedCredential?.label || "未指定")}</div>
             <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc(item.label)).join("、") : "未识别"}</div>
@@ -9198,7 +9198,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-B5ECIs6B.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-6oTd4dyg.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -12082,7 +12082,7 @@ function createPanel() {
         <div style="max-width:1100px;margin:0 auto;display:grid;gap:16px;">
           <div data-view="overview">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div class="ds-card aus-overview-balance-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div class="ds-card-title">充值余额</div><div id="aus-overview-wallet-btn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;"><span style="color:var(--ds-text-2);">余额口径</span><span id="aus-overview-wallet-label" style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部钱包合计</span>${icon("chevron-down", 14)}</div><div id="aus-overview-wallet-dropdown" style="display:none;position:absolute;top:44px;right:10px;z-index:20;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:190px;max-height:260px;overflow:auto;"></div></div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div id="aus-balance-remaining" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;min-height:16px;"></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:var(--aus-fs-sm);">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">导出记录</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">导入记录</button></div></div>
+              <div class="ds-card aus-overview-balance-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div class="ds-card-title">充值余额</div><div id="aus-overview-wallet-btn" class="aus-pill aus-pill-sm"><span style="color:var(--ds-text-2);">余额口径</span><span id="aus-overview-wallet-label" style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部钱包合计</span>${icon("chevron-down", 14)}</div><div id="aus-overview-wallet-dropdown" style="display:none;position:absolute;top:44px;right:10px;z-index:20;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:190px;max-height:260px;overflow:auto;"></div></div><div class="ds-card-val" id="aus-balance">¥0.00<small>CNY</small></div><div id="aus-balance-remaining" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;min-height:16px;"></div><div style="margin-top:8px;display:flex;gap:6px;"><button id="aus-btn-query-balance" class="ds-btn-pill" style="padding:6px 12px;font-size:var(--aus-fs-sm);">查询余额</button><button id="aus-btn-export" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">导出记录</button><button id="aus-btn-import" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">导入记录</button></div></div>
               <div class="ds-card"><div class="ds-card-title">累计消费</div><div class="ds-card-val" id="aus-total-cost">¥0.0000<small>CNY</small></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:2px;" id="aus-total-tokens">0 tokens</div></div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
@@ -12127,7 +12127,7 @@ function createPanel() {
            <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div class="aus-stats-filter">
-                <div id="aus-range-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-range-btn" class="aus-pill"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-range-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);overflow:hidden;flex-direction:row;">
                   <div style="min-width:120px;border-right:1px solid var(--ds-card);padding:8px;display:grid;gap:2px;">
                     <div data-range="all" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);color:var(--ds-text);">全部</div>
@@ -12143,19 +12143,19 @@ function createPanel() {
                 </div>
               </div>
               <div class="aus-stats-filter">
-                <div id="aus-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-model-btn" class="aus-pill"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div class="aus-stats-filter">
-                <div id="aus-chat-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">对话</span><span id="aus-chat-label" style="font-weight:600;color:var(--ds-text);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-chat-btn" class="aus-pill"><span style="color:var(--ds-text-2);">对话</span><span id="aus-chat-label" style="font-weight:600;color:var(--ds-text);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-chat-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div class="aus-stats-filter">
-                <div id="aus-endpoint-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">接入类型</span><span id="aus-endpoint-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-endpoint-btn" class="aus-pill"><span style="color:var(--ds-text-2);">接入类型</span><span id="aus-endpoint-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-endpoint-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div class="aus-stats-filter">
-                <div id="aus-credential-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-credential-btn" class="aus-pill"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div id="aus-stats-filter-reset" class="aus-filter-reset" title="重置筛选" aria-label="重置筛选" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);font-size:var(--aus-fs-base);cursor:pointer;margin-left:auto;">${icon("refresh", 14)}<span>重置筛选</span></div>
@@ -12388,19 +12388,19 @@ function createPanel() {
           <div data-view="history" style="display:none;">
             <div id="aus-history-filter-host" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div class="aus-stats-filter">
-                <div id="aus-history-model-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">模型</span><span id="aus-history-model-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-history-model-btn" class="aus-pill"><span style="color:var(--ds-text-2);">模型</span><span id="aus-history-model-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-history-model-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div class="aus-stats-filter">
-                <div id="aus-history-chat-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">对话</span><span id="aus-history-chat-label" style="font-weight:600;color:var(--ds-text);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-history-chat-btn" class="aus-pill"><span style="color:var(--ds-text-2);">对话</span><span id="aus-history-chat-label" style="font-weight:600;color:var(--ds-text);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-history-chat-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div class="aus-stats-filter">
-                <div id="aus-history-endpoint-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">接入类型</span><span id="aus-history-endpoint-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-history-endpoint-btn" class="aus-pill"><span style="color:var(--ds-text-2);">接入类型</span><span id="aus-history-endpoint-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-history-endpoint-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div class="aus-stats-filter">
-                <div id="aus-history-credential-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-history-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-history-credential-btn" class="aus-pill"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-history-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-history-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div id="aus-history-filter-reset" class="aus-filter-reset" title="重置筛选" aria-label="重置筛选" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);font-size:var(--aus-fs-base);cursor:pointer;margin-left:auto;">${icon("refresh", 14)}<span>重置筛选</span></div>
@@ -12902,7 +12902,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-ifwKgsXU.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-H6rMCUjK.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-DXjqScOj.js").then((m) => m.maybeAutoCheck());
@@ -13131,10 +13131,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-CrUoCjwA.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DyZ5Oo8Z.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-ifwKgsXU.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-H6rMCUjK.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -13142,10 +13142,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-CrUoCjwA.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DyZ5Oo8Z.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-ifwKgsXU.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-H6rMCUjK.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -13208,10 +13208,10 @@ function ensureWandEntry() {
 /** 运行时收尾：卸载拦截器与采集、拆掉面板 DOM、停全部定时器与事件监听（数据一律不动） */
 async function teardownRuntime() {
 	try {
-		import("./interception-CrUoCjwA.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-DyZ5Oo8Z.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-ifwKgsXU.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-H6rMCUjK.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -13227,13 +13227,13 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-B5ECIs6B.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-6oTd4dyg.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-C7kzKPUW.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-4ycCjc3H.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-BI6SnohY.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -13283,19 +13283,19 @@ async function onClean() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-CrUoCjwA.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-DyZ5Oo8Z.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-ifwKgsXU.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-H6rMCUjK.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-B5ECIs6B.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-6oTd4dyg.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-C7kzKPUW.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-4ycCjc3H.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-BI6SnohY.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -13338,19 +13338,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-B5ECIs6B.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-6oTd4dyg.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-C7kzKPUW.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-4ycCjc3H.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-BI6SnohY.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-ifwKgsXU.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-H6rMCUjK.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -13372,7 +13372,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-4ycCjc3H.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-BI6SnohY.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

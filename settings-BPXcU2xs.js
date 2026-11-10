@@ -3,12 +3,12 @@ import { r as state } from "./store-TDK3YzRZ.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, d as isMigrationBackupKey, h as saveExtensionSettings, s as deleteMigrationBackups, u as getExtensionSettings, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as mergeWalletCollections, a as decryptKey, d as calcCost, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, t as repository } from "./repository-uubXA-z-.js";
+import { C as mergeWalletCollections, a as decryptKey, d as calcCost, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, t as repository } from "./repository-hoZEFuvR.js";
 import { a as isUnsafeKey, o as isValidDayKey, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { i as getDisplayCurrency, n as fetchLiveRate } from "./currency-C7kzKPUW.js";
-import { r as recalcAllCosts } from "./interception-CrUoCjwA.js";
-import { i as saveApiKey } from "./balance-B5ECIs6B.js";
-import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-4ycCjc3H.js";
+import { r as recalcAllCosts } from "./interception-DyZ5Oo8Z.js";
+import { i as saveApiKey } from "./balance-6oTd4dyg.js";
+import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-BI6SnohY.js";
 //#region src/ui/icons.ts
 var PATHS = {
 	overview: "<rect width=\"7\" height=\"9\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"9\" x=\"14\" y=\"12\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"3\" y=\"16\" rx=\"1\"/>",
@@ -2045,7 +2045,7 @@ function renderSettings(doc) {
 	host.innerHTML = `
     <div style="display:grid;gap:12px;">
       <!-- 颜色模式（与用量统计·模型选择一致的胶囊下拉） -->
-      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">颜色模式</span><div id="aus-theme-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">模式</span><span id="aus-theme-label" style="font-weight:600;color:var(--ds-text);">浅色</span>${icon("chevron-down", 14)}</div></div><div id="aus-theme-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:140px;padding:8px;"></div><div id="aus-theme-hint" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">切换扩展颜色模式</div></div>
+      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">颜色模式</span><div id="aus-theme-btn" class="aus-pill"><span style="color:var(--ds-text-2);">模式</span><span id="aus-theme-label" style="font-weight:600;color:var(--ds-text);">浅色</span>${icon("chevron-down", 14)}</div></div><div id="aus-theme-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:140px;padding:8px;"></div><div id="aus-theme-hint" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">切换扩展颜色模式</div></div>
 
       <!-- 移动端兼容 UI：窄屏底栏（移动端默认） / 改造前的侧栏抽屉（桌面端默认） -->
       <div class="ds-card">
@@ -2057,7 +2057,7 @@ function renderSettings(doc) {
       </div>
 
       <!-- 历史显示范围 -->
-      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">历史显示范围</span><div id="aus-history-scope-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);cursor:pointer;"><span style="color:var(--ds-text-2);">范围</span><span id="aus-history-scope-label" style="font-weight:600;color:var(--ds-text);">全部历史</span>${icon("chevron-down", 14)}</div></div><div id="aus-history-scope-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">调整历史记录页的默认展示范围</div></div>
+      <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">历史显示范围</span><div id="aus-history-scope-btn" class="aus-pill"><span style="color:var(--ds-text-2);">范围</span><span id="aus-history-scope-label" style="font-weight:600;color:var(--ds-text);">全部历史</span>${icon("chevron-down", 14)}</div></div><div id="aus-history-scope-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">调整历史记录页的默认展示范围</div></div>
 
       <!-- 对话展示：控制按对话统计表与各页「对话」下拉胶囊里展示哪些对话（只影响显示） -->
       <div class="ds-card">
@@ -2096,7 +2096,7 @@ function renderSettings(doc) {
       <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">汇率与价格同步（models.dev）</span></div>
         <div id="aus-pricing-sync-panel" style="display:grid;margin-top:10px;gap:10px;">
           <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;"><b style="color:var(--ds-text);">价格同步没有总开关</b>：在钱包页为某个钱包选定「价格来源」后，该钱包里已识别的模型才会按 <a href="https://models.dev" target="_blank" style="color:var(--ds-text);text-decoration:underline;">models.dev</a> 价格同步；DeepSeek 峰价按谷价 2× 合成。<br /><b style="color:var(--ds-text);">显示币种同样由钱包决定</b>：未忽略的钱包全部为美元时全站按 $ 显示（按下方汇率换算），否则按 ¥ CNY；</div>
-          <div style="display:flex;align-items:center;justify-content:space-between;position:relative;"><span style="font-size:var(--aus-fs-base);color:var(--ds-text);">同步模式</span><div id="aus-pricing-sync-mode-btn" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);cursor:pointer;"><span id="aus-pricing-sync-mode-label" style="font-weight:600;color:var(--ds-text);">仅新增</span>${icon("chevron-down", 14)}</div><div id="aus-pricing-sync-mode-dropdown" style="display:none;position:absolute;top:40px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;position:relative;"><span style="font-size:var(--aus-fs-base);color:var(--ds-text);">同步模式</span><div id="aus-pricing-sync-mode-btn" class="aus-pill"><span id="aus-pricing-sync-mode-label" style="font-weight:600;color:var(--ds-text);">仅新增</span>${icon("chevron-down", 14)}</div><div id="aus-pricing-sync-mode-dropdown" style="display:none;position:absolute;top:40px;right:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
             <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">汇率 USD→CNY</div><input id="aus-exchange-rate" type="number" step="0.0001" min="0" style="width:100%;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);" /></div>
             <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-bottom:4px;">自动同步间隔</div><div id="aus-pricing-sync-interval-btn" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);cursor:pointer;"><span id="aus-pricing-sync-interval-label" style="font-weight:600;">仅手动</span>${icon("chevron-down", 14)}</div><div id="aus-pricing-sync-interval-dropdown" style="display:none;position:absolute;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:140px;padding:8px;"></div></div>
@@ -2344,7 +2344,7 @@ function renderSettings(doc) {
 		state.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state.settings });
 		try {
-			import("./balance-B5ECIs6B.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-6oTd4dyg.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2388,7 +2388,7 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-uubXA-z-.js").then((n) => n.n);
+				const { repository } = await import("./repository-hoZEFuvR.js").then((n) => n.n);
 				const { state: st } = await import("./store-TDK3YzRZ.js").then((n) => n.i);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
@@ -2537,7 +2537,7 @@ function renderSettings(doc) {
 					closeDropdownInstant(intervalDrop);
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-4ycCjc3H.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./pricing-sync-BI6SnohY.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 						import("./currency-C7kzKPUW.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};
