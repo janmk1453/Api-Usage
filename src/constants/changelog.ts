@@ -37,6 +37,18 @@ export const CHANGELOG_ENTRY_LIMIT = 5;
 /** 更新日志（最新在前） */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'r3.2.1',
+    date: '2026-11-14',
+    sections: [
+      {
+        kind: 'improve',
+        items: [
+          '改进图表 tooltip 的表现',
+        ],
+      },
+    ],
+  },
+  {
     version: 'r3.2.0',
     date: '2026-11-08',
     sections: [
