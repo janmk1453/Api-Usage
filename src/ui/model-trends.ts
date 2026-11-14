@@ -1,6 +1,6 @@
 import { esc, localDay } from '../utils/date';
 import { X_OPTIONS } from './chart-config';
-import { CHART_TOOLTIP_SURFACE, chartTooltipPlacement } from './chart-tooltip';
+import { CHART_TOOLTIP_CONFIG } from './chart-tooltip';
 import { attachChartZoom, detachChartZoom, getChartRange } from './range-zoom';
 import { closeDropdownThenPaint } from './dropdown-close';
 
@@ -154,8 +154,8 @@ async function renderOne(id:TrendId, filtered:any[]){
       backgroundColor:cCardInner,
       borderColor:cBorder,
       borderWidth:1,
-      ...CHART_TOOLTIP_SURFACE,
-      ...chartTooltipPlacement(el),
+      // 浮层不越出图表容器：confine 负责夹取，CSS 上限负责不超尺寸
+      ...CHART_TOOLTIP_CONFIG,
       textStyle:{ color:cText, fontSize: 12 },
       formatter:(params:any)=>{
         if (!params?.length) return '';
