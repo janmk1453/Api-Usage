@@ -31,7 +31,6 @@ export type PricingSyncSettings = {
   autoIntervalHours: number;
   lastSync: number | null;
   lastRateFetch: number | null;
-  recalcOnSync: boolean;
   /** 是否在“模型与价格”列表中展开显示已同步模型（默认 false，仅参与计价） */
   showSyncedModels: boolean;
   /** 旧数据同步模型标记迁移版本：0 表示尚未处理（用于版本更新后自动清理列表） */
@@ -120,7 +119,6 @@ export const defaultSettings = (): Settings => ({
     autoIntervalHours: 0,
     lastSync: null,
     lastRateFetch: null,
-    recalcOnSync: false,
     showSyncedModels: false,
     syncedMarkVersion: 0,
   },

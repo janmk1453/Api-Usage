@@ -220,7 +220,6 @@ export function renderSettings(doc: Document) {
           </div>
           <div style="display:flex;align-items:center;gap:8px;"><label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" id="aus-use-live-rate" class="aus-checkbox" /> 每24小时自动联网获取最新汇率</label><button id="aus-fetch-rate" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">立即获取</button></div>
           <div id="aus-rate-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);"></div>
-          <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" id="aus-recalc-on-sync" class="aus-checkbox" /> 同步后重算历史费用（否则仅新请求生效）</label>
           <div style="display:flex;gap:8px;"><button id="aus-btn-sync-pricing" class="ds-btn-pill" style="flex:1;">立即同步</button><button id="aus-btn-preview-pricing" style="flex:1;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">预览</button></div>
           <div id="aus-pricing-sync-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);"></div>
           <div id="aus-pricing-sync-preview" style="display:none;max-height:160px;overflow:auto;border-radius:8px;padding:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);"></div>
@@ -565,8 +564,6 @@ export function renderSettings(doc: Document) {
     if (rateEl) rateEl.value = String(ps.exchangeRate ?? 7.2);
     const liveEl = doc.getElementById('aus-use-live-rate') as HTMLInputElement | null;
     if (liveEl) liveEl.checked = !!ps.useLiveRate;
-    const recalcEl = doc.getElementById('aus-recalc-on-sync') as HTMLInputElement | null;
-    if (recalcEl) recalcEl.checked = !!ps.recalcOnSync;
     const intervalBtn = doc.getElementById('aus-pricing-sync-interval-btn') as HTMLElement | null;
     const intervalLabel = doc.getElementById('aus-pricing-sync-interval-label') as HTMLElement | null;
     const intervalDrop = doc.getElementById('aus-pricing-sync-interval-dropdown') as HTMLElement | null;
@@ -607,10 +604,6 @@ export function renderSettings(doc: Document) {
       (state.settings as any).pricingSync.useLiveRate = liveEl.checked;
       saveHot({ settings: state.settings });
       try { import('../services/currency').then(m=> (m as any).restartRateTimer?.()); } catch {}
-    };
-    if (recalcEl) recalcEl.onchange = () => {
-      (state.settings as any).pricingSync.recalcOnSync = recalcEl.checked;
-      saveHot({ settings: state.settings });
     };
     const fetchBtn = doc.getElementById('aus-fetch-rate') as HTMLElement | null;
     if (fetchBtn) fetchBtn.onclick = async () => {

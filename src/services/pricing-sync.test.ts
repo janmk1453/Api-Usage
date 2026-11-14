@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { state } from '../store/index';
 import { defaultSettings } from '../types/settings';
@@ -36,6 +37,10 @@ describe('钱包价格同步（模糊匹配写入）', () => {
     observeModel(wallet, 'relay-model', 1000);
     state.wallets = [wallet];
     state.walletIgnored = [];
+    state.history = [];
+    state.total_cost = 0;
+    state.input_cost = 0;
+    state.output_cost = 0;
   });
 
   afterEach(() => {
@@ -71,6 +76,36 @@ describe('钱包价格同步（模糊匹配写入）', () => {
     expect(synced.price.priceConfigured).toBe(true);
     expect(synced.price.offpeak).toMatchObject({ hit: 1.4, miss: 7, output: 14 });
     expect(synced.priceMatch).toMatchObject({ provider: 'deepseek', catalogModel: 'relay-model', score: 1 });
+  });
+
+  it('同步写入价格后，已有记录的费用立即按新价重算', async () => {
+    const wallet = currentWallet();
+    state.history = [{
+      timestamp: 2_000,
+      model: 'relay-model',
+      total_tokens: 1_000_000,
+      prompt_tokens: 1_000_000,
+      cache_hit_tokens: 0,
+      cache_miss_tokens: 1_000_000,
+      completion_tokens: 0,
+      input_cost: 0,
+      output_cost: 0,
+      cost: 0,
+      walletId: wallet.id,
+      endpointId: 'sync-endpoint',
+    }];
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => catalogWithPrice(1),
+    }));
+
+    await syncPricingFromModelsDev({ silent: true, force: true });
+
+    // 未命中价 1 USD/1M × 汇率 7 = 7 CNY，1M 未命中 token 即 7 元
+    expect(state.history[0].cost).toBeCloseTo(7, 4);
+    expect(state.history[0].input_cost).toBeCloseTo(7, 4);
+    expect(state.history[0].pricingSource).toBe('wallet');
+    expect(state.total_cost).toBeCloseTo(7, 4);
   });
 
   it('只补未定价模式（add-missing）不覆盖已有价格', async () => {

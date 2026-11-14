@@ -1489,6 +1489,8 @@ export const repository = {
       if (coldChanged) await saveHistoryCold(cold);
     } catch {}
     persist();
+    // 费用变了就得广播：历史页/统计页的缓存都挂在 UPDATED 上，否则重算完仍显示旧数字
+    if (changed > 0) emit(DataEvents.UPDATED);
     return changed;
   },
 
@@ -1692,11 +1694,11 @@ export const repository = {
     }
     // 迁移：pricingSync（无全局开关：币种由钱包 currency 决定，同步由钱包 catalogProvider 决定；汇率 7.2，自动同步仅手动）
     if (!(state.settings as any).pricingSync) {
-      (state.settings as any).pricingSync = { mode: 'add-missing', exchangeRate: 7.2, useLiveRate: true, autoIntervalHours: 0, lastSync: null, lastRateFetch: null, recalcOnSync: false, showSyncedModels: false, syncedMarkVersion: 0 };
+      (state.settings as any).pricingSync = { mode: 'add-missing', exchangeRate: 7.2, useLiveRate: true, autoIntervalHours: 0, lastSync: null, lastRateFetch: null, showSyncedModels: false, syncedMarkVersion: 0 };
       try { saveHot({ settings: state.settings }); } catch {}
     } else {
       try {
-        const def:any = { enabled:false, mode:'add-missing', exchangeRate:7.2, useLiveRate:true, autoIntervalHours:0, lastSync:null, lastRateFetch:null, recalcOnSync:false, showSyncedModels:false, syncedMarkVersion:0 };
+        const def:any = { enabled:false, mode:'add-missing', exchangeRate:7.2, useLiveRate:true, autoIntervalHours:0, lastSync:null, lastRateFetch:null, showSyncedModels:false, syncedMarkVersion:0 };
         const ps:any=(state.settings as any).pricingSync;
         for(const k of Object.keys(def)) if(ps[k]===undefined) ps[k]=def[k];
         const r=parseFloat(String(ps.exchangeRate));

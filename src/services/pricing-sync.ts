@@ -368,10 +368,10 @@ export async function applySyncPlan(
     };
   }
   try { saveHot({ settings: state.settings }); } catch {}
-  if (ps?.recalcOnSync !== false) {
-    for (const walletId of affected) {
-      try { await repository.recalcWallet(walletId); } catch {}
-    }
+  // 赋价后必须按新价重算受影响钱包的历史记录：否则只有新请求生效，
+  // 概览/统计/历史/趋势里的旧记录仍按老价（或待定价的 0）显示，与手动改价两条路径口径不一致。
+  for (const walletId of affected) {
+    try { await repository.recalcWallet(walletId); } catch {}
   }
   try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
   log.debug('sync plan applied', { applied: targets.length, wallets: Array.from(affected) });

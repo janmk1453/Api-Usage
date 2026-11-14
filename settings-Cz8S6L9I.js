@@ -1,14 +1,14 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { r as state } from "./store-TDK3YzRZ.js";
+import { r as state } from "./store-UtA6O3mA.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, d as isMigrationBackupKey, h as saveExtensionSettings, s as deleteMigrationBackups, u as getExtensionSettings, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as mergeWalletCollections, a as decryptKey, d as calcCost, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, t as repository } from "./repository-DynBMwPS.js";
+import { C as mergeWalletCollections, a as decryptKey, d as calcCost, m as isDeepSeekOfficialModel, o as encryptKey, p as getPricing$1, t as repository } from "./repository-C41YrSIn.js";
 import { a as isUnsafeKey, o as isValidDayKey, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
-import { i as getDisplayCurrency, n as fetchLiveRate } from "./currency-C7kzKPUW.js";
-import { r as recalcAllCosts } from "./interception-CTBS4wfW.js";
-import { i as saveApiKey } from "./balance-Kkufps3O.js";
-import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-DfJKz3tJ.js";
+import { i as getDisplayCurrency, n as fetchLiveRate } from "./currency-CJMNKSam.js";
+import { r as recalcAllCosts } from "./interception-CbjUuU_7.js";
+import { i as saveApiKey } from "./balance-BCE_ATCu.js";
+import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-HVbzVuJk.js";
 //#region src/ui/icons.ts
 var PATHS = {
 	overview: "<rect width=\"7\" height=\"9\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"9\" x=\"14\" y=\"12\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"3\" y=\"16\" rx=\"1\"/>",
@@ -2103,7 +2103,6 @@ function renderSettings(doc) {
           </div>
           <div style="display:flex;align-items:center;gap:8px;"><label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" id="aus-use-live-rate" class="aus-checkbox" /> 每24小时自动联网获取最新汇率</label><button id="aus-fetch-rate" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">立即获取</button></div>
           <div id="aus-rate-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);"></div>
-          <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" id="aus-recalc-on-sync" class="aus-checkbox" /> 同步后重算历史费用（否则仅新请求生效）</label>
           <div style="display:flex;gap:8px;"><button id="aus-btn-sync-pricing" class="ds-btn-pill" style="flex:1;">立即同步</button><button id="aus-btn-preview-pricing" style="flex:1;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">预览</button></div>
           <div id="aus-pricing-sync-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);"></div>
           <div id="aus-pricing-sync-preview" style="display:none;max-height:160px;overflow:auto;border-radius:8px;padding:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);"></div>
@@ -2344,7 +2343,7 @@ function renderSettings(doc) {
 		state.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state.settings });
 		try {
-			import("./balance-Kkufps3O.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-BCE_ATCu.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2388,8 +2387,8 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-DynBMwPS.js").then((n) => n.n);
-				const { state: st } = await import("./store-TDK3YzRZ.js").then((n) => n.i);
+				const { repository } = await import("./repository-C41YrSIn.js").then((n) => n.n);
+				const { state: st } = await import("./store-UtA6O3mA.js").then((n) => n.i);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
 				await repository.rebuildAggregates();
@@ -2517,8 +2516,6 @@ function renderSettings(doc) {
 		if (rateEl) rateEl.value = String(ps.exchangeRate ?? 7.2);
 		const liveEl = doc.getElementById("aus-use-live-rate");
 		if (liveEl) liveEl.checked = !!ps.useLiveRate;
-		const recalcEl = doc.getElementById("aus-recalc-on-sync");
-		if (recalcEl) recalcEl.checked = !!ps.recalcOnSync;
 		const intervalBtn = doc.getElementById("aus-pricing-sync-interval-btn");
 		const intervalLabel = doc.getElementById("aus-pricing-sync-interval-label");
 		const intervalDrop = doc.getElementById("aus-pricing-sync-interval-dropdown");
@@ -2537,8 +2534,8 @@ function renderSettings(doc) {
 					closeDropdownInstant(intervalDrop);
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-DfJKz3tJ.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
-						import("./currency-C7kzKPUW.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+						import("./pricing-sync-HVbzVuJk.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./currency-CJMNKSam.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};
 			});
@@ -2567,12 +2564,8 @@ function renderSettings(doc) {
 			state.settings.pricingSync.useLiveRate = liveEl.checked;
 			saveHot({ settings: state.settings });
 			try {
-				import("./currency-C7kzKPUW.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+				import("./currency-CJMNKSam.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 			} catch {}
-		};
-		if (recalcEl) recalcEl.onchange = () => {
-			state.settings.pricingSync.recalcOnSync = recalcEl.checked;
-			saveHot({ settings: state.settings });
 		};
 		const fetchBtn = doc.getElementById("aus-fetch-rate");
 		if (fetchBtn) fetchBtn.onclick = async () => {
