@@ -4,7 +4,7 @@
  */
 import type { ForecastSeries } from '../stats/forecast-series';
 import { chartDateTime } from './chart-time';
-import { CHART_TOOLTIP_CONFIG } from './chart-tooltip';
+import { CHART_TOOLTIP_CONFIG, registerChartTooltipDismiss } from './chart-tooltip';
 import { TOKEN_SERIES_COLORS } from './chart-config';
 
 type CurrencyInfo = { code: string; symbol: string; rate: number };
@@ -104,6 +104,7 @@ async function initChart(id: string, echarts: any): Promise<any | null> {
   el.innerHTML = '';
   const chart = echarts.init(el);
   instances[id] = chart;
+  registerChartTooltipDismiss(chart);
   return chart;
 }
 

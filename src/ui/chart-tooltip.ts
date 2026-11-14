@@ -139,3 +139,172 @@ export const CHART_TOOLTIP_CONFIG = {
   extraCssText:
     'max-width:100%;max-height:100%;box-sizing:border-box;white-space:normal;overflow-wrap:break-word;',
 };
+
+/* ------------------------------------------------------------------ *
+ * 收起来：点别处 / 再点一下同一个点 / 滚页面 / 按 Esc / 切页
+ *
+ * 桌面端鼠标移开就会自己消失，移动端不会：触摸没有 mouseout，ECharts 的
+ * hideLater 等不到 globalout，浮层一旦弹出就只能等下一次点击别的数据项时被替换，
+ * 点空白、点别处、滚页面、切页面它都赖着不走。所以这里统一接管「收起」：
+ *
+ *   1. 点面板里任何地方 —— 先收掉**别的**图表的浮层（被点的那张留给 ECharts
+ *      照常弹出或就地移动）；
+ *   2. 触摸设备上「再点一下同一个点」—— 140ms 后比较浮层的位置与内容，
+ *      没变化说明用户点的还是同一处数据（ECharts 没重画），这时才收起来；
+ *      点到别的柱子时内容/位置会变，浮层跟着移动，不会被误关；
+ *   3. 滚页面 / 按 Esc / 切页 —— 直接收起全部。
+ * ------------------------------------------------------------------ */
+
+/** 能收起悬浮窗的图表实例（只依赖这几个方法，测试里可传假对象） */
+export interface TooltipDismissableChart {
+  dispatchAction?: (payload: { type: string }) => void;
+  getDom?: () => unknown;
+  isDisposed?: () => boolean;
+}
+
+/** ECharts TooltipHTMLContent 给浮层写的固定 z-index，用来在容器里认出它 */
+const TOOLTIP_Z_INDEX = 9999999;
+/** 触摸设备上判断「还是原来那个提示」的回看延迟（要晚于 ECharts 处理 click） */
+const TAP_TOGGLE_DELAY = 140;
+
+const dismissableCharts = new Set<TooltipDismissableChart>();
+let dismissListenersInstalled = false;
+
+/** 当前设备是否没有 hover 能力（手机/平板 → 支持「再点一下收起」） */
+function prefersTapDismiss(): boolean {
+  try {
+    return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(hover: none)').matches
+      : false;
+  } catch {
+    return false;
+  }
+}
+
+function hideTipOf(chart: TooltipDismissableChart): void {
+  try {
+    chart.dispatchAction?.({ type: 'hideTip' });
+  } catch {
+    // 图表已 dispose / 容器已移除：忽略
+  }
+}
+
+function pruneDisposed(): void {
+  for (const chart of dismissableCharts) {
+    try {
+      if (chart.isDisposed?.()) dismissableCharts.delete(chart);
+    } catch {
+      dismissableCharts.delete(chart);
+    }
+  }
+}
+
+function domOf(chart: TooltipDismissableChart): Element | null {
+  try {
+    const dom = chart.getDom?.() as Element | null | undefined;
+    return dom && typeof (dom as any).querySelector === 'function' ? dom : null;
+  } catch {
+    return null;
+  }
+}
+
+function isInside(chart: TooltipDismissableChart, target: unknown): boolean {
+  const dom = domOf(chart);
+  if (!dom || !target) return false;
+  if (dom === target) return true;
+  try {
+    return dom.contains(target as Node);
+  } catch {
+    return false;
+  }
+}
+
+function tooltipNodeOf(chart: TooltipDismissableChart): HTMLElement | null {
+  const dom = domOf(chart) as HTMLElement | null;
+  if (!dom) return null;
+  try {
+    return dom.querySelector(`[style*="z-index: ${TOOLTIP_Z_INDEX}"]`) as HTMLElement | null;
+  } catch {
+    return null;
+  }
+}
+
+/** 浮层位置 + 内容快照：变了说明用户点到了另一处数据，没变说明还是同一处 */
+function tooltipSnapshot(chart: TooltipDismissableChart): string | null {
+  const node = tooltipNodeOf(chart);
+  if (!node || node.style.display === 'none') return null;
+  return `${node.style.transform}|@{node.textContent || ''}`;
+}
+
+/**
+ * 触摸设备：记下当前浮层快照，稍后比对。
+ * 没变化 = 用户点的是同一处数据（ECharts 没有重画）→ 收起；
+ * 变化了 = 点到别处、浮层已跟着移动 → 保持。
+ */
+function armTapToggle(chart: TooltipDismissableChart): void {
+  const before = tooltipSnapshot(chart);
+  if (!before) return; // 当前没显示：这一下交给 ECharts 正常弹出
+  const timer = setTimeout(() => {
+    if (tooltipSnapshot(chart) === before) hideTipOf(chart);
+  }, TAP_TOGGLE_DELAY);
+  (timer as unknown as { unref?: () => void })?.unref?.();
+}
+
+/** 收起全部图表的悬浮窗（切页、滚页面、Esc 用） */
+export function hideAllChartTooltips(): void {
+  pruneDisposed();
+  for (const chart of dismissableCharts) hideTipOf(chart);
+}
+
+/**
+ * 收起「不属于 target 所在图表」的悬浮窗：
+ * target 在 A 图表里 → A 的浮层保留（ECharts 随后按新的点击位置重画或移动），收掉其它图表的；
+ * target 为空（滚动 / 切页 / 面板外点击）→ 全部收起。
+ */
+export function dismissChartTooltipsFor(target: unknown): void {
+  pruneDisposed();
+  for (const chart of dismissableCharts) {
+    if (isInside(chart, target)) continue;
+    hideTipOf(chart);
+  }
+}
+
+function installDismissListeners(): void {
+  if (dismissListenersInstalled || typeof document === 'undefined') return;
+  dismissListenersInstalled = true;
+  const doc = document;
+  const onPress = (event: Event): void => {
+    const target = event.target;
+    dismissChartTooltipsFor(target);
+    if (!prefersTapDismiss()) return;
+    for (const chart of dismissableCharts) {
+      if (isInside(chart, target)) {
+        armTapToggle(chart);
+        break;
+      }
+    }
+  };
+  // 捕获阶段：先于 ECharts 自己的点击处理执行，收掉别的图表的旧浮层
+  doc.addEventListener('pointerdown', onPress, true);
+  // 老 WebView 可能不派发 pointerdown，touchstart 兜一层
+  doc.addEventListener('touchstart', onPress, { capture: true, passive: true });
+  // 滚动不冒泡，必须捕获阶段监听；滚页面就把浮层收掉，避免它“浮”在原地错位
+  doc.addEventListener('scroll', () => hideAllChartTooltips(), true);
+  doc.addEventListener(
+    'keydown',
+    (event: KeyboardEvent) => {
+      if (event.key === 'Escape') hideAllChartTooltips();
+    },
+    true,
+  );
+}
+
+/**
+ * 注册图表，让「点别处 / 再点一下 / 滚页面 / Esc / 切页」能收起它的悬浮窗。
+ * 同一实例重复注册无副作用；已 dispose 的实例会在下次收尾时自动剔除。
+ */
+export function registerChartTooltipDismiss(chart: TooltipDismissableChart): void {
+  if (!chart) return;
+  dismissableCharts.add(chart);
+  installDismissListeners();
+}

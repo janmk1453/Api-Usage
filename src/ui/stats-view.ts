@@ -5,7 +5,7 @@ import { localDay, esc } from '../utils/date';
 import { Y_OPTIONS, Y_GROUPS, X_OPTIONS, getYSelected, getXSelected, getChartType, setChartType, getAxisLabelMode, setAxisLabelMode, toggleY, setXSelected, aggregateForChart, tokenStackDrawOrder, sortTooltipParams } from './chart-config';
 import { renderExtraCharts } from './extra-charts';
 import { BAR_SQUARE, barTopRadius, estimateBarWidth } from './chart-bar';
-import { CHART_TOOLTIP_CONFIG } from './chart-tooltip';
+import { CHART_TOOLTIP_CONFIG, registerChartTooltipDismiss } from './chart-tooltip';
 import { attachChartZoom, clearChartRanges, detachChartZoom, getChartRange, type RangeZoomHandle } from './range-zoom';
 import { renderModelTrends, initModelTrends } from './model-trends';
 import { DataEvents, on as onDataEvent } from '../data/events';
@@ -697,6 +697,8 @@ async function renderChart(filteredRaw: any[]) {
   }
   if (!chart) {
     chart = echarts.init(el);
+    // 点别处 / 滚页面时收起悬浮窗（移动端没有 mouseout，ECharts 不会自己收）
+    registerChartTooltipDismiss(chart);
   } else {
     try { chart.resize(); } catch {}
   }

@@ -27,6 +27,7 @@ import { renderWalletView } from './wallet-view';
 import { initChatManageView, renderChatManageView } from './chat-manage';
 import { helpViewHTML } from './help-view';
 import { chartCardHTML } from './chart-picker';
+import { hideAllChartTooltips } from './chart-tooltip';
 import { filterPickerRows } from './chat-visibility';
 import { backDebug } from './back-debug';
 import { afterNextPaint, closeDropdownInstant } from './dropdown-close';
@@ -1254,6 +1255,8 @@ function openChatManage(from: AppView): void {
 }
 
 function switchView(view: AppView, opts?: { track?: boolean; back?: boolean }) {
+  // 切页时先把图表悬浮窗收掉：页面隐藏后浮层仍留在 DOM 里，回到该页会“凭空”浮着一张旧卡片
+  try { hideAllChartTooltips(); } catch {}
   const prevView = currentView;
   currentView = view;
   // 「设置」下的二级页记忆：点回设置 tab 时恢复到上次位置；主动切回设置根页（重复点 tab / 返回箭头）则清空
@@ -2187,6 +2190,8 @@ export function openPanel() {
 }
 export function closePanel() {
   const doc = getDoc();
+  // 关面板前把图表悬浮窗收掉，下次打开不会残留一张旧浮层
+  try { hideAllChartTooltips(); } catch {}
   const ov = doc.getElementById('aus-overlay') as HTMLElement | null;
   const pn = doc.getElementById('aus-panel') as HTMLElement | null;
   if (ov) { ov.style.opacity = '0'; setTimeout(() => { ov.style.display = 'none'; }, 200); }

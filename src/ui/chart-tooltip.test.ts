@@ -4,7 +4,10 @@ import {
   CHART_TOOLTIP_SURFACE,
   TOOLTIP_GAP,
   chartTooltipPosition,
+  dismissChartTooltipsFor,
+  hideAllChartTooltips,
   placeChartTooltip,
+  registerChartTooltipDismiss,
 } from './chart-tooltip';
 
 // 手机窄屏下的一张图表：容器 340×220，悬浮窗 220×122
@@ -93,5 +96,74 @@ describe('CHART_TOOLTIP_CONFIG', () => {
 
   it('不再有 fixed 宿主的 appendTo（真机上是它把浮层搞乱的）', () => {
     expect(CHART_TOOLTIP_CONFIG).not.toHaveProperty('appendTo');
+  });
+});
+
+describe('dismissChartTooltipsFor / hideAllChartTooltips', () => {
+  const makeChart = (inside: unknown[]) => {
+    const calls: string[] = [];
+    const dom = {
+      querySelector: () => null,
+      contains: (node: unknown) => inside.includes(node),
+    };
+    return {
+      calls,
+      getDom: () => dom,
+      dispatchAction: (payload: { type: string }) => calls.push(payload.type),
+      isDisposed: () => false,
+    };
+  };
+
+  it('点面板别处（不在任何图表里）收起全部', () => {
+    const a = makeChart([]);
+    const b = makeChart([]);
+    registerChartTooltipDismiss(a);
+    registerChartTooltipDismiss(b);
+    dismissChartTooltipsFor({ tagName: 'DIV' });
+    expect(a.calls).toEqual(['hideTip']);
+    expect(b.calls).toEqual(['hideTip']);
+  });
+
+  it('点 A 图表内部时不动 A（由 ECharts 负责弹出/移动），只收别的图表', () => {
+    const node: any = { tagName: 'CANVAS' };
+    const a = makeChart([node]);
+    const b = makeChart([]);
+    registerChartTooltipDismiss(a);
+    registerChartTooltipDismiss(b);
+    dismissChartTooltipsFor(node);
+    expect(a.calls).toEqual([]);
+    expect(b.calls).toEqual(['hideTip']);
+  });
+
+  it('target 为空（滚动 / 切页 / Esc）收起全部', () => {
+    const a = makeChart([]);
+    registerChartTooltipDismiss(a);
+    hideAllChartTooltips();
+    expect(a.calls).toEqual(['hideTip']);
+  });
+
+  it('已 dispose 的图表不再被调用', () => {
+    const calls: string[] = [];
+    registerChartTooltipDismiss({
+      getDom: () => ({ querySelector: () => null, contains: () => false }),
+      dispatchAction: (payload: { type: string }) => calls.push(payload.type),
+      isDisposed: () => true,
+    });
+    hideAllChartTooltips();
+    expect(calls).toEqual([]);
+  });
+
+  it('某个图表 dispatchAction 抛错不影响其它图表', () => {
+    const ok = makeChart([]);
+    registerChartTooltipDismiss({
+      getDom: () => ({ querySelector: () => null, contains: () => false }),
+      dispatchAction: () => {
+        throw new Error('disposed');
+      },
+      isDisposed: () => false,
+    });
+    registerChartTooltipDismiss(ok);
+    expect(() => hideAllChartTooltips()).not.toThrow();
+    expect(ok.calls).toEqual(['hideTip']);
   });
 });

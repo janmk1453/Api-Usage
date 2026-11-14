@@ -3370,6 +3370,126 @@ var CHART_TOOLTIP_CONFIG = {
 	position: chartTooltipPosition,
 	extraCssText: "max-width:100%;max-height:100%;box-sizing:border-box;white-space:normal;overflow-wrap:break-word;"
 };
+/** ECharts TooltipHTMLContent 给浮层写的固定 z-index，用来在容器里认出它 */
+var TOOLTIP_Z_INDEX = 9999999;
+/** 触摸设备上判断「还是原来那个提示」的回看延迟（要晚于 ECharts 处理 click） */
+var TAP_TOGGLE_DELAY = 140;
+var dismissableCharts = /* @__PURE__ */ new Set();
+var dismissListenersInstalled = false;
+/** 当前设备是否没有 hover 能力（手机/平板 → 支持「再点一下收起」） */
+function prefersTapDismiss() {
+	try {
+		return typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia("(hover: none)").matches : false;
+	} catch {
+		return false;
+	}
+}
+function hideTipOf(chart) {
+	try {
+		chart.dispatchAction?.({ type: "hideTip" });
+	} catch {}
+}
+function pruneDisposed() {
+	for (const chart of dismissableCharts) try {
+		if (chart.isDisposed?.()) dismissableCharts.delete(chart);
+	} catch {
+		dismissableCharts.delete(chart);
+	}
+}
+function domOf(chart) {
+	try {
+		const dom = chart.getDom?.();
+		return dom && typeof dom.querySelector === "function" ? dom : null;
+	} catch {
+		return null;
+	}
+}
+function isInside(chart, target) {
+	const dom = domOf(chart);
+	if (!dom || !target) return false;
+	if (dom === target) return true;
+	try {
+		return dom.contains(target);
+	} catch {
+		return false;
+	}
+}
+function tooltipNodeOf(chart) {
+	const dom = domOf(chart);
+	if (!dom) return null;
+	try {
+		return dom.querySelector(`[style*="z-index: ${TOOLTIP_Z_INDEX}"]`);
+	} catch {
+		return null;
+	}
+}
+/** 浮层位置 + 内容快照：变了说明用户点到了另一处数据，没变说明还是同一处 */
+function tooltipSnapshot(chart) {
+	const node = tooltipNodeOf(chart);
+	if (!node || node.style.display === "none") return null;
+	return `${node.style.transform}|@{node.textContent || ''}`;
+}
+/**
+* 触摸设备：记下当前浮层快照，稍后比对。
+* 没变化 = 用户点的是同一处数据（ECharts 没有重画）→ 收起；
+* 变化了 = 点到别处、浮层已跟着移动 → 保持。
+*/
+function armTapToggle(chart) {
+	const before = tooltipSnapshot(chart);
+	if (!before) return;
+	setTimeout(() => {
+		if (tooltipSnapshot(chart) === before) hideTipOf(chart);
+	}, TAP_TOGGLE_DELAY)?.unref?.();
+}
+/** 收起全部图表的悬浮窗（切页、滚页面、Esc 用） */
+function hideAllChartTooltips() {
+	pruneDisposed();
+	for (const chart of dismissableCharts) hideTipOf(chart);
+}
+/**
+* 收起「不属于 target 所在图表」的悬浮窗：
+* target 在 A 图表里 → A 的浮层保留（ECharts 随后按新的点击位置重画或移动），收掉其它图表的；
+* target 为空（滚动 / 切页 / 面板外点击）→ 全部收起。
+*/
+function dismissChartTooltipsFor(target) {
+	pruneDisposed();
+	for (const chart of dismissableCharts) {
+		if (isInside(chart, target)) continue;
+		hideTipOf(chart);
+	}
+}
+function installDismissListeners() {
+	if (dismissListenersInstalled || typeof document === "undefined") return;
+	dismissListenersInstalled = true;
+	const doc = document;
+	const onPress = (event) => {
+		const target = event.target;
+		dismissChartTooltipsFor(target);
+		if (!prefersTapDismiss()) return;
+		for (const chart of dismissableCharts) if (isInside(chart, target)) {
+			armTapToggle(chart);
+			break;
+		}
+	};
+	doc.addEventListener("pointerdown", onPress, true);
+	doc.addEventListener("touchstart", onPress, {
+		capture: true,
+		passive: true
+	});
+	doc.addEventListener("scroll", () => hideAllChartTooltips(), true);
+	doc.addEventListener("keydown", (event) => {
+		if (event.key === "Escape") hideAllChartTooltips();
+	}, true);
+}
+/**
+* 注册图表，让「点别处 / 再点一下 / 滚页面 / Esc / 切页」能收起它的悬浮窗。
+* 同一实例重复注册无副作用；已 dispose 的实例会在下次收尾时自动剔除。
+*/
+function registerChartTooltipDismiss(chart) {
+	if (!chart) return;
+	dismissableCharts.add(chart);
+	installDismissListeners();
+}
 //#endregion
 //#region src/ui/chart-bar.ts
 /**
@@ -3906,6 +4026,7 @@ async function renderOne$1(id, filtered) {
 					width: el.clientWidth || 320,
 					height: el.clientHeight || 260
 				});
+				registerChartTooltipDismiss(c);
 			}
 			c.setOption({
 				backgroundColor: "transparent",
@@ -4128,6 +4249,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 				width: el.clientWidth || 320,
 				height: el.clientHeight || 290
 			});
+			registerChartTooltipDismiss(c);
 		}
 		const isTokenCost = id === "token" || id === "cost";
 		const savedZoom = getChartRange("extra-" + id);
@@ -4609,6 +4731,7 @@ async function renderOne(id, filtered) {
 				width: el.clientWidth || 320,
 				height: el.clientHeight || 250
 			});
+			registerChartTooltipDismiss(c);
 		}
 		const cBorder = themeColor$2("--ds-border", "#E5E7EB");
 		const cCard = themeColor$2("--ds-card", "#F5F6F7");
@@ -5675,8 +5798,10 @@ async function renderChart(filteredRaw) {
 		console.error("[Api-Usage] echarts load failed", e);
 		return;
 	}
-	if (!chart) chart = echarts.init(el);
-	else try {
+	if (!chart) {
+		chart = echarts.init(el);
+		registerChartTooltipDismiss(chart);
+	} else try {
 		chart.resize();
 	} catch {}
 	const kinds = new Set(series.map((s) => s.kind));
@@ -6670,6 +6795,7 @@ async function initChart(id, echarts) {
 	el.innerHTML = "";
 	const chart = echarts.init(el);
 	instances[id] = chart;
+	registerChartTooltipDismiss(chart);
 	return chart;
 }
 function ensureResizeObserver() {
@@ -11934,6 +12060,9 @@ function openChatManage(from) {
 	switchView("chat-manage");
 }
 function switchView(view, opts) {
+	try {
+		hideAllChartTooltips();
+	} catch {}
 	const prevView = currentView;
 	currentView = view;
 	if (isSettingsChild(view)) settingsChildView = view;
@@ -12961,6 +13090,9 @@ function openPanel() {
 }
 function closePanel() {
 	const doc = getDoc$1();
+	try {
+		hideAllChartTooltips();
+	} catch {}
 	const ov = doc.getElementById("aus-overlay");
 	const pn = doc.getElementById("aus-panel");
 	if (ov) {

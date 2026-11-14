@@ -1,6 +1,6 @@
 import { localDay, esc } from '../utils/date';
 import { bucketTip, roundTip, rangeTip } from './chart-time';
-import { CHART_TOOLTIP_CONFIG } from './chart-tooltip';
+import { CHART_TOOLTIP_CONFIG, registerChartTooltipDismiss } from './chart-tooltip';
 import { BAR_SQUARE, barTopRadius, estimateBarWidth } from './chart-bar';
 import { Y_OPTIONS, X_OPTIONS, X_OPTIONS_WITHOUT_ROUND, getYSelected as getMainY, getXSelected as getMainX, tokenStackDrawOrder, sortTooltipParams } from './chart-config';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
@@ -169,6 +169,7 @@ async function renderOne(id:ChartId, filtered:any[]){
       el.innerHTML=''; (el as any).style.height='260px';
       // 兜底尺寸：容器尚不可见时 clientWidth 为 0，ECharts 会画出 0 宽空白（表现为「图表无法加载」）
     c = charts[id]=ec.init(el, undefined, { width: el.clientWidth || 320, height: el.clientHeight || 260 });
+    registerChartTooltipDismiss(c);
     }
     c.setOption({
       backgroundColor:'transparent',
@@ -316,6 +317,7 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
   if (!c || (c as any).isDisposed?.()) {
     el.innerHTML=''; (el as any).style.height='290px';
     c = charts[id]=ec.init(el, undefined, { width: el.clientWidth || 320, height: el.clientHeight || 290 });
+    registerChartTooltipDismiss(c);
   }
   // 前两张：重叠柱 + 曲线（Token/费用）
   const isTokenCost = id==='token' || id==='cost';

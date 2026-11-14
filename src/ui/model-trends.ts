@@ -1,6 +1,6 @@
 import { esc, localDay } from '../utils/date';
 import { X_OPTIONS } from './chart-config';
-import { CHART_TOOLTIP_CONFIG } from './chart-tooltip';
+import { CHART_TOOLTIP_CONFIG, registerChartTooltipDismiss } from './chart-tooltip';
 import { attachChartZoom, detachChartZoom, getChartRange } from './range-zoom';
 import { closeDropdownThenPaint } from './dropdown-close';
 
@@ -132,6 +132,7 @@ async function renderOne(id:TrendId, filtered:any[]){
   if (!c || (c as any).isDisposed?.()) {
     el.innerHTML=''; (el as any).style.height='250px';
     c = charts[id]=ec.init(el, undefined, { width: el.clientWidth || 320, height: el.clientHeight || 250 });
+    registerChartTooltipDismiss(c);
   }
 
   const cBorder = themeColor('--ds-border','#E5E7EB');
