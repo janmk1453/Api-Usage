@@ -1,6 +1,137 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { E as resolveRuntimeConnectionContext, T as initConnectionIdentity, t as repository } from "./repository-B7vP-cjv.js";
+import { E as resolveRuntimeConnectionContext, T as initConnectionIdentity, t as repository } from "./repository-BDw-nmW-.js";
+//#region src/services/missing-usage.ts
+var MISSING_USAGE_KEY = "aus_missing_usage_v1";
+/** 同一次请求可能被 fetch 捕获与生成结束事件各记一次，这个窗口内视为同一条 */
+var MISSING_USAGE_DEDUPE_MS = 6e3;
+/** 提示只看最近 7 天，久到想不起来的老记录不再打扰 */
+var MISSING_USAGE_WINDOW_MS = 6048e5;
+var MISSING_USAGE_UNKNOWN_MODEL = "未知模型";
+var MISSING_USAGE_UNKNOWN_ENDPOINT = "未记录接入";
+function cleanText(value, fallback) {
+	return (typeof value === "string" ? value.trim() : "") || fallback;
+}
+function missingUsageId(model, endpointLabel, at) {
+	return `${model}|${endpointLabel}|${Math.floor(at / MISSING_USAGE_DEDUPE_MS)}`;
+}
+/**
+* 追加一条诊断记录（纯函数，返回新数组）：
+* - 同一 requestKey 已存在 → 跳过
+* - 同模型 + 同接入且时间差在 dedupeMs 内 → 视为同一次请求，跳过
+*/
+function appendMissingUsage(records, record, dedupeMs = MISSING_USAGE_DEDUPE_MS, max = 120) {
+	const list = Array.isArray(records) ? records : [];
+	if (list.some((item) => {
+		if (record.requestKey && item.requestKey) return item.requestKey === record.requestKey;
+		if (item.model !== record.model || item.endpointLabel !== record.endpointLabel) return false;
+		return Math.abs(item.at - record.at) < dedupeMs;
+	})) return list;
+	const next = [...list, record].sort((a, b) => a.at - b.at);
+	return next.length > max ? next.slice(next.length - max) : next;
+}
+/** 按模型 + 接入聚合成提示用的摘要（纯函数） */
+function summarizeMissingUsage(records, now = Date.now(), windowMs = MISSING_USAGE_WINDOW_MS) {
+	const list = (Array.isArray(records) ? records : []).filter((item) => item && typeof item.at === "number" && now - item.at <= windowMs);
+	const map = /* @__PURE__ */ new Map();
+	for (const item of list) {
+		const key = `${item.model}|${item.endpointLabel}`;
+		const row = map.get(key);
+		if (!row) {
+			map.set(key, {
+				model: item.model,
+				endpointLabel: item.endpointLabel,
+				count: 1,
+				lastAt: item.at,
+				reasons: [item.reason]
+			});
+			continue;
+		}
+		row.count += 1;
+		if (item.at > row.lastAt) row.lastAt = item.at;
+		if (!row.reasons.includes(item.reason)) row.reasons.push(item.reason);
+	}
+	const rows = [...map.values()].sort((a, b) => b.count - a.count || b.lastAt - a.lastAt);
+	return {
+		total: list.length,
+		rows
+	};
+}
+function readStore() {
+	try {
+		if (typeof localStorage === "undefined") return [];
+		const raw = localStorage.getItem(MISSING_USAGE_KEY);
+		if (!raw) return [];
+		const parsed = JSON.parse(raw);
+		if (!Array.isArray(parsed)) return [];
+		return parsed.filter((item) => item && typeof item.at === "number" && typeof item.model === "string" && typeof item.endpointLabel === "string");
+	} catch {
+		return [];
+	}
+}
+var writeTimer = null;
+var pendingRecords = null;
+function writeStore(records) {
+	try {
+		if (typeof localStorage === "undefined") return;
+		localStorage.setItem(MISSING_USAGE_KEY, JSON.stringify(records));
+	} catch (e) {
+		log.debug("写入未计量请求记录失败", e?.message || e);
+	}
+}
+/** 内存缓存：节流写盘期间后续记录要接着累加，不能每次都从磁盘重读（否则会丢前一条） */
+var cache = null;
+function currentRecords() {
+	if (!cache) cache = readStore();
+	return cache;
+}
+function getMissingUsageRecords() {
+	return currentRecords();
+}
+/** 记录一次「上游没给用量」的请求；同一请求重复上报会被去重 */
+function noteMissingUsage(input) {
+	try {
+		const at = typeof input.at === "number" ? input.at : Date.now();
+		const model = cleanText(input.model, MISSING_USAGE_UNKNOWN_MODEL);
+		const endpointLabel = cleanText(input.endpointLabel, MISSING_USAGE_UNKNOWN_ENDPOINT);
+		const record = {
+			id: missingUsageId(model, endpointLabel, at),
+			at,
+			model,
+			endpointLabel,
+			sourceType: cleanText(input.sourceType, ""),
+			reason: input.reason === "zero-usage" ? "zero-usage" : "no-usage",
+			stream: typeof input.stream === "boolean" ? input.stream : null,
+			status: typeof input.status === "number" ? input.status : null,
+			requestKey: typeof input.requestKey === "string" && input.requestKey ? input.requestKey : null
+		};
+		cache = appendMissingUsage(currentRecords(), record);
+		pendingRecords = cache;
+		if (writeTimer) return;
+		writeTimer = setTimeout(() => {
+			writeTimer = null;
+			const rows = pendingRecords;
+			pendingRecords = null;
+			if (rows) writeStore(rows);
+		}, 240);
+	} catch (e) {
+		log.debug("记录未计量请求失败", e?.message || e);
+	}
+}
+function clearMissingUsage() {
+	try {
+		cache = [];
+		pendingRecords = null;
+		if (writeTimer) {
+			clearTimeout(writeTimer);
+			writeTimer = null;
+		}
+		if (typeof localStorage !== "undefined") localStorage.removeItem(MISSING_USAGE_KEY);
+	} catch (e) {
+		log.debug("清空未计量请求记录失败", e?.message || e);
+	}
+}
+//#endregion
 //#region src/services/include-usage.ts
 /**
 * 流式 usage 注入的纯逻辑：把 stream_options.include_usage 合并进用户/预设自定义的请求体参数。
@@ -407,7 +538,17 @@ function installFetchCapture() {
 								log.debug("用量响应解析失败", e?.message || e);
 								return;
 							}
-							if (data && data.usage) {
+							const rawUsage = data?.usage;
+							if (rawUsage && isZeroUsage(rawUsage)) noteMissingUsage({
+								model: data?.model || reqBody?.model || fullReq?.model || null,
+								endpointLabel: requestConnection?.endpointLabel ?? null,
+								sourceType: requestConnection?.sourceType ?? null,
+								reason: "zero-usage",
+								stream: requestedStream,
+								status: res.status,
+								requestKey: requestId
+							});
+							else if (data && data.usage) {
 								const model = data?.model || reqBody?.model || fullReq?.model || lastFetchModel || "deepseek-v4-flash";
 								const usage = data.usage;
 								try {
@@ -443,7 +584,15 @@ function installFetchCapture() {
 								} catch (e) {
 									log.error("fetch 用量记录失败 " + (e?.message || e));
 								}
-							}
+							} else if (res.ok) noteMissingUsage({
+								model: reqBody?.model || fullReq?.model || null,
+								endpointLabel: requestConnection?.endpointLabel ?? null,
+								sourceType: requestConnection?.sourceType ?? null,
+								reason: "no-usage",
+								stream: requestedStream,
+								status: res.status,
+								requestKey: requestId
+							});
 						};
 						try {
 							const t0 = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
@@ -589,6 +738,15 @@ function uninstallInterception() {
 		interceptionInstalled = false;
 	} catch {}
 }
+/** 用量字段齐全但三项全是 0：上游「回了 usage 却什么也没说」，与没有 usage 同等对待 */
+function isZeroUsage(u) {
+	if (!u || typeof u !== "object" || Array.isArray(u)) return false;
+	const num = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
+	const prompt = num(u.prompt_tokens) || num(u.input_tokens);
+	const completion = num(u.completion_tokens) || num(u.output_tokens);
+	const total = num(u.total_tokens);
+	return prompt <= 0 && completion <= 0 && total <= 0;
+}
 function isValidUsage(u) {
 	if (!u || typeof u !== "object" || Array.isArray(u)) return false;
 	return typeof u.prompt_tokens === "number" || typeof u.completion_tokens === "number" || typeof u.total_tokens === "number" || typeof u.input_tokens === "number" || typeof u.output_tokens === "number" || typeof u.prompt_cache_hit_tokens === "number" || typeof u.cached_tokens === "number" || u.prompt_tokens_details && typeof u.prompt_tokens_details.cached_tokens === "number";
@@ -718,6 +876,17 @@ function onGenerationEnded(...args) {
 				});
 			}
 		}
+		if (!usage || !isValidUsage(usage)) {
+			const conn = recentConnection(12e4);
+			noteMissingUsage({
+				model,
+				endpointLabel: conn?.endpointLabel ?? null,
+				sourceType: conn?.sourceType ?? null,
+				reason: usage ? "zero-usage" : "no-usage",
+				stream: null,
+				requestKey: recentRequestId(12e4)
+			});
+		}
 		if (extra.token_count != null && !usage) {
 			log.debug("跳过无效 usage：仅有本地 token_count=" + extra.token_count + " model=" + model);
 			return;
@@ -756,4 +925,4 @@ function recalcAllCosts() {
 	return repository.recalcAll();
 }
 //#endregion
-export { interception_exports as n, recalcAllCosts as r, installInterception as t };
+export { clearMissingUsage as a, MISSING_USAGE_WINDOW_MS as i, interception_exports as n, getMissingUsageRecords as o, recalcAllCosts as r, summarizeMissingUsage as s, installInterception as t };

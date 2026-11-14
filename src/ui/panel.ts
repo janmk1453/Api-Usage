@@ -1496,6 +1496,7 @@ export function createPanel() {
              <div id="aus-tap-root"></div>
            </div>
            <div data-view="stats" style="display:none;">
+           <div id="aus-missing-slot"></div>
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div class="aus-stats-filter">
                 <div id="aus-range-btn" class="aus-pill"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span>${icon('chevron-down', 14)}</div>

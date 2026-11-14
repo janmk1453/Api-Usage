@@ -3,14 +3,14 @@ import { n as getSelectedSave, o as mobileDeviceHint, r as state$2, t as getHist
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as walletPendingModelCount, D as DEEPSEEK_WALLET_ID, O as WALLET_CATALOG_PROVIDERS, S as walletBalanceToCny, _ as defaultContextLimitForModel, b as findWalletModel, c as isTruncatedFinish, d as getPricing, g as cloneWallet, h as normalizeModel, i as saveWalletApiKey, m as isWalletPeakHour, p as isPeakHour, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as calcSavings, x as mergeWalletCollections, y as findWalletForHistory } from "./repository-B7vP-cjv.js";
+import { C as walletPendingModelCount, D as DEEPSEEK_WALLET_ID, O as WALLET_CATALOG_PROVIDERS, S as walletBalanceToCny, _ as defaultContextLimitForModel, b as findWalletModel, c as isTruncatedFinish, d as getPricing, g as cloneWallet, h as normalizeModel, i as saveWalletApiKey, m as isWalletPeakHour, p as isPeakHour, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as calcSavings, x as mergeWalletCollections, y as findWalletForHistory } from "./repository-BDw-nmW-.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-CJMNKSam.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
-import { t as installInterception } from "./interception-DzQ0MplD.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-BypvPIQk.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-D10-9eBc.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-DJgmC8rg.js";
+import { a as clearMissingUsage, i as MISSING_USAGE_WINDOW_MS, o as getMissingUsageRecords, s as summarizeMissingUsage, t as installInterception } from "./interception-BJUVYg7m.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-SMGXiVWC.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-BIwZJ-fM.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-BaHkBOSb.js";
 import { a as subscribeTap, i as listTapRecords, n as tapDiagnostics, r as clearTapRecords } from "./request-tap-C2qTkpQP.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
@@ -285,7 +285,7 @@ function triggerImport() {
 //#region src/ui/compare.ts
 var selOld = null;
 var selNew = null;
-function getDoc$12() {
+function getDoc$13() {
 	return window.parent?.document ?? document;
 }
 function diffMessages(oldMsgs, newMsgs) {
@@ -299,7 +299,7 @@ function diffMessages(oldMsgs, newMsgs) {
 	return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${esc(a.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-red-bg);color:var(--ds-red);padding:0 2px;border-radius:3px;\">" + esc(a.slice(i, i + 200)) + "</span>" + esc(a.slice(i + 200, i + 280))}</div><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${esc(b.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-green-bg);color:var(--ds-green);padding:0 2px;border-radius:3px;\">" + esc(b.slice(i, i + 200)) + "</span>" + esc(b.slice(i + 200, i + 280))}</div></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
 }
 function bindHistoryCompare() {
-	const doc = getDoc$12();
+	const doc = getDoc$13();
 	doc.addEventListener("click", (e) => {
 		const t = e.target;
 		if (!t) return;
@@ -316,7 +316,7 @@ function bindHistoryCompare() {
 	});
 }
 function renderDiff() {
-	const host = getDoc$12().getElementById("aus-diff");
+	const host = getDoc$13().getElementById("aus-diff");
 	if (!host) return;
 	if (selOld == null || selNew == null) {
 		host.innerHTML = "<div style=\"text-align:center;padding:16px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">已选 " + (selOld != null ? "旧 " : "") + (selNew != null ? "新 " : "") + "，请在历史中各选一条 旧/新 进行对比</div>";
@@ -1864,18 +1864,18 @@ function renderChatSummaryTable(doc, rows) {
 }
 //#endregion
 //#region src/ui/heatmap.ts
-function getDoc$11() {
+function getDoc$12() {
 	return window.parent?.document ?? document;
 }
 function themeIsDark() {
 	try {
-		return getDoc$11().getElementById("aus-panel")?.getAttribute("data-ds-theme") === "dark";
+		return getDoc$12().getElementById("aus-panel")?.getAttribute("data-ds-theme") === "dark";
 	} catch {
 		return false;
 	}
 }
 function renderHeatmap(filtered) {
-	const doc = getDoc$11();
+	const doc = getDoc$12();
 	const container = doc.getElementById("aus-heatmap-container-overview") || doc.getElementById("aus-heatmap-container");
 	const legendEl = doc.getElementById("aus-heatmap-legend-overview") || doc.getElementById("aus-heatmap-legend");
 	const labelsEl = doc.getElementById("aus-heatmap-labels-overview") || doc.getElementById("aus-heatmap-labels");
@@ -2060,7 +2060,7 @@ function placeDropdownRelativeToHost(input) {
 }
 //#endregion
 //#region src/ui/overview.ts
-function getDoc$10() {
+function getDoc$11() {
 	return window.parent?.document ?? document;
 }
 function fmt(n) {
@@ -2295,7 +2295,7 @@ var overviewWalletBound = false;
 var overviewWalletViewportBound = false;
 var overviewAsyncToken = 0;
 function closeOverviewWalletDropdown() {
-	const dropdown = getDoc$10().getElementById("aus-overview-wallet-dropdown");
+	const dropdown = getDoc$11().getElementById("aus-overview-wallet-dropdown");
 	if (dropdown) dropdown.style.display = "none";
 }
 function bindOverviewWalletViewport() {
@@ -2308,12 +2308,12 @@ function bindOverviewWalletViewport() {
 		window.addEventListener("resize", closeOverviewWalletDropdown, { passive: true });
 	} catch {}
 	try {
-		getDoc$10().getElementById("aus-main")?.addEventListener("scroll", closeOverviewWalletDropdown, { passive: true });
+		getDoc$11().getElementById("aus-main")?.addEventListener("scroll", closeOverviewWalletDropdown, { passive: true });
 	} catch {}
 }
 function positionOverviewWalletDropdown(btn, dropdown) {
 	try {
-		const doc = getDoc$10();
+		const doc = getDoc$11();
 		const hostEl = btn.closest(".aus-overview-balance-card") || btn.parentElement;
 		if (!hostEl) return;
 		try {
@@ -3871,12 +3871,12 @@ function persistExtraPrefs(id) {
 		x: state$1[id].x
 	} } });
 }
-function getDoc$9() {
+function getDoc$10() {
 	return window.parent?.document ?? document;
 }
 function themeColor$3(name, fallback) {
 	try {
-		const doc = getDoc$9();
+		const doc = getDoc$10();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -3985,7 +3985,7 @@ function shortModelName(name, max = 16) {
 }
 async function renderOne$1(id, filtered) {
 	try {
-		const doc = getDoc$9();
+		const doc = getDoc$10();
 		const el = doc.getElementById(`aus-chart-${id}`);
 		if (!el) return;
 		if (id === "req" && state$1[id].x === "round") state$1[id].x = "day";
@@ -4205,7 +4205,7 @@ async function renderOne$1(id, filtered) {
 	} catch (e) {
 		dropChart(id);
 		try {
-			const el2 = getDoc$9().getElementById(`aus-chart-${id}`);
+			const el2 = getDoc$10().getElementById(`aus-chart-${id}`);
 			if (el2) el2.innerHTML = "<div style=\"text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);\">图表加载失败: " + (e?.message || e) + "</div>";
 		} catch {}
 		try {
@@ -4440,7 +4440,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 		}
 		c.setOption(opts, true);
 		attachChartZoom({
-			doc: getDoc$9(),
+			doc: getDoc$10(),
 			chart: c,
 			container: el,
 			left: 40,
@@ -4465,7 +4465,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 	}
 }
 function initExtraCharts() {
-	const doc = getDoc$9();
+	const doc = getDoc$10();
 	for (const id of Object.keys(CHART_DEFS)) {
 		if (!CHART_DEFS[id].hasX) continue;
 		renderExtraY(id);
@@ -4522,7 +4522,7 @@ function initExtraCharts() {
 	});
 }
 function renderExtraY(id) {
-	const doc = getDoc$9();
+	const doc = getDoc$10();
 	const drop = doc.getElementById(`aus-extra-y-drop-${id}`);
 	const label = doc.getElementById(`aus-extra-y-label-${id}`);
 	if (!drop) return;
@@ -4546,7 +4546,7 @@ function renderExtraY(id) {
 	});
 }
 function renderExtraX(id) {
-	const doc = getDoc$9();
+	const doc = getDoc$10();
 	const drop = doc.getElementById(`aus-extra-x-drop-${id}`);
 	const label = doc.getElementById(`aus-extra-x-label-${id}`);
 	if (!drop) return;
@@ -4593,12 +4593,12 @@ var state = {
 	token: { x: "day" },
 	req: { x: "day" }
 };
-function getDoc$8() {
+function getDoc$9() {
 	return window.parent?.document ?? document;
 }
 function themeColor$2(name, fallback) {
 	try {
-		const doc = getDoc$8();
+		const doc = getDoc$9();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -4651,7 +4651,7 @@ function renderModelTrends(filtered) {
 }
 async function renderOne(id, filtered) {
 	try {
-		const doc = getDoc$8();
+		const doc = getDoc$9();
 		const el = doc.getElementById(`aus-chart-model-${id}`);
 		if (!el) return;
 		const xKey = state[id].x;
@@ -4868,7 +4868,7 @@ async function renderOne(id, filtered) {
 			charts[id] = null;
 		}
 		try {
-			const el2 = getDoc$8().getElementById(`aus-chart-model-${id}`);
+			const el2 = getDoc$9().getElementById(`aus-chart-model-${id}`);
 			if (el2) el2.innerHTML = "<div style=\"text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);\">图表加载失败</div>";
 		} catch {}
 		try {
@@ -4877,7 +4877,7 @@ async function renderOne(id, filtered) {
 	}
 }
 function initModelTrends() {
-	const doc = getDoc$8();
+	const doc = getDoc$9();
 	for (const id of ["token", "req"]) {
 		const btn = doc.getElementById(`aus-modeltrends-x-btn-${id}`);
 		const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
@@ -4896,7 +4896,7 @@ function initModelTrends() {
 	});
 }
 function renderXDrop(id) {
-	const doc = getDoc$8();
+	const doc = getDoc$9();
 	const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
 	const label = doc.getElementById(`aus-modeltrends-x-label-${id}`);
 	if (!drop) return;
@@ -5048,6 +5048,119 @@ function writeFilterPrefs(patch) {
 		if (raw === serialized) return;
 		store.setItem(FILTER_PREFS_KEY, serialized);
 	} catch {}
+}
+//#endregion
+//#region src/ui/missing-usage-bar.ts
+/**
+* 统计页顶部「未计量请求」提示条
+*
+* 上游没返回 usage 的请求以前被静默丢弃，用户只看到「对话发生了但历史页没有」。
+* 这条提示把丢弃显性化：有多少次、哪个模型、哪个接入，并可清空。
+* 只做提示，不参与任何统计口径。
+*/
+var BAR_ID = "aus-missing-bar";
+var CONFIRM_WINDOW_MS = 4e3;
+function getDoc$8() {
+	return window.parent?.document ?? document;
+}
+function escapeHtml(text) {
+	return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function formatWhen(at) {
+	const d = new Date(at);
+	const pad = (n) => String(n).padStart(2, "0");
+	return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function reasonText(row) {
+	return row.reasons.includes("zero-usage") ? "返回的用量全是 0" : "没有返回用量";
+}
+/** 静态骨架（放在统计页视图里，避免每次重绘整体重建） */
+function missingUsageBarHTML() {
+	return `<div class="aus-missing-bar" id="${BAR_ID}" style="display:none;">
+  <div class="aus-missing-head">
+    <span class="aus-missing-dot" aria-hidden="true"></span>
+    <span class="aus-missing-text" id="aus-missing-text"></span>
+    <button type="button" class="aus-missing-link" id="aus-missing-toggle">详情</button>
+    <button type="button" class="aus-missing-link" id="aus-missing-clear">清空</button>
+  </div>
+  <div class="aus-missing-body" id="aus-missing-body" style="display:none;"></div>
+</div>`;
+}
+function bindBar(bar, doc) {
+	if (bar.__ausBound) return;
+	bar.__ausBound = true;
+	const toggle = bar.querySelector("#aus-missing-toggle");
+	const body = bar.querySelector("#aus-missing-body");
+	const clear = bar.querySelector("#aus-missing-clear");
+	if (toggle && body) toggle.onclick = () => {
+		const open = body.style.display !== "none";
+		body.style.display = open ? "none" : "block";
+		toggle.textContent = open ? "详情" : "收起";
+		if (!open) paintBody(bar);
+	};
+	if (clear) {
+		let armedAt = 0;
+		clear.onclick = () => {
+			const now = Date.now();
+			if (!armedAt || now - armedAt > CONFIRM_WINDOW_MS) {
+				armedAt = now;
+				clear.textContent = "确认清空";
+				setTimeout(() => {
+					if (Date.now() - armedAt >= CONFIRM_WINDOW_MS) {
+						clear.textContent = "清空";
+						armedAt = 0;
+					}
+				}, CONFIRM_WINDOW_MS);
+				return;
+			}
+			armedAt = 0;
+			clear.textContent = "清空";
+			clearMissingUsage();
+			renderMissingUsageBar(doc);
+		};
+	}
+}
+function paintBody(bar) {
+	const body = bar.querySelector("#aus-missing-body");
+	if (!body) return;
+	body.innerHTML = summarizeMissingUsage(getMissingUsageRecords(), Date.now(), MISSING_USAGE_WINDOW_MS).rows.map((row) => `<div class="aus-missing-row">
+        <span class="aus-missing-row-model">${escapeHtml(row.model)}</span>
+        <span class="aus-missing-row-endpoint">${escapeHtml(row.endpointLabel)}</span>
+        <span class="aus-missing-row-count">${row.count} 次</span>
+        <span class="aus-missing-row-when">${escapeHtml(formatWhen(row.lastAt))}</span>
+        <span class="aus-missing-row-reason">${reasonText(row)}</span>
+      </div>`).join("");
+}
+function renderMissingUsageBar(target) {
+	const doc = target ?? getDoc$8();
+	let bar = doc.getElementById(BAR_ID);
+	if (!bar) {
+		const slot = doc.getElementById("aus-missing-slot");
+		if (!slot) return;
+		slot.innerHTML = missingUsageBarHTML();
+		bar = doc.getElementById(BAR_ID);
+		if (!bar) return;
+	}
+	try {
+		bindBar(bar, doc);
+		const summary = summarizeMissingUsage(getMissingUsageRecords(), Date.now(), MISSING_USAGE_WINDOW_MS);
+		const text = bar.querySelector("#aus-missing-text");
+		const body = bar.querySelector("#aus-missing-body");
+		const toggle = bar.querySelector("#aus-missing-toggle");
+		const clear = bar.querySelector("#aus-missing-clear");
+		if (!summary.total) {
+			bar.style.display = "none";
+			if (body) body.innerHTML = "";
+			if (toggle) toggle.textContent = "详情";
+			if (clear) clear.textContent = "清空";
+			return;
+		}
+		bar.style.display = "";
+		if (text) text.textContent = `最近 7 天有 ${summary.total} 次请求未计入统计：上游没有返回 token 用量，费用无法得知`;
+		if (body && body.style.display !== "none") paintBody(bar);
+	} catch (e) {
+		log.debug("渲染未计量请求提示失败", e?.message || e);
+	}
 }
 //#endregion
 //#region src/ui/stats-view.ts
@@ -6287,6 +6400,7 @@ async function renderStatsView() {
 		const { log } = await import("./logger-8RGXnvfI.js").then((n) => n.n);
 		log.debug("stats 隐藏，跳过图表初始化");
 	} catch {}
+	renderMissingUsageBar(doc);
 	persistStatsFilters();
 }
 function ensureStatsFour() {
@@ -9378,7 +9492,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-BypvPIQk.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-SMGXiVWC.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -12478,6 +12592,7 @@ function createPanel() {
              <div id="aus-tap-root"></div>
            </div>
            <div data-view="stats" style="display:none;">
+           <div id="aus-missing-slot"></div>
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div class="aus-stats-filter">
                 <div id="aus-range-btn" class="aus-pill"><span style="color:var(--ds-text-2);">时间维度</span><span id="aus-range-label" style="font-weight:600;color:var(--ds-text);">近 30 天</span>${icon("chevron-down", 14)}</div>
@@ -13257,7 +13372,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-BPj6FEHU.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-CTJsgeZz.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-B_KlK_bQ.js").then((m) => {
@@ -13492,10 +13607,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-DzQ0MplD.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-BJUVYg7m.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-BPj6FEHU.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CTJsgeZz.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-C2qTkpQP.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -13506,10 +13621,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-DzQ0MplD.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-BJUVYg7m.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-BPj6FEHU.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CTJsgeZz.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-C2qTkpQP.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -13575,10 +13690,10 @@ function ensureWandEntry() {
 /** 运行时收尾：卸载拦截器与采集、拆掉面板 DOM、停全部定时器与事件监听（数据一律不动） */
 async function teardownRuntime() {
 	try {
-		import("./interception-DzQ0MplD.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-BJUVYg7m.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-BPj6FEHU.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-CTJsgeZz.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -13594,13 +13709,13 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-BypvPIQk.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-SMGXiVWC.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CJMNKSam.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DJgmC8rg.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-BaHkBOSb.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -13650,19 +13765,19 @@ async function onClean() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-DzQ0MplD.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-BJUVYg7m.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-BPj6FEHU.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CTJsgeZz.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-BypvPIQk.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-SMGXiVWC.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-CJMNKSam.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-DJgmC8rg.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-BaHkBOSb.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -13705,19 +13820,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-BypvPIQk.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-SMGXiVWC.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CJMNKSam.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DJgmC8rg.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-BaHkBOSb.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-BPj6FEHU.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CTJsgeZz.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -13739,7 +13854,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-DJgmC8rg.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-BaHkBOSb.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

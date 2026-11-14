@@ -3556,6 +3556,110 @@
   font-size: var(--aus-fs-xs);
   color: var(--ds-text-3);
 }
+
+/* ===== 未计量请求提示条（统计页） =====
+   上游没回 usage 的请求不再静默丢弃，这里如实告诉用户「有 N 次没算进去」。
+   无描边、无阴影，与其他块一致，只靠底色分层。 */
+#aus-panel .aus-missing-bar {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: var(--ds-radius-card);
+  background: var(--ds-card);
+}
+#aus-panel .aus-missing-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+#aus-panel .aus-missing-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ds-orange);
+}
+#aus-panel .aus-missing-text {
+  flex: 1 1 220px;
+  min-width: 0;
+  font-size: var(--aus-fs-sm);
+  line-height: 1.6;
+  color: var(--ds-text);
+}
+#aus-panel .aus-missing-link {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: var(--aus-fs-sm);
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--ds-text-2);
+  cursor: pointer;
+}
+#aus-panel .aus-missing-link:hover {
+  color: var(--ds-text);
+  background: var(--ds-card-inner);
+}
+#aus-panel .aus-missing-body {
+  margin-top: 8px;
+  display: grid;
+  gap: 2px;
+}
+#aus-panel .aus-missing-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: var(--aus-fs-xs);
+  color: var(--ds-text-2);
+  border-top: 1px solid var(--ds-card-inner);
+}
+#aus-panel .aus-missing-row:first-child { border-top: 0; }
+#aus-panel .aus-missing-row-model {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--ds-text);
+}
+#aus-panel .aus-missing-row-endpoint {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#aus-panel .aus-missing-row-count,
+#aus-panel .aus-missing-row-when,
+#aus-panel .aus-missing-row-reason {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+#aus-panel .aus-missing-row-reason { color: var(--ds-text-3); }
+
+@media (max-width: 760px) {
+  #aus-panel .aus-missing-bar { padding: 10px; }
+  #aus-panel .aus-missing-text { flex: 1 1 100%; }
+  /* 说明文字占满一行后，两个操作按钮换到第二行、贴右 */
+  #aus-panel .aus-missing-head .aus-missing-link:first-of-type { margin-left: auto; }
+  /* 明细行改两列网格：左列省略长模型名，右列次数/时间右对齐，原因独占一行 */
+  #aus-panel .aus-missing-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 8px;
+  }
+  #aus-panel .aus-missing-row-model { grid-area: 1 / 1; max-width: 100%; }
+  #aus-panel .aus-missing-row-count { grid-area: 1 / 2; text-align: right; }
+  #aus-panel .aus-missing-row-endpoint { grid-area: 2 / 1; }
+  #aus-panel .aus-missing-row-when { grid-area: 2 / 2; text-align: right; }
+  #aus-panel .aus-missing-row-reason { grid-area: 3 / 1 / 4 / 3; }
+}
+
 #aus-panel .aus-tap-empty {
   padding: 16px;
   text-align: center;

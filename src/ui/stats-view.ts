@@ -22,6 +22,7 @@ import { FOUR_OPTIONS, getFourDisplay } from './overview';
 import { historyRecordKey } from '../utils/history-key';
 import { toast } from '../utils/logger';
 import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
+import { renderMissingUsageBar } from './missing-usage-bar';
 import { filterPickerRows } from './chat-visibility';
 import { closeDropdownInstant, closeDropdownThenPaint } from './dropdown-close';
 
@@ -1048,6 +1049,8 @@ export async function renderStatsView() {
   } else {
     try { const { log } = await import('../utils/logger'); log.debug('stats 隐藏，跳过图表初始化'); } catch {}
   }
+  // 上游没回用量而被丢弃的请求：在这里显式提示，别再让用户对着空历史页猜
+  renderMissingUsageBar(doc);
   // 本页五维筛选是纯展示偏好，每次渲染后落盘（含校验剔除后的值），供下次打开还原
   persistStatsFilters();
 }

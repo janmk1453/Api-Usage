@@ -2,6 +2,7 @@ import { state } from '../store/index';
 import { repository } from '../data/repository';
 import { log } from '../utils/logger';
 import { initConnectionIdentity, resolveRuntimeConnectionContext, type HistoryConnection } from './connection-identity';
+import { noteMissingUsage } from './missing-usage';
 import { mergeIncludeUsage } from './include-usage';
 import { createThinkClock, scanThinkChunk, resolveThinkTime, reasoningTextOf, contentTextOf } from './think-timing';
 
@@ -202,7 +203,20 @@ function installFetchCapture() {
               log.debug('用量响应解析失败', (e as any)?.message || e);
               return;
             }
-            if (data && data.usage) {
+            const rawUsage = (data as any)?.usage;
+            if (rawUsage && isZeroUsage(rawUsage)) {
+              // 上游回了 usage 但全是 0（部分中转的固定行为）：入库只会得到一条 0 token 记录，
+              // 记为「未计量」并说明原因，比留一条假记录更诚实
+              noteMissingUsage({
+                model: (data as any)?.model || reqBody?.model || fullReq?.model || null,
+                endpointLabel: requestConnection?.endpointLabel ?? null,
+                sourceType: requestConnection?.sourceType ?? null,
+                reason: 'zero-usage',
+                stream: requestedStream,
+                status: res.status,
+                requestKey: requestId,
+              });
+            } else if (data && data.usage) {
               const model = (data as any)?.model || reqBody?.model || fullReq?.model || lastFetchModel || 'deepseek-v4-flash';
               const usage = (data as any).usage;
               // 将 finish_reason 挂到 usage 以便 repository 统一处理
@@ -214,6 +228,17 @@ function installFetchCapture() {
               lastFetchTime = Date.now();
               log.debug('fetch 捕获 usage', { model, hasUsage: !!usage, finishReason, streamed });
               try { processUsage(usage, model, msgs, startTime, fullReq, text, ttftVal, thinkTimeVal, finishReason, requestConnection, requestId, streamed); } catch (e) { log.error('fetch 用量记录失败 ' + ((e as any)?.message || e)); }
+            } else if (res.ok) {
+              // 响应里完全没有 usage：以前这里什么都不做，用户只看到「对话发生了但历史页没有」
+              noteMissingUsage({
+                model: reqBody?.model || fullReq?.model || null,
+                endpointLabel: requestConnection?.endpointLabel ?? null,
+                sourceType: requestConnection?.sourceType ?? null,
+                reason: 'no-usage',
+                stream: requestedStream,
+                status: res.status,
+                requestKey: requestId,
+              });
             }
           };
           // 流式测量 TTFT 与思维链耗时：后台消费 clone 的 body 流，不阻塞原始响应透传
@@ -344,6 +369,16 @@ export function uninstallInterception() {
   } catch {}
 }
 
+/** 用量字段齐全但三项全是 0：上游「回了 usage 却什么也没说」，与没有 usage 同等对待 */
+function isZeroUsage(u: any): boolean {
+  if (!u || typeof u !== 'object' || Array.isArray(u)) return false;
+  const num = (v: any) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  const prompt = num(u.prompt_tokens) || num(u.input_tokens);
+  const completion = num(u.completion_tokens) || num(u.output_tokens);
+  const total = num(u.total_tokens);
+  return prompt <= 0 && completion <= 0 && total <= 0;
+}
+
 function isValidUsage(u: any): boolean {
   if (!u || typeof u !== 'object' || Array.isArray(u)) return false;
   return (
@@ -460,6 +495,20 @@ function onGenerationEnded(...args: any[]) {
         const fu = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
         log.debug('fetch 有缓存但无效或超时', { has: !!lastFetchUsage, isValid: fu ? isValidUsage(fu) : false, age: Date.now() - lastFetchTime });
       }
+    }
+    // 走到这里说明：主路径、swipe_info、args、fetch 兜底全都没拿到用量。
+    // 以前是静默丢弃，现在至少留下一条「未计量」诊断，让用户知道钱去哪了。
+    if (!usage || !isValidUsage(usage)) {
+      const conn = recentConnection(120000);
+      noteMissingUsage({
+        model,
+        endpointLabel: conn?.endpointLabel ?? null,
+        sourceType: conn?.sourceType ?? null,
+        reason: usage ? 'zero-usage' : 'no-usage',
+        stream: null,
+        // 带上请求号：fetch 层已经为同一次请求记过，这里精确去重，避免一次请求算两次
+        requestKey: recentRequestId(120000),
+      });
     }
     if (extra.token_count != null && !usage) {
       log.debug('跳过无效 usage：仅有本地 token_count=' + extra.token_count + ' model=' + model);
