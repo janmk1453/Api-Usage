@@ -6,9 +6,9 @@
  * DataEvents.HISTORY_ADDED 当账本，把探针记录标成 settled / orphan。
  */
 import { DataEvents, on } from '../../data/events';
-import { installTapCapture, uninstallTapCapture } from './capture';
+import { installTapCapture, uninstallTapCapture, tapDebugRecord } from './capture';
 import { findSettlement, probeKeyOf, type Settlement } from './match';
-import { listTapRecords, patchTapRecord } from './store';
+import { clearTapRecords, listTapRecords, patchTapRecord } from './store';
 import type { TapRecord } from './types';
 
 /** 入账窗口：酒馆 GENERATION_ENDED → 写库有延迟，留足时间再判定 */
@@ -81,6 +81,19 @@ export function installRequestTap(): void {
   try { installTapCapture(); } catch {}
   try { unsubscribe = on(DataEvents.HISTORY_ADDED, (entry: any) => { noteSettlement(entry); }); } catch { unsubscribe = null; }
   reconcileTimer = setInterval(() => { try { reconcilePending(); } catch {} }, RECONCILE_INTERVAL_MS);
+  // 验证期调试口子：真机上不用真触发插件请求，也能造一条记录看看页面表现
+  try {
+    (globalThis as any).__ausTap = {
+      install: installRequestTap,
+      uninstall: uninstallRequestTap,
+      reconcile: reconcilePending,
+      note: noteSettlement,
+      diagnostics: tapDiagnostics,
+      record: tapDebugRecord,
+      list: listTapRecords,
+      clear: clearTapRecords,
+    };
+  } catch {}
 }
 
 /** 卸载探针（还原被包过的 fetch / XHR，停掉对账定时器） */

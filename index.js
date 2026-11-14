@@ -11,7 +11,7 @@ import { t as installInterception } from "./interception-DzQ0MplD.js";
 import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-BypvPIQk.js";
 import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-D10-9eBc.js";
 import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-DJgmC8rg.js";
-import { a as subscribeTap, i as listTapRecords, n as tapDiagnostics, r as clearTapRecords } from "./request-tap-Bus5os65.js";
+import { a as subscribeTap, i as listTapRecords, n as tapDiagnostics, r as clearTapRecords } from "./request-tap-C2qTkpQP.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -13498,7 +13498,7 @@ function onAppReady() {
 		import("./collector-BPj6FEHU.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./request-tap-Bus5os65.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
+		import("./request-tap-C2qTkpQP.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -13512,7 +13512,7 @@ function onAppInitialized() {
 		import("./collector-BPj6FEHU.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./request-tap-Bus5os65.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
+		import("./request-tap-C2qTkpQP.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {

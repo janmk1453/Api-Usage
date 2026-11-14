@@ -236,6 +236,7 @@ var PATCH_FLAG = "__ausTapPatched";
 var RESCAN_INTERVAL_MS = 4e3;
 var seq = 0;
 var installed$1 = false;
+var rescanTimer = null;
 var observer = null;
 var restores = [];
 function hostWindow() {
@@ -558,7 +559,33 @@ function installTapCapture() {
 			});
 		}
 	} catch {}
-	setInterval(scanFrames, RESCAN_INTERVAL_MS);
+	rescanTimer = setInterval(scanFrames, RESCAN_INTERVAL_MS);
+}
+/** 卸载探针（还原被包过的 fetch / XHR） */
+function uninstallTapCapture() {
+	if (!installed$1) return;
+	installed$1 = false;
+	try {
+		if (rescanTimer) clearInterval(rescanTimer);
+	} catch {}
+	rescanTimer = null;
+	try {
+		observer?.disconnect();
+	} catch {}
+	observer = null;
+	for (const restore of restores.splice(0)) try {
+		restore();
+	} catch {}
+}
+/** 供调试用：把一段请求手工记进来（不涉及网络） */
+function tapDebugRecord(input) {
+	const rec = toRecord(begin(input.url, endpointOf(input.url) || "chat", {
+		kind: "unknown",
+		id: "",
+		label: input.actorLabel || "手工"
+	}, input.body || null), Date.now(), null, null);
+	upsertTapRecord(rec);
+	return rec;
 }
 //#endregion
 //#region src/services/request-tap/match.ts
@@ -621,7 +648,8 @@ var request_tap_exports = /* @__PURE__ */ __exportAll({
 	installRequestTap: () => installRequestTap,
 	noteSettlement: () => noteSettlement,
 	reconcilePending: () => reconcilePending,
-	tapDiagnostics: () => tapDiagnostics
+	tapDiagnostics: () => tapDiagnostics,
+	uninstallRequestTap: () => uninstallRequestTap
 });
 /** 入账窗口：酒馆 GENERATION_ENDED → 写库有延迟，留足时间再判定 */
 var RECONCILE_DELAY_MS = 12e3;
@@ -630,6 +658,8 @@ var SETTLEMENT_MAX = 800;
 var RECONCILE_INTERVAL_MS = 3e3;
 var settlements = [];
 var used = /* @__PURE__ */ new Set();
+var reconcileTimer = null;
+var unsubscribe = null;
 var installed = false;
 /** 把一条入账记录放进账本 */
 function noteSettlement(entry) {
@@ -699,15 +729,45 @@ function installRequestTap() {
 		installTapCapture();
 	} catch {}
 	try {
-		on(DataEvents.HISTORY_ADDED, (entry) => {
+		unsubscribe = on(DataEvents.HISTORY_ADDED, (entry) => {
 			noteSettlement(entry);
 		});
-	} catch {}
-	setInterval(() => {
+	} catch {
+		unsubscribe = null;
+	}
+	reconcileTimer = setInterval(() => {
 		try {
 			reconcilePending();
 		} catch {}
 	}, RECONCILE_INTERVAL_MS);
+	try {
+		globalThis.__ausTap = {
+			install: installRequestTap,
+			uninstall: uninstallRequestTap,
+			reconcile: reconcilePending,
+			note: noteSettlement,
+			diagnostics: tapDiagnostics,
+			record: tapDebugRecord,
+			list: listTapRecords,
+			clear: clearTapRecords
+		};
+	} catch {}
+}
+/** 卸载探针（还原被包过的 fetch / XHR，停掉对账定时器） */
+function uninstallRequestTap() {
+	if (!installed) return;
+	installed = false;
+	try {
+		if (reconcileTimer) clearInterval(reconcileTimer);
+	} catch {}
+	reconcileTimer = null;
+	try {
+		unsubscribe?.();
+	} catch {}
+	unsubscribe = null;
+	try {
+		uninstallTapCapture();
+	} catch {}
 }
 //#endregion
 export { subscribeTap as a, listTapRecords as i, tapDiagnostics as n, clearTapRecords as r, request_tap_exports as t };
