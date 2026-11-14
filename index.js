@@ -3,13 +3,15 @@ import { n as getSelectedSave, o as mobileDeviceHint, r as state$2, t as getHist
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as normalizeModel, c as isTruncatedFinish, f as calcSavings, g as isWalletPeakHour, h as isPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as DataEvents, p as getPricing, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as on, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-C41YrSIn.js";
+import { C as walletPendingModelCount, D as DEEPSEEK_WALLET_ID, O as WALLET_CATALOG_PROVIDERS, S as walletBalanceToCny, _ as defaultContextLimitForModel, b as findWalletModel, c as isTruncatedFinish, d as getPricing, g as cloneWallet, h as normalizeModel, i as saveWalletApiKey, m as isWalletPeakHour, p as isPeakHour, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as calcSavings, x as mergeWalletCollections, y as findWalletForHistory } from "./repository-B7vP-cjv.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-CJMNKSam.js";
-import { t as installInterception } from "./interception-CbjUuU_7.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-BCE_ATCu.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-Cz8S6L9I.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-HVbzVuJk.js";
+import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
+import { t as installInterception } from "./interception-DzQ0MplD.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-BypvPIQk.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-D10-9eBc.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-DJgmC8rg.js";
+import { a as subscribeTap, i as listTapRecords, n as tapDiagnostics, r as clearTapRecords } from "./request-tap-Bus5os65.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -2588,14 +2590,16 @@ var CHILD_PARENT = {
 	wallet: "settings",
 	help: "settings",
 	about: "settings",
-	"chat-manage": "overview"
+	"chat-manage": "overview",
+	tap: "history"
 };
 /** 二级视图清单（顺序即声明顺序） */
 var CHILD_VIEWS = [
 	"wallet",
 	"help",
 	"about",
-	"chat-manage"
+	"chat-manage",
+	"tap"
 ];
 function isSettingsChild(view) {
 	return SETTINGS_CHILD_VIEWS.includes(view);
@@ -2625,7 +2629,8 @@ var VIEW_TITLES = {
 	settings: "设置",
 	help: "使用说明",
 	about: "关于",
-	"chat-manage": "对话展示管理"
+	"chat-manage": "对话展示管理",
+	tap: "其他请求"
 };
 function viewTitle(view) {
 	return VIEW_TITLES[view] || VIEW_TITLES.overview;
@@ -2656,40 +2661,40 @@ var WEEKDAY = [
 	"周六"
 ];
 var pad$1 = (n) => String(n).padStart(2, "0");
-var num = (v) => {
+var num$1 = (v) => {
 	const n = Number(v);
 	return Number.isFinite(n) && n > 0 ? n : 0;
 };
 /** 2026-10-23 */
 function chartDate(ts) {
-	const t = num(ts);
+	const t = num$1(ts);
 	if (!t) return "";
 	const d = new Date(t);
 	return `${d.getFullYear()}-${pad$1(d.getMonth() + 1)}-${pad$1(d.getDate())}`;
 }
 /** 2026-10-23 周五 */
 function chartDateWeek(ts) {
-	const t = num(ts);
+	const t = num$1(ts);
 	if (!t) return "";
 	return chartDate(t) + " " + WEEKDAY[new Date(t).getDay()];
 }
 /** 2026-10-23 19:12 */
 function chartDateTime(ts) {
-	const t = num(ts);
+	const t = num$1(ts);
 	if (!t) return "";
 	const d = new Date(t);
 	return chartDate(t) + " " + pad$1(d.getHours()) + ":" + pad$1(d.getMinutes());
 }
 /** 19:12:33 */
 function chartClock(ts) {
-	const t = num(ts);
+	const t = num$1(ts);
 	if (!t) return "";
 	const d = new Date(t);
 	return pad$1(d.getHours()) + ":" + pad$1(d.getMinutes()) + ":" + pad$1(d.getSeconds());
 }
 /** ISO 周键：2026-W43 */
 function isoWeekKey(ts) {
-	const t = num(ts);
+	const t = num$1(ts);
 	if (!t) return "";
 	const d = new Date(t);
 	const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -2701,7 +2706,7 @@ function isoWeekKey(ts) {
 }
 /** 单条记录的悬浮标题：2026-10-23 19:12:33 */
 function entryTip(entry) {
-	const ts = num(entry?.timestamp);
+	const ts = num$1(entry?.timestamp);
 	if (!ts) return "";
 	return chartDate(ts) + " " + chartClock(ts);
 }
@@ -2719,9 +2724,9 @@ function roundTip(round, timestamp) {
 * - 每月：2026 年 10 月
 */
 function bucketTip(x, firstTs, lastTs) {
-	const first = num(firstTs);
+	const first = num$1(firstTs);
 	if (!first) return "";
-	const last = num(lastTs) || first;
+	const last = num$1(lastTs) || first;
 	if (x === "hour") {
 		const d = new Date(first);
 		const from = pad$1(d.getHours()) + ":00";
@@ -2746,7 +2751,7 @@ function rangeTip(entries) {
 	let min = 0;
 	let max = 0;
 	for (const e of entries || []) {
-		const ts = num(e?.timestamp);
+		const ts = num$1(e?.timestamp);
 		if (!ts) continue;
 		if (!min || ts < min) min = ts;
 		if (!max || ts > max) max = ts;
@@ -9373,7 +9378,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-BCE_ATCu.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-BypvPIQk.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -10040,6 +10045,164 @@ async function renderChatManageView() {
 		if (!all || !all.length || all.length <= hot.length) return;
 		rows = computeChatStats(all);
 		paintList(doc);
+	} catch {}
+}
+//#endregion
+//#region src/ui/tap-view.ts
+/**
+* 其他请求（技术验证页）
+*
+* 定位：只把探针采到的请求「摆出来给人看」，回答一个问题 ——
+* 酒馆里那些不走常规对话链路的请求长什么样、来自谁、和对账结果是否一致。
+* 这里读的数据全部来自 localStorage['aus_tap_log_v1']，不参与概览/统计/历史/趋势的任何计算，
+* 也不写回 state.history。页面本身不进底栏 tab，挂在「历史记录」下，从历史页工具栏进入。
+*/
+var filter = "orphan";
+var pendingClear = false;
+var bound = false;
+var go = null;
+var subscribing = false;
+var renderQueued = false;
+/** 面板初始化时注入切页函数（与 chat-manage 的 init 同款） */
+function initTapView(deps) {
+	go = deps.go;
+	if (subscribing) return;
+	subscribing = true;
+	try {
+		subscribeTap(() => {
+			if (renderQueued) return;
+			renderQueued = true;
+			const flush = () => {
+				renderQueued = false;
+				const root = document.getElementById("aus-tap-root");
+				const host = root?.closest("[data-view]");
+				if (!root || !host || host.style.display === "none") return;
+				renderTapView();
+			};
+			if (typeof requestAnimationFrame === "function") requestAnimationFrame(flush);
+			else setTimeout(flush, 60);
+		});
+	} catch {}
+}
+function num(n) {
+	const v = Number(n) || 0;
+	if (v >= 1e6) return (v / 1e6).toFixed(2) + "M";
+	if (v >= 1e3) return (v / 1e3).toFixed(1) + "k";
+	return String(v);
+}
+function tokensOf(records) {
+	let sum = 0;
+	for (const r of records) sum += Number(r.usage?.total) || 0;
+	return sum;
+}
+function stateText(r) {
+	if (r.state === "settled") return "已入账";
+	if (r.state === "orphan") return "未入账";
+	return "待对账";
+}
+function cardOf(key, rows) {
+	const label = rows[0]?.purposeLabel || "未分类";
+	const tokens = tokensOf(rows);
+	const latest = rows.reduce((max, r) => Math.max(max, r.at), 0);
+	const shown = rows.slice(0, 8);
+	const rest = rows.length - shown.length;
+	const items = shown.map((r) => {
+		const usage = r.usage ? "入 " + num(r.usage.prompt) + " · 出 " + num(r.usage.completion) : "无 usage（该接口未返回用量）";
+		const actor = r.actorLabel || "未知来源";
+		const meta = [
+			r.endpoint === "chat" ? "chat" : r.endpoint === "text" ? "text" : "其他",
+			r.model || "未标模型",
+			r.stream ? "流式" : "非流式"
+		].filter(Boolean).join(" · ");
+		return "<div class=\"aus-tap-row\"><div class=\"aus-tap-row-top\"><span class=\"aus-tap-time\">" + esc(localDay(r.at) + " " + localTimeHM(r.at)) + "</span><span class=\"aus-tap-actor\" title=\"" + esc(r.actorId || "") + "\">" + esc(actor) + "</span><span class=\"aus-tap-state\" data-state=\"" + esc(r.state) + "\">" + esc(stateText(r)) + "</span></div><div class=\"aus-tap-row-meta\">" + esc(meta) + "</div><div class=\"aus-tap-row-usage\">" + esc(usage) + (r.durationMs ? "<span class=\"aus-tap-dur\">" + esc((r.durationMs / 1e3).toFixed(1) + "s") + "</span>" : "") + "</div>" + (r.promptHint ? "<div class=\"aus-tap-hint\">" + esc(r.promptHint) + "</div>" : "") + "</div>";
+	}).join("");
+	return "<div class=\"ds-card aus-tap-group\" data-key=\"" + esc(key) + "\"><div class=\"aus-tap-group-head\"><span class=\"aus-tap-group-label\">" + esc(label) + "</span><span class=\"aus-tap-group-meta\">" + rows.length + " 次 · " + num(tokens) + " tokens · 最近 " + esc(localDay(latest) + " " + localTimeHM(latest)) + "</span></div>" + items + (rest > 0 ? "<div class=\"aus-tap-more\">其余 " + rest + " 条已省略</div>" : "") + "</div>";
+}
+/** 纯函数：给定记录与筛选，产出整页 HTML（无 DOM 依赖，可直接单测） */
+function tapViewHTML(input) {
+	const all = input.records;
+	const orphans = all.filter((r) => r.state === "orphan");
+	const settled = all.filter((r) => r.state === "settled");
+	const pending = all.filter((r) => r.state === "pending");
+	const noUsage = all.filter((r) => r.usageMissing).length;
+	const diag = input.diag;
+	const rows = input.filter === "orphan" ? orphans : input.filter === "settled" ? settled : all;
+	const groups = /* @__PURE__ */ new Map();
+	for (const r of rows) {
+		const key = r.purposeKey || "unknown";
+		if (!groups.has(key)) groups.set(key, []);
+		groups.get(key).push(r);
+	}
+	const ordered = Array.from(groups.entries()).map(([key, list]) => ({
+		key,
+		list: list.slice().sort((a, b) => b.at - a.at)
+	})).sort((a, b) => b.list.length - a.list.length || a.key.localeCompare(b.key));
+	const block = (label, value, sub) => "<div class=\"aus-tap-block\"><div class=\"aus-tap-block-label\">" + esc(label) + "</div><div class=\"aus-tap-block-value\">" + esc(value) + "</div>" + (sub ? "<div class=\"aus-tap-block-sub\">" + esc(sub) + "</div>" : "") + "</div>";
+	const pill = (key, text) => "<button type=\"button\" class=\"aus-pill aus-pill-sm\" data-tap-filter=\"" + key + "\"" + (input.filter === key ? " data-on=\"1\"" : "") + ">" + esc(text) + "</button>";
+	return "<div class=\"aus-tap-note\">技术验证页：这里只做原理验证 —— 旁路记录酒馆发出的后端请求，再用「现有逻辑有没有为它写过一条历史记录」判断哪些属于非常规对话请求。<b>数据只存在本机 localStorage（<code>" + esc("aus_tap_log_v1") + "</code>），完全不进入概览、统计、历史、趋势的任何计算</b>，可随时一键清空。上限 500 条；已采集 " + all.length + " 条，账本 " + diag.settlements + " 条。</div><div class=\"aus-tap-sum\">" + block("采集到的后端请求", String(all.length), "端点命中 /api/backends/*/generate") + block("未入账（疑似非常规）", String(orphans.length), "现有逻辑没写过记录") + block("已入账（常规对话）", String(settled.length), "与历史记录一一对上") + block("待对账 / 无用量", pending.length + " / " + noUsage, "结束后 12 秒判定") + "</div><div class=\"aus-tap-tools\">" + pill("orphan", "未入账 " + orphans.length) + pill("settled", "已入账 " + settled.length) + pill("all", "全部 " + all.length) + "<span class=\"aus-tap-tools-gap\"></span><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-export\">导出 JSON</button><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-clear\"" + (input.pendingClear ? " data-danger=\"1\"" : "") + ">" + (input.pendingClear ? "确认清空？" : "清空") + "</button><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-back\">返回历史记录</button></div>" + (ordered.length ? "<div class=\"aus-tap-groups\">" + ordered.map((g) => cardOf(g.key, g.list)).join("") + "</div>" : "<div class=\"ds-card aus-tap-empty\">还没有符合条件的记录 —— 触发几次插件请求（比如 MVU 变量更新、填表）再回来看。</div>");
+}
+function renderTapView() {
+	const root = document.getElementById("aus-tap-root");
+	if (!root) return;
+	root.innerHTML = tapViewHTML({
+		records: listTapRecords(),
+		filter,
+		pendingClear,
+		diag: tapDiagnostics()
+	});
+	bindOnce(root);
+}
+function bindOnce(root) {
+	if (bound) return;
+	bound = true;
+	root.addEventListener("click", (e) => {
+		const t = e.target;
+		if (!t) return;
+		const filterBtn = t.closest("[data-tap-filter]");
+		if (filterBtn) {
+			filter = filterBtn.getAttribute("data-tap-filter") || "all";
+			pendingClear = false;
+			renderTapView();
+			return;
+		}
+		if (t.closest("#aus-tap-export")) {
+			exportAll();
+			return;
+		}
+		if (t.closest("#aus-tap-clear")) {
+			if (!pendingClear) {
+				pendingClear = true;
+				renderTapView();
+				return;
+			}
+			pendingClear = false;
+			try {
+				clearTapRecords();
+			} catch {}
+			renderTapView();
+			return;
+		}
+		if (t.closest("#aus-tap-back")) try {
+			go?.("history");
+		} catch {}
+	});
+}
+function exportAll() {
+	try {
+		const data = JSON.stringify(listTapRecords(), null, 2);
+		const blob = new Blob([data], { type: "application/json" });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = "aus-tap-" + Date.now() + ".json";
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+		setTimeout(() => {
+			try {
+				URL.revokeObjectURL(url);
+			} catch {}
+		}, 4e3);
 	} catch {}
 }
 //#endregion
@@ -12119,6 +12282,7 @@ function switchView(view, opts) {
 				const s = getSelectedSave();
 				if (s) renderHistory(doc, s);
 			} else if (view === "chat-manage") Promise.resolve(renderChatManageView()).catch(() => {});
+			else if (view === "tap") renderTapView();
 		} catch {}
 	};
 	const animateIn = view !== prevView;
@@ -12309,6 +12473,9 @@ function createPanel() {
             </div>
            <div data-view="chat-manage" style="display:none;">
              <div id="aus-chat-manage-body"></div>
+           </div>
+           <div data-view="tap" style="display:none;">
+             <div id="aus-tap-root"></div>
            </div>
            <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
@@ -12590,6 +12757,7 @@ function createPanel() {
                 <div id="aus-history-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div id="aus-history-filter-reset" class="aus-filter-reset" title="重置筛选" aria-label="重置筛选" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);font-size:var(--aus-fs-base);cursor:pointer;margin-left:auto;">${icon("refresh", 14)}<span>重置筛选</span></div>
+              <button id="aus-history-tap-btn" type="button" class="aus-pill aus-pill-sm" title="查看探针采到的非常规对话请求（技术验证，数据隔离、不进统计）">其他请求</button>
             </div>
             <div id="aus-diff" class="ds-card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">缓存断点</span><button id="aus-diff-fullscreen" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">全屏</button></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">在历史中各选一条 旧/新 对比，橙/绿高亮即发散点</div></div>
             <div id="aus-history"></div>
@@ -12717,6 +12885,8 @@ function createPanel() {
 		if (e.target?.closest?.("#aus-settings-chat-manage")) openChatManage("settings");
 	});
 	initChatManageView({ go: () => switchView(chatManageOrigin) });
+	doc.getElementById("aus-history-tap-btn")?.addEventListener("click", () => switchView("tap"));
+	initTapView({ go: () => switchView("history") });
 	const applyCollapsed = (v) => {
 		collapsed = v;
 		const sb = doc.getElementById("aus-sidebar");
@@ -13087,7 +13257,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-dJcdDxCA.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-BPj6FEHU.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-B_KlK_bQ.js").then((m) => {
@@ -13322,10 +13492,13 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-CbjUuU_7.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DzQ0MplD.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-dJcdDxCA.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BPj6FEHU.js").then((m) => m.initAgentUsage()).catch(() => {});
+	} catch {}
+	try {
+		import("./request-tap-Bus5os65.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -13333,10 +13506,13 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-CbjUuU_7.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DzQ0MplD.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-dJcdDxCA.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BPj6FEHU.js").then((m) => m.initAgentUsage()).catch(() => {});
+	} catch {}
+	try {
+		import("./request-tap-Bus5os65.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -13399,10 +13575,10 @@ function ensureWandEntry() {
 /** 运行时收尾：卸载拦截器与采集、拆掉面板 DOM、停全部定时器与事件监听（数据一律不动） */
 async function teardownRuntime() {
 	try {
-		import("./interception-CbjUuU_7.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-DzQ0MplD.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-dJcdDxCA.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-BPj6FEHU.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -13418,13 +13594,13 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-BCE_ATCu.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-BypvPIQk.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CJMNKSam.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-HVbzVuJk.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-DJgmC8rg.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -13474,19 +13650,19 @@ async function onClean() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-CbjUuU_7.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-DzQ0MplD.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-dJcdDxCA.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BPj6FEHU.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-BCE_ATCu.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-BypvPIQk.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-CJMNKSam.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-HVbzVuJk.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-DJgmC8rg.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -13529,19 +13705,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-BCE_ATCu.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-BypvPIQk.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CJMNKSam.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-HVbzVuJk.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-DJgmC8rg.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-dJcdDxCA.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-BPj6FEHU.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -13563,7 +13739,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-HVbzVuJk.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-DJgmC8rg.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

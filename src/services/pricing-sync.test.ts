@@ -88,9 +88,11 @@ describe('钱包价格同步（模糊匹配写入）', () => {
       cache_hit_tokens: 0,
       cache_miss_tokens: 1_000_000,
       completion_tokens: 0,
+      cache_hit_rate: 0,
       input_cost: 0,
       output_cost: 0,
       cost: 0,
+      priceType: 'peak',
       walletId: wallet.id,
       endpointId: 'sync-endpoint',
     }];

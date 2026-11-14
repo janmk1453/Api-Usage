@@ -53,12 +53,15 @@ function onAppReady() {
   try { refreshUI(); } catch {}
   try { import('./services/interception').then(m=>m.installInterception()).catch(() => {}); } catch {}
   try { import('./services/agent-usage/collector').then(m => m.initAgentUsage()).catch(() => {}); } catch {}
+  // 请求探针（技术验证）：旁路记录后端请求并和既有入账对账，只写独立的 localStorage 键，不进任何统计口径
+  try { import('./services/request-tap').then(m => m.installRequestTap()).catch(() => {}); } catch {}
 }
 
 function onAppInitialized() {
   try { ensureWandEntry(); } catch {}
   try { import('./services/interception').then(m=>m.installInterception()).catch(() => {}); } catch {}
   try { import('./services/agent-usage/collector').then(m => m.initAgentUsage()).catch(() => {}); } catch {}
+  try { import('./services/request-tap').then(m => m.installRequestTap()).catch(() => {}); } catch {}
 }
 
 function onChatChanged() {

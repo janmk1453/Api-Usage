@@ -21,7 +21,9 @@ export type AppView =
   | 'help'
   | 'about'
   /** 对话展示管理：概览「按对话统计」表格的显隐设置页 */
-  | 'chat-manage';
+  | 'chat-manage'
+  /** 其他请求：历史记录页的「非常规对话请求」技术验证页（数据隔离，不进统计） */
+  | 'tap';
 
 export const APP_VIEWS: readonly AppView[] = [
   'overview',
@@ -33,6 +35,7 @@ export const APP_VIEWS: readonly AppView[] = [
   'help',
   'about',
   'chat-manage',
+  'tap',
 ];
 
 export function isAppView(value: unknown): value is AppView {
@@ -72,10 +75,11 @@ export const CHILD_PARENT: Readonly<Partial<Record<AppView, AppView>>> = {
   help: 'settings',
   about: 'settings',
   'chat-manage': 'overview',
+  tap: 'history',
 };
 
 /** 二级视图清单（顺序即声明顺序） */
-export const CHILD_VIEWS: readonly AppView[] = ['wallet', 'help', 'about', 'chat-manage'];
+export const CHILD_VIEWS: readonly AppView[] = ['wallet', 'help', 'about', 'chat-manage', 'tap'];
 
 export function isSettingsChild(view: AppView): boolean {
   return SETTINGS_CHILD_VIEWS.includes(view);
@@ -110,6 +114,7 @@ const VIEW_TITLES: Record<AppView, string> = {
   help: '使用说明',
   about: '关于',
   'chat-manage': '对话展示管理',
+  tap: '其他请求',
 };
 
 export function viewTitle(view: AppView): string {

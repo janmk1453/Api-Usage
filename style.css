@@ -3403,3 +3403,171 @@
     padding-bottom: calc(var(--aus-bottomnav-h) + 12px + env(safe-area-inset-bottom)) !important;
   }
 }
+
+/* ===== 其他请求（技术验证页，data-view="tap"） =====
+   数据完全隔离：只读 localStorage['aus_tap_log_v1']，不参与任何统计口径。
+   布局全部写在这里，模板与脚本不写内联宽度，窄屏也不撑宽整页。 */
+#aus-panel .aus-tap-note {
+  background: var(--ds-card);
+  border-radius: var(--ds-radius-card);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: var(--aus-fs-sm);
+  line-height: 1.7;
+  color: var(--ds-text-2);
+  word-break: break-word;
+}
+#aus-panel .aus-tap-note b { color: var(--ds-text); font-weight: 600; }
+#aus-panel .aus-tap-note code {
+  font-family: Consolas, Monaco, monospace;
+  font-size: var(--aus-fs-xs);
+  background: var(--ds-card-inner);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+#aus-panel .aus-tap-sum {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+#aus-panel .aus-tap-block {
+  background: var(--ds-card);
+  border-radius: var(--ds-radius-card);
+  padding: 10px 12px;
+  min-width: 0;
+}
+#aus-panel .aus-tap-block-label {
+  font-size: var(--aus-fs-sm);
+  color: var(--ds-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#aus-panel .aus-tap-block-value {
+  margin-top: 2px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ds-text);
+  font-variant-numeric: tabular-nums;
+}
+#aus-panel .aus-tap-block-sub {
+  margin-top: 2px;
+  font-size: var(--aus-fs-xs);
+  color: var(--ds-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#aus-panel .aus-tap-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+#aus-panel .aus-tap-tools-gap { flex: 1 1 0; min-width: 0; }
+#aus-panel [data-tap-filter][data-on="1"] {
+  background: var(--ds-black);
+  color: var(--ds-black-text);
+  border-color: transparent;
+}
+#aus-panel #aus-tap-clear[data-danger="1"] {
+  color: var(--ds-red);
+  border-color: var(--ds-red-border);
+}
+
+#aus-panel .aus-tap-groups { display: flex; flex-direction: column; gap: 10px; }
+#aus-panel .aus-tap-group { padding: 10px 12px; }
+#aus-panel .aus-tap-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+#aus-panel .aus-tap-group-label { font-size: var(--aus-fs-base); font-weight: 600; color: var(--ds-text); }
+#aus-panel .aus-tap-group-meta { font-size: var(--aus-fs-xs); color: var(--ds-text-3); font-variant-numeric: tabular-nums; }
+
+#aus-panel .aus-tap-row { border-top: 1px solid var(--ds-border); padding: 8px 0; }
+#aus-panel .aus-tap-row-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#aus-panel .aus-tap-time {
+  font-size: var(--aus-fs-xs);
+  color: var(--ds-text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+#aus-panel .aus-tap-actor {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--aus-fs-sm);
+  font-weight: 600;
+  color: var(--ds-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#aus-panel .aus-tap-state {
+  flex: 0 0 auto;
+  font-size: var(--aus-fs-xs);
+  padding: 1px 6px;
+  border-radius: var(--ds-radius-pill);
+  background: var(--ds-card-inner);
+  color: var(--ds-text-3);
+  border: 1px solid var(--ds-border);
+  white-space: nowrap;
+}
+#aus-panel .aus-tap-state[data-state="orphan"] { color: var(--ds-orange); border-color: var(--ds-orange-bg-strong); }
+#aus-panel .aus-tap-state[data-state="settled"] { color: var(--ds-green); border-color: var(--ds-green-bg); }
+#aus-panel .aus-tap-row-meta {
+  margin-top: 2px;
+  font-size: var(--aus-fs-xs);
+  color: var(--ds-text-3);
+  word-break: break-word;
+}
+#aus-panel .aus-tap-row-usage {
+  margin-top: 2px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--aus-fs-sm);
+  color: var(--ds-text-2);
+  font-variant-numeric: tabular-nums;
+}
+#aus-panel .aus-tap-dur { font-size: var(--aus-fs-xs); color: var(--ds-text-3); }
+#aus-panel .aus-tap-hint {
+  margin-top: 4px;
+  font-size: var(--aus-fs-xs);
+  color: var(--ds-text-3);
+  line-height: 1.6;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+#aus-panel .aus-tap-more {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--ds-border);
+  font-size: var(--aus-fs-xs);
+  color: var(--ds-text-3);
+}
+#aus-panel .aus-tap-empty {
+  padding: 16px;
+  text-align: center;
+  font-size: var(--aus-fs-sm);
+  color: var(--ds-text-3);
+  line-height: 1.8;
+}
+
+/* 窄屏：汇总块两列，工具行允许换行，按钮不被拉成整条横幅 */
+@media (max-width: 760px) {
+  #aus-panel .aus-tap-sum { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  #aus-panel .aus-tap-tools { gap: 6px; }
+  #aus-panel .aus-tap-tools-gap { display: none; }
+  #aus-panel .aus-tap-tools .aus-pill { flex: 0 0 auto; }
+}

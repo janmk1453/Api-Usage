@@ -5,6 +5,7 @@ import { _ as saveHot, a as clearHistoryCold, f as loadHistoryCold, g as saveHis
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
 import { a as isUnsafeKey, c as localDay, i as isPeakHour$1, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay } from "./date-Dsu8hrMO.js";
 import { a as getWalletExchangeRate } from "./currency-CJMNKSam.js";
+import { n as emit, t as DataEvents } from "./events-BD2MbRMW.js";
 //#region src/types/wallet.ts
 var DEEPSEEK_WALLET_ID = "wallet:deepseek-official";
 var WALLET_CATALOG_PROVIDERS = [
@@ -1159,30 +1160,6 @@ function calcSavings(u, settings, wallet) {
 	return (u.prompt_cache_hit_tokens || 0) / 1e6 * (p.miss - p.hit);
 }
 //#endregion
-//#region src/data/events.ts
-var map = /* @__PURE__ */ new Map();
-var DataEvents = {
-	UPDATED: "data:updated",
-	HISTORY_ADDED: "data:history:added",
-	SETTINGS_CHANGED: "data:settings:changed",
-	BALANCE_CHANGED: "data:balance:changed"
-};
-function on(event, fn) {
-	if (!map.has(event)) map.set(event, /* @__PURE__ */ new Set());
-	map.get(event).add(fn);
-	return () => off(event, fn);
-}
-function off(event, fn) {
-	map.get(event)?.delete(fn);
-}
-function emit(event, payload) {
-	map.get(event)?.forEach((fn) => {
-		try {
-			fn(payload);
-		} catch {}
-	});
-}
-//#endregion
 //#region src/utils/finish.ts
 var NORMAL_FINISH = /* @__PURE__ */ new Set([
 	"stop",
@@ -2276,7 +2253,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && !!wallet.catalogProvider) try {
-						import("./pricing-sync-HVbzVuJk.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-DJgmC8rg.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
@@ -3135,4 +3112,4 @@ var repository = {
 	}
 };
 //#endregion
-export { WALLET_CATALOG_PROVIDERS as A, mergeWalletCollections as C, initConnectionIdentity as D, buildEndpointContext as E, resolveRuntimeConnectionContext as O, findWalletModel as S, walletPendingModelCount as T, normalizeModel as _, decryptKey as a, findWalletForConnection as b, isTruncatedFinish as c, calcCost as d, calcSavings as f, isWalletPeakHour as g, isPeakHour as h, saveWalletApiKey as i, DEEPSEEK_WALLET_ID as k, DataEvents as l, isDeepSeekOfficialModel as m, repository_exports as n, encryptKey as o, getPricing as p, getWalletApiKey as r, sanitizeHistoryTiming as s, repository as t, on as u, cloneWallet as v, walletBalanceToCny as w, findWalletForHistory as x, defaultContextLimitForModel as y };
+export { walletPendingModelCount as C, DEEPSEEK_WALLET_ID as D, resolveRuntimeConnectionContext as E, WALLET_CATALOG_PROVIDERS as O, walletBalanceToCny as S, initConnectionIdentity as T, defaultContextLimitForModel as _, decryptKey as a, findWalletModel as b, isTruncatedFinish as c, getPricing as d, isDeepSeekOfficialModel as f, cloneWallet as g, normalizeModel as h, saveWalletApiKey as i, calcCost as l, isWalletPeakHour as m, repository_exports as n, encryptKey as o, isPeakHour as p, getWalletApiKey as r, sanitizeHistoryTiming as s, repository as t, calcSavings as u, findWalletForConnection as v, buildEndpointContext as w, mergeWalletCollections as x, findWalletForHistory as y };
