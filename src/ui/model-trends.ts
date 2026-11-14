@@ -1,6 +1,6 @@
 import { esc, localDay } from '../utils/date';
 import { X_OPTIONS } from './chart-config';
-import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
+import { CHART_TOOLTIP_SURFACE, chartTooltipPlacement } from './chart-tooltip';
 import { attachChartZoom, detachChartZoom, getChartRange } from './range-zoom';
 import { closeDropdownThenPaint } from './dropdown-close';
 
@@ -155,6 +155,7 @@ async function renderOne(id:TrendId, filtered:any[]){
       borderColor:cBorder,
       borderWidth:1,
       ...CHART_TOOLTIP_SURFACE,
+      ...chartTooltipPlacement(el),
       textStyle:{ color:cText, fontSize: 12 },
       formatter:(params:any)=>{
         if (!params?.length) return '';

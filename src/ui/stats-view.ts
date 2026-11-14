@@ -5,7 +5,7 @@ import { localDay, esc } from '../utils/date';
 import { Y_OPTIONS, Y_GROUPS, X_OPTIONS, getYSelected, getXSelected, getChartType, setChartType, getAxisLabelMode, setAxisLabelMode, toggleY, setXSelected, aggregateForChart, tokenStackDrawOrder, sortTooltipParams } from './chart-config';
 import { renderExtraCharts } from './extra-charts';
 import { BAR_SQUARE, barTopRadius, estimateBarWidth } from './chart-bar';
-import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
+import { CHART_TOOLTIP_SURFACE, chartTooltipPlacement } from './chart-tooltip';
 import { attachChartZoom, clearChartRanges, detachChartZoom, getChartRange, type RangeZoomHandle } from './range-zoom';
 import { renderModelTrends, initModelTrends } from './model-trends';
 import { DataEvents, on as onDataEvent } from '../data/events';
@@ -822,6 +822,8 @@ async function renderChart(filteredRaw: any[]) {
       borderColor: cBorder,
       borderWidth: 1,
       ...CHART_TOOLTIP_SURFACE,
+      // 挂到 fixed 宿主 + 视口夹取：手机上贴边时悬浮窗不会被图表/屏幕切掉
+      ...chartTooltipPlacement(el),
       textStyle: { color: cText, fontSize: 12 },
       formatter: (params:any)=>{
         if (!params?.length) return '';

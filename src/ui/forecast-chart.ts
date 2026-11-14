@@ -4,7 +4,7 @@
  */
 import type { ForecastSeries } from '../stats/forecast-series';
 import { chartDateTime } from './chart-time';
-import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
+import { CHART_TOOLTIP_SURFACE, chartTooltipPlacement } from './chart-tooltip';
 import { TOKEN_SERIES_COLORS } from './chart-config';
 
 type CurrencyInfo = { code: string; symbol: string; rate: number };
@@ -487,6 +487,8 @@ async function renderMainChart(echarts: any, options: ForecastChartOptions): Pro
       borderColor: border,
       borderWidth: 1,
       ...CHART_TOOLTIP_SURFACE,
+      // 挂到 fixed 宿主 + 视口夹取：手机上贴边时悬浮窗不会被图表/屏幕切掉
+      ...chartTooltipPlacement(chart.getDom()),
       textStyle: { color: text, fontSize: 12 },
       axisPointer: { type: 'line', lineStyle: { color: border } },
       formatter: (params: any) => {
@@ -577,6 +579,8 @@ async function renderHitChart(echarts: any, options: ForecastChartOptions): Prom
       borderColor: border,
       borderWidth: 1,
       ...CHART_TOOLTIP_SURFACE,
+      // 挂到 fixed 宿主 + 视口夹取：手机上贴边时悬浮窗不会被图表/屏幕切掉
+      ...chartTooltipPlacement(chart.getDom()),
       textStyle: { color: text, fontSize: 12 },
       formatter: (params: any) => {
         if (!Array.isArray(params) || !params.length) return '';
@@ -683,6 +687,8 @@ async function renderCostChart(echarts: any, options: ForecastChartOptions): Pro
       borderColor: border,
       borderWidth: 1,
       ...CHART_TOOLTIP_SURFACE,
+      // 挂到 fixed 宿主 + 视口夹取：手机上贴边时悬浮窗不会被图表/屏幕切掉
+      ...chartTooltipPlacement(chart.getDom()),
       textStyle: { color: text, fontSize: 12 },
       formatter: (params: any) => {
         if (!Array.isArray(params) || !params.length) return '';

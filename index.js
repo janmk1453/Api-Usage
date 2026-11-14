@@ -3303,12 +3303,21 @@ function aggregateForChart(entries, yKeys, xKey) {
 //#endregion
 //#region src/ui/chart-tooltip.ts
 /**
-* 图表悬浮窗（tooltip）统一外观（单一来源）
+* 图表悬浮窗（tooltip）统一定位与外观（单一来源）
 *
 * 圆角直接对齐块（.ds-card）的圆角 —— style.css 里 `--ds-radius-card: 14px`，
 * 让 ECharts 浮层与页面卡片用同一套圆角语言；正文内边距同步放大一点，
 * 否则 14px 圆角会把默认 5px 内距里的文字切到弧线上。
 * 需要调整浮层外观时只改这里，禁止各图表自己写 borderRadius。
+*
+* 定位同样收在这里：ECharts 默认把 tooltip 的 DOM 挂在**图表容器自身**里，
+* 于是卡片/图表的 `overflow:hidden` 会把它按边缘切掉；靠近容器左/上边缘时
+* `refixTooltipPosition` 只翻面、不把坐标夹回 0，还会直接跑出屏幕（手机上尤其明显）。
+* 现在统一做两件事：
+*   1. `appendTo` → 每个 `[data-view]` 容器里一个铺满视口的 fixed 宿主，悬浮窗脱离所有
+*      overflow 裁剪，同时仍留在面板 DOM 内（formatter 里的 `var(--ds-*)` 主题变量才有效）；
+*   2. `position` → 按**视口**而不是图表盒子翻面 + 夹取，四周永远留 `8px`。
+* 也因此不要开 `confine`（它会按图表盒子再夹一次，把上面算好的视口位置顶回去）。
 */
 var CHART_TOOLTIP_SURFACE = {
 	/** 与 .ds-card 的 --ds-radius-card 保持一致 */
@@ -3316,6 +3325,90 @@ var CHART_TOOLTIP_SURFACE = {
 	/** 上/下 8、左/右 12：让 14px 圆角内部留出与卡片相近的呼吸感 */
 	padding: [8, 12]
 };
+/** 悬浮窗与指针的间距（px） */
+var TOOLTIP_GAP = 12;
+/** 悬浮窗与视口四边的最小留白（px） */
+var TOOLTIP_VIEWPORT_MARGIN = 8;
+/** 悬浮窗宿主标记，便于调试时定位 */
+var TOOLTIP_HOST_ATTR = "data-aus-tooltip-host";
+/** 每个视图容器一个宿主（WeakMap 跟着 DOM 走，容器没了自动回收） */
+var tooltipHosts = /* @__PURE__ */ new WeakMap();
+/**
+* 取（必要时创建）图表所在视图的悬浮窗宿主。
+*
+* 宿主是「铺满视口的 fixed 层」：既不会给 #aus-main 这类滚动容器制造溢出，
+* 也正好让 ECharts 的坐标换算（图表本地坐标 → 宿主本地坐标）等价于视口坐标。
+*
+* 注意**尺寸不能是 0**：zrender 会往宿主里插 4 个 left/right/top/bottom 标记 div，
+* 用它们的屏幕坐标建四角变换矩阵；宿主 0×0 时四个标记重合、矩阵行列式为 0，
+* 换算直接失败（tooltip 被画到 translate(0,0)，也就是视口左上角）。
+*/
+function tooltipHost(chartEl) {
+	const doc = chartEl?.ownerDocument;
+	if (!doc) return null;
+	const anchor = chartEl.closest?.("[data-view]") || doc.getElementById("aus-panel");
+	if (!anchor) return null;
+	const cached = tooltipHosts.get(anchor);
+	if (cached && cached.isConnected && cached.parentElement === anchor) return cached;
+	const host = doc.createElement("div");
+	host.setAttribute(TOOLTIP_HOST_ATTR, "1");
+	host.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;overflow:visible;pointer-events:none;";
+	anchor.appendChild(host);
+	tooltipHosts.set(anchor, host);
+	return host;
+}
+function clampNumber(value, min, max) {
+	if (!Number.isFinite(value)) return min;
+	return value < min ? min : value > max ? max : value;
+}
+/**
+* 悬浮窗落点（纯几何，单测覆盖）：先按指针右下放，放不下翻到左/上侧，最后夹回视口。
+* 入参与返回值都是**视口坐标**（相对浏览器窗口左上角），不碰 DOM 也不读设备像素比。
+*
+* @param pointerX 指针在视口中的横坐标
+* @param pointerY 指针在视口中的纵坐标
+* @param tipWidth 悬浮窗宽（含内距与描边）
+* @param tipHeight 悬浮窗高
+* @param viewWidth 视口宽（取不到时传 0，表示不夹取）
+* @param viewHeight 视口高（同上）
+*/
+function placeChartTooltip(pointerX, pointerY, tipWidth, tipHeight, viewWidth, viewHeight) {
+	const width = Math.max(0, Number(tipWidth) || 0);
+	const height = Math.max(0, Number(tipHeight) || 0);
+	let x = pointerX + TOOLTIP_GAP;
+	let y = pointerY + TOOLTIP_GAP;
+	if (viewWidth > 0 && x + width > viewWidth - TOOLTIP_VIEWPORT_MARGIN) x = pointerX - TOOLTIP_GAP - width;
+	if (viewHeight > 0 && y + height > viewHeight - TOOLTIP_VIEWPORT_MARGIN) y = pointerY - TOOLTIP_GAP - height;
+	if (viewWidth > 0) x = clampNumber(x, TOOLTIP_VIEWPORT_MARGIN, Math.max(TOOLTIP_VIEWPORT_MARGIN, viewWidth - width - TOOLTIP_VIEWPORT_MARGIN));
+	if (viewHeight > 0) y = clampNumber(y, TOOLTIP_VIEWPORT_MARGIN, Math.max(TOOLTIP_VIEWPORT_MARGIN, viewHeight - height - TOOLTIP_VIEWPORT_MARGIN));
+	return [x, y];
+}
+/**
+* 图表悬浮窗统一挂载点与定位（每个图表实例传入自己的容器元素）。
+*
+* 用法：
+* ```ts
+* tooltip: { trigger: 'axis', ...CHART_TOOLTIP_SURFACE, ...chartTooltipPlacement(el) }
+* ```
+*/
+function chartTooltipPlacement(chartEl) {
+	const position = (point, _params, _dom, _rect, size) => {
+		const rect = chartEl.getBoundingClientRect();
+		const win = chartEl.ownerDocument?.defaultView || null;
+		const contentSize = size?.contentSize || [0, 0];
+		const tipWidth = Math.max(0, Number(contentSize[0]) || 0);
+		const tipHeight = Math.max(0, Number(contentSize[1]) || 0);
+		const viewWidth = win?.innerWidth || Math.round(rect.width) || 0;
+		const viewHeight = win?.innerHeight || Math.round(rect.height) || 0;
+		const [x, y] = placeChartTooltip(rect.left + (Number(point?.[0]) || 0), rect.top + (Number(point?.[1]) || 0), tipWidth, tipHeight, viewWidth, viewHeight);
+		return [x - rect.left, y - rect.top];
+	};
+	return {
+		appendTo: () => tooltipHost(chartEl),
+		position,
+		extraCssText: "max-width:min(340px, calc(100vw - 16px));box-sizing:border-box;white-space:normal;overflow-wrap:break-word;"
+	};
+}
 //#endregion
 //#region src/ui/chart-bar.ts
 /**
@@ -3858,6 +3951,7 @@ async function renderOne$1(id, filtered) {
 				tooltip: {
 					trigger: "item",
 					...CHART_TOOLTIP_SURFACE,
+					...chartTooltipPlacement(el),
 					backgroundColor: themeColor$3("--ds-card-inner", "#FFFFFF"),
 					borderColor: themeColor$3("--ds-border", "#E5E7EB"),
 					textStyle: {
@@ -4083,6 +4177,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 			tooltip: {
 				trigger: "axis",
 				...CHART_TOOLTIP_SURFACE,
+				...chartTooltipPlacement(el),
 				backgroundColor: themeColor$3("--ds-card-inner", "#FFFFFF"),
 				borderColor: themeColor$3("--ds-border", "#E5E7EB"),
 				textStyle: { fontSize: 12 },
@@ -4191,6 +4286,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 			opts.tooltip = {
 				trigger: "axis",
 				...CHART_TOOLTIP_SURFACE,
+				...chartTooltipPlacement(el),
 				backgroundColor: themeColor$3("--ds-card-inner", "#FFFFFF"),
 				borderColor: themeColor$3("--ds-border", "#E5E7EB"),
 				textStyle: { fontSize: 12 },
@@ -4574,6 +4670,7 @@ async function renderOne(id, filtered) {
 				borderColor: cBorder,
 				borderWidth: 1,
 				...CHART_TOOLTIP_SURFACE,
+				...chartTooltipPlacement(el),
 				textStyle: {
 					color: cText,
 					fontSize: 12
@@ -5815,6 +5912,7 @@ async function renderChart(filteredRaw) {
 			borderColor: cBorder,
 			borderWidth: 1,
 			...CHART_TOOLTIP_SURFACE,
+			...chartTooltipPlacement(el),
 			textStyle: {
 				color: cText,
 				fontSize: 12
@@ -7028,6 +7126,7 @@ async function renderMainChart(echarts, options) {
 			borderColor: border,
 			borderWidth: 1,
 			...CHART_TOOLTIP_SURFACE,
+			...chartTooltipPlacement(chart.getDom()),
 			textStyle: {
 				color: text,
 				fontSize: 12
@@ -7128,6 +7227,7 @@ async function renderHitChart(echarts, options) {
 			borderColor: border,
 			borderWidth: 1,
 			...CHART_TOOLTIP_SURFACE,
+			...chartTooltipPlacement(chart.getDom()),
 			textStyle: {
 				color: text,
 				fontSize: 12
@@ -7258,6 +7358,7 @@ async function renderCostChart(echarts, options) {
 			borderColor: border,
 			borderWidth: 1,
 			...CHART_TOOLTIP_SURFACE,
+			...chartTooltipPlacement(chart.getDom()),
 			textStyle: {
 				color: text,
 				fontSize: 12
