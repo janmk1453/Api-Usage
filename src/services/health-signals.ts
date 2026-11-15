@@ -19,6 +19,19 @@ export interface HealthSignal {
   at: number;
   /** 一行可读的说明（展示用，最长 120 字） */
   detail: string;
+  /** 归属模型（用于「忽略同类问题」时区分对象，没有就留空） */
+  model?: string;
+  /** 细分原因：zero / missing / rate-high / rate-low / entry-error / console */
+  reason?: string;
+}
+
+/**
+ * 信号的「问题指纹」：类型 + 模型 + 细分原因。
+ * 用户点「忽略」时按它落盘 —— 同一个模型同一类问题不再反复弹，
+ * 换了模型、换了问题类型（或速率方向）仍会重新提示。
+ */
+export function healthSignalKey(sig: HealthSignal): string {
+  return sig.kind + '|' + (sig.model || '') + '|' + (sig.reason || '');
 }
 
 export interface HealthReport {
@@ -83,15 +96,15 @@ export function scanHistoryHealth(history: any[], limit = HEALTH_HISTORY_SCAN): 
     const completion = Number(entry?.completion_tokens) || 0;
     const total = Number(entry?.total_tokens) || 0;
     if (prompt === 0 && completion === 0 && total === 0) {
-      out.push({ kind: 'zero-usage', at, detail: clipText(model + ' 这一轮用量全为 0') });
+      out.push({ kind: 'zero-usage', at, model, reason: 'zero', detail: clipText(model + ' 这一轮用量全为 0') });
       continue;
     }
     const rate = rateOf(entry);
     if (rate == null) continue;
     if (rate > RATE_ANOMALY_HIGH) {
-      out.push({ kind: 'rate-anomaly', at, detail: clipText(model + ' 速率 ' + Math.round(rate) + ' token/s，明显偏高') });
+      out.push({ kind: 'rate-anomaly', at, model, reason: 'rate-high', detail: clipText(model + ' 速率 ' + Math.round(rate) + ' token/s，明显偏高') });
     } else if (rate < RATE_ANOMALY_LOW && total >= 20) {
-      out.push({ kind: 'rate-anomaly', at, detail: clipText(model + ' 速率 ' + rate.toFixed(2) + ' token/s，明显偏低') });
+      out.push({ kind: 'rate-anomaly', at, model, reason: 'rate-low', detail: clipText(model + ' 速率 ' + rate.toFixed(2) + ' token/s，明显偏低') });
     }
   }
   return out;
@@ -106,18 +119,24 @@ export function scanCaptureHealth(stages = listCaptureStages()): HealthSignal[] 
       out.push({
         kind: 'missing-usage',
         at: rec.at,
+        model: rec.model || '',
+        reason: 'missing',
         detail: clipText((rec.model || '未知模型') + ' 的这一轮没有取到用量，未写入历史'),
       });
     } else if (rec.stage === 'entry-error') {
       out.push({
         kind: 'plugin-error',
         at: rec.at,
+        model: rec.model || '',
+        reason: 'entry-error',
         detail: clipText('写入历史失败：' + (rec.reason || '未知错误')),
       });
     } else if (rec.stage === 'fetch-parse' && rec.usageZero) {
       out.push({
         kind: 'zero-usage',
         at: rec.at,
+        model: rec.model || '',
+        reason: 'zero',
         detail: clipText((rec.model || '未知模型') + ' 上游返回的用量全为 0'),
       });
     }
@@ -131,7 +150,7 @@ export function scanConsoleHealth(entries = listConsoleEntries()): HealthSignal[
   for (const item of entries) {
     if (!item) continue;
     if (item.level === 'error' || item.level === 'uncaught') {
-      out.push({ kind: 'plugin-error', at: item.at || 0, detail: clipText(item.text || '控制台错误') });
+      out.push({ kind: 'plugin-error', at: item.at || 0, reason: 'console', detail: clipText(item.text || '控制台错误') });
     }
   }
   return out;
@@ -143,6 +162,8 @@ export function buildHealthReport(input: {
   stages?: ReturnType<typeof listCaptureStages>;
   consoleEntries?: ReturnType<typeof listConsoleEntries>;
   limit?: number;
+  /** 已被用户「忽略」的问题指纹（healthSignalKey 的返回值），命中即不再提示 */
+  ignored?: string[];
 } = {}): HealthReport {
   const limit = Math.max(1, input.limit || HEALTH_ITEM_LIMIT);
   let items: HealthSignal[] = [];
@@ -162,22 +183,24 @@ export function buildHealthReport(input: {
     const dup = kept.find((k) => k.kind === sig.kind && Math.abs(k.at - sig.at) < HEALTH_DEDUPE_MS);
     if (!dup) kept.push(sig);
   }
-  kept.sort((a, b) => b.at - a.at);
+  const ignoredSet = new Set(input.ignored || []);
+  const visible = ignoredSet.size ? kept.filter((sig) => !ignoredSet.has(healthSignalKey(sig))) : kept;
+  visible.sort((a, b) => b.at - a.at);
   const counts: Record<HealthSignalKind, number> = {
     'zero-usage': 0,
     'missing-usage': 0,
     'rate-anomaly': 0,
     'plugin-error': 0,
   };
-  for (const sig of kept) {
+  for (const sig of visible) {
     if (counts[sig.kind] != null) counts[sig.kind] += 1;
   }
-  const shown = kept.slice(0, limit);
+  const shown = visible.slice(0, limit);
   return {
-    total: kept.length,
+    total: visible.length,
     counts,
     items: shown,
-    shouldShow: kept.length > 0,
+    shouldShow: visible.length > 0,
   };
 }
 

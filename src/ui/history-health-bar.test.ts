@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { healthBarHTML, isHistoryHealthDismissed } from './history-health-bar';
+import { healthBarHTML } from './history-health-bar';
 import type { HealthReport } from '../services/health-signals';
 
 function report(over: Partial<HealthReport> = {}): HealthReport {
@@ -25,6 +25,13 @@ describe('历史记录页健康提示条', () => {
     expect(html).toContain('上传反馈日志');
   });
 
+  it('「忽略」按钮与右上角关闭都用忽略语义，不再是一次性关闭', () => {
+    const html = healthBarHTML(report());
+    expect(html).toContain('data-health-action="ignore"');
+    expect(html).toContain('>忽略</button>');
+    expect(html).not.toContain('这次先不用');
+  });
+
   it('明细最多三条，其余折叠成一行提示', () => {
     const many = report({
       total: 6,
@@ -44,9 +51,5 @@ describe('历史记录页健康提示条', () => {
     const html = healthBarHTML(report({ items: [{ kind: 'plugin-error', at: 1, detail: '<img src=x>' }] }));
     expect(html).toContain('&lt;img src=x&gt;');
     expect(html).not.toContain('<img src=x>');
-  });
-
-  it('默认不处于「本次会话不再提示」状态', () => {
-    expect(isHistoryHealthDismissed()).toBe(false);
   });
 });

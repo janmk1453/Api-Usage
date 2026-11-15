@@ -4079,3 +4079,59 @@
     display: none;
   }
 }
+
+
+/* ---- 问题反馈 / 请求日志：历史记录页问题提示的偏好区（总开关 + 恢复忽略） ---- */
+#aus-panel .aus-log-prefs {
+  margin: 12px 0 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-card, 14px);
+  background: var(--ds-card);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#aus-panel .aus-log-pref-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+#aus-panel .aus-log-pref-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+#aus-panel .aus-log-pref-title {
+  font-size: var(--aus-fs-base);
+  font-weight: 600;
+  color: var(--ds-text);
+}
+#aus-panel .aus-log-pref-hint {
+  font-size: var(--aus-fs-sm);
+  color: var(--ds-text-2);
+  line-height: 1.55;
+}
+#aus-panel .aus-log-pref-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 6px;
+  border-top: 1px dashed var(--ds-border);
+  font-size: var(--aus-fs-sm);
+  color: var(--ds-text-3);
+}
+@media (max-width: 760px) {
+  #aus-panel .aus-log-prefs {
+    padding: 10px;
+  }
+  #aus-panel .aus-log-pref-main {
+    gap: 10px;
+  }
+  #aus-panel .aus-log-pref-hint {
+    font-size: var(--aus-fs-xs);
+  }
+}

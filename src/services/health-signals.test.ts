@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   buildHealthReport,
+  healthSignalKey,
   healthSummaryText,
   scanCaptureHealth,
   scanConsoleHealth,
@@ -85,6 +86,33 @@ describe('历史记录页健康信号', () => {
     const report = buildHealthReport({ history: [entry()], stages: [], consoleEntries: [] });
     expect(report.shouldShow).toBe(false);
     expect(report.total).toBe(0);
+    expect(healthSummaryText(report)).toBe('');
+  });
+
+  it('忽略的只是同一类问题：同类不再弹，别的模型/别的问题照旧', () => {
+    const history = [
+      entry({ timestamp: 1794719000000, prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }),
+      // 与上一条间隔超过去重窗口，避免被当成同一次
+      entry({ timestamp: 1794720000000, model: 'glm-5', prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }),
+    ];
+    const before = buildHealthReport({ history, stages: [], consoleEntries: [] });
+    expect(before.total).toBe(2);
+    const key = healthSignalKey(before.items.find((s) => s.model === 'deepseek-flash')!);
+    expect(key).toBe('zero-usage|deepseek-flash|zero');
+    const after = buildHealthReport({ history, stages: [], consoleEntries: [], ignored: [key] });
+    expect(after.total).toBe(1);
+    expect(after.items[0].model).toBe('glm-5');
+  });
+
+  it('问题全被忽略时不显示', () => {
+    const history = [entry({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 })];
+    const report = buildHealthReport({
+      history,
+      stages: [],
+      consoleEntries: [],
+      ignored: ['zero-usage|deepseek-flash|zero'],
+    });
+    expect(report.shouldShow).toBe(false);
     expect(healthSummaryText(report)).toBe('');
   });
 

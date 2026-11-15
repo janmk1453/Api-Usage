@@ -29,7 +29,6 @@ import { initChatManageView, renderChatManageView } from './chat-manage';
 import { initTapView, renderTapView } from './tap-view';
 import { renderLogView } from './log-view';
 import { renderHistoryHealthBar } from './history-health-bar';
-import { buildHealthReport } from '../services/health-signals';
 import { helpViewHTML } from './help-view';
 import { chartCardHTML } from './chart-picker';
 import { hideAllChartTooltips } from './chart-tooltip';
@@ -713,11 +712,11 @@ function renderHistory(doc: Document, s: any) {
   const host = doc.getElementById('aus-history');
   if (!host) return;
   // 顶部健康提示：最近有「用量为 0 / 没取到用量 / 速率离谱 / 扩展报错」才显示
+  // （总开关与已忽略的问题在 renderHistoryHealthBar 内部处理）
   try {
-    renderHistoryHealthBar(
-      doc.getElementById('aus-history-health') as HTMLElement | null,
-      buildHealthReport({ history: (s && s.history) || [] }),
-    );
+    renderHistoryHealthBar(doc.getElementById('aus-history-health') as HTMLElement | null, {
+      history: (s && s.history) || [],
+    });
   } catch {}
   let hist: any[] = s.history || [];
   let scope = 'all';

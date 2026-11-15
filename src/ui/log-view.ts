@@ -1,12 +1,22 @@
 /**
- * 请求日志页（设置 → 请求日志）：展示最近一轮对话请求的标头、正文与响应元数据。
+ * 问题反馈 / 请求日志页（设置 → 问题反馈 / 请求日志）
+ *
+ * 展示最近一轮对话请求的标头、正文与响应元数据，并提供「上传反馈」入口；
+ * 同时是历史记录页问题提示的开关所在（总开关 + 恢复已忽略的问题）。
  *
  * 只读展示：数据由 services/request-log.ts 在 fetch 捕获层旁路写入，
  * 与本页无关——本页只负责渲染，绝不参与统计口径。
  */
 import { icon } from './icons';
+import { switchHTML } from './switch';
 import { APP_VERSION } from '../constants/version';
 import { openLogUploadDialog } from './log-upload-dialog';
+import {
+  clearIgnoredHealthKeys,
+  ignoredHealthCount,
+  isHealthBarEnabled,
+  setHealthBarEnabled,
+} from '../services/health-prefs';
 import {
   clearRequestLog,
   readRequestLog,
@@ -206,6 +216,33 @@ export function logBodyHTML(record: RequestLogRecord | null): string {
   );
 }
 
+/** 历史记录页问题提示的偏好区：总开关 + 已忽略数量/恢复入口 */
+function healthPrefsHTML(): string {
+  let enabled = true;
+  let ignored = 0;
+  try {
+    enabled = isHealthBarEnabled();
+    ignored = ignoredHealthCount();
+  } catch {}
+  const foot =
+    ignored > 0
+      ? '<div class="aus-log-pref-foot">已忽略 ' + ignored +
+        ' 类问题，同类不再提示<button type="button" class="aus-log-link" data-log-action="clear-ignored">全部恢复</button></div>'
+      : '';
+  return (
+    '<div class="aus-log-prefs">' +
+    '<div class="aus-log-pref-main">' +
+    '<div class="aus-log-pref-text">' +
+    '<span class="aus-log-pref-title">历史记录页的问题提示</span>' +
+    '<span class="aus-log-pref-hint">用量为 0、没取到用量、速率异常或扩展报错时，在历史记录页顶部给出提示，可一键上传反馈；关掉后不再显示。</span>' +
+    '</div>' +
+    switchHTML('aus-log-health-switch', { checked: enabled, ariaLabel: '历史记录页问题提示' }) +
+    '</div>' +
+    foot +
+    '</div>'
+  );
+}
+
 export function renderLogView(): void {
   if (typeof document === 'undefined') return;
   const host = document.getElementById('aus-log-body');
@@ -221,6 +258,7 @@ export function renderLogView(): void {
     '<button type="button" class="aus-log-link" data-log-action="clear">' + icon('close', 14) + '清空</button>' +
     '</div>' +
     '</div>' +
+    healthPrefsHTML() +
     '<div id="aus-log-content">' + logBodyHTML(record) + '</div>';
   bind(host);
 }
@@ -243,6 +281,11 @@ function bind(host: HTMLElement): void {
     const btn = (event.target as HTMLElement | null)?.closest?.('[data-log-action]') as HTMLElement | null;
     if (!btn) return;
     const action = btn.getAttribute('data-log-action');
+    if (action === 'clear-ignored') {
+      clearIgnoredHealthKeys();
+      renderLogView();
+      return;
+    }
     if (action === 'upload') {
       resetClear();
       openLogUploadDialog({ appVersion: APP_VERSION });
@@ -285,6 +328,14 @@ function bind(host: HTMLElement): void {
       }
       return;
     }
+  });
+  // 开关：写盘即可，历史页每次渲染都会重新读偏好
+  host.addEventListener('change', (event: any) => {
+    const el = event?.target as HTMLInputElement | null;
+    if (!el || el.id !== 'aus-log-health-switch') return;
+    try {
+      setHealthBarEnabled(!!el.checked);
+    } catch {}
   });
 }
 

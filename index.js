@@ -3,14 +3,14 @@ import { n as getSelectedSave, o as mobileDeviceHint, r as state$2, t as getHist
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as walletPendingModelCount, D as DEEPSEEK_WALLET_ID, O as WALLET_CATALOG_PROVIDERS, S as walletBalanceToCny, _ as defaultContextLimitForModel, b as findWalletModel, c as isTruncatedFinish, d as getPricing, g as cloneWallet, h as normalizeModel, i as saveWalletApiKey, m as isWalletPeakHour, p as isPeakHour, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as calcSavings, x as mergeWalletCollections, y as findWalletForHistory } from "./repository-CXB5J4lx.js";
+import { C as walletPendingModelCount, D as DEEPSEEK_WALLET_ID, O as WALLET_CATALOG_PROVIDERS, S as walletBalanceToCny, _ as defaultContextLimitForModel, b as findWalletModel, c as isTruncatedFinish, d as getPricing, g as cloneWallet, h as normalizeModel, i as saveWalletApiKey, m as isWalletPeakHour, p as isPeakHour, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as calcSavings, x as mergeWalletCollections, y as findWalletForHistory } from "./repository-DTRi_qLe.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc$3, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-CJMNKSam.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
-import { a as listCaptureStages, c as readRequestLog, i as captureDigest, l as summarizeRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception } from "./interception-B5u0S3e-.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-DY0MskUF.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-CjKgNONX.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-CKtLOBef.js";
+import { a as listCaptureStages, c as readRequestLog, i as captureDigest, l as summarizeRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception } from "./interception-PxVMxCz1.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-dYJP1qPw.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-xFvDc0hA.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-eILq-gMt.js";
 import { a as subscribeTap, i as listTapRecords, n as tapDiagnostics, r as clearTapRecords } from "./request-tap-CNHp5RUv.js";
 //#region src/constants/version.ts
 var APP_VERSION = String("3.2.1");
@@ -2636,7 +2636,7 @@ var VIEW_TITLES = {
 	about: "关于",
 	"chat-manage": "对话展示管理",
 	tap: "其他请求",
-	log: "请求日志"
+	log: "问题反馈 / 请求日志"
 };
 function viewTitle(view) {
 	return VIEW_TITLES[view] || VIEW_TITLES.overview;
@@ -9384,7 +9384,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-DY0MskUF.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-dYJP1qPw.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -10961,9 +10961,95 @@ function openLogUploadDialog(options = {}) {
 	bind$2(mask, String(options.appVersion || ""));
 }
 //#endregion
+//#region src/services/health-prefs.ts
+/**
+* 历史记录页「问题提示」的偏好：总开关 + 已忽略的问题指纹
+*
+* 两件事分开存：
+* - 总开关（默认开启）：关掉后历史记录页不再显示任何提示条，入口在
+*   「问题反馈 / 请求日志」页；用户主动关掉的意图要跨刷新保留。
+* - 忽略列表：点提示条上的「忽略」时，把当前这批问题按指纹记下来，
+*   同类问题以后不再弹；换了模型或换了问题类型仍会重新提示。
+*
+* 只用 localStorage，失败时退化为「不忽略、保持开启」，绝不阻塞主流程。
+*/
+var HEALTH_BAR_ENABLED_KEY = "aus_health_bar_enabled_v1";
+var HEALTH_IGNORE_KEY = "aus_health_ignore_v1";
+function readStorage(key) {
+	try {
+		return globalThis.localStorage?.getItem(key) ?? null;
+	} catch {
+		return null;
+	}
+}
+function writeStorage(key, value) {
+	try {
+		globalThis.localStorage?.setItem(key, value);
+	} catch {}
+}
+/** 总开关：没存过（或存坏了）都按「开启」处理 */
+function isHealthBarEnabled() {
+	const raw = readStorage(HEALTH_BAR_ENABLED_KEY);
+	if (raw === "0") return false;
+	if (raw === "1") return true;
+	return true;
+}
+function setHealthBarEnabled(enabled) {
+	writeStorage(HEALTH_BAR_ENABLED_KEY, enabled ? "1" : "0");
+}
+function readEntries() {
+	const raw = readStorage(HEALTH_IGNORE_KEY);
+	if (!raw) return [];
+	try {
+		const parsed = JSON.parse(raw);
+		if (!Array.isArray(parsed)) return [];
+		const out = [];
+		for (const item of parsed) {
+			const key = typeof item?.key === "string" ? item.key : "";
+			if (!key) continue;
+			const at = Number(item?.at) || 0;
+			out.push({
+				key,
+				at
+			});
+		}
+		return out;
+	} catch {
+		return [];
+	}
+}
+/** 已忽略的问题指纹（新→旧） */
+function readIgnoredHealthKeys() {
+	return readEntries().map((e) => e.key);
+}
+function ignoredHealthCount() {
+	return readEntries().length;
+}
+/** 追加忽略；重复的指纹只更新时间为最新，超出上限淘汰最旧的 */
+function addIgnoredHealthKeys(keys, now = Date.now()) {
+	const incoming = (keys || []).filter((k) => typeof k === "string" && k);
+	if (!incoming.length) return ignoredHealthCount();
+	const map = /* @__PURE__ */ new Map();
+	for (const entry of readEntries()) map.set(entry.key, entry.at);
+	for (const key of incoming) map.set(key, now);
+	const kept = Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, 50).map(([key, at]) => ({
+		key,
+		at
+	}));
+	writeStorage(HEALTH_IGNORE_KEY, JSON.stringify(kept));
+	return kept.length;
+}
+/** 清空忽略记录（「问题反馈 / 请求日志」页的恢复入口） */
+function clearIgnoredHealthKeys() {
+	writeStorage(HEALTH_IGNORE_KEY, "[]");
+}
+//#endregion
 //#region src/ui/log-view.ts
 /**
-* 请求日志页（设置 → 请求日志）：展示最近一轮对话请求的标头、正文与响应元数据。
+* 问题反馈 / 请求日志页（设置 → 问题反馈 / 请求日志）
+*
+* 展示最近一轮对话请求的标头、正文与响应元数据，并提供「上传反馈」入口；
+* 同时是历史记录页问题提示的开关所在（总开关 + 恢复已忽略的问题）。
 *
 * 只读展示：数据由 services/request-log.ts 在 fetch 捕获层旁路写入，
 * 与本页无关——本页只负责渲染，绝不参与统计口径。
@@ -11074,12 +11160,26 @@ function logBodyHTML(record) {
 	const statusText = r.status ? String(r.status) + (r.statusText ? " " + r.statusText : "") : "等待响应";
 	return "<section class=\"aus-log-summary\"><div class=\"aus-log-summary-top\"><span class=\"aus-log-method\">" + esc$1(record.method) + "</span><span class=\"aus-log-status " + statusClass + "\">" + esc$1(statusText) + "</span><span class=\"aus-log-summary-time\">" + esc$1(logTimeText(record.at)) + "</span></div><div class=\"aus-log-url\">" + esc$1(record.url) + "</div><div class=\"aus-log-metrics\"><span>首字节 " + (r.firstByteMs == null ? "—" : r.firstByteMs + "ms") + "</span><span>总耗时 " + (r.durationMs == null ? "—" : r.durationMs + "ms") + "</span><span>流式 " + (r.streamed === true ? "是" : r.streamed === false ? "否" : "未知") + "</span>" + (r.model ? "<span>模型 " + esc$1(r.model) + "</span>" : "") + "</div>" + (r.error ? "<div class=\"aus-log-error\">" + esc$1(r.error) + "</div>" : "") + "</section>" + section("请求标头", record.requestHeaders.length ? record.requestHeaders.length + " 项" : "", "<div class=\"aus-log-kv\">" + kvRows(record.requestHeaders) + "</div>") + bodyBlock(record) + section("响应状态", "", "<div class=\"aus-log-kv\"><div class=\"aus-log-kv-row\"><span class=\"aus-log-kv-k\">status</span><span class=\"aus-log-kv-v\">" + esc$1(r.status ? String(r.status) : "—") + "</span></div><div class=\"aus-log-kv-row\"><span class=\"aus-log-kv-k\">finish_reason</span><span class=\"aus-log-kv-v\">" + esc$1(r.finishReason || "—") + "</span></div><div class=\"aus-log-kv-row\"><span class=\"aus-log-kv-k\">model</span><span class=\"aus-log-kv-v\">" + esc$1(r.model || "—") + "</span></div></div>") + section("用量（usage）", "", "<div class=\"aus-log-kv\">" + usageRows(r.usage) + "</div>") + section("响应标头", r.headers.length ? r.headers.length + " 项" : "", "<div class=\"aus-log-kv\">" + kvRows(r.headers) + "</div>");
 }
+/** 历史记录页问题提示的偏好区：总开关 + 已忽略数量/恢复入口 */
+function healthPrefsHTML() {
+	let enabled = true;
+	let ignored = 0;
+	try {
+		enabled = isHealthBarEnabled();
+		ignored = ignoredHealthCount();
+	} catch {}
+	const foot = ignored > 0 ? "<div class=\"aus-log-pref-foot\">已忽略 " + ignored + " 类问题，同类不再提示<button type=\"button\" class=\"aus-log-link\" data-log-action=\"clear-ignored\">全部恢复</button></div>" : "";
+	return "<div class=\"aus-log-prefs\"><div class=\"aus-log-pref-main\"><div class=\"aus-log-pref-text\"><span class=\"aus-log-pref-title\">历史记录页的问题提示</span><span class=\"aus-log-pref-hint\">用量为 0、没取到用量、速率异常或扩展报错时，在历史记录页顶部给出提示，可一键上传反馈；关掉后不再显示。</span></div>" + switchHTML("aus-log-health-switch", {
+		checked: enabled,
+		ariaLabel: "历史记录页问题提示"
+	}) + "</div>" + foot + "</div>";
+}
 function renderLogView() {
 	if (typeof document === "undefined") return;
 	const host = document.getElementById("aus-log-body");
 	if (!host) return;
 	const record = readRequestLog();
-	host.innerHTML = "<div class=\"aus-log-top\"><div class=\"aus-log-desc\">只保留最近一轮对话请求，默认只在当前浏览器本地保存。密钥已打码。<span class=\"aus-log-desc-state\" id=\"aus-log-state\">" + esc$1(summarizeRequestLog(record)) + "</span></div><div class=\"aus-log-actions\"><button type=\"button\" class=\"aus-log-link is-upload\" data-log-action=\"upload\">" + icon("menu", 14) + "上传反馈</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"refresh\">" + icon("refresh", 14) + "刷新</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"clear\">" + icon("close", 14) + "清空</button></div></div><div id=\"aus-log-content\">" + logBodyHTML(record) + "</div>";
+	host.innerHTML = "<div class=\"aus-log-top\"><div class=\"aus-log-desc\">只保留最近一轮对话请求，默认只在当前浏览器本地保存。密钥已打码。<span class=\"aus-log-desc-state\" id=\"aus-log-state\">" + esc$1(summarizeRequestLog(record)) + "</span></div><div class=\"aus-log-actions\"><button type=\"button\" class=\"aus-log-link is-upload\" data-log-action=\"upload\">" + icon("menu", 14) + "上传反馈</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"refresh\">" + icon("refresh", 14) + "刷新</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"clear\">" + icon("close", 14) + "清空</button></div></div>" + healthPrefsHTML() + "<div id=\"aus-log-content\">" + logBodyHTML(record) + "</div>";
 	bind$1(host);
 }
 var clearArmed = false;
@@ -11098,6 +11198,11 @@ function bind$1(host) {
 		const btn = event.target?.closest?.("[data-log-action]");
 		if (!btn) return;
 		const action = btn.getAttribute("data-log-action");
+		if (action === "clear-ignored") {
+			clearIgnoredHealthKeys();
+			renderLogView();
+			return;
+		}
 		if (action === "upload") {
 			resetClear();
 			openLogUploadDialog({ appVersion: APP_VERSION });
@@ -11142,6 +11247,34 @@ function bind$1(host) {
 			return;
 		}
 	});
+	host.addEventListener("change", (event) => {
+		const el = event?.target;
+		if (!el || el.id !== "aus-log-health-switch") return;
+		try {
+			setHealthBarEnabled(!!el.checked);
+		} catch {}
+	});
+}
+//#endregion
+//#region src/services/health-signals.ts
+/**
+* 运行健康信号：历史记录页顶部提示条的数据来源（纯逻辑，无 DOM）
+*
+* 只在「用户能明显感觉到不对」的几种情况下给出信号：
+* - zero-usage  常规对话记下来了，但用量全 0（费用必然错）
+* - missing-usage  常规对话的用量没取到，这一轮没进历史
+* - rate-anomaly  速率离谱（极高 / 极低），多半是耗时或流式判定出错
+* - plugin-error   扩展自身报错 / 入库失败 / 控制台异常
+*
+* 这里只做判断与汇总，怎么展示、要不要上传由 UI 决定。
+*/
+/**
+* 信号的「问题指纹」：类型 + 模型 + 细分原因。
+* 用户点「忽略」时按它落盘 —— 同一个模型同一类问题不再反复弹，
+* 换了模型、换了问题类型（或速率方向）仍会重新提示。
+*/
+function healthSignalKey(sig) {
+	return sig.kind + "|" + (sig.model || "") + "|" + (sig.reason || "");
 }
 var KIND_TEXT = {
 	"zero-usage": "用量为 0",
@@ -11182,6 +11315,8 @@ function scanHistoryHealth(history, limit = 30) {
 			out.push({
 				kind: "zero-usage",
 				at,
+				model,
+				reason: "zero",
 				detail: clipText(model + " 这一轮用量全为 0")
 			});
 			continue;
@@ -11191,11 +11326,15 @@ function scanHistoryHealth(history, limit = 30) {
 		if (rate > 5e3) out.push({
 			kind: "rate-anomaly",
 			at,
+			model,
+			reason: "rate-high",
 			detail: clipText(model + " 速率 " + Math.round(rate) + " token/s，明显偏高")
 		});
 		else if (rate < .5 && total >= 20) out.push({
 			kind: "rate-anomaly",
 			at,
+			model,
+			reason: "rate-low",
 			detail: clipText(model + " 速率 " + rate.toFixed(2) + " token/s，明显偏低")
 		});
 	}
@@ -11209,16 +11348,22 @@ function scanCaptureHealth(stages = listCaptureStages()) {
 		if (rec.stage === "event-drop") out.push({
 			kind: "missing-usage",
 			at: rec.at,
+			model: rec.model || "",
+			reason: "missing",
 			detail: clipText((rec.model || "未知模型") + " 的这一轮没有取到用量，未写入历史")
 		});
 		else if (rec.stage === "entry-error") out.push({
 			kind: "plugin-error",
 			at: rec.at,
+			model: rec.model || "",
+			reason: "entry-error",
 			detail: clipText("写入历史失败：" + (rec.reason || "未知错误"))
 		});
 		else if (rec.stage === "fetch-parse" && rec.usageZero) out.push({
 			kind: "zero-usage",
 			at: rec.at,
+			model: rec.model || "",
+			reason: "zero",
 			detail: clipText((rec.model || "未知模型") + " 上游返回的用量全为 0")
 		});
 	}
@@ -11232,6 +11377,7 @@ function scanConsoleHealth(entries = listConsoleEntries()) {
 		if (item.level === "error" || item.level === "uncaught") out.push({
 			kind: "plugin-error",
 			at: item.at || 0,
+			reason: "console",
 			detail: clipText(item.text || "控制台错误")
 		});
 	}
@@ -11250,20 +11396,22 @@ function buildHealthReport(input = {}) {
 	const sorted = items.slice().sort((a, b) => a.at - b.at);
 	const kept = [];
 	for (const sig of sorted) if (!kept.find((k) => k.kind === sig.kind && Math.abs(k.at - sig.at) < 9e4)) kept.push(sig);
-	kept.sort((a, b) => b.at - a.at);
+	const ignoredSet = new Set(input.ignored || []);
+	const visible = ignoredSet.size ? kept.filter((sig) => !ignoredSet.has(healthSignalKey(sig))) : kept;
+	visible.sort((a, b) => b.at - a.at);
 	const counts = {
 		"zero-usage": 0,
 		"missing-usage": 0,
 		"rate-anomaly": 0,
 		"plugin-error": 0
 	};
-	for (const sig of kept) if (counts[sig.kind] != null) counts[sig.kind] += 1;
-	const shown = kept.slice(0, limit);
+	for (const sig of visible) if (counts[sig.kind] != null) counts[sig.kind] += 1;
+	const shown = visible.slice(0, limit);
 	return {
-		total: kept.length,
+		total: visible.length,
 		counts,
 		items: shown,
-		shouldShow: kept.length > 0
+		shouldShow: visible.length > 0
 	};
 }
 /** 一句话摘要（标题行用） */
@@ -11287,14 +11435,16 @@ function healthSummaryText(report) {
 *
 * 只在真的出问题时出现：用量为 0、用量没取到导致没进历史、速率离谱、扩展报错。
 * 目的是把「用户感觉不对」变成「一键把诊断材料交给开发者」。
+*
+* 提示条本身不决定「要不要提示」：
+* - 总开关（问题反馈 / 请求日志 页）关掉后整条不再出现；
+* - 点「忽略」把当前这批问题按指纹记下来（services/health-prefs），
+*   同类问题以后不再弹，换成别的问题仍会提示。
 */
 /** 明细最多列几条，再多就只看汇总 */
 var DETAIL_LIMIT = 3;
-var dismissed = false;
-/** 关闭只对本次会话生效（刷新后重新判断，问题还在就还会提示） */
-function dismissHistoryHealth() {
-	dismissed = true;
-}
+/** 当前渲染出来的报告：点「忽略」时按它的指纹落盘 */
+var currentReport = null;
 function esc(text) {
 	return String(text ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
@@ -11323,14 +11473,18 @@ function healthBarHTML(report) {
       </div>
       <div class="aus-health-body">
         <div class="aus-health-list">${list}${more}</div>
-        <div class="aus-health-tip">可以把诊断材料上传给开发者，帮助定位问题（密钥会自动打码）。</div>
+        <div class="aus-health-tip">可以把诊断材料上传给开发者，帮助定位问题（密钥会自动打码）。点「忽略」后同类问题不再提示，可在「设置 → 问题反馈 / 请求日志」里恢复。</div>
       </div>
       <div class="aus-health-actions">
         <button type="button" class="aus-health-btn is-primary" data-health-action="upload">上传反馈日志</button>
-        <button type="button" class="aus-health-btn" data-health-action="dismiss">这次先不用</button>
-        <button type="button" class="aus-health-close" data-health-action="dismiss" aria-label="关闭">${icon("close", 14)}</button>
+        <button type="button" class="aus-health-btn" data-health-action="ignore" title="这一类问题以后不再提示">忽略</button>
+        <button type="button" class="aus-health-close" data-health-action="ignore" aria-label="忽略">${icon("close", 14)}</button>
       </div>
     </div>`;
+}
+function hide(host) {
+	host.innerHTML = "";
+	host.style.display = "none";
 }
 function bind(host) {
 	host.addEventListener("click", (event) => {
@@ -11341,35 +11495,45 @@ function bind(host) {
 			openLogUploadDialog({ appVersion: APP_VERSION });
 			return;
 		}
-		if (action === "dismiss") {
-			dismissHistoryHealth();
+		if (action === "ignore") {
+			try {
+				addIgnoredHealthKeys((currentReport?.items || []).map(healthSignalKey));
+			} catch {}
+			currentReport = null;
 			renderHistoryHealthBar(host);
 		}
 	});
 }
-/** 渲染提示条（容器由历史页提供；没有异常时清空并隐藏） */
-function renderHistoryHealthBar(host, report) {
+/**
+* 渲染提示条（容器由历史页提供；没有异常、总开关关闭、问题已被忽略时清空并隐藏）
+* @param input.history 历史记录（取最近若干条判断用量与速率）
+*/
+function renderHistoryHealthBar(host, input) {
 	if (!host) return;
-	if (dismissed) {
-		host.innerHTML = "";
-		host.style.display = "none";
+	if (!isHealthBarEnabled()) {
+		currentReport = null;
+		hide(host);
 		return;
 	}
-	let data;
+	let report;
 	try {
-		data = report || buildHealthReport();
+		report = buildHealthReport({
+			history: input?.history || [],
+			ignored: readIgnoredHealthKeys()
+		});
 	} catch {
-		host.innerHTML = "";
-		host.style.display = "none";
+		currentReport = null;
+		hide(host);
 		return;
 	}
-	if (!data.shouldShow) {
-		host.innerHTML = "";
-		host.style.display = "none";
+	if (!report.shouldShow) {
+		currentReport = null;
+		hide(host);
 		return;
 	}
+	currentReport = report;
 	host.style.display = "block";
-	host.innerHTML = healthBarHTML(data);
+	host.innerHTML = healthBarHTML(report);
 	if (!host.__ausHealthBound) {
 		host.__ausHealthBound = true;
 		bind(host);
@@ -12837,7 +13001,7 @@ function renderHistory(doc, s) {
 	const host = doc.getElementById("aus-history");
 	if (!host) return;
 	try {
-		renderHistoryHealthBar(doc.getElementById("aus-history-health"), buildHealthReport({ history: s && s.history || [] }));
+		renderHistoryHealthBar(doc.getElementById("aus-history-health"), { history: s && s.history || [] });
 	} catch {}
 	let hist = s.history || [];
 	let scope = "all";
@@ -14437,7 +14601,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-DO2blrmp.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-zcvodZVT.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-B_KlK_bQ.js").then((m) => {
@@ -14675,10 +14839,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-B5u0S3e-.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-PxVMxCz1.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-DO2blrmp.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-zcvodZVT.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-CNHp5RUv.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -14689,10 +14853,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-B5u0S3e-.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-PxVMxCz1.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-DO2blrmp.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-zcvodZVT.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-CNHp5RUv.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -14758,10 +14922,10 @@ function ensureWandEntry() {
 /** 运行时收尾：卸载拦截器与采集、拆掉面板 DOM、停全部定时器与事件监听（数据一律不动） */
 async function teardownRuntime() {
 	try {
-		import("./interception-B5u0S3e-.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-PxVMxCz1.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-DO2blrmp.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-zcvodZVT.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -14777,13 +14941,13 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-DY0MskUF.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-dYJP1qPw.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CJMNKSam.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CKtLOBef.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-eILq-gMt.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -14833,19 +14997,19 @@ async function onClean() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-B5u0S3e-.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-PxVMxCz1.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-DO2blrmp.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-zcvodZVT.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-DY0MskUF.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-dYJP1qPw.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-CJMNKSam.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-CKtLOBef.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-eILq-gMt.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -14888,19 +15052,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-DY0MskUF.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-dYJP1qPw.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CJMNKSam.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CKtLOBef.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-eILq-gMt.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-DO2blrmp.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-zcvodZVT.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -14922,7 +15086,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-CKtLOBef.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-eILq-gMt.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

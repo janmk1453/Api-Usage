@@ -3,26 +3,33 @@
  *
  * 只在真的出问题时出现：用量为 0、用量没取到导致没进历史、速率离谱、扩展报错。
  * 目的是把「用户感觉不对」变成「一键把诊断材料交给开发者」。
+ *
+ * 提示条本身不决定「要不要提示」：
+ * - 总开关（问题反馈 / 请求日志 页）关掉后整条不再出现；
+ * - 点「忽略」把当前这批问题按指纹记下来（services/health-prefs），
+ *   同类问题以后不再弹，换成别的问题仍会提示。
  */
 import { icon } from './icons';
 import { APP_VERSION } from '../constants/version';
-import { buildHealthReport, healthSummaryText, type HealthReport } from '../services/health-signals';
+import {
+  buildHealthReport,
+  healthSignalKey,
+  healthSummaryText,
+  type HealthReport,
+} from '../services/health-signals';
+import {
+  addIgnoredHealthKeys,
+  isHealthBarEnabled,
+  readIgnoredHealthKeys,
+} from '../services/health-prefs';
 import { openLogUploadDialog } from './log-upload-dialog';
 
 export const HEALTH_HOST_ID = 'aus-history-health';
 /** 明细最多列几条，再多就只看汇总 */
 const DETAIL_LIMIT = 3;
 
-let dismissed = false;
-
-/** 关闭只对本次会话生效（刷新后重新判断，问题还在就还会提示） */
-export function dismissHistoryHealth(): void {
-  dismissed = true;
-}
-
-export function isHistoryHealthDismissed(): boolean {
-  return dismissed;
-}
+/** 当前渲染出来的报告：点「忽略」时按它的指纹落盘 */
+let currentReport: HealthReport | null = null;
 
 function esc(text: unknown): string {
   return String(text ?? '')
@@ -60,14 +67,19 @@ export function healthBarHTML(report: HealthReport): string {
       </div>
       <div class="aus-health-body">
         <div class="aus-health-list">${list}${more}</div>
-        <div class="aus-health-tip">可以把诊断材料上传给开发者，帮助定位问题（密钥会自动打码）。</div>
+        <div class="aus-health-tip">可以把诊断材料上传给开发者，帮助定位问题（密钥会自动打码）。点「忽略」后同类问题不再提示，可在「设置 → 问题反馈 / 请求日志」里恢复。</div>
       </div>
       <div class="aus-health-actions">
         <button type="button" class="aus-health-btn is-primary" data-health-action="upload">上传反馈日志</button>
-        <button type="button" class="aus-health-btn" data-health-action="dismiss">这次先不用</button>
-        <button type="button" class="aus-health-close" data-health-action="dismiss" aria-label="关闭">${icon('close', 14)}</button>
+        <button type="button" class="aus-health-btn" data-health-action="ignore" title="这一类问题以后不再提示">忽略</button>
+        <button type="button" class="aus-health-close" data-health-action="ignore" aria-label="忽略">${icon('close', 14)}</button>
       </div>
     </div>`;
+}
+
+function hide(host: HTMLElement): void {
+  host.innerHTML = '';
+  host.style.display = 'none';
 }
 
 function bind(host: HTMLElement): void {
@@ -79,36 +91,48 @@ function bind(host: HTMLElement): void {
       openLogUploadDialog({ appVersion: APP_VERSION });
       return;
     }
-    if (action === 'dismiss') {
-      dismissHistoryHealth();
+    if (action === 'ignore') {
+      // 把「当前这批问题」按指纹记下来：同类不再弹，别的问题照旧提示
+      try {
+        const keys = (currentReport?.items || []).map(healthSignalKey);
+        addIgnoredHealthKeys(keys);
+      } catch {}
+      currentReport = null;
       renderHistoryHealthBar(host);
     }
   });
 }
 
-/** 渲染提示条（容器由历史页提供；没有异常时清空并隐藏） */
-export function renderHistoryHealthBar(host: HTMLElement | null, report?: HealthReport): void {
+/**
+ * 渲染提示条（容器由历史页提供；没有异常、总开关关闭、问题已被忽略时清空并隐藏）
+ * @param input.history 历史记录（取最近若干条判断用量与速率）
+ */
+export function renderHistoryHealthBar(host: HTMLElement | null, input?: { history?: any[] }): void {
   if (!host) return;
-  if (dismissed) {
-    host.innerHTML = '';
-    host.style.display = 'none';
+  if (!isHealthBarEnabled()) {
+    currentReport = null;
+    hide(host);
     return;
   }
-  let data: HealthReport;
+  let report: HealthReport;
   try {
-    data = report || buildHealthReport();
+    report = buildHealthReport({
+      history: input?.history || [],
+      ignored: readIgnoredHealthKeys(),
+    });
   } catch {
-    host.innerHTML = '';
-    host.style.display = 'none';
+    currentReport = null;
+    hide(host);
     return;
   }
-  if (!data.shouldShow) {
-    host.innerHTML = '';
-    host.style.display = 'none';
+  if (!report.shouldShow) {
+    currentReport = null;
+    hide(host);
     return;
   }
+  currentReport = report;
   host.style.display = 'block';
-  host.innerHTML = healthBarHTML(data);
+  host.innerHTML = healthBarHTML(report);
   if (!(host as any).__ausHealthBound) {
     (host as any).__ausHealthBound = true;
     bind(host);

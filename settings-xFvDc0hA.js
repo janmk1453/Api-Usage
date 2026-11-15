@@ -3,12 +3,12 @@ import { r as state } from "./store-UtA6O3mA.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, d as isMigrationBackupKey, h as saveExtensionSettings, s as deleteMigrationBackups, u as getExtensionSettings, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { a as decryptKey, d as getPricing$1, f as isDeepSeekOfficialModel, l as calcCost, o as encryptKey, t as repository, x as mergeWalletCollections } from "./repository-CXB5J4lx.js";
+import { a as decryptKey, d as getPricing$1, f as isDeepSeekOfficialModel, l as calcCost, o as encryptKey, t as repository, x as mergeWalletCollections } from "./repository-DTRi_qLe.js";
 import { a as isUnsafeKey, o as isValidDayKey, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { i as getDisplayCurrency, n as fetchLiveRate } from "./currency-CJMNKSam.js";
-import { r as recalcAllCosts } from "./interception-B5u0S3e-.js";
-import { i as saveApiKey } from "./balance-DY0MskUF.js";
-import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-CKtLOBef.js";
+import { r as recalcAllCosts } from "./interception-PxVMxCz1.js";
+import { i as saveApiKey } from "./balance-dYJP1qPw.js";
+import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-eILq-gMt.js";
 //#region src/ui/icons.ts
 var PATHS = {
 	overview: "<rect width=\"7\" height=\"9\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"9\" x=\"14\" y=\"12\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"3\" y=\"16\" rx=\"1\"/>",
@@ -2067,8 +2067,8 @@ function renderSettings(doc) {
 
       <!-- 请求日志：最近一轮对话请求的标头 / 正文 / 响应元数据（只在本机保存） -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">请求日志</span><button id="aus-settings-request-log" type="button" class="aus-manage-chat-btn" title="查看最近一轮对话请求的标头、正文与响应元数据">${icon("menu", 14)}查看</button></div>
-        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">保留最近一轮对话请求发出的标头、正文与响应元数据，用于排查「这轮为什么没记录」；只在本机保存，密钥已打码，可随时清空</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">问题反馈 / 请求日志</span><button id="aus-settings-request-log" type="button" class="aus-manage-chat-btn" title="查看最近一轮对话请求的标头、正文与响应元数据">${icon("menu", 14)}查看</button></div>
+        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">保留最近一轮对话请求发出的标头、正文与响应元数据，用于排查「这轮为什么没记录」；也是历史记录页问题提示的开关所在。只在本机保存，密钥已打码，可随时清空</div>
       </div>
 
       <!-- API 密钥 -->
@@ -2349,7 +2349,7 @@ function renderSettings(doc) {
 		state.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state.settings });
 		try {
-			import("./balance-DY0MskUF.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-dYJP1qPw.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2393,7 +2393,7 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-CXB5J4lx.js").then((n) => n.n);
+				const { repository } = await import("./repository-DTRi_qLe.js").then((n) => n.n);
 				const { state: st } = await import("./store-UtA6O3mA.js").then((n) => n.i);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
@@ -2540,7 +2540,7 @@ function renderSettings(doc) {
 					closeDropdownInstant(intervalDrop);
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-CKtLOBef.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./pricing-sync-eILq-gMt.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 						import("./currency-CJMNKSam.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};

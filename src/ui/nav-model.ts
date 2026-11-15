@@ -119,7 +119,7 @@ const VIEW_TITLES: Record<AppView, string> = {
   about: '关于',
   'chat-manage': '对话展示管理',
   tap: '其他请求',
-  log: '请求日志',
+  log: '问题反馈 / 请求日志',
 };
 
 export function viewTitle(view: AppView): string {
