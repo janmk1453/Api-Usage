@@ -90,6 +90,8 @@ describe('request-log：隐私与截断', () => {
     expect(masked.endsWith('klmn')).toBe(true);
     expect(redactHeader('Authorization', 'Bearer abcdefghijklmnopqrst')).toMatch(/^Bearer /);
     expect(redactHeader('x-api-key', secret)).not.toBe(secret);
+    // 酒馆的 CSRF 令牌等同于会话凭证，页面上也不该明文出现
+    expect(redactHeader('X-CSRF-Token', 'ed5ebebb993f0b08e6c8caedf9291e31e4b1d571')).not.toContain('ed5ebebb993f0b08');
     expect(redactHeader('Content-Type', 'application/json')).toBe('application/json');
   });
 

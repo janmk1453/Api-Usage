@@ -27,7 +27,7 @@ import { disposeForecastCharts } from './forecast-chart';
 import { renderWalletView } from './wallet-view';
 import { initChatManageView, renderChatManageView } from './chat-manage';
 import { initTapView, renderTapView } from './tap-view';
-import { renderLogView } from './log-view';
+import { initLogView, renderLogView } from './log-view';
 import { renderHistoryHealthBar } from './history-health-bar';
 import { helpViewHTML } from './help-view';
 import { chartCardHTML } from './chart-picker';
@@ -1839,6 +1839,7 @@ export function createPanel() {
   // 历史记录工具栏「其他请求」：进技术验证页（挂在历史下，返回箭头与底栏高亮都按子页处理）
   doc.getElementById('aus-history-tap-btn')?.addEventListener('click', () => switchView('tap'));
   initTapView({ go: () => switchView('history') });
+  initLogView({ go: () => switchView('settings') });
   const applyCollapsed = (v: boolean) => {
     collapsed = v;
     const sb = doc.getElementById('aus-sidebar') as HTMLElement | null;

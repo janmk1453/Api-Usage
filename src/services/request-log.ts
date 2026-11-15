@@ -53,6 +53,9 @@ const SENSITIVE_HEADERS = [
   'x-api-key',
   'api-key',
   'x-auth-token',
+  // 酒馆每条请求都带 CSRF 令牌，等同于会话凭证，页面上也不该明文展示
+  'x-csrf-token',
+  'x-xsrf-token',
 ];
 
 function isSensitive(name: string): boolean {
@@ -217,7 +220,7 @@ export function summarizeRequestLog(record: RequestLogRecord | null): string {
   const r = record.response;
   if (!r || !r.status) return '请求已发出，等待响应';
   const parts: string[] = [String(r.status)];
-  if (r.durationMs != null) parts.push(r.durationMs + 'ms');
-  else if (r.firstByteMs != null) parts.push('首字 ' + r.firstByteMs + 'ms');
+  if (r.durationMs != null) parts.push(Math.round(r.durationMs) + 'ms');
+  else if (r.firstByteMs != null) parts.push('首字 ' + Math.round(r.firstByteMs) + 'ms');
   return parts.join(' · ');
 }

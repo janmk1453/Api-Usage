@@ -3,14 +3,14 @@ import { n as getSelectedSave, o as mobileDeviceHint, r as state$2, t as getHist
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as walletPendingModelCount, D as DEEPSEEK_WALLET_ID, O as WALLET_CATALOG_PROVIDERS, S as walletBalanceToCny, _ as defaultContextLimitForModel, b as findWalletModel, c as isTruncatedFinish, d as getPricing, g as cloneWallet, h as normalizeModel, i as saveWalletApiKey, m as isWalletPeakHour, p as isPeakHour, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as calcSavings, x as mergeWalletCollections, y as findWalletForHistory } from "./repository-DTRi_qLe.js";
+import { C as walletPendingModelCount, D as DEEPSEEK_WALLET_ID, O as WALLET_CATALOG_PROVIDERS, S as walletBalanceToCny, _ as defaultContextLimitForModel, b as findWalletModel, c as isTruncatedFinish, d as getPricing, g as cloneWallet, h as normalizeModel, i as saveWalletApiKey, m as isWalletPeakHour, p as isPeakHour, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as calcSavings, x as mergeWalletCollections, y as findWalletForHistory } from "./repository-SL4FmbJr.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc$3, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-CJMNKSam.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
-import { a as listCaptureStages, c as readRequestLog, i as captureDigest, l as summarizeRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception } from "./interception-PxVMxCz1.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-dYJP1qPw.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-xFvDc0hA.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-eILq-gMt.js";
+import { a as listCaptureStages, c as readRequestLog, i as captureDigest, l as summarizeRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception } from "./interception-DivgTjgo.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-CMJjhSho.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-B3ZJGJZ9.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-FoDlIDgU.js";
 import { a as subscribeTap, i as listTapRecords, n as tapDiagnostics, r as clearTapRecords } from "./request-tap-CNHp5RUv.js";
 //#region src/constants/version.ts
 var APP_VERSION = String("3.2.1");
@@ -9384,7 +9384,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-dYJP1qPw.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-CMJjhSho.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -10852,7 +10852,7 @@ function problemButtons(current) {
 }
 function dialogHTML(address, hasRecord) {
 	const recordLine = hasRecord ? "当前请求日志：有，会一起上传" : "当前请求日志：无（还没有捕获到请求，仅上传下面的诊断摘要）";
-	return "<div class=\"aus-up\" role=\"dialog\" aria-modal=\"true\" aria-label=\"上传反馈日志\"><div class=\"aus-up-head\"><div class=\"aus-up-title\">上传反馈日志</div><button type=\"button\" class=\"aus-up-close\" data-up-action=\"cancel\" aria-label=\"关闭\">" + icon("close", 16) + "</button></div><div class=\"aus-up-body\"><p class=\"aus-up-text\">遇到<b>对话没有被记录</b>，或者<b>记录下来的 token、费用明显不对</b>时，把当前这条请求日志和相关诊断信息发给我，可以快很多定位问题。</p><p class=\"aus-up-text aus-up-muted\">" + esc$2(recordLine) + "</p><div class=\"aus-up-label\">这是什么问题</div><div class=\"aus-up-problems\">" + problemButtons("not-recorded") + "</div><div class=\"aus-up-label\">补充说明<span class=\"aus-up-optional\">可选</span></div><textarea class=\"aus-up-note\" id=\"aus-up-note\" rows=\"3\" maxlength=\"" + FEEDBACK_NOTE_LIMIT + "\" placeholder=\"什么时候、哪条对话、哪一轮；那次的模型或接入是什么；和你预期的差别在哪\"></textarea><details class=\"aus-up-details\"><summary>查看会一并上传的内容与隐私说明</summary><div class=\"aus-up-details-body\"><p class=\"aus-up-details-title\">为排查问题，上传内容可能包括</p><ul class=\"aus-up-list\"><li><b>聊天与提示词</b>：当前这一条请求正文里的历史聊天、你的输入、角色设定、世界书与系统提示词。</li><li><b>生成与结构化数据</b>：模型名称、请求端点、是否流式、finish_reason、用量（token 数）以及请求参数。</li><li><b>记录摘要</b>：最近 10 条历史记录的模型、token、费用与接入名称（<b>不含聊天正文</b>），以及「其他请求」探针里最近 20 条请求的模型、状态与错误。</li><li><b>脚本诊断</b>：最近 40 条控制台报错与未处理的 Promise 异常，可能含有酒馆或其他扩展打印的内容。</li><li><b>扩展与运行环境</b>：扩展名称与版本清单、本扩展版本、系统时区、屏幕与视口尺寸、当前对话名与角色名。</li></ul><p class=\"aus-up-details-title\">不会上传</p><ul class=\"aus-up-list\"><li>钱包密钥、API Key、登录凭据：上传前会再把请求头、正文和 URL 里的密钥抹成 <code>***</code>。</li><li>图片与附件内容、扩展源码、酒馆设置原文。</li></ul><p class=\"aus-up-details-title\">脱敏有局限</p><p class=\"aus-up-text\">程序会尝试遮蔽常见密钥、密码和认证头，但不能保证识别聊天正文、脚本输出或自定义字段中的所有敏感信息。请勿把日志视为已经完全脱敏。</p><p class=\"aus-up-details-title\">接收与保存</p><p class=\"aus-up-text\">日志会发送到下面填写的接收地址，接收服务及有权限的收件人可能查看、下载和保存内容；保存期限与删除方式由接收方决定，上传后无法替你撤回。请核对地址，仅向信任的接收方上传。</p></div></details><details class=\"aus-up-details\"><summary>上传地址（高级）</summary><div class=\"aus-up-details-body\"><input type=\"text\" class=\"aus-up-address\" id=\"aus-up-address\" spellcheck=\"false\" value=\"" + esc$2(address) + "\" /><p class=\"aus-up-text aus-up-muted\">默认是项目自带的接收端。改成你自己的接收地址时，请确认它愿意接收这些内容。</p></div></details><div class=\"aus-up-result\" id=\"aus-up-result\" hidden></div></div><div class=\"aus-up-foot\"><button type=\"button\" class=\"aus-up-btn\" data-up-action=\"cancel\">取消</button><button type=\"button\" class=\"aus-up-btn is-primary\" data-up-action=\"submit\">同意并上传</button></div></div>";
+	return "<div class=\"aus-up\" role=\"dialog\" aria-modal=\"true\" aria-label=\"上传反馈日志\"><div class=\"aus-up-head\"><div class=\"aus-up-title\">上传反馈日志</div><button type=\"button\" class=\"aus-up-close\" data-up-action=\"cancel\" aria-label=\"关闭\">" + icon("close", 16) + "</button></div><div class=\"aus-up-body\"><p class=\"aus-up-text\">遇到<b>对话没有被记录</b>，或者<b>记录下来的 token、费用明显不对</b>时，可将当前这条请求日志和相关诊断信息发送给开发者，便于定位问题。</p><p class=\"aus-up-text aus-up-muted\">" + esc$2(recordLine) + "</p><div class=\"aus-up-label\">这是什么问题</div><div class=\"aus-up-problems\">" + problemButtons("not-recorded") + "</div><div class=\"aus-up-label\">补充说明<span class=\"aus-up-optional\">可选</span></div><textarea class=\"aus-up-note\" id=\"aus-up-note\" rows=\"3\" maxlength=\"" + FEEDBACK_NOTE_LIMIT + "\" placeholder=\"什么时候、哪条对话、哪一轮；那次的模型或接入是什么；和你预期的差别在哪\"></textarea><details class=\"aus-up-details\"><summary>查看会一并上传的内容与隐私说明</summary><div class=\"aus-up-details-body\"><p class=\"aus-up-details-title\">为排查问题，上传内容可能包括</p><ul class=\"aus-up-list\"><li><b>聊天与提示词</b>：当前这一条请求正文里的历史聊天、你的输入、角色设定、世界书与系统提示词。</li><li><b>生成与结构化数据</b>：模型名称、请求端点、是否流式、finish_reason、用量（token 数）以及请求参数。</li><li><b>记录摘要</b>：最近 10 条历史记录的模型、token、费用与接入名称（<b>不含聊天正文</b>），以及「其他请求」探针里最近 20 条请求的模型、状态与错误。</li><li><b>脚本诊断</b>：最近 40 条控制台报错与未处理的 Promise 异常，可能含有酒馆或其他扩展打印的内容。</li><li><b>扩展与运行环境</b>：扩展名称与版本清单、本扩展版本、系统时区、屏幕与视口尺寸、当前对话名与角色名。</li></ul><p class=\"aus-up-details-title\">不会上传</p><ul class=\"aus-up-list\"><li>钱包密钥、API Key、登录凭据：上传前会再把请求头、正文和 URL 里的密钥抹成 <code>***</code>。</li><li>图片与附件内容、扩展源码、酒馆设置原文。</li></ul><p class=\"aus-up-details-title\">脱敏有局限</p><p class=\"aus-up-text\">程序会尝试遮蔽常见密钥、密码和认证头，但不能保证识别聊天正文、脚本输出或自定义字段中的所有敏感信息。请勿把日志视为已经完全脱敏。</p><p class=\"aus-up-details-title\">接收与保存</p><p class=\"aus-up-text\">日志会发送到下面填写的接收地址，接收服务及有权限的收件人可能查看、下载和保存内容；保存期限与删除方式由接收方决定，上传后无法替你撤回。请核对地址，仅向信任的接收方上传。</p></div></details><details class=\"aus-up-details\"><summary>上传地址（高级）</summary><div class=\"aus-up-details-body\"><input type=\"text\" class=\"aus-up-address\" id=\"aus-up-address\" spellcheck=\"false\" value=\"" + esc$2(address) + "\" /><p class=\"aus-up-text aus-up-muted\">默认是项目自带的接收端。改成你自己的接收地址时，请确认它愿意接收这些内容。</p></div></details><div class=\"aus-up-result\" id=\"aus-up-result\" hidden></div></div><div class=\"aus-up-foot\"><button type=\"button\" class=\"aus-up-btn\" data-up-action=\"cancel\">取消</button><button type=\"button\" class=\"aus-up-btn is-primary\" data-up-action=\"submit\">同意并上传</button></div></div>";
 }
 var currentProblem = "not-recorded";
 var uploading = false;
@@ -11060,6 +11060,11 @@ function esc$1(text) {
 function pad2(n) {
 	return n < 10 ? "0" + n : String(n);
 }
+/** 毫秒展示：抹掉浮点尾巴（performance.now 差值会带一长串小数） */
+function msText(value) {
+	if (value == null || !Number.isFinite(value)) return "—";
+	return Math.round(value) + "ms";
+}
 /** 2026-11-15 12:39:44 */
 function logTimeText(at) {
 	if (!at || !isFinite(at)) return "—";
@@ -11158,7 +11163,7 @@ function logBodyHTML(record) {
 	const r = record.response;
 	const statusClass = r.status ? isOkStatus(r.status) ? "is-ok" : "is-bad" : "is-pending";
 	const statusText = r.status ? String(r.status) + (r.statusText ? " " + r.statusText : "") : "等待响应";
-	return "<section class=\"aus-log-summary\"><div class=\"aus-log-summary-top\"><span class=\"aus-log-method\">" + esc$1(record.method) + "</span><span class=\"aus-log-status " + statusClass + "\">" + esc$1(statusText) + "</span><span class=\"aus-log-summary-time\">" + esc$1(logTimeText(record.at)) + "</span></div><div class=\"aus-log-url\">" + esc$1(record.url) + "</div><div class=\"aus-log-metrics\"><span>首字节 " + (r.firstByteMs == null ? "—" : r.firstByteMs + "ms") + "</span><span>总耗时 " + (r.durationMs == null ? "—" : r.durationMs + "ms") + "</span><span>流式 " + (r.streamed === true ? "是" : r.streamed === false ? "否" : "未知") + "</span>" + (r.model ? "<span>模型 " + esc$1(r.model) + "</span>" : "") + "</div>" + (r.error ? "<div class=\"aus-log-error\">" + esc$1(r.error) + "</div>" : "") + "</section>" + section("请求标头", record.requestHeaders.length ? record.requestHeaders.length + " 项" : "", "<div class=\"aus-log-kv\">" + kvRows(record.requestHeaders) + "</div>") + bodyBlock(record) + section("响应状态", "", "<div class=\"aus-log-kv\"><div class=\"aus-log-kv-row\"><span class=\"aus-log-kv-k\">status</span><span class=\"aus-log-kv-v\">" + esc$1(r.status ? String(r.status) : "—") + "</span></div><div class=\"aus-log-kv-row\"><span class=\"aus-log-kv-k\">finish_reason</span><span class=\"aus-log-kv-v\">" + esc$1(r.finishReason || "—") + "</span></div><div class=\"aus-log-kv-row\"><span class=\"aus-log-kv-k\">model</span><span class=\"aus-log-kv-v\">" + esc$1(r.model || "—") + "</span></div></div>") + section("用量（usage）", "", "<div class=\"aus-log-kv\">" + usageRows(r.usage) + "</div>") + section("响应标头", r.headers.length ? r.headers.length + " 项" : "", "<div class=\"aus-log-kv\">" + kvRows(r.headers) + "</div>");
+	return "<section class=\"aus-log-summary\"><div class=\"aus-log-summary-top\"><span class=\"aus-log-method\">" + esc$1(record.method) + "</span><span class=\"aus-log-status " + statusClass + "\">" + esc$1(statusText) + "</span><span class=\"aus-log-summary-time\">" + esc$1(logTimeText(record.at)) + "</span></div><div class=\"aus-log-url\">" + esc$1(record.url) + "</div><div class=\"aus-log-metrics\"><span>首字节 " + msText(r.firstByteMs) + "</span><span>总耗时 " + msText(r.durationMs) + "</span><span>流式 " + (r.streamed === true ? "是" : r.streamed === false ? "否" : "未知") + "</span>" + (r.model ? "<span>模型 " + esc$1(r.model) + "</span>" : "") + "</div>" + (r.error ? "<div class=\"aus-log-error\">" + esc$1(r.error) + "</div>" : "") + "</section>" + section("请求标头", record.requestHeaders.length ? record.requestHeaders.length + " 项" : "", "<div class=\"aus-log-kv\">" + kvRows(record.requestHeaders) + "</div>") + bodyBlock(record) + section("响应状态", "", "<div class=\"aus-log-kv\"><div class=\"aus-log-kv-row\"><span class=\"aus-log-kv-k\">status</span><span class=\"aus-log-kv-v\">" + esc$1(r.status ? String(r.status) : "—") + "</span></div><div class=\"aus-log-kv-row\"><span class=\"aus-log-kv-k\">finish_reason</span><span class=\"aus-log-kv-v\">" + esc$1(r.finishReason || "—") + "</span></div><div class=\"aus-log-kv-row\"><span class=\"aus-log-kv-k\">model</span><span class=\"aus-log-kv-v\">" + esc$1(r.model || "—") + "</span></div></div>") + section("用量（usage）", "", "<div class=\"aus-log-kv\">" + usageRows(r.usage) + "</div>") + section("响应标头", r.headers.length ? r.headers.length + " 项" : "", "<div class=\"aus-log-kv\">" + kvRows(r.headers) + "</div>");
 }
 /** 历史记录页问题提示的偏好区：总开关 + 已忽略数量/恢复入口 */
 function healthPrefsHTML() {
@@ -11174,12 +11179,14 @@ function healthPrefsHTML() {
 		ariaLabel: "历史记录页问题提示"
 	}) + "</div>" + foot + "</div>";
 }
+var goBack = null;
 function renderLogView() {
 	if (typeof document === "undefined") return;
 	const host = document.getElementById("aus-log-body");
 	if (!host) return;
 	const record = readRequestLog();
-	host.innerHTML = "<div class=\"aus-log-top\"><div class=\"aus-log-desc\">只保留最近一轮对话请求，默认只在当前浏览器本地保存。密钥已打码。<span class=\"aus-log-desc-state\" id=\"aus-log-state\">" + esc$1(summarizeRequestLog(record)) + "</span></div><div class=\"aus-log-actions\"><button type=\"button\" class=\"aus-log-link is-upload\" data-log-action=\"upload\">" + icon("menu", 14) + "上传反馈</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"refresh\">" + icon("refresh", 14) + "刷新</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"clear\">" + icon("close", 14) + "清空</button></div></div>" + healthPrefsHTML() + "<div id=\"aus-log-content\">" + logBodyHTML(record) + "</div>";
+	const summary = summarizeRequestLog(record);
+	host.innerHTML = "<div class=\"aus-log-top\"><button type=\"button\" class=\"aus-log-link aus-log-back\" data-log-action=\"back\" aria-label=\"返回设置\">" + icon("chevron-left", 14) + "返回</button><div class=\"aus-log-desc\">只保留最近一轮对话请求，默认只在当前浏览器本地保存。密钥已打码。<span class=\"aus-log-desc-state\" id=\"aus-log-state\">" + esc$1(summary) + "</span></div><div class=\"aus-log-actions\"><button type=\"button\" class=\"aus-log-link is-upload\" data-log-action=\"upload\">" + icon("menu", 14) + "上传反馈</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"refresh\">" + icon("refresh", 14) + "刷新</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"clear\">" + icon("close", 14) + "清空</button></div></div><div class=\"aus-log-advice\">遇到对话没被记录、token 或费用明显不对时，建议在问题刚复现、还没进行下一轮对话时就点「上传反馈」——日志只保留最近一轮请求，继续聊下去会把出问题的那一轮覆盖掉。</div>" + healthPrefsHTML() + "<div id=\"aus-log-content\">" + logBodyHTML(record) + "</div>";
 	bind$1(host);
 }
 var clearArmed = false;
@@ -11201,6 +11208,11 @@ function bind$1(host) {
 		if (action === "clear-ignored") {
 			clearIgnoredHealthKeys();
 			renderLogView();
+			return;
+		}
+		if (action === "back") {
+			resetClear();
+			if (goBack) goBack();
 			return;
 		}
 		if (action === "upload") {
@@ -11254,6 +11266,9 @@ function bind$1(host) {
 			setHealthBarEnabled(!!el.checked);
 		} catch {}
 	});
+}
+function initLogView(options) {
+	if (options?.go) goBack = options.go;
 }
 //#endregion
 //#region src/services/health-signals.ts
@@ -14231,6 +14246,7 @@ function createPanel() {
 	initChatManageView({ go: () => switchView(chatManageOrigin) });
 	doc.getElementById("aus-history-tap-btn")?.addEventListener("click", () => switchView("tap"));
 	initTapView({ go: () => switchView("history") });
+	initLogView({ go: () => switchView("settings") });
 	const applyCollapsed = (v) => {
 		collapsed = v;
 		const sb = doc.getElementById("aus-sidebar");
@@ -14601,7 +14617,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-zcvodZVT.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-5EKy7Dz8.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-B_KlK_bQ.js").then((m) => {
@@ -14839,10 +14855,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-PxVMxCz1.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DivgTjgo.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-zcvodZVT.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-5EKy7Dz8.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-CNHp5RUv.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -14853,10 +14869,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-PxVMxCz1.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DivgTjgo.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-zcvodZVT.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-5EKy7Dz8.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-CNHp5RUv.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -14922,10 +14938,10 @@ function ensureWandEntry() {
 /** 运行时收尾：卸载拦截器与采集、拆掉面板 DOM、停全部定时器与事件监听（数据一律不动） */
 async function teardownRuntime() {
 	try {
-		import("./interception-PxVMxCz1.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-DivgTjgo.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-zcvodZVT.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-5EKy7Dz8.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -14941,13 +14957,13 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-dYJP1qPw.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-CMJjhSho.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CJMNKSam.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-eILq-gMt.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-FoDlIDgU.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -14997,19 +15013,19 @@ async function onClean() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-PxVMxCz1.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-DivgTjgo.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-zcvodZVT.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-5EKy7Dz8.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-dYJP1qPw.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-CMJjhSho.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-CJMNKSam.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-eILq-gMt.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-FoDlIDgU.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -15052,19 +15068,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-dYJP1qPw.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-CMJjhSho.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CJMNKSam.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-eILq-gMt.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-FoDlIDgU.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-zcvodZVT.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-5EKy7Dz8.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -15086,7 +15102,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-eILq-gMt.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-FoDlIDgU.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

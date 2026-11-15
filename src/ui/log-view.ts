@@ -38,6 +38,12 @@ function pad2(n: number): string {
   return n < 10 ? '0' + n : String(n);
 }
 
+/** 毫秒展示：抹掉浮点尾巴（performance.now 差值会带一长串小数） */
+function msText(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return Math.round(value) + 'ms';
+}
+
 /** 2026-11-15 12:39:44 */
 export function logTimeText(at: number): string {
   if (!at || !isFinite(at)) return '—';
@@ -195,8 +201,8 @@ export function logBodyHTML(record: RequestLogRecord | null): string {
     '</div>' +
     '<div class="aus-log-url">' + esc(record.url) + '</div>' +
     '<div class="aus-log-metrics">' +
-    '<span>首字节 ' + (r.firstByteMs == null ? '—' : r.firstByteMs + 'ms') + '</span>' +
-    '<span>总耗时 ' + (r.durationMs == null ? '—' : r.durationMs + 'ms') + '</span>' +
+    '<span>首字节 ' + msText(r.firstByteMs) + '</span>' +
+    '<span>总耗时 ' + msText(r.durationMs) + '</span>' +
     '<span>流式 ' + (r.streamed === true ? '是' : r.streamed === false ? '否' : '未知') + '</span>' +
     (r.model ? '<span>模型 ' + esc(r.model) + '</span>' : '') +
     '</div>' +
@@ -243,6 +249,8 @@ function healthPrefsHTML(): string {
   );
 }
 
+let goBack: (() => void) | null = null;
+
 export function renderLogView(): void {
   if (typeof document === 'undefined') return;
   const host = document.getElementById('aus-log-body');
@@ -251,6 +259,7 @@ export function renderLogView(): void {
   const summary = summarizeRequestLog(record);
   host.innerHTML =
     '<div class="aus-log-top">' +
+    '<button type="button" class="aus-log-link aus-log-back" data-log-action="back" aria-label="返回设置">' + icon('chevron-left', 14) + '返回</button>' +
     '<div class="aus-log-desc">只保留最近一轮对话请求，默认只在当前浏览器本地保存。密钥已打码。<span class="aus-log-desc-state" id="aus-log-state">' + esc(summary) + '</span></div>' +
     '<div class="aus-log-actions">' +
     '<button type="button" class="aus-log-link is-upload" data-log-action="upload">' + icon('menu', 14) + '上传反馈</button>' +
@@ -258,6 +267,7 @@ export function renderLogView(): void {
     '<button type="button" class="aus-log-link" data-log-action="clear">' + icon('close', 14) + '清空</button>' +
     '</div>' +
     '</div>' +
+    '<div class="aus-log-advice">遇到对话没被记录、token 或费用明显不对时，建议在问题刚复现、还没进行下一轮对话时就点「上传反馈」——日志只保留最近一轮请求，继续聊下去会把出问题的那一轮覆盖掉。</div>' +
     healthPrefsHTML() +
     '<div id="aus-log-content">' + logBodyHTML(record) + '</div>';
   bind(host);
@@ -284,6 +294,11 @@ function bind(host: HTMLElement): void {
     if (action === 'clear-ignored') {
       clearIgnoredHealthKeys();
       renderLogView();
+      return;
+    }
+    if (action === 'back') {
+      resetClear();
+      if (goBack) goBack();
       return;
     }
     if (action === 'upload') {
@@ -339,4 +354,6 @@ function bind(host: HTMLElement): void {
   });
 }
 
-export function initLogView(): void {}
+export function initLogView(options?: { go?: () => void }): void {
+  if (options?.go) goBack = options.go;
+}

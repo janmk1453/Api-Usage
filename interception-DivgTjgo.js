@@ -1,6 +1,6 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { E as resolveRuntimeConnectionContext, T as initConnectionIdentity, t as repository } from "./repository-DTRi_qLe.js";
+import { E as resolveRuntimeConnectionContext, T as initConnectionIdentity, t as repository } from "./repository-SL4FmbJr.js";
 //#region src/services/include-usage.ts
 /**
 * 流式 usage 注入的纯逻辑：把 stream_options.include_usage 合并进用户/预设自定义的请求体参数。
@@ -220,7 +220,9 @@ var SENSITIVE_HEADERS = [
 	"set-cookie",
 	"x-api-key",
 	"api-key",
-	"x-auth-token"
+	"x-auth-token",
+	"x-csrf-token",
+	"x-xsrf-token"
 ];
 function isSensitive(name) {
 	return SENSITIVE_HEADERS.includes(name.trim().toLowerCase());
@@ -359,8 +361,8 @@ function summarizeRequestLog(record) {
 	const r = record.response;
 	if (!r || !r.status) return "请求已发出，等待响应";
 	const parts = [String(r.status)];
-	if (r.durationMs != null) parts.push(r.durationMs + "ms");
-	else if (r.firstByteMs != null) parts.push("首字 " + r.firstByteMs + "ms");
+	if (r.durationMs != null) parts.push(Math.round(r.durationMs) + "ms");
+	else if (r.firstByteMs != null) parts.push("首字 " + Math.round(r.firstByteMs) + "ms");
 	return parts.join(" · ");
 }
 var USAGE_KEYS = [

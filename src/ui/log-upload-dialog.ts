@@ -57,7 +57,7 @@ function dialogHTML(address: string, hasRecord: boolean): string {
     '</div>' +
 
     '<div class="aus-up-body">' +
-    '<p class="aus-up-text">遇到<b>对话没有被记录</b>，或者<b>记录下来的 token、费用明显不对</b>时，把当前这条请求日志和相关诊断信息发给我，可以快很多定位问题。</p>' +
+    '<p class="aus-up-text">遇到<b>对话没有被记录</b>，或者<b>记录下来的 token、费用明显不对</b>时，可将当前这条请求日志和相关诊断信息发送给开发者，便于定位问题。</p>' +
     '<p class="aus-up-text aus-up-muted">' + esc(recordLine) + '</p>' +
 
     '<div class="aus-up-label">这是什么问题</div>' +
