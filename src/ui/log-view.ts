@@ -5,6 +5,7 @@
  * 与本页无关——本页只负责渲染，绝不参与统计口径。
  */
 import { icon } from './icons';
+import { openLogUploadDialog } from './log-upload-dialog';
 import {
   clearRequestLog,
   readRequestLog,
@@ -212,8 +213,9 @@ export function renderLogView(): void {
   const summary = summarizeRequestLog(record);
   host.innerHTML =
     '<div class="aus-log-top">' +
-    '<div class="aus-log-desc">只保留最近一轮对话请求，仅在当前浏览器本地保存、不上传。密钥已打码。<span class="aus-log-desc-state" id="aus-log-state">' + esc(summary) + '</span></div>' +
+    '<div class="aus-log-desc">只保留最近一轮对话请求，默认只在当前浏览器本地保存。密钥已打码。<span class="aus-log-desc-state" id="aus-log-state">' + esc(summary) + '</span></div>' +
     '<div class="aus-log-actions">' +
+    '<button type="button" class="aus-log-link is-upload" data-log-action="upload">' + icon('menu', 14) + '上传反馈</button>' +
     '<button type="button" class="aus-log-link" data-log-action="refresh">' + icon('refresh', 14) + '刷新</button>' +
     '<button type="button" class="aus-log-link" data-log-action="clear">' + icon('close', 14) + '清空</button>' +
     '</div>' +
@@ -240,6 +242,11 @@ function bind(host: HTMLElement): void {
     const btn = (event.target as HTMLElement | null)?.closest?.('[data-log-action]') as HTMLElement | null;
     if (!btn) return;
     const action = btn.getAttribute('data-log-action');
+    if (action === 'upload') {
+      resetClear();
+      openLogUploadDialog({ appVersion: String((globalThis as any).__APP_VERSION__ || '') });
+      return;
+    }
     if (action === 'refresh') {
       resetClear();
       renderLogView();

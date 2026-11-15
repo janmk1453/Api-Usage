@@ -1,0 +1,316 @@
+/**
+ * 请求日志上传体校验与归一（纯函数，无运行时依赖，便于单元测试）
+ *
+ * 与 payload.js 同一原则：只接受白名单字段，其余一律丢弃；字符串全部按上限截断，
+ * 数值全部钳制。任何一项不合法都返回 { ok: false }，调用方直接拒绝、不写库。
+ *
+ * 这个接口是公开的（任何人都能 POST），所以这里同时是第一道防线：
+ * 体积、条数、字段长度都在这里收口，D1 里只会有这一种形状的数据。
+ */
+
+export const LOG_SCHEMA = 2;
+/** 兼容的上报版本：1 = 只带单条记录（旧版），2 = 记录 + 反馈说明 + 诊断摘要 */
+export const LOG_SCHEMAS = [1, 2];
+/** 上报体最大字节数：正文本身允许 200000 字符，留出标头与包装的余量 */
+export const MAX_LOG_BODY_BYTES = 280000;
+export const MAX_RECORD_BODY_CHARS = 200000;
+export const MAX_HEADER_PAIRS = 80;
+export const MAX_HEADER_NAME = 80;
+export const MAX_HEADER_VALUE = 1000;
+export const MAX_URL_CHARS = 2000;
+export const MAX_ERROR_CHARS = 1000;
+export const MAX_USAGE_KEYS = 40;
+export const MAX_USAGE_INNER_KEYS = 12;
+export const MAX_STATUS_TEXT = 120;
+export const MAX_MODEL_CHARS = 120;
+export const MAX_FINISH_CHARS = 80;
+
+/** 诊断摘要上限：只留够定位问题的条目数，避免把整份历史搬上服务器 */
+export const MAX_DIAG_HISTORY = 10;
+export const MAX_DIAG_TAP = 20;
+export const MAX_DIAG_CONSOLE = 40;
+export const MAX_DIAG_EXTENSIONS = 60;
+export const MAX_DIAG_KEYS = 40;
+export const MAX_NOTE_CHARS = 2000;
+/** 问题类型白名单，其余一律归 other */
+export const PROBLEM_KEYS = ['not-recorded', 'wrong-data', 'other'];
+
+function fail(error) {
+  return { ok: false, error };
+}
+
+function toStr(value, max) {
+  return typeof value === 'string' ? value.slice(0, max) : '';
+}
+
+function toInt(value, min, max, fallback) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  const floored = Math.floor(num);
+  if (floored < min) return min;
+  if (floored > max) return max;
+  return floored;
+}
+
+/** 版本号清洗：只保留数字、字母与 . + -，不含数字则视为无效 */
+function toVersion(value, max) {
+  const text = toStr(value, max).replace(/[^0-9A-Za-z.+-]/g, '');
+  return /\d/.test(text) ? text : '';
+}
+
+/** 标头：只接受 [name, value] 二元数组，超长截断，条数封顶 */
+function normalizeHeaders(value) {
+  const out = [];
+  if (!Array.isArray(value)) return out;
+  for (const item of value) {
+    if (out.length >= MAX_HEADER_PAIRS) break;
+    if (!Array.isArray(item) || item.length < 2) continue;
+    const name = toStr(item[0], MAX_HEADER_NAME).trim();
+    if (!name) continue;
+    out.push([name, toStr(item[1], MAX_HEADER_VALUE)]);
+  }
+  return out;
+}
+
+/** usage：只保留数字与一层嵌套的数字（cached_tokens / reasoning_tokens 等） */
+function normalizeUsage(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const out = {};
+  let count = 0;
+  for (const [key, item] of Object.entries(value)) {
+    if (count >= MAX_USAGE_KEYS) break;
+    const name = String(key).slice(0, 60);
+    if (!name) continue;
+    if (typeof item === 'number' && Number.isFinite(item)) {
+      out[name] = item;
+      count += 1;
+      continue;
+    }
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      const inner = {};
+      let innerCount = 0;
+      for (const [innerKey, innerValue] of Object.entries(item)) {
+        if (innerCount >= MAX_USAGE_INNER_KEYS) break;
+        if (typeof innerValue !== 'number' || !Number.isFinite(innerValue)) continue;
+        inner[String(innerKey).slice(0, 40)] = innerValue;
+        innerCount += 1;
+      }
+      out[name] = inner;
+      count += 1;
+    }
+  }
+  return count ? out : null;
+}
+
+function normalizeResponse(value, now) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return {
+    status: toInt(value.status, 0, 599, 0),
+    statusText: toStr(value.statusText, MAX_STATUS_TEXT),
+    headers: normalizeHeaders(value.headers),
+    firstByteMs: value.firstByteMs == null ? null : toInt(value.firstByteMs, 0, 86400000, null),
+    durationMs: value.durationMs == null ? null : toInt(value.durationMs, 0, 86400000, null),
+    streamed: typeof value.streamed === 'boolean' ? value.streamed : null,
+    model: toStr(value.model, MAX_MODEL_CHARS),
+    finishReason: toStr(value.finishReason, MAX_FINISH_CHARS),
+    usage: normalizeUsage(value.usage),
+    error: toStr(value.error, MAX_ERROR_CHARS),
+  };
+}
+
+/** 单条记录的归一：缺失关键字段（method / url / at）直接判为无效 */
+function normalizeRecord(value, now) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const method = toStr(value.method, 16).toUpperCase();
+  const url = toStr(value.url, MAX_URL_CHARS);
+  if (!method || !url) return null;
+  // 时间允许 2 天前到 10 分钟后的时钟偏差，超出范围按服务端时间记账
+  const at = toInt(value.at, 0, now + 600000, 0);
+  return {
+    at: at > 0 ? at : now,
+    method,
+    url,
+    requestHeaders: normalizeHeaders(value.requestHeaders),
+    requestBody: toStr(value.requestBody, MAX_RECORD_BODY_CHARS),
+    requestBodyTruncated: value.requestBodyTruncated === true,
+    response: normalizeResponse(value.response, now),
+  };
+}
+
+function toBoolOrNull(value) {
+  return typeof value === 'boolean' ? value : null;
+}
+
+function toNumberOr(value, fallback) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+/** 泛型列表归一：逐项过映射函数，为 null 的项丢弃，条数封顶 */
+function listOf(value, max, map) {
+  const out = [];
+  if (!Array.isArray(value)) return out;
+  for (const item of value) {
+    if (out.length >= max) break;
+    const row = map(item);
+    if (row) out.push(row);
+  }
+  return out;
+}
+
+function normalizeReport(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const problem = typeof value.problem === 'string' && PROBLEM_KEYS.includes(value.problem) ? value.problem : 'other';
+  return { problem, note: toStr(value.note, MAX_NOTE_CHARS) };
+}
+
+function normalizeHistoryRow(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return {
+    timestamp: toInt(value.timestamp, 0, 4102444800000, 0),
+    model: toStr(value.model, MAX_MODEL_CHARS),
+    prompt_tokens: toInt(value.prompt_tokens, 0, 1e9, 0),
+    completion_tokens: toInt(value.completion_tokens, 0, 1e9, 0),
+    total_tokens: toInt(value.total_tokens, 0, 1e9, 0),
+    cache_hit_tokens: toInt(value.cache_hit_tokens, 0, 1e9, 0),
+    cost: toNumberOr(value.cost, 0),
+    sourceType: toStr(value.sourceType, 40),
+    endpointLabel: toStr(value.endpointLabel, MAX_MODEL_CHARS),
+    credentialLabel: toStr(value.credentialLabel, MAX_MODEL_CHARS),
+    chatId: toStr(value.chatId, 200),
+  };
+}
+
+function normalizeTapRow(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const usage = value.usage && typeof value.usage === 'object' && !Array.isArray(value.usage) ? value.usage : null;
+  return {
+    at: toInt(value.at, 0, 4102444800000, 0),
+    endedAt: toInt(value.endedAt, 0, 4102444800000, 0),
+    endpoint: toStr(value.endpoint, 200),
+    model: toStr(value.model, MAX_MODEL_CHARS),
+    requestType: toStr(value.requestType, 40),
+    actorKind: toStr(value.actorKind, 20),
+    actorLabel: toStr(value.actorLabel, MAX_MODEL_CHARS),
+    state: toStr(value.state, 20),
+    settledBy: toStr(value.settledBy, 40),
+    status: toInt(value.status, 0, 599, 0),
+    error: toStr(value.error, MAX_ERROR_CHARS),
+    durationMs: toInt(value.durationMs, 0, 86400000, 0),
+    messageCount: toInt(value.messageCount, 0, 100000, 0),
+    usage: usage
+      ? {
+          prompt: toInt(usage.prompt, 0, 1e9, 0),
+          completion: toInt(usage.completion, 0, 1e9, 0),
+          total: toInt(usage.total, 0, 1e9, 0),
+          hit: toInt(usage.hit, 0, 1e9, 0),
+          miss: toInt(usage.miss, 0, 1e9, 0),
+        }
+      : null,
+  };
+}
+
+function normalizeConsoleRow(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const level = value.level === 'warn' || value.level === 'uncaught' ? value.level : 'error';
+  return { level, text: toStr(value.text, 600) };
+}
+
+function normalizeExtensionRow(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return {
+    name: toStr(value.name, 80),
+    version: toVersion(value.version, 40),
+    type: toStr(value.type, 40),
+    enabled: value.enabled === true,
+  };
+}
+
+function normalizeStringList(value, max, itemMax) {
+  const out = [];
+  if (!Array.isArray(value)) return out;
+  for (const item of value) {
+    if (out.length >= max) break;
+    const text = toStr(item, itemMax).trim();
+    if (text) out.push(text);
+  }
+  return out;
+}
+
+/** 诊断摘要归一：只保留定位问题需要的字段，全部按上限截断 */
+export function normalizeDiagnostics(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const settings = value.settings && typeof value.settings === 'object' ? value.settings : {};
+  const env = value.env && typeof value.env === 'object' ? value.env : {};
+  const conversation = value.conversation && typeof value.conversation === 'object' ? value.conversation : {};
+  const summary = value.tapSummary && typeof value.tapSummary === 'object' ? value.tapSummary : {};
+  return {
+    history: listOf(value.history, MAX_DIAG_HISTORY, normalizeHistoryRow),
+    tap: listOf(value.tap, MAX_DIAG_TAP, normalizeTapRow),
+    tapSummary: {
+      total: toInt(summary.total, 0, 1e9, 0),
+      orphan: toInt(summary.orphan, 0, 1e9, 0),
+      settled: toInt(summary.settled, 0, 1e9, 0),
+      pending: toInt(summary.pending, 0, 1e9, 0),
+    },
+    console: listOf(value.console, MAX_DIAG_CONSOLE, normalizeConsoleRow),
+    settings: {
+      appVersion: toVersion(settings.appVersion, 40),
+      mobileCompatUi: toBoolOrNull(settings.mobileCompatUi),
+      theme: toStr(settings.theme, 20),
+      historyScope: toStr(settings.historyScope, 20),
+      historyCount: toInt(settings.historyCount, 0, 1e9, 0),
+      walletCount: toInt(settings.walletCount, 0, 1000, 0),
+    },
+    env: {
+      userAgent: toStr(env.userAgent, 300),
+      platform: toStr(env.platform, 120),
+      language: toStr(env.language, 40),
+      timeZone: toStr(env.timeZone, 60),
+      mobile: toBoolOrNull(env.mobile),
+      screenWidth: toInt(env.screenWidth, 0, 100000, 0),
+      screenHeight: toInt(env.screenHeight, 0, 100000, 0),
+      viewportWidth: toInt(env.viewportWidth, 0, 100000, 0),
+      viewportHeight: toInt(env.viewportHeight, 0, 100000, 0),
+      devicePixelRatio: toNumberOr(env.devicePixelRatio, 0),
+    },
+    conversation: {
+      chatId: toStr(conversation.chatId, 200),
+      character: toStr(conversation.character, MAX_MODEL_CHARS),
+      stVersion: toStr(conversation.stVersion, 60),
+      extensionKeys: normalizeStringList(conversation.extensionKeys, MAX_DIAG_KEYS, 80),
+    },
+    extensions: listOf(value.extensions, MAX_DIAG_EXTENSIONS, normalizeExtensionRow),
+  };
+}
+
+/**
+ * 整体校验。成功返回 { ok: true, value }，value 就是入库的形状：
+ * { schema, appVersion, uploadedAt, client: { userAgent, timeZone, language }, record, report, diagnostics }。
+ * schema 1 只带单条记录（旧版），schema 2 额外带反馈说明与诊断摘要，此时 record 允许为空。
+ */
+export function normalizeLogUpload(raw, now = Date.now()) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fail('bad_body');
+  if (raw.kind !== 'aus_request_log') return fail('bad_kind');
+  const schema = Number(raw.schema);
+  if (!LOG_SCHEMAS.includes(schema)) return fail('bad_schema');
+  const record = normalizeRecord(raw.record, now);
+  if (!record && schema === 1) return fail('bad_record');
+  const client = raw.client && typeof raw.client === 'object' ? raw.client : {};
+  return {
+    ok: true,
+    value: {
+      schema,
+      appVersion: toVersion(raw.appVersion, 40),
+      uploadedAt: toInt(raw.uploadedAt, 0, now + 600000, now) || now,
+      client: {
+        userAgent: toStr(client.userAgent, 300),
+        timeZone: toStr(client.timeZone, 60),
+        language: toStr(client.language, 20),
+      },
+      record,
+      report: schema >= 2 ? normalizeReport(raw.report) : null,
+      diagnostics: schema >= 2 ? normalizeDiagnostics(raw.diagnostics) : null,
+    },
+  };
+}

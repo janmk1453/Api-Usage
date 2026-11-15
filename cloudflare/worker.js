@@ -21,6 +21,7 @@
  */
 import dashboardHtml from './dashboard.html';
 import { MAX_BODY_BYTES, normalizePayload } from './payload.js';
+import { MAX_LOG_BODY_BYTES, normalizeLogUpload } from './log-payload.js';
 import { beijingDayKey, beijingHourKey } from './summary.js';
 import {
   DEVICE_BASE_COLUMNS,
@@ -38,6 +39,15 @@ import { renderDashboard } from './boot.js';
 const RETENTION_DAYS = 730;
 /** 逐设备小时数据保留天数：只服务小时粒度趋势，按较短周期清理以省 D1 空间 */
 const HOURLY_RETENTION_DAYS = 180;
+/** 请求日志保留天数与行数上限：只服务人工排查，短周期清理 */
+const LOG_RETENTION_DAYS = 90;
+const LOG_MAX_ROWS = 2000;
+/** 上传限流：单 IP 每分钟 / 单 IP 每天 / 全站每天，防第三方灌垃圾 */
+const LOG_RATE_PER_MINUTE = 6;
+const LOG_RATE_PER_DAY = 40;
+const LOG_RATE_GLOBAL_DAY = 800;
+const MINUTE_MS = 60000;
+const DAY_MS = 86400000;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -318,6 +328,8 @@ export default {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
     if (path === '/collect') return handleCollect(request, env);
+    // 请求日志上传：面向扩展用户的公开接口，写入前有体积、字段与限流三道闸
+    if (path === '/api/log') return handleLogUpload(request, env);
     if (path === '/health') {
       return jsonResponse({ ok: true, time: Date.now() }, { status: 200, headers: noStore() });
     }
@@ -325,6 +337,8 @@ export default {
     if (path === '/dashboard' || path === '/') return handleDashboard(request, env);
     if (path === '/api/summary') return handleSummary(request, env);
     if (path === '/api/trend') return handleTrend(request, env);
+    if (path === '/api/logs') return handleLogList(request, env);
+    if (path === '/api/log/view') return handleLogDetail(request, env);
     return new Response('Not Found', { status: 404 });
   },
 
@@ -464,6 +478,195 @@ async function writeRow(db, payload, now) {
   await db.batch([buildDevice('legacy'), buildDaily()]);
 }
 
+/* -------------------------------- /api/log -------------------------------- */
+/* 请求日志上传：公开接口，任何人可 POST。体积、字段形状、频次三处收口， */
+/* 写库失败一律返回可读文案，绝不把内部错误抛给用户。 */
+
+function logJson(data, status) {
+  return jsonResponse(data, {
+    status: status || 200,
+    headers: { ...CORS_HEADERS, 'Cache-Control': 'no-store' },
+  });
+}
+
+function logText(message, status) {
+  return new Response(message, {
+    status,
+    headers: {
+      ...CORS_HEADERS,
+      'Content-Type': 'text/plain; charset=UTF-8',
+      'Cache-Control': 'no-store',
+    },
+  });
+}
+
+/** 单 IP 的哈希：只取 SHA-256 前 8 字节（16 位十六进制），足够区分又不留明文 */
+async function hashIp(ip) {
+  const text = String(ip || '').trim();
+  if (!text) return 'unknown';
+  try {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    const bytes = new Uint8Array(digest).slice(0, 8);
+    return Array.from(bytes)
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('');
+  } catch {
+    return 'unknown';
+  }
+}
+
+/** 一次 UNION ALL 查完三个桶，省 D1 读额度；表未建时返回空串交给写入阶段兜底 */
+async function checkLogRate(db, ipHash, now) {
+  let rows = [];
+  try {
+    const res = await db
+      .prepare(
+        `SELECT 'minute' AS k, COUNT(*) AS c FROM request_log WHERE ip_hash = ?1 AND received_at >= ?2
+UNION ALL SELECT 'day' AS k, COUNT(*) AS c FROM request_log WHERE ip_hash = ?1 AND received_at >= ?3
+UNION ALL SELECT 'global' AS k, COUNT(*) AS c FROM request_log WHERE received_at >= ?3`
+      )
+      .bind(ipHash, now - MINUTE_MS, now - DAY_MS)
+      .all();
+    rows = Array.isArray(res?.results) ? res.results : [];
+  } catch {
+    return '';
+  }
+  const counts = { minute: 0, day: 0, global: 0 };
+  for (const row of rows) {
+    const key = String(row?.k || '');
+    if (key in counts) counts[key] = Number(row?.c) || 0;
+  }
+  if (counts.minute >= LOG_RATE_PER_MINUTE) return '上传太频繁了，请稍后再试。';
+  if (counts.day >= LOG_RATE_PER_DAY) return '这个网络今天的上传次数已用完，请明天再试。';
+  if (counts.global >= LOG_RATE_GLOBAL_DAY) return '接收端今天的反馈量已满，请明天再试。';
+  return '';
+}
+
+async function insertLog(db, value, ipHash, now, bytes) {
+  const res = await db
+    .prepare(
+      'INSERT INTO request_log (received_at, ip_hash, app_version, user_agent, time_zone, language, bytes, payload) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)'
+    )
+    .bind(
+      now,
+      ipHash,
+      value.appVersion || '',
+      value.client?.userAgent || '',
+      value.client?.timeZone || '',
+      value.client?.language || '',
+      bytes,
+      JSON.stringify(value)
+    )
+    .run();
+  return Number(res?.meta?.last_row_id || 0);
+}
+
+async function handleLogUpload(request, env) {
+  if (request.method !== 'POST') return logText('Method Not Allowed', 405);
+  const declared = Number(request.headers.get('content-length') || 0);
+  if (Number.isFinite(declared) && declared > MAX_LOG_BODY_BYTES) {
+    return logText('Payload Too Large', 413);
+  }
+  let body = '';
+  try {
+    body = await request.text();
+  } catch {
+    return logText('Bad Request', 400);
+  }
+  if (!body || body.length > MAX_LOG_BODY_BYTES) return logText('Payload Too Large', 413);
+  let raw;
+  try {
+    raw = JSON.parse(body);
+  } catch {
+    return logText('Bad Request', 400);
+  }
+  const now = Date.now();
+  const normalized = normalizeLogUpload(raw, now);
+  if (!normalized.ok) return logText('Bad Request', 400);
+  if (!env?.DB) return logText('上传暂不可用：接收端尚未绑定存储。', 503);
+  const ipHash = await hashIp(request.headers.get('cf-connecting-ip') || '');
+  const limited = await checkLogRate(env.DB, ipHash, now);
+  if (limited) return logText(limited, 429);
+  let id = 0;
+  try {
+    id = await insertLog(env.DB, normalized.value, ipHash, now, body.length);
+  } catch {
+    return logText('上传暂不可用：接收端存储尚未就绪，请稍后重试。', 503);
+  }
+  return logJson({ ok: true, id });
+}
+
+/* 下面两个接口都在口令保护之内：列表只回摘要，详情按 id 取回完整上报体。 */
+
+async function handleLogList(request, env) {
+  if (request.method !== 'GET') return logText('Method Not Allowed', 405);
+  if (!env?.DB) return logJson({ ok: false, error: 'storage_unavailable' }, 503);
+  let res;
+  try {
+    res = await env.DB
+      .prepare('SELECT id, received_at, app_version, bytes, payload FROM request_log ORDER BY id DESC LIMIT ?1')
+      .bind(50)
+      .all();
+  } catch {
+    return logJson({ ok: false, error: 'log_table_missing' }, 503);
+  }
+  const items = (Array.isArray(res?.results) ? res.results : []).map((row) => {
+    let parsed = null;
+    try {
+      parsed = JSON.parse(String(row?.payload || '{}'));
+    } catch {
+      parsed = null;
+    }
+    return {
+      id: Number(row?.id) || 0,
+      receivedAt: Number(row?.received_at) || 0,
+      appVersion: String(row?.app_version || ''),
+      bytes: Number(row?.bytes) || 0,
+      problem: String(parsed?.report?.problem || ''),
+      note: String(parsed?.report?.note || '').slice(0, 300),
+      model: String(parsed?.record?.response?.model || ''),
+      url: String(parsed?.record?.url || ''),
+      status: Number(parsed?.record?.response?.status) || 0,
+    };
+  });
+  return logJson({ ok: true, count: items.length, items });
+}
+
+async function handleLogDetail(request, env) {
+  if (request.method !== 'GET') return logText('Method Not Allowed', 405);
+  const url = new URL(request.url);
+  const id = Number(url.searchParams.get('id') || 0);
+  if (!Number.isFinite(id) || id <= 0) return logJson({ ok: false, error: 'bad_id' }, 400);
+  if (!env?.DB) return logJson({ ok: false, error: 'storage_unavailable' }, 503);
+  let rows = [];
+  try {
+    const res = await env.DB
+      .prepare('SELECT id, received_at, ip_hash, payload FROM request_log WHERE id = ?1')
+      .bind(id)
+      .all();
+    rows = Array.isArray(res?.results) ? res.results : [];
+  } catch {
+    return logJson({ ok: false, error: 'log_table_missing' }, 503);
+  }
+  const row = rows[0];
+  if (!row) return logJson({ ok: false, error: 'not_found' }, 404);
+  let payload = null;
+  try {
+    payload = JSON.parse(String(row.payload || 'null'));
+  } catch {
+    payload = null;
+  }
+  return logJson({
+    ok: true,
+    item: {
+      id: Number(row.id) || 0,
+      receivedAt: Number(row.received_at) || 0,
+      ipHash: String(row.ip_hash || ''),
+      payload,
+    },
+  });
+}
+
 /* ---------------------------------- 定时清理 ---------------------------------- */
 
 async function prune(env) {
@@ -475,6 +678,17 @@ async function prune(env) {
   const hourCutoff = beijingHourKey(Date.now() - HOURLY_RETENTION_DAYS * 86400000);
   try {
     await env.DB.prepare('DELETE FROM device_hourly WHERE hour < ?1').bind(hourCutoff).run();
+  } catch {}
+  const logCutoff = Date.now() - LOG_RETENTION_DAYS * DAY_MS;
+  try {
+    await env.DB.prepare('DELETE FROM request_log WHERE received_at < ?1').bind(logCutoff).run();
+  } catch {}
+  // 行数上限：即便天天有人传，也只留最近 LOG_MAX_ROWS 条
+  try {
+    await env.DB
+      .prepare('DELETE FROM request_log WHERE id NOT IN (SELECT id FROM request_log ORDER BY id DESC LIMIT ?1)')
+      .bind(LOG_MAX_ROWS)
+      .run();
   } catch {}
 }
 

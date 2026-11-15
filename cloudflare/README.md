@@ -53,6 +53,16 @@ cd cloudflare
 npx wrangler deploy -c wrangler.local.toml
 ```
 
+### 已有库升级（新增反馈日志表）
+
+请求日志页的「上传反馈」依赖 `request_log` 表。若数据库是旧版本建的，**先建表再部署新版 Worker**，否则上传会返回 `503`：
+
+```bash
+npx wrangler d1 execute api_usage_stat --remote --file cloudflare/schema-request-log.sql
+```
+
+新库无需单独执行，`schema.sql` 已包含该表。
+
 ### 已有库升级（新增设备累计列）
 
 看板的总计与画像依赖 `device` 表的累计列。若数据库是旧版本建的，先执行一次迁移，**再部署新版 Worker**：
@@ -162,13 +172,16 @@ npx wrangler d1 execute api_usage_stat --remote --file cloudflare/migrate-tt-ver
 | 接口 | 说明 |
 | --- | --- |
 | `POST /collect` | 接收匿名上报，返回 `204`；兼容旧版扩展的上报体（`v1`、无 `ts`），新版新增可选 `ts`（毫秒时间戳，服务端归一为分钟精度） |
+| `POST /api/log` | 公开的反馈日志上传（请求日志页「上传反馈」），成功返回 `{"ok":true,"id":N}`；限流为单 IP 每分钟 6 条、单 IP 每天 40 条、全站每天 800 条，超限 `429`；`request_log` 表未建时返回 `503` |
+| `GET /api/logs` | 口令：最近 50 条反馈日志摘要（不含请求正文） |
+| `GET /api/log/view?id=N` | 口令：按 id 取回完整上报体 |
 | `GET /api/summary` | 总计、当日、累计用户序列、面板累计、版本分布、环境画像、时长直方图；支持 `?force=1` |
 | `GET /api/trend?from=YYYY-MM-DD&to=YYYY-MM-DD&parts=daily\|render\|both` | 每日趋势（不重复用户 / 打开次数 / 使用时长 / 面板明细）与按版本渲染耗时；支持 `?force=1` |
 | `GET /api/trend?bucket=hour&from=YYYY-MM-DDTHH&to=YYYY-MM-DDTHH&parts=daily` | 小时粒度趋势（同上指标，X 轴为北京时间整点，缺失小时补 0，另返回累计用户序列）；缺省窗口为最近 24 小时，最长 180 天；支持 `?force=1` |
 | `GET /dashboard` | 口令保护的看板页（也响应根路径 `/`）；首屏数据内联，支持 `?force=1` 绕过缓存 |
 | `GET /health` | 健康检查，无需口令 |
 
-除 `/collect` 与 `/health` 外都需要 HTTP Basic 口令（用户名任意，口令为 `DASHBOARD_TOKEN`）。
+除 `/collect`、`/health` 与 `POST /api/log` 外都需要 HTTP Basic 口令（用户名任意，口令为 `DASHBOARD_TOKEN`）。
 
 ## 本地调试
 
@@ -235,6 +248,7 @@ Cloudflare 免费额度（2026 年 4 月官方文档）：Workers **10 万请求
 - `device_hourly`：每台设备每（北京时间）小时一行，保存该小时分桶与计数与分钟级首末上报时间，180 天后自动清理。
 
 不采集、不存库的内容包括：IP 地址、User-Agent 原文、对话名称或内容、模型名、密钥信息、余额与费用、接口地址、精确屏幕分辨率。Worker 只把校验后的白名单字段写入 D1，原始请求体不做持久化，也不开启访问日志。
+- `request_log`：**只由用户在请求日志页点「上传反馈」主动提交**时才写入，内容是最近一轮对话请求的标头与正文、用户选中的问题类型与补充说明、最近历史摘要、其他请求探针摘要、控制台报错、扩展清单、环境与设置摘要。密钥与认证头在上传前由扩展端打码，服务端再做一次字段白名单与截断；`ip_hash` 只存 SHA-256 前 8 字节（16 位十六进制）用于限流，无法还原 IP；保留 90 天且最多 2000 条，超出由定时任务清理。该表不参与任何匿名统计聚合。
 
 ## 运维
 
@@ -258,6 +272,13 @@ npx wrangler d1 execute api_usage_stat --remote --command \
 npx wrangler d1 execute api_usage_stat --remote --command \
   "DELETE FROM device_hourly WHERE hour < strftime('%Y-%m-%dT%H', datetime('now','-180 day'))"
 
+# 查看 / 读取反馈日志（与看板同一口令）
+curl -u "user:$DASHBOARD_TOKEN" https://stat.janmk.us.ci/api/logs
+curl -u "user:$DASHBOARD_TOKEN" "https://stat.janmk.us.ci/api/log/view?id=1"
+
+# 手动清理超过 90 天的反馈日志（正常由定时任务完成）
+npx wrangler d1 execute api_usage_stat --remote --command \
+  "DELETE FROM request_log WHERE received_at < (strftime('%s','now')*1000 - 7776000000)"
 # 用户要求删除其数据（需要对方提供设置页显示的匿名标识前 8 位）
 npx wrangler d1 execute api_usage_stat --remote --command \
   "DELETE FROM device_daily WHERE device_id LIKE 'xxxxxxxx%'; DELETE FROM device_hourly WHERE device_id LIKE 'xxxxxxxx%'; DELETE FROM device WHERE device_id LIKE 'xxxxxxxx%'"
