@@ -1,6 +1,6 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { D as initConnectionIdentity, O as resolveRuntimeConnectionContext, t as repository } from "./repository-hoZEFuvR.js";
+import { E as resolveRuntimeConnectionContext, T as initConnectionIdentity, t as repository } from "./repository-SL4FmbJr.js";
 //#region src/services/include-usage.ts
 /**
 * 流式 usage 注入的纯逻辑：把 stream_options.include_usage 合并进用户/预设自定义的请求体参数。
@@ -198,6 +198,270 @@ function resolveThinkTime(clock, endedAt) {
 	return Math.round(ms);
 }
 //#endregion
+//#region src/services/request-log.ts
+/**
+* 请求日志：只保留「最后一轮」对话请求的标头、正文与响应元数据。
+*
+* 定位：纯诊断用途，不参与统计、不进历史、不导出。每次请求开始时整体覆盖，
+* 因此本地永远只有一条记录（用户点「清空」后为空）。
+*
+* 隐私：请求头里的 Authorization / x-api-key / cookie 一律打码后再落盘，
+* 正文里可能包含对话内容，页面顶部有明确提示，可随时清空。
+*/
+var LOG_STORAGE_KEY = "aus_last_request_v1";
+/** 请求正文上限（字符），超出截断并标记，避免撑爆 localStorage */
+var LOG_BODY_LIMIT = 2e5;
+/** 单个字符串值在树里最多展示的字符数 */
+var LOG_VALUE_LIMIT = 2e3;
+var SENSITIVE_HEADERS = [
+	"authorization",
+	"proxy-authorization",
+	"cookie",
+	"set-cookie",
+	"x-api-key",
+	"api-key",
+	"x-auth-token",
+	"x-csrf-token",
+	"x-xsrf-token"
+];
+function isSensitive(name) {
+	return SENSITIVE_HEADERS.includes(name.trim().toLowerCase());
+}
+/** 打码：保留 scheme 前缀与首尾少量字符，中间用 * 代替 */
+function redactValue(value) {
+	const text = String(value ?? "");
+	const match = text.match(/^(\S+\s+)(.*)$/);
+	const prefix = match ? match[1] : "";
+	const secret = match ? match[2] : text;
+	if (secret.length <= 12) return prefix + "*".repeat(Math.max(secret.length, 4));
+	return prefix + secret.slice(0, 6) + "*".repeat(Math.min(10, secret.length - 10)) + secret.slice(-4);
+}
+function redactHeader(name, value) {
+	return isSensitive(name) ? redactValue(value) : String(value ?? "");
+}
+/** 把 Headers / 数组 / 普通对象统一成有序键值对，敏感项打码 */
+function headersToPairs(input) {
+	const pairs = [];
+	const push = (name, value) => {
+		const key = String(name || "").trim();
+		if (!key) return;
+		pairs.push([key, redactHeader(key, String(value ?? ""))]);
+	};
+	if (!input) return pairs;
+	const anyInput = input;
+	if (typeof anyInput.forEach === "function" && typeof anyInput.get === "function") {
+		anyInput.forEach((value, name) => push(name, value));
+		return pairs.sort((a, b) => a[0].localeCompare(b[0]));
+	}
+	if (Array.isArray(anyInput)) {
+		for (const item of anyInput) if (Array.isArray(item) && item.length >= 2) push(item[0], item[1]);
+		return pairs;
+	}
+	if (typeof anyInput === "object") for (const [key, value] of Object.entries(anyInput)) if (Array.isArray(value)) push(key, value.join(", "));
+	else push(key, value);
+	return pairs.sort((a, b) => a[0].localeCompare(b[0]));
+}
+/** 请求体原文 → 截断信息 */
+function clipBody(text, limit = LOG_BODY_LIMIT) {
+	const raw = typeof text === "string" ? text : "";
+	if (raw.length <= limit) return {
+		body: raw,
+		truncated: false
+	};
+	return {
+		body: raw.slice(0, limit),
+		truncated: true
+	};
+}
+function emptyResponse() {
+	return {
+		status: 0,
+		statusText: "",
+		headers: [],
+		firstByteMs: null,
+		durationMs: null,
+		streamed: null,
+		model: null,
+		finishReason: null,
+		usage: null,
+		error: null
+	};
+}
+/** 请求发出时调用：整体覆盖上一条记录 */
+function saveRequestStart(input) {
+	try {
+		const clipped = clipBody(input.body || "");
+		const record = {
+			at: typeof input.at === "number" ? input.at : Date.now(),
+			method: String(input.method || "POST").toUpperCase(),
+			url: String(input.url || ""),
+			requestHeaders: headersToPairs(input.headers),
+			requestBody: clipped.body,
+			requestBodyTruncated: clipped.truncated,
+			response: emptyResponse()
+		};
+		globalThis.localStorage?.setItem(LOG_STORAGE_KEY, JSON.stringify(record));
+	} catch {}
+}
+function readRaw() {
+	try {
+		const text = globalThis.localStorage?.getItem(LOG_STORAGE_KEY);
+		if (!text) return null;
+		const parsed = JSON.parse(text);
+		if (!parsed || typeof parsed !== "object") return null;
+		return {
+			at: typeof parsed.at === "number" ? parsed.at : 0,
+			method: String(parsed.method || "POST"),
+			url: String(parsed.url || ""),
+			requestHeaders: Array.isArray(parsed.requestHeaders) ? parsed.requestHeaders.filter((p) => Array.isArray(p) && p.length >= 2).map((p) => [String(p[0]), String(p[1])]) : [],
+			requestBody: typeof parsed.requestBody === "string" ? parsed.requestBody : "",
+			requestBodyTruncated: parsed.requestBodyTruncated === true,
+			response: {
+				...emptyResponse(),
+				...parsed.response && typeof parsed.response === "object" ? parsed.response : {}
+			}
+		};
+	} catch {
+		return null;
+	}
+}
+/** 写入响应侧字段（合并到同一条记录） */
+function patchRequestLog(patch) {
+	try {
+		const record = readRaw();
+		if (!record) return;
+		const next = { ...record.response };
+		if (typeof patch.status === "number") next.status = patch.status;
+		if (typeof patch.statusText === "string") next.statusText = patch.statusText;
+		if (patch.headers !== void 0) next.headers = headersToPairs(patch.headers);
+		if (patch.firstByteMs !== void 0) next.firstByteMs = patch.firstByteMs;
+		if (patch.durationMs !== void 0) next.durationMs = patch.durationMs;
+		if (patch.streamed !== void 0) next.streamed = patch.streamed;
+		if (patch.model !== void 0) next.model = patch.model;
+		if (patch.finishReason !== void 0) next.finishReason = patch.finishReason;
+		if (patch.usage !== void 0) next.usage = patch.usage;
+		if (patch.error !== void 0) next.error = patch.error;
+		globalThis.localStorage?.setItem(LOG_STORAGE_KEY, JSON.stringify({
+			...record,
+			response: next
+		}));
+	} catch {}
+}
+function readRequestLog() {
+	return readRaw();
+}
+function clearRequestLog() {
+	try {
+		globalThis.localStorage?.removeItem(LOG_STORAGE_KEY);
+	} catch {}
+}
+/** 摘要：状态码 + 耗时一行文案，供页面顶部展示 */
+function summarizeRequestLog(record) {
+	if (!record) return "暂无记录";
+	const r = record.response;
+	if (!r || !r.status) return "请求已发出，等待响应";
+	const parts = [String(r.status)];
+	if (r.durationMs != null) parts.push(Math.round(r.durationMs) + "ms");
+	else if (r.firstByteMs != null) parts.push("首字 " + Math.round(r.firstByteMs) + "ms");
+	return parts.join(" · ");
+}
+var USAGE_KEYS = [
+	"prompt_tokens",
+	"completion_tokens",
+	"total_tokens",
+	"input_tokens",
+	"output_tokens",
+	"cached_tokens",
+	"prompt_cache_hit_tokens",
+	"prompt_cache_miss_tokens"
+];
+var buffer = [];
+/** 只留下数字型用量字段，避免把整块 usage 塞进诊断包 */
+function usageNumbers(usage) {
+	if (!usage || typeof usage !== "object") return null;
+	const out = {};
+	let any = false;
+	for (const key of USAGE_KEYS) {
+		const v = usage[key];
+		if (typeof v === "number" && Number.isFinite(v)) {
+			out[key] = v;
+			any = true;
+		}
+	}
+	const cached = usage?.prompt_tokens_details?.cached_tokens;
+	if (typeof cached === "number" && Number.isFinite(cached)) {
+		out.cached_tokens = cached;
+		any = true;
+	}
+	return any ? out : null;
+}
+/** usage 是否存在但三项计数全为 0（上游不计量时的典型表现） */
+function isZeroUsage(usage) {
+	const n = usageNumbers(usage);
+	if (!n) return false;
+	const present = [
+		"prompt_tokens",
+		"completion_tokens",
+		"total_tokens",
+		"input_tokens",
+		"output_tokens"
+	].filter((k) => typeof n[k] === "number");
+	if (!present.length) return false;
+	return present.every((k) => n[k] === 0);
+}
+function clipText(v, max) {
+	const s = typeof v === "string" ? v : v == null ? "" : String(v);
+	return s.length > max ? s.slice(0, max) : s;
+}
+/** 记一条链路快照（永不抛错） */
+function noteCaptureStage(stage, data = {}) {
+	try {
+		const rec = {
+			at: typeof data.at === "number" ? data.at : Date.now(),
+			stage,
+			model: data.model ? clipText(data.model, 120) : void 0,
+			requestId: data.requestId ? clipText(data.requestId, 80) : void 0,
+			url: data.url ? clipText(data.url, 200) : void 0,
+			streamed: data.streamed === void 0 ? void 0 : data.streamed,
+			usageFound: data.usageFound,
+			usageZero: data.usageZero,
+			usage: data.usage || null,
+			finishReason: data.finishReason === void 0 ? void 0 : data.finishReason,
+			reason: data.reason ? clipText(data.reason, 300) : void 0
+		};
+		buffer.push(rec);
+		if (buffer.length > 24) buffer = buffer.slice(-24);
+	} catch {}
+}
+/** 最近的链路快照（按时间正序，最后一条最新） */
+function listCaptureStages(limit = 24) {
+	try {
+		const n = Math.max(1, Math.min(24, Math.floor(limit) || 24));
+		return buffer.slice(-n).map((r) => ({ ...r }));
+	} catch {
+		return [];
+	}
+}
+/** 诊断包里的 capture 段：最近若干条快照，已裁掉空字段 */
+function captureDigest(limit = 24) {
+	return listCaptureStages(limit).map((rec) => {
+		const out = {
+			at: rec.at,
+			stage: rec.stage
+		};
+		if (rec.model) out.model = rec.model;
+		if (rec.requestId) out.requestId = rec.requestId;
+		if (rec.url) out.url = rec.url;
+		if (rec.streamed !== void 0 && rec.streamed !== null) out.streamed = rec.streamed;
+		if (rec.usageFound !== void 0) out.usageFound = rec.usageFound;
+		if (rec.usageZero !== void 0) out.usageZero = rec.usageZero;
+		if (rec.usage) out.usage = rec.usage;
+		if (rec.finishReason) out.finishReason = rec.finishReason;
+		if (rec.reason) out.reason = rec.reason;
+		return out;
+	});
+}
+//#endregion
 //#region src/services/interception.ts
 var interception_exports = /* @__PURE__ */ __exportAll({
 	installInterception: () => installInterception,
@@ -348,10 +612,30 @@ function installFetchCapture() {
 				} catch {}
 				const injected = injectIncludeUsage(reqBody, reqBody?.chat_completion_source ?? null);
 				const performFetch = (init) => rawFetch.apply(p, init);
-				return performFetch(injected ? [args[0], {
+				const fetchArgs = injected ? [args[0], {
 					...args[1],
 					body: JSON.stringify(reqBody)
-				}] : args).then((firstRes) => {
+				}] : args;
+				try {
+					const sentInit = fetchArgs[1] || {};
+					const sentBody = typeof sentInit.body === "string" ? sentInit.body : "";
+					saveRequestStart({
+						at: startTime,
+						method: sentInit.method || "POST",
+						url,
+						headers: sentInit.headers,
+						body: sentBody
+					});
+				} catch {}
+				try {
+					noteCaptureStage("fetch-start", {
+						model: reqBody?.model,
+						requestId,
+						url,
+						streamed: reqBody?.stream === true
+					});
+				} catch {}
+				return performFetch(fetchArgs).then((firstRes) => {
 					if (injected && !firstRes.ok && (firstRes.status === 400 || firstRes.status === 422)) {
 						log.debug("上游不接受 include_usage，按原请求重试");
 						try {
@@ -362,6 +646,14 @@ function installFetchCapture() {
 					}
 					return firstRes;
 				}).then((res) => {
+					try {
+						patchRequestLog({
+							status: res.status,
+							statusText: res.statusText,
+							headers: res.headers,
+							firstByteMs: Date.now() - startTime
+						});
+					} catch {}
 					try {
 						const clone = res.clone();
 						const requestedStream = reqBody?.stream === true;
@@ -407,6 +699,25 @@ function installFetchCapture() {
 								log.debug("用量响应解析失败", e?.message || e);
 								return;
 							}
+							try {
+								patchRequestLog({
+									model: data?.model || reqBody?.model || null,
+									finishReason: finishReason ?? null,
+									usage: data?.usage || null
+								});
+							} catch {}
+							try {
+								const parsedUsage = data?.usage || null;
+								noteCaptureStage("fetch-parse", {
+									model: data?.model || reqBody?.model,
+									requestId,
+									streamed,
+									usageFound: !!parsedUsage,
+									usageZero: isZeroUsage(parsedUsage),
+									usage: usageNumbers(parsedUsage),
+									finishReason: finishReason ?? null
+								});
+							} catch {}
 							if (data && data.usage) {
 								const model = data?.model || reqBody?.model || fullReq?.model || lastFetchModel || "deepseek-v4-flash";
 								const usage = data.usage;
@@ -471,6 +782,12 @@ function installFetchCapture() {
 											at: Date.now()
 										};
 									} catch {}
+									try {
+										patchRequestLog({
+											durationMs: endedAt,
+											streamed
+										});
+									} catch {}
 									parseAndProcess(fullText, ttft, thinkTime, streamed);
 								} catch {}
 							};
@@ -525,6 +842,9 @@ function installFetchCapture() {
 					}
 					return res;
 				}).catch((e) => {
+					try {
+						patchRequestLog({ error: String(e && (e.message || e) || "请求失败") });
+					} catch {}
 					throw e;
 				});
 			}
@@ -720,9 +1040,23 @@ function onGenerationEnded(...args) {
 		}
 		if (extra.token_count != null && !usage) {
 			log.debug("跳过无效 usage：仅有本地 token_count=" + extra.token_count + " model=" + model);
+			try {
+				noteCaptureStage("event-drop", {
+					model,
+					requestId: recentRequestId(12e4) || "",
+					reason: "no-usage-with-local-token-count:" + String(extra.token_count)
+				});
+			} catch {}
 			return;
 		}
 		log.debug("未找到任何有效 usage，丢弃本次记录");
+		try {
+			noteCaptureStage("event-drop", {
+				model,
+				requestId: recentRequestId(12e4) || "",
+				reason: "no-usage"
+			});
+		} catch {}
 	} catch (e) {
 		log.error("onGenerationEnded 异常 " + e?.message || e);
 	}
@@ -749,11 +1083,34 @@ function processUsage(usage, model, messages, startTime, fullRequest = null, ful
 			if (streamed == null) streamed = st.streamed;
 		}
 	} catch {}
-	repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason, connection, requestId, streamed);
+	try {
+		repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason, connection, requestId, streamed);
+	} catch (e) {
+		try {
+			noteCaptureStage("entry-error", {
+				model,
+				requestId: requestId || "",
+				reason: String(e?.message || e)
+			});
+		} catch {}
+		throw e;
+	}
+	try {
+		noteCaptureStage("entry-added", {
+			model,
+			requestId: requestId || "",
+			streamed,
+			usageFound: !!usage,
+			usageZero: isZeroUsage(usage),
+			usage: usageNumbers(usage),
+			finishReason: finishReason ?? null,
+			reason: "addEntry"
+		});
+	} catch {}
 	refresh();
 }
 function recalcAllCosts() {
 	return repository.recalcAll();
 }
 //#endregion
-export { interception_exports as n, recalcAllCosts as r, installInterception as t };
+export { listCaptureStages as a, readRequestLog as c, captureDigest as i, summarizeRequestLog as l, interception_exports as n, LOG_VALUE_LIMIT as o, recalcAllCosts as r, clearRequestLog as s, installInterception as t };

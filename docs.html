@@ -1006,13 +1006,14 @@
           <li><a class="toc-link" href="#forecast">8. 趋势预测</a></li>
           <li><a class="toc-link" href="#wallet">9. 钱包</a></li>
           <li><a class="toc-link" href="#settings">10. 设置</a></li>
-          <li><a class="toc-link" href="#data-transfer">11. 导入、导出、删除与 WebDAV</a></li>
-          <li><a class="toc-link" href="#update-about">12. 检查更新与关于</a></li>
-          <li><a class="toc-link" href="#faq">13. 常见问题</a></li>
-          <li><a class="toc-link" href="#glossary">14. 数据口径与术语</a></li>
-          <li><a class="toc-link" href="#privacy">15. 隐私声明</a></li>
-          <li><a class="toc-link" href="#disclaimer">16. 免责声明</a></li>
-          <li><a class="toc-link" href="#credits">17. 致谢与许可</a></li>
+          <li><a class="toc-link" href="#feedback-log">11. 问题反馈与请求日志</a></li>
+          <li><a class="toc-link" href="#data-transfer">12. 导入、导出、删除与 WebDAV</a></li>
+          <li><a class="toc-link" href="#update-about">13. 检查更新与关于</a></li>
+          <li><a class="toc-link" href="#faq">14. 常见问题</a></li>
+          <li><a class="toc-link" href="#glossary">15. 数据口径与术语</a></li>
+          <li><a class="toc-link" href="#privacy">16. 隐私声明</a></li>
+          <li><a class="toc-link" href="#disclaimer">17. 免责声明</a></li>
+          <li><a class="toc-link" href="#credits">18. 致谢与许可</a></li>
         </ul>
       </nav>
     </aside>
@@ -1614,7 +1615,7 @@
               <tr><td>同步模式</td><td>决定只补充缺失价格、覆盖未锁定价格，还是覆盖全部可同步价格。</td></tr>
               <tr><td>汇率</td><td>美元与人民币的换算比例，用于价格同步、钱包余额换算，以及钱包全部为美元时的全站展示。</td></tr>
               <tr><td>自动同步间隔</td><td>选择仅手动或按设定周期更新；周期性同步只处理已选价格来源的钱包，没有可同步钱包时不会联网。</td></tr>
-              <tr><td>同步后重算</td><td>开启后，价格同步会更新已有历史费用；关闭后主要影响后续请求。</td></tr>
+              <tr><td>写入后重算</td><td>价格同步写入成功后，立即按新价重算该钱包的热记录与冷记录，概览、统计、历史、趋势里的费用随即更新，与手动改价的口径一致。</td></tr>
               <tr><td>预览</td><td>在正式同步前查看新增、更新、跳过和待定价数量。</td></tr>
             </tbody>
           </table>
@@ -1639,6 +1640,33 @@
           <li>确认现有历史与金额无误后，可点击该行右侧的“清理”按钮：按钮会先变为“确认清理？再点一次”，<strong>再次点击才真正删除</strong>（5 秒内未确认会自动取消）。</li>
           <li>清理只删除键名为 <span class="code">migration_backup_&lt;时间戳&gt;</span> 的备份条目（含其 localStorage 降级副本），<strong>不会动冷历史、设置、钱包、密钥与正在使用的降级副本</strong>；删除后会重新统计并刷新占用数字。</li>
         </ul>
+      </section>
+
+      <section class="doc-section" id="feedback-log" data-keywords="问题反馈 请求日志 上传日志 诊断 排查 对话没被记录 用量为0 费用不对 打码 脱敏 接收地址 清空 历史记录提示">
+        <div class="section-kicker">问题排查</div>
+        <h2 id="feedback-log-title">问题反馈与请求日志</h2>
+        <p class="lead">这一节用于排查「对话没有被记录」「Token 或费用明显不对」这类问题：它保存最近一轮对话请求的原始材料，并能在你确认后上传给接收方协助定位。日志默认只存在本机浏览器，不主动上传任何内容。</p>
+
+        <h3 id="feedback-log-entry">入口与日志内容</h3>
+        <ul>
+          <li>从设置页的「问题反馈 / 请求日志」进入日志页；页面左上角的「返回」回到设置。</li>
+          <li>顶部一行是当前记录的状态摘要（如 <span class="code">200 · 1832ms</span>），右侧为「上传反馈 / 刷新 / 清空」。</li>
+          <li>下面依次展示：请求摘要（时间、地址、首字节、总耗时、是否流式、模型）、请求标头、请求正文、响应状态（status / finish_reason / model）、用量（usage 原对象）、响应标头。</li>
+          <li>请求标头中的 <span class="code">Authorization</span>、<span class="code">x-api-key</span>、<span class="code">cookie</span>、CSRF 令牌等敏感项<strong>已打码</strong>；请求正文按原文保留（排查需要看真实结构），因此其中含有这一轮的聊天与提示词，正文过长会截断并标注。</li>
+          <li>日志<strong>只保留最近一轮请求</strong>，每次新请求整体覆盖；「清空」需要再点一次确认，删除后不可恢复。</li>
+        </ul>
+
+        <h3 id="feedback-log-hint">历史记录页的问题提示</h3>
+        <p>当出现用量为 0、没取到用量、速率异常或扩展报错时，历史记录页顶部会出现一条提示，可直接上传反馈。提示可以「忽略这一类」，忽略后同类问题不再提示；日志页「已忽略 N 类问题」右侧可一键「全部恢复」。这个提示的总开关也在日志页，关掉后历史记录页不再显示提示，日志页本身不受影响。</p>
+
+        <h3 id="feedback-log-upload">上传反馈的流程</h3>
+        <ol class="steps">
+          <li>在问题刚复现、还没进行下一轮对话时点「上传反馈」——继续聊会把出问题的那一轮覆盖掉。</li>
+          <li>在弹窗里选择问题类型（对话未记录 / 数据不对 / 其他），可填写补充说明：什么时候、哪条对话、哪一轮、当时的模型或接入是什么。</li>
+          <li>展开「查看会一并上传的内容与隐私说明」核对范围；需要时可展开「上传地址（高级）」改成你自己的接收地址。</li>
+          <li>点「同意并上传」才会真正发送，结果在弹窗内提示；取消、点击遮罩外或关闭弹窗都不会发出任何请求。</li>
+        </ol>
+        <div class="callout tip"><strong>关于隐私：</strong>上传内容包含这一轮的请求正文（聊天与提示词）、最近报错、设置与环境摘要、对话名与角色名；扩展会把能识别的密钥抹成 <span class="code">***</span>，但脱敏只能尽力而为，上传后由接收方保存且无法撤回。完整说明见<a href="#privacy-feedback">隐私声明第十一节</a>。</div>
       </section>
 
       <section class="doc-section" id="data-transfer" data-keywords="导入 导出 删除记录 清理 WebDAV 云同步 备份 恢复 合并 去重">
@@ -1859,17 +1887,17 @@
         </div>
       </section>
 
-      <section class="doc-section" id="privacy" data-keywords="隐私 密钥 校准密钥 XOR WebDAV models.dev 数据上传 聊天内容 网络请求 域名 权限 删除 匿名使用统计 遥测 上报 匿名标识 关闭 卸载 清理数据">
+      <section class="doc-section" id="privacy" data-keywords="隐私 密钥 校准密钥 XOR WebDAV models.dev 数据上传 聊天内容 网络请求 域名 权限 删除 匿名使用统计 遥测 上报 匿名标识 关闭 卸载 清理数据 请求日志 问题反馈 上传日志 诊断包 脱敏 打码 接收地址 IP 哈希">
         <div class="section-kicker">隐私声明</div>
         <h2 id="privacy-title">隐私声明</h2>
         <p class="lead">本扩展是纯前端、本地运行的 SillyTavern 原生扩展，完整代码开源（MIT 许可证），可随时审查。本声明基于实际代码行为编写，逐项如实披露本扩展的全部网络请求与敏感操作。</p>
         <p><strong>适用对象：</strong>SillyTavern 扩展「API用量统计」（Api-Usage，仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">janmk1453/Api-Usage</a>）<br>
         <strong>适用版本：</strong>当前发行版本及功能行为一致的后续版本<br>
-        <strong>最后更新：</strong>2026年10月22日</p>
+        <strong>最后更新：</strong>2026年11月15日</p>
 
         <h3 id="privacy-commitments">一、核心承诺</h3>
         <ol class="steps">
-          <li>本扩展<strong>不采集、不上传任何可识别个人身份的数据</strong>。唯一会离开设备的，是可在「设置 → 匿名使用统计」一键关闭的匿名使用统计（随机设备标识、环境分桶、页面使用次数、扩展版本与渲染耗时分桶），其中不含聊天内容、模型名、密钥、余额、费用与接口地址，详见第十节。</li>
+          <li>本扩展<strong>不主动采集、不上传任何可识别个人身份的数据</strong>。离开设备的数据只有两类：一是可在「设置 → 匿名使用统计」一键关闭的匿名使用统计（随机设备标识、环境分桶、页面使用次数、扩展版本与渲染耗时分桶），其中不含聊天内容、模型名、密钥、余额、费用与接口地址，详见第十节；二是你在「问题反馈」里<strong>主动点「同意并上传」</strong>之后才发送的诊断包，内容与接收方见第十一节。除这两类，本扩展不会自行向外发送任何数据。</li>
           <li>本扩展发起的所有网络请求<strong>仅限于本声明第四节列出的域名</strong>，除该清单外不存在任何其他网络访问。</li>
           <li>本扩展<strong>无法获取用户储存在酒馆中的明文 API 密钥</strong>，详见第五节。</li>
           <li>用户主动填入本扩展的校准密钥<strong>不会被上传到除钱包所对应厂商的余额/额度接口以外的任何位置</strong>，且由浏览器直连、不经过任何第三方中转，详见第六节。</li>
@@ -1879,7 +1907,7 @@
         <ul>
           <li>不读取、不保存、不上传用户储存在酒馆中的完整明文密钥；</li>
           <li>不修改、不删除酒馆的聊天记录、角色卡数据、世界书、预设或酒馆密钥本体；</li>
-          <li>不将对话正文发送到本扩展自身或开发者的任何服务器；</li>
+          <li>除你主动上传的「问题反馈」诊断包外，不将对话正文发送到本扩展自身或开发者的任何服务器（该诊断包含请求正文里的聊天与提示词，上传与否完全由你决定，详见第十一节）；</li>
           <li>不进行任何形式的用户画像、行为追踪或数据售卖；</li>
           <li>不参与导入导出与云同步的数据：<strong>校准密钥</strong>与<strong>对话正文明细</strong>（详见第六、八节）。</li>
         </ul>
@@ -1893,7 +1921,7 @@
           <li>对话归属：当前对话的标识与名称（仅用于「按对话筛选、统计」的展示）；</li>
           <li>明细快照：最近若干次请求的消息与响应快照（有严格截断与保留上限，详见第八节）。</li>
         </ul>
-        <p>以上数据<strong>全部仅存储于用户本地</strong>（浏览器 IndexedDB、localStorage 及酒馆自身的扩展设置中），除用户主动触发 WebDAV 同步外不会离开用户设备。</p>
+        <p>以上数据<strong>全部仅存储于用户本地</strong>（浏览器 IndexedDB、localStorage 及酒馆自身的扩展设置中），除用户主动触发 WebDAV 同步、或主动上传「问题反馈」诊断包（见第十一节）外不会离开用户设备。</p>
 
         <h3 id="privacy-endpoints">四、网络请求域名完整披露</h3>
         <p>下表为本扩展代码中<strong>全部</strong>可能发起的网络请求：</p>
@@ -1912,10 +1940,12 @@
               <tr><td>8</td><td><strong>用户自行填写的 CORS 代理</strong>（可选）</td><td>透传上述 WebDAV 请求</td><td>部分网盘不提供 CORS 响应头时的中转</td><td>仅当用户主动填写代理地址</td><td>与第 7 项相同（经代理转发）</td></tr>
               <tr><td>9</td><td><strong>本机酒馆服务端</strong></td><td><span class="code">POST /api/extensions/version</span>、<span class="code">POST /api/extensions/switch</span>、<span class="code">POST /api/extensions/update</span></td><td>读取扩展当前提交、切换所选分支并执行扩展内一键更新</td><td>检查更新时自动或手动触发；点击“立即更新”时触发</td><td>仅发送扩展目录名、所选分支名与本地/全局标记，无用户数据</td></tr>
               <tr><td>10</td><td><span class="code">stat.janmk.us.ci</span>（部署者自有的 Cloudflare Worker 域名，未使用 workers.dev）</td><td><span class="code">POST /collect</span></td><td>匿名使用统计上报（仅聚合数据，可在「设置 → 匿名使用统计」关闭）</td><td>默认开启；面板关闭或页面隐藏时合并上报（同一会话内只在结束时发一次，失败最多重试三次），关闭开关后不再发起任何请求</td><td>随机匿名标识、上报序号、客户端本地日期、上报时刻（分钟精度）、时区偏移、扩展版本、酒馆版本号、浏览器名与主版本、操作系统、CPU 架构、语言、窄屏分桶、系统深色偏好、扩展颜色模式设置（浅色 / 深色 / 跟随系统）、standalone、触屏标记、8 个页面使用次数、打开次数、会话时长、面板渲染耗时分桶；<strong>不含</strong>对话名称与内容、模型名、密钥、余额、费用、接口地址，服务端不记录 IP 地址，也不保存原始请求体</td></tr>
+              <tr><td>11</td><td><span class="code">stat.janmk.us.ci</span>（默认接收地址，可在上传弹窗「上传地址（高级）」里改成你自己的地址）</td><td><span class="code">POST /api/log</span></td><td>接收「问题反馈」诊断包（仅在你主动点「同意并上传」时触发）</td><td>只有你打开反馈弹窗、核对内容后点上传才有一次请求；取消或关闭弹窗不发任何数据</td><td>问题类型与你的补充说明、浏览器与系统环境、本扩展最近一轮请求日志（<strong>请求正文含当前对话的聊天、提示词与角色设定</strong>，敏感标头与可识别的密钥已打码）、最近报错、设置与「其他请求」探针摘要、对话名与角色名；服务端只保存上报体、接收时刻、扩展版本、大小与<strong>所连接 IP 的哈希值</strong>（SHA-256 前 8 字节，用于限流去重），<strong>不保存原始 IP 地址</strong></td></tr>
             </tbody>
           </table>
         </div>
         <p><strong>关于聊天生成请求本身：</strong>对话生成请求（SillyTavern 后端路径 <span class="code">/api/backends/chat-completions/generate</span>）始终由 SillyTavern 前端本身发往其自身后端或用户配置的接口。本扩展对该请求<strong>仅做本地观察</strong>（克隆响应用于解析用量数据），不发起、不转发、不复制、不修改该请求，也不会将其中内容发送到任何上述服务器。</p>
+        <p><strong>关于第 11 项的读取接口：</strong>接收端同一域名下的 <span class="code">GET /api/logs</span>（列表）、<span class="code">GET /api/log/view?id=…</span>（单条详情）需要部署者设置的看板口令，只由部署者本人在统计看板的「反馈」页使用；扩展本身除上传那一次 <span class="code">POST /api/log</span> 外，不会调用这两个接口。</p>
         <p><strong>纯跳转链接（不发送任何数据）：</strong>扩展界面中存在指向 <span class="code">janmk1453.github.io/Api-Usage/</span>（使用文档）、<span class="code">github.com/janmk1453/Api-Usage</span>、<span class="code">github.com/janmk1453/deepseek-tavern-script</span>（仓库与致谢）的超链接，仅在用户主动点击时由浏览器打开，不随附任何数据。</p>
 
         <h3 id="privacy-tavern-keys">五、关于酒馆中已储存的密钥</h3>
@@ -1981,6 +2011,8 @@
           <li><strong>冷数据：</strong>超出热区的历史记录（上限 2000 条，含去重）存于浏览器 IndexedDB；</li>
           <li><strong>明细：</strong>消息与响应快照仅对最近 5 条记录保留，其余自动剥离，且永不导出；</li>
           <li><strong>调试日志：</strong>仅存于本地 localStorage，可随时清除，不含聊天正文；</li>
+          <li><strong>请求日志：</strong>最近一轮对话请求的标头、正文与响应只存于本地 localStorage（键 <span class="code">aus_last_request_v1</span>，正文上限 200,000 字符、敏感标头打码），每次请求整体覆盖；可在「设置 → 问题反馈 / 请求日志」随时清空，它<strong>不进入历史记录、统计、导出与云同步</strong>。正文按原文保存，其中含有该轮的聊天与提示词；</li>
+          <li><strong>已上传的反馈：</strong>上传成功后数据由接收方（默认是本项目自建接收端，或你自己填写的地址）保存，本扩展无法读取、修改或代为删除，需要删除请联系对应接收方；</li>
           <li><strong>旧版迁移备份：</strong>升级到当前数据结构时会留下一份包含旧版存档、设置、余额与旧密钥字段的原始字符串快照，存于浏览器 IndexedDB（键名 <span class="code">migration_backup_&lt;时间戳&gt;</span>）。程序不会读取它，用户可在设置页“存储占用”中一键清理（二次确认，仅删除该键）；升级前仍想找回旧数据时再保留。</li>
           <li><strong>卸载行为：</strong>默认卸载只移除界面与运行时，酒馆设置中本扩展的数据、IndexedDB 中的冷历史与迁移备份、以及上述本地缓存键都会保留；在酒馆的删除确认框里勾选“同时清理扩展数据”，才会把这三处一并删除（<strong>不可恢复</strong>，建议先导出备份）。酒馆版本低于 1.18.0 时不会出现该勾选项，此时需要彻底清除请在浏览器「清除站点数据、存储」中清理；</li>
           <li>用户可随时通过导出功能取得全部统计数据的明文 JSON 副本。</li>
@@ -2005,10 +2037,25 @@
         </ul>
         <p>该功能完整实现可审查：客户端 <span class="code">src/services/telemetry.ts</span>，服务端 <span class="code">cloudflare/</span>（Worker、D1 建表脚本与看板页）。</p>
 
-        <h3 id="privacy-opensource">十一、开源与验证</h3>
+        <h3 id="privacy-feedback">十一、请求日志与「问题反馈」上传</h3>
+        <p>「问题反馈 / 请求日志」（设置页入口，历史记录页顶部也会在出现异常时给出提示）是本扩展的诊断功能，用于在对话没被记录、Token 或费用明显不对时定位问题。日常使用中它<strong>不向任何地方发送数据</strong>，分两部分：</p>
+        <ul>
+          <li><strong>本地请求日志：</strong>每次对话请求开始时，把该请求的标头、正文与响应元数据写入本机 localStorage，只保留最近一轮并整体覆盖。请求头中的 <span class="code">Authorization</span>、<span class="code">x-api-key</span>、<span class="code">cookie</span>、<span class="code">x-csrf-token</span> 等敏感项打码后落盘；<strong>请求正文按原文保存</strong>（排查问题需要看真实结构），因此其中含有这一轮发给模型的聊天记录、你的输入、角色设定、世界书与系统提示词。你可以在日志页随时「清空」，清理站点数据或卸载扩展同样会删除它。</li>
+          <li><strong>上传由你主动触发：</strong>只有你在反馈弹窗里选好问题类型、展开看过「会一并上传的内容」，再点击<strong>「同意并上传」</strong>时，才会把诊断包发往弹窗里显示的接收地址（默认是本项目自建的 Cloudflare Worker，见第四节第 11 项；可改成你自己的接收端）。取消、关闭弹窗、什么都不点，都不会产生任何网络请求。</li>
+        </ul>
+        <p><strong>上传内容清单：</strong></p>
+        <ol class="steps">
+          <li>你选择的问题类型，以及你填写的补充说明（可选）；</li>
+          <li><strong>最近一轮请求日志</strong>：请求地址、请求头、请求正文（含聊天与提示词）、响应状态与耗时、模型名、<span class="code">finish_reason</span>、上游返回的用量对象；</li>
+          <li><strong>诊断摘要</strong>：最近 10 条历史记录的模型、Token、费用与接入名称（不含聊天正文）；「其他请求」探针最近 20 条请求的模型、状态与错误；最近 40 条控制台报错与未处理的 Promise 异常（可能含有酒馆或其他扩展打印的内容）；本扩展相关设置项与运行环境（时区、语言、视口尺寸、设备像素比、User-Agent）；当前对话名与角色名；已安装扩展的名称与版本清单。</li>
+        </ol>
+        <p><strong>上传前会做的清洗，以及做不到的事：</strong>上传前会把请求头、请求正文、URL 查询串与诊断数据再统一扫一遍，把键名类似 <span class="code">api_key</span> / <span class="code">token</span> / <span class="code">secret</span> / <span class="code">password</span> 的字段，以及 <span class="code">sk-</span>、<span class="code">ghp_</span>、<span class="code">Bearer</span>、<span class="code">Basic</span> 等内联凭据替换为 <span class="code">***</span>。但这只是规则匹配的尽力而为：<strong>无法保证识别聊天正文、脚本输出或自定义字段中的全部敏感信息</strong>，不要把上传的日志当作已完全脱敏，上传前请自行判断是否介意。</p>
+        <p><strong>接收与保存：</strong>数据会发送到弹窗里显示的地址，接收服务的运营者与有权限的收件人可能查看、下载并长期保存；保存期限与删除方式由接收方决定，<strong>上传后无法代为撤回或删除</strong>。请核对地址，只向信任的接收方上传。默认接收端只保存上报内容、接收时刻、扩展版本、大小与所连接 IP 的哈希值（SHA-256 前 8 字节，用于限流与去重），不保存原始 IP 地址。<strong>不想用这个功能就不点上传</strong>；「设置 → 问题反馈 / 请求日志」里的总开关可关掉历史记录页顶部的异常提示，让整条提示不再出现，日志页里的手动清空与上传入口不受影响。</p>
+
+        <h3 id="privacy-opensource">十二、开源与验证</h3>
         <p>本扩展完整代码开源（MIT 许可证）：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">https://github.com/janmk1453/Api-Usage</a>。本声明所述全部行为均可通过审查源码验证。若未来版本的数据处理方式发生变化，本声明将随之更新，并在仓库中说明变更内容。</p>
 
-        <h3 id="privacy-contact">十二、联系与反馈</h3>
+        <h3 id="privacy-contact">十三、联系与反馈</h3>
         <p>如对本声明或扩展行为有任何疑问，欢迎通过仓库 Issues 提出：<a href="https://github.com/janmk1453/Api-Usage/issues" target="_blank" rel="noreferrer">https://github.com/janmk1453/Api-Usage/issues</a>。</p>
       </section>
 
@@ -2018,7 +2065,7 @@
         <p class="lead">请在安装或使用本扩展前仔细阅读本声明。<strong>一旦安装、启用或使用本扩展，即视为您已阅读、理解并同意本声明的全部内容。</strong>如不同意，请立即停止使用并卸载本扩展。</p>
         <p><strong>适用对象：</strong>SillyTavern 扩展「API用量统计」（Api-Usage，仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">janmk1453/Api-Usage</a>）<br>
         <strong>适用版本：</strong>当前发行版本及功能行为一致的后续版本<br>
-        <strong>最后更新：</strong>2026年10月22日</p>
+        <strong>最后更新：</strong>2026年11月15日</p>
 
         <h3 id="disclaimer-as-is">一、按「现状」提供，不作任何担保</h3>
         <p>本扩展按「现状」（AS IS）提供，开发者以开源社区志愿者的身份尽力维护，但<strong>不对本扩展作出任何形式的明示或默示担保</strong>，包括但不限于对适销性、特定用途适用性、不侵权、无错误或漏洞、不间断运行的担保。本扩展的功能表现可能随 SillyTavern 版本、浏览器环境、上游接口变化而受影响。</p>
@@ -2046,6 +2093,7 @@
           <li>XOR 混淆<strong>不是安全加密</strong>，仅用于避免明文直接可见。用户应自行评估风险，并建议使用权限受限的密钥（如仅具余额只读权限的密钥）。</li>
           <li>用户通过 WebDAV 进行的云同步，其数据安全<strong>取决于用户自行选择的存储服务、账号凭证与网络环境</strong>（含可选的 CORS 代理）；因第三方存储服务导致的数据泄露、丢失或损坏，本扩展不承担责任。</li>
           <li>请从官方仓库 <a href="https://github.com/janmk1453/Api-Usage" target="_blank" rel="noreferrer">https://github.com/janmk1453/Api-Usage</a> 获取本扩展。经第三方渠道分发、篡改的版本不在本声明保障范围内。</li>
+          <li>「问题反馈」上传的内容<strong>由你自行核对与决定</strong>：诊断包中的请求正文与脚本报错可能含有聊天内容、提示词或其他敏感信息，脱敏只能尽力而为；一旦上传，数据由接收方保存，本扩展无法撤回或代为删除。因你主动上传而产生的任何信息暴露、泄露或损失，本扩展不承担责任。</li>
         </ol>
 
         <h3 id="disclaimer-cost">五、费用与统计估算免责</h3>

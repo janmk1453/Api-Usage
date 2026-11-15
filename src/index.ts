@@ -12,9 +12,12 @@ import { applyTheme, watchSystemTheme, unwatchSystemTheme } from './services/the
 import { initTelemetry } from './services/telemetry';
 import { log } from './utils/logger';
 import { installBackDebug } from './ui/back-debug';
+import { installConsoleRing } from './services/console-ring';
 
 // 返回键诊断日志（临时排查用）：入口尽早安装，面板打开之前的返回事件也要记上
 try { installBackDebug(); } catch {}
+// 控制台环形缓冲：只留最近若干条报错，供「请求日志 → 上传反馈」取证
+try { installConsoleRing(); } catch {}
 
 const MODULE = 'api_usage_stat';
 let wandRetryTimer: any = null;
@@ -53,12 +56,15 @@ function onAppReady() {
   try { refreshUI(); } catch {}
   try { import('./services/interception').then(m=>m.installInterception()).catch(() => {}); } catch {}
   try { import('./services/agent-usage/collector').then(m => m.initAgentUsage()).catch(() => {}); } catch {}
+  // 请求探针（技术验证）：旁路记录后端请求并和既有入账对账，只写独立的 localStorage 键，不进任何统计口径
+  try { import('./services/request-tap').then(m => m.installRequestTap()).catch(() => {}); } catch {}
 }
 
 function onAppInitialized() {
   try { ensureWandEntry(); } catch {}
   try { import('./services/interception').then(m=>m.installInterception()).catch(() => {}); } catch {}
   try { import('./services/agent-usage/collector').then(m => m.initAgentUsage()).catch(() => {}); } catch {}
+  try { import('./services/request-tap').then(m => m.installRequestTap()).catch(() => {}); } catch {}
 }
 
 function onChatChanged() {

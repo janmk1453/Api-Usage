@@ -59,7 +59,7 @@ describe('设置页卡片顺序', () => {
 describe('设置页「关于」入口展示当前版本号', () => {
   it('版本号单源读取，并渲染在关于入口的标题后面', () => {
     expect(panelCode).toContain('function appVersionText(): string {');
-    expect(panelCode).toContain("return typeof __APP_VERSION__ !== 'undefined' ? String(__APP_VERSION__) : '';");
+    expect(panelCode).toContain('return APP_VERSION;');
     expect(panelCode).toContain("const version = e.view === 'about' && appVersionText()");
     expect(panelCode).toContain('aus-settings-entry-version');
     expect(panelCode).toContain('<span class="aus-settings-entry-label">${e.label}${version}</span>');

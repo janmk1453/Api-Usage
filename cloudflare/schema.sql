@@ -107,3 +107,19 @@ CREATE INDEX IF NOT EXISTS idx_device_hourly_hour ON device_hourly (hour);
 
 -- 设备表按最近活跃排序/清理时使用
 CREATE INDEX IF NOT EXISTS idx_device_last_seen ON device (last_seen);
+
+-- 反馈日志（请求日志页「上传反馈」）：公开写入、口令读取
+CREATE TABLE IF NOT EXISTS request_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  received_at INTEGER NOT NULL,
+  ip_hash TEXT NOT NULL,
+  app_version TEXT,
+  user_agent TEXT,
+  time_zone TEXT,
+  language TEXT,
+  bytes INTEGER NOT NULL,
+  payload TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_request_log_received ON request_log (received_at DESC);
+CREATE INDEX IF NOT EXISTS idx_request_log_ip ON request_log (ip_hash, received_at);

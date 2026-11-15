@@ -37,6 +37,35 @@ export const CHANGELOG_ENTRY_LIMIT = 5;
 /** 更新日志（最新在前） */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'r3.2.1',
+    date: '2026-11-15',
+    sections: [
+      {
+        kind: 'feature',
+        items: [
+          '新增 请求日志，在设置中查看最近一轮请求的完整数据',
+          '新增 问题反馈 能力，支持上传日志，自动提示，日志输出，问题报告',
+          '实验性功能 在 历史记录 页中增加其他请求选项，用于验证记录 数据库/记忆/填表/提取 等非常规对话请求的能力，为未来实现全局统计做铺垫',
+        ],
+      },
+      {
+        kind: 'improve',
+        items: [
+          '改进图表tooltip效果',
+          '历史记录失败时给出具体原因',
+          '改进价格同步逻辑',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          '修复价格同步后历史费用没有自动重算',
+          '修复了一些已知问题',
+        ],
+      },
+    ],
+  },
+  {
     version: 'r3.2.0',
     date: '2026-11-08',
     sections: [

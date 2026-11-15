@@ -4,7 +4,7 @@
  */
 import type { ForecastSeries } from '../stats/forecast-series';
 import { chartDateTime } from './chart-time';
-import { CHART_TOOLTIP_SURFACE } from './chart-tooltip';
+import { CHART_TOOLTIP_CONFIG, registerChartTooltipDismiss } from './chart-tooltip';
 import { TOKEN_SERIES_COLORS } from './chart-config';
 
 type CurrencyInfo = { code: string; symbol: string; rate: number };
@@ -104,6 +104,7 @@ async function initChart(id: string, echarts: any): Promise<any | null> {
   el.innerHTML = '';
   const chart = echarts.init(el);
   instances[id] = chart;
+  registerChartTooltipDismiss(chart);
   return chart;
 }
 
@@ -486,7 +487,8 @@ async function renderMainChart(echarts: any, options: ForecastChartOptions): Pro
       backgroundColor: cardInner,
       borderColor: border,
       borderWidth: 1,
-      ...CHART_TOOLTIP_SURFACE,
+      // 浮层不越出图表容器：confine 负责夹取，CSS 上限负责不超尺寸
+      ...CHART_TOOLTIP_CONFIG,
       textStyle: { color: text, fontSize: 12 },
       axisPointer: { type: 'line', lineStyle: { color: border } },
       formatter: (params: any) => {
@@ -576,7 +578,8 @@ async function renderHitChart(echarts: any, options: ForecastChartOptions): Prom
       backgroundColor: cardInner,
       borderColor: border,
       borderWidth: 1,
-      ...CHART_TOOLTIP_SURFACE,
+      // 浮层不越出图表容器：confine 负责夹取，CSS 上限负责不超尺寸
+      ...CHART_TOOLTIP_CONFIG,
       textStyle: { color: text, fontSize: 12 },
       formatter: (params: any) => {
         if (!Array.isArray(params) || !params.length) return '';
@@ -682,7 +685,8 @@ async function renderCostChart(echarts: any, options: ForecastChartOptions): Pro
       backgroundColor: cardInner,
       borderColor: border,
       borderWidth: 1,
-      ...CHART_TOOLTIP_SURFACE,
+      // 浮层不越出图表容器：confine 负责夹取，CSS 上限负责不超尺寸
+      ...CHART_TOOLTIP_CONFIG,
       textStyle: { color: text, fontSize: 12 },
       formatter: (params: any) => {
         if (!Array.isArray(params) || !params.length) return '';

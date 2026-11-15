@@ -1,7 +1,7 @@
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
 import { t as esc } from "./date-Dsu8hrMO.js";
 //#region src/services/update.ts
-var CURRENT_VERSION = "3.2.0";
+var CURRENT_VERSION = "3.2.1";
 var REPO = "janmk1453/Api-Usage";
 var EXTENSION_FOLDER = "Api-Usage";
 /** 自动检查节流：每 10 分钟内首次打开面板才真正联网检查一次 */

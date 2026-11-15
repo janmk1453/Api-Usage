@@ -1,3 +1,4 @@
+import { APP_VERSION } from '../constants/version';
 import { state, getSelectedSave, getHistoryForDisplay } from '../store/index';
 import { esc, localDay, localTimeHM } from '../utils/date';
 import { isTruncatedFinish } from '../utils/finish';
@@ -25,8 +26,12 @@ import { renderForecastView, initForecastView } from './forecast-view';
 import { disposeForecastCharts } from './forecast-chart';
 import { renderWalletView } from './wallet-view';
 import { initChatManageView, renderChatManageView } from './chat-manage';
+import { initTapView, renderTapView } from './tap-view';
+import { initLogView, renderLogView } from './log-view';
+import { renderHistoryHealthBar } from './history-health-bar';
 import { helpViewHTML } from './help-view';
 import { chartCardHTML } from './chart-picker';
+import { hideAllChartTooltips } from './chart-tooltip';
 import { filterPickerRows } from './chat-visibility';
 import { backDebug } from './back-debug';
 import { afterNextPaint, closeDropdownInstant } from './dropdown-close';
@@ -54,11 +59,9 @@ function nowTs(): number {
   try { return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now(); } catch { return Date.now(); }
 }
 
-declare const __APP_VERSION__: string;
-
 /** 当前扩展版本号（构建时由 manifest.version 注入）：侧栏品牌、设置页「关于」入口与关于页共用 */
 function appVersionText(): string {
-  return typeof __APP_VERSION__ !== 'undefined' ? String(__APP_VERSION__) : '';
+  return APP_VERSION;
 }
 
 function getDoc(): Document { return (window.parent as any)?.document ?? document; }
@@ -708,6 +711,13 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
 function renderHistory(doc: Document, s: any) {
   const host = doc.getElementById('aus-history');
   if (!host) return;
+  // 顶部健康提示：最近有「用量为 0 / 没取到用量 / 速率离谱 / 扩展报错」才显示
+  // （总开关与已忽略的问题在 renderHistoryHealthBar 内部处理）
+  try {
+    renderHistoryHealthBar(doc.getElementById('aus-history-health') as HTMLElement | null, {
+      history: (s && s.history) || [],
+    });
+  } catch {}
   let hist: any[] = s.history || [];
   let scope = 'all';
   try {
@@ -1254,6 +1264,8 @@ function openChatManage(from: AppView): void {
 }
 
 function switchView(view: AppView, opts?: { track?: boolean; back?: boolean }) {
+  // 切页时先把图表悬浮窗收掉：页面隐藏后浮层仍留在 DOM 里，回到该页会“凭空”浮着一张旧卡片
+  try { hideAllChartTooltips(); } catch {}
   const prevView = currentView;
   currentView = view;
   // 「设置」下的二级页记忆：点回设置 tab 时恢复到上次位置；主动切回设置根页（重复点 tab / 返回箭头）则清空
@@ -1310,6 +1322,8 @@ function switchView(view: AppView, opts?: { track?: boolean; back?: boolean }) {
       else if (view === 'wallet') Promise.resolve(renderWalletView()).catch(() => {});
       else if (view === 'history') { const s = getSelectedSave(); if (s) renderHistory(doc, s); }
       else if (view === 'chat-manage') Promise.resolve(renderChatManageView()).catch(() => {});
+      else if (view === 'tap') renderTapView();
+      else if (view === 'log') renderLogView();
     } catch {}
   };
   // 底栏布局下切到别的页时，先把指示胶囊送上轨道（原因见 renderAfterPillStart 注释）；
@@ -1487,6 +1501,12 @@ export function createPanel() {
            <div data-view="chat-manage" style="display:none;">
              <div id="aus-chat-manage-body"></div>
            </div>
+           <div data-view="tap" style="display:none;">
+             <div id="aus-tap-root"></div>
+           </div>
+           <div data-view="log" style="display:none;">
+             <div id="aus-log-body"></div>
+           </div>
            <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div class="aus-stats-filter">
@@ -1660,6 +1680,7 @@ export function createPanel() {
             <div id="aus-wallet"></div>
           </div>
           <div data-view="history" style="display:none;">
+            <div id="aus-history-health" style="display:none;"></div>
             <div id="aus-history-filter-host" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div class="aus-stats-filter">
                 <div id="aus-history-model-btn" class="aus-pill"><span style="color:var(--ds-text-2);">模型</span><span id="aus-history-model-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon('chevron-down', 14)}</div>
@@ -1678,6 +1699,7 @@ export function createPanel() {
                 <div id="aus-history-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div id="aus-history-filter-reset" class="aus-filter-reset" title="重置筛选" aria-label="重置筛选" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);font-size:var(--aus-fs-base);cursor:pointer;margin-left:auto;">${icon('refresh', 14)}<span>重置筛选</span></div>
+              <button id="aus-history-tap-btn" type="button" class="aus-pill aus-pill-sm" title="查看探针采到的非常规对话请求（技术验证，数据隔离、不进统计）">其他请求</button>
             </div>
             <div id="aus-diff" class="ds-card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">缓存断点</span><button id="aus-diff-fullscreen" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">全屏</button></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">在历史中各选一条 旧/新 对比，橙/绿高亮即发散点</div></div>
             <div id="aus-history"></div>
@@ -1810,9 +1832,14 @@ export function createPanel() {
   doc.getElementById('aus-panel')?.addEventListener('click', (e: any) => {
     const target = e.target as HTMLElement | null;
     if (target?.closest?.('#aus-settings-chat-manage')) openChatManage('settings');
+    if (target?.closest?.('#aus-settings-request-log')) switchView('log');
   });
   // 页内「返回」按钮：回到进入前的来源页
   initChatManageView({ go: () => switchView(chatManageOrigin) });
+  // 历史记录工具栏「其他请求」：进技术验证页（挂在历史下，返回箭头与底栏高亮都按子页处理）
+  doc.getElementById('aus-history-tap-btn')?.addEventListener('click', () => switchView('tap'));
+  initTapView({ go: () => switchView('history') });
+  initLogView({ go: () => switchView('settings') });
   const applyCollapsed = (v: boolean) => {
     collapsed = v;
     const sb = doc.getElementById('aus-sidebar') as HTMLElement | null;
@@ -2187,6 +2214,8 @@ export function openPanel() {
 }
 export function closePanel() {
   const doc = getDoc();
+  // 关面板前把图表悬浮窗收掉，下次打开不会残留一张旧浮层
+  try { hideAllChartTooltips(); } catch {}
   const ov = doc.getElementById('aus-overlay') as HTMLElement | null;
   const pn = doc.getElementById('aus-panel') as HTMLElement | null;
   if (ov) { ov.style.opacity = '0'; setTimeout(() => { ov.style.display = 'none'; }, 200); }

@@ -22,7 +22,7 @@
 | `migrate-theme-mode.sql` | 已有库补充 `device.theme_mode` 颜色模式列（light / dark / auto，未执行时 Worker 自动降级为不写该列，不影响上报） |
 | `wrangler.toml` | Worker 配置模板（D1 绑定、Cron、文本模块规则）；`database_id` 保持占位符，真实值放本地 `wrangler.local.toml` |
 | `dashboard.html` | 看板页（单文件零依赖，自绘 SVG 图表），作为文本模块打包进 Worker |
-| `dashboard.test.js` | 看板模板与注入测试：占位符唯一、无外部资源、五视图结构与 `serializeBoot` 转义 |
+| `dashboard.test.js` | 看板模板与注入测试：占位符唯一、无外部资源、六视图结构与 `serializeBoot` 转义 |
 | `scripts/build-preview.mjs` | 用 D1 REST 直接生成「真实数据 + 看板」的离线单文件，用于本地/离线验收 |
 
 除 Worker 与 D1 之外没有其它外部依赖：看板图表全部自绘，仓库内不含任何第三方图表库文件。
@@ -52,6 +52,16 @@ npx wrangler secret put DASHBOARD_TOKEN
 cd cloudflare
 npx wrangler deploy -c wrangler.local.toml
 ```
+
+### 已有库升级（新增反馈日志表）
+
+请求日志页的「上传反馈」依赖 `request_log` 表。若数据库是旧版本建的，**先建表再部署新版 Worker**，否则上传会返回 `503`：
+
+```bash
+npx wrangler d1 execute api_usage_stat --remote --file cloudflare/schema-request-log.sql
+```
+
+新库无需单独执行，`schema.sql` 已包含该表。
 
 ### 已有库升级（新增设备累计列）
 
@@ -125,7 +135,7 @@ npx wrangler d1 execute api_usage_stat --remote --file cloudflare/migrate-tt-ver
 
 `/dashboard`（以及根路径 `/`）是一个**单文件零依赖**页面：HTML 里没有任何 `<script src>`、外部样式、字体或图表库，图表全部自绘 SVG。首屏数据由 Worker 直接内联成 `window.__TEL_BOOT__`（紧凑数组 JSON），浏览器拿到 HTML 就能渲染，不额外请求接口。
 
-页面分五个视图，每个视图只回答一个问题；顶部只有**一个全局时间范围**（近 7 / 30 / 90 / 365 天、全部数据或自定义起止；「全部数据」从首个上报日算起，写进 hash 为 `r=all`），切视图不会重置。范围、粒度与所选指标写进地址 hash（如 `#/trends?r=30d&g=hour&m=users,views`），可直接分享或存成书签（`m=` 只属于趋势页；概览卡自己的指标单独记忆，不写 hash）。
+页面分六个视图，每个视图只回答一个问题；顶部只有**一个全局时间范围**（近 7 / 30 / 90 / 365 天、全部数据或自定义起止；「全部数据」从首个上报日算起，写进 hash 为 `r=all`），切视图不会重置。范围、粒度与所选指标写进地址 hash（如 `#/trends?r=30d&g=hour&m=users,views`），可直接分享或存成书签（`m=` 只属于趋势页；概览卡自己的指标单独记忆，不写 hash）。
 
 | 视图 | 回答的问题 | 主要内容 |
 | --- | --- | --- |
@@ -133,6 +143,7 @@ npx wrangler d1 execute api_usage_stat --remote --file cloudflare/migrate-tt-ver
 | 趋势 `#/trends` | 在往哪个方向走 | 指标多选（最多 3 个，单位不同的指标自动指数化到基准 100）+ 粒度按天 / 按小时 + 形态面积 / 折线 / 柱状 + 对比上一周期 + 当前指标数值表 + 页面表现表 + 24 小时分布 |
 | 用户 `#/audience` | 谁在用、怎么用 | 设备总数 / 深色偏好 / 触屏 / 关闭匿名四项占比 + 扩展版本、酒馆版本、宿主版本分布 + 使用深度（人均页面浏览、单次打开时长）+ 面板宽度 / 指针类型 / 显示形态 / 时区 |
 | 性能 `#/performance` | 面板打开得够快吗 | 平均渲染耗时与快慢标尺、P50 / P90（由 5 档估算）、慢样本占比 + 版本耗时分布与明细表（可排序）+ 结论与建议 |
+| 反馈 `#/feedback` | 有没有人提交问题 | 最近 50 条反馈摘要（收到时间 / 问题类型 / 用户填写说明 / 扩展版本 / 模型 / 大小），侧栏与窄屏底栏都有未读徽标，进入即清零；请求体不在页面里展开，点「原文」另开 `/api/log/view` |
 | 自定义 `#/explore` | 想按任意维度切数据 | 维度 × 形态（条形 / 环形 / 占比条）× Top N（5 / 8 / 12 / 20 / 50）× 排序，即时预览，可保存为本机视图（最多 8 个，存 `localStorage`）并把配置带进链接 |
 
 界面与交互：
@@ -140,8 +151,8 @@ npx wrangler d1 execute api_usage_stat --remote --file cloudflare/migrate-tt-ver
 - **图表全部自绘 SVG**：`niceTicks` 取整刻度、单调三次插值平滑曲线、渐变面积、十字线与悬浮读数。没有第三方图表库，因此也不存在「图表库加载失败 / 只剩文本列表」的降级路径。
 - 动效克制：入场错峰上浮、数字滚动、柱与折线的生长动画；`prefers-reduced-motion` 下全部降级为瞬时。
 - 主题浅色 / 深色 / 跟随系统，首帧由内联脚本读 `localStorage` 恢复，不闪白；切主题即时重绘图表。
-- 响应式：≥1280 常显侧栏；≤1120 收成 72px 图标栏；≤900 侧栏隐藏、改底部 5 项 tab；≤760 单列；≤620 表格隐藏次要列；图表随容器宽度重绘。
-- 键盘：`⌘K` / `Ctrl+K` 打开命令面板，`1`–`5` 直切视图，`?` 看快捷键。
+- 响应式：≥1280 常显侧栏；≤1120 收成 72px 图标栏；≤900 侧栏隐藏、改底部 6 项 tab；≤760 单列；≤620 表格隐藏次要列；图表随容器宽度重绘。
+- 键盘：`⌘K` / `Ctrl+K` 打开命令面板，`1`–`6` 直切视图，`?` 看快捷键。
 
 数据口径：
 
@@ -162,13 +173,16 @@ npx wrangler d1 execute api_usage_stat --remote --file cloudflare/migrate-tt-ver
 | 接口 | 说明 |
 | --- | --- |
 | `POST /collect` | 接收匿名上报，返回 `204`；兼容旧版扩展的上报体（`v1`、无 `ts`），新版新增可选 `ts`（毫秒时间戳，服务端归一为分钟精度） |
+| `POST /api/log` | 公开的反馈日志上传（请求日志页「上传反馈」），成功返回 `{"ok":true,"id":N}`；限流为单 IP 每分钟 6 条、单 IP 每天 40 条、全站每天 800 条，超限 `429`；`request_log` 表未建时返回 `503` |
+| `GET /api/logs` | 口令：最近 50 条反馈日志摘要（不含请求正文） |
+| `GET /api/log/view?id=N` | 口令：按 id 取回完整上报体 |
 | `GET /api/summary` | 总计、当日、累计用户序列、面板累计、版本分布、环境画像、时长直方图；支持 `?force=1` |
 | `GET /api/trend?from=YYYY-MM-DD&to=YYYY-MM-DD&parts=daily\|render\|both` | 每日趋势（不重复用户 / 打开次数 / 使用时长 / 面板明细）与按版本渲染耗时；支持 `?force=1` |
 | `GET /api/trend?bucket=hour&from=YYYY-MM-DDTHH&to=YYYY-MM-DDTHH&parts=daily` | 小时粒度趋势（同上指标，X 轴为北京时间整点，缺失小时补 0，另返回累计用户序列）；缺省窗口为最近 24 小时，最长 180 天；支持 `?force=1` |
 | `GET /dashboard` | 口令保护的看板页（也响应根路径 `/`）；首屏数据内联，支持 `?force=1` 绕过缓存 |
 | `GET /health` | 健康检查，无需口令 |
 
-除 `/collect` 与 `/health` 外都需要 HTTP Basic 口令（用户名任意，口令为 `DASHBOARD_TOKEN`）。
+除 `/collect`、`/health` 与 `POST /api/log` 外都需要 HTTP Basic 口令（用户名任意，口令为 `DASHBOARD_TOKEN`）。
 
 ## 本地调试
 
@@ -235,6 +249,7 @@ Cloudflare 免费额度（2026 年 4 月官方文档）：Workers **10 万请求
 - `device_hourly`：每台设备每（北京时间）小时一行，保存该小时分桶与计数与分钟级首末上报时间，180 天后自动清理。
 
 不采集、不存库的内容包括：IP 地址、User-Agent 原文、对话名称或内容、模型名、密钥信息、余额与费用、接口地址、精确屏幕分辨率。Worker 只把校验后的白名单字段写入 D1，原始请求体不做持久化，也不开启访问日志。
+- `request_log`：**只由用户在请求日志页点「上传反馈」主动提交**时才写入，内容是最近一轮对话请求的标头与正文、用户选中的问题类型与补充说明、最近历史摘要、其他请求探针摘要、控制台报错、扩展清单、环境与设置摘要。密钥与认证头在上传前由扩展端打码，服务端再做一次字段白名单与截断；`ip_hash` 只存 SHA-256 前 8 字节（16 位十六进制）用于限流，无法还原 IP；保留 90 天且最多 2000 条，超出由定时任务清理。该表不参与任何匿名统计聚合。
 
 ## 运维
 
@@ -258,6 +273,13 @@ npx wrangler d1 execute api_usage_stat --remote --command \
 npx wrangler d1 execute api_usage_stat --remote --command \
   "DELETE FROM device_hourly WHERE hour < strftime('%Y-%m-%dT%H', datetime('now','-180 day'))"
 
+# 查看 / 读取反馈日志（与看板同一口令）
+curl -u "user:$DASHBOARD_TOKEN" https://stat.janmk.us.ci/api/logs
+curl -u "user:$DASHBOARD_TOKEN" "https://stat.janmk.us.ci/api/log/view?id=1"
+
+# 手动清理超过 90 天的反馈日志（正常由定时任务完成）
+npx wrangler d1 execute api_usage_stat --remote --command \
+  "DELETE FROM request_log WHERE received_at < (strftime('%s','now')*1000 - 7776000000)"
 # 用户要求删除其数据（需要对方提供设置页显示的匿名标识前 8 位）
 npx wrangler d1 execute api_usage_stat --remote --command \
   "DELETE FROM device_daily WHERE device_id LIKE 'xxxxxxxx%'; DELETE FROM device_hourly WHERE device_id LIKE 'xxxxxxxx%'; DELETE FROM device WHERE device_id LIKE 'xxxxxxxx%'"

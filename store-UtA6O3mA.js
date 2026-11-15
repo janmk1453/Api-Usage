@@ -92,7 +92,6 @@ var defaultSettings = () => ({
 		autoIntervalHours: 0,
 		lastSync: null,
 		lastRateFetch: null,
-		recalcOnSync: false,
 		showSyncedModels: false,
 		syncedMarkVersion: 0
 	}

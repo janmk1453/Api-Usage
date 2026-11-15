@@ -64,6 +64,16 @@ describe('使用说明页', () => {
     }
   });
 
+  it('隐私与免责要点覆盖请求日志与主动上传反馈', () => {
+    expect(html).toContain('请求日志');
+    expect(html).toContain('只存在本机浏览器');
+    expect(html).toContain('上传反馈');
+    expect(html).toContain('同意并上传');
+    expect(html).toContain('自行核对');
+    // 上传内容里含聊天正文，不能写成「不含聊天内容」
+    expect(html.includes('不含聊天正文')).toBe(false);
+  });
+
   it('保留钱包、免责与模型兼容三块必要内容', () => {
     expect(html).toContain('钱包');
     expect(html).toContain('models.dev');
