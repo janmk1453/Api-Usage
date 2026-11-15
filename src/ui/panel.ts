@@ -26,6 +26,7 @@ import { disposeForecastCharts } from './forecast-chart';
 import { renderWalletView } from './wallet-view';
 import { initChatManageView, renderChatManageView } from './chat-manage';
 import { initTapView, renderTapView } from './tap-view';
+import { renderLogView } from './log-view';
 import { helpViewHTML } from './help-view';
 import { chartCardHTML } from './chart-picker';
 import { hideAllChartTooltips } from './chart-tooltip';
@@ -1315,6 +1316,7 @@ function switchView(view: AppView, opts?: { track?: boolean; back?: boolean }) {
       else if (view === 'history') { const s = getSelectedSave(); if (s) renderHistory(doc, s); }
       else if (view === 'chat-manage') Promise.resolve(renderChatManageView()).catch(() => {});
       else if (view === 'tap') renderTapView();
+      else if (view === 'log') renderLogView();
     } catch {}
   };
   // 底栏布局下切到别的页时，先把指示胶囊送上轨道（原因见 renderAfterPillStart 注释）；
@@ -1494,6 +1496,9 @@ export function createPanel() {
            </div>
            <div data-view="tap" style="display:none;">
              <div id="aus-tap-root"></div>
+           </div>
+           <div data-view="log" style="display:none;">
+             <div id="aus-log-body"></div>
            </div>
            <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
@@ -1819,6 +1824,7 @@ export function createPanel() {
   doc.getElementById('aus-panel')?.addEventListener('click', (e: any) => {
     const target = e.target as HTMLElement | null;
     if (target?.closest?.('#aus-settings-chat-manage')) openChatManage('settings');
+    if (target?.closest?.('#aus-settings-request-log')) switchView('log');
   });
   // 页内「返回」按钮：回到进入前的来源页
   initChatManageView({ go: () => switchView(chatManageOrigin) });

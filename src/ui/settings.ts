@@ -185,6 +185,12 @@ export function renderSettings(doc: Document) {
         <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">管理哪些对话出现在概览列表与「对话」下拉胶囊中；只影响显示隐藏，不影响数据统计</div>
       </div>
 
+      <!-- 请求日志：最近一轮对话请求的标头 / 正文 / 响应元数据（只在本机保存） -->
+      <div class="ds-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">请求日志</span><button id="aus-settings-request-log" type="button" class="aus-manage-chat-btn" title="查看最近一轮对话请求的标头、正文与响应元数据">${icon('menu', 14)}查看</button></div>
+        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">保留最近一轮对话请求发出的标头、正文与响应元数据，用于排查「这轮为什么没记录」；只在本机保存，密钥已打码，可随时清空</div>
+      </div>
+
       <!-- API 密钥 -->
       <div class="ds-card" style="display:none;"><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);font-weight:500;margin-bottom:6px;">API 密钥</div><div style="display:flex;gap:8px;"><input id="aus-api-key" type="password" placeholder="输入 DeepSeek API 密钥" style="flex:1;padding:8px 10px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);outline:none;" /><button id="aus-save-key" class="ds-btn-pill" style="padding:8px 14px;">保存</button></div><div id="aus-key-status" style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;"></div></div>
 

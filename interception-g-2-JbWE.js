@@ -1,6 +1,6 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { E as resolveRuntimeConnectionContext, T as initConnectionIdentity, t as repository } from "./repository-B7vP-cjv.js";
+import { E as resolveRuntimeConnectionContext, T as initConnectionIdentity, t as repository } from "./repository-0zz7dSXF.js";
 //#region src/services/include-usage.ts
 /**
 * 流式 usage 注入的纯逻辑：把 stream_options.include_usage 合并进用户/预设自定义的请求体参数。
@@ -198,6 +198,172 @@ function resolveThinkTime(clock, endedAt) {
 	return Math.round(ms);
 }
 //#endregion
+//#region src/services/request-log.ts
+/**
+* 请求日志：只保留「最后一轮」对话请求的标头、正文与响应元数据。
+*
+* 定位：纯诊断用途，不参与统计、不进历史、不导出。每次请求开始时整体覆盖，
+* 因此本地永远只有一条记录（用户点「清空」后为空）。
+*
+* 隐私：请求头里的 Authorization / x-api-key / cookie 一律打码后再落盘，
+* 正文里可能包含对话内容，页面顶部有明确提示，可随时清空。
+*/
+var LOG_STORAGE_KEY = "aus_last_request_v1";
+/** 请求正文上限（字符），超出截断并标记，避免撑爆 localStorage */
+var LOG_BODY_LIMIT = 2e5;
+/** 单个字符串值在树里最多展示的字符数 */
+var LOG_VALUE_LIMIT = 2e3;
+var SENSITIVE_HEADERS = [
+	"authorization",
+	"proxy-authorization",
+	"cookie",
+	"set-cookie",
+	"x-api-key",
+	"api-key",
+	"x-auth-token"
+];
+function isSensitive(name) {
+	return SENSITIVE_HEADERS.includes(name.trim().toLowerCase());
+}
+/** 打码：保留 scheme 前缀与首尾少量字符，中间用 * 代替 */
+function redactValue(value) {
+	const text = String(value ?? "");
+	const match = text.match(/^(\S+\s+)(.*)$/);
+	const prefix = match ? match[1] : "";
+	const secret = match ? match[2] : text;
+	if (secret.length <= 12) return prefix + "*".repeat(Math.max(secret.length, 4));
+	return prefix + secret.slice(0, 6) + "*".repeat(Math.min(10, secret.length - 10)) + secret.slice(-4);
+}
+function redactHeader(name, value) {
+	return isSensitive(name) ? redactValue(value) : String(value ?? "");
+}
+/** 把 Headers / 数组 / 普通对象统一成有序键值对，敏感项打码 */
+function headersToPairs(input) {
+	const pairs = [];
+	const push = (name, value) => {
+		const key = String(name || "").trim();
+		if (!key) return;
+		pairs.push([key, redactHeader(key, String(value ?? ""))]);
+	};
+	if (!input) return pairs;
+	const anyInput = input;
+	if (typeof anyInput.forEach === "function" && typeof anyInput.get === "function") {
+		anyInput.forEach((value, name) => push(name, value));
+		return pairs.sort((a, b) => a[0].localeCompare(b[0]));
+	}
+	if (Array.isArray(anyInput)) {
+		for (const item of anyInput) if (Array.isArray(item) && item.length >= 2) push(item[0], item[1]);
+		return pairs;
+	}
+	if (typeof anyInput === "object") for (const [key, value] of Object.entries(anyInput)) if (Array.isArray(value)) push(key, value.join(", "));
+	else push(key, value);
+	return pairs.sort((a, b) => a[0].localeCompare(b[0]));
+}
+/** 请求体原文 → 截断信息 */
+function clipBody(text, limit = LOG_BODY_LIMIT) {
+	const raw = typeof text === "string" ? text : "";
+	if (raw.length <= limit) return {
+		body: raw,
+		truncated: false
+	};
+	return {
+		body: raw.slice(0, limit),
+		truncated: true
+	};
+}
+function emptyResponse() {
+	return {
+		status: 0,
+		statusText: "",
+		headers: [],
+		firstByteMs: null,
+		durationMs: null,
+		streamed: null,
+		model: null,
+		finishReason: null,
+		usage: null,
+		error: null
+	};
+}
+/** 请求发出时调用：整体覆盖上一条记录 */
+function saveRequestStart(input) {
+	try {
+		const clipped = clipBody(input.body || "");
+		const record = {
+			at: typeof input.at === "number" ? input.at : Date.now(),
+			method: String(input.method || "POST").toUpperCase(),
+			url: String(input.url || ""),
+			requestHeaders: headersToPairs(input.headers),
+			requestBody: clipped.body,
+			requestBodyTruncated: clipped.truncated,
+			response: emptyResponse()
+		};
+		globalThis.localStorage?.setItem(LOG_STORAGE_KEY, JSON.stringify(record));
+	} catch {}
+}
+function readRaw() {
+	try {
+		const text = globalThis.localStorage?.getItem(LOG_STORAGE_KEY);
+		if (!text) return null;
+		const parsed = JSON.parse(text);
+		if (!parsed || typeof parsed !== "object") return null;
+		return {
+			at: typeof parsed.at === "number" ? parsed.at : 0,
+			method: String(parsed.method || "POST"),
+			url: String(parsed.url || ""),
+			requestHeaders: Array.isArray(parsed.requestHeaders) ? parsed.requestHeaders.filter((p) => Array.isArray(p) && p.length >= 2).map((p) => [String(p[0]), String(p[1])]) : [],
+			requestBody: typeof parsed.requestBody === "string" ? parsed.requestBody : "",
+			requestBodyTruncated: parsed.requestBodyTruncated === true,
+			response: {
+				...emptyResponse(),
+				...parsed.response && typeof parsed.response === "object" ? parsed.response : {}
+			}
+		};
+	} catch {
+		return null;
+	}
+}
+/** 写入响应侧字段（合并到同一条记录） */
+function patchRequestLog(patch) {
+	try {
+		const record = readRaw();
+		if (!record) return;
+		const next = { ...record.response };
+		if (typeof patch.status === "number") next.status = patch.status;
+		if (typeof patch.statusText === "string") next.statusText = patch.statusText;
+		if (patch.headers !== void 0) next.headers = headersToPairs(patch.headers);
+		if (patch.firstByteMs !== void 0) next.firstByteMs = patch.firstByteMs;
+		if (patch.durationMs !== void 0) next.durationMs = patch.durationMs;
+		if (patch.streamed !== void 0) next.streamed = patch.streamed;
+		if (patch.model !== void 0) next.model = patch.model;
+		if (patch.finishReason !== void 0) next.finishReason = patch.finishReason;
+		if (patch.usage !== void 0) next.usage = patch.usage;
+		if (patch.error !== void 0) next.error = patch.error;
+		globalThis.localStorage?.setItem(LOG_STORAGE_KEY, JSON.stringify({
+			...record,
+			response: next
+		}));
+	} catch {}
+}
+function readRequestLog() {
+	return readRaw();
+}
+function clearRequestLog() {
+	try {
+		globalThis.localStorage?.removeItem(LOG_STORAGE_KEY);
+	} catch {}
+}
+/** 摘要：状态码 + 耗时一行文案，供页面顶部展示 */
+function summarizeRequestLog(record) {
+	if (!record) return "暂无记录";
+	const r = record.response;
+	if (!r || !r.status) return "请求已发出，等待响应";
+	const parts = [String(r.status)];
+	if (r.durationMs != null) parts.push(r.durationMs + "ms");
+	else if (r.firstByteMs != null) parts.push("首字 " + r.firstByteMs + "ms");
+	return parts.join(" · ");
+}
+//#endregion
 //#region src/services/interception.ts
 var interception_exports = /* @__PURE__ */ __exportAll({
 	installInterception: () => installInterception,
@@ -348,10 +514,22 @@ function installFetchCapture() {
 				} catch {}
 				const injected = injectIncludeUsage(reqBody, reqBody?.chat_completion_source ?? null);
 				const performFetch = (init) => rawFetch.apply(p, init);
-				return performFetch(injected ? [args[0], {
+				const fetchArgs = injected ? [args[0], {
 					...args[1],
 					body: JSON.stringify(reqBody)
-				}] : args).then((firstRes) => {
+				}] : args;
+				try {
+					const sentInit = fetchArgs[1] || {};
+					const sentBody = typeof sentInit.body === "string" ? sentInit.body : "";
+					saveRequestStart({
+						at: startTime,
+						method: sentInit.method || "POST",
+						url,
+						headers: sentInit.headers,
+						body: sentBody
+					});
+				} catch {}
+				return performFetch(fetchArgs).then((firstRes) => {
 					if (injected && !firstRes.ok && (firstRes.status === 400 || firstRes.status === 422)) {
 						log.debug("上游不接受 include_usage，按原请求重试");
 						try {
@@ -362,6 +540,14 @@ function installFetchCapture() {
 					}
 					return firstRes;
 				}).then((res) => {
+					try {
+						patchRequestLog({
+							status: res.status,
+							statusText: res.statusText,
+							headers: res.headers,
+							firstByteMs: Date.now() - startTime
+						});
+					} catch {}
 					try {
 						const clone = res.clone();
 						const requestedStream = reqBody?.stream === true;
@@ -407,6 +593,13 @@ function installFetchCapture() {
 								log.debug("用量响应解析失败", e?.message || e);
 								return;
 							}
+							try {
+								patchRequestLog({
+									model: data?.model || reqBody?.model || null,
+									finishReason: finishReason ?? null,
+									usage: data?.usage || null
+								});
+							} catch {}
 							if (data && data.usage) {
 								const model = data?.model || reqBody?.model || fullReq?.model || lastFetchModel || "deepseek-v4-flash";
 								const usage = data.usage;
@@ -471,6 +664,12 @@ function installFetchCapture() {
 											at: Date.now()
 										};
 									} catch {}
+									try {
+										patchRequestLog({
+											durationMs: endedAt,
+											streamed
+										});
+									} catch {}
 									parseAndProcess(fullText, ttft, thinkTime, streamed);
 								} catch {}
 							};
@@ -525,6 +724,9 @@ function installFetchCapture() {
 					}
 					return res;
 				}).catch((e) => {
+					try {
+						patchRequestLog({ error: String(e && (e.message || e) || "请求失败") });
+					} catch {}
 					throw e;
 				});
 			}
@@ -756,4 +958,4 @@ function recalcAllCosts() {
 	return repository.recalcAll();
 }
 //#endregion
-export { interception_exports as n, recalcAllCosts as r, installInterception as t };
+export { clearRequestLog as a, LOG_VALUE_LIMIT as i, interception_exports as n, readRequestLog as o, recalcAllCosts as r, summarizeRequestLog as s, installInterception as t };

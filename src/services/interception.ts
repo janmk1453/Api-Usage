@@ -4,6 +4,7 @@ import { log } from '../utils/logger';
 import { initConnectionIdentity, resolveRuntimeConnectionContext, type HistoryConnection } from './connection-identity';
 import { mergeIncludeUsage } from './include-usage';
 import { createThinkClock, scanThinkChunk, resolveThinkTime, reasoningTextOf, contentTextOf } from './think-timing';
+import { saveRequestStart, patchRequestLog } from './request-log';
 
 let lastMessages: any[] = [];
 let lastStart = 0;
@@ -160,6 +161,12 @@ function installFetchCapture() {
         const fetchArgs = injected
           ? [args[0], { ...(args[1] as any), body: JSON.stringify(reqBody) }]
           : args;
+        // 请求日志：不管这轮最终有没有算出用量、有没有入库，先把实际发出的标头与正文留下（只保留最近一轮）
+        try {
+          const sentInit: any = (fetchArgs as any)[1] || {};
+          const sentBody = typeof sentInit.body === 'string' ? sentInit.body : '';
+          saveRequestStart({ at: startTime, method: sentInit.method || 'POST', url, headers: sentInit.headers, body: sentBody });
+        } catch {}
         return performFetch(fetchArgs).then((firstRes: Response) => {
           if (injected && !firstRes.ok && (firstRes.status === 400 || firstRes.status === 422)) {
             log.debug('上游不接受 include_usage，按原请求重试');
@@ -167,6 +174,8 @@ function installFetchCapture() {
           }
           return firstRes;
         }).then((res: Response) => {
+          // 响应一到达就记下状态与标头（首字节耗时按请求发出时刻算）
+          try { patchRequestLog({ status: res.status, statusText: res.statusText, headers: res.headers, firstByteMs: Date.now() - startTime }); } catch {}
           try {
             const clone = res.clone();
             // 请求体未声明流式 → 明确非流式，全程不测速
@@ -202,6 +211,14 @@ function installFetchCapture() {
               log.debug('用量响应解析失败', (e as any)?.message || e);
               return;
             }
+            // 无论有没有 usage，都把这次解析到的模型 / 结束原因 / 用量原样记进日志
+            try {
+              patchRequestLog({
+                model: (data as any)?.model || reqBody?.model || null,
+                finishReason: finishReason ?? null,
+                usage: (data as any)?.usage || null,
+              });
+            } catch {}
             if (data && data.usage) {
               const model = (data as any)?.model || reqBody?.model || fullReq?.model || lastFetchModel || 'deepseek-v4-flash';
               const usage = (data as any).usage;
@@ -241,6 +258,7 @@ function installFetchCapture() {
                 const streamed = judgeStreamed();
                 if (thinkTime > 0) log.debug('思维链耗时已测量 ' + thinkTime + 'ms');
                 try { lastStreamTiming = { ttft, thinkTime, streamed, startTime, at: Date.now() }; } catch {}
+                try { patchRequestLog({ durationMs: endedAt, streamed }); } catch {}
                 parseAndProcess(fullText, ttft, thinkTime, streamed);
               } catch {}
             };
@@ -283,7 +301,10 @@ function installFetchCapture() {
             log.debug('fetch 克隆解析异常，不影响原请求', (e as any)?.message || e);
           }
           return res;
-        }).catch((e: any) => { throw e; });
+        }).catch((e: any) => {
+          try { patchRequestLog({ error: String((e && (e.message || e)) || '请求失败') }); } catch {}
+          throw e;
+        });
       }
       return rawFetch.apply(p, args);
     };

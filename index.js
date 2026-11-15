@@ -3,14 +3,14 @@ import { n as getSelectedSave, o as mobileDeviceHint, r as state$2, t as getHist
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as walletPendingModelCount, D as DEEPSEEK_WALLET_ID, O as WALLET_CATALOG_PROVIDERS, S as walletBalanceToCny, _ as defaultContextLimitForModel, b as findWalletModel, c as isTruncatedFinish, d as getPricing, g as cloneWallet, h as normalizeModel, i as saveWalletApiKey, m as isWalletPeakHour, p as isPeakHour, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as calcSavings, x as mergeWalletCollections, y as findWalletForHistory } from "./repository-B7vP-cjv.js";
-import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
+import { C as walletPendingModelCount, D as DEEPSEEK_WALLET_ID, O as WALLET_CATALOG_PROVIDERS, S as walletBalanceToCny, _ as defaultContextLimitForModel, b as findWalletModel, c as isTruncatedFinish, d as getPricing, g as cloneWallet, h as normalizeModel, i as saveWalletApiKey, m as isWalletPeakHour, p as isPeakHour, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as calcSavings, x as mergeWalletCollections, y as findWalletForHistory } from "./repository-0zz7dSXF.js";
+import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc$1, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-CJMNKSam.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
-import { t as installInterception } from "./interception-DzQ0MplD.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-BypvPIQk.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-D10-9eBc.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-DJgmC8rg.js";
+import { a as clearRequestLog, i as LOG_VALUE_LIMIT, o as readRequestLog, s as summarizeRequestLog, t as installInterception } from "./interception-g-2-JbWE.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-CjCc8lNQ.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-BsWI7Xpl.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-BfoyGjrP.js";
 import { a as subscribeTap, i as listTapRecords, n as tapDiagnostics, r as clearTapRecords } from "./request-tap-C2qTkpQP.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
@@ -296,7 +296,7 @@ function diffMessages(oldMsgs, newMsgs) {
 	while (i < a.length && i < b.length && a[i] === b[i]) i++;
 	if (i === a.length && i === b.length) return "<span style=\"color:var(--ds-text-2);\">两条请求完全一致（缓存命中段完整）</span>";
 	const ctx = 80;
-	return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${esc(a.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-red-bg);color:var(--ds-red);padding:0 2px;border-radius:3px;\">" + esc(a.slice(i, i + 200)) + "</span>" + esc(a.slice(i + 200, i + 280))}</div><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${esc(b.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-green-bg);color:var(--ds-green);padding:0 2px;border-radius:3px;\">" + esc(b.slice(i, i + 200)) + "</span>" + esc(b.slice(i + 200, i + 280))}</div></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
+	return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${esc$1(a.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-red-bg);color:var(--ds-red);padding:0 2px;border-radius:3px;\">" + esc$1(a.slice(i, i + 200)) + "</span>" + esc$1(a.slice(i + 200, i + 280))}</div><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${esc$1(b.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-green-bg);color:var(--ds-green);padding:0 2px;border-radius:3px;\">" + esc$1(b.slice(i, i + 200)) + "</span>" + esc$1(b.slice(i + 200, i + 280))}</div></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
 }
 function bindHistoryCompare() {
 	const doc = getDoc$12();
@@ -1849,7 +1849,7 @@ function renderChatSummaryTable(doc, rows) {
 		} catch {}
 		return [
 			"<tr style=\"border-bottom:1px solid var(--ds-card);\">",
-			"<td style=\"padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;\" title=\"" + esc(r.chatId || "null") + "\">" + esc(r.displayName) + "</td>",
+			"<td style=\"padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;\" title=\"" + esc$1(r.chatId || "null") + "\">" + esc$1(r.displayName) + "</td>",
 			"<td style=\"padding:6px 8px;text-align:right;\">" + r.count + "</td>",
 			"<td style=\"padding:6px 8px;text-align:right;color:#0BA25E;\">" + r.hit.toLocaleString("zh-CN") + "</td>",
 			"<td style=\"padding:6px 8px;text-align:right;color:#DC2626;\">" + r.miss.toLocaleString("zh-CN") + "</td>",
@@ -2412,7 +2412,7 @@ function renderOverview(fullHistory) {
 	if (walletDrop) {
 		const item = (id, label) => {
 			const active = id === activeWalletId;
-			return `<div data-overview-wallet="${esc(id)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-sm);${active ? "background:var(--ds-card);font-weight:600;" : ""}">${esc(label)}</div>`;
+			return `<div data-overview-wallet="${esc$1(id)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-sm);${active ? "background:var(--ds-card);font-weight:600;" : ""}">${esc$1(label)}</div>`;
 		};
 		walletDrop.innerHTML = item("all", "全部钱包合计") + wallets.map((wallet) => item(wallet.id, wallet.name)).join("");
 		walletDrop.querySelectorAll("[data-overview-wallet]").forEach((el) => {
@@ -2591,7 +2591,8 @@ var CHILD_PARENT = {
 	help: "settings",
 	about: "settings",
 	"chat-manage": "overview",
-	tap: "history"
+	tap: "history",
+	log: "settings"
 };
 /** 二级视图清单（顺序即声明顺序） */
 var CHILD_VIEWS = [
@@ -2599,7 +2600,8 @@ var CHILD_VIEWS = [
 	"help",
 	"about",
 	"chat-manage",
-	"tap"
+	"tap",
+	"log"
 ];
 function isSettingsChild(view) {
 	return SETTINGS_CHILD_VIEWS.includes(view);
@@ -2630,7 +2632,8 @@ var VIEW_TITLES = {
 	help: "使用说明",
 	about: "关于",
 	"chat-manage": "对话展示管理",
-	tap: "其他请求"
+	tap: "其他请求",
+	log: "请求日志"
 };
 function viewTitle(view) {
 	return VIEW_TITLES[view] || VIEW_TITLES.overview;
@@ -4051,7 +4054,7 @@ async function renderOne$1(id, filtered) {
 						let html = `<div style="display:flex;align-items:center;gap:6px;font-weight:600;margin-bottom:4px;">${p.marker || ""}${p.name}</div>`;
 						html += `<div style="display:flex;gap:16px;"><span>用量</span><span style="margin-left:auto;font-weight:600;">${val}</span></div>`;
 						html += `<div style="display:flex;gap:16px;"><span>占比</span><span style="margin-left:auto;font-weight:600;">${pct} %</span></div>`;
-						if (others.length && String(p.name || "").startsWith("其他")) html += `<div style="margin-top:4px;font-size:11px;color:${themeColor$3("--ds-text-3", "#9CA3AF")};max-width:220px;white-space:normal;">含 ${others.map((n) => esc(n)).join("、")}</div>`;
+						if (others.length && String(p.name || "").startsWith("其他")) html += `<div style="margin-top:4px;font-size:11px;color:${themeColor$3("--ds-text-3", "#9CA3AF")};max-width:220px;white-space:normal;">含 ${others.map((n) => esc$1(n)).join("、")}</div>`;
 						if (range) html += `<div style="margin-top:4px;font-size:11px;color:#9CA3AF;">时间范围 ${range}</div>`;
 						return `<div style="padding:2px 2px;min-width:170px;">${html}</div>`;
 					}
@@ -4766,10 +4769,10 @@ async function renderOne(id, filtered) {
 					const label = labels[idx];
 					let sum = 0;
 					for (const p of params) sum += Number(p.value || 0);
-					let html = `<div style="font-weight:600;margin-bottom:6px;">${esc(label)}<span style="margin-left:8px;color:var(--ds-text-2);font-weight:400;">合计 ${id === "token" ? sum.toLocaleString() + " tokens" : sum + " 次"}</span></div>`;
+					let html = `<div style="font-weight:600;margin-bottom:6px;">${esc$1(label)}<span style="margin-left:8px;color:var(--ds-text-2);font-weight:400;">合计 ${id === "token" ? sum.toLocaleString() + " tokens" : sum + " 次"}</span></div>`;
 					for (const p of params) {
 						if (Number(p.value) === 0) continue;
-						html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${esc(p.seriesName)}<span style="margin-left:auto;font-weight:600;">${id === "token" ? Number(p.value).toLocaleString() + " tokens" : p.value + " 次"}</span></div>`;
+						html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${esc$1(p.seriesName)}<span style="margin-left:auto;font-weight:600;">${id === "token" ? Number(p.value).toLocaleString() + " tokens" : p.value + " 次"}</span></div>`;
 					}
 					if (!params.some((p) => Number(p.value) > 0)) html += `<div style="color:var(--ds-text-3);font-size:var(--aus-fs-sm);">本${xKey === "day" ? "日" : xKey === "hour" ? "时段" : xKey === "week" ? "周" : xKey === "month" ? "月" : "轮次"}无数据</div>`;
 					return `<div style="padding:4px 2px;min-width:180px;max-width:280px;">${html}</div>`;
@@ -5323,7 +5326,7 @@ function renderModelPicker(modelsHist) {
 	let html = `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${allSelected ? "background:var(--ds-card);font-weight:600;" : ""}"><input type="checkbox" data-model-all ${allSelected ? "checked" : ""} class="aus-checkbox" /><span>全部模型</span></label>`;
 	for (const m of models) {
 		const checked = selectedModels.includes(m);
-		html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${checked ? "background:var(--ds-card);font-weight:600;" : ""}"><input type="checkbox" data-model="${esc(m)}" ${checked ? "checked" : ""} class="aus-checkbox" /><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m)}</span></label>`;
+		html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${checked ? "background:var(--ds-card);font-weight:600;" : ""}"><input type="checkbox" data-model="${esc$1(m)}" ${checked ? "checked" : ""} class="aus-checkbox" /><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$1(m)}</span></label>`;
 	}
 	if (!models.length) html += "<div style=\"padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">暂无模型</div>";
 	dropdown.innerHTML = html;
@@ -5357,7 +5360,7 @@ function renderChatPicker(chatHist) {
 	for (const c of list) {
 		const key = c.chatId ?? "__null__";
 		const active = key === selectedChat ? "background:var(--ds-card);font-weight:600;" : "";
-		html += `<div data-chat="${esc(key)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}" title="${esc(c.chatId || "")}">${esc(c.displayName)}</div>`;
+		html += `<div data-chat="${esc$1(key)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}" title="${esc$1(c.chatId || "")}">${esc$1(c.displayName)}</div>`;
 	}
 	if (!list.length) html += "<div style=\"padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">" + (fullList.length ? "对话已全部隐藏（可在「对话展示管理」中恢复）" : "暂无对话") + "</div>";
 	dropdown.innerHTML = html;
@@ -5383,7 +5386,7 @@ function renderEndpointPicker(history) {
 	label.title = label.textContent;
 	const optionHtml = (id, text, title) => {
 		const active = id === selectedEndpoint ? "background:var(--ds-card);font-weight:600;" : "";
-		return `<div data-endpoint="${esc(id)}" title="${esc(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${esc(text)}</div>`;
+		return `<div data-endpoint="${esc$1(id)}" title="${esc$1(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${esc$1(text)}</div>`;
 	};
 	let html = optionHtml(STATS_FILTER_ALL, "全部", "全部");
 	for (const option of options) html += optionHtml(option.id, option.label, option.label);
@@ -5409,7 +5412,7 @@ function renderCredentialPicker$1(history, endpoint = selectedEndpoint) {
 	label.title = label.textContent;
 	const optionHtml = (id, text, title) => {
 		const active = id === selectedCredential ? "background:var(--ds-card);font-weight:600;" : "";
-		return `<div data-credential="${esc(id)}" title="${esc(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${esc(text)}</div>`;
+		return `<div data-credential="${esc$1(id)}" title="${esc$1(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${esc$1(text)}</div>`;
 	};
 	let html = optionHtml(STATS_FILTER_ALL, "全部", "全部");
 	for (const option of options) html += optionHtml(option.id, option.label, option.label);
@@ -6007,7 +6010,7 @@ async function renderChart(filteredRaw) {
 				if (!params?.length) return "";
 				const idx = params[0].dataIndex;
 				const label = tips[idx] || labels[idx];
-				let html = `<div style="font-weight:600;margin-bottom:6px;">${esc(label)}</div>`;
+				let html = `<div style="font-weight:600;margin-bottom:6px;">${esc$1(label)}</div>`;
 				for (const p of sortTooltipParams(params)) {
 					const v = p.value;
 					const meta = Y_OPTIONS.find((o) => o.label === p.seriesName);
@@ -6019,7 +6022,7 @@ async function renderChart(filteredRaw) {
 					else if (kind === "rate") disp = Math.round(Number(v)) + " t/s";
 					else if (kind === "count") disp = Number(v).toLocaleString() + " 次";
 					else disp = Number(v).toLocaleString() + " " + (meta?.unit || "");
-					html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${esc(p.seriesName)}<span style="margin-left:auto;font-weight:600;">${disp}</span></div>`;
+					html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${esc$1(p.seriesName)}<span style="margin-left:auto;font-weight:600;">${disp}</span></div>`;
 				}
 				return `<div style="padding:4px 2px;min-width:180px;">${html}</div>`;
 			}
@@ -6170,7 +6173,7 @@ function renderModelSummary(filtered) {
 		}
 	};
 	tbody.innerHTML = list.map((r) => {
-		return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${fmtC(r.cost)}</td><td style="padding:6px 8px;text-align:right;">${fmtC(r.avgCost)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
+		return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc$1(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${fmtC(r.cost)}</td><td style="padding:6px 8px;text-align:right;">${fmtC(r.avgCost)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
 	}).join("");
 }
 var cachedAllHistory = null;
@@ -7812,9 +7815,9 @@ function bindGlobalClose() {
 	} catch {}
 }
 function dropdownItem(attr, value, label, active, meta = "") {
-	return `<div class="aus-forecast-dropdown-item${active ? " is-active" : ""}" ${attr}="${esc(value)}" title="${esc(label)}">
-    <span class="aus-forecast-dropdown-label">${esc(label)}</span>
-    ${meta ? `<span class="aus-forecast-dropdown-meta">${esc(meta)}</span>` : ""}
+	return `<div class="aus-forecast-dropdown-item${active ? " is-active" : ""}" ${attr}="${esc$1(value)}" title="${esc$1(label)}">
+    <span class="aus-forecast-dropdown-label">${esc$1(label)}</span>
+    ${meta ? `<span class="aus-forecast-dropdown-meta">${esc$1(meta)}</span>` : ""}
   </div>`;
 }
 function renderChatDropdown(fullHist) {
@@ -7889,7 +7892,7 @@ function renderHitControl(fullHist, model, series, globalRate, modelRate) {
     <div class="aus-forecast-picker" style="position:relative;">
       <div id="aus-forecast-hit-btn" class="aus-forecast-pill" title="该对话没有缓存命中数据，可选择平均命中率">
         <span class="aus-forecast-pill-label">平均命中率</span>
-        <span class="aus-forecast-pill-value">${esc(hitModeLabel(hitMode, globalRate, modelRate))}</span>
+        <span class="aus-forecast-pill-value">${esc$1(hitModeLabel(hitMode, globalRate, modelRate))}</span>
         ${icon("chevron-down", 14)}
       </div>
       <div id="aus-forecast-hit-dropdown" class="aus-forecast-dropdown"></div>
@@ -7996,8 +7999,8 @@ function renderToolbar(fullHist, effective, modelOptions, model, priceContext, s
 	}
 }
 function kpiCard(label, value, sub, tone = "default", title = "") {
-	return `<div class="ds-card aus-forecast-kpi aus-forecast-kpi-${tone}"${title ? ` title="${esc(title)}"` : ""}>
-    <div class="aus-forecast-kpi-label">${esc(label)}</div>
+	return `<div class="ds-card aus-forecast-kpi aus-forecast-kpi-${tone}"${title ? ` title="${esc$1(title)}"` : ""}>
+    <div class="aus-forecast-kpi-label">${esc$1(label)}</div>
     <div class="aus-forecast-kpi-value">${value}</div>
     <div class="aus-forecast-kpi-sub">${sub}</div>
   </div>`;
@@ -8072,7 +8075,7 @@ function renderHealth(history, model) {
       <div><span>截断</span><b>${pct(metrics.truncRate)}</b></div>
       <div><span>思维链</span><b>${pct(metrics.thinkRatio)}</b></div>
     </div>
-    <div class="aus-forecast-health-foot">样本 ${history.length} 轮 · ${esc(model || "—")} · ${esc(getForecastLabel(lastFullHistory))}</div>
+    <div class="aus-forecast-health-foot">样本 ${history.length} 轮 · ${esc$1(model || "—")} · ${esc$1(getForecastLabel(lastFullHistory))}</div>
   `;
 }
 function renderCompaction(series, options) {
@@ -8178,8 +8181,8 @@ function renderEfficiency(history, scopeLabel) {
 		const avg = row.avgCost == null ? "—" : formatCost(row.avgCost, 4);
 		const ratio = row.ioRatio == null ? "—" : `${row.ioRatio.toFixed(1)} : 1`;
 		const selectable = selectableModels.has(row.model);
-		return `<tr class="aus-forecast-eff-row${row.model === selectedForecastModel ? " is-selected" : ""}" data-eff-model="${esc(row.model)}" title="${selectable ? "点击切换为计价模型" : "该模型不在当前对话中，仅作全量对比"}">
-      <td><div class="aus-forecast-eff-model"><span>${esc(row.model)}</span>${isBest ? "<span class=\"aus-forecast-eff-best\">最省</span>" : ""}</div></td>
+		return `<tr class="aus-forecast-eff-row${row.model === selectedForecastModel ? " is-selected" : ""}" data-eff-model="${esc$1(row.model)}" title="${selectable ? "点击切换为计价模型" : "该模型不在当前对话中，仅作全量对比"}">
+      <td><div class="aus-forecast-eff-model"><span>${esc$1(row.model)}</span>${isBest ? "<span class=\"aus-forecast-eff-best\">最省</span>" : ""}</div></td>
       <td>${row.rounds}</td>
       <td>${ratio}</td>
       <td><div class="aus-forecast-eff-cost"><span>${cost}</span><span class="aus-forecast-eff-bar"><i style="width:${width}%"></i></span></div></td>
@@ -8272,7 +8275,7 @@ function renderTop(fullHist) {
 		const avgCost = entries.length ? entries.reduce((sum, entry) => sum + (Number(entry.cost) || 0), 0) / entries.length : 0;
 		const pctWidth = Math.max(4, Math.min(100, row.delta / Math.max(1, list[0].delta) * 100));
 		return `<div class="aus-forecast-top-row">
-      <span class="aus-forecast-top-name" title="${esc(row.chatId || "未分组/旧数据")}">${esc(name)}</span>
+      <span class="aus-forecast-top-name" title="${esc$1(row.chatId || "未分组/旧数据")}">${esc$1(name)}</span>
       <span class="aus-forecast-grade aus-forecast-grade-sm" style="background:${colors[row.grade] || "#9CA3AF"};">${row.grade}</span>
       <span class="aus-forecast-top-bar"><span style="width:${pctWidth}%"></span></span>
       <span class="aus-forecast-top-delta">${compactTok(row.delta)} tok/轮</span>
@@ -8289,13 +8292,13 @@ function clearCharts(message) {
 		"aus-forecast-cost-chart"
 	]) {
 		const el = doc.getElementById(id);
-		if (el) el.innerHTML = `<div class="aus-forecast-chart-empty">${esc(message)}</div>`;
+		if (el) el.innerHTML = `<div class="aus-forecast-chart-empty">${esc$1(message)}</div>`;
 	}
 }
 function renderNoticeCards(message) {
 	const doc = getDoc$5();
 	const kpis = doc.getElementById("aus-forecast-kpis");
-	if (kpis) kpis.innerHTML = `<div class="ds-card aus-forecast-notice">${esc(message)}</div>`;
+	if (kpis) kpis.innerHTML = `<div class="ds-card aus-forecast-notice">${esc$1(message)}</div>`;
 	const health = doc.getElementById("aus-forecast-health");
 	if (health) health.innerHTML = "<div class=\"aus-forecast-empty\">需要单个对话的逐轮数据</div>";
 	const compaction = doc.getElementById("aus-forecast-compaction");
@@ -8519,7 +8522,7 @@ async function openWalletSyncPreview(options = {}) {
 	try {
 		catalog = await fetchModelsDevCatalog();
 	} catch (error) {
-		body.innerHTML = "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-red);\">价格目录拉取失败：" + esc(error?.message || error) + "</div>";
+		body.innerHTML = "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-red);\">价格目录拉取失败：" + esc$1(error?.message || error) + "</div>";
 		return;
 	}
 	wallet && resolveVendor({
@@ -8545,10 +8548,10 @@ async function openWalletSyncPreview(options = {}) {
 			return (row.localModel + " " + (row.catalogModel || "")).toLowerCase().includes(keyword.toLowerCase());
 		});
 		const actionable = plan.rows.filter((row) => row.changed && !row.ambiguous);
-		const head = "<div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:8px;\"><div style=\"display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);\">" + (providerVendor ? "<span style=\"width:18px;height:18px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;background:" + providerVendor.color + ";color:#fff;font-size:10px;font-weight:700;\">" + (vendorIconSvg(providerVendor.id, 12) || esc(providerVendor.mark)) + "</span>" : "") + "供应商 <b style=\"color:var(--ds-text);\">" + esc(plan.providerLabel || "未选择") + "</b></div><div style=\"display:flex;gap:4px;margin-left:auto;\">" + MODE_LABELS.map((item) => "<button data-sync-mode=\"" + item.id + "\" style=\"padding:5px 10px;border:1px solid " + (mode === item.id ? "var(--ds-black)" : "var(--ds-border)") + ";border-radius:999px;background:" + (mode === item.id ? "var(--ds-black)" : "var(--ds-card)") + ";color:" + (mode === item.id ? "var(--ds-black-text)" : "var(--ds-text)") + ";font-size:var(--aus-fs-sm);cursor:pointer;\">" + item.label + "</button>").join("") + "</div></div><div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:8px;\"><input data-sync-search=\"1\" value=\"" + esc(keyword) + "\" placeholder=\"搜索模型\" style=\"flex:1;min-width:140px;padding:6px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card);color:var(--ds-text);font-size:var(--aus-fs-sm);\" /><label style=\"display:flex;align-items:center;gap:5px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;\"><input type=\"checkbox\" class=\"aus-checkbox\" data-sync-only-changed=\"1\" " + (onlyChanged ? "checked" : "") + " /> 仅看变化</label></div><div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);line-height:1.7;\">按钱包里已识别的模型名，在目录中用模糊匹配找到对应价格后写入该模型（不会新增模型）。 匹配 " + plan.summary.matched + " · 精确 " + plan.summary.exact + " · 模糊 " + plan.summary.fuzzy + (plan.summary.ambiguous ? " · 歧义 " + plan.summary.ambiguous : "") + " · 未匹配 " + plan.summary.unmatched + " · 单位 " + getDisplayCurrency().code + "/百万 tokens</div>";
+		const head = "<div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:8px;\"><div style=\"display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);\">" + (providerVendor ? "<span style=\"width:18px;height:18px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;background:" + providerVendor.color + ";color:#fff;font-size:10px;font-weight:700;\">" + (vendorIconSvg(providerVendor.id, 12) || esc$1(providerVendor.mark)) + "</span>" : "") + "供应商 <b style=\"color:var(--ds-text);\">" + esc$1(plan.providerLabel || "未选择") + "</b></div><div style=\"display:flex;gap:4px;margin-left:auto;\">" + MODE_LABELS.map((item) => "<button data-sync-mode=\"" + item.id + "\" style=\"padding:5px 10px;border:1px solid " + (mode === item.id ? "var(--ds-black)" : "var(--ds-border)") + ";border-radius:999px;background:" + (mode === item.id ? "var(--ds-black)" : "var(--ds-card)") + ";color:" + (mode === item.id ? "var(--ds-black-text)" : "var(--ds-text)") + ";font-size:var(--aus-fs-sm);cursor:pointer;\">" + item.label + "</button>").join("") + "</div></div><div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:8px;\"><input data-sync-search=\"1\" value=\"" + esc$1(keyword) + "\" placeholder=\"搜索模型\" style=\"flex:1;min-width:140px;padding:6px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card);color:var(--ds-text);font-size:var(--aus-fs-sm);\" /><label style=\"display:flex;align-items:center;gap:5px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;\"><input type=\"checkbox\" class=\"aus-checkbox\" data-sync-only-changed=\"1\" " + (onlyChanged ? "checked" : "") + " /> 仅看变化</label></div><div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);line-height:1.7;\">按钱包里已识别的模型名，在目录中用模糊匹配找到对应价格后写入该模型（不会新增模型）。 匹配 " + plan.summary.matched + " · 精确 " + plan.summary.exact + " · 模糊 " + plan.summary.fuzzy + (plan.summary.ambiguous ? " · 歧义 " + plan.summary.ambiguous : "") + " · 未匹配 " + plan.summary.unmatched + " · 单位 " + getDisplayCurrency().code + "/百万 tokens</div>";
 		const table = rows.length ? "<div style=\"width:100%;overflow:auto;border-radius:10px;\"><table style=\"width:100%;min-width:720px;border-collapse:collapse;font-size:var(--aus-fs-sm);\"><thead><tr style=\"text-align:left;color:var(--ds-text-2);background:var(--ds-card);\"><th style=\"padding:6px;\">选</th><th style=\"padding:6px;\">钱包模型</th><th style=\"padding:6px;\">匹配</th><th style=\"padding:6px;\">目录模型</th><th style=\"padding:6px;\">价格（命中/未命中/输出）</th><th style=\"padding:6px;\">动作</th></tr></thead><tbody>" + rows.map((row) => {
 			const checked = selected.has(row.key);
-			return "<tr style=\"border-top:1px solid var(--ds-border);\"><td style=\"padding:6px;\"><input type=\"checkbox\" class=\"aus-checkbox\" data-sync-row=\"" + esc(row.key) + "\" " + (checked ? "checked" : "") + " " + (row.changed ? "" : "disabled") + " /></td><td style=\"padding:6px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\" title=\"" + esc(row.localModel) + "\">" + esc(row.localModel) + "</td><td style=\"padding:6px;white-space:nowrap;\">" + scoreLabel(row) + "</td><td style=\"padding:6px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ds-text-2);\" title=\"" + esc(row.catalogModel || "") + "\">" + esc(row.catalogModel || "—") + "</td><td style=\"padding:6px;white-space:nowrap;\">" + tierText(row) + "</td><td style=\"padding:6px;white-space:nowrap;\">" + actionLabel(row) + "</td></tr>";
+			return "<tr style=\"border-top:1px solid var(--ds-border);\"><td style=\"padding:6px;\"><input type=\"checkbox\" class=\"aus-checkbox\" data-sync-row=\"" + esc$1(row.key) + "\" " + (checked ? "checked" : "") + " " + (row.changed ? "" : "disabled") + " /></td><td style=\"padding:6px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\" title=\"" + esc$1(row.localModel) + "\">" + esc$1(row.localModel) + "</td><td style=\"padding:6px;white-space:nowrap;\">" + scoreLabel(row) + "</td><td style=\"padding:6px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ds-text-2);\" title=\"" + esc$1(row.catalogModel || "") + "\">" + esc$1(row.catalogModel || "—") + "</td><td style=\"padding:6px;white-space:nowrap;\">" + tierText(row) + "</td><td style=\"padding:6px;white-space:nowrap;\">" + actionLabel(row) + "</td></tr>";
 		}).join("") + "</tbody></table></div>" : "<div style=\"padding:14px;text-align:center;color:var(--ds-text-3);font-size:var(--aus-fs-sm);\">" + (onlyChanged ? "没有需要变化的价格（可关闭「仅看变化」查看全部）" : "没有可展示的模型") + "</div>";
 		const footer = "<div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:8px;\"><div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">已选 " + selected.size + " / 可写入 " + actionable.length + "</div><div style=\"margin-left:auto;display:flex;gap:8px;\"><button data-sync-cancel=\"1\" style=\"padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;\">取消</button><button data-sync-apply=\"1\" style=\"padding:6px 14px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;\">应用所选</button></div></div>";
 		body.innerHTML = head + table + footer;
@@ -8795,13 +8798,13 @@ function renderRemote(wallet) {
 		const ratio = item.used != null && item.limit ? Math.min(1, item.used / item.limit) : 0;
 		const percent = Math.round(ratio * 100);
 		const left = item.remaining != null ? formatPlanUnit(item.remaining, item.unit === "percent" ? "percent" : item.unit === "count" ? "count" : item.unit) : formatPlanUnit(Math.max(0, 100 - percent), "percent");
-		return "<div style=\"display:grid;gap:4px;\"><div style=\"display:flex;justify-content:space-between;gap:8px;font-size:var(--aus-fs-sm);\"><span style=\"color:var(--ds-text-2);\">" + esc(item.label) + "</span><span style=\"color:" + ratioColor(ratio) + ";font-weight:600;\">已用 " + percent + "% · 剩余 " + esc(left) + "</span></div>" + bar(ratio, ratioColor(ratio)) + "<div style=\"font-size:var(--aus-fs-xs,11px);color:var(--ds-text-3);\">厂商返回 · " + esc(resetLabel({
+		return "<div style=\"display:grid;gap:4px;\"><div style=\"display:flex;justify-content:space-between;gap:8px;font-size:var(--aus-fs-sm);\"><span style=\"color:var(--ds-text-2);\">" + esc$1(item.label) + "</span><span style=\"color:" + ratioColor(ratio) + ";font-weight:600;\">已用 " + percent + "% · 剩余 " + esc$1(left) + "</span></div>" + bar(ratio, ratioColor(ratio)) + "<div style=\"font-size:var(--aus-fs-xs,11px);color:var(--ds-text-3);\">厂商返回 · " + esc$1(resetLabel({
 			id: "custom",
 			label: item.label,
 			unit: "token",
 			limit: 0,
 			resetMode: item.resetAt ? "calendar" : "rolling"
-		}, item.resetAt)) + " · 查询于 " + esc(item.checkedAt ? new Date(item.checkedAt).toLocaleTimeString("zh-CN") : "—") + "</div></div>";
+		}, item.resetAt)) + " · 查询于 " + esc$1(item.checkedAt ? new Date(item.checkedAt).toLocaleTimeString("zh-CN") : "—") + "</div></div>";
 	}).join("") + "</div>";
 }
 /** 本地估算（可选，仅作补充） */
@@ -8812,7 +8815,7 @@ function renderLocal(wallet, history) {
 		const window = usage.window;
 		const eta = estimateExhaustion(usage);
 		const hasLimit = usage.limit > 0;
-		return "<div style=\"display:grid;gap:4px;\"><div style=\"display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:space-between;\"><span style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-2);\">" + esc(describePlanWindow(window)) + "</span><span style=\"display:flex;align-items:center;gap:4px;font-size:var(--aus-fs-sm);\"><input type=\"number\" min=\"0\" step=\"1000\" data-plan-limit=\"" + index + "\" value=\"" + (window.limit || "") + "\" placeholder=\"额度\" style=\"width:96px;padding:3px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);\" /><span style=\"color:var(--ds-text-3);\">" + esc(PLAN_UNIT_LABEL[window.unit]) + "</span><button data-plan-reset=\"" + index + "\" title=\"切换重置方式：滚动窗口 / 自然月\" style=\"padding:2px 7px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;\">" + (window.resetMode === "calendar" ? "自然月" : "滚动") + "</button><button data-plan-remove=\"" + index + "\" title=\"移除该窗口\" style=\"padding:2px 6px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;\">" + icon("close", 12) + "</button></span></div>" + (hasLimit ? bar(usage.ratio, ratioColor(usage.ratio)) : "<div style=\"height:6px;border-radius:999px;background:var(--ds-border);\"></div>") + "<div style=\"font-size:var(--aus-fs-xs,11px);color:var(--ds-text-3);\">本地估算 · 已用 " + esc(formatPlanUnit(usage.used, window.unit)) + (hasLimit ? " / " + esc(formatPlanUnit(usage.limit, window.unit)) + "（" + Math.round(usage.ratio * 100) + "%）· 剩余 " + esc(formatPlanUnit(usage.remaining, window.unit)) : "（填额度后显示比例）") + " · " + resetLabel(window, usage.resetAt) + (eta ? " · 预计 " + esc(relativeTime(eta)) + "耗尽" : "") + "</div></div>";
+		return "<div style=\"display:grid;gap:4px;\"><div style=\"display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:space-between;\"><span style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-2);\">" + esc$1(describePlanWindow(window)) + "</span><span style=\"display:flex;align-items:center;gap:4px;font-size:var(--aus-fs-sm);\"><input type=\"number\" min=\"0\" step=\"1000\" data-plan-limit=\"" + index + "\" value=\"" + (window.limit || "") + "\" placeholder=\"额度\" style=\"width:96px;padding:3px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);\" /><span style=\"color:var(--ds-text-3);\">" + esc$1(PLAN_UNIT_LABEL[window.unit]) + "</span><button data-plan-reset=\"" + index + "\" title=\"切换重置方式：滚动窗口 / 自然月\" style=\"padding:2px 7px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;\">" + (window.resetMode === "calendar" ? "自然月" : "滚动") + "</button><button data-plan-remove=\"" + index + "\" title=\"移除该窗口\" style=\"padding:2px 6px;border:1px solid var(--ds-red-border);border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;\">" + icon("close", 12) + "</button></span></div>" + (hasLimit ? bar(usage.ratio, ratioColor(usage.ratio)) : "<div style=\"height:6px;border-radius:999px;background:var(--ds-border);\"></div>") + "<div style=\"font-size:var(--aus-fs-xs,11px);color:var(--ds-text-3);\">本地估算 · 已用 " + esc$1(formatPlanUnit(usage.used, window.unit)) + (hasLimit ? " / " + esc$1(formatPlanUnit(usage.limit, window.unit)) + "（" + Math.round(usage.ratio * 100) + "%）· 剩余 " + esc$1(formatPlanUnit(usage.remaining, window.unit)) : "（填额度后显示比例）") + " · " + resetLabel(window, usage.resetAt) + (eta ? " · 预计 " + esc$1(relativeTime(eta)) + "耗尽" : "") + "</div></div>";
 	}).join("");
 }
 function renderPlanBlock(wallet, history) {
@@ -8822,8 +8825,8 @@ function renderPlanBlock(wallet, history) {
 	plan?.remote;
 	const localEnabled = plan?.enabled === true && (plan?.windows || []).length > 0;
 	const hasKey = !!getWalletApiKey(wallet.id);
-	const header = "<div style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;\"><div><div style=\"font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);\">套餐额度</div><div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">" + esc(adapter.label) + " · 仅供展示参考，不参与计费与导出</div></div><div style=\"display:flex;gap:6px;flex-wrap:wrap;\"><button data-plan-query=\"1\" style=\"padding:6px 11px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;display:inline-flex;align-items:center;gap:4px;\">" + icon("refresh", 13) + " 查询额度</button>" + (localEnabled ? "<button data-plan-disable=\"1\" style=\"padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;\">关闭本地估算</button>" : "<button data-plan-enable=\"1\" style=\"padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;\">启用本地估算</button>") + "</div></div>";
-	const error = plan?.remoteError ? "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-red);\">查询失败：" + esc(plan.remoteError) + "</div>" : "";
+	const header = "<div style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;\"><div><div style=\"font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);\">套餐额度</div><div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">" + esc$1(adapter.label) + " · 仅供展示参考，不参与计费与导出</div></div><div style=\"display:flex;gap:6px;flex-wrap:wrap;\"><button data-plan-query=\"1\" style=\"padding:6px 11px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;display:inline-flex;align-items:center;gap:4px;\">" + icon("refresh", 13) + " 查询额度</button>" + (localEnabled ? "<button data-plan-disable=\"1\" style=\"padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;\">关闭本地估算</button>" : "<button data-plan-enable=\"1\" style=\"padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;\">启用本地估算</button>") + "</div></div>";
+	const error = plan?.remoteError ? "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-red);\">查询失败：" + esc$1(plan.remoteError) + "</div>" : "";
 	const remoteHtml = renderRemote(wallet);
 	const localHtml = localEnabled ? renderLocal(wallet, history) : "";
 	const empty = !remoteHtml && !localHtml ? "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">" + (hasKey ? "点击「查询额度」获取厂商返回的额度与剩余。" : "先在下方填写查询密钥，再点「查询额度」。") + "</div>" : "";
@@ -8970,9 +8973,9 @@ function closeOtherDropdowns(id) {
 }
 function dropdownHtml(walletId, kind, options) {
 	return options.map((option) => `
-    <div data-wallet-select="${esc(kind)}" data-wallet-id="${esc(walletId)}" data-value="${esc(option.id)}"
+    <div data-wallet-select="${esc$1(kind)}" data-wallet-id="${esc$1(walletId)}" data-value="${esc$1(option.id)}"
       style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-sm);${option.active ? "background:var(--ds-card);font-weight:600;" : ""}">
-      ${esc(option.label)}
+      ${esc$1(option.label)}
     </div>
   `).join("");
 }
@@ -8983,8 +8986,8 @@ function sourceLabel(model) {
 	return "待定价";
 }
 function priceField(walletId, modelId, tier, key, value) {
-	return `<input type="number" step="0.000001" min="0" data-wallet-price="1" data-wallet-id="${esc(walletId)}"
-    data-model-id="${esc(modelId)}" data-tier="${tier}" data-key="${key}" value="${esc(cnyToDisplay(value))}"
+	return `<input type="number" step="0.000001" min="0" data-wallet-price="1" data-wallet-id="${esc$1(walletId)}"
+    data-model-id="${esc$1(modelId)}" data-tier="${tier}" data-key="${key}" value="${esc$1(cnyToDisplay(value))}"
     style="width:100%;min-width:72px;padding:5px 6px;border:1px solid var(--ds-border);border-radius:7px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />`;
 }
 function renderModelRows(wallet, showHidden = false) {
@@ -8995,18 +8998,18 @@ function renderModelRows(wallet, showHidden = false) {
 	return models.map((model) => {
 		const pending = !model.price.priceConfigured;
 		const canDelete = model.source !== "builtin";
-		const matchLine = model.priceMatch ? "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:3px;\" title=\"来源：" + esc(model.priceMatch.provider + " / " + model.priceMatch.catalogModel) + "\">↳ " + esc(model.priceMatch.catalogModel) + " · " + Math.round(model.priceMatch.score * 100) + "%</div>" : "";
+		const matchLine = model.priceMatch ? "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:3px;\" title=\"来源：" + esc$1(model.priceMatch.provider + " / " + model.priceMatch.catalogModel) + "\">↳ " + esc$1(model.priceMatch.catalogModel) + " · " + Math.round(model.priceMatch.score * 100) + "%</div>" : "";
 		const rowStyle = "border-top:1px solid var(--ds-border);" + (model.hidden === true ? "opacity:0.55;" : "");
 		return `
-      <tr data-wallet-model-row="${esc(model.id)}" style="${rowStyle}">
+      <tr data-wallet-model-row="${esc$1(model.id)}" style="${rowStyle}">
         <td style="padding:8px 6px;min-width:180px;">
-          <input data-wallet-model-name="1" data-wallet-id="${esc(wallet.id)}" data-model-id="${esc(model.id)}"
-            value="${esc(model.model)}"
+          <input data-wallet-model-name="1" data-wallet-id="${esc$1(wallet.id)}" data-model-id="${esc$1(model.id)}"
+            value="${esc$1(model.model)}"
             style="width:100%;padding:6px 7px;border:1px solid var(--ds-border);border-radius:7px;background:${model.source === "builtin" ? "var(--ds-sidebar-bg)" : "var(--ds-card-inner)"};color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:3px;">${esc(model.sourceModel)}${model.aliases.length ? ` · 别名 ${esc(model.aliases.join("、"))}` : ""}${model.hidden === true ? " · 已隐藏" : ""}</div>
+          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:3px;">${esc$1(model.sourceModel)}${model.aliases.length ? ` · 别名 ${esc$1(model.aliases.join("、"))}` : ""}${model.hidden === true ? " · 已隐藏" : ""}</div>
           <label style="display:flex;align-items:center;gap:5px;margin-top:5px;font-size:var(--aus-fs-sm);color:var(--ds-text-3);">
             上下文上限
-            <input type="number" min="1" step="1000" data-wallet-context-limit="1" data-wallet-id="${esc(wallet.id)}" data-model-id="${esc(model.id)}"
+            <input type="number" min="1" step="1000" data-wallet-context-limit="1" data-wallet-id="${esc$1(wallet.id)}" data-model-id="${esc$1(model.id)}"
               value="${model.contextLimit ?? ""}" placeholder="未知"
               style="width:80px;padding:3px 5px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
           </label>
@@ -9021,9 +9024,9 @@ function renderModelRows(wallet, showHidden = false) {
         <td style="padding:8px 6px;min-width:224px;opacity:${model.price.usePeakPricing ? "1" : "0.45"};">
           <div style="display:grid;grid-template-columns:repeat(3,minmax(68px,1fr));gap:4px;">${priceField(wallet.id, model.id, "peak", "hit", model.price.peak.hit)}${priceField(wallet.id, model.id, "peak", "miss", model.price.peak.miss)}${priceField(wallet.id, model.id, "peak", "output", model.price.peak.output)}</div>
         </td>
-        <td style="padding:8px 6px;text-align:center;"><input type="checkbox" class="aus-checkbox" data-wallet-model-peak="1" data-wallet-id="${esc(wallet.id)}" data-model-id="${esc(model.id)}" ${model.price.usePeakPricing ? "checked" : ""} /></td>
-        <td style="padding:8px 6px;text-align:center;"><input type="checkbox" class="aus-checkbox" data-wallet-model-lock="1" data-wallet-id="${esc(wallet.id)}" data-model-id="${esc(model.id)}" ${model.locked ? "checked" : ""} /></td>
-        <td style="padding:8px 6px;text-align:center;">${canDelete ? `<button data-wallet-model-delete="1" data-wallet-id="${esc(wallet.id)}" data-model-id="${esc(model.id)}" style="padding:4px 8px;border:1px solid var(--ds-red-border);border-radius:7px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">删除</button>` : "—"}</td>
+        <td style="padding:8px 6px;text-align:center;"><input type="checkbox" class="aus-checkbox" data-wallet-model-peak="1" data-wallet-id="${esc$1(wallet.id)}" data-model-id="${esc$1(model.id)}" ${model.price.usePeakPricing ? "checked" : ""} /></td>
+        <td style="padding:8px 6px;text-align:center;"><input type="checkbox" class="aus-checkbox" data-wallet-model-lock="1" data-wallet-id="${esc$1(wallet.id)}" data-model-id="${esc$1(model.id)}" ${model.locked ? "checked" : ""} /></td>
+        <td style="padding:8px 6px;text-align:center;">${canDelete ? `<button data-wallet-model-delete="1" data-wallet-id="${esc$1(wallet.id)}" data-model-id="${esc$1(model.id)}" style="padding:4px 8px;border:1px solid var(--ds-red-border);border-radius:7px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">删除</button>` : "—"}</td>
       </tr>`;
 	}).join("");
 }
@@ -9031,22 +9034,22 @@ function renderPeakRows(wallet) {
 	if (!wallet.peakHours.length) return "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">暂无高峰时段</div>";
 	return wallet.peakHours.map((item, index) => `
     <div style="display:flex;align-items:center;gap:6px;">
-      <input type="time" data-wallet-peak="1" data-wallet-id="${esc(wallet.id)}" data-peak-index="${index}" data-peak-field="start" value="${esc(item.start)}" style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:7px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
+      <input type="time" data-wallet-peak="1" data-wallet-id="${esc$1(wallet.id)}" data-peak-index="${index}" data-peak-field="start" value="${esc$1(item.start)}" style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:7px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
       <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">至</span>
-      <input type="time" data-wallet-peak="1" data-wallet-id="${esc(wallet.id)}" data-peak-index="${index}" data-peak-field="end" value="${esc(item.end)}" style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:7px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-      <button data-wallet-peak-delete="1" data-wallet-id="${esc(wallet.id)}" data-peak-index="${index}" style="padding:5px 8px;border:1px solid var(--ds-red-border);border-radius:7px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">删除</button>
+      <input type="time" data-wallet-peak="1" data-wallet-id="${esc$1(wallet.id)}" data-peak-index="${index}" data-peak-field="end" value="${esc$1(item.end)}" style="flex:1;padding:6px 8px;border:1px solid var(--ds-border);border-radius:7px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
+      <button data-wallet-peak-delete="1" data-wallet-id="${esc$1(wallet.id)}" data-peak-index="${index}" style="padding:5px 8px;border:1px solid var(--ds-red-border);border-radius:7px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);cursor:pointer;">删除</button>
     </div>
   `).join("");
 }
 function renderCredentialPicker(wallet) {
 	const current = wallet.credentials.find((item) => item.id === wallet.balance.primaryCredentialId);
 	return `
-    <button data-wallet-credential-btn="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill aus-pill-sm" style="flex-shrink:0;gap:7px;padding:7px 10px;max-width:100%;">
+    <button data-wallet-credential-btn="1" data-wallet-id="${esc$1(wallet.id)}" class="aus-pill aus-pill-sm" style="flex-shrink:0;gap:7px;padding:7px 10px;max-width:100%;">
       <span style="color:var(--ds-text-2);">主密钥</span>
-      <span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;">${esc(current?.label || "未指定")}</span>
+      <span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;">${esc$1(current?.label || "未指定")}</span>
       ${icon("chevron-down", 14)}
     </button>
-    <div id="aus-wallet-credential-drop-${esc(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;left:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-width:320px;">
+    <div id="aus-wallet-credential-drop-${esc$1(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;left:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-width:320px;">
       ${dropdownHtml(wallet.id, "credential", [{
 		id: "",
 		label: "无（使用钱包内校准密钥）",
@@ -9065,14 +9068,14 @@ function renderCatalogPicker(wallet) {
 	const status = walletSyncStatus(wallet);
 	return `
     <div class="aus-wallet-catalog-picker" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:0 0 auto;min-width:0;max-width:100%;">
-    <button type="button" data-wallet-catalog-btn="1" data-wallet-id="${esc(wallet.id)}" title="选择价格来源" class="aus-wallet-catalog-btn aus-pill aus-pill-sm" style="flex:0 0 auto;gap:7px;max-width:100%;box-sizing:border-box;min-height:30px;padding:7px 10px;">
+    <button type="button" data-wallet-catalog-btn="1" data-wallet-id="${esc$1(wallet.id)}" title="选择价格来源" class="aus-wallet-catalog-btn aus-pill aus-pill-sm" style="flex:0 0 auto;gap:7px;max-width:100%;box-sizing:border-box;min-height:30px;padding:7px 10px;">
       <span style="color:var(--ds-text-2);flex:0 0 auto;">价格来源</span>
       ${providerIcon ? "<span style=\"display:inline-flex;flex:0 0 auto;color:var(--ds-text-2);\">" + providerIcon + "</span>" : ""}
-      <span style="font-weight:600;min-width:0;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(current?.label || "不自动同步")}</span>
+      <span style="font-weight:600;min-width:0;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$1(current?.label || "不自动同步")}</span>
       <span style="display:inline-flex;flex:0 0 auto;">${icon("chevron-down", 14)}</span>
     </button>
-    <div style="font-size:var(--aus-fs-sm);color:${status.pending ? "var(--ds-red)" : "var(--ds-text-3)"};max-width:190px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(status.label)}">${esc(status.label)}${status.pending ? ` · ${status.pending} 个待匹配` : ""}</div>
-    <div id="aus-wallet-catalog-drop-${esc(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;right:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:180px;max-height:260px;overflow:auto;">
+    <div style="font-size:var(--aus-fs-sm);color:${status.pending ? "var(--ds-red)" : "var(--ds-text-3)"};max-width:190px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc$1(status.label)}">${esc$1(status.label)}${status.pending ? ` · ${status.pending} 个待匹配` : ""}</div>
+    <div id="aus-wallet-catalog-drop-${esc$1(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;right:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:180px;max-height:260px;overflow:auto;">
       ${dropdownHtml(wallet.id, "catalog", [{
 		id: "",
 		label: "不自动同步",
@@ -9089,14 +9092,14 @@ function renderAdapterPicker(wallet) {
 	const current = BALANCE_ADAPTERS.find((item) => item.id === wallet.balance.adapter);
 	return `
     <div style="position:relative;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-      <button data-wallet-adapter-btn="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill aus-pill-sm" style="gap:6px;padding:6px 9px;">
+      <button data-wallet-adapter-btn="1" data-wallet-id="${esc$1(wallet.id)}" class="aus-pill aus-pill-sm" style="gap:6px;padding:6px 9px;">
         <span style="color:var(--ds-text-2);">查询适配器</span>
-        <span style="font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(current?.label || "自动识别")}</span>
+        <span style="font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$1(current?.label || "自动识别")}</span>
         ${icon("chevron-down", 14)}
       </button>
-      <input data-wallet-adapter-user-id="1" data-wallet-id="${esc(wallet.id)}" value="${esc(wallet.balance.userId || "")}" placeholder="用户 ID（new-api 需要）"
+      <input data-wallet-adapter-user-id="1" data-wallet-id="${esc$1(wallet.id)}" value="${esc$1(wallet.balance.userId || "")}" placeholder="用户 ID（new-api 需要）"
         style="width:150px;padding:6px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-      <div id="aus-wallet-adapter-drop-${esc(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:36px;left:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;">
+      <div id="aus-wallet-adapter-drop-${esc$1(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:36px;left:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px;min-width:220px;max-height:280px;overflow:auto;">
         ${dropdownHtml(wallet.id, "adapter", [{
 		id: "",
 		label: "自动识别",
@@ -9136,24 +9139,24 @@ function renderWalletCard(wallet, history) {
 		title: walletBalanceText(wallet)
 	}];
 	return `
-    <section class="ds-card" data-wallet-card="${esc(wallet.id)}" style="display:grid;gap:12px;">
+    <section class="ds-card" data-wallet-card="${esc$1(wallet.id)}" style="display:grid;gap:12px;">
       <div class="aus-wallet-header">
-        ${vendor ? `<div class="aus-wallet-avatar" title="${esc(vendor.label)}" style="background:${vendor.color};color:#FFFFFF;${vendorIconSvg(vendor.id, 22) ? "padding:0;" : vendor.mark.length > 1 ? "font-size:12px;" : ""}">${vendorIconSvg(vendor.id, 22) || esc(vendor.mark)}</div>` : `<div class="aus-wallet-avatar" title="${esc(wallet.name)}">${esc(avatarLetter)}</div>`}
+        ${vendor ? `<div class="aus-wallet-avatar" title="${esc$1(vendor.label)}" style="background:${vendor.color};color:#FFFFFF;${vendorIconSvg(vendor.id, 22) ? "padding:0;" : vendor.mark.length > 1 ? "font-size:12px;" : ""}">${vendorIconSvg(vendor.id, 22) || esc$1(vendor.mark)}</div>` : `<div class="aus-wallet-avatar" title="${esc$1(wallet.name)}">${esc$1(avatarLetter)}</div>`}
         <div class="aus-wallet-identity">
           <div class="aus-wallet-name-row">
-            <input data-wallet-name="1" data-wallet-id="${esc(wallet.id)}" value="${esc(wallet.name)}" />
-            <span class="${isOfficial ? "aus-wallet-badge-official" : "aus-wallet-badge-relay"}" style="padding:3px 8px;border-radius:999px;background:${isOfficial ? "var(--ds-green-bg)" : "var(--ds-card-inner)"};color:${isOfficial ? "var(--ds-green)" : "var(--ds-text-2)"};font-size:var(--aus-fs-sm);white-space:nowrap;">${isOfficial ? "DeepSeek 官方" : esc(vendor?.label || "中转/自定义")}</span>
+            <input data-wallet-name="1" data-wallet-id="${esc$1(wallet.id)}" value="${esc$1(wallet.name)}" />
+            <span class="${isOfficial ? "aus-wallet-badge-official" : "aus-wallet-badge-relay"}" style="padding:3px 8px;border-radius:999px;background:${isOfficial ? "var(--ds-green-bg)" : "var(--ds-card-inner)"};color:${isOfficial ? "var(--ds-green)" : "var(--ds-text-2)"};font-size:var(--aus-fs-sm);white-space:nowrap;">${isOfficial ? "DeepSeek 官方" : esc$1(vendor?.label || "中转/自定义")}</span>
             ${pending ? `<span style="padding:3px 8px;border-radius:999px;background:var(--ds-red-bg);color:var(--ds-red);font-size:var(--aus-fs-sm);white-space:nowrap;">${pending} 个待定价</span>` : ""}
           </div>
-          <div class="aus-wallet-sub">${esc(wallet.endpointDisplay || wallet.endpointLabel || "本机官方接口")} · ${esc(wallet.sourceType || "未识别")}</div>
+          <div class="aus-wallet-sub">${esc$1(wallet.endpointDisplay || wallet.endpointLabel || "本机官方接口")} · ${esc$1(wallet.sourceType || "未识别")}</div>
         </div>
         <div class="aus-wallet-metrics">
-          ${metrics.map((item) => `<div class="aus-wallet-metric" title="${esc(item.title)}"><div class="aus-wallet-metric-label">${esc(item.label)}</div><div class="aus-wallet-metric-value">${esc(item.value)}</div></div>`).join("")}
+          ${metrics.map((item) => `<div class="aus-wallet-metric" title="${esc$1(item.title)}"><div class="aus-wallet-metric-label">${esc$1(item.label)}</div><div class="aus-wallet-metric-value">${esc$1(item.value)}</div></div>`).join("")}
         </div>
         <div class="aus-wallet-actions">
-          <button class="aus-wallet-icon-btn" data-wallet-toggle="1" data-wallet-id="${esc(wallet.id)}" title="${collapsed ? "展开钱包详情" : "收起钱包详情"}" aria-label="${collapsed ? "展开钱包详情" : "收起钱包详情"}">${collapsed ? icon("chevron-down", 16) : icon("chevron-up", 16)}</button>
-          <button class="aus-wallet-icon-btn" data-wallet-sync="1" data-wallet-id="${esc(wallet.id)}" title="${wallet.catalogProvider ? "预览并应用价格同步（按已识别模型模糊匹配）" : "先选择价格来源，再同步价格"}" aria-label="预览价格同步">${icon("refresh", 16)}</button>
-          ${isOfficial ? "" : `<button class="aus-wallet-icon-btn is-danger" data-wallet-ignore="1" data-wallet-id="${esc(wallet.id)}" title="忽略该钱包（历史与统计保留）" aria-label="忽略钱包">${icon("close", 16)}</button>`}
+          <button class="aus-wallet-icon-btn" data-wallet-toggle="1" data-wallet-id="${esc$1(wallet.id)}" title="${collapsed ? "展开钱包详情" : "收起钱包详情"}" aria-label="${collapsed ? "展开钱包详情" : "收起钱包详情"}">${collapsed ? icon("chevron-down", 16) : icon("chevron-up", 16)}</button>
+          <button class="aus-wallet-icon-btn" data-wallet-sync="1" data-wallet-id="${esc$1(wallet.id)}" title="${wallet.catalogProvider ? "预览并应用价格同步（按已识别模型模糊匹配）" : "先选择价格来源，再同步价格"}" aria-label="预览价格同步">${icon("refresh", 16)}</button>
+          ${isOfficial ? "" : `<button class="aus-wallet-icon-btn is-danger" data-wallet-ignore="1" data-wallet-id="${esc$1(wallet.id)}" title="忽略该钱包（历史与统计保留）" aria-label="忽略钱包">${icon("close", 16)}</button>`}
         </div>
       </div>
 
@@ -9161,15 +9164,15 @@ function renderWalletCard(wallet, history) {
       <div class="aus-wallet-two-col" style="display:grid;grid-template-columns:minmax(250px,1fr) minmax(260px,1fr);gap:10px;">
         <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;display:grid;gap:8px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-            <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包余额</div><div style="font-size:17px;font-weight:700;color:var(--ds-text);">${esc(walletBalanceText(wallet))}</div></div>
+            <div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">钱包余额</div><div style="font-size:17px;font-weight:700;color:var(--ds-text);">${esc$1(walletBalanceText(wallet))}</div></div>
             <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:${supportsAuto ? "pointer" : "not-allowed"};">
-              <input type="checkbox" class="aus-checkbox" data-wallet-auto-balance="1" data-wallet-id="${esc(wallet.id)}" ${wallet.balance.mode === "auto" ? "checked" : ""} ${supportsAuto ? "" : "disabled"} /> 自动校准
+              <input type="checkbox" class="aus-checkbox" data-wallet-auto-balance="1" data-wallet-id="${esc$1(wallet.id)}" ${wallet.balance.mode === "auto" ? "checked" : ""} ${supportsAuto ? "" : "disabled"} /> 自动校准
             </label>
           </div>
           <div style="display:flex;gap:6px;align-items:center;position:relative;">
-            <input data-wallet-balance-amount="1" data-wallet-id="${esc(wallet.id)}" value="${esc(wallet.balance.amount ?? "")}" placeholder="手工余额" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-            <button data-wallet-currency-btn="1" data-wallet-id="${esc(wallet.id)}" class="aus-pill aus-pill-sm" style="gap:4px;padding:7px 10px;">${wallet.balance.currency}${icon("chevron-down", 14)}</button>
-            <div id="aus-wallet-currency-drop-${esc(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;right:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:6px;min-width:110px;">
+            <input data-wallet-balance-amount="1" data-wallet-id="${esc$1(wallet.id)}" value="${esc$1(wallet.balance.amount ?? "")}" placeholder="手工余额" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
+            <button data-wallet-currency-btn="1" data-wallet-id="${esc$1(wallet.id)}" class="aus-pill aus-pill-sm" style="gap:4px;padding:7px 10px;">${wallet.balance.currency}${icon("chevron-down", 14)}</button>
+            <div id="aus-wallet-currency-drop-${esc$1(wallet.id)}" data-wallet-dropdown="1" style="display:none;position:absolute;top:38px;right:0;z-index:30;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:10px;padding:6px;min-width:110px;">
               ${dropdownHtml(wallet.id, "currency", [{
 		id: "CNY",
 		label: "CNY",
@@ -9184,17 +9187,17 @@ function renderWalletCard(wallet, history) {
           ${supportsAuto ? `
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;position:relative;">
               ${renderCredentialPicker(wallet)}
-              <button data-wallet-calibrate="1" data-wallet-id="${esc(wallet.id)}" style="padding:7px 11px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;">立即校准</button>
+              <button data-wallet-calibrate="1" data-wallet-id="${esc$1(wallet.id)}" style="padding:7px 11px;border:1px solid var(--ds-black);border-radius:999px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;">立即校准</button>
             </div>
             <div style="display:flex;gap:6px;">
-              <input type="password" data-wallet-api-key="1" data-wallet-id="${esc(wallet.id)}" value="" placeholder="${getWalletApiKey(wallet.id) ? "已保存钱包校准密钥（留空不修改）" : "填写钱包校准密钥"}" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-              <button data-wallet-save-key="1" data-wallet-id="${esc(wallet.id)}" style="padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">保存密钥</button>
+              <input type="password" data-wallet-api-key="1" data-wallet-id="${esc$1(wallet.id)}" value="" placeholder="${getWalletApiKey(wallet.id) ? "已保存钱包校准密钥（留空不修改）" : "填写钱包校准密钥"}" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
+              <button data-wallet-save-key="1" data-wallet-id="${esc$1(wallet.id)}" style="padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">保存密钥</button>
             </div>
-            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">查询方式：${esc(balanceAdapter?.label || "无")}${balanceAdapter?.note ? "（" + esc(balanceAdapter.note) + "）" : ""}；勾选「自动校准」后按设置页校准间隔轮询；主密钥：${esc(selectedCredential?.label || "未指定")}</div>
-            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc(item.label)).join("、") : "未识别"}</div>
+            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">查询方式：${esc$1(balanceAdapter?.label || "无")}${balanceAdapter?.note ? "（" + esc$1(balanceAdapter.note) + "）" : ""}；勾选「自动校准」后按设置页校准间隔轮询；主密钥：${esc$1(selectedCredential?.label || "未指定")}</div>
+            <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc$1(item.label)).join("、") : "未识别"}</div>
           ` : `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">该接入暂无可用查询适配器，可直接手工维护余额；中转站可在下方「查询适配器」中选择 new-api 并填写系统访问令牌与用户 ID。</div>`}
           ${renderAdapterPicker(wallet)}
-          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc(item.label)).join("、") : "未识别"}</div>
+          <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);word-break:break-all;">已识别密钥：${wallet.credentials.length ? wallet.credentials.map((item) => esc$1(item.label)).join("、") : "未识别"}</div>
         </div>
 
         <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;display:grid;gap:8px;position:relative;">
@@ -9204,8 +9207,8 @@ function renderWalletCard(wallet, history) {
           </div>
           <div style="display:grid;gap:6px;">${renderPeakRows(wallet)}</div>
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-            <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" class="aus-checkbox" data-wallet-weekend="1" data-wallet-id="${esc(wallet.id)}" ${wallet.weekendOffpeak ? "checked" : ""} /> 周末全天按低谷</label>
-            <button data-wallet-add-peak="1" data-wallet-id="${esc(wallet.id)}" style="padding:6px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加时段</button>
+            <label style="display:flex;align-items:center;gap:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-2);cursor:pointer;"><input type="checkbox" class="aus-checkbox" data-wallet-weekend="1" data-wallet-id="${esc$1(wallet.id)}" ${wallet.weekendOffpeak ? "checked" : ""} /> 周末全天按低谷</label>
+            <button data-wallet-add-peak="1" data-wallet-id="${esc$1(wallet.id)}" style="padding:6px 9px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加时段</button>
           </div>
           ${isOfficial ? `<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);line-height:1.6;">官方接口按 DeepSeek 规则计费：中国法定节假日全天空闲（内置数据覆盖 ${CN_HOLIDAY_COVERAGE_LABEL}），调休上班的周末同样按空闲计价，可在设置中补充额外空闲日期。</div>` : ""}
         </div>
@@ -9214,7 +9217,7 @@ function renderWalletCard(wallet, history) {
       <div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;overflow:hidden;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
           <div><div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">模型与价格</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">单位 ${getDisplayCurrency().code}/百万 tokens；模型改名会保留旧名别名</div></div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;"><button data-wallet-toggle-hidden="1" data-wallet-id="${esc(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;display:${hiddenCount ? "inline-flex" : "none"};align-items:center;gap:4px;">${showHidden ? "隐藏" : "显示"} ${hiddenCount} 个隐藏条目</button><button data-wallet-add-model="1" data-wallet-id="${esc(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加模型</button></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;"><button data-wallet-toggle-hidden="1" data-wallet-id="${esc$1(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;display:${hiddenCount ? "inline-flex" : "none"};align-items:center;gap:4px;">${showHidden ? "隐藏" : "显示"} ${hiddenCount} 个隐藏条目</button><button data-wallet-add-model="1" data-wallet-id="${esc$1(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加模型</button></div>
         </div>
         <div style="width:100%;overflow-x:auto;">
           <table style="width:100%;min-width:900px;border-collapse:collapse;font-size:var(--aus-fs-sm);">
@@ -9233,8 +9236,8 @@ function renderIgnoredWallets(ignored, wallets) {
 		const wallet = wallets.find((item) => item.id === id);
 		if (!wallet) return "";
 		return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--ds-border);">
-      <div><div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">${esc(wallet.name)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">${esc(wallet.endpointDisplay || wallet.endpointLabel || "")}</div></div>
-      <button data-wallet-restore="1" data-wallet-id="${esc(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">恢复显示</button>
+      <div><div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">${esc$1(wallet.name)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">${esc$1(wallet.endpointDisplay || wallet.endpointLabel || "")}</div></div>
+      <button data-wallet-restore="1" data-wallet-id="${esc$1(wallet.id)}" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">恢复显示</button>
     </div>`;
 	}).filter(Boolean).join("") || "<div style=\"font-size:var(--aus-fs-sm);color:var(--ds-text-3);\">暂无已忽略接入</div>";
 }
@@ -9284,8 +9287,8 @@ async function renderWalletView() {
 	const anyCollapsed = active.some((wallet) => wallet.collapsed);
 	const toolbar = `
       <div class="ds-card" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;">
-        <input data-wallet-search="1" value="${esc(walletQuery)}" placeholder="搜索钱包 / 地址 / 模型" style="flex:1;min-width:180px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
-        ${filters.map((item) => "<button data-wallet-filter=\"" + item.id + "\" style=\"padding:6px 11px;border:1px solid " + (walletFilter === item.id ? "var(--ds-black)" : "var(--ds-border)") + ";border-radius:999px;background:" + (walletFilter === item.id ? "var(--ds-black)" : "var(--ds-card-inner)") + ";color:" + (walletFilter === item.id ? "var(--ds-black-text)" : "var(--ds-text)") + ";font-size:var(--aus-fs-sm);cursor:pointer;\">" + esc(item.label) + (item.count != null ? " " + item.count : "") + "</button>").join("")}
+        <input data-wallet-search="1" value="${esc$1(walletQuery)}" placeholder="搜索钱包 / 地址 / 模型" style="flex:1;min-width:180px;padding:7px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);" />
+        ${filters.map((item) => "<button data-wallet-filter=\"" + item.id + "\" style=\"padding:6px 11px;border:1px solid " + (walletFilter === item.id ? "var(--ds-black)" : "var(--ds-border)") + ";border-radius:999px;background:" + (walletFilter === item.id ? "var(--ds-black)" : "var(--ds-card-inner)") + ";color:" + (walletFilter === item.id ? "var(--ds-black-text)" : "var(--ds-text)") + ";font-size:var(--aus-fs-sm);cursor:pointer;\">" + esc$1(item.label) + (item.count != null ? " " + item.count : "") + "</button>").join("")}
         <button data-wallet-toggle-all="${anyCollapsed ? "expand" : "collapse"}" style="padding:6px 11px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">${anyCollapsed ? "展开全部" : "收起全部"}</button>
       </div>`;
 	const visibleWallets = active.filter(matchesFilter);
@@ -9378,7 +9381,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-BypvPIQk.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-CjCc8lNQ.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -9824,10 +9827,10 @@ function shellHTML() {
 		"<div id=\"aus-chat-manage-head\">",
 		"<div class=\"aus-chat-manage-lead\">",
 		"<div class=\"aus-chat-manage-title\">对话展示管理</div>",
-		"<div class=\"aus-chat-manage-desc\" id=\"aus-chat-manage-desc\">" + esc(info.desc) + "</div>",
+		"<div class=\"aus-chat-manage-desc\" id=\"aus-chat-manage-desc\">" + esc$1(info.desc) + "</div>",
 		"</div>",
 		"<div id=\"aus-chat-manage-tools\">",
-		"<input id=\"aus-chat-manage-search\" type=\"text\" placeholder=\"搜索对话\" value=\"" + esc(keyword) + "\" />",
+		"<input id=\"aus-chat-manage-search\" type=\"text\" placeholder=\"搜索对话\" value=\"" + esc$1(keyword) + "\" />",
 		"<button id=\"aus-chat-manage-reset\" type=\"button\" class=\"aus-chat-manage-btn\">全部显示</button>",
 		"<button id=\"aus-chat-manage-hide-all\" type=\"button\" class=\"aus-chat-manage-btn\">全部隐藏</button>",
 		"<button id=\"aus-chat-manage-back\" type=\"button\" class=\"aus-chat-manage-btn\" title=\"回到进入本页之前的页面\">" + icon("chevron-left", 14) + "返回</button>",
@@ -9835,7 +9838,7 @@ function shellHTML() {
 		"</div>",
 		"<div id=\"aus-chat-manage-modes\" data-mode=\"" + mode + "\" role=\"tablist\" aria-label=\"管理模式\">",
 		"<span class=\"aus-chat-manage-mode-thumb\" aria-hidden=\"true\"></span>",
-		MODES.map((m) => "<button type=\"button\" class=\"aus-chat-manage-mode\" role=\"tab\" data-manage-mode=\"" + m.key + "\" data-active=\"" + (m.key === mode ? "1" : "0") + "\" aria-selected=\"" + (m.key === mode ? "true" : "false") + "\" title=\"" + esc(m.title) + "\">" + esc(m.label) + "</button>").join(""),
+		MODES.map((m) => "<button type=\"button\" class=\"aus-chat-manage-mode\" role=\"tab\" data-manage-mode=\"" + m.key + "\" data-active=\"" + (m.key === mode ? "1" : "0") + "\" aria-selected=\"" + (m.key === mode ? "true" : "false") + "\" title=\"" + esc$1(m.title) + "\">" + esc$1(m.label) + "</button>").join(""),
 		"</div>",
 		"<div class=\"ds-card aus-chat-manage-card\">",
 		"<div id=\"aus-chat-manage-list\"></div>",
@@ -9853,9 +9856,9 @@ function rowHTML(row, index) {
 	const meta = row.count + " 轮 · " + row.total.toLocaleString("zh-CN") + " tokens · " + costTxt;
 	const aria = row.displayName + "：" + (mode === "picker" ? "在「对话」下拉胶囊中展示" : "在按对话统计中展示");
 	return [
-		"<div class=\"aus-chat-manage-row\" data-chat-row=\"" + esc(key) + "\" data-chat-name=\"" + esc(row.displayName.toLowerCase()) + "\" data-hidden=\"" + (hidden ? "1" : "0") + "\">",
+		"<div class=\"aus-chat-manage-row\" data-chat-row=\"" + esc$1(key) + "\" data-chat-name=\"" + esc$1(row.displayName.toLowerCase()) + "\" data-hidden=\"" + (hidden ? "1" : "0") + "\">",
 		"<div class=\"aus-chat-manage-main\">",
-		"<div class=\"aus-chat-manage-name\" title=\"" + esc(row.chatId || row.displayName) + "\">" + esc(row.displayName) + "</div>",
+		"<div class=\"aus-chat-manage-name\" title=\"" + esc$1(row.chatId || row.displayName) + "\">" + esc$1(row.displayName) + "</div>",
 		"<div class=\"aus-chat-manage-meta\">" + meta + "</div>",
 		"</div>",
 		"<span class=\"aus-chat-manage-state\" data-state>" + (hidden ? "已隐藏" : "展示中") + "</span>",
@@ -10114,9 +10117,9 @@ function cardOf(key, rows) {
 			r.model || "未标模型",
 			r.stream ? "流式" : "非流式"
 		].filter(Boolean).join(" · ");
-		return "<div class=\"aus-tap-row\"><div class=\"aus-tap-row-top\"><span class=\"aus-tap-time\">" + esc(localDay(r.at) + " " + localTimeHM(r.at)) + "</span><span class=\"aus-tap-actor\" title=\"" + esc(r.actorId || "") + "\">" + esc(actor) + "</span><span class=\"aus-tap-state\" data-state=\"" + esc(r.state) + "\">" + esc(stateText(r)) + "</span></div><div class=\"aus-tap-row-meta\">" + esc(meta) + "</div><div class=\"aus-tap-row-usage\">" + esc(usage) + (r.durationMs ? "<span class=\"aus-tap-dur\">" + esc((r.durationMs / 1e3).toFixed(1) + "s") + "</span>" : "") + "</div>" + (r.promptHint ? "<div class=\"aus-tap-hint\">" + esc(r.promptHint) + "</div>" : "") + "</div>";
+		return "<div class=\"aus-tap-row\"><div class=\"aus-tap-row-top\"><span class=\"aus-tap-time\">" + esc$1(localDay(r.at) + " " + localTimeHM(r.at)) + "</span><span class=\"aus-tap-actor\" title=\"" + esc$1(r.actorId || "") + "\">" + esc$1(actor) + "</span><span class=\"aus-tap-state\" data-state=\"" + esc$1(r.state) + "\">" + esc$1(stateText(r)) + "</span></div><div class=\"aus-tap-row-meta\">" + esc$1(meta) + "</div><div class=\"aus-tap-row-usage\">" + esc$1(usage) + (r.durationMs ? "<span class=\"aus-tap-dur\">" + esc$1((r.durationMs / 1e3).toFixed(1) + "s") + "</span>" : "") + "</div>" + (r.promptHint ? "<div class=\"aus-tap-hint\">" + esc$1(r.promptHint) + "</div>" : "") + "</div>";
 	}).join("");
-	return "<div class=\"ds-card aus-tap-group\" data-key=\"" + esc(key) + "\"><div class=\"aus-tap-group-head\"><span class=\"aus-tap-group-label\">" + esc(label) + "</span><span class=\"aus-tap-group-meta\">" + rows.length + " 次 · " + num(tokens) + " tokens · 最近 " + esc(localDay(latest) + " " + localTimeHM(latest)) + "</span></div>" + items + (rest > 0 ? "<div class=\"aus-tap-more\">其余 " + rest + " 条已省略</div>" : "") + "</div>";
+	return "<div class=\"ds-card aus-tap-group\" data-key=\"" + esc$1(key) + "\"><div class=\"aus-tap-group-head\"><span class=\"aus-tap-group-label\">" + esc$1(label) + "</span><span class=\"aus-tap-group-meta\">" + rows.length + " 次 · " + num(tokens) + " tokens · 最近 " + esc$1(localDay(latest) + " " + localTimeHM(latest)) + "</span></div>" + items + (rest > 0 ? "<div class=\"aus-tap-more\">其余 " + rest + " 条已省略</div>" : "") + "</div>";
 }
 /** 纯函数：给定记录与筛选，产出整页 HTML（无 DOM 依赖，可直接单测） */
 function tapViewHTML(input) {
@@ -10137,9 +10140,9 @@ function tapViewHTML(input) {
 		key,
 		list: list.slice().sort((a, b) => b.at - a.at)
 	})).sort((a, b) => b.list.length - a.list.length || a.key.localeCompare(b.key));
-	const block = (label, value, sub) => "<div class=\"aus-tap-block\"><div class=\"aus-tap-block-label\">" + esc(label) + "</div><div class=\"aus-tap-block-value\">" + esc(value) + "</div>" + (sub ? "<div class=\"aus-tap-block-sub\">" + esc(sub) + "</div>" : "") + "</div>";
-	const pill = (key, text) => "<button type=\"button\" class=\"aus-pill aus-pill-sm\" data-tap-filter=\"" + key + "\"" + (input.filter === key ? " data-on=\"1\"" : "") + ">" + esc(text) + "</button>";
-	return "<div class=\"aus-tap-note\">技术验证页：这里只做原理验证 —— 旁路记录酒馆发出的后端请求，再用「现有逻辑有没有为它写过一条历史记录」判断哪些属于非常规对话请求。<b>数据只存在本机 localStorage（<code>" + esc("aus_tap_log_v1") + "</code>），完全不进入概览、统计、历史、趋势的任何计算</b>，可随时一键清空。上限 500 条；已采集 " + all.length + " 条，账本 " + diag.settlements + " 条。</div><div class=\"aus-tap-sum\">" + block("采集到的后端请求", String(all.length), "端点命中 /api/backends/*/generate") + block("未入账（疑似非常规）", String(orphans.length), "现有逻辑没写过记录") + block("已入账（常规对话）", String(settled.length), "与历史记录一一对上") + block("待对账 / 无用量", pending.length + " / " + noUsage, "结束后 12 秒判定") + "</div><div class=\"aus-tap-tools\">" + pill("orphan", "未入账 " + orphans.length) + pill("settled", "已入账 " + settled.length) + pill("all", "全部 " + all.length) + "<span class=\"aus-tap-tools-gap\"></span><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-export\">导出 JSON</button><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-clear\"" + (input.pendingClear ? " data-danger=\"1\"" : "") + ">" + (input.pendingClear ? "确认清空？" : "清空") + "</button><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-back\">返回历史记录</button></div>" + (ordered.length ? "<div class=\"aus-tap-groups\">" + ordered.map((g) => cardOf(g.key, g.list)).join("") + "</div>" : "<div class=\"ds-card aus-tap-empty\">还没有符合条件的记录 —— 触发几次插件请求（比如 MVU 变量更新、填表）再回来看。</div>");
+	const block = (label, value, sub) => "<div class=\"aus-tap-block\"><div class=\"aus-tap-block-label\">" + esc$1(label) + "</div><div class=\"aus-tap-block-value\">" + esc$1(value) + "</div>" + (sub ? "<div class=\"aus-tap-block-sub\">" + esc$1(sub) + "</div>" : "") + "</div>";
+	const pill = (key, text) => "<button type=\"button\" class=\"aus-pill aus-pill-sm\" data-tap-filter=\"" + key + "\"" + (input.filter === key ? " data-on=\"1\"" : "") + ">" + esc$1(text) + "</button>";
+	return "<div class=\"aus-tap-note\">技术验证页：这里只做原理验证 —— 旁路记录酒馆发出的后端请求，再用「现有逻辑有没有为它写过一条历史记录」判断哪些属于非常规对话请求。<b>数据只存在本机 localStorage（<code>" + esc$1("aus_tap_log_v1") + "</code>），完全不进入概览、统计、历史、趋势的任何计算</b>，可随时一键清空。上限 500 条；已采集 " + all.length + " 条，账本 " + diag.settlements + " 条。</div><div class=\"aus-tap-sum\">" + block("采集到的后端请求", String(all.length), "端点命中 /api/backends/*/generate") + block("未入账（疑似非常规）", String(orphans.length), "现有逻辑没写过记录") + block("已入账（常规对话）", String(settled.length), "与历史记录一一对上") + block("待对账 / 无用量", pending.length + " / " + noUsage, "结束后 12 秒判定") + "</div><div class=\"aus-tap-tools\">" + pill("orphan", "未入账 " + orphans.length) + pill("settled", "已入账 " + settled.length) + pill("all", "全部 " + all.length) + "<span class=\"aus-tap-tools-gap\"></span><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-export\">导出 JSON</button><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-clear\"" + (input.pendingClear ? " data-danger=\"1\"" : "") + ">" + (input.pendingClear ? "确认清空？" : "清空") + "</button><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-back\">返回历史记录</button></div>" + (ordered.length ? "<div class=\"aus-tap-groups\">" + ordered.map((g) => cardOf(g.key, g.list)).join("") + "</div>" : "<div class=\"ds-card aus-tap-empty\">还没有符合条件的记录 —— 触发几次插件请求（比如 MVU 变量更新、填表）再回来看。</div>");
 }
 function renderTapView() {
 	const root = document.getElementById("aus-tap-root");
@@ -10204,6 +10207,184 @@ function exportAll() {
 			} catch {}
 		}, 4e3);
 	} catch {}
+}
+//#endregion
+//#region src/ui/log-view.ts
+/**
+* 请求日志页（设置 → 请求日志）：展示最近一轮对话请求的标头、正文与响应元数据。
+*
+* 只读展示：数据由 services/request-log.ts 在 fetch 捕获层旁路写入，
+* 与本页无关——本页只负责渲染，绝不参与统计口径。
+*/
+function esc(text) {
+	return String(text ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function pad2(n) {
+	return n < 10 ? "0" + n : String(n);
+}
+/** 2026-11-15 12:39:44 */
+function logTimeText(at) {
+	if (!at || !isFinite(at)) return "—";
+	const d = new Date(at);
+	return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds());
+}
+function isOkStatus(status) {
+	return status >= 200 && status < 300;
+}
+/** 字符串值截断（只影响展示） */
+function clipValue(text, limit = LOG_VALUE_LIMIT) {
+	const raw = String(text ?? "");
+	if (raw.length <= limit) return raw;
+	return raw.slice(0, limit) + "…（共 " + raw.length + " 字符）";
+}
+function keyHTML(key, index) {
+	if (index != null) return "<span class=\"aus-log-index\">" + index + "</span>";
+	if (key == null) return "";
+	return "<span class=\"aus-log-key\">" + esc(key) + "</span><span class=\"aus-log-colon\">:</span>";
+}
+/**
+* 把任意 JSON 值渲染成可折叠的树（纯函数，便于单测）。
+* depth 从 1 开始：顶层展开，第二层起折叠。
+*/
+function jsonTreeHTML(value, key = null, index = null, depth = 1) {
+	const prefix = keyHTML(key, index);
+	if (value === null || value === void 0) return "<div class=\"aus-log-leaf\">" + prefix + "<span class=\"aus-log-null\">null</span></div>";
+	const type = typeof value;
+	if (type === "string") return "<div class=\"aus-log-leaf\">" + prefix + "<span class=\"aus-log-str\">" + esc(clipValue(value)) + "</span></div>";
+	if (type === "number") return "<div class=\"aus-log-leaf\">" + prefix + "<span class=\"aus-log-num\">" + esc(value) + "</span></div>";
+	if (type === "boolean") return "<div class=\"aus-log-leaf\">" + prefix + "<span class=\"aus-log-bool\">" + String(value) + "</span></div>";
+	if (Array.isArray(value)) {
+		if (!value.length) return "<div class=\"aus-log-leaf\">" + prefix + "<span class=\"aus-log-brace\">[]</span></div>";
+		const inner = value.map((item, i) => jsonTreeHTML(item, null, i, depth + 1)).join("");
+		return "<details class=\"aus-log-node\"" + (depth <= 1 ? " open" : "") + "><summary>" + prefix + "<span class=\"aus-log-brace\">[]</span><span class=\"aus-log-count\">" + value.length + " 项</span></summary><div class=\"aus-log-children\">" + inner + "</div></details>";
+	}
+	if (type === "object") {
+		const entries = Object.entries(value);
+		if (!entries.length) return "<div class=\"aus-log-leaf\">" + prefix + "<span class=\"aus-log-brace\">{}</span></div>";
+		const inner = entries.map(([k, v]) => jsonTreeHTML(v, k, null, depth + 1)).join("");
+		return "<details class=\"aus-log-node\"" + (depth <= 1 ? " open" : "") + "><summary>" + prefix + "<span class=\"aus-log-brace\">{}</span><span class=\"aus-log-count\">" + entries.length + " 项</span></summary><div class=\"aus-log-children\">" + inner + "</div></details>";
+	}
+	return "<div class=\"aus-log-leaf\">" + prefix + "<span class=\"aus-log-str\">" + esc(clipValue(String(value))) + "</span></div>";
+}
+function kvRows(pairs) {
+	if (!pairs.length) return "<div class=\"aus-log-empty-line\">没有记录到标头</div>";
+	return pairs.map(([k, v]) => "<div class=\"aus-log-kv-row\"><span class=\"aus-log-kv-k\">" + esc(k) + "</span><span class=\"aus-log-kv-v\">" + esc(v) + "</span></div>").join("");
+}
+function usageRows(usage) {
+	if (!usage) return "<div class=\"aus-log-empty-line\">上游没有返回 usage</div>";
+	const rows = [];
+	const push = (label, value) => {
+		if (value === void 0 || value === null) return;
+		if (typeof value === "object") return;
+		rows.push("<div class=\"aus-log-kv-row\"><span class=\"aus-log-kv-k\">" + esc(label) + "</span><span class=\"aus-log-kv-v\">" + esc(value) + "</span></div>");
+	};
+	push("prompt_tokens", usage.prompt_tokens);
+	push("completion_tokens", usage.completion_tokens);
+	push("total_tokens", usage.total_tokens);
+	const promptDetails = usage.prompt_tokens_details;
+	push("cached_tokens", promptDetails?.cached_tokens);
+	const completionDetails = usage.completion_tokens_details;
+	push("reasoning_tokens", completionDetails?.reasoning_tokens);
+	const known = /* @__PURE__ */ new Set([
+		"prompt_tokens",
+		"completion_tokens",
+		"total_tokens",
+		"prompt_tokens_details",
+		"completion_tokens_details"
+	]);
+	for (const [k, v] of Object.entries(usage)) {
+		if (known.has(k)) continue;
+		if (k.startsWith("__")) continue;
+		push(k, v);
+	}
+	return rows.length ? rows.join("") : "<div class=\"aus-log-empty-line\">上游没有返回 usage</div>";
+}
+function section(title, meta, body, extraClass = "") {
+	return "<section class=\"aus-log-section " + extraClass + "\"><div class=\"aus-log-section-head\"><span class=\"aus-log-section-title\">" + esc(title) + "</span>" + (meta ? "<span class=\"aus-log-section-meta\">" + esc(meta) + "</span>" : "") + "</div>" + body + "</section>";
+}
+function bodyBlock(record) {
+	const raw = record.requestBody || "";
+	let parsed = null;
+	let isJson = false;
+	try {
+		parsed = JSON.parse(raw);
+		isJson = true;
+	} catch {}
+	const tools = "<div class=\"aus-log-section-tools\"><button type=\"button\" class=\"aus-log-link\" data-log-action=\"expand-all\">全部展开</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"collapse-all\">全部折叠</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"copy\">复制</button></div>";
+	const meta = isJson ? "JSON" : "原文";
+	const tree = isJson ? "<div class=\"aus-log-tree\">" + jsonTreeHTML(parsed) + "</div>" : "<pre class=\"aus-log-pre\">" + esc(clipValue(raw, 2e4)) + "</pre>";
+	return section("请求正文", meta, tools + (record.requestBodyTruncated ? "<div class=\"aus-log-empty-line\">正文过长，已截断保存</div>" : "") + tree, "aus-log-section-body");
+}
+function logBodyHTML(record) {
+	if (!record) return "<div class=\"aus-log-section aus-log-empty\"><div class=\"aus-log-empty-title\">还没有记录到请求</div><div class=\"aus-log-empty-desc\">在酒馆里发一条消息后回到这里，就能看到那一轮对话向模型服务发出的请求标头、正文与响应元数据。<br />只保留最近一轮，不参与任何统计。</div></div>";
+	const r = record.response;
+	const statusClass = r.status ? isOkStatus(r.status) ? "is-ok" : "is-bad" : "is-pending";
+	const statusText = r.status ? String(r.status) + (r.statusText ? " " + r.statusText : "") : "等待响应";
+	return "<section class=\"aus-log-summary\"><div class=\"aus-log-summary-top\"><span class=\"aus-log-method\">" + esc(record.method) + "</span><span class=\"aus-log-status " + statusClass + "\">" + esc(statusText) + "</span><span class=\"aus-log-summary-time\">" + esc(logTimeText(record.at)) + "</span></div><div class=\"aus-log-url\">" + esc(record.url) + "</div><div class=\"aus-log-metrics\"><span>首字节 " + (r.firstByteMs == null ? "—" : r.firstByteMs + "ms") + "</span><span>总耗时 " + (r.durationMs == null ? "—" : r.durationMs + "ms") + "</span><span>流式 " + (r.streamed === true ? "是" : r.streamed === false ? "否" : "未知") + "</span>" + (r.model ? "<span>模型 " + esc(r.model) + "</span>" : "") + "</div>" + (r.error ? "<div class=\"aus-log-error\">" + esc(r.error) + "</div>" : "") + "</section>" + section("请求标头", record.requestHeaders.length ? record.requestHeaders.length + " 项" : "", "<div class=\"aus-log-kv\">" + kvRows(record.requestHeaders) + "</div>") + bodyBlock(record) + section("响应状态", "", "<div class=\"aus-log-kv\"><div class=\"aus-log-kv-row\"><span class=\"aus-log-kv-k\">status</span><span class=\"aus-log-kv-v\">" + esc(r.status ? String(r.status) : "—") + "</span></div><div class=\"aus-log-kv-row\"><span class=\"aus-log-kv-k\">finish_reason</span><span class=\"aus-log-kv-v\">" + esc(r.finishReason || "—") + "</span></div><div class=\"aus-log-kv-row\"><span class=\"aus-log-kv-k\">model</span><span class=\"aus-log-kv-v\">" + esc(r.model || "—") + "</span></div></div>") + section("用量（usage）", "", "<div class=\"aus-log-kv\">" + usageRows(r.usage) + "</div>") + section("响应标头", r.headers.length ? r.headers.length + " 项" : "", "<div class=\"aus-log-kv\">" + kvRows(r.headers) + "</div>");
+}
+function renderLogView() {
+	if (typeof document === "undefined") return;
+	const host = document.getElementById("aus-log-body");
+	if (!host) return;
+	const record = readRequestLog();
+	host.innerHTML = "<div class=\"aus-log-top\"><div class=\"aus-log-desc\">只保留最近一轮对话请求，仅在当前浏览器本地保存、不上传。密钥已打码。<span class=\"aus-log-desc-state\" id=\"aus-log-state\">" + esc(summarizeRequestLog(record)) + "</span></div><div class=\"aus-log-actions\"><button type=\"button\" class=\"aus-log-link\" data-log-action=\"refresh\">" + icon("refresh", 14) + "刷新</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"clear\">" + icon("close", 14) + "清空</button></div></div><div id=\"aus-log-content\">" + logBodyHTML(record) + "</div>";
+	bind(host);
+}
+var clearArmed = false;
+var clearTimer = null;
+function resetClear() {
+	clearArmed = false;
+	if (clearTimer) {
+		clearTimeout(clearTimer);
+		clearTimer = null;
+	}
+}
+function bind(host) {
+	if (host.__ausLogBound) return;
+	host.__ausLogBound = true;
+	host.addEventListener("click", (event) => {
+		const btn = event.target?.closest?.("[data-log-action]");
+		if (!btn) return;
+		const action = btn.getAttribute("data-log-action");
+		if (action === "refresh") {
+			resetClear();
+			renderLogView();
+			return;
+		}
+		if (action === "clear") {
+			if (!clearArmed) {
+				clearArmed = true;
+				btn.textContent = "确认清空";
+				clearTimer = window.setTimeout(() => {
+					resetClear();
+					renderLogView();
+				}, 4e3);
+				return;
+			}
+			resetClear();
+			clearRequestLog();
+			renderLogView();
+			return;
+		}
+		if (action === "expand-all" || action === "collapse-all") {
+			const open = action === "expand-all";
+			host.querySelectorAll("#aus-log-content details").forEach((el) => {
+				el.open = open;
+			});
+			return;
+		}
+		if (action === "copy") {
+			const text = readRequestLog()?.requestBody || "";
+			const clip = globalThis.navigator?.clipboard;
+			if (clip?.writeText) clip.writeText(text).then(() => {
+				btn.textContent = "已复制";
+				setTimeout(() => {
+					btn.textContent = "复制";
+				}, 1500);
+			}).catch(() => {});
+			return;
+		}
+	});
 }
 //#endregion
 //#region src/ui/help-view.ts
@@ -10809,14 +10990,14 @@ function formatChangelogDate(date, now = Date.now()) {
 }
 function sectionHtml(section) {
 	const style = KIND_STYLE[section.kind] || KIND_STYLE.feature;
-	const items = section.items.map((text) => `<div class="aus-changelog-item"><span class="aus-changelog-dot" style="background:${style.color};"></span><span>${esc(text)}</span></div>`).join("");
+	const items = section.items.map((text) => `<div class="aus-changelog-item"><span class="aus-changelog-dot" style="background:${style.color};"></span><span>${esc$1(text)}</span></div>`).join("");
 	return `<div class="aus-changelog-section"><span class="aus-changelog-kind" style="color:${style.color};background:${style.bg};">${style.label}</span><div class="aus-changelog-items">${items}</div></div>`;
 }
 function entryHtml(entry, open, isLatest) {
 	const dateText = formatChangelogDate(entry.date);
-	const meta = [dateText ? `${esc(dateText)} 更新` : ""].concat(isLatest ? ["<span class=\"aus-changelog-latest\">最新</span>"] : []).filter(Boolean).join("");
+	const meta = [dateText ? `${esc$1(dateText)} 更新` : ""].concat(isLatest ? ["<span class=\"aus-changelog-latest\">最新</span>"] : []).filter(Boolean).join("");
 	const sections = entry.sections.filter((s) => s && s.items && s.items.length).map(sectionHtml).join("");
-	return "<div class=\"aus-changelog-entry\" data-changelog-entry data-open=\"" + (open ? "1" : "0") + `"><button type="button" class="aus-changelog-head" data-changelog-toggle aria-expanded="${open ? "true" : "false"}"><span class="aus-changelog-version">${esc(entry.version)}</span><span class="aus-changelog-meta">${meta}</span><span class="aus-changelog-caret">${icon(open ? "chevron-up" : "chevron-down", 16)}</span></button><div class="aus-changelog-body"${open ? "" : " style=\"display:none;\""}>${sections}</div></div>`;
+	return "<div class=\"aus-changelog-entry\" data-changelog-entry data-open=\"" + (open ? "1" : "0") + `"><button type="button" class="aus-changelog-head" data-changelog-toggle aria-expanded="${open ? "true" : "false"}"><span class="aus-changelog-version">${esc$1(entry.version)}</span><span class="aus-changelog-meta">${meta}</span><span class="aus-changelog-caret">${icon(open ? "chevron-up" : "chevron-down", 16)}</span></button><div class="aus-changelog-body"${open ? "" : " style=\"display:none;\""}>${sections}</div></div>`;
 }
 /**
 * 关于页底部的「更新日志」块：默认只展开最新版本，其余版本点击表头展开/收起。
@@ -10828,7 +11009,7 @@ function renderChangelogCard() {
 	const total = CHANGELOG.length;
 	const countText = total > entries.length ? `共 ${total} 个版本 · 显示最近 ${entries.length} 个` : `共 ${total} 个版本`;
 	const list = entries.map((e, i) => entryHtml(e, i === 0, i === 0)).join("");
-	return `<div class="ds-card" id="aus-changelog"><div class="aus-changelog-header"><span class="aus-changelog-title">更新日志</span><span class="aus-changelog-count">${esc(countText)}</span></div><div class="aus-changelog-list">${list}</div><div class="aus-changelog-footer">更新日志由作者手动维护，更早的版本请看仓库提交记录：<a href="https://github.com/janmk1453/Api-Usage/commits/main" target="_blank" rel="noreferrer">janmk1453/Api-Usage</a></div></div>`;
+	return `<div class="ds-card" id="aus-changelog"><div class="aus-changelog-header"><span class="aus-changelog-title">更新日志</span><span class="aus-changelog-count">${esc$1(countText)}</span></div><div class="aus-changelog-list">${list}</div><div class="aus-changelog-footer">更新日志由作者手动维护，更早的版本请看仓库提交记录：<a href="https://github.com/janmk1453/Api-Usage/commits/main" target="_blank" rel="noreferrer">janmk1453/Api-Usage</a></div></div>`;
 }
 /** 绑定展开/收起（事件委托，只绑一次；表头是原生 button，键盘回车/空格同样可用） */
 function bindChangelog(doc) {
@@ -11212,11 +11393,11 @@ function renderHistoryFilterDropdown(kind, selected, options, emptyText, onSelec
 	if (!dropdown) return;
 	const item = (id, label, title = label) => {
 		const active = id === selected ? "background:var(--ds-card);font-weight:600;" : "";
-		return `<div data-history-value="${esc(id)}" title="${esc(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${esc(label)}</div>`;
+		return `<div data-history-value="${esc$1(id)}" title="${esc$1(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${esc$1(label)}</div>`;
 	};
 	let html = item(STATS_FILTER_ALL, "全部");
 	for (const option of options) html += item(option.id, option.label, option.title || option.label);
-	if (!options.length) html += `<div style="padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);">${esc(emptyText)}</div>`;
+	if (!options.length) html += `<div style="padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);">${esc$1(emptyText)}</div>`;
 	dropdown.innerHTML = html;
 	dropdown.querySelectorAll("[data-history-value]").forEach((element) => {
 		element.onclick = () => onSelect(element.getAttribute("data-history-value") || "__all__");
@@ -11499,7 +11680,7 @@ function renderHistoryInner(doc, fullHist) {
 				failed: "失败"
 			}[agentStatusKey] || ""
 		].filter(Boolean).join(" · ") : "常规对话";
-		const originBadge = isAgentRecord ? `<span class="aus-origin-badge" title="${esc(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:var(--ds-green-bg);color:var(--ds-green);">Agent</span>` : `<span class="aus-origin-badge" title="${esc(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:var(--ds-card-inner);color:var(--ds-text-3);">常规</span>`;
+		const originBadge = isAgentRecord ? `<span class="aus-origin-badge" title="${esc$1(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:var(--ds-green-bg);color:var(--ds-green);">Agent</span>` : `<span class="aus-origin-badge" title="${esc$1(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:var(--ds-card-inner);color:var(--ds-text-3);">常规</span>`;
 		const recordDate = new Date(h.timestamp);
 		const recordDateText = recordDate.toLocaleDateString("zh-CN");
 		const recordTimeText = recordDate.toLocaleTimeString("zh-CN", { hour12: false });
@@ -11507,7 +11688,7 @@ function renderHistoryInner(doc, fullHist) {
     <div style="padding:10px 12px;background:var(--ds-card);border-radius:10px;margin-bottom:8px;font-size:var(--aus-fs-base);">
       <div class="aus-history-card-head" style="display:flex;justify-content:space-between;align-items:center;">
         <div class="aus-history-card-main" style="min-width:0;flex:1;">
-          <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${originBadge}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(h.model)} · ${esc(localTimeHM(h.timestamp))}</span></div>
+          <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${originBadge}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$1(h.model)} · ${esc$1(localTimeHM(h.timestamp))}</span></div>
           <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · ${(h.tokenRate || 0) > 0 ? h.tokenRate + " t/s" : "未测速"}</div>
         </div>
         <div class="aus-history-card-actions" style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
@@ -11517,7 +11698,7 @@ function renderHistoryInner(doc, fullHist) {
           <div style="display:flex;gap:4px;">
             <button class="aus-compare-old" data-ts="${h.timestamp}" style="padding:4px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">旧</button>
             <button class="aus-compare-new" data-ts="${h.timestamp}" style="padding:4px 6px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">新</button>
-            <button class="aus-detail-toggle" data-ts="${h.timestamp}" data-model="${esc(h.model || "")}" data-time="${esc(recordDateText + " " + recordTimeText)}" style="padding:4px 8px;border:1px solid var(--ds-black);border-radius:6px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;">详情</button>
+            <button class="aus-detail-toggle" data-ts="${h.timestamp}" data-model="${esc$1(h.model || "")}" data-time="${esc$1(recordDateText + " " + recordTimeText)}" style="padding:4px 8px;border:1px solid var(--ds-black);border-radius:6px;background:var(--ds-black);color:var(--ds-black-text);font-size:var(--aus-fs-sm);cursor:pointer;">详情</button>
           </div>
         </div>
       </div>
@@ -11539,12 +11720,12 @@ function renderHistoryInner(doc, fullHist) {
                 <section class="aus-dt-block">
                   <div class="aus-dt-head">基础信息</div>
                   <div class="aus-dt-grid">
-                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">模型</span><span class="aus-dt-val">${esc(h.model || "—")}</span></div>
+                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">模型</span><span class="aus-dt-val">${esc$1(h.model || "—")}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">时段</span><span class="aus-dt-val">${h.priceType === "new-peak" || h.priceType === "wallet-peak" ? "高峰" : h.priceType === "new-offpeak" || h.priceType === "wallet-offpeak" ? "非高峰" : h.priceType === "unpriced" ? "待定价" : "旧价格"}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">计价来源</span><span class="aus-dt-val">${h.pricingSource === "wallet" ? "钱包规则" : h.pricingSource === "builtin" ? "DeepSeek 内置" : h.pricingSource === "unpriced" ? "待定价" : h.pricingSource === "legacy-match" ? "旧数据同名价" : h.pricingSource === "legacy" ? "旧全局规则" : "旧记录兜底"}</span></div>
-                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">钱包</span><span class="aus-dt-val">${esc(repository.getWallet(String(h.walletId || ""))?.name || h.endpointLabel || "未归属钱包")}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label">日期</span><span class="aus-dt-val">${esc(recordDateText)}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label">时间</span><span class="aus-dt-val">${esc(recordTimeText)}</span></div>
+                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">钱包</span><span class="aus-dt-val">${esc$1(repository.getWallet(String(h.walletId || ""))?.name || h.endpointLabel || "未归属钱包")}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">日期</span><span class="aus-dt-val">${esc$1(recordDateText)}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">时间</span><span class="aus-dt-val">${esc$1(recordTimeText)}</span></div>
                   </div>
                 </section>
                 <section class="aus-dt-block">
@@ -11559,7 +11740,7 @@ function renderHistoryInner(doc, fullHist) {
 			if (!comp || !th) return "—";
 			return (th / comp * 100).toFixed(1) + "%";
 		})()}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label">是否截断</span><span class="aus-dt-val" style="color:${isTruncatedFinish(h.finishReason) || h.isTruncated ? "var(--ds-red)" : "var(--ds-text)"};">${isTruncatedFinish(h.finishReason) || h.isTruncated ? "是 (" + esc(h.finishReason || "length") + ")" : "否"}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">是否截断</span><span class="aus-dt-val" style="color:${isTruncatedFinish(h.finishReason) || h.isTruncated ? "var(--ds-red)" : "var(--ds-text)"};">${isTruncatedFinish(h.finishReason) || h.isTruncated ? "是 (" + esc$1(h.finishReason || "length") + ")" : "否"}</span></div>
                   </div>
                 </section>
               </div>
@@ -11594,13 +11775,13 @@ function renderHistoryInner(doc, fullHist) {
                 <button class="aus-tab-btn" data-tab="raw" data-ts="${h.timestamp}" role="tab">Raw 用量</button>
                 <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" role="tab">消息内容</button>
               </div>
-              <pre class="aus-tab-content aus-dt-pre" data-content="req-${h.timestamp}" style="display:block;">${esc(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : "（原文已清理，仅保留统计）")}</pre>
+              <pre class="aus-tab-content aus-dt-pre" data-content="req-${h.timestamp}" style="display:block;">${esc$1(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : "（原文已清理，仅保留统计）")}</pre>
               <div class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;">
-                <pre class="aus-dt-pre">${esc(prettyFullResponse(h.fullResponse))}</pre>
-                ${h.fullResponse ? `<div class="aus-dt-rawbar"><button class="aus-res-raw-btn" data-ts="${h.timestamp}">查看原始完整数据</button></div><pre class="aus-res-raw aus-dt-pre aus-dt-pre-raw" data-ts="${h.timestamp}" style="display:none;">${esc(typeof h.fullResponse === "string" ? h.fullResponse : JSON.stringify(h.fullResponse, null, 2))}</pre>` : ""}
+                <pre class="aus-dt-pre">${esc$1(prettyFullResponse(h.fullResponse))}</pre>
+                ${h.fullResponse ? `<div class="aus-dt-rawbar"><button class="aus-res-raw-btn" data-ts="${h.timestamp}">查看原始完整数据</button></div><pre class="aus-res-raw aus-dt-pre aus-dt-pre-raw" data-ts="${h.timestamp}" style="display:none;">${esc$1(typeof h.fullResponse === "string" ? h.fullResponse : JSON.stringify(h.fullResponse, null, 2))}</pre>` : ""}
               </div>
-              <pre class="aus-tab-content aus-dt-pre" data-content="raw-${h.timestamp}" style="display:none;">${esc(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
-              <pre class="aus-tab-content aus-dt-pre" data-content="msg-${h.timestamp}" style="display:none;">${esc(h.messages && h.messages.length ? JSON.stringify(h.messages, null, 2) : "（原文已清理——仅最近 5 条保留，其余仅统计可用）")}</pre>
+              <pre class="aus-tab-content aus-dt-pre" data-content="raw-${h.timestamp}" style="display:none;">${esc$1(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
+              <pre class="aus-tab-content aus-dt-pre" data-content="msg-${h.timestamp}" style="display:none;">${esc$1(h.messages && h.messages.length ? JSON.stringify(h.messages, null, 2) : "（原文已清理——仅最近 5 条保留，其余仅统计可用）")}</pre>
       </div>
     </div>
   `;
@@ -12283,6 +12464,7 @@ function switchView(view, opts) {
 				if (s) renderHistory(doc, s);
 			} else if (view === "chat-manage") Promise.resolve(renderChatManageView()).catch(() => {});
 			else if (view === "tap") renderTapView();
+			else if (view === "log") renderLogView();
 		} catch {}
 	};
 	const animateIn = view !== prevView;
@@ -12476,6 +12658,9 @@ function createPanel() {
            </div>
            <div data-view="tap" style="display:none;">
              <div id="aus-tap-root"></div>
+           </div>
+           <div data-view="log" style="display:none;">
+             <div id="aus-log-body"></div>
            </div>
            <div data-view="stats" style="display:none;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
@@ -12882,7 +13067,9 @@ function createPanel() {
 	doc.getElementById("aus-chat-manage-btn")?.addEventListener("click", () => openChatManage("overview"));
 	doc.getElementById("aus-forecast-chat-manage-btn")?.addEventListener("click", () => openChatManage("forecast"));
 	doc.getElementById("aus-panel")?.addEventListener("click", (e) => {
-		if (e.target?.closest?.("#aus-settings-chat-manage")) openChatManage("settings");
+		const target = e.target;
+		if (target?.closest?.("#aus-settings-chat-manage")) openChatManage("settings");
+		if (target?.closest?.("#aus-settings-request-log")) switchView("log");
 	});
 	initChatManageView({ go: () => switchView(chatManageOrigin) });
 	doc.getElementById("aus-history-tap-btn")?.addEventListener("click", () => switchView("tap"));
@@ -13257,7 +13444,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-BPj6FEHU.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-CrrItBIz.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-B_KlK_bQ.js").then((m) => {
@@ -13492,10 +13679,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-DzQ0MplD.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-g-2-JbWE.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-BPj6FEHU.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CrrItBIz.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-C2qTkpQP.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -13506,10 +13693,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-DzQ0MplD.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-g-2-JbWE.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-BPj6FEHU.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CrrItBIz.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-C2qTkpQP.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -13575,10 +13762,10 @@ function ensureWandEntry() {
 /** 运行时收尾：卸载拦截器与采集、拆掉面板 DOM、停全部定时器与事件监听（数据一律不动） */
 async function teardownRuntime() {
 	try {
-		import("./interception-DzQ0MplD.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-g-2-JbWE.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-BPj6FEHU.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-CrrItBIz.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -13594,13 +13781,13 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-BypvPIQk.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-CjCc8lNQ.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CJMNKSam.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DJgmC8rg.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-BfoyGjrP.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -13650,19 +13837,19 @@ async function onClean() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-DzQ0MplD.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-g-2-JbWE.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-BPj6FEHU.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CrrItBIz.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-BypvPIQk.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-CjCc8lNQ.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-CJMNKSam.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-DJgmC8rg.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-BfoyGjrP.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -13705,19 +13892,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-BypvPIQk.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-CjCc8lNQ.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CJMNKSam.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DJgmC8rg.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-BfoyGjrP.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-BPj6FEHU.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CrrItBIz.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -13739,7 +13926,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-DJgmC8rg.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-BfoyGjrP.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();
