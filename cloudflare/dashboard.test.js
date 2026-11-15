@@ -34,8 +34,8 @@ describe('看板模板结构', () => {
     expect(html).not.toContain('getInstanceByDom');
   });
 
-  it('五个视图的导航入口齐全', () => {
-    const views = ['overview', 'trends', 'audience', 'performance', 'explore'];
+  it('六个视图的导航入口齐全', () => {
+    const views = ['overview', 'trends', 'audience', 'performance', 'explore', 'feedback'];
     views.forEach((view) => {
       expect(html).toContain('data-nav="' + view + '"');
       expect(html).toContain('#/' + view);
