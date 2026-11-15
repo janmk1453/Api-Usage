@@ -306,9 +306,10 @@ main { flex: 1; width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 26
   -webkit-backdrop-filter: saturate(180%) blur(16px);
   backdrop-filter: saturate(180%) blur(16px);
   border-top: 1px solid var(--line);
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
 }
 .mtabs a {
+  position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
   font-size: 9.5px; color: var(--text-3); transition: color .16s ease;
 }
@@ -350,6 +351,51 @@ main { flex: 1; width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 26
   font-size: 10.5px; font-weight: 550; white-space: nowrap;
 }
 .badge-soft .ic { width: 12px; height: 12px; }
+
+/* 反馈页：只提示存在性与摘要，不展开请求体 */
+.fb-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.fb-stats > div { min-width: 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); }
+.fb-stats span { display: block; font-size: 10.5px; color: var(--text-3); }
+.fb-stats b { display: block; margin-top: 2px; font-size: 18px; font-weight: 620; letter-spacing: -.02em; }
+.fb-stats small { display: block; margin-top: 1px; font-size: 10px; color: var(--text-3); }
+.fb-stats b em { font-style: normal; margin-left: 3px; font-size: 11px; font-weight: 550; color: var(--text-3); }
+.mtab-dot { position: absolute; top: 7px; left: calc(50% + 7px); width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--topbar-bg); }
+.fb-time { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fb-dot { display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--accent); vertical-align: 1px; }
+.fb-chip { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 6px; font-size: 10.5px; font-weight: 550; white-space: nowrap; background: var(--surface-2); color: var(--text-2); }
+.fb-chip.fb-warn { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.fb-chip.fb-bad { background: color-mix(in srgb, #e5484d 14%, transparent); color: #e5484d; }
+.fb-note summary { cursor: pointer; color: var(--text-2); }
+.fb-note summary::marker { color: var(--text-3); }
+.fb-note p { margin-top: 6px; max-width: 460px; color: var(--text-2); font-size: 11.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fb-muted { color: var(--text-3); }
+.fb-error { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 10px; background: color-mix(in srgb, #e5484d 12%, transparent); color: var(--text); font-size: 11.5px; }
+.fb-error .ic { width: 15px; height: 15px; flex: none; color: #e5484d; }
+.fb-error .text-btn { margin-left: auto; }
+#fbNavK.fb-unread { background: var(--accent); color: #fff; min-width: 18px; height: 18px; border-radius: 9px; padding: 0 5px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; }
+@media (max-width: 560px) {
+  .fb-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fb-stats > div:first-child { grid-column: 1 / -1; }
+  /* 窄屏七列挤不下：表头藏起来，每行摊成「时间 + 问题 / 说明 / 版本·模型·大小 / 原文」四段。
+     这里必须带 .dt 前缀：下方的 .dt td 规则定义在后面且同样权重，单独 .fb-table 压不住。 */
+  .dt.fb-table thead { display: none; }
+  .dt.fb-table, .dt.fb-table tbody, .dt.fb-table tr { display: block; width: auto; }
+  .dt.fb-table td { display: block; width: auto; height: auto; padding: 0; border-bottom: 0; text-align: left; }
+  .dt.fb-table tbody tr { padding: 10px 0; border-top: 1px solid var(--line); }
+  .dt.fb-table tbody tr:first-child { border-top: 0; }
+  .dt.fb-table tbody tr:hover td { background: none; }
+  .dt.fb-table td:nth-child(1) { display: flex; align-items: center; gap: 6px; }
+  .dt.fb-table td:nth-child(2) { margin-top: 5px; }
+  .dt.fb-table td:nth-child(3) { margin-top: 6px; line-height: 1.6; }
+  .dt.fb-table td:nth-child(4), .dt.fb-table td:nth-child(5), .dt.fb-table td:nth-child(6) { display: inline-block; margin-top: 6px; font-size: 10.5px; color: var(--text-3); }
+  .dt.fb-table td:nth-child(4)::after, .dt.fb-table td:nth-child(5)::after { content: '·'; margin: 0 6px; color: var(--text-3); }
+  .dt.fb-table td:nth-child(5) { max-width: 58%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+  .dt.fb-table td:nth-child(6), .dt.fb-table td:nth-child(7) { text-align: left; }
+  .dt.fb-table td:nth-child(7) { margin-top: 7px; }
+  /* 窄屏标题行位置紧张：刷新只留图标 */
+  .fb-refresh span { display: none; }
+  .fb-refresh { padding: 0 9px; }
+}
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -1221,6 +1267,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       <a class="nav-item" href="#/performance" data-nav="performance"><svg class="ic" aria-hidden="true"><use href="#i-gauge"></use></svg><span>性能</span><span class="nav-k">4</span></a>
       <div class="nav-label" style="margin-top:8px">工具</div>
       <a class="nav-item" href="#/explore" data-nav="explore"><svg class="ic" aria-hidden="true"><use href="#i-sliders"></use></svg><span>自定义</span><span class="nav-k">5</span></a>
+      <a class="nav-item" href="#/feedback" data-nav="feedback"><svg class="ic" aria-hidden="true"><use href="#i-inbox"></use></svg><span>反馈</span><span class="nav-k" id="fbNavK" hidden>0</span></a>
     </nav>
     <div class="rail-sep"></div>
     <div class="rail-note">匿名 · 聚合 · 去标识化<br>不含对话内容与个人信息</div>
@@ -1274,6 +1321,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
   <a href="#/audience" data-nav="audience"><svg class="ic" aria-hidden="true"><use href="#i-users"></use></svg><span>用户</span></a>
   <a href="#/performance" data-nav="performance"><svg class="ic" aria-hidden="true"><use href="#i-gauge"></use></svg><span>性能</span></a>
   <a href="#/explore" data-nav="explore"><svg class="ic" aria-hidden="true"><use href="#i-sliders"></use></svg><span>自定义</span></a>
+  <a href="#/feedback" data-nav="feedback"><svg class="ic" aria-hidden="true"><use href="#i-inbox"></use></svg><span>反馈</span><i class="mtab-dot" id="fbTabDot" hidden></i></a>
 </nav>
 
 <div id="overlay-root"></div>
@@ -3246,7 +3294,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
   function openPalette() {
     if (paletteNode) return;
     const actions = [];
-    const views = [['overview', '概览', 'grid'], ['trends', '趋势', 'trend'], ['audience', '用户', 'users'], ['performance', '性能', 'gauge'], ['explore', '自定义', 'sliders']];
+    const views = [['overview', '概览', 'grid'], ['trends', '趋势', 'trend'], ['audience', '用户', 'users'], ['performance', '性能', 'gauge'], ['explore', '自定义', 'sliders'], ['feedback', '反馈', 'inbox']];
     views.forEach(([key, label, ic]) => actions.push({ group: '前往', label, hint: '视图', icon: ic, run: () => route.navigate(key) }));
     [7, 30, 90, 365].forEach((n) => actions.push({ group: '时间范围', label: '最近 ' + n + ' 天', hint: '筛选', icon: 'calendar', run: () => setRange(TEL.core.presetRange(n)) }));
     actions.push({ group: '时间范围', label: '全部数据', hint: '筛选', icon: 'calendar', run: () => setRange(TEL.core.allRange()) });
@@ -3328,8 +3376,9 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     audience: ['用户', '设备、环境与使用深度'],
     performance: ['性能', '渲染耗时与版本质量'],
     explore: ['自定义', '按任意维度切分并保存视图'],
+    feedback: ['反馈', '用户主动上传的问题日志，只看有没有新的'],
   };
-  const ORDER = ['overview', 'trends', 'audience', 'performance', 'explore'];
+  const ORDER = ['overview', 'trends', 'audience', 'performance', 'explore', 'feedback'];
 
   const route = {
     navigate(view, opts) {
@@ -3520,7 +3569,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       if (typing) return;
       if (e.key === '/') { e.preventDefault(); openPalette(); return; }
       if (e.key === '?' ) { e.preventDefault(); shortcutsSheet(); return; }
-      const map = { '1': 'overview', '2': 'trends', '3': 'audience', '4': 'performance', '5': 'explore' };
+      const map = { '1': 'overview', '2': 'trends', '3': 'audience', '4': 'performance', '5': 'explore', '6': 'feedback' };
       if (map[e.key]) { route.navigate(map[e.key], { push: true }); return; }
       if (e.key.toLowerCase() === 'c') route.toggleCompare();
       if (e.key.toLowerCase() === 'd') setTheme(resolvedTheme() === 'dark' ? 'light' : 'dark');
@@ -3636,7 +3685,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
   function tableHTML(cols, rows, opts) {
     const o = opts || {};
     return '<div class="table-wrap' + (o.maxHeight ? ' scroll' : '') + '"' + (o.maxHeight ? ' style="max-height:' + o.maxHeight + '"' : '') + '>'
-      + '<table class="dt"><thead><tr>' + cols.map((c) =>
+      + '<table class="dt' + (o.className ? ' ' + o.className : '') + '"><thead><tr>' + cols.map((c) =>
         '<th class="' + (c.align || 'left') + '">' + (c.sort ? '<button data-sort="' + c.sort + '">' + esc(c.label) + '</button>' : esc(c.label)) + '</th>'
       ).join('') + '</tr></thead><tbody>'
       + rows.map((r) => '<tr>' + cols.map((c) => '<td class="' + (c.align || 'left') + '">' + (c.render ? c.render(r) : esc(r[c.key])) + '</td>').join('') + '</tr>').join('')
@@ -5205,7 +5254,205 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
 
 
 /* ==========================================================================
-   10 · 启动
+   10 · 反馈日志（只提示有没有新的，不展开请求体）
+   ========================================================================== */
+(function () {
+  'use strict';
+  const TEL = window.TEL;
+  const S = TEL.comp;
+  const U = TEL.ui;
+
+  const SEEN_KEY = 'tel_feedback_seen_v1';
+  const NOTE_BRIEF = 42;
+  const PROBLEM_LABELS = { 'not-recorded': '对话未记录', 'wrong-data': '数据不对', other: '其他' };
+  const PROBLEM_TONES = { 'not-recorded': 'fb-warn', 'wrong-data': 'fb-bad' };
+  const fb = { items: null, loading: false, error: '', seen: 0 };
+
+  try { fb.seen = Number(localStorage.getItem(SEEN_KEY)) || 0; } catch (error) { fb.seen = 0; }
+
+  function pad2(n) { return n < 10 ? '0' + n : String(n); }
+
+  /* receivedAt 是毫秒时间戳，页面统一按北京时间展示 */
+  function clock(ts) {
+    const t = Number(ts);
+    if (!Number.isFinite(t) || t <= 0) return '—';
+    const d = new Date(t + 8 * 3600 * 1000);
+    return pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate()) + ' ' + pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes());
+  }
+  function beijingDay(ts) {
+    const d = new Date(Number(ts) + 8 * 3600 * 1000);
+    return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
+  }
+  function ago(ts) {
+    const t = Number(ts);
+    if (!Number.isFinite(t) || t <= 0) return '—';
+    const mins = Math.max(0, Math.round((Date.now() - t) / 60000));
+    if (mins < 1) return '刚刚';
+    if (mins < 60) return mins + ' 分钟前';
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return hours + ' 小时前';
+    return Math.round(hours / 24) + ' 天前';
+  }
+  function size(bytes) {
+    const n = Number(bytes) || 0;
+    if (n <= 0) return '—';
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1048576).toFixed(1) + ' MB';
+  }
+
+  /* 未读数：比「上次进入反馈页时记下的最大 id」更大的条目数 */
+  function pendingCount(base) {
+    const since = base === undefined ? fb.seen : base;
+    if (!fb.items) return 0;
+    return fb.items.filter((item) => (Number(item.id) || 0) > since).length;
+  }
+
+  function paintBadge() {
+    const n = pendingCount();
+    const node = document.getElementById('fbNavK');
+    if (node) {
+      node.textContent = n > 99 ? '99+' : String(n);
+      node.hidden = n <= 0;
+      node.classList.toggle('fb-unread', n > 0);
+    }
+    // 窄屏没有侧栏，用底栏「反馈」图标右上角的小圆点提示
+    const dot = document.getElementById('fbTabDot');
+    if (dot) dot.hidden = n <= 0;
+  }
+
+  function load(force) {
+    if (fb.loading) return Promise.resolve(false);
+    if (fb.items && !force) return Promise.resolve(false);
+    fb.loading = true;
+    return fetch('api/logs', { credentials: 'same-origin', cache: 'no-store' })
+      .then((res) => {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .then((payload) => {
+        fb.items = payload && Array.isArray(payload.items) ? payload.items : [];
+        fb.error = '';
+        fb.loading = false;
+        paintBadge();
+        return true;
+      })
+      .catch((error) => {
+        fb.error = String(error && error.message ? error.message : error);
+        if (fb.items === null) fb.items = [];
+        fb.loading = false;
+        paintBadge();
+        return false;
+      });
+  }
+
+  function problemChip(value) {
+    const key = String(value || '');
+    const label = PROBLEM_LABELS[key] || '未标明';
+    const tone = PROBLEM_TONES[key] || '';
+    return '<span class="fb-chip' + (tone ? ' ' + tone : '') + '">' + U.esc(label) + '</span>';
+  }
+
+  function versionCell(value) {
+    const text = String(value || '').trim();
+    if (!text) return '<span class="fb-muted">—</span>';
+    return U.esc(/^v/i.test(text) ? text : 'v' + text);
+  }
+
+  /* 用户自己填的说明：短句直接给，长句折叠，点开看全文（最多 300 字，服务端已截断） */
+  function noteCell(note) {
+    const text = String(note === null || note === undefined ? '' : note).trim();
+    if (!text) return '<span class="fb-muted">未填写</span>';
+    if (text.length <= NOTE_BRIEF) return U.esc(text);
+    return '<details class="fb-note"><summary>' + U.esc(text.slice(0, NOTE_BRIEF) + '…') + '</summary><p>' + U.esc(text) + '</p></details>';
+  }
+
+  function columns(seen) {
+    return [
+      { key: 'receivedAt', label: '收到', render: (row) => '<span class="fb-time">' + U.esc(clock(row.receivedAt)) + '</span>'
+        + ((Number(row.id) || 0) > seen ? '<i class="fb-dot" title="上次查看之后新增"></i>' : '') },
+      { key: 'problem', label: '问题', render: (row) => problemChip(row.problem) },
+      { key: 'note', label: '用户说明', render: (row) => noteCell(row.note) },
+      { key: 'appVersion', label: '版本', render: (row) => versionCell(row.appVersion) },
+      { key: 'model', label: '模型', render: (row) => (row.model ? U.esc(row.model) : '<span class="fb-muted">—</span>') },
+      { key: 'bytes', label: '大小', align: 'right', render: (row) => '<span class="fb-time">' + U.esc(size(row.bytes)) + '</span>' },
+      { key: 'id', label: '', align: 'right', render: (row) => '<a class="text-btn" href="api/log/view?id=' + encodeURIComponent(row.id) + '" target="_blank" rel="noopener">原文</a>' },
+    ];
+  }
+
+  function page(root) {
+    const seen = fb.seen;
+    const items = fb.items || [];
+    const newest = items.length ? items[0] : null;
+    const today = items.filter((item) => beijingDay(item.receivedAt) === beijingDay(Date.now())).length;
+
+    const error = fb.error
+      ? '<div class="fb-error">' + U.icon('info') + '<span>读取失败：' + U.esc(fb.error) + '</span>'
+        + '<button type="button" class="text-btn" data-act="fb-retry">重试</button></div>'
+      : '';
+
+    const body = fb.items === null
+      ? S.empty('正在读取反馈列表', '只拉最近 50 条摘要')
+      : (items.length
+        ? S.tableHTML(columns(seen), items, { className: 'fb-table' })
+        : S.empty('暂时没有反馈', '用户在扩展里点「上传反馈」后，这里会出现一行摘要'));
+
+    root.innerHTML = '<div class="stack">'
+      + error
+      + '<section class="card rise">'
+      + S.head('最近反馈'
+        + (fb.items ? ' <span class="badge-soft">' + items.length + ' 条</span>' : ''),
+        '用户主动上传的问题日志，用来确认「有没有新的」；请求体不在这里展开，点「原文」才看完整上报。',
+        '<button type="button" class="btn ghost fb-refresh" data-act="fb-refresh">' + U.icon('refresh') + '<span>刷新</span></button>')
+      + '<div class="card-body">'
+      + '<div class="fb-stats">'
+      + '<div><span>最近一次</span><b>' + U.esc(newest ? clock(newest.receivedAt) : '—') + '</b><small>'
+        + U.esc(newest ? ago(newest.receivedAt) : '还没有收到反馈') + '</small></div>'
+      + '<div><span>今天</span><b>' + (fb.items ? today : '—') + '<em>条</em></b><small>北京时间当日</small></div>'
+      + '<div><span>上次查看之后</span><b>' + (fb.items ? pendingCount(seen) : '—') + '<em>条</em></b><small>进入本页后清零</small></div>'
+      + '</div>'
+      + body
+      + '</div>'
+      + '<footer class="card-foot"><span class="foot-note">只列最近 <b>50</b> 条摘要（含用户填写的说明，最多 300 字），不含请求体、密钥与 IP；完整上报只在点「原文」时打开。</span></footer>'
+      + '</section>'
+      + '</div>';
+
+    const refresh = root.querySelector('[data-act="fb-refresh"]');
+    if (refresh) refresh.addEventListener('click', () => {
+      load(true).then((ok) => {
+        if (ok) U.route.render(true); else U.toast('读取失败：' + fb.error, 'warn');
+      });
+    });
+    const retry = root.querySelector('[data-act="fb-retry"]');
+    if (retry) retry.addEventListener('click', () => {
+      load(true).then((ok) => { if (ok) U.route.render(true); });
+    });
+
+    if (fb.items === null && !fb.loading) {
+      load().then((ok) => { if (ok && U.STATE.view === 'feedback') U.route.render(true); });
+    }
+
+    /* 进入本页即视为已读：记下当前最大 id，侧栏徽标清零；上面渲染用的还是进入前的 seen，新条目仍带圆点 */
+    if (items.length) {
+      const maxId = items.reduce((max, item) => Math.max(max, Number(item.id) || 0), 0);
+      if (maxId > fb.seen) {
+        fb.seen = maxId;
+        try { localStorage.setItem(SEEN_KEY, String(maxId)); } catch (error) { /* 忽略 */ }
+        paintBadge();
+      }
+    }
+
+    S.initCommon(root);
+  }
+
+  TEL.pages = TEL.pages || {};
+  TEL.pages.feedback = page;
+  TEL.feedback = { load: load, paintBadge: paintBadge };
+})();
+
+
+/* ==========================================================================
+   11 · 启动
    ========================================================================== */
 (function () {
   'use strict';
@@ -5214,6 +5461,8 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     try {
       TEL.bootShell();
       TEL.ui.route.render(false);
+      // 静默拉一次反馈列表，只为点亮侧栏「反馈」徽标；失败不打扰
+      if (TEL.feedback && !TEL.data.meta.offline) TEL.feedback.load();
       document.documentElement.classList.add('ready');
       if (TEL.data.meta.offline) {
         const foot = document.querySelector('.pagefoot span');
