@@ -562,27 +562,27 @@ async function insertLog(db, value, ipHash, now, bytes) {
 }
 
 async function handleLogUpload(request, env) {
-  if (request.method !== 'POST') return logText('Method Not Allowed', 405);
+  if (request.method !== 'POST') return logText('只接受 POST 上传。', 405);
   const declared = Number(request.headers.get('content-length') || 0);
   if (Number.isFinite(declared) && declared > MAX_LOG_BODY_BYTES) {
-    return logText('Payload Too Large', 413);
+    return logText('上传内容太大了，请精简后重试。', 413);
   }
   let body = '';
   try {
     body = await request.text();
   } catch {
-    return logText('Bad Request', 400);
+    return logText('上传内容格式不对，无法解析。', 400);
   }
-  if (!body || body.length > MAX_LOG_BODY_BYTES) return logText('Payload Too Large', 413);
+  if (!body || body.length > MAX_LOG_BODY_BYTES) return logText('上传内容太大了，请精简后重试。', 413);
   let raw;
   try {
     raw = JSON.parse(body);
   } catch {
-    return logText('Bad Request', 400);
+    return logText('上传内容格式不对，无法解析。', 400);
   }
   const now = Date.now();
   const normalized = normalizeLogUpload(raw, now);
-  if (!normalized.ok) return logText('Bad Request', 400);
+  if (!normalized.ok) return logText('上传内容格式不对，无法解析。', 400);
   if (!env?.DB) return logText('上传暂不可用：接收端尚未绑定存储。', 503);
   const ipHash = await hashIp(request.headers.get('cf-connecting-ip') || '');
   const limited = await checkLogRate(env.DB, ipHash, now);
