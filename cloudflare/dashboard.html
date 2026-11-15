@@ -505,6 +505,7 @@ html[data-theme="dark"] .seg button.on { background: var(--surface-3); }
 .rank-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .rank-label { font-size: 11.5px; color: var(--text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rank-label em { font-style: normal; font-size: 9.5px; color: var(--text-3); margin-left: 5px; }
+.rank-label em.is-latest { color: var(--accent); font-weight: 600; }
 .rank-value { font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rank-value em { font-style: normal; font-size: 9.5px; color: var(--text-3); font-weight: 400; margin-left: 5px; }
 .rank-track { height: 5px; border-radius: 99px; background: var(--surface-2); margin-top: 5px; overflow: hidden; }
@@ -3667,7 +3668,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     return '<div class="rank-list' + (o.compact ? ' compact' : '') + '">' + items.map((item, i) => {
       const pct = o.showShare && item.total ? item.value / item.total : null;
       return '<div class="rank-row" style="--i:' + i + '">'
-        + '<div class="rank-head"><span class="rank-label" title="' + esc(item.label) + '">' + esc(item.label) + (item.tag ? '<em>' + esc(item.tag) + '</em>' : '') + '</span>'
+        + '<div class="rank-head"><span class="rank-label" title="' + esc(item.label) + '">' + esc(item.label) + (item.tag ? '<em' + (item.tagClass ? ' class="' + item.tagClass + '"' : '') + '>' + esc(item.tag) + '</em>' : '') + '</span>'
         + '<span class="rank-value">' + esc(item.display || C.fmtInt(item.value))
         + (pct !== null ? '<em>' + C.fmtPct(pct) + '</em>' : '') + '</span></div>'
         + '<div class="rank-track"><i class="rank-fill" style="--w:' + Math.max(1.5, (item.value / max) * 100).toFixed(2) + '%;--c:' + (item.color || 'var(--accent)') + '"></i></div>'
@@ -4651,11 +4652,19 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       return 0;
     });
     const oldest = numeric[0];
-    // 取用量最多的 9 个做展示，再按版本号降序排列
-    const shown = S.sortVersionItems(versions.slice(0, 9));
+    // 取用量最多的 9 个做展示，再按版本号降序排列；最新版优先占位——
+    // 刚发布时它的设备数通常排不进前 9，直接截断会让页脚写着「最新版覆盖 N%」而列表里根本没有这个版本
+    const topUsed = versions.filter((v) => v.label !== '未知').slice(0, 9);
+    if (latest && !topUsed.some((v) => v.label === latest.label)) {
+      if (topUsed.length >= 9) topUsed.pop();
+      topUsed.push(latest);
+    }
+    const shown = S.sortVersionItems(topUsed);
     const items = shown.map((v, i) => ({
       label: v.label, value: v.count, display: C.fmtInt(v.count), total,
-      color: i === 0 ? 'var(--accent)' : i < 3 ? 'var(--chart-2)' : 'var(--chart-8)',
+      tag: latest && v.label === latest.label ? '最新' : '',
+      tagClass: latest && v.label === latest.label ? 'is-latest' : '',
+      color: latest && v.label === latest.label ? 'var(--accent)' : i < 3 ? 'var(--chart-2)' : 'var(--chart-8)',
     }));
     return '<div class="grid split">'
       + '<section class="card rise">'

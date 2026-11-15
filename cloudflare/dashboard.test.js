@@ -99,6 +99,17 @@ describe('看板模板结构', () => {
     expect(html).toContain("label: '全部数据', hint: '筛选'");
   });
 
+  it('版本分布列表永远给最新版留一席，避免刚发布时被挤出九行之外', () => {
+    // 刚发布的版本设备数很少，只按用量取前 9 会让「最新版覆盖 0.6%」的脚注与列表自相矛盾
+    expect(html).toContain("const topUsed = versions.filter((v) => v.label !== '未知').slice(0, 9);");
+    expect(html).toContain('if (latest && !topUsed.some((v) => v.label === latest.label)) {');
+    expect(html).toContain('topUsed.pop();');
+    expect(html).toContain('topUsed.push(latest);');
+    expect(html).toContain("tag: latest && v.label === latest.label ? '最新' : '',");
+    expect(html).toContain('.rank-label em.is-latest { color: var(--accent); font-weight: 600; }');
+    expect(html).toContain("(item.tag ? '<em' + (item.tagClass ? ' class=\"' + item.tagClass + '\"' : '') + '>'");
+  });
+
   it('版本耗时分布图按版本号降序排布', () => {
     expect(html).toContain('const rows = w.rows.slice().sort((a, b) => S.byVersionDesc({ label: a.version }, { label: b.version }));');
   });

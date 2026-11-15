@@ -306,7 +306,8 @@ async function buildSummary(env) {
     userGrowth,
     pages: { ...pages, total: pageTotal },
     historyCount: historyCountCurve(deviceRows.map((row) => row?.history_count)),
-    versions: tally(deviceRows.map((row) => row?.app_version), { limit: 12 }),
+    // 版本项给足上限：刚发布的版本设备很少，截得太短会让「最新版」直接从列表里消失
+    versions: tally(deviceRows.map((row) => row?.app_version), { limit: 40 }),
     env: envBreakdown(deviceRows),
     durationHistogram: durationHistogram(deviceRows.map((row) => row?.dur_ms_total)),
   };
