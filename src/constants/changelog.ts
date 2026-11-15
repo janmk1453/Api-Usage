@@ -38,12 +38,28 @@ export const CHANGELOG_ENTRY_LIMIT = 5;
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: 'r3.2.1',
-    date: '2026-11-14',
+    date: '2026-11-15',
     sections: [
+      {
+        kind: 'feature',
+        items: [
+          '新增「请求日志」，在设置里查看最近一轮请求的标头、正文与响应',
+          '请求日志里可以一键上传反馈，密钥会自动遮住',
+          '历史页会说明这一轮为什么没记上，也能看到哪些请求没进统计',
+        ],
+      },
       {
         kind: 'improve',
         items: [
-          '改进图表 tooltip 的表现',
+          '图表悬浮窗不再超出图表边缘，点一下或滚动就会收起',
+          '上传反馈失败时给出具体原因',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          '修复移动端图表悬浮窗唤不出、位置跑偏、被底栏盖住',
+          '修复价格同步后历史费用没有重算',
         ],
       },
     ],
