@@ -11488,7 +11488,7 @@ function healthBarHTML(report) {
       </div>
       <div class="aus-health-body">
         <div class="aus-health-list">${list}${more}</div>
-        <div class="aus-health-tip">可以把诊断材料上传给开发者，帮助定位问题（密钥会自动打码）。点「忽略」后同类问题不再提示，可在「设置 → 问题反馈 / 请求日志」里恢复。</div>
+        <div class="aus-health-tip">可以把诊断材料上传给开发者，帮助定位问题（密钥会自动打码）。</div>
       </div>
       <div class="aus-health-actions">
         <button type="button" class="aus-health-btn is-primary" data-health-action="upload">上传反馈日志</button>
