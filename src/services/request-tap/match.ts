@@ -31,7 +31,7 @@ export interface ProbeKey {
 }
 
 /** 匹配窗口：覆盖酒馆 GENERATION_ENDED → 写库的延迟，同时避免误配相邻请求 */
-export const MATCH_WINDOW_MS = 20000;
+export const MATCH_WINDOW_MS = 60000;
 
 export function normalizeModel(model: string): string {
   return String(model || '').trim().toLowerCase();

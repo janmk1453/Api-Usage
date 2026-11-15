@@ -392,11 +392,23 @@ function finalize(ctx, status, reader, error = null) {
 	upsertTapRecord(rec);
 	if (!reader) return;
 	reader().then((r) => {
-		patchTapRecord(rec.id, {
+		const settledAt = Date.now();
+		const patch = {
+			endedAt: settledAt,
+			durationMs: Math.max(0, settledAt - ctx.at),
 			usage: r.usage,
 			usageMissing: !r.usage,
 			ttftMs: r.ttft
-		});
+		};
+		if (r.usage) try {
+			const cur = listTapRecords().find((x) => x.id === rec.id);
+			if (cur && cur.state === "orphan" && cur.settledBy === "no-usage") {
+				patch.state = "pending";
+				patch.settledBy = null;
+				patch.settledAt = null;
+			}
+		} catch {}
+		patchTapRecord(rec.id, patch);
 	}).catch(() => {
 		patchTapRecord(rec.id, { usageMissing: true });
 	});
@@ -590,7 +602,7 @@ function tapDebugRecord(input) {
 //#endregion
 //#region src/services/request-tap/match.ts
 /** 匹配窗口：覆盖酒馆 GENERATION_ENDED → 写库的延迟，同时避免误配相邻请求 */
-var MATCH_WINDOW_MS = 2e4;
+var MATCH_WINDOW_MS = 6e4;
 function normalizeModel(model) {
 	return String(model || "").trim().toLowerCase();
 }

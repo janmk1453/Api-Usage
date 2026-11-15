@@ -5,6 +5,7 @@
  * 与本页无关——本页只负责渲染，绝不参与统计口径。
  */
 import { icon } from './icons';
+import { APP_VERSION } from '../constants/version';
 import { openLogUploadDialog } from './log-upload-dialog';
 import {
   clearRequestLog,
@@ -244,7 +245,7 @@ function bind(host: HTMLElement): void {
     const action = btn.getAttribute('data-log-action');
     if (action === 'upload') {
       resetClear();
-      openLogUploadDialog({ appVersion: String((globalThis as any).__APP_VERSION__ || '') });
+      openLogUploadDialog({ appVersion: APP_VERSION });
       return;
     }
     if (action === 'refresh') {

@@ -31,6 +31,7 @@ export const MAX_DIAG_TAP = 20;
 export const MAX_DIAG_CONSOLE = 40;
 export const MAX_DIAG_EXTENSIONS = 60;
 export const MAX_DIAG_KEYS = 40;
+export const MAX_DIAG_CAPTURE = 24;
 export const MAX_NOTE_CHARS = 2000;
 /** 问题类型白名单，其余一律归 other */
 export const PROBLEM_KEYS = ['not-recorded', 'wrong-data', 'other'];
@@ -237,6 +238,58 @@ function normalizeStringList(value, max, itemMax) {
   return out;
 }
 
+
+/** 采集链路快照：阶段白名单 + 数字型用量字段 */
+const CAPTURE_STAGES = ['fetch-start', 'fetch-parse', 'event-drop', 'entry-added', 'entry-error'];
+const CAPTURE_USAGE_KEYS = [
+  'prompt_tokens',
+  'completion_tokens',
+  'total_tokens',
+  'input_tokens',
+  'output_tokens',
+  'cached_tokens',
+  'prompt_cache_hit_tokens',
+  'prompt_cache_miss_tokens',
+];
+
+function normalizeCaptureUsage(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const out = {};
+  let any = false;
+  for (const key of CAPTURE_USAGE_KEYS) {
+    const num = value[key];
+    if (typeof num === 'number' && Number.isFinite(num)) {
+      out[key] = Math.max(0, Math.floor(num));
+      any = true;
+    }
+  }
+  return any ? out : null;
+}
+
+function normalizeCaptureRow(value) {
+  if (!value || typeof value !== 'object') return null;
+  const stage = toStr(value.stage, 40);
+  if (!CAPTURE_STAGES.includes(stage)) return null;
+  const row = { at: toInt(value.at, 0, 1e15, 0), stage };
+  const model = toStr(value.model, MAX_MODEL_CHARS);
+  if (model) row.model = model;
+  const requestId = toStr(value.requestId, 120);
+  if (requestId) row.requestId = requestId;
+  const url = toStr(value.url, 300);
+  if (url) row.url = url;
+  const streamed = toBoolOrNull(value.streamed);
+  if (streamed !== null) row.streamed = streamed;
+  if (typeof value.usageFound === 'boolean') row.usageFound = value.usageFound;
+  if (typeof value.usageZero === 'boolean') row.usageZero = value.usageZero;
+  const usage = normalizeCaptureUsage(value.usage);
+  if (usage) row.usage = usage;
+  const finishReason = toStr(value.finishReason, MAX_FINISH_CHARS);
+  if (finishReason) row.finishReason = finishReason;
+  const reason = toStr(value.reason, 300);
+  if (reason) row.reason = reason;
+  return row;
+}
+
 /** 诊断摘要归一：只保留定位问题需要的字段，全部按上限截断 */
 export function normalizeDiagnostics(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -246,6 +299,7 @@ export function normalizeDiagnostics(value) {
   const summary = value.tapSummary && typeof value.tapSummary === 'object' ? value.tapSummary : {};
   return {
     history: listOf(value.history, MAX_DIAG_HISTORY, normalizeHistoryRow),
+    capture: listOf(value.capture, MAX_DIAG_CAPTURE, normalizeCaptureRow),
     tap: listOf(value.tap, MAX_DIAG_TAP, normalizeTapRow),
     tapSummary: {
       total: toInt(summary.total, 0, 1e9, 0),
@@ -277,6 +331,8 @@ export function normalizeDiagnostics(value) {
     conversation: {
       chatId: toStr(conversation.chatId, 200),
       character: toStr(conversation.character, MAX_MODEL_CHARS),
+      characterId: toStr(conversation.characterId, 40),
+      isGroup: toBoolOrNull(conversation.isGroup),
       stVersion: toStr(conversation.stVersion, 60),
       extensionKeys: normalizeStringList(conversation.extensionKeys, MAX_DIAG_KEYS, 80),
     },

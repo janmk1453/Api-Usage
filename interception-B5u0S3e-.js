@@ -1,6 +1,6 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { E as resolveRuntimeConnectionContext, T as initConnectionIdentity, t as repository } from "./repository-0zz7dSXF.js";
+import { E as resolveRuntimeConnectionContext, T as initConnectionIdentity, t as repository } from "./repository-CXB5J4lx.js";
 //#region src/services/include-usage.ts
 /**
 * 流式 usage 注入的纯逻辑：把 stream_options.include_usage 合并进用户/预设自定义的请求体参数。
@@ -363,6 +363,102 @@ function summarizeRequestLog(record) {
 	else if (r.firstByteMs != null) parts.push("首字 " + r.firstByteMs + "ms");
 	return parts.join(" · ");
 }
+var USAGE_KEYS = [
+	"prompt_tokens",
+	"completion_tokens",
+	"total_tokens",
+	"input_tokens",
+	"output_tokens",
+	"cached_tokens",
+	"prompt_cache_hit_tokens",
+	"prompt_cache_miss_tokens"
+];
+var buffer = [];
+/** 只留下数字型用量字段，避免把整块 usage 塞进诊断包 */
+function usageNumbers(usage) {
+	if (!usage || typeof usage !== "object") return null;
+	const out = {};
+	let any = false;
+	for (const key of USAGE_KEYS) {
+		const v = usage[key];
+		if (typeof v === "number" && Number.isFinite(v)) {
+			out[key] = v;
+			any = true;
+		}
+	}
+	const cached = usage?.prompt_tokens_details?.cached_tokens;
+	if (typeof cached === "number" && Number.isFinite(cached)) {
+		out.cached_tokens = cached;
+		any = true;
+	}
+	return any ? out : null;
+}
+/** usage 是否存在但三项计数全为 0（上游不计量时的典型表现） */
+function isZeroUsage(usage) {
+	const n = usageNumbers(usage);
+	if (!n) return false;
+	const present = [
+		"prompt_tokens",
+		"completion_tokens",
+		"total_tokens",
+		"input_tokens",
+		"output_tokens"
+	].filter((k) => typeof n[k] === "number");
+	if (!present.length) return false;
+	return present.every((k) => n[k] === 0);
+}
+function clipText(v, max) {
+	const s = typeof v === "string" ? v : v == null ? "" : String(v);
+	return s.length > max ? s.slice(0, max) : s;
+}
+/** 记一条链路快照（永不抛错） */
+function noteCaptureStage(stage, data = {}) {
+	try {
+		const rec = {
+			at: typeof data.at === "number" ? data.at : Date.now(),
+			stage,
+			model: data.model ? clipText(data.model, 120) : void 0,
+			requestId: data.requestId ? clipText(data.requestId, 80) : void 0,
+			url: data.url ? clipText(data.url, 200) : void 0,
+			streamed: data.streamed === void 0 ? void 0 : data.streamed,
+			usageFound: data.usageFound,
+			usageZero: data.usageZero,
+			usage: data.usage || null,
+			finishReason: data.finishReason === void 0 ? void 0 : data.finishReason,
+			reason: data.reason ? clipText(data.reason, 300) : void 0
+		};
+		buffer.push(rec);
+		if (buffer.length > 24) buffer = buffer.slice(-24);
+	} catch {}
+}
+/** 最近的链路快照（按时间正序，最后一条最新） */
+function listCaptureStages(limit = 24) {
+	try {
+		const n = Math.max(1, Math.min(24, Math.floor(limit) || 24));
+		return buffer.slice(-n).map((r) => ({ ...r }));
+	} catch {
+		return [];
+	}
+}
+/** 诊断包里的 capture 段：最近若干条快照，已裁掉空字段 */
+function captureDigest(limit = 24) {
+	return listCaptureStages(limit).map((rec) => {
+		const out = {
+			at: rec.at,
+			stage: rec.stage
+		};
+		if (rec.model) out.model = rec.model;
+		if (rec.requestId) out.requestId = rec.requestId;
+		if (rec.url) out.url = rec.url;
+		if (rec.streamed !== void 0 && rec.streamed !== null) out.streamed = rec.streamed;
+		if (rec.usageFound !== void 0) out.usageFound = rec.usageFound;
+		if (rec.usageZero !== void 0) out.usageZero = rec.usageZero;
+		if (rec.usage) out.usage = rec.usage;
+		if (rec.finishReason) out.finishReason = rec.finishReason;
+		if (rec.reason) out.reason = rec.reason;
+		return out;
+	});
+}
 //#endregion
 //#region src/services/interception.ts
 var interception_exports = /* @__PURE__ */ __exportAll({
@@ -529,6 +625,14 @@ function installFetchCapture() {
 						body: sentBody
 					});
 				} catch {}
+				try {
+					noteCaptureStage("fetch-start", {
+						model: reqBody?.model,
+						requestId,
+						url,
+						streamed: reqBody?.stream === true
+					});
+				} catch {}
 				return performFetch(fetchArgs).then((firstRes) => {
 					if (injected && !firstRes.ok && (firstRes.status === 400 || firstRes.status === 422)) {
 						log.debug("上游不接受 include_usage，按原请求重试");
@@ -598,6 +702,18 @@ function installFetchCapture() {
 									model: data?.model || reqBody?.model || null,
 									finishReason: finishReason ?? null,
 									usage: data?.usage || null
+								});
+							} catch {}
+							try {
+								const parsedUsage = data?.usage || null;
+								noteCaptureStage("fetch-parse", {
+									model: data?.model || reqBody?.model,
+									requestId,
+									streamed,
+									usageFound: !!parsedUsage,
+									usageZero: isZeroUsage(parsedUsage),
+									usage: usageNumbers(parsedUsage),
+									finishReason: finishReason ?? null
 								});
 							} catch {}
 							if (data && data.usage) {
@@ -922,9 +1038,23 @@ function onGenerationEnded(...args) {
 		}
 		if (extra.token_count != null && !usage) {
 			log.debug("跳过无效 usage：仅有本地 token_count=" + extra.token_count + " model=" + model);
+			try {
+				noteCaptureStage("event-drop", {
+					model,
+					requestId: recentRequestId(12e4) || "",
+					reason: "no-usage-with-local-token-count:" + String(extra.token_count)
+				});
+			} catch {}
 			return;
 		}
 		log.debug("未找到任何有效 usage，丢弃本次记录");
+		try {
+			noteCaptureStage("event-drop", {
+				model,
+				requestId: recentRequestId(12e4) || "",
+				reason: "no-usage"
+			});
+		} catch {}
 	} catch (e) {
 		log.error("onGenerationEnded 异常 " + e?.message || e);
 	}
@@ -951,11 +1081,34 @@ function processUsage(usage, model, messages, startTime, fullRequest = null, ful
 			if (streamed == null) streamed = st.streamed;
 		}
 	} catch {}
-	repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason, connection, requestId, streamed);
+	try {
+		repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason, connection, requestId, streamed);
+	} catch (e) {
+		try {
+			noteCaptureStage("entry-error", {
+				model,
+				requestId: requestId || "",
+				reason: String(e?.message || e)
+			});
+		} catch {}
+		throw e;
+	}
+	try {
+		noteCaptureStage("entry-added", {
+			model,
+			requestId: requestId || "",
+			streamed,
+			usageFound: !!usage,
+			usageZero: isZeroUsage(usage),
+			usage: usageNumbers(usage),
+			finishReason: finishReason ?? null,
+			reason: "addEntry"
+		});
+	} catch {}
 	refresh();
 }
 function recalcAllCosts() {
 	return repository.recalcAll();
 }
 //#endregion
-export { clearRequestLog as a, LOG_VALUE_LIMIT as i, interception_exports as n, readRequestLog as o, recalcAllCosts as r, summarizeRequestLog as s, installInterception as t };
+export { listCaptureStages as a, readRequestLog as c, captureDigest as i, summarizeRequestLog as l, interception_exports as n, LOG_VALUE_LIMIT as o, recalcAllCosts as r, clearRequestLog as s, installInterception as t };

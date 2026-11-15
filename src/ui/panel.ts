@@ -1,3 +1,4 @@
+import { APP_VERSION } from '../constants/version';
 import { state, getSelectedSave, getHistoryForDisplay } from '../store/index';
 import { esc, localDay, localTimeHM } from '../utils/date';
 import { isTruncatedFinish } from '../utils/finish';
@@ -27,6 +28,8 @@ import { renderWalletView } from './wallet-view';
 import { initChatManageView, renderChatManageView } from './chat-manage';
 import { initTapView, renderTapView } from './tap-view';
 import { renderLogView } from './log-view';
+import { renderHistoryHealthBar } from './history-health-bar';
+import { buildHealthReport } from '../services/health-signals';
 import { helpViewHTML } from './help-view';
 import { chartCardHTML } from './chart-picker';
 import { hideAllChartTooltips } from './chart-tooltip';
@@ -57,11 +60,9 @@ function nowTs(): number {
   try { return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now(); } catch { return Date.now(); }
 }
 
-declare const __APP_VERSION__: string;
-
 /** 当前扩展版本号（构建时由 manifest.version 注入）：侧栏品牌、设置页「关于」入口与关于页共用 */
 function appVersionText(): string {
-  return typeof __APP_VERSION__ !== 'undefined' ? String(__APP_VERSION__) : '';
+  return APP_VERSION;
 }
 
 function getDoc(): Document { return (window.parent as any)?.document ?? document; }
@@ -711,6 +712,13 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
 function renderHistory(doc: Document, s: any) {
   const host = doc.getElementById('aus-history');
   if (!host) return;
+  // 顶部健康提示：最近有「用量为 0 / 没取到用量 / 速率离谱 / 扩展报错」才显示
+  try {
+    renderHistoryHealthBar(
+      doc.getElementById('aus-history-health') as HTMLElement | null,
+      buildHealthReport({ history: (s && s.history) || [] }),
+    );
+  } catch {}
   let hist: any[] = s.history || [];
   let scope = 'all';
   try {
@@ -1673,6 +1681,7 @@ export function createPanel() {
             <div id="aus-wallet"></div>
           </div>
           <div data-view="history" style="display:none;">
+            <div id="aus-history-health" style="display:none;"></div>
             <div id="aus-history-filter-host" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div class="aus-stats-filter">
                 <div id="aus-history-model-btn" class="aus-pill"><span style="color:var(--ds-text-2);">模型</span><span id="aus-history-model-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon('chevron-down', 14)}</div>

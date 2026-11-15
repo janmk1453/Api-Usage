@@ -5,6 +5,7 @@ import { initConnectionIdentity, resolveRuntimeConnectionContext, type HistoryCo
 import { mergeIncludeUsage } from './include-usage';
 import { createThinkClock, scanThinkChunk, resolveThinkTime, reasoningTextOf, contentTextOf } from './think-timing';
 import { saveRequestStart, patchRequestLog } from './request-log';
+import { noteCaptureStage, isZeroUsage, usageNumbers } from './capture-digest';
 
 let lastMessages: any[] = [];
 let lastStart = 0;
@@ -167,6 +168,15 @@ function installFetchCapture() {
           const sentBody = typeof sentInit.body === 'string' ? sentInit.body : '';
           saveRequestStart({ at: startTime, method: sentInit.method || 'POST', url, headers: sentInit.headers, body: sentBody });
         } catch {}
+        // 采集链路快照：只记录「请求已发出」，与后续是否入库无关
+        try {
+          noteCaptureStage('fetch-start', {
+            model: (reqBody as any)?.model,
+            requestId,
+            url,
+            streamed: (reqBody as any)?.stream === true,
+          });
+        } catch {}
         return performFetch(fetchArgs).then((firstRes: Response) => {
           if (injected && !firstRes.ok && (firstRes.status === 400 || firstRes.status === 422)) {
             log.debug('上游不接受 include_usage，按原请求重试');
@@ -217,6 +227,19 @@ function installFetchCapture() {
                 model: (data as any)?.model || reqBody?.model || null,
                 finishReason: finishReason ?? null,
                 usage: (data as any)?.usage || null,
+              });
+            } catch {}
+            // 采集链路快照：响应解析完成，是否解析到用量、用量是否全 0
+            try {
+              const parsedUsage = (data as any)?.usage || null;
+              noteCaptureStage('fetch-parse', {
+                model: (data as any)?.model || (reqBody as any)?.model,
+                requestId,
+                streamed,
+                usageFound: !!parsedUsage,
+                usageZero: isZeroUsage(parsedUsage),
+                usage: usageNumbers(parsedUsage),
+                finishReason: finishReason ?? null,
               });
             } catch {}
             if (data && data.usage) {
@@ -484,9 +507,23 @@ function onGenerationEnded(...args: any[]) {
     }
     if (extra.token_count != null && !usage) {
       log.debug('跳过无效 usage：仅有本地 token_count=' + extra.token_count + ' model=' + model);
+      try {
+        noteCaptureStage('event-drop', {
+          model,
+          requestId: recentRequestId(120000) || '',
+          reason: 'no-usage-with-local-token-count:' + String(extra.token_count),
+        });
+      } catch {}
       return;
     }
     log.debug('未找到任何有效 usage，丢弃本次记录');
+    try {
+      noteCaptureStage('event-drop', {
+        model,
+        requestId: recentRequestId(120000) || '',
+        reason: 'no-usage',
+      });
+    } catch {}
   } catch (e) {
     log.error('onGenerationEnded 异常 ' + (e as any)?.message || e);
   }
@@ -516,7 +553,30 @@ export function processUsage(usage: any, model: string, messages: any[], startTi
       if (streamed == null) streamed = st.streamed;
     }
   } catch {}
-  repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason, connection, requestId, streamed);
+  try {
+    repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason, connection, requestId, streamed);
+  } catch (e) {
+    try {
+      noteCaptureStage('entry-error', {
+        model,
+        requestId: requestId || '',
+        reason: String((e as any)?.message || e),
+      });
+    } catch {}
+    throw e;
+  }
+  try {
+    noteCaptureStage('entry-added', {
+      model,
+      requestId: requestId || '',
+      streamed,
+      usageFound: !!usage,
+      usageZero: isZeroUsage(usage),
+      usage: usageNumbers(usage),
+      finishReason: finishReason ?? null,
+      reason: 'addEntry',
+    });
+  } catch {}
   refresh();
 }
 

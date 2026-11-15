@@ -7,7 +7,7 @@
  */
 import type { TapEndpointKind, TapRecord, TapUsage } from './types';
 import { classifyPurpose, actorFromLocation, actorFromStack, stackTopFrame, promptHintOf, fingerprint, type TapActor } from './classify';
-import { upsertTapRecord, patchTapRecord } from './store';
+import { upsertTapRecord, patchTapRecord, listTapRecords } from './store';
 
 /** 只关心酒馆后端转发端点；其余请求（汇率、更新检查、WebDAV、遥测）一律不碰 */
 export const TAP_API_PREFIX = '/api/backends/';
@@ -183,7 +183,30 @@ function finalize(ctx: Ctx, status: number | null, reader?: Reader, error: strin
   upsertTapRecord(rec);
   if (!reader) return;
   reader()
-    .then((r) => { patchTapRecord(rec.id, { usage: r.usage, usageMissing: !r.usage, ttftMs: r.ttft }); })
+    .then((r) => {
+      // 流式响应的真正结束在读完整个 body 之后：用此刻补正 endedAt / durationMs，
+      // 否则 endedAt 会停在「响应头到达」，对账窗口按它算会把长输出请求全判成超窗。
+      const settledAt = Date.now();
+      const patch: any = {
+        endedAt: settledAt,
+        durationMs: Math.max(0, settledAt - ctx.at),
+        usage: r.usage,
+        usageMissing: !r.usage,
+        ttftMs: r.ttft,
+      };
+      // usage 迟到：先前按「没用量」判成孤儿的，usage 到手后重新排队，让对账再判一次
+      if (r.usage) {
+        try {
+          const cur = listTapRecords().find((x) => x.id === rec.id);
+          if (cur && cur.state === 'orphan' && cur.settledBy === 'no-usage') {
+            patch.state = 'pending';
+            patch.settledBy = null;
+            patch.settledAt = null;
+          }
+        } catch {}
+      }
+      patchTapRecord(rec.id, patch);
+    })
     .catch(() => { patchTapRecord(rec.id, { usageMissing: true }); });
 }
 

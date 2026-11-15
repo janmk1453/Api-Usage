@@ -1,7 +1,12 @@
 import { defineConfig } from 'vitest/config';
 import { readFileSync } from 'node:fs';
 
+// 与 vite.config.ts 保持一致：测试环境也要注入版本号，否则 src/constants/version.ts 恒为空，
+// 诊断包「设置摘要」里的版本号断言就失去意义。
+const manifest = JSON.parse(readFileSync(new URL('./manifest.json', import.meta.url), 'utf8'));
+
 export default defineConfig({
+  define: { __APP_VERSION__: JSON.stringify(String(manifest.version || '')) },
   plugins: [
     {
       // cloudflare/worker.js 通过 Text 模块导入看板页（wrangler.toml 的 rules 已声明），

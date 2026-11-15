@@ -11,6 +11,8 @@
  * 不收集：钱包密钥、API Key、extensionSettings 原文、图片附件、脚本源码、Discord 身份。
  */
 import { state } from '../store';
+import { APP_VERSION } from '../constants/version';
+import { captureDigest } from './capture-digest';
 import { listTapRecords } from './request-tap/store';
 import { sanitizeJson, sanitizeText, sanitizeLogForUpload } from './log-sanitize';
 import { listConsoleEntries } from './console-ring';
@@ -161,7 +163,7 @@ export function settingsDigest(): Record<string, unknown> {
     walletCount = Array.isArray(state.wallets) ? state.wallets.length : 0;
   } catch {}
   return {
-    appVersion: clip((globalThis as any).__APP_VERSION__, 40),
+    appVersion: clip(APP_VERSION, 40),
     mobileCompatUi: settings.mobileCompatUi === true,
     theme: clip(settings.theme, 20),
     historyScope: clip(settings.historyScope, 20),
@@ -202,14 +204,27 @@ export function conversationDigest(): Record<string, unknown> {
   let chatId = '';
   let character = '';
   let stVersion = '';
+  let characterId = '';
+  // 对话标识：ctx.chatId 在部分客户端/未保存对话时为空，逐级兜底
   try {
-    chatId = String(ctx?.chatId || '');
+    chatId = String(ctx?.chatId || ctx?.chatMetadata?.chatId || ctx?.getCurrentChatId?.() || '');
   } catch {}
+  // 角色名：name2 在没有角色卡/扩展上下文里可能是默认系统名，回落到角色表
   try {
+    characterId = ctx?.characterId == null ? '' : String(ctx.characterId);
     character = String(ctx?.name2 || '');
+    if (!character || character === 'SillyTavern System') {
+      const fromList = characterId ? ctx?.characters?.[Number(characterId)]?.name : '';
+      if (fromList) character = String(fromList);
+    }
+    if (!character) character = String(ctx?.characters?.[ctx?.characterId]?.name || '');
   } catch {}
+  // 酒馆版本：不同版本把版本放在对象或字符串上，逐级兜底
   try {
-    stVersion = String(ctx?.version?.pkgVersion || ctx?.version?.commit || '');
+    const v = ctx?.version;
+    stVersion = String(
+      (v && typeof v === 'object' ? v.pkgVersion || v.commit || v.version : v) || '',
+    );
   } catch {}
   let extensionKeys: string[] = [];
   try {
@@ -218,6 +233,8 @@ export function conversationDigest(): Record<string, unknown> {
   return {
     chatId: clip(chatId, 160),
     character: clip(character, 120),
+    characterId: clip(characterId, 40),
+    isGroup: ctx?.groupId != null || undefined,
     stVersion: clip(stVersion, 40),
     extensionKeys,
   };
@@ -321,6 +338,7 @@ export async function buildFeedbackPack(input: {
   } catch {}
   const diagnostics = sanitizeJson({
     history: historyDigest(),
+    capture: captureDigest(),
     tap: tapDigest(),
     tapSummary: tapSummary(),
     console: consoleDigest(),
@@ -332,7 +350,7 @@ export async function buildFeedbackPack(input: {
   return {
     kind: 'aus_request_log',
     schema: FEEDBACK_SCHEMA,
-    appVersion: clip(input.appVersion || (globalThis as any).__APP_VERSION__, 40),
+    appVersion: clip(input.appVersion || APP_VERSION, 40),
     uploadedAt: now,
     report: { problem, note },
     client: {
