@@ -49,9 +49,11 @@ export interface RemoteSource {
 
 /**
  * 远端文件多源列表（manifest / update-policy 共用）。
- * 国内直连 raw.githubusercontent.com 常被污染或重置，酒馆服务端检查更新的 git 走的也是同一条路，
- * 因此排成两梯队：先并发抢实时源（raw + 几个 GitHub 加速镜像），全部失败才退到 jsDelivr 缓存源
+ * 国内直连 raw.githubusercontent.com 常被污染或重置，酒馆服务端检查更新走的 git 也是同一条路，
+ * 因此排成两梯队：先并发抢实时源（raw + 数个 GitHub 加速镜像），全部失败才退到 CDN 缓存源
  * —— 后者对 @branch 有最长 12 小时缓存，可能读到旧版本，只能兜底。
+ * 实测（国内家宽）raw 与 cdn.jsdelivr.net 均不可达时，gh-proxy.com / gh-proxy.org /
+ * fastly.jsdelivr.net / jsd.onmicrosoft.cn 通常仍可用，故两梯队都放了多个来源，先到先得。
  * query 串带时间戳，用于绕开浏览器与中间层缓存。
  */
 export function remoteSources(path: string, branch: UpdateBranch): RemoteSource[] {
@@ -61,9 +63,12 @@ export function remoteSources(path: string, branch: UpdateBranch): RemoteSource[
     { url: `${raw}?t=${t}`, live: true },
     { url: `https://ghproxy.net/${raw}?t=${t}`, live: true },
     { url: `https://gh-proxy.com/${raw}?t=${t}`, live: true },
+    { url: `https://gh-proxy.org/${raw}?t=${t}`, live: true },
     { url: `https://raw.gitmirror.com/${REPO}/${branch}/${path}?t=${t}`, live: true },
     { url: `https://cdn.jsdelivr.net/gh/${REPO}@${branch}/${path}?t=${t}`, live: false },
     { url: `https://fastly.jsdelivr.net/gh/${REPO}@${branch}/${path}?t=${t}`, live: false },
+    { url: `https://cdn.jsdmirror.com/gh/${REPO}@${branch}/${path}?t=${t}`, live: false },
+    { url: `https://jsd.onmicrosoft.cn/gh/${REPO}@${branch}/${path}?t=${t}`, live: false },
   ];
 }
 

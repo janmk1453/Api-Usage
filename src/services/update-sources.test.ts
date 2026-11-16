@@ -19,6 +19,16 @@ describe('远端多源列表', () => {
   it('至少有一条 GitHub 加速镜像，避免 raw 被墙后只剩缓存源', () => {
     expect(sources.some(s => s.url.includes('ghproxy.net'))).toBe(true);
     expect(sources.some(s => s.url.includes('gh-proxy.com'))).toBe(true);
+    expect(sources.some(s => s.url.includes('gh-proxy.org'))).toBe(true);
+  });
+
+  it('两个梯队都留有多条国内可达镜像，任一被墙仍有兜底', () => {
+    const live = sources.filter(s => s.live);
+    const cached = sources.filter(s => !s.live);
+    expect(live.length).toBeGreaterThanOrEqual(4);
+    expect(cached.length).toBeGreaterThanOrEqual(3);
+    expect(cached.some(s => s.url.includes('jsdmirror'))).toBe(true);
+    expect(cached.some(s => s.url.includes('jsd.onmicrosoft.cn'))).toBe(true);
   });
 
   it('每个地址都是 https 合法 URL 且指向同一文件', () => {
