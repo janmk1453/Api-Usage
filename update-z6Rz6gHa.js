@@ -19,7 +19,6 @@ var FORCE_RETRY_KEY = "aus_update_force_retry_at";
 var FORCE_PROBE_KEY = "aus_update_force_probe_at";
 var FORCE_RETRY_MS = 18e5;
 var FORCE_PROBE_INTERVAL_MS = 72e5;
-var POLICY_TIMEOUT_MS = 5e3;
 var POLICY_PATH = "update-policy.json";
 /** 「有新版本」状态的持久化：刷新页面后仍能点亮徽标/横幅，直到下次检查覆盖或超过有效期 */
 var STATE_KEY = "aus_update_state_v1";
@@ -380,7 +379,7 @@ async function fetchRemoteVersionSafe(branch) {
 		try {
 			ctrl.abort();
 		} catch {}
-	}, POLICY_TIMEOUT_MS);
+	}, 6500);
 	try {
 		return await fetchRemoteManifestVersion(branch, ctrl.signal);
 	} catch {
@@ -797,7 +796,7 @@ async function checkUpdate(manual = false) {
 				clearTimeout(timer);
 				log.debug("提交哈希检查失败，回退版本检查", e?.message || e);
 			}
-			if (!hasUpdate && !cmp && local.isUpToDate !== true) {
+			if (!hasUpdate && !needsSwitch && !cmp && local.isUpToDate !== true) {
 				const remoteVer = await fetchRemoteVersionSafe(targetBranch);
 				if (remoteVer && isNewer(remoteVer, CURRENT_VERSION)) {
 					hasUpdate = true;

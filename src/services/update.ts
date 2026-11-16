@@ -352,7 +352,8 @@ async function fetchPolicy(branch: UpdateBranch): Promise<UpdatePolicy | null> {
 
 async function fetchRemoteVersionSafe(branch: UpdateBranch): Promise<string> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => { try { ctrl.abort(); } catch {} }, POLICY_TIMEOUT_MS);
+  // 两梯队各 TIER_TIMEOUT_MS，总上限要留够，否则第二梯队（CDN 缓存源）刚发出就被掐断
+  const timer = setTimeout(() => { try { ctrl.abort(); } catch {} }, TIER_TIMEOUT_MS * 2 + 500);
   try {
     return await fetchRemoteManifestVersion(branch, ctrl.signal);
   } catch {
@@ -732,7 +733,7 @@ export async function checkUpdate(manual = false): Promise<{ hasUpdate: boolean;
       }
       // compare 拿不到结果（api.github.com 被墙/限流）时用多源 manifest 兜底：
       // 版本号只在发版时变，粒度比提交粗，但足以判断「落后」，总好过直接误报「已是最新」。
-      if (!hasUpdate && !cmp && local.isUpToDate !== true) {
+      if (!hasUpdate && !needsSwitch && !cmp && local.isUpToDate !== true) {
         const remoteVer = await fetchRemoteVersionSafe(targetBranch);
         if (remoteVer && isNewer(remoteVer, CURRENT_VERSION)) {
           hasUpdate = true;
