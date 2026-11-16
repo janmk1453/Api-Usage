@@ -7,6 +7,8 @@ var EXTENSION_FOLDER = "Api-Usage";
 /** 自动检查节流：每 10 分钟内首次打开面板才真正联网检查一次 */
 var INTERVAL_MS = 6e5;
 var TIMEOUT_MS = 5e3;
+/** 单个来源梯队（实时源 / 缓存源）的并发竞速上限 */
+var TIER_TIMEOUT_MS = 3e3;
 var LOCAL_TIMEOUT_MS = 15e3;
 var LAST_CHECK_KEY = "aus_update_last_check";
 var LAST_NOTIFIED_KEY = "aus_update_last_notified_version";
@@ -35,8 +37,42 @@ function setUpdateBranch(branch) {
 		localStorage.setItem(UPDATE_BRANCH_KEY, branch);
 	} catch {}
 }
-function remoteManifestUrl(branch) {
-	return `https://raw.githubusercontent.com/${REPO}/${branch}/manifest.json`;
+/**
+* 远端文件多源列表（manifest / update-policy 共用）。
+* 国内直连 raw.githubusercontent.com 常被污染或重置，酒馆服务端检查更新的 git 走的也是同一条路，
+* 因此排成两梯队：先并发抢实时源（raw + 几个 GitHub 加速镜像），全部失败才退到 jsDelivr 缓存源
+* —— 后者对 @branch 有最长 12 小时缓存，可能读到旧版本，只能兜底。
+* query 串带时间戳，用于绕开浏览器与中间层缓存。
+*/
+function remoteSources(path, branch) {
+	const t = Date.now();
+	const raw = `https://raw.githubusercontent.com/${REPO}/${branch}/${path}`;
+	return [
+		{
+			url: `${raw}?t=${t}`,
+			live: true
+		},
+		{
+			url: `https://ghproxy.net/${raw}?t=${t}`,
+			live: true
+		},
+		{
+			url: `https://gh-proxy.com/${raw}?t=${t}`,
+			live: true
+		},
+		{
+			url: `https://raw.gitmirror.com/${REPO}/${branch}/${path}?t=${t}`,
+			live: true
+		},
+		{
+			url: `https://cdn.jsdelivr.net/gh/${REPO}@${branch}/${path}?t=${t}`,
+			live: false
+		},
+		{
+			url: `https://fastly.jsdelivr.net/gh/${REPO}@${branch}/${path}?t=${t}`,
+			live: false
+		}
+	];
 }
 var cachedLocalRepo = null;
 var loadedBranch = null;
@@ -218,67 +254,111 @@ async function fetchLocalCommit() {
 	}
 	return null;
 }
-async function compareWithBranch(localSha, branch, signal) {
-	const resp = await getParentFetch()(`https://api.github.com/repos/${REPO}/compare/${localSha}...${encodeURIComponent(branch)}?t=${Date.now()}`, {
-		method: "GET",
-		headers: { Accept: "application/vnd.github+json" },
-		cache: "no-store",
-		signal
+/**
+* 同一梯队内并发请求，第一个通过 accept 校验的响应胜出。
+* 先到先得而不是按列表顺序等待 —— 某个源被墙时不会拖住其他源；整体超时由 signal 控制。
+*/
+async function raceJson(urls, signal, accept) {
+	if (!urls.length) throw new Error("没有可用来源");
+	return new Promise((resolve, reject) => {
+		let settled = false;
+		let pending = urls.length;
+		const errors = [];
+		const fail = (e) => {
+			if (settled) return;
+			errors.push(String(e?.message || e || "未知错误"));
+			pending -= 1;
+			if (pending <= 0) {
+				settled = true;
+				reject(new Error(errors.join(" / ")));
+			}
+		};
+		for (const url of urls) {
+			const rf = getParentFetch();
+			Promise.resolve().then(() => rf(url, {
+				method: "GET",
+				headers: { Accept: "application/json" },
+				cache: "no-store",
+				signal
+			})).then(async (resp) => {
+				if (!resp?.ok) throw new Error("HTTP " + (resp?.status ?? "?"));
+				const data = await resp.json().catch(() => null);
+				if (!accept(data)) throw new Error("内容不可用");
+				return data;
+			}).then((data) => {
+				if (settled) return;
+				settled = true;
+				resolve(data);
+			}).catch(fail);
+		}
 	});
-	if (!resp?.ok) return null;
-	const data = await resp.json();
-	const ahead = Number(data?.ahead_by || 0);
-	const commits = Array.isArray(data?.commits) ? data.commits : [];
-	const remoteSha = commits.length ? String(commits[commits.length - 1]?.sha || "") : localSha;
-	return {
-		hasUpdate: ahead > 0,
-		remoteSha
-	};
 }
-async function fetchRemoteManifestVersion(branch, signal) {
-	const resp = await getParentFetch()(remoteManifestUrl(branch) + "?t=" + Date.now(), {
-		method: "GET",
-		headers: { Accept: "application/json" },
-		cache: "no-store",
-		signal
-	});
-	if (!resp?.ok) throw new Error("HTTP " + resp.status);
-	const data = await resp.json();
-	const v = String(data?.version || "").trim();
-	if (!v) throw new Error("远程版本为空");
-	return v;
-}
-/** 策略文件的两个来源：GitHub raw 优先，jsDelivr 兜底（raw 被墙/限流时仍能拿到） */
-function policyUrls(branch) {
-	const t = Date.now();
-	return [`https://raw.githubusercontent.com/${REPO}/${branch}/${POLICY_PATH}?t=${t}`, `https://cdn.jsdelivr.net/gh/${REPO}@${branch}/${POLICY_PATH}?t=${t}`];
-}
-/** 读远端策略；读不到一律当作「没有强制要求」，绝不让网络问题反而触发强制 */
-async function fetchPolicy(branch) {
-	const rf = getParentFetch();
-	for (const url of policyUrls(branch)) {
+/** 两梯队取远端 JSON：实时源全部失败才退到缓存源，两梯队都失败才抛错 */
+async function fetchJsonWithFallback(sources, parent, accept) {
+	const tiers = [sources.filter((s) => s.live), sources.filter((s) => !s.live)].filter((tier) => tier.length > 0);
+	const errors = [];
+	for (const tier of tiers) {
+		if (parent?.aborted) throw new Error("请求已取消");
 		const ctrl = new AbortController();
 		const timer = setTimeout(() => {
 			try {
 				ctrl.abort();
 			} catch {}
-		}, POLICY_TIMEOUT_MS);
+		}, TIER_TIMEOUT_MS);
+		const relay = () => {
+			try {
+				ctrl.abort();
+			} catch {}
+		};
+		if (parent) {
+			if (parent.aborted) relay();
+			else parent.addEventListener("abort", relay, { once: true });
+		}
 		try {
-			const resp = await rf(url, {
-				method: "GET",
-				headers: { Accept: "application/json" },
-				cache: "no-store",
-				signal: ctrl.signal
-			});
+			return await raceJson(tier.map((s) => s.url), ctrl.signal, accept);
+		} catch (e) {
+			errors.push(String(e?.message || e || "未知错误"));
+		} finally {
 			clearTimeout(timer);
-			if (!resp?.ok) continue;
-			const data = await resp.json().catch(() => null);
-			if (data && typeof data === "object") return normalizePolicy(data);
-		} catch {
-			clearTimeout(timer);
+			try {
+				parent?.removeEventListener("abort", relay);
+			} catch {}
 		}
 	}
-	return null;
+	throw new Error(errors.filter(Boolean).join("；") || "没有可用来源");
+}
+/** compare 接口：api.github.com 直连 + gh-proxy 包装，任一可用即可 */
+function compareUrls(localSha, branch) {
+	const t = Date.now();
+	const path = `repos/${REPO}/compare/${localSha}...${encodeURIComponent(branch)}`;
+	return [`https://api.github.com/${path}?t=${t}`, `https://gh-proxy.com/https://api.github.com/${path}?t=${t}`];
+}
+async function compareWithBranch(localSha, branch, signal) {
+	try {
+		const data = await raceJson(compareUrls(localSha, branch), signal, (d) => !!d && typeof d === "object" && "ahead_by" in d);
+		const ahead = Number(data?.ahead_by || 0);
+		const commits = Array.isArray(data?.commits) ? data.commits : [];
+		const remoteSha = commits.length ? String(commits[commits.length - 1]?.sha || "") : localSha;
+		return {
+			hasUpdate: ahead > 0,
+			remoteSha
+		};
+	} catch {
+		return null;
+	}
+}
+/** 按多源竞速读目标分支的 manifest 版本号 */
+async function fetchRemoteManifestVersion(branch, signal) {
+	const data = await fetchJsonWithFallback(remoteSources("manifest.json", branch), signal, (d) => !!String(d?.version || "").trim());
+	return String(data.version).trim();
+}
+/** 读远端策略；读不到一律当作「没有强制要求」，绝不让网络问题反而触发强制 */
+async function fetchPolicy(branch) {
+	try {
+		return normalizePolicy(await fetchJsonWithFallback(remoteSources(POLICY_PATH, branch), void 0, (d) => !!d && typeof d === "object" && !Array.isArray(d)));
+	} catch {
+		return null;
+	}
 }
 async function fetchRemoteVersionSafe(branch) {
 	const ctrl = new AbortController();
@@ -676,6 +756,7 @@ async function checkUpdate(manual = false) {
 			const needsSwitch = currentBranch !== "unknown" && currentBranch !== targetBranch;
 			let hasUpdate = !needsSwitch && local.isUpToDate === false;
 			let remoteLabel = "";
+			let remoteKind = "commit";
 			let remoteSha = "";
 			let notifyKey = `${targetBranch}:${local.sha}`;
 			const ctrl = new AbortController();
@@ -684,8 +765,9 @@ async function checkUpdate(manual = false) {
 					ctrl.abort();
 				} catch {}
 			}, TIMEOUT_MS);
+			let cmp = null;
 			try {
-				const cmp = await compareWithBranch(local.sha, targetBranch, ctrl.signal);
+				cmp = await compareWithBranch(local.sha, targetBranch, ctrl.signal);
 				clearTimeout(timer);
 				if (cmp) {
 					if (cmp.hasUpdate) {
@@ -701,6 +783,15 @@ async function checkUpdate(manual = false) {
 				clearTimeout(timer);
 				log.debug("提交哈希检查失败，回退版本检查", e?.message || e);
 			}
+			if (!hasUpdate && !cmp && local.isUpToDate !== true) {
+				const remoteVer = await fetchRemoteVersionSafe(targetBranch);
+				if (remoteVer && isNewer(remoteVer, CURRENT_VERSION)) {
+					hasUpdate = true;
+					remoteLabel = `v${remoteVer}`;
+					remoteKind = "version";
+					notifyKey = `${targetBranch}:v${remoteVer}`;
+				}
+			}
 			if (needsSwitch) hasUpdate = true;
 			if (hasUpdate && await maybeForceUpdate(targetBranch)) return {
 				hasUpdate: true,
@@ -708,12 +799,12 @@ async function checkUpdate(manual = false) {
 				remote: remoteLabel || `${targetBranch}（领先本地）`
 			};
 			if (hasUpdate) {
-				const message = needsSwitch ? `当前 ${localLabel}，可在关于页切换到 ${targetBranch} 分支并更新` : remoteLabel ? `发现新提交 ${remoteLabel}（当前 ${localLabel}），可在关于页更新` : `检测到 ${targetBranch} 有新提交（当前 ${localLabel}），可在关于页更新`;
+				const message = needsSwitch ? `当前 ${localLabel}，可在关于页切换到 ${targetBranch} 分支并更新` : remoteKind === "version" ? `发现 ${targetBranch} 分支新版本 ${remoteLabel}（当前 v${CURRENT_VERSION}），可在关于页更新` : remoteLabel ? `发现新提交 ${remoteLabel}（当前 ${localLabel}），可在关于页更新` : `检测到 ${targetBranch} 有新提交（当前 ${localLabel}），可在关于页更新`;
 				if (getLastNotified() !== notifyKey || manual) {
 					toast("info", message);
 					setLastNotified(notifyKey);
 				}
-				if (banner) showBanner(needsSwitch ? `当前 <b>${esc(localLabel)}</b>，目标分支 <b>${esc(targetBranch)}</b>，点击“立即更新”将切换并更新` : remoteLabel ? `发现新提交 <b>${esc(remoteLabel)}</b>（当前 ${esc(localLabel)}），可在本页直接更新` : `当前 <b>${esc(localLabel)}</b> 落后于 <b>${esc(targetBranch)}</b> 分支，点击“立即更新”拉取最新提交`);
+				if (banner) showBanner(needsSwitch ? `当前 <b>${esc(localLabel)}</b>，目标分支 <b>${esc(targetBranch)}</b>，点击“立即更新”将切换并更新` : remoteKind === "version" ? `发现 <b>${esc(targetBranch)}</b> 分支新版本 <b>${esc(remoteLabel)}</b>（当前 <b>v${esc(CURRENT_VERSION)}</b>），可在本页直接更新` : remoteLabel ? `发现新提交 <b>${esc(remoteLabel)}</b>（当前 ${esc(localLabel)}），可在本页直接更新` : `当前 <b>${esc(localLabel)}</b> 落后于 <b>${esc(targetBranch)}</b> 分支，点击“立即更新”拉取最新提交`);
 				setUpdateButtonVisible(true);
 				setNavBadge(true, needsSwitch ? `${targetBranch}（可切换）` : remoteLabel || `${targetBranch} 新提交`);
 			} else {
