@@ -37,6 +37,18 @@ export const CHANGELOG_ENTRY_LIMIT = 5;
 /** 更新日志（最新在前） */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'r3.2.2',
+    date: '2026-11-16',
+    sections: [
+      {
+        kind: 'improve',
+        items: [
+          '国内网络下的检查更新',
+        ],
+      },
+    ],
+  },
+  {
     version: 'r3.2.1',
     date: '2026-11-15',
     sections: [
