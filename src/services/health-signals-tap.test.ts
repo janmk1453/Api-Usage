@@ -51,6 +51,19 @@ describe('scanTapHealth 提示文案', () => {
     expect(out[0].detail).toContain('12 条消息');
   });
 
+  it('只有几毫秒的假探针不算「没记进历史」', () => {
+    const short = { durationMs: 4, settledBy: 'too-short' };
+    expect(scanTapHealth([tap(short), tap({ ...short, at: 2000 })])).toHaveLength(0);
+  });
+
+  it('提示里的模型名去掉 [A] / [D] 之类前缀', () => {
+    const out = scanTapHealth([
+      tap({ model: '[A]gemini-3.8-flash' }),
+      tap({ at: 2000, model: '[A]gemini-3.8-flash' }),
+    ]);
+    expect(out[0].model).toBe('gemini-3.8-flash');
+  });
+
   it('不同发起方的同用途聚簇文案互不相同，用户能分辨', () => {
     const out = scanTapHealth([
       tap(),

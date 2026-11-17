@@ -215,7 +215,6 @@ export function clearRequestLog(): void {
 }
 
 /** 摘要：状态码 + 耗时一行文案，供页面顶部展示 */
-/** 摘要：状态码 + 耗时一行文案，供页面顶部展示 */
 export function summarizeRequestLog(record: RequestLogRecord | null): string {
   if (!record) return "暂无记录";
   const r = record.response;
@@ -242,6 +241,11 @@ export interface RecentTurnRecord {
   /** 这轮请求的时间 */
   at: number;
   role: string;
+  /**
+   * dialogue    = 真正的对白轮（user 提问 + assistant 回复成对取到）
+   * prompt-tail = 只抓到尾部注入的提示词，没有对白（首轮 / 重新生成时常见）
+   */
+  kind?: 'dialogue' | 'prompt-tail';
   /** 正文前 400 字（已截断） */
   text: string;
   /** 完整字符数（截断前） */
@@ -261,33 +265,62 @@ function contentTextOf(content: unknown): string {
   return "";
 }
 
+function turnRow(role: string, full: string, at: number, kind: "dialogue" | "prompt-tail"): RecentTurnRecord {
+  return {
+    at,
+    role,
+    kind,
+    text: full.length <= RECENT_TURN_TEXT_LIMIT ? full : full.slice(0, RECENT_TURN_TEXT_LIMIT),
+    chars: full.length,
+  };
+}
+
 /**
- * 请求发出时记一份「最近几轮在聊什么」：取 messages 尾部 6 条 user/assistant。
- * 只存角色 + 前 400 字 + 字符数，整体不超过 8KB，避免撑爆 localStorage。
+ * 请求发出时记一份「最近几轮在聊什么」。
+ *
+ * 只取尾部 6 条 user/assistant 是不够的：人称准则、字数准则、输出模板这类尾部注入
+ * 提示词本身也是 user，重新生成时尾部连着好几条 user，一条对白都抓不到（真机上反馈
+ * 包里 6 条全是提示词）。所以改成按轮配对——从尾部往前找 assistant 回复，每条回复
+ * 连同它前面的 user 提问一起收下，最多 3 轮；找不到 assistant 时只留最后一条 user，
+ * 并标 kind='prompt-tail'，让看日志的人一眼知道这不是对白。
  */
 export function noteRecentTurns(messages: unknown, at = Date.now()): void {
   try {
     if (!Array.isArray(messages)) return;
     const rows: RecentTurnRecord[] = [];
-    for (let i = messages.length - 1; i >= 0 && rows.length < RECENT_TURNS_MAX; i -= 1) {
+    let turns = 0;
+    for (let i = messages.length - 1; i >= 0 && turns < 3; i -= 1) {
       const msg: any = messages[i];
-      const role = String(msg?.role || "");
-      if (role !== "user" && role !== "assistant") continue;
-      const full = contentTextOf(msg?.content);
-      if (!full) continue;
-      rows.unshift({
-        at,
-        role,
-        text: full.length <= RECENT_TURN_TEXT_LIMIT ? full : full.slice(0, RECENT_TURN_TEXT_LIMIT),
-        chars: full.length,
-      });
+      if (String(msg?.role || "") !== "assistant") continue;
+      const reply = contentTextOf(msg?.content);
+      if (!reply) continue;
+      const pair: RecentTurnRecord[] = [];
+      const prev: any = i > 0 ? messages[i - 1] : null;
+      if (prev && String(prev?.role || "") === "user") {
+        const ask = contentTextOf(prev?.content);
+        if (ask) pair.push(turnRow("user", ask, at, "dialogue"));
+      }
+      pair.push(turnRow("assistant", reply, at, "dialogue"));
+      rows.unshift(...pair);
+      turns += 1;
+    }
+    if (!rows.length) {
+      for (let i = messages.length - 1; i >= 0; i -= 1) {
+        const msg: any = messages[i];
+        if (String(msg?.role || "") !== "user") continue;
+        const text = contentTextOf(msg?.content);
+        if (!text) continue;
+        rows.push(turnRow("user", text, at, "prompt-tail"));
+        break;
+      }
     }
     if (!rows.length) return;
     // 超上限时从头丢，保留最近的
-    let payload = JSON.stringify(rows);
-    while (payload.length > RECENT_TURNS_BYTES_LIMIT && rows.length > 1) {
-      rows.shift();
-      payload = JSON.stringify(rows);
+    let trimmed = rows.slice(-RECENT_TURNS_MAX);
+    let payload = JSON.stringify(trimmed);
+    while (payload.length > RECENT_TURNS_BYTES_LIMIT && trimmed.length > 1) {
+      trimmed = trimmed.slice(1);
+      payload = JSON.stringify(trimmed);
     }
     globalThis.localStorage?.setItem(RECENT_TURNS_KEY, payload);
   } catch {}
@@ -307,6 +340,7 @@ export function readRecentTurns(): RecentTurnRecord[] {
       out.push({
         at: Number((item as any).at) || 0,
         role,
+        kind: (item as any).kind === "prompt-tail" ? "prompt-tail" : "dialogue",
         text: String((item as any).text || ""),
         chars: Number((item as any).chars) || 0,
       });

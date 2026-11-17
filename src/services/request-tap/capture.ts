@@ -198,7 +198,7 @@ function finalize(ctx: Ctx, status: number | null, reader?: Reader, error: strin
       if (r.usage) {
         try {
           const cur = listTapRecords().find((x) => x.id === rec.id);
-          if (cur && cur.state === 'orphan' && cur.settledBy === 'no-usage') {
+          if (cur && cur.state === 'orphan' && (cur.settledBy === 'no-usage' || cur.settledBy === 'too-short')) {
             patch.state = 'pending';
             patch.settledBy = null;
             patch.settledAt = null;

@@ -1,6 +1,6 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { E as resolveRuntimeConnectionContext, T as initConnectionIdentity, t as repository } from "./repository-CbOXJf4X.js";
+import { E as resolveRuntimeConnectionContext, T as initConnectionIdentity, t as repository } from "./repository-GlOd_EFe.js";
 //#region src/services/include-usage.ts
 /**
 * 流式 usage 注入的纯逻辑：把 stream_options.include_usage 合并进用户/预设自定义的请求体参数。
@@ -360,7 +360,6 @@ function clearRequestLog() {
 	} catch {}
 }
 /** 摘要：状态码 + 耗时一行文案，供页面顶部展示 */
-/** 摘要：状态码 + 耗时一行文案，供页面顶部展示 */
 function summarizeRequestLog(record) {
 	if (!record) return "暂无记录";
 	const r = record.response;
@@ -381,32 +380,58 @@ function contentTextOf(content) {
 	}
 	return "";
 }
+function turnRow(role, full, at, kind) {
+	return {
+		at,
+		role,
+		kind,
+		text: full.length <= 400 ? full : full.slice(0, 400),
+		chars: full.length
+	};
+}
 /**
-* 请求发出时记一份「最近几轮在聊什么」：取 messages 尾部 6 条 user/assistant。
-* 只存角色 + 前 400 字 + 字符数，整体不超过 8KB，避免撑爆 localStorage。
+* 请求发出时记一份「最近几轮在聊什么」。
+*
+* 只取尾部 6 条 user/assistant 是不够的：人称准则、字数准则、输出模板这类尾部注入
+* 提示词本身也是 user，重新生成时尾部连着好几条 user，一条对白都抓不到（真机上反馈
+* 包里 6 条全是提示词）。所以改成按轮配对——从尾部往前找 assistant 回复，每条回复
+* 连同它前面的 user 提问一起收下，最多 3 轮；找不到 assistant 时只留最后一条 user，
+* 并标 kind='prompt-tail'，让看日志的人一眼知道这不是对白。
 */
 function noteRecentTurns(messages, at = Date.now()) {
 	try {
 		if (!Array.isArray(messages)) return;
 		const rows = [];
-		for (let i = messages.length - 1; i >= 0 && rows.length < 6; i -= 1) {
+		let turns = 0;
+		for (let i = messages.length - 1; i >= 0 && turns < 3; i -= 1) {
 			const msg = messages[i];
-			const role = String(msg?.role || "");
-			if (role !== "user" && role !== "assistant") continue;
-			const full = contentTextOf(msg?.content);
-			if (!full) continue;
-			rows.unshift({
-				at,
-				role,
-				text: full.length <= 400 ? full : full.slice(0, 400),
-				chars: full.length
-			});
+			if (String(msg?.role || "") !== "assistant") continue;
+			const reply = contentTextOf(msg?.content);
+			if (!reply) continue;
+			const pair = [];
+			const prev = i > 0 ? messages[i - 1] : null;
+			if (prev && String(prev?.role || "") === "user") {
+				const ask = contentTextOf(prev?.content);
+				if (ask) pair.push(turnRow("user", ask, at, "dialogue"));
+			}
+			pair.push(turnRow("assistant", reply, at, "dialogue"));
+			rows.unshift(...pair);
+			turns += 1;
+		}
+		if (!rows.length) for (let i = messages.length - 1; i >= 0; i -= 1) {
+			const msg = messages[i];
+			if (String(msg?.role || "") !== "user") continue;
+			const text = contentTextOf(msg?.content);
+			if (!text) continue;
+			rows.push(turnRow("user", text, at, "prompt-tail"));
+			break;
 		}
 		if (!rows.length) return;
-		let payload = JSON.stringify(rows);
-		while (payload.length > 8e3 && rows.length > 1) {
-			rows.shift();
-			payload = JSON.stringify(rows);
+		let trimmed = rows.slice(-6);
+		let payload = JSON.stringify(trimmed);
+		while (payload.length > 8e3 && trimmed.length > 1) {
+			trimmed = trimmed.slice(1);
+			payload = JSON.stringify(trimmed);
 		}
 		globalThis.localStorage?.setItem(RECENT_TURNS_KEY, payload);
 	} catch {}
@@ -425,6 +450,7 @@ function readRecentTurns() {
 			out.push({
 				at: Number(item.at) || 0,
 				role,
+				kind: item.kind === "prompt-tail" ? "prompt-tail" : "dialogue",
 				text: String(item.text || ""),
 				chars: Number(item.chars) || 0
 			});
@@ -434,6 +460,21 @@ function readRecentTurns() {
 		return [];
 	}
 }
+/**
+* 落盘镜像：真机上「没记进历史」往往发生在几轮之前，而页面一刷新内存缓冲就空了
+* （反馈包里 capture 总是空数组）。这里把同一批快照同步写进 localStorage，
+* 只含阶段名、模型名、URL 与用量数字，不含任何正文。
+*/
+var CAPTURE_STORAGE_KEY = "aus_capture_stages_v1";
+var CAPTURE_STAGE_SET = /* @__PURE__ */ new Set([
+	"fetch-start",
+	"fetch-parse",
+	"event-drop",
+	"entry-added",
+	"entry-error",
+	"turn-estimated",
+	"turn-interrupted"
+]);
 var USAGE_KEYS = [
 	"prompt_tokens",
 	"completion_tokens",
@@ -445,6 +486,41 @@ var USAGE_KEYS = [
 	"prompt_cache_miss_tokens"
 ];
 var buffer = [];
+function readPersisted() {
+	try {
+		const text = globalThis.localStorage?.getItem(CAPTURE_STORAGE_KEY);
+		if (!text) return [];
+		const parsed = JSON.parse(text);
+		if (!Array.isArray(parsed)) return [];
+		const out = [];
+		for (const item of parsed) {
+			if (!item || typeof item !== "object") continue;
+			const stage = String(item.stage || "");
+			if (!CAPTURE_STAGE_SET.has(stage)) continue;
+			out.push({
+				at: Number(item.at) || 0,
+				stage,
+				model: item.model ? String(item.model) : void 0,
+				requestId: item.requestId ? String(item.requestId) : void 0,
+				url: item.url ? String(item.url) : void 0,
+				streamed: typeof item.streamed === "boolean" ? item.streamed : void 0,
+				usageFound: typeof item.usageFound === "boolean" ? item.usageFound : void 0,
+				usageZero: typeof item.usageZero === "boolean" ? item.usageZero : void 0,
+				usage: item.usage && typeof item.usage === "object" ? item.usage : null,
+				finishReason: item.finishReason == null ? void 0 : String(item.finishReason),
+				reason: item.reason ? String(item.reason) : void 0
+			});
+		}
+		return out.slice(-24);
+	} catch {
+		return [];
+	}
+}
+function persist() {
+	try {
+		globalThis.localStorage?.setItem(CAPTURE_STORAGE_KEY, JSON.stringify(buffer));
+	} catch {}
+}
 /** 只留下数字型用量字段，避免把整块 usage 塞进诊断包 */
 function usageNumbers(usage) {
 	if (!usage || typeof usage !== "object") return null;
@@ -500,12 +576,14 @@ function noteCaptureStage(stage, data = {}) {
 		};
 		buffer.push(rec);
 		if (buffer.length > 24) buffer = buffer.slice(-24);
+		persist();
 	} catch {}
 }
 /** 最近的链路快照（按时间正序，最后一条最新） */
 function listCaptureStages(limit = 24) {
 	try {
 		const n = Math.max(1, Math.min(24, Math.floor(limit) || 24));
+		if (!buffer.length) buffer = readPersisted();
 		return buffer.slice(-n).map((r) => ({ ...r }));
 	} catch {
 		return [];

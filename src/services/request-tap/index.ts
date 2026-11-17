@@ -9,7 +9,7 @@ import { DataEvents, on } from '../../data/events';
 import { installTapCapture, uninstallTapCapture, tapDebugRecord } from './capture';
 import { findSettlement, probeKeyOf, type Settlement } from './match';
 import { clearTapRecords, listTapRecords, patchTapRecord } from './store';
-import type { TapRecord } from './types';
+import { MIN_TAP_DURATION_MS, type TapRecord } from './types';
 
 /** 入账窗口：酒馆 GENERATION_ENDED → 写库有延迟，留足时间再判定 */
 export const RECONCILE_DELAY_MS = 12000;
@@ -31,7 +31,9 @@ export function noteSettlement(entry: any): void {
     const id = String(entry.requestId || '') || 'auto:' + ts + ':' + settlements.length;
     settlements.push({
       id,
-      model: String(entry.model || ''),
+      // 入账侧 model 已归一（前缀留在 rawModel），探针侧是请求体原名；
+      // 两侧都保留原值，由 findSettlement 的 normalizeModel 统一剥前缀后比较。
+      model: String(entry.model || entry.rawModel || ''),
       prompt: Number(entry.prompt_tokens) || 0,
       completion: Number(entry.completion_tokens) || 0,
       total: Number(entry.total_tokens) || 0,
@@ -64,7 +66,14 @@ export function reconcilePending(now = Date.now()): void {
       used.add(hit.settlement.id);
       patchTapRecord(rec.id, { state: 'settled', settledBy: hit.by, settledAt: now });
     } else {
-      patchTapRecord(rec.id, { state: 'orphan', settledBy: rec.usage ? null : 'no-usage', settledAt: now });
+      // 过短请求单独标注：仍留在 orphan 里，但不参与「疑似正常对话没记账」的聚簇
+      const durationMs = Number(rec.durationMs) || 0;
+      const tooShort = durationMs > 0 && durationMs < MIN_TAP_DURATION_MS;
+      patchTapRecord(rec.id, {
+        state: 'orphan',
+        settledBy: tooShort ? 'too-short' : rec.usage ? null : 'no-usage',
+        settledAt: now,
+      });
     }
   }
 }

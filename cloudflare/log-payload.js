@@ -8,7 +8,7 @@
  * 体积、条数、字段长度都在这里收口，D1 里只会有这一种形状的数据。
  */
 
-export const LOG_SCHEMA = 4;
+export const LOG_SCHEMA = 5;
 /**
  * 兼容的上报版本：
  * 1 = 只带单条记录（旧版）；
@@ -16,7 +16,7 @@ export const LOG_SCHEMA = 4;
  * 3 = 额外带 report.target 与 diagnostics.evidence（点名单条异常）；
  * 4 = report.targets 逐条点名多条异常（当前）。
  */
-export const LOG_SCHEMAS = [1, 2, 3, 4];
+export const LOG_SCHEMAS = [1, 2, 3, 4, 5];
 /** 上报体最大字节数：正文本身允许 200000 字符，留出标头、逐条点名的现场证据与包装的余量 */
 export const MAX_LOG_BODY_BYTES = 400000;
 export const MAX_RECORD_BODY_CHARS = 200000;
@@ -212,6 +212,8 @@ function normalizeRequestRef(value) {
   return {
     requestId: toStr(row.requestId, 120),
     logAt: toStamp(row.logAt, 4102444800000),
+    // 最近一轮请求日志是否真的就是被点名那一轮（false 时 logAt 为 null，别当成同轮现场）
+    matched: row.matched === true,
   };
 }
 
@@ -243,6 +245,8 @@ function normalizeEvidenceItem(value) {
     history: normalizeHistoryEvidence(value.history),
     tap: normalizeTapEvidence(value.tap),
     console: listOf(value.console, MAX_EVIDENCE_CONSOLE, normalizeConsoleRow),
+    // true 表示窗口内没有条目，带的是「最近几条」，不是与目标同窗的证据
+    consoleFallback: value.consoleFallback === true,
   };
 }
 
@@ -252,6 +256,8 @@ function normalizeRecentTurn(value) {
   return {
     at: toStamp(value.at, 4102444800000),
     role: toStr(value.role, 20),
+    // dialogue=成对的对白轮；prompt-tail=只抓到尾部注入提示词
+    kind: value.kind === 'prompt-tail' ? 'prompt-tail' : 'dialogue',
     chars: toInt(value.chars, 0, 1e9, 0),
     text: toStr(value.text, MAX_RECENT_TURN_TEXT),
   };
@@ -277,6 +283,7 @@ export function normalizeEvidence(value) {
     history: normalizeHistoryEvidence(value.history),
     tap: normalizeTapEvidence(value.tap),
     console: listOf(value.console, MAX_EVIDENCE_CONSOLE, normalizeConsoleRow),
+    consoleFallback: value.consoleFallback === true,
     items,
     recentTurns: listOf(value.recentTurns, MAX_RECENT_TURNS, normalizeRecentTurn),
   };
@@ -324,11 +331,12 @@ function normalizeHistoryRow(value) {
     finishReason: toStr(value.finishReason, MAX_FINISH_CHARS),
     isTruncated: value.isTruncated === true,
     pricingSource: toStr(value.pricingSource, 40),
-    usageSource: toStr(value.usageSource, 20),
-    interrupted: toStr(value.interrupted, 20),
-    interruptReason: toStr(value.interruptReason, 200),
+    // 空字符串没有意义，缺省一律 null，避免摘要里出现一堆 ""
+    usageSource: toStr(value.usageSource, 20) || null,
+    interrupted: toStr(value.interrupted, 20) || null,
+    interruptReason: toStr(value.interruptReason, 200) || null,
     modelFallback: value.modelFallback === true,
-    estimateMethod: toStr(value.estimateMethod, 60),
+    estimateMethod: toStr(value.estimateMethod, 60) || null,
     estimateVersion: toInt(value.estimateVersion, 0, 1e6, 0),
     promptChars: toInt(value.promptChars, 0, 1e9, 0),
     outputChars: toInt(value.outputChars, 0, 1e9, 0),
@@ -354,7 +362,7 @@ function normalizeTapRow(value) {
     actorKind: toStr(value.actorKind, 20),
     actorLabel: toStr(value.actorLabel, MAX_MODEL_CHARS),
     state: toStr(value.state, 20),
-    settledBy: toStr(value.settledBy, 40),
+    settledBy: toStr(value.settledBy, 40) || null,
     status: toInt(value.status, 0, 599, 0),
     error: toStr(value.error, MAX_ERROR_CHARS),
     durationMs: toInt(value.durationMs, 0, 86400000, 0),

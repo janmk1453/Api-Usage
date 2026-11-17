@@ -402,7 +402,7 @@ function finalize(ctx, status, reader, error = null) {
 		};
 		if (r.usage) try {
 			const cur = listTapRecords().find((x) => x.id === rec.id);
-			if (cur && cur.state === "orphan" && cur.settledBy === "no-usage") {
+			if (cur && cur.state === "orphan" && (cur.settledBy === "no-usage" || cur.settledBy === "too-short")) {
 				patch.state = "pending";
 				patch.settledBy = null;
 				patch.settledAt = null;
@@ -603,8 +603,19 @@ function tapDebugRecord(input) {
 //#region src/services/request-tap/match.ts
 /** 匹配窗口：覆盖酒馆 GENERATION_ENDED → 写库的延迟，同时避免误配相邻请求 */
 var MATCH_WINDOW_MS = 6e4;
+/**
+* 去掉模型名前缀标签（`[A]`、`[Proxy]`、`[抗截断]` 这类），只用于对账比较。
+*
+* 探针抓的是请求体原样的模型名，而入账记录的 `entry.model` 已经被扩展归一过
+* （前缀留在 `rawModel`）。不做这一步，`[A]gemini-3.8-flash` 与
+* `gemini-3.8-flash` 永远对不上，整类请求会被误判成「没记进历史」。
+* 展示仍用原名，这里只在比较时剥掉。
+*/
+function stripModelTag(model) {
+	return String(model || "").trim().replace(/^\[[^\]]{1,24}\]\s*/, "");
+}
 function normalizeModel(model) {
-	return String(model || "").trim().toLowerCase();
+	return stripModelTag(model).toLowerCase();
 }
 /** 入账时刻是否落在探针请求的合理时间范围（请求发出 ~ 结束 + 窗口）内 */
 function inWindow(s, p, windowMs) {
@@ -681,7 +692,7 @@ function noteSettlement(entry) {
 		const id = String(entry.requestId || "") || "auto:" + ts + ":" + settlements.length;
 		settlements.push({
 			id,
-			model: String(entry.model || ""),
+			model: String(entry.model || entry.rawModel || ""),
 			prompt: Number(entry.prompt_tokens) || 0,
 			completion: Number(entry.completion_tokens) || 0,
 			total: Number(entry.total_tokens) || 0,
@@ -719,11 +730,15 @@ function reconcilePending(now = Date.now()) {
 				settledBy: hit.by,
 				settledAt: now
 			});
-		} else patchTapRecord(rec.id, {
-			state: "orphan",
-			settledBy: rec.usage ? null : "no-usage",
-			settledAt: now
-		});
+		} else {
+			const durationMs = Number(rec.durationMs) || 0;
+			const tooShort = durationMs > 0 && durationMs < 500;
+			patchTapRecord(rec.id, {
+				state: "orphan",
+				settledBy: tooShort ? "too-short" : rec.usage ? null : "no-usage",
+				settledAt: now
+			});
+		}
 	}
 }
 /** 供验证页显示的诊断信息（只读） */
@@ -782,4 +797,4 @@ function uninstallRequestTap() {
 	} catch {}
 }
 //#endregion
-export { subscribeTap as a, listTapRecords as i, tapDiagnostics as n, clearTapRecords as r, request_tap_exports as t };
+export { listTapRecords as a, clearTapRecords as i, tapDiagnostics as n, subscribeTap as o, stripModelTag as r, request_tap_exports as t };

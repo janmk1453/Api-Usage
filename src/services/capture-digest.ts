@@ -39,6 +39,22 @@ export interface CaptureRecord {
 
 /** 环形缓冲上限：够还原最近几轮的链路，又不至于撑大诊断包 */
 export const CAPTURE_MAX = 24;
+/**
+ * 落盘镜像：真机上「没记进历史」往往发生在几轮之前，而页面一刷新内存缓冲就空了
+ * （反馈包里 capture 总是空数组）。这里把同一批快照同步写进 localStorage，
+ * 只含阶段名、模型名、URL 与用量数字，不含任何正文。
+ */
+export const CAPTURE_STORAGE_KEY = 'aus_capture_stages_v1';
+
+const CAPTURE_STAGE_SET = new Set<string>([
+  'fetch-start',
+  'fetch-parse',
+  'event-drop',
+  'entry-added',
+  'entry-error',
+  'turn-estimated',
+  'turn-interrupted',
+]);
 
 const USAGE_KEYS = [
   'prompt_tokens',
@@ -52,6 +68,43 @@ const USAGE_KEYS = [
 ];
 
 let buffer: CaptureRecord[] = [];
+
+function readPersisted(): CaptureRecord[] {
+  try {
+    const text = globalThis.localStorage?.getItem(CAPTURE_STORAGE_KEY);
+    if (!text) return [];
+    const parsed = JSON.parse(text);
+    if (!Array.isArray(parsed)) return [];
+    const out: CaptureRecord[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== 'object') continue;
+      const stage = String((item as any).stage || '');
+      if (!CAPTURE_STAGE_SET.has(stage)) continue;
+      out.push({
+        at: Number((item as any).at) || 0,
+        stage: stage as CaptureStage,
+        model: (item as any).model ? String((item as any).model) : undefined,
+        requestId: (item as any).requestId ? String((item as any).requestId) : undefined,
+        url: (item as any).url ? String((item as any).url) : undefined,
+        streamed: typeof (item as any).streamed === 'boolean' ? (item as any).streamed : undefined,
+        usageFound: typeof (item as any).usageFound === 'boolean' ? (item as any).usageFound : undefined,
+        usageZero: typeof (item as any).usageZero === 'boolean' ? (item as any).usageZero : undefined,
+        usage: (item as any).usage && typeof (item as any).usage === 'object' ? (item as any).usage : null,
+        finishReason: (item as any).finishReason == null ? undefined : String((item as any).finishReason),
+        reason: (item as any).reason ? String((item as any).reason) : undefined,
+      });
+    }
+    return out.slice(-CAPTURE_MAX);
+  } catch {
+    return [];
+  }
+}
+
+function persist(): void {
+  try {
+    globalThis.localStorage?.setItem(CAPTURE_STORAGE_KEY, JSON.stringify(buffer));
+  } catch {}
+}
 
 /** 只留下数字型用量字段，避免把整块 usage 塞进诊断包 */
 export function usageNumbers(usage: any): Record<string, number> | null {
@@ -106,6 +159,7 @@ export function noteCaptureStage(stage: CaptureStage, data: Omit<CaptureRecord, 
     };
     buffer.push(rec);
     if (buffer.length > CAPTURE_MAX) buffer = buffer.slice(-CAPTURE_MAX);
+    persist();
   } catch {}
 }
 
@@ -113,6 +167,8 @@ export function noteCaptureStage(stage: CaptureStage, data: Omit<CaptureRecord, 
 export function listCaptureStages(limit = CAPTURE_MAX): CaptureRecord[] {
   try {
     const n = Math.max(1, Math.min(CAPTURE_MAX, Math.floor(limit) || CAPTURE_MAX));
+    // 页面刚重载时内存是空的，回落到落盘镜像，否则「几轮之前为什么没记进历史」永远查不到
+    if (!buffer.length) buffer = readPersisted();
     return buffer.slice(-n).map((r) => ({ ...r }));
   } catch {
     return [];
@@ -139,4 +195,5 @@ export function captureDigest(limit = CAPTURE_MAX): Array<Record<string, unknown
 /** 清空快照（仅测试与调试用） */
 export function clearCaptureStages(): void {
   buffer = [];
+  try { globalThis.localStorage?.removeItem(CAPTURE_STORAGE_KEY); } catch {}
 }

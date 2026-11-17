@@ -35,7 +35,7 @@ export const FEEDBACK_TAP_LIMIT = 20;
 /** 控制台摘要条数 */
 export const FEEDBACK_CONSOLE_LIMIT = 40;
 /** 反馈体版本：2 起带 report / diagnostics；3 起带 report.target 与 diagnostics.evidence；4 起支持 report.targets 多条点名 */
-export const FEEDBACK_SCHEMA = 4;
+export const FEEDBACK_SCHEMA = 5;
 /** 一次最多逐条点名几条异常（再多只计数，避免上传体膨胀） */
 export const FEEDBACK_TARGET_LIMIT = 8;
 /** 控制台证据的时间窗（前后各 2 分钟） */
@@ -207,6 +207,43 @@ export function historyEvidence(target: FeedbackTarget | null): Record<string, u
   };
 }
 
+/**
+ * 探针记录 → 上传用摘要。
+ * tapDigest（诊断清单）与 evidence.tap.cluster（同簇现场）必须共用这一份字段：
+ * 之前 cluster 只带了 id/at/settledBy/usage，线上日志里 model/endpoint/status 全是空，
+ * 看包的人无法判断这几条到底是不是同一类请求。
+ */
+export function tapRowDigest(rec: any): Record<string, unknown> {
+  return {
+    id: clip(rec?.id, 60),
+    at: num(rec?.at),
+    endedAt: num(rec?.endedAt),
+    purposeKey: clip(rec?.purposeKey, 80),
+    promptChars: num(rec?.promptChars),
+    usageMissing: bool(rec?.usageMissing),
+    endpoint: clip(rec?.endpoint, 200),
+    model: clip(rec?.model, 120),
+    requestType: clip(rec?.requestType, 40),
+    actorKind: clip(rec?.actorKind, 20),
+    actorLabel: clip(rec?.actorLabel, 120),
+    state: clip(rec?.state, 20),
+    settledBy: clip(rec?.settledBy, 60),
+    status: num(rec?.status),
+    error: clip(rec?.error, 300),
+    durationMs: num(rec?.durationMs),
+    messageCount: num(rec?.messageCount),
+    usage: rec?.usage
+      ? {
+          prompt: num(rec.usage.prompt),
+          completion: num(rec.usage.completion),
+          total: num(rec.usage.total),
+          hit: num(rec.usage.hit),
+          miss: num(rec.usage.miss),
+        }
+      : null,
+  };
+}
+
 /** 目标探针 + 同簇（同 purposeKey/actorLabel）几条：判断「整类请求都没记账」 */
 export function tapEvidence(target: FeedbackTarget | null): {
   target: Record<string, unknown> | null;
@@ -236,43 +273,18 @@ export function tapEvidence(target: FeedbackTarget | null): {
         .filter((rec) => clip(rec?.purposeKey, 80) + "|" + clip(rec?.actorLabel, 80) === clusterKey)
         .sort((a, b) => num(b?.at) - num(a?.at))
         .slice(0, EVIDENCE_TAP_LIMIT)
-        .map((rec) => ({
-          id: clip(rec?.id, 40),
-          at: num(rec?.at),
-          settledBy: clip(rec?.settledBy, 60),
-          status: num(rec?.status),
-          usage: rec?.usage
-            ? {
-                prompt: num(rec.usage.prompt),
-                completion: num(rec.usage.completion),
-                total: num(rec.usage.total),
-                hit: num(rec.usage.hit),
-                miss: num(rec.usage.miss),
-              }
-            : null,
-          error: clip(rec?.error, 200),
-        }))
+        .map((rec) => tapRowDigest(rec))
     : [];
   return {
-    target: hit
-      ? {
-          id: clip(hit.id, 40),
-          at: num(hit.at),
-          endpoint: clip(hit.endpoint, 200),
-          model: clip(hit.model, 120),
-          purposeKey: clip(hit.purposeKey, 80),
-          actorLabel: clip(hit.actorLabel, 120),
-          state: clip(hit.state, 20),
-          settledBy: clip(hit.settledBy, 60),
-          messageCount: num(hit.messageCount),
-          promptChars: num(hit.promptChars),
-          usageMissing: bool(hit.usageMissing),
-          error: clip(hit.error, 200),
-        }
-      : null,
+    target: hit ? tapRowDigest(hit) : null,
     cluster,
   };
 }
+
+/** 反馈包内单轮请求体上限：完整请求体是体积大头，超了在包里截断并标记 */
+export const FEEDBACK_BODY_LIMIT = 60_000;
+/** 请求日志与目标记录最多差这么多毫秒，才算「同一轮」 */
+export const EVIDENCE_REQUEST_WINDOW_MS = 120_000;
 
 /** 目标时刻前后各 2 分钟的控制台条目（已脱敏） */
 export function consoleEvidence(centerAt: number | null | undefined): Array<Record<string, unknown>> {
@@ -293,9 +305,34 @@ export function consoleEvidence(centerAt: number | null | undefined): Array<Reco
   }));
 }
 
+/**
+ * 控制台证据 + 是否用了回退：目标时刻在几小时/几天前时，±2 分钟窗口必然是空的
+ * （真机反馈包里 evidence.console 就是空数组），这时退回最近几条，至少能看见
+ * 「当时有没有报过错」，并由 consoleFallback 标注这不是同窗证据。
+ */
+export function consoleEvidenceWithMeta(centerAt: number | null | undefined): {
+  rows: Array<Record<string, unknown>>;
+  fallback: boolean;
+} {
+  const rows = consoleEvidence(centerAt);
+  if (rows.length || !centerAt) return { rows, fallback: false };
+  let list: Array<{ at: number; level: string; text: string }> = [];
+  try { list = listConsoleEntries(10); } catch { return { rows: [], fallback: false }; }
+  const recent = list
+    .slice()
+    .sort((a, b) => num(b?.at) - num(a?.at))
+    .slice(0, 5)
+    .map((entry) => ({
+      at: num(entry?.at),
+      level: clip(entry?.level, 20),
+      text: sanitizeText(clip(entry?.text, 600)),
+    }));
+  return { rows: recent, fallback: recent.length > 0 };
+}
+
 /** 最近三轮对话摘要（正文可关）：快速看懂「当时在聊什么」 */
 export function recentTurnsDigest(includeText: boolean): Array<Record<string, unknown>> {
-  let list: Array<{ at: number; role: string; text: string; chars: number }> = [];
+  let list: Array<{ at: number; role: string; kind?: "dialogue" | "prompt-tail"; text: string; chars: number }> = [];
   try {
     list = readRecentTurns();
   } catch {
@@ -304,6 +341,8 @@ export function recentTurnsDigest(includeText: boolean): Array<Record<string, un
   return list.map((turn) => ({
     at: num(turn?.at),
     role: clip(turn?.role, 20),
+    // dialogue=成对拿到的对白；prompt-tail=只有尾部提示词，让看包的人别误以为是剧情
+    kind: turn?.kind === "prompt-tail" ? "prompt-tail" : "dialogue",
     chars: num(turn?.chars),
     text: includeText ? clip(turn?.text, 400) : "",
   }));
@@ -321,30 +360,7 @@ export function tapDigest(limit: number = FEEDBACK_TAP_LIMIT): Array<Record<stri
     .slice()
     .sort((a, b) => num(b?.at) - num(a?.at))
     .slice(0, limit)
-    .map((rec) => ({
-      at: num(rec?.at),
-      endedAt: num(rec?.endedAt),
-      endpoint: clip(rec?.endpoint, 200),
-      model: clip(rec?.model, 120),
-      requestType: clip(rec?.requestType, 40),
-      actorKind: clip(rec?.actorKind, 20),
-      actorLabel: clip(rec?.actorLabel, 120),
-      state: clip(rec?.state, 20),
-      settledBy: clip(rec?.settledBy, 40),
-      status: num(rec?.status),
-      error: clip(rec?.error, 300),
-      durationMs: num(rec?.durationMs),
-      messageCount: num(rec?.messageCount),
-      usage: rec?.usage
-        ? {
-            prompt: num(rec.usage.prompt),
-            completion: num(rec.usage.completion),
-            total: num(rec.usage.total),
-            hit: num(rec.usage.hit),
-            miss: num(rec.usage.miss),
-          }
-        : null,
-    }));
+    .map((rec) => tapRowDigest(rec));
 }
 
 /** 探针总数与状态分布：判断是「整轮都没记」还是「个别没记」 */
@@ -575,26 +591,39 @@ export async function buildFeedbackPack(input: {
   const single = targets.length === 1 ? targets[0] : null;
   const scope: FeedbackScope = targetTotal > 1 ? "all" : targetTotal === 1 ? "single" : "recent";
   const includeConversation = input.includeConversation !== false;
-  const record = input.record ? sanitizeLogForUpload(input.record as any) : null;
+  const record = input.record ? clipPackRecord(sanitizeLogForUpload(input.record as any)) : null;
   let extensions: Array<Record<string, unknown>> = [];
   try {
     extensions = await extensionDigest();
   } catch {}
-  const logAt = record ? num((record as any).at) : null;
-  // 每条目标各自配一份「现场证据」：目标记录 + 前后各一条历史、同簇探针、前后 2 分钟控制台
-  const items = targets.map((item) => ({
-    signal: item,
-    request: { requestId: item.requestId || null, logAt },
-    history: historyEvidence(item),
-    tap: tapEvidence(item),
-    console: consoleEvidence(item.at || now),
-  }));
+  // 请求日志只保留最近一轮：只有它确实落在目标那一轮附近，才算「这一轮的请求证据」。
+  // 否则明确标 matched:false + logAt:null——之前把几天后的另一轮日志当成点名对象的现场。
+  const logAt = record ? num((record as any).at) : 0;
+  const requestOf = (item: FeedbackTarget | null) => {
+    if (!item) return { requestId: null, logAt: logAt || null, matched: false };
+    const at = num(item.at) || num(item.historyTimestamp) || 0;
+    const matched = !!(logAt && at && Math.abs(logAt - at) <= EVIDENCE_REQUEST_WINDOW_MS);
+    return { requestId: item.requestId || null, logAt: matched ? logAt : null, matched };
+  };
+  // 每条目标各自配一份「现场证据」：目标记录 + 前后各一条历史、同簇探针、控制台（窗口空则回退最近几条）
+  const items = targets.map((item) => {
+    const consoleMeta = consoleEvidenceWithMeta(item.at || now);
+    return {
+      signal: item,
+      request: requestOf(item),
+      history: historyEvidence(item),
+      tap: tapEvidence(item),
+      console: consoleMeta.rows,
+      consoleFallback: consoleMeta.fallback,
+    };
+  });
   const first = items[0] || {
     signal: null,
-    request: { requestId: null, logAt },
+    request: requestOf(null),
     history: { target: null, before: null, after: null },
     tap: { target: null, cluster: [] },
     console: consoleEvidence(now),
+    consoleFallback: false,
   };
   const evidence = {
     scope,
@@ -606,6 +635,7 @@ export async function buildFeedbackPack(input: {
     history: first.history,
     tap: first.tap,
     console: first.console,
+    consoleFallback: first.consoleFallback,
     items,
     recentTurns: recentTurnsDigest(includeConversation),
   };
@@ -635,6 +665,13 @@ export async function buildFeedbackPack(input: {
     record: (record as unknown as Record<string, unknown>) || null,
     diagnostics,
   };
+}
+
+/** 单轮请求体在反馈包里单独限长：完整角色卡 + 全部提示词会让整包逼近接收端 400KB 上限 */
+function clipPackRecord(record: any): any {
+  const body = String(record?.requestBody || "");
+  if (body.length <= FEEDBACK_BODY_LIMIT) return record;
+  return { ...record, requestBody: body.slice(0, FEEDBACK_BODY_LIMIT), requestBodyTruncated: true };
 }
 
 /** 只保留已知字段并裁掉空值，避免把 DOM 对象或事件对象整包塞进上报体 */

@@ -4,7 +4,9 @@ import { clearTapRecords, upsertTapRecord } from './request-tap/store';
 import { clearConsoleRing, noteConsole } from './console-ring';
 import { APP_VERSION } from '../constants/version';
 import type { TapRecord } from './request-tap/types';
+import { clearRecentTurns, noteRecentTurns } from './request-log';
 import {
+  FEEDBACK_BODY_LIMIT,
   FEEDBACK_NOTE_LIMIT,
   FEEDBACK_SCHEMA,
   FEEDBACK_TARGET_LIMIT,
@@ -272,6 +274,105 @@ describe('反馈诊断包', () => {
     expect(pack.report.targets).toHaveLength(FEEDBACK_TARGET_LIMIT);
     expect(pack.report.targetTotal).toBe(FEEDBACK_TARGET_LIMIT + 4);
     expect((pack.diagnostics as any).evidence.items).toHaveLength(FEEDBACK_TARGET_LIMIT);
+  });
+
+  it('请求日志不是目标那一轮时明确标 matched=false，不当成现场', async () => {
+    (globalThis as any).fetch = vi.fn(async () => ({ ok: false, json: async () => [] }));
+    const recAt = 5_000_000;
+    const record = {
+      at: recAt,
+      method: 'POST',
+      url: 'https://api.example.com/v1/chat/completions',
+      requestHeaders: [],
+      requestBody: '{"model":"m"}',
+      requestBodyTruncated: false,
+      response: { status: 200, statusText: 'OK', headers: [], durationMs: 900 },
+    } as any;
+
+    const far = await buildFeedbackPack({
+      problem: 'not-recorded',
+      now: recAt,
+      record,
+      targets: [{ kind: 'missing-usage', at: 1000, model: 'm' }],
+    });
+    const farItem = (far.diagnostics as any).evidence.items[0];
+    expect(farItem.request.logAt).toBe(null);
+    expect(farItem.request.matched).toBe(false);
+
+    const near = await buildFeedbackPack({
+      problem: 'not-recorded',
+      now: recAt,
+      record,
+      targets: [{ kind: 'missing-usage', at: recAt - 30_000, model: 'm' }],
+    });
+    const nearItem = (near.diagnostics as any).evidence.items[0];
+    expect(nearItem.request.logAt).toBe(recAt);
+    expect(nearItem.request.matched).toBe(true);
+  });
+
+  it('探针清单与簇行都带定位字段，不再只剩 id', async () => {
+    (globalThis as any).fetch = vi.fn(async () => ({ ok: false, json: async () => [] }));
+    upsertTapRecord(makeTap('tap:7', { purposeKey: 'fp1', promptChars: 2048, model: '[A]gemini-3.8-flash' }));
+    const pack = await buildFeedbackPack({
+      problem: 'not-recorded',
+      now: 1794700000000,
+      target: { kind: 'missing-usage', at: 1794700000000, tapId: 'tap:7', signature: 'tap:fp1|mvu' },
+    });
+    const d = pack.diagnostics as any;
+    expect(d.tap[0]).toMatchObject({
+      id: 'tap:7',
+      purposeKey: 'fp1',
+      promptChars: 2048,
+      model: '[A]gemini-3.8-flash',
+      status: 200,
+      durationMs: 1200,
+      messageCount: 12,
+    });
+    const tapEv = d.evidence.items[0].tap;
+    expect(tapEv.target).toMatchObject({ id: 'tap:7', model: '[A]gemini-3.8-flash', endpoint: 'chat' });
+    expect(tapEv.cluster[0]).toMatchObject({ id: 'tap:7', model: '[A]gemini-3.8-flash', state: 'orphan' });
+  });
+
+  it('整轮请求体超限时截断并标记，避免把包撑过接收端上限', async () => {
+    (globalThis as any).fetch = vi.fn(async () => ({ ok: false, json: async () => [] }));
+    const pack = await buildFeedbackPack({
+      problem: 'other',
+      now: 100,
+      record: {
+        at: 100,
+        method: 'POST',
+        url: 'https://api.example.com/v1/chat/completions',
+        requestHeaders: [],
+        requestBody: 'x'.repeat(FEEDBACK_BODY_LIMIT + 5000),
+        requestBodyTruncated: false,
+        response: { status: 200, headers: [] },
+      } as any,
+    });
+    const record = pack.record as any;
+    expect(record.requestBody.length).toBe(FEEDBACK_BODY_LIMIT);
+    expect(record.requestBodyTruncated).toBe(true);
+  });
+
+  it('最近几轮带 kind，纯提示词不会被当成对白', async () => {
+    (globalThis as any).fetch = vi.fn(async () => ({ ok: false, json: async () => [] }));
+    const store = new Map<string, string>();
+    (globalThis as any).localStorage = {
+      getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+      setItem: (k: string, v: string) => { store.set(k, String(v)); },
+      removeItem: (k: string) => { store.delete(k); },
+    };
+    clearRecentTurns();
+    noteRecentTurns([
+      { role: 'user', content: '问' },
+      { role: 'assistant', content: '答' },
+      { role: 'user', content: '人称准则' },
+    ]);
+    const pack = await buildFeedbackPack({ problem: 'other', now: 100 });
+    const rows = (pack.diagnostics as any).evidence.recentTurns;
+    expect(rows.map((r: any) => r.kind)).toEqual(['dialogue', 'dialogue']);
+    expect(rows[0].text).toBe('问');
+    clearRecentTurns();
+    delete (globalThis as any).localStorage;
   });
 
   it('设置摘要给出定位问题的关键项', () => {

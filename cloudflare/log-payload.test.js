@@ -189,7 +189,7 @@ describe('请求日志上报体校验', () => {
   });
 
   it('拒绝未知的 schema 版本', () => {
-    expect(normalizeLogUpload(v2Pack({ schema: 5 }), NOW).error).toBe('bad_schema');
+    expect(normalizeLogUpload(v2Pack({ schema: 6 }), NOW).error).toBe('bad_schema');
     expect(normalizeLogUpload(v2Pack({ schema: '2' }), NOW).ok).toBe(true);
   });
 
@@ -279,6 +279,44 @@ describe('请求日志上报体校验', () => {
     expect(evidence.items[0].tap.cluster.length).toBe(MAX_EVIDENCE_TAP);
     expect(evidence.items[0].console.length).toBe(20);
     expect(evidence.recentTurns.length).toBe(MAX_RECENT_TURNS);
+  });
+
+  it('接受 schema 5：请求证据标 matched、最近几轮带 kind、空串归 null', () => {
+    const result = normalizeLogUpload(
+      v4Pack({
+        schema: 5,
+        diagnostics: {
+          evidence: {
+            scope: 'single',
+            targetTotal: 1,
+            consoleFallback: true,
+            signal: targetOf(0),
+            request: { requestId: '', logAt: null, matched: false },
+            items: [{ signal: targetOf(0), request: { requestId: '', logAt: null, matched: false }, history: {}, tap: {}, console: [], consoleFallback: true }],
+            recentTurns: [
+              { at: NOW - 1, role: 'user', kind: 'dialogue', chars: 1, text: 'a' },
+              { at: NOW - 2, role: 'user', kind: 'prompt-tail', chars: 1, text: '人称准则' },
+            ],
+          },
+          history: [{ timestamp: NOW, model: 'm', total_tokens: 3, usageSource: '', interrupted: '', estimateMethod: '' }],
+          tap: [{ id: 'tap-x', at: NOW, settledBy: '' }],
+        },
+      }),
+      NOW
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value.schema).toBe(5);
+    const evidence = result.value.diagnostics.evidence;
+    expect(evidence.request.matched).toBe(false);
+    expect(evidence.request.logAt).toBe(null);
+    expect(evidence.consoleFallback).toBe(true);
+    expect(evidence.items[0].consoleFallback).toBe(true);
+    expect(evidence.recentTurns.map((row) => row.kind)).toEqual(['dialogue', 'prompt-tail']);
+    const historyRow = result.value.diagnostics.history[0];
+    expect(historyRow.usageSource).toBe(null);
+    expect(historyRow.interrupted).toBe(null);
+    expect(historyRow.estimateMethod).toBe(null);
+    expect(result.value.diagnostics.tap[0].settledBy).toBe(null);
   });
 
   it('拒绝错误的上报类型与空体', () => {

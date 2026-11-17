@@ -17,7 +17,7 @@ import {
   structuralLabel,
   PROMPT_HINT_LIMIT,
 } from './classify';
-import { findSettlement, MATCH_WINDOW_MS, normalizeModel, probeKeyOf, type Settlement } from './match';
+import { findSettlement, MATCH_WINDOW_MS, normalizeModel, probeKeyOf, stripModelTag, type Settlement } from './match';
 
 describe('端点识别', () => {
   it('只认酒馆后端转发的 generate 端点', () => {
@@ -183,5 +183,18 @@ describe('对账匹配', () => {
     expect(normalizeModel('  DeepSeek-Flash ')).toBe('deepseek-flash');
     const probe = probeKeyOf({ ...base, usage: { prompt: 100, completion: 20, total: 120 } });
     expect(findSettlement(probe, [settlement({ model: ' DeepSeek-Flash ' })], new Set())).not.toBeNull();
+  });
+
+  it('模型名前缀 [A] / [D] 不参与比较（探针存请求体原名，入账存去掉前缀的 model）', () => {
+    expect(stripModelTag('[A]gemini-3.8-flash')).toBe('gemini-3.8-flash');
+    expect(stripModelTag('  [D] deepseek-flash ')).toBe('deepseek-flash');
+    // 超长前缀不当标签剥（防把正常模型名的方括号内容误删）
+    expect(stripModelTag('[' + 'x'.repeat(30) + ']m')).toBe('[' + 'x'.repeat(30) + ']m');
+    expect(stripModelTag('gemini-3.8-flash')).toBe('gemini-3.8-flash');
+    expect(normalizeModel('[A]Gemini-3.8-Flash')).toBe('gemini-3.8-flash');
+    // 探针带前缀、入账不带（历史里 model 已剥前缀，原名在 rawModel）
+    const probe = probeKeyOf({ ...base, model: '[A]gemini-3.8-flash', usage: { prompt: 100, completion: 20, total: 120 } });
+    const hit = findSettlement(probe, [settlement({ model: 'gemini-3.8-flash' })], new Set());
+    expect(hit?.by).toBe('tokens');
   });
 });

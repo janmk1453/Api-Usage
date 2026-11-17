@@ -9,6 +9,8 @@ import {
   readRequestLog,
   redactHeader,
   redactValue,
+  noteRecentTurns,
+  readRecentTurns,
   saveRequestStart,
   summarizeRequestLog,
 } from './request-log';
@@ -113,6 +115,30 @@ describe('request-log：隐私与截断', () => {
     saveRequestStart({ at: 1, url: 'u', body: big });
     expect(readRequestLog()!.requestBodyTruncated).toBe(true);
     expect(clipBody('short')).toEqual({ body: 'short', truncated: false });
+  });
+
+  it('最近三轮按对白成对取，尾部注入的提示词不占位', () => {
+    const messages = [
+      { role: 'user', content: '第一问' },
+      { role: 'assistant', content: '第一答' },
+      { role: 'user', content: '第二问' },
+      { role: 'assistant', content: '第二答' },
+      { role: 'user', content: '人称准则' },
+      { role: 'user', content: '字数准则' },
+      { role: 'user', content: '输出模板' },
+    ];
+    noteRecentTurns(messages, 777);
+    const rows = readRecentTurns();
+    expect(rows.map((r) => r.text)).toEqual(['第一问', '第一答', '第二问', '第二答']);
+    expect(rows.every((r) => r.kind === 'dialogue')).toBe(true);
+    expect(rows[0].at).toBe(777);
+  });
+
+  it('一条 assistant 都没有时只留最后一条 user，并标 prompt-tail', () => {
+    noteRecentTurns([{ role: 'user', content: '早期提示' }, { role: 'user', content: '尾部提示' }], 888);
+    const rows = readRecentTurns();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ role: 'user', text: '尾部提示', kind: 'prompt-tail' });
   });
 
   it('摘要按状态与耗时生成一行文案', () => {

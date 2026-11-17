@@ -33,8 +33,20 @@ export interface ProbeKey {
 /** 匹配窗口：覆盖酒馆 GENERATION_ENDED → 写库的延迟，同时避免误配相邻请求 */
 export const MATCH_WINDOW_MS = 60000;
 
+/**
+ * 去掉模型名前缀标签（`[A]`、`[Proxy]`、`[抗截断]` 这类），只用于对账比较。
+ *
+ * 探针抓的是请求体原样的模型名，而入账记录的 `entry.model` 已经被扩展归一过
+ * （前缀留在 `rawModel`）。不做这一步，`[A]gemini-3.8-flash` 与
+ * `gemini-3.8-flash` 永远对不上，整类请求会被误判成「没记进历史」。
+ * 展示仍用原名，这里只在比较时剥掉。
+ */
+export function stripModelTag(model: string): string {
+  return String(model || '').trim().replace(/^\[[^\]]{1,24}\]\s*/, '');
+}
+
 export function normalizeModel(model: string): string {
-  return String(model || '').trim().toLowerCase();
+  return stripModelTag(model).toLowerCase();
 }
 
 /** 入账时刻是否落在探针请求的合理时间范围（请求发出 ~ 结束 + 窗口）内 */

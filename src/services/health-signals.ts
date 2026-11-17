@@ -15,7 +15,8 @@ import { listCaptureStages } from './capture-digest';
 import { listConsoleEntries } from './console-ring';
 import { classifyErrorText, errorSignature } from './error-classify';
 import { interruptKindOf, isEstimatedEntry, isReliablePerformanceSample } from '../data/sample-quality';
-import type { TapRecord } from './request-tap/types';
+import { MIN_TAP_DURATION_MS, type TapRecord } from './request-tap/types';
+import { stripModelTag } from './request-tap/match';
 import type { FeedbackTarget } from './feedback-pack';
 
 export type HealthSignalKind =
@@ -341,6 +342,10 @@ export function scanTapHealth(taps: TapRecord[] = []): HealthSignal[] {
   for (const tap of taps) {
     if (!tap || tap.state !== 'orphan') continue;
     if (String((tap as any).endpoint || '') !== 'chat') continue;
+    // 过短请求（几百毫秒就结束）不可能是正常对话，不参与聚簇
+    if (String((tap as any).settledBy || '') === 'too-short') continue;
+    const durationMs = Number((tap as any).durationMs) || 0;
+    if (durationMs > 0 && durationMs < MIN_TAP_DURATION_MS) continue;
     const messageCount = Number((tap as any).messageCount) || 0;
     const promptChars = Number((tap as any).promptChars) || 0;
     if (messageCount < 3 || promptChars < 400) continue;
@@ -366,7 +371,7 @@ export function scanTapHealth(taps: TapRecord[] = []): HealthSignal[] {
         out.push({
           kind: 'missing-usage',
           at: Number(latest.at) || 0,
-          model: String((latest as any).model || ''),
+          model: stripModelTag(String((latest as any).model || '')),
           reason: 'missing',
           signature: 'tap:' + key,
           severity: 'warn',

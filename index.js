@@ -3,15 +3,15 @@ import { n as getSelectedSave, o as mobileDeviceHint, r as state$2, t as getHist
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as walletPendingModelCount, D as DEEPSEEK_WALLET_ID, O as WALLET_CATALOG_PROVIDERS, S as walletBalanceToCny, _ as defaultContextLimitForModel, b as findWalletModel, c as isTruncatedFinish, d as getPricing, g as cloneWallet, h as normalizeModel, i as saveWalletApiKey, m as isWalletPeakHour, p as isPeakHour, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as calcSavings, x as mergeWalletCollections, y as findWalletForHistory } from "./repository-CbOXJf4X.js";
+import { C as walletPendingModelCount, D as DEEPSEEK_WALLET_ID, O as WALLET_CATALOG_PROVIDERS, S as walletBalanceToCny, _ as defaultContextLimitForModel, b as findWalletModel, c as isTruncatedFinish, d as getPricing, g as cloneWallet, h as normalizeModel, i as saveWalletApiKey, m as isWalletPeakHour, p as isPeakHour, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as calcSavings, x as mergeWalletCollections, y as findWalletForHistory } from "./repository-GlOd_EFe.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc$3, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-CJMNKSam.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
-import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-BjT6cxMH.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-D45ldtrA.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-KmLCxl_a.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-CUhsjNxb.js";
-import { a as subscribeTap, i as listTapRecords, n as tapDiagnostics, r as clearTapRecords } from "./request-tap-CNHp5RUv.js";
+import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-u8J536w_.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-CzWOD7tS.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-CV7df-vQ.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-B_rvY5O8.js";
+import { a as listTapRecords, i as clearTapRecords, n as tapDiagnostics, o as subscribeTap, r as stripModelTag } from "./request-tap-D0LfhaX6.js";
 //#region src/constants/version.ts
 var APP_VERSION = String("3.2.2");
 //#endregion
@@ -9429,7 +9429,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-D45ldtrA.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-CzWOD7tS.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -10639,6 +10639,40 @@ function historyEvidence(target) {
 		after: hit.index + 1 < list.length ? entryDigest(list[hit.index + 1]) : null
 	};
 }
+/**
+* 探针记录 → 上传用摘要。
+* tapDigest（诊断清单）与 evidence.tap.cluster（同簇现场）必须共用这一份字段：
+* 之前 cluster 只带了 id/at/settledBy/usage，线上日志里 model/endpoint/status 全是空，
+* 看包的人无法判断这几条到底是不是同一类请求。
+*/
+function tapRowDigest(rec) {
+	return {
+		id: clip(rec?.id, 60),
+		at: num(rec?.at),
+		endedAt: num(rec?.endedAt),
+		purposeKey: clip(rec?.purposeKey, 80),
+		promptChars: num(rec?.promptChars),
+		usageMissing: bool(rec?.usageMissing),
+		endpoint: clip(rec?.endpoint, 200),
+		model: clip(rec?.model, 120),
+		requestType: clip(rec?.requestType, 40),
+		actorKind: clip(rec?.actorKind, 20),
+		actorLabel: clip(rec?.actorLabel, 120),
+		state: clip(rec?.state, 20),
+		settledBy: clip(rec?.settledBy, 60),
+		status: num(rec?.status),
+		error: clip(rec?.error, 300),
+		durationMs: num(rec?.durationMs),
+		messageCount: num(rec?.messageCount),
+		usage: rec?.usage ? {
+			prompt: num(rec.usage.prompt),
+			completion: num(rec.usage.completion),
+			total: num(rec.usage.total),
+			hit: num(rec.usage.hit),
+			miss: num(rec.usage.miss)
+		} : null
+	};
+}
 /** 目标探针 + 同簇（同 purposeKey/actorLabel）几条：判断「整类请求都没记账」 */
 function tapEvidence(target) {
 	let list = [];
@@ -10669,38 +10703,14 @@ function tapEvidence(target) {
 		if (best && bestGap <= 6e4) hit = best;
 	}
 	const clusterKey = hit ? clip(hit.purposeKey, 80) + "|" + clip(hit.actorLabel, 80) : "";
-	const cluster = clusterKey ? list.filter((rec) => clip(rec?.purposeKey, 80) + "|" + clip(rec?.actorLabel, 80) === clusterKey).sort((a, b) => num(b?.at) - num(a?.at)).slice(0, 4).map((rec) => ({
-		id: clip(rec?.id, 40),
-		at: num(rec?.at),
-		settledBy: clip(rec?.settledBy, 60),
-		status: num(rec?.status),
-		usage: rec?.usage ? {
-			prompt: num(rec.usage.prompt),
-			completion: num(rec.usage.completion),
-			total: num(rec.usage.total),
-			hit: num(rec.usage.hit),
-			miss: num(rec.usage.miss)
-		} : null,
-		error: clip(rec?.error, 200)
-	})) : [];
+	const cluster = clusterKey ? list.filter((rec) => clip(rec?.purposeKey, 80) + "|" + clip(rec?.actorLabel, 80) === clusterKey).sort((a, b) => num(b?.at) - num(a?.at)).slice(0, 4).map((rec) => tapRowDigest(rec)) : [];
 	return {
-		target: hit ? {
-			id: clip(hit.id, 40),
-			at: num(hit.at),
-			endpoint: clip(hit.endpoint, 200),
-			model: clip(hit.model, 120),
-			purposeKey: clip(hit.purposeKey, 80),
-			actorLabel: clip(hit.actorLabel, 120),
-			state: clip(hit.state, 20),
-			settledBy: clip(hit.settledBy, 60),
-			messageCount: num(hit.messageCount),
-			promptChars: num(hit.promptChars),
-			usageMissing: bool(hit.usageMissing),
-			error: clip(hit.error, 200)
-		} : null,
+		target: hit ? tapRowDigest(hit) : null,
 		cluster
 	};
 }
+/** 反馈包内单轮请求体上限：完整请求体是体积大头，超了在包里截断并标记 */
+var FEEDBACK_BODY_LIMIT = 6e4;
 /** 目标时刻前后各 2 分钟的控制台条目（已脱敏） */
 function consoleEvidence(centerAt) {
 	let list = [];
@@ -10716,6 +10726,36 @@ function consoleEvidence(centerAt) {
 		text: sanitizeText(clip(entry?.text, 600))
 	}));
 }
+/**
+* 控制台证据 + 是否用了回退：目标时刻在几小时/几天前时，±2 分钟窗口必然是空的
+* （真机反馈包里 evidence.console 就是空数组），这时退回最近几条，至少能看见
+* 「当时有没有报过错」，并由 consoleFallback 标注这不是同窗证据。
+*/
+function consoleEvidenceWithMeta(centerAt) {
+	const rows = consoleEvidence(centerAt);
+	if (rows.length || !centerAt) return {
+		rows,
+		fallback: false
+	};
+	let list = [];
+	try {
+		list = listConsoleEntries(10);
+	} catch {
+		return {
+			rows: [],
+			fallback: false
+		};
+	}
+	const recent = list.slice().sort((a, b) => num(b?.at) - num(a?.at)).slice(0, 5).map((entry) => ({
+		at: num(entry?.at),
+		level: clip(entry?.level, 20),
+		text: sanitizeText(clip(entry?.text, 600))
+	}));
+	return {
+		rows: recent,
+		fallback: recent.length > 0
+	};
+}
 /** 最近三轮对话摘要（正文可关）：快速看懂「当时在聊什么」 */
 function recentTurnsDigest(includeText) {
 	let list = [];
@@ -10727,6 +10767,7 @@ function recentTurnsDigest(includeText) {
 	return list.map((turn) => ({
 		at: num(turn?.at),
 		role: clip(turn?.role, 20),
+		kind: turn?.kind === "prompt-tail" ? "prompt-tail" : "dialogue",
 		chars: num(turn?.chars),
 		text: includeText ? clip(turn?.text, 400) : ""
 	}));
@@ -10739,28 +10780,7 @@ function tapDigest(limit = 20) {
 	} catch {
 		return [];
 	}
-	return list.slice().sort((a, b) => num(b?.at) - num(a?.at)).slice(0, limit).map((rec) => ({
-		at: num(rec?.at),
-		endedAt: num(rec?.endedAt),
-		endpoint: clip(rec?.endpoint, 200),
-		model: clip(rec?.model, 120),
-		requestType: clip(rec?.requestType, 40),
-		actorKind: clip(rec?.actorKind, 20),
-		actorLabel: clip(rec?.actorLabel, 120),
-		state: clip(rec?.state, 20),
-		settledBy: clip(rec?.settledBy, 40),
-		status: num(rec?.status),
-		error: clip(rec?.error, 300),
-		durationMs: num(rec?.durationMs),
-		messageCount: num(rec?.messageCount),
-		usage: rec?.usage ? {
-			prompt: num(rec.usage.prompt),
-			completion: num(rec.usage.completion),
-			total: num(rec.usage.total),
-			hit: num(rec.usage.hit),
-			miss: num(rec.usage.miss)
-		} : null
-	}));
+	return list.slice().sort((a, b) => num(b?.at) - num(a?.at)).slice(0, limit).map((rec) => tapRowDigest(rec));
 }
 /** 探针总数与状态分布：判断是「整轮都没记」还是「个别没记」 */
 function tapSummary() {
@@ -10957,28 +10977,40 @@ async function buildFeedbackPack(input) {
 	const single = targets.length === 1 ? targets[0] : null;
 	const scope = targetTotal > 1 ? "all" : targetTotal === 1 ? "single" : "recent";
 	const includeConversation = input.includeConversation !== false;
-	const record = input.record ? sanitizeLogForUpload(input.record) : null;
+	const record = input.record ? clipPackRecord(sanitizeLogForUpload(input.record)) : null;
 	let extensions = [];
 	try {
 		extensions = await extensionDigest();
 	} catch {}
-	const logAt = record ? num(record.at) : null;
-	const items = targets.map((item) => ({
-		signal: item,
-		request: {
+	const logAt = record ? num(record.at) : 0;
+	const requestOf = (item) => {
+		if (!item) return {
+			requestId: null,
+			logAt: logAt || null,
+			matched: false
+		};
+		const at = num(item.at) || num(item.historyTimestamp) || 0;
+		const matched = !!(logAt && at && Math.abs(logAt - at) <= 12e4);
+		return {
 			requestId: item.requestId || null,
-			logAt
-		},
-		history: historyEvidence(item),
-		tap: tapEvidence(item),
-		console: consoleEvidence(item.at || now)
-	}));
+			logAt: matched ? logAt : null,
+			matched
+		};
+	};
+	const items = targets.map((item) => {
+		const consoleMeta = consoleEvidenceWithMeta(item.at || now);
+		return {
+			signal: item,
+			request: requestOf(item),
+			history: historyEvidence(item),
+			tap: tapEvidence(item),
+			console: consoleMeta.rows,
+			consoleFallback: consoleMeta.fallback
+		};
+	});
 	const first = items[0] || {
 		signal: null,
-		request: {
-			requestId: null,
-			logAt
-		},
+		request: requestOf(null),
 		history: {
 			target: null,
 			before: null,
@@ -10988,7 +11020,8 @@ async function buildFeedbackPack(input) {
 			target: null,
 			cluster: []
 		},
-		console: consoleEvidence(now)
+		console: consoleEvidence(now),
+		consoleFallback: false
 	};
 	const evidence = {
 		scope,
@@ -10999,6 +11032,7 @@ async function buildFeedbackPack(input) {
 		history: first.history,
 		tap: first.tap,
 		console: first.console,
+		consoleFallback: first.consoleFallback,
 		items,
 		recentTurns: recentTurnsDigest(includeConversation)
 	};
@@ -11016,7 +11050,7 @@ async function buildFeedbackPack(input) {
 	});
 	return {
 		kind: "aus_request_log",
-		schema: 4,
+		schema: 5,
 		appVersion: clip(input.appVersion || APP_VERSION, 40),
 		uploadedAt: now,
 		report: {
@@ -11034,6 +11068,16 @@ async function buildFeedbackPack(input) {
 		},
 		record: record || null,
 		diagnostics
+	};
+}
+/** 单轮请求体在反馈包里单独限长：完整角色卡 + 全部提示词会让整包逼近接收端 400KB 上限 */
+function clipPackRecord(record) {
+	const body = String(record?.requestBody || "");
+	if (body.length <= 6e4) return record;
+	return {
+		...record,
+		requestBody: body.slice(0, FEEDBACK_BODY_LIMIT),
+		requestBodyTruncated: true
 	};
 }
 /** 只保留已知字段并裁掉空值，避免把 DOM 对象或事件对象整包塞进上报体 */
@@ -12096,6 +12140,9 @@ function scanTapHealth(taps = []) {
 	for (const tap of taps) {
 		if (!tap || tap.state !== "orphan") continue;
 		if (String(tap.endpoint || "") !== "chat") continue;
+		if (String(tap.settledBy || "") === "too-short") continue;
+		const durationMs = Number(tap.durationMs) || 0;
+		if (durationMs > 0 && durationMs < 500) continue;
 		const messageCount = Number(tap.messageCount) || 0;
 		const promptChars = Number(tap.promptChars) || 0;
 		if (messageCount < 3 || promptChars < 400) continue;
@@ -12119,7 +12166,7 @@ function scanTapHealth(taps = []) {
 				out.push({
 					kind: "missing-usage",
 					at: Number(latest.at) || 0,
-					model: String(latest.model || ""),
+					model: stripModelTag(String(latest.model || "")),
 					reason: "missing",
 					signature: "tap:" + key,
 					severity: "warn",
@@ -15482,7 +15529,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-CBC-5blB.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-b9qXV89V.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-B9CwijFJ.js").then((m) => {
@@ -15720,13 +15767,13 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-BjT6cxMH.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-u8J536w_.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-CBC-5blB.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-b9qXV89V.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./request-tap-CNHp5RUv.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
+		import("./request-tap-D0LfhaX6.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -15734,13 +15781,13 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-BjT6cxMH.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-u8J536w_.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-CBC-5blB.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-b9qXV89V.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./request-tap-CNHp5RUv.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
+		import("./request-tap-D0LfhaX6.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {
@@ -15803,10 +15850,10 @@ function ensureWandEntry() {
 /** 运行时收尾：卸载拦截器与采集、拆掉面板 DOM、停全部定时器与事件监听（数据一律不动） */
 async function teardownRuntime() {
 	try {
-		import("./interception-BjT6cxMH.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-u8J536w_.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-CBC-5blB.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-b9qXV89V.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -15822,13 +15869,13 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-D45ldtrA.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-CzWOD7tS.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CJMNKSam.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CUhsjNxb.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-B_rvY5O8.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -15878,19 +15925,19 @@ async function onClean() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-BjT6cxMH.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-u8J536w_.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-CBC-5blB.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-b9qXV89V.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-D45ldtrA.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-CzWOD7tS.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-CJMNKSam.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-CUhsjNxb.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-B_rvY5O8.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -15933,19 +15980,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-D45ldtrA.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-CzWOD7tS.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CJMNKSam.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CUhsjNxb.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-B_rvY5O8.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-CBC-5blB.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-b9qXV89V.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -15967,7 +16014,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-CUhsjNxb.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-B_rvY5O8.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

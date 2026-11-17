@@ -32,6 +32,12 @@ export interface TapUsage {
  */
 export type TapState = 'pending' | 'settled' | 'orphan';
 
+/**
+ * 低于这个耗时的探针记录不算「疑似正常对话」：
+ * 几百毫秒内就结束的调用不可能产出完整对话，把它们计入 orphan 聚簇只会制造噪声。
+ */
+export const MIN_TAP_DURATION_MS = 500;
+
 /** 一条探针记录（验证期结构，字段可以随时调整） */
 export interface TapRecord {
   /** tap:<时间戳>:<序号>，同时作为幂等键 */
