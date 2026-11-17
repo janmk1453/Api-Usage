@@ -15,6 +15,7 @@ import { listCaptureStages } from './capture-digest';
 import { listConsoleEntries } from './console-ring';
 import { classifyErrorText, errorSignature } from './error-classify';
 import { interruptKindOf, isEstimatedEntry, isReliablePerformanceSample } from '../data/sample-quality';
+import { measureTokenRate } from '../data/token-rate';
 import { MIN_TAP_DURATION_MS, type TapRecord } from './request-tap/types';
 import { stripModelTag } from './request-tap/match';
 import type { FeedbackTarget } from './feedback-pack';
@@ -105,8 +106,10 @@ export const HEALTH_HISTORY_SCAN = 30;
 export const HEALTH_ITEM_LIMIT = 40;
 /** 速率上限（token/s）：超过它基本不可能是真实生成速度 */
 export const RATE_ANOMALY_HIGH = 5000;
-/** 速率下限（token/s）：低于它且用量不算太小时视为异常 */
+/** 速率下限（token/s）：低于它且输出不算太小时视为异常 */
 export const RATE_ANOMALY_LOW = 0.5;
+/** 判「速率偏低」所需的最小输出量（token）：几个 token 的回复谈不上快慢 */
+export const RATE_LOW_MIN_OUTPUT = 20;
 /** 同类型信号在这个时间窗内视为同一次，避免重复计数 */
 export const HEALTH_DEDUPE_MS = 90000;
 /** 缺失用量聚簇窗口：同类丢弃在这个窗口内反复出现才算「多次未计入」 */
@@ -137,19 +140,6 @@ export const HEALTH_KIND_ORDER: HealthSignalKind[] = [
 
 export function healthKindText(kind: HealthSignalKind): string {
   return KIND_TEXT[kind] || '异常';
-}
-
-function rateOf(entry: any): number | null {
-  try {
-    const total = Number(entry?.total_tokens) || 0;
-    const ms = Number(entry?.duration) || 0;
-    if (!total || !ms) return null;
-    // 非流式（含上游一次性返回）的耗时不含生成过程，速率不可信，直接跳过
-    if (entry?.streamed === false) return null;
-    return total / (ms / 1000);
-  } catch {
-    return null;
-  }
 }
 
 function clipText(text: string, max = 120): string {
@@ -222,11 +212,13 @@ export function scanHistoryHealth(history: any[], limit = HEALTH_HISTORY_SCAN, n
     }
     // 中断与估算记录不进速率口径，避免把「停止时的半截输出」当异常
     if (!isReliablePerformanceSample(entry)) continue;
-    const rate = rateOf(entry);
+    // 速率只认输出侧口径（输出 Token / 生成窗口），与入库的 tokenRate 同源：
+    // 拿 total_tokens 除以总耗时会把「大 prompt + 极短回复」算成上万 t/s 的假告警
+    const rate = measureTokenRate(entry);
     if (rate == null) continue;
     if (rate > RATE_ANOMALY_HIGH) {
       out.push({ kind: 'rate-anomaly', at, model, reason: 'rate-high', severity: 'warn', ...loc, detail: clipText(model + ' 速率 ' + Math.round(rate) + ' token/s，明显偏高') });
-    } else if (rate < RATE_ANOMALY_LOW && total >= 20) {
+    } else if (rate < RATE_ANOMALY_LOW && completion >= RATE_LOW_MIN_OUTPUT) {
       out.push({ kind: 'rate-anomaly', at, model, reason: 'rate-low', severity: 'warn', ...loc, detail: clipText(model + ' 速率 ' + rate.toFixed(2) + ' token/s，明显偏低') });
     }
   }

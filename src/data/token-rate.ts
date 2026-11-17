@@ -25,8 +25,46 @@ export function sanitizeRate(rate: unknown): number {
   return Math.round(value);
 }
 
+/** 速率测量所需字段：历史记录与请求快照都满足，其余字段忽略 */
+export interface RateSample {
+  duration?: number | null;
+  ttft?: number | null;
+  completion_tokens?: number | null;
+  streamed?: boolean | null;
+}
+
 /**
- * 计算输出速率（t/s）。
+ * 测量输出速率（t/s），不可测时返回 null。
+ *
+ * 与 computeTokenRate 同源同口径，区别只在「不可测」怎么表达：
+ * - computeTokenRate 面向入库，不可测与超上限都写成 0；
+ * - 这里保留未取整、未截断的真实测量值，供健康扫描判断「耗时/流式判定是不是坏了」——
+ *   真离谱的速率要能被看见，不能在入库那一步就被抹平。
+ * 不可测的判定：非流式 / 无输出 / 无耗时 / TTFT 缺失 / TTFT≈总耗时 / 生成窗口过短。
+ */
+export function measureTokenRate(sample: RateSample | null | undefined): number | null {
+  if (!sample) return null;
+  // 非流式（含上游一次性返回）的耗时不含生成过程，速率不可信
+  if (sample.streamed === false) return null;
+  const dur = Number(sample.duration);
+  const first = Number(sample.ttft);
+  const comp = Number(sample.completion_tokens);
+  if (!Number.isFinite(dur) || dur <= 0) return null;
+  if (!Number.isFinite(comp) || comp <= 0) return null;
+  // TTFT 不可信（非流式/未知）时不参与速率统计
+  if (!Number.isFinite(first) || first <= 0) return null;
+  // 首字与全文几乎同时到达：TTFT 无意义，速率也不可信（与 sanitizeHistoryTiming 同口径）
+  if (first >= dur * 0.98) return null;
+  const window = dur - first;
+  if (window < MIN_OUTPUT_WINDOW_MS) return null;
+  const rate = (comp / window) * 1000;
+  if (!Number.isFinite(rate) || rate < 0) return null;
+  // 不在这里取整：健康扫描要按小数位区分「0.1 t/s」和「完全测不出来」
+  return rate;
+}
+
+/**
+ * 计算输出速率（t/s），入库形态：不可测或超过上限一律记 0。
  * @param duration 整轮耗时（ms）
  * @param ttft 首字延迟（ms）
  * @param completionTokens 输出 Token 数
@@ -38,17 +76,13 @@ export function computeTokenRate(opts: {
   completionTokens: number;
   streamed?: boolean | null;
 }): number {
-  const { duration, ttft, completionTokens, streamed } = opts;
-  if (streamed === false) return 0;
-  const dur = Number.isFinite(duration) ? duration : 0;
-  const first = Number.isFinite(ttft) ? ttft : 0;
-  const comp = Number.isFinite(completionTokens) ? completionTokens : 0;
-  if (dur <= 0 || comp <= 0) return 0;
-  // TTFT 不可信（非流式）时不参与速率与首字延迟统计
-  if (first <= 0) return 0;
-  const window = dur - first;
-  if (window < MIN_OUTPUT_WINDOW_MS) return 0;
-  return sanitizeRate((comp / window) * 1000);
+  const rate = measureTokenRate({
+    duration: opts.duration,
+    ttft: opts.ttft,
+    completion_tokens: opts.completionTokens,
+    streamed: opts.streamed,
+  });
+  return rate == null ? 0 : sanitizeRate(rate);
 }
 
 /**

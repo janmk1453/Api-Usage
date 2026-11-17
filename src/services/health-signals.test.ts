@@ -9,6 +9,7 @@ import {
   scanHistoryHealth,
   RATE_ANOMALY_HIGH,
   RATE_ANOMALY_LOW,
+  RATE_LOW_MIN_OUTPUT,
   HEALTH_DEDUPE_MS,
 } from './health-signals';
 import { noteCaptureStage, clearCaptureStages } from './capture-digest';
@@ -40,26 +41,45 @@ describe('历史记录页健康信号', () => {
   });
 
   it('速率高得离谱判为「速率异常」', () => {
-    // 1200 token / 0.1s = 12000 token/s
-    const signals = scanHistoryHealth([entry({ duration: 100 })]);
+    // 输出 6000 token / 生成窗口 (1200 - 200)ms = 6000 token/s
+    const signals = scanHistoryHealth([entry({ prompt_tokens: 1000, completion_tokens: 6000, total_tokens: 7000, duration: 1200, ttft: 200 })]);
     expect(signals[0].kind).toBe('rate-anomaly');
     expect(signals[0].detail).toContain('偏高');
-    expect(12000).toBeGreaterThan(RATE_ANOMALY_HIGH);
+    expect(6000).toBeGreaterThan(RATE_ANOMALY_HIGH);
   });
 
-  it('速率低得离谱且用量不小才判异常', () => {
-    const slow = scanHistoryHealth([entry({ total_tokens: 40, duration: 400000 })]);
+  it('大输入 + 极短输出不算速率异常（速率只取输出侧）', () => {
+    // 真机样本：输入 25438（其中 20224 命中）、输出 2、耗时 1700ms、首字 1697ms
+    const sample = entry({
+      prompt_tokens: 25438,
+      completion_tokens: 2,
+      total_tokens: 25440,
+      duration: 1700,
+      ttft: 1697,
+      streamed: null,
+    });
+    expect(scanHistoryHealth([sample])).toHaveLength(0);
+    // 首字正常、输出极小：按「总 Token / 总耗时」的老口径是 15 万 t/s，现在只算 10 token / 1.5s
+    const tiny = entry({ prompt_tokens: 300000, completion_tokens: 10, total_tokens: 300010, duration: 2000, ttft: 500 });
+    expect(scanHistoryHealth([tiny])).toHaveLength(0);
+  });
+
+  it('速率低得离谱且输出不算太小时才判异常', () => {
+    // 输出 40 token / 生成窗口 398s ≈ 0.1 token/s
+    const slow = scanHistoryHealth([entry({ completion_tokens: 40, total_tokens: 1040, duration: 400000, ttft: 2000 })]);
     expect(slow[0].kind).toBe('rate-anomaly');
     expect(slow[0].detail).toContain('偏低');
-    // 用量太小（<20）不判，避免短回复误报
-    const tiny = scanHistoryHealth([entry({ total_tokens: 10, duration: 400000 })]);
+    // 输出太少（低于 RATE_LOW_MIN_OUTPUT）不判，几个 token 谈不上快慢
+    const tiny = scanHistoryHealth([entry({ completion_tokens: 10, total_tokens: 1010, duration: 400000, ttft: 2000 })]);
     expect(tiny).toHaveLength(0);
     expect(RATE_ANOMALY_LOW).toBeGreaterThan(0);
+    expect(RATE_LOW_MIN_OUTPUT).toBe(20);
   });
 
-  it('非流式记录的速率不可信，不判异常', () => {
-    const signals = scanHistoryHealth([entry({ duration: 100, streamed: false })]);
-    expect(signals).toHaveLength(0);
+  it('非流式记录与测不出来的记录都不判异常', () => {
+    expect(scanHistoryHealth([entry({ duration: 100, streamed: false })])).toHaveLength(0);
+    // TTFT 缺失（含旧数据未记录首字时间）同样不猜
+    expect(scanHistoryHealth([entry({ duration: 400000, ttft: 0 })])).toHaveLength(0);
   });
 
   it('偶发一次没取到用量不打扰，连续多次才提示「没有取到用量」', () => {

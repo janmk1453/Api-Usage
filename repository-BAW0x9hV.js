@@ -1209,23 +1209,45 @@ function sanitizeRate(rate) {
 	return Math.round(value);
 }
 /**
-* 计算输出速率（t/s）。
+* 测量输出速率（t/s），不可测时返回 null。
+*
+* 与 computeTokenRate 同源同口径，区别只在「不可测」怎么表达：
+* - computeTokenRate 面向入库，不可测与超上限都写成 0；
+* - 这里保留未取整、未截断的真实测量值，供健康扫描判断「耗时/流式判定是不是坏了」——
+*   真离谱的速率要能被看见，不能在入库那一步就被抹平。
+* 不可测的判定：非流式 / 无输出 / 无耗时 / TTFT 缺失 / TTFT≈总耗时 / 生成窗口过短。
+*/
+function measureTokenRate(sample) {
+	if (!sample) return null;
+	if (sample.streamed === false) return null;
+	const dur = Number(sample.duration);
+	const first = Number(sample.ttft);
+	const comp = Number(sample.completion_tokens);
+	if (!Number.isFinite(dur) || dur <= 0) return null;
+	if (!Number.isFinite(comp) || comp <= 0) return null;
+	if (!Number.isFinite(first) || first <= 0) return null;
+	if (first >= dur * .98) return null;
+	const window = dur - first;
+	if (window < 200) return null;
+	const rate = comp / window * 1e3;
+	if (!Number.isFinite(rate) || rate < 0) return null;
+	return rate;
+}
+/**
+* 计算输出速率（t/s），入库形态：不可测或超过上限一律记 0。
 * @param duration 整轮耗时（ms）
 * @param ttft 首字延迟（ms）
 * @param completionTokens 输出 Token 数
 * @param streamed 是否为真实流式；false 表示非流式/假流式，速率不可测
 */
 function computeTokenRate(opts) {
-	const { duration, ttft, completionTokens, streamed } = opts;
-	if (streamed === false) return 0;
-	const dur = Number.isFinite(duration) ? duration : 0;
-	const first = Number.isFinite(ttft) ? ttft : 0;
-	const comp = Number.isFinite(completionTokens) ? completionTokens : 0;
-	if (dur <= 0 || comp <= 0) return 0;
-	if (first <= 0) return 0;
-	const window = dur - first;
-	if (window < 200) return 0;
-	return sanitizeRate(comp / window * 1e3);
+	const rate = measureTokenRate({
+		duration: opts.duration,
+		ttft: opts.ttft,
+		completion_tokens: opts.completionTokens,
+		streamed: opts.streamed
+	});
+	return rate == null ? 0 : sanitizeRate(rate);
 }
 /**
 * 迁移清洗：把一次性返回造成的异常速率与失真 TTFT 归零。
@@ -2354,7 +2376,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && !!wallet.catalogProvider) try {
-						import("./pricing-sync-B_rvY5O8.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-BYQTbBto.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
@@ -3235,4 +3257,4 @@ var repository = {
 	}
 };
 //#endregion
-export { walletPendingModelCount as C, DEEPSEEK_WALLET_ID as D, resolveRuntimeConnectionContext as E, WALLET_CATALOG_PROVIDERS as O, walletBalanceToCny as S, initConnectionIdentity as T, defaultContextLimitForModel as _, decryptKey as a, findWalletModel as b, isTruncatedFinish as c, getPricing as d, isDeepSeekOfficialModel as f, cloneWallet as g, normalizeModel as h, saveWalletApiKey as i, calcCost as l, isWalletPeakHour as m, repository_exports as n, encryptKey as o, isPeakHour as p, getWalletApiKey as r, sanitizeHistoryTiming as s, repository as t, calcSavings as u, findWalletForConnection as v, buildEndpointContext as w, mergeWalletCollections as x, findWalletForHistory as y };
+export { walletBalanceToCny as C, resolveRuntimeConnectionContext as D, initConnectionIdentity as E, DEEPSEEK_WALLET_ID as O, mergeWalletCollections as S, buildEndpointContext as T, cloneWallet as _, decryptKey as a, findWalletForHistory as b, sanitizeHistoryTiming as c, calcSavings as d, getPricing as f, normalizeModel as g, isWalletPeakHour as h, saveWalletApiKey as i, WALLET_CATALOG_PROVIDERS as k, isTruncatedFinish as l, isPeakHour as m, repository_exports as n, encryptKey as o, isDeepSeekOfficialModel as p, getWalletApiKey as r, measureTokenRate as s, repository as t, calcCost as u, defaultContextLimitForModel as v, walletPendingModelCount as w, findWalletModel as x, findWalletForConnection as y };
