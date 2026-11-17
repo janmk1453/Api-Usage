@@ -3761,6 +3761,7 @@
 }
 
 #aus-panel .aus-up-target-main {
+  flex: 0 1 auto;
   min-width: 0;
   font-weight: 600;
   color: var(--ds-text);
@@ -3769,6 +3770,8 @@
 
 #aus-panel .aus-up-target-kind {
   flex: none;
+  /* 类型胶囊靠右收边；模型名过长换行时它单独占下一行、同样贴右，不会孤零零缩在行首 */
+  margin-left: auto;
   padding: 0 6px;
   border-radius: 6px;
   background: var(--ds-card-inner);
