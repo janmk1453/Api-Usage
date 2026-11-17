@@ -12875,22 +12875,22 @@ var CHANGELOG = [
 			{
 				kind: "feature",
 				items: [
-					"新增 上游没返回用量时改用本地数据补记，历史里标「估算」",
-					"新增 中断记录：手动停止或上游断开且已有输出时也记入历史，分别标黄、红「中断」",
-					"历史记录页的问题提示改成逐条点名，可以只传一条，也可以一次传完列出的全部异常"
+					"上游没有返回用量时，支持本地估算数据，且计入历史",
+					"手动中断对话时，可以正确识别并估算用量，且计入历史",
+					"历史记录列表现在可以显示更多信息"
 				]
 			},
 			{
 				kind: "improve",
-				items: ["国内网络下的检查更新", "问题提示只留真问题：手动停止的那一轮、几毫秒的空请求都不再提示"]
+				items: [
+					"国内网络环境下的检查更新",
+					"提高对网络中断，请求超时，用户中断等情况的兼容性",
+					"改进错误提示，降低误报率"
+				]
 			},
 			{
 				kind: "fix",
-				items: [
-					"修复带 [A] 这类前缀的模型被误判成「没记进历史」",
-					"修复升级后仍在显示的旧版本误报",
-					"修复手机端提示条按钮竖排、上传弹窗勾选行错位"
-				]
+				items: ["修复部分模型前缀导致误判", "修复手机端部分UI问题"]
 			}
 		]
 	},
@@ -13345,6 +13345,8 @@ var currentView = "overview";
 var settingsChildView = null;
 /** 「对话展示管理」的来源页：进入前记录的视图，页内「返回」与顶栏返回箭头都回到这里 */
 var chatManageOrigin = "overview";
+/** 「问题反馈 / 请求日志」的来源页：设置页与历史记录页两个入口共用，返回时各回各家 */
+var logOrigin = "settings";
 /** 当前导航高亮键：窄屏二级页归到「设置」，桌面为视图本身 */
 var currentNavKey = "overview";
 var collapsed = false;
@@ -14417,7 +14419,7 @@ function syncBottomNav(doc, animate) {
 * bottom=false 是桌面侧栏或「移动端兼容 UI」关闭后的原侧栏抽屉，直接按当前视图高亮，也没有返回箭头。
 */
 function paintNavState(doc, bottom, animate) {
-	const navSource = currentView === "chat-manage" ? chatManageOrigin : currentView;
+	const navSource = viewSourceOf(currentView);
 	currentNavKey = bottom || !isSettingsChild(currentView) ? parentTabOf(navSource) : navSource;
 	try {
 		doc.querySelectorAll("#aus-sidebar [data-nav]").forEach((el) => {
@@ -14441,7 +14443,7 @@ function handleBottomTabTap(target) {
 		switchView(target);
 		return;
 	}
-	const currentTab = currentView === "chat-manage" ? parentTabOf(chatManageOrigin) : parentTabOf(currentView);
+	const currentTab = parentTabOf(viewSourceOf(currentView));
 	const action = resolveTabTap(target, currentView, isChildView(currentView), currentTab);
 	if (action === "switch") {
 		switchView(target === "settings" && settingsChildView ? settingsChildView : target);
@@ -14503,15 +14505,30 @@ function syncMobileSidebar(doc) {
 		}
 	} catch {}
 }
-/** 二级页「返回」目标：对话展示管理回到进入前的来源页，其余回到自己的父级根页 */
+/**
+* 视图的真实归属页：没有自己导航项的二级页按进入前的来源页算。
+* 「对话展示管理」（概览/趋势/设置三处入口）与「请求日志」（设置/历史两处入口）都走这里。
+*/
+function viewSourceOf(view) {
+	if (view === "chat-manage") return chatManageOrigin;
+	if (view === "log") return logOrigin;
+	return view;
+}
+/** 二级页「返回」目标：对话展示管理与请求日志回到进入前的来源页，其余回到自己的父级根页 */
 function returnFromChild() {
 	if (currentView === "chat-manage") return chatManageOrigin;
+	if (currentView === "log") return logOrigin;
 	return childParentOf(currentView) ?? "settings";
 }
 /** 进入对话展示管理页并记住来源（概览 / 趋势预测 / 设置三处入口共用） */
 function openChatManage(from) {
 	chatManageOrigin = from;
 	switchView("chat-manage");
+}
+/** 进入请求日志页并记住来源（设置页「问题反馈 / 请求日志」与历史记录页工具栏两处入口共用） */
+function openRequestLog(from) {
+	logOrigin = from;
+	switchView("log");
 }
 function switchView(view, opts) {
 	try {
@@ -15046,6 +15063,7 @@ function createPanel() {
               </div>
               <div id="aus-history-filter-reset" class="aus-filter-reset" title="重置筛选" aria-label="重置筛选" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);font-size:var(--aus-fs-base);cursor:pointer;margin-left:auto;">${icon("refresh", 14)}<span>重置筛选</span></div>
               <button id="aus-history-tap-btn" type="button" class="aus-pill aus-pill-sm" title="查看探针采到的非常规对话请求（技术验证，数据隔离、不进统计）">其他请求</button>
+              <button id="aus-history-log-btn" type="button" class="aus-pill aus-pill-sm" title="查看最近一轮请求的标头、正文与响应元数据（与设置页「问题反馈 / 请求日志」是同一页）">请求日志</button>
             </div>
             <div id="aus-diff" class="ds-card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">缓存断点</span><button id="aus-diff-fullscreen" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">全屏</button></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">在历史中各选一条 旧/新 对比，橙/绿高亮即发散点</div></div>
             <div id="aus-history"></div>
@@ -15172,12 +15190,13 @@ function createPanel() {
 	doc.getElementById("aus-panel")?.addEventListener("click", (e) => {
 		const target = e.target;
 		if (target?.closest?.("#aus-settings-chat-manage")) openChatManage("settings");
-		if (target?.closest?.("#aus-settings-request-log")) switchView("log");
+		if (target?.closest?.("#aus-settings-request-log")) openRequestLog("settings");
 	});
 	initChatManageView({ go: () => switchView(chatManageOrigin) });
 	doc.getElementById("aus-history-tap-btn")?.addEventListener("click", () => switchView("tap"));
+	doc.getElementById("aus-history-log-btn")?.addEventListener("click", () => openRequestLog("history"));
 	initTapView({ go: () => switchView("history") });
-	initLogView({ go: () => switchView("settings") });
+	initLogView({ go: () => switchView(returnFromChild()) });
 	const applyCollapsed = (v) => {
 		collapsed = v;
 		const sb = doc.getElementById("aus-sidebar");
