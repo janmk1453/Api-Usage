@@ -8,11 +8,17 @@
  * 体积、条数、字段长度都在这里收口，D1 里只会有这一种形状的数据。
  */
 
-export const LOG_SCHEMA = 2;
-/** 兼容的上报版本：1 = 只带单条记录（旧版），2 = 记录 + 反馈说明 + 诊断摘要 */
-export const LOG_SCHEMAS = [1, 2];
-/** 上报体最大字节数：正文本身允许 200000 字符，留出标头与包装的余量 */
-export const MAX_LOG_BODY_BYTES = 280000;
+export const LOG_SCHEMA = 4;
+/**
+ * 兼容的上报版本：
+ * 1 = 只带单条记录（旧版）；
+ * 2 = 记录 + 反馈说明 + 诊断摘要；
+ * 3 = 额外带 report.target 与 diagnostics.evidence（点名单条异常）；
+ * 4 = report.targets 逐条点名多条异常（当前）。
+ */
+export const LOG_SCHEMAS = [1, 2, 3, 4];
+/** 上报体最大字节数：正文本身允许 200000 字符，留出标头、逐条点名的现场证据与包装的余量 */
+export const MAX_LOG_BODY_BYTES = 400000;
 export const MAX_RECORD_BODY_CHARS = 200000;
 export const MAX_HEADER_PAIRS = 80;
 export const MAX_HEADER_NAME = 80;
@@ -35,6 +41,19 @@ export const MAX_DIAG_CAPTURE = 24;
 export const MAX_NOTE_CHARS = 2000;
 /** 问题类型白名单，其余一律归 other */
 export const PROBLEM_KEYS = ['not-recorded', 'wrong-data', 'other'];
+/** 上传口径白名单：单条点名 / 逐条点名全部 / 只带最近一轮 */
+export const FEEDBACK_SCOPES = ['single', 'all', 'recent'];
+/** 健康信号类型白名单（与扩展 src/services/health-signals.ts 同步），未知一律归 other */
+export const HEALTH_KINDS = ['zero-usage', 'estimated-usage', 'missing-usage', 'rate-anomaly', 'meta-missing', 'plugin-error'];
+/** 逐条点名的目标上限：超出的只记进 targetTotal，不再逐条展开 */
+export const MAX_REPORT_TARGETS = 8;
+/** evidence 里每条目标的现场证据上限 */
+export const MAX_EVIDENCE_ITEMS = 8;
+export const MAX_EVIDENCE_TAP = 6;
+export const MAX_EVIDENCE_CONSOLE = 20;
+/** 最近三轮对话摘要的条数与单条正文字符上限 */
+export const MAX_RECENT_TURNS = 6;
+export const MAX_RECENT_TURN_TEXT = 400;
 
 function fail(error) {
   return { ok: false, error };
@@ -159,26 +178,163 @@ function listOf(value, max, map) {
   return out;
 }
 
+/** 时间戳归一：非正数或非数字一律 null，超过上限钳到上限 */
+function toStamp(value, max) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num <= 0) return null;
+  return Math.min(Math.floor(num), max);
+}
+
+/**
+ * 反馈目标（点名的那一条异常）：只保留白名单字段。
+ * 客户端在 schema 3/4 里用它指名道姓「哪一轮、什么信号」，缺了它服务端就只能看到一句笼统说明。
+ */
+function normalizeTarget(value, now = Date.now()) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const kind = toStr(value.kind, 40);
+  return {
+    signalKey: toStr(value.signalKey, 240),
+    kind: HEALTH_KINDS.includes(kind) ? kind : 'other',
+    at: toStamp(value.at, now + 600000),
+    detail: toStr(value.detail, 300),
+    model: toStr(value.model, MAX_MODEL_CHARS),
+    reason: toStr(value.reason, 200),
+    signature: toStr(value.signature, 80),
+    requestId: toStr(value.requestId, 120),
+    tapId: toStr(value.tapId, 40),
+    historyTimestamp: toStamp(value.historyTimestamp, 4102444800000),
+  };
+}
+
+/** evidence 里的「本次上传的那一轮请求」引用 */
+function normalizeRequestRef(value) {
+  const row = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    requestId: toStr(row.requestId, 120),
+    logAt: toStamp(row.logAt, 4102444800000),
+  };
+}
+
+/** evidence 里的历史现场：目标记录 + 前后各一条 */
+function normalizeHistoryEvidence(value) {
+  const row = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    target: normalizeHistoryRow(row.target),
+    before: normalizeHistoryRow(row.before),
+    after: normalizeHistoryRow(row.after),
+  };
+}
+
+/** evidence 里的探针现场：目标探针 + 同簇几条 */
+function normalizeTapEvidence(value) {
+  const row = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    target: normalizeTapRow(row.target),
+    cluster: listOf(row.cluster, MAX_EVIDENCE_TAP, normalizeTapRow),
+  };
+}
+
+/** 一条目标的完整现场证据 */
+function normalizeEvidenceItem(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return {
+    signal: normalizeTarget(value.signal),
+    request: normalizeRequestRef(value.request),
+    history: normalizeHistoryEvidence(value.history),
+    tap: normalizeTapEvidence(value.tap),
+    console: listOf(value.console, MAX_EVIDENCE_CONSOLE, normalizeConsoleRow),
+  };
+}
+
+/** 最近对话摘要（正文由用户勾选决定是否附带） */
+function normalizeRecentTurn(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return {
+    at: toStamp(value.at, 4102444800000),
+    role: toStr(value.role, 20),
+    chars: toInt(value.chars, 0, 1e9, 0),
+    text: toStr(value.text, MAX_RECENT_TURN_TEXT),
+  };
+}
+
+/**
+ * 诊断现场（schema 3 起）：逐条点名的目标各自配一份「记录 + 探针 + 控制台」，
+ * 顶层保留第一条，便于旧解析器按单条读。
+ */
+export function normalizeEvidence(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const items = listOf(value.items, MAX_EVIDENCE_ITEMS, normalizeEvidenceItem);
+  const targetTotal = toInt(value.targetTotal, 0, 1e6, items.length);
+  const scope = FEEDBACK_SCOPES.includes(value.scope)
+    ? value.scope
+    : targetTotal > 1 ? 'all' : targetTotal === 1 ? 'single' : 'recent';
+  return {
+    scope,
+    targetTotal,
+    sampleLimit: toInt(value.sampleLimit, 0, 1e6, MAX_REPORT_TARGETS),
+    signal: normalizeTarget(value.signal),
+    request: normalizeRequestRef(value.request),
+    history: normalizeHistoryEvidence(value.history),
+    tap: normalizeTapEvidence(value.tap),
+    console: listOf(value.console, MAX_EVIDENCE_CONSOLE, normalizeConsoleRow),
+    items,
+    recentTurns: listOf(value.recentTurns, MAX_RECENT_TURNS, normalizeRecentTurn),
+  };
+}
+
 function normalizeReport(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const problem = typeof value.problem === 'string' && PROBLEM_KEYS.includes(value.problem) ? value.problem : 'other';
-  return { problem, note: toStr(value.note, MAX_NOTE_CHARS) };
+  const target = normalizeTarget(value.target);
+  const targets = listOf(value.targets, MAX_REPORT_TARGETS, normalizeTarget);
+  const targetTotal = toInt(value.targetTotal, 0, 1e6, targets.length);
+  const scope = FEEDBACK_SCOPES.includes(value.scope)
+    ? value.scope
+    : targetTotal > 1 ? 'all' : targetTotal === 1 ? 'single' : 'recent';
+  return { problem, note: toStr(value.note, MAX_NOTE_CHARS), scope, target, targets, targetTotal };
 }
 
+/**
+ * 历史记录摘要：除金额与 token 外，还要带上「记录状态」——
+ * usageSource/interrupted/estimateMethod 是判断「估算还是真用量」的关键，
+ * 少了它们，服务端看到的一条记录跟正常记录长得一模一样。
+ */
 function normalizeHistoryRow(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return {
     timestamp: toInt(value.timestamp, 0, 4102444800000, 0),
     model: toStr(value.model, MAX_MODEL_CHARS),
+    rawModel: toStr(value.rawModel, MAX_MODEL_CHARS),
     prompt_tokens: toInt(value.prompt_tokens, 0, 1e9, 0),
     completion_tokens: toInt(value.completion_tokens, 0, 1e9, 0),
     total_tokens: toInt(value.total_tokens, 0, 1e9, 0),
     cache_hit_tokens: toInt(value.cache_hit_tokens, 0, 1e9, 0),
+    cache_miss_tokens: toInt(value.cache_miss_tokens, 0, 1e9, 0),
     cost: toNumberOr(value.cost, 0),
     sourceType: toStr(value.sourceType, 40),
     endpointLabel: toStr(value.endpointLabel, MAX_MODEL_CHARS),
     credentialLabel: toStr(value.credentialLabel, MAX_MODEL_CHARS),
     chatId: toStr(value.chatId, 200),
+    duration: toInt(value.duration, 0, 86400000, 0),
+    tokenRate: toNumberOr(value.tokenRate, 0),
+    ttft: toInt(value.ttft, 0, 3600000, 0),
+    thinkTime: toInt(value.thinkTime, 0, 3600000, 0),
+    thinkTokens: toInt(value.thinkTokens, 0, 1e9, 0),
+    streamed: toBoolOrNull(value.streamed),
+    finishReason: toStr(value.finishReason, MAX_FINISH_CHARS),
+    isTruncated: value.isTruncated === true,
+    pricingSource: toStr(value.pricingSource, 40),
+    usageSource: toStr(value.usageSource, 20),
+    interrupted: toStr(value.interrupted, 20),
+    interruptReason: toStr(value.interruptReason, 200),
+    modelFallback: value.modelFallback === true,
+    estimateMethod: toStr(value.estimateMethod, 60),
+    estimateVersion: toInt(value.estimateVersion, 0, 1e6, 0),
+    promptChars: toInt(value.promptChars, 0, 1e9, 0),
+    outputChars: toInt(value.outputChars, 0, 1e9, 0),
+    estimateCacheUnknown: value.estimateCacheUnknown === true,
+    costEstimated: value.costEstimated === true,
+    raw_usage: normalizeUsage(value.raw_usage),
   };
 }
 
@@ -186,8 +342,13 @@ function normalizeTapRow(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const usage = value.usage && typeof value.usage === 'object' && !Array.isArray(value.usage) ? value.usage : null;
   return {
+    id: toStr(value.id, 60),
     at: toInt(value.at, 0, 4102444800000, 0),
     endedAt: toInt(value.endedAt, 0, 4102444800000, 0),
+    purposeKey: toStr(value.purposeKey, 80),
+    actorLabel: toStr(value.actorLabel, MAX_MODEL_CHARS),
+    promptChars: toInt(value.promptChars, 0, 1e9, 0),
+    usageMissing: value.usageMissing === true,
     endpoint: toStr(value.endpoint, 200),
     model: toStr(value.model, MAX_MODEL_CHARS),
     requestType: toStr(value.requestType, 40),
@@ -214,7 +375,11 @@ function normalizeTapRow(value) {
 function normalizeConsoleRow(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const level = value.level === 'warn' || value.level === 'uncaught' ? value.level : 'error';
-  return { level, text: toStr(value.text, 600) };
+  const row = { level, text: toStr(value.text, 600) };
+  // evidence 里的控制台按目标时刻取窗口，带 at 才能对齐时间轴；摘要列表不带就保持原样
+  const at = toStamp(value.at, 4102444800000);
+  if (at) row.at = at;
+  return row;
 }
 
 function normalizeExtensionRow(value) {
@@ -240,7 +405,15 @@ function normalizeStringList(value, max, itemMax) {
 
 
 /** 采集链路快照：阶段白名单 + 数字型用量字段 */
-const CAPTURE_STAGES = ['fetch-start', 'fetch-parse', 'event-drop', 'entry-added', 'entry-error'];
+const CAPTURE_STAGES = [
+  'fetch-start',
+  'fetch-parse',
+  'event-drop',
+  'entry-added',
+  'entry-error',
+  'turn-interrupted',
+  'turn-estimated',
+];
 const CAPTURE_USAGE_KEYS = [
   'prompt_tokens',
   'completion_tokens',
@@ -337,13 +510,16 @@ export function normalizeDiagnostics(value) {
       extensionKeys: normalizeStringList(conversation.extensionKeys, MAX_DIAG_KEYS, 80),
     },
     extensions: listOf(value.extensions, MAX_DIAG_EXTENSIONS, normalizeExtensionRow),
+    // schema 3 起：逐条点名的目标各自配一份现场证据（含最近三轮对话摘要）
+    evidence: normalizeEvidence(value.evidence),
   };
 }
 
 /**
  * 整体校验。成功返回 { ok: true, value }，value 就是入库的形状：
  * { schema, appVersion, uploadedAt, client: { userAgent, timeZone, language }, record, report, diagnostics }。
- * schema 1 只带单条记录（旧版），schema 2 额外带反馈说明与诊断摘要，此时 record 允许为空。
+ * schema 1 只带单条记录（旧版）；schema 2 起带反馈说明与诊断摘要，record 允许为空；
+ * schema 3/4 再带点名目标与现场证据，历史页「上传这一条 / 上传反馈日志」靠它定位到具体轮次。
  */
 export function normalizeLogUpload(raw, now = Date.now()) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fail('bad_body');

@@ -108,6 +108,37 @@ describe('/api/log 请求日志上传', () => {
     expect(stored.diagnostics.console[0].text).toBe('boom');
   });
 
+  it('接受 schema 4 的逐条点名包并保留目标', async () => {
+    const { env, db } = logEnv();
+    const pack = {
+      ...PACK,
+      schema: 4,
+      report: {
+        problem: 'not-recorded',
+        note: '三条都没进历史',
+        scope: 'all',
+        target: null,
+        targets: [
+          { signalKey: 'a', kind: 'missing-usage', at: 1794718900000, detail: '没记进历史', model: 'gemini-3.8-flash', tapId: 'tap-1' },
+          { signalKey: 'b', kind: 'missing-usage', at: 1794718800000, detail: '没记进历史', model: 'gemini-3.8-flash', tapId: 'tap-2' },
+        ],
+        targetTotal: 2,
+      },
+      diagnostics: {
+        ...PACK.diagnostics,
+        evidence: { scope: 'all', targetTotal: 2, items: [{ signal: { tapId: 'tap-1' }, request: {}, history: {}, tap: {}, console: [] }] },
+      },
+    };
+    const res = await worker.fetch(uploadRequest(pack), env, { waitUntil() {} });
+    expect(res.status).toBe(200);
+    const stored = JSON.parse(insertCall(db).params[7]);
+    expect(stored.schema).toBe(4);
+    expect(stored.report.scope).toBe('all');
+    expect(stored.report.targets.length).toBe(2);
+    expect(stored.report.targets[1].tapId).toBe('tap-2');
+    expect(stored.diagnostics.evidence.items[0].signal.tapId).toBe('tap-1');
+  });
+
   it('同一个 IP 哈希稳定，不同 IP 不同', async () => {
     const one = logEnv();
     await worker.fetch(uploadRequest(PACK), one.env, { waitUntil() {} });
@@ -144,7 +175,7 @@ describe('/api/log 请求日志上传', () => {
     const getRes = await worker.fetch(new Request('https://stat.example.com/api/log', { method: 'GET' }), env, { waitUntil() {} });
     expect(getRes.status).toBe(405);
 
-    const huge = JSON.stringify({ ...PACK, record: { ...PACK.record, requestBody: 'x'.repeat(300000) } });
+    const huge = JSON.stringify({ ...PACK, record: { ...PACK.record, requestBody: 'x'.repeat(500000) } });
     const tooLarge = await worker.fetch(uploadRequest(null, { raw: huge }), env, { waitUntil() {} });
     expect(tooLarge.status).toBe(413);
   });

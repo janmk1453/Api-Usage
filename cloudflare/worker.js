@@ -582,7 +582,8 @@ async function handleLogUpload(request, env) {
   }
   const now = Date.now();
   const normalized = normalizeLogUpload(raw, now);
-  if (!normalized.ok) return logText('上传内容格式不对，无法解析。', 400);
+  // 回显固定错误码（bad_schema / bad_kind / bad_record / bad_body），方便定位是客户端版本旧还是字段坏了
+  if (!normalized.ok) return logText('上传内容格式不对，无法解析（错误码：' + normalized.error + '）。', 400);
   if (!env?.DB) return logText('上传暂不可用：接收端尚未绑定存储。', 503);
   const ipHash = await hashIp(request.headers.get('cf-connecting-ip') || '');
   const limited = await checkLogRate(env.DB, ipHash, now);

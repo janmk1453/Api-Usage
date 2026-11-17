@@ -5,9 +5,13 @@ import {
   MAX_DIAG_EXTENSIONS,
   MAX_DIAG_HISTORY,
   MAX_DIAG_TAP,
+  MAX_EVIDENCE_ITEMS,
+  MAX_EVIDENCE_TAP,
   MAX_HEADER_PAIRS,
   MAX_NOTE_CHARS,
+  MAX_RECENT_TURNS,
   MAX_RECORD_BODY_CHARS,
+  MAX_REPORT_TARGETS,
   normalizeLogUpload,
 } from './log-payload.js';
 
@@ -69,6 +73,73 @@ function v2Pack(overrides) {
   );
 }
 
+/** 一条指向历史记录的反馈目标（扩展 schema 4 的实际形状） */
+function targetOf(index) {
+  return {
+    signalKey: 'missing-usage|gemini-3.8-flash|tap:abc' + index,
+    kind: 'missing-usage',
+    at: NOW - 60000 - index,
+    detail: '有 2 次疑似正常对话的请求没有被记进历史',
+    model: 'gemini-3.8-flash',
+    reason: 'tap-cluster',
+    signature: 'tap:abc' + index,
+    requestId: 'req-' + index,
+    tapId: 'tap-' + index,
+    historyTimestamp: NOW - 90000 - index,
+  };
+}
+
+function v4Pack(overrides) {
+  const targets = [targetOf(0), targetOf(1), targetOf(2)];
+  return Object.assign(
+    {
+      kind: 'aus_request_log',
+      schema: 4,
+      appVersion: '3.2.2',
+      uploadedAt: NOW - 500,
+      report: { problem: 'not-recorded', note: '三条都没进历史', scope: 'all', target: null, targets, targetTotal: 3 },
+      client: { userAgent: 'UA', timeZone: 'Asia/Shanghai', language: 'zh-CN' },
+      record: baseRecord(),
+      diagnostics: {
+        history: [{ timestamp: NOW - 9000, model: 'gemini-3.8-flash', total_tokens: 15, usageSource: 'estimated', estimateMethod: 'char-heuristic-v1' }],
+        tap: [],
+        tapSummary: { total: 3, orphan: 3, settled: 0, pending: 0 },
+        console: [{ level: 'error', text: 'boom' }],
+        extensions: [],
+        evidence: {
+          scope: 'all',
+          targetTotal: 3,
+          sampleLimit: MAX_REPORT_TARGETS,
+          signal: targets[0],
+          request: { requestId: 'req-0', logAt: NOW - 400 },
+          history: {
+            target: { timestamp: NOW - 90000, model: 'gemini-3.8-flash', total_tokens: 21 },
+            before: { timestamp: NOW - 120000, model: 'gemini-3.8-flash', total_tokens: 18 },
+            after: null,
+          },
+          tap: {
+            target: { id: 'tap-0', at: NOW - 60000, endpoint: '/api/backends/chat-completions/generate', model: 'gemini-3.8-flash', actorLabel: '酒馆主窗', purposeKey: 'abc', messageCount: 12, promptChars: 900, usageMissing: true },
+            cluster: [{ id: 'tap-0', at: NOW - 60000 }, { id: 'tap-1', at: NOW - 61000 }],
+          },
+          console: [{ at: NOW - 60000, level: 'uncaught', text: 'Uncaught TypeError: x' }],
+          items: targets.map((target, index) => ({
+            signal: target,
+            request: { requestId: target.requestId, logAt: NOW - 400 },
+            history: { target: { timestamp: target.historyTimestamp, model: target.model }, before: null, after: null },
+            tap: { target: null, cluster: [] },
+            console: [{ at: target.at, level: 'error', text: 'e' + index }],
+          })),
+          recentTurns: [
+            { at: NOW - 300000, role: 'user', chars: 120, text: '你好' },
+            { at: NOW - 200000, role: 'assistant', chars: 300, text: '' },
+          ],
+        },
+      },
+    },
+    overrides || {}
+  );
+}
+
 describe('请求日志上报体校验', () => {
   it('接受 schema 1 的旧版上报', () => {
     const result = normalizeLogUpload(v1Pack(), NOW);
@@ -90,10 +161,18 @@ describe('请求日志上报体校验', () => {
     const result = normalizeLogUpload(v2Pack(), NOW);
     expect(result.ok).toBe(true);
     expect(LOG_SCHEMAS).toContain(result.value.schema);
-    expect(result.value.report).toEqual({ problem: 'not-recorded', note: '这一条没进历史' });
+    expect(result.value.report).toMatchObject({
+      problem: 'not-recorded',
+      note: '这一条没进历史',
+      scope: 'recent',
+      target: null,
+      targets: [],
+      targetTotal: 0,
+    });
     const diag = result.value.diagnostics;
     expect(diag.history.length).toBe(1);
     expect(diag.history[0].total_tokens).toBe(15);
+    expect(diag.evidence).toBe(null);
     expect(diag.tap[0].usage.total).toBe(12);
     expect(diag.tapSummary.orphan).toBe(1);
     expect(diag.console[0]).toEqual({ level: 'error', text: 'boom' });
@@ -110,8 +189,96 @@ describe('请求日志上报体校验', () => {
   });
 
   it('拒绝未知的 schema 版本', () => {
-    expect(normalizeLogUpload(v2Pack({ schema: 3 }), NOW).error).toBe('bad_schema');
+    expect(normalizeLogUpload(v2Pack({ schema: 5 }), NOW).error).toBe('bad_schema');
     expect(normalizeLogUpload(v2Pack({ schema: '2' }), NOW).ok).toBe(true);
+  });
+
+  it('接受 schema 4 的逐条点名包', () => {
+    const result = normalizeLogUpload(v4Pack(), NOW);
+    expect(result.ok).toBe(true);
+    const report = result.value.report;
+    expect(report.scope).toBe('all');
+    expect(report.targetTotal).toBe(3);
+    expect(report.target).toBe(null);
+    expect(report.targets.length).toBe(3);
+    expect(report.targets[0]).toMatchObject({ kind: 'missing-usage', model: 'gemini-3.8-flash', tapId: 'tap-0' });
+    const evidence = result.value.diagnostics.evidence;
+    expect(evidence.scope).toBe('all');
+    expect(evidence.items.length).toBe(3);
+    expect(evidence.items[1].signal.tapId).toBe('tap-1');
+    expect(evidence.items[2].console[0].text).toBe('e2');
+    expect(evidence.history.before.total_tokens).toBe(18);
+    expect(evidence.history.after).toBe(null);
+    expect(evidence.tap.target.usageMissing).toBe(true);
+    expect(evidence.tap.cluster.length).toBe(2);
+    expect(evidence.recentTurns.length).toBe(2);
+    expect(evidence.recentTurns[0].text).toBe('你好');
+  });
+
+  it('schema 4 允许没有记录到请求（历史页反馈常见）', () => {
+    const result = normalizeLogUpload(v4Pack({ record: null }), NOW);
+    expect(result.ok).toBe(true);
+    expect(result.value.record).toBe(null);
+    expect(result.value.report.targets.length).toBe(3);
+  });
+
+  it('未知的信号类型归 other，逐条点名按上限截断但保留总数', () => {
+    const many = Array.from({ length: MAX_REPORT_TARGETS + 4 }, (_, index) => targetOf(index));
+    const result = normalizeLogUpload(
+      v4Pack({
+        report: { problem: 'other', note: '', scope: 'all', target: null, targets: many, targetTotal: many.length },
+        diagnostics: { evidence: { scope: 'all', targetTotal: many.length, items: many.map((target) => ({ signal: { ...target, kind: 'weird' }, request: {}, history: {}, tap: {}, console: [] })) } },
+      }),
+      NOW
+    );
+    const report = result.value.report;
+    expect(report.targets.length).toBe(MAX_REPORT_TARGETS);
+    expect(report.targetTotal).toBe(many.length);
+    expect(report.targets[0].kind).toBe('missing-usage');
+    const evidence = result.value.diagnostics.evidence;
+    expect(evidence.items.length).toBe(MAX_EVIDENCE_ITEMS);
+    expect(evidence.items[0].signal.kind).toBe('other');
+    expect(evidence.targetTotal).toBe(many.length);
+  });
+
+  it('schema 3 的单条点名仍按一条目标入库', () => {
+    const target = targetOf(0);
+    const result = normalizeLogUpload(
+      v2Pack({
+        schema: 3,
+        report: { problem: 'wrong-data', note: '', scope: 'single', target, targets: [target], targetTotal: 1 },
+        diagnostics: { evidence: { scope: 'single', targetTotal: 1, signal: target, request: { requestId: 'req-0', logAt: NOW - 400 }, history: { target: null, before: null, after: null }, tap: { target: null, cluster: [] }, console: [], items: [{ signal: target, request: {}, history: {}, tap: {}, console: [] }], recentTurns: [] } },
+      }),
+      NOW
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value.report.scope).toBe('single');
+    expect(result.value.report.target.tapId).toBe('tap-0');
+    expect(result.value.diagnostics.evidence.items.length).toBe(1);
+    expect(result.value.diagnostics.evidence.request.requestId).toBe('req-0');
+  });
+
+  it('逐条点名的控制台与探针按上限截断', () => {
+    const many = Array.from({ length: MAX_EVIDENCE_TAP + 5 }, (_, index) => ({ id: 'tap-' + index, at: NOW - index }));
+    const consoles = Array.from({ length: 30 }, (_, index) => ({ at: NOW - index, level: 'error', text: 'c' + index }));
+    const turns = Array.from({ length: MAX_RECENT_TURNS + 3 }, (_, index) => ({ at: NOW - index, role: 'user', chars: index, text: 'x' }));
+    const result = normalizeLogUpload(
+      v4Pack({
+        diagnostics: {
+          evidence: {
+            scope: 'all',
+            targetTotal: 1,
+            items: [{ signal: targetOf(0), request: {}, history: {}, tap: { target: null, cluster: many }, console: consoles }],
+            recentTurns: turns,
+          },
+        },
+      }),
+      NOW
+    );
+    const evidence = result.value.diagnostics.evidence;
+    expect(evidence.items[0].tap.cluster.length).toBe(MAX_EVIDENCE_TAP);
+    expect(evidence.items[0].console.length).toBe(20);
+    expect(evidence.recentTurns.length).toBe(MAX_RECENT_TURNS);
   });
 
   it('拒绝错误的上报类型与空体', () => {

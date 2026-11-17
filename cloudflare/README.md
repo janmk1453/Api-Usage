@@ -173,7 +173,7 @@ npx wrangler d1 execute api_usage_stat --remote --file cloudflare/migrate-tt-ver
 | 接口 | 说明 |
 | --- | --- |
 | `POST /collect` | 接收匿名上报，返回 `204`；兼容旧版扩展的上报体（`v1`、无 `ts`），新版新增可选 `ts`（毫秒时间戳，服务端归一为分钟精度） |
-| `POST /api/log` | 公开的反馈日志上传（请求日志页「上传反馈」），成功返回 `{"ok":true,"id":N}`；限流为单 IP 每分钟 6 条、单 IP 每天 40 条、全站每天 800 条，超限 `429`；`request_log` 表未建时返回 `503` |
+| `POST /api/log` | 公开的反馈日志上传（历史页提示条 / 请求日志页 / 设置页「上传反馈」），成功返回 `{"ok":true,"id":N}`；限流为单 IP 每分钟 6 条、单 IP 每天 40 条、全站每天 800 条，超限 `429`；`request_log` 表未建时返回 `503`；上传体支持 schema 1–4（1 单条记录、2 加反馈说明与诊断、3 加点名目标与现场证据、4 逐条点名多条），未知 schema 或字段不合法返回 `400` 并回显错误码 `bad_schema/bad_kind/bad_record/bad_body`；核对版本不一致时先升级并重新 `wrangler deploy` 接收端 |
 | `GET /api/logs` | 口令：最近 50 条反馈日志摘要（不含请求正文） |
 | `GET /api/log/view?id=N` | 口令：按 id 取回完整上报体 |
 | `GET /api/summary` | 总计、当日、累计用户序列、面板累计、版本分布、环境画像、时长直方图；支持 `?force=1` |
