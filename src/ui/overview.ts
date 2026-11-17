@@ -308,7 +308,7 @@ export function renderOverview(fullHistory?: any[]) {
         <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">Token 历史消耗</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-text);">${fmt(v.totalTokens)} tokens</span></div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输入（命中缓存）</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-green);">${fmt(v.hit)} tokens</span></div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输入（未命中缓存）</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-red);">${fmt(v.miss)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输出</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-text);">${fmt(v.output)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输出</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--aus-token-output);">${fmt(v.output)} tokens</span></div>
       </div>
     `;
   }

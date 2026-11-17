@@ -1901,7 +1901,7 @@ function renderChatSummaryTable(doc, rows) {
 			"<td style=\"padding:6px 8px;text-align:right;\">" + r.count + "</td>",
 			"<td style=\"padding:6px 8px;text-align:right;color:#0BA25E;\">" + r.hit.toLocaleString("zh-CN") + "</td>",
 			"<td style=\"padding:6px 8px;text-align:right;color:#DC2626;\">" + r.miss.toLocaleString("zh-CN") + "</td>",
-			"<td style=\"padding:6px 8px;text-align:right;color:#6366F1;\">" + r.out.toLocaleString("zh-CN") + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;color:var(--aus-token-output);\">" + r.out.toLocaleString("zh-CN") + "</td>",
 			"<td style=\"padding:6px 8px;text-align:right;font-weight:600;\">" + r.total.toLocaleString("zh-CN") + "</td>",
 			"<td style=\"padding:6px 8px;text-align:right;color:var(--ds-text);\">" + costTxt + "</td>",
 			"<td style=\"padding:6px 8px;text-align:right;\">" + Math.round(r.avgTokens).toLocaleString("zh-CN") + "</td>",
@@ -2513,7 +2513,7 @@ function renderOverview(fullHistory) {
         <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">Token 历史消耗</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-text);">${fmt(v.totalTokens)} tokens</span></div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输入（命中缓存）</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-green);">${fmt(v.hit)} tokens</span></div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输入（未命中缓存）</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-red);">${fmt(v.miss)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输出</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-text);">${fmt(v.output)} tokens</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输出</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--aus-token-output);">${fmt(v.output)} tokens</span></div>
       </div>
     `;
 	const spendHost = doc.getElementById("aus-overview-spend");
@@ -6221,7 +6221,7 @@ function renderModelSummary(filtered) {
 		}
 	};
 	tbody.innerHTML = list.map((r) => {
-		return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc$3(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#6366F1;">${r.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${fmtC(r.cost)}</td><td style="padding:6px 8px;text-align:right;">${fmtC(r.avgCost)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
+		return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc$3(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--aus-token-output);">${r.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${fmtC(r.cost)}</td><td style="padding:6px 8px;text-align:right;">${fmtC(r.avgCost)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
 	}).join("");
 }
 var cachedAllHistory = null;

@@ -86,7 +86,7 @@ export function renderChatSummaryTable(doc: Document, rows: ChatSummaryRow[]): v
       '<td style="padding:6px 8px;text-align:right;">' + r.count + '</td>',
       '<td style="padding:6px 8px;text-align:right;color:#0BA25E;">' + r.hit.toLocaleString('zh-CN') + '</td>',
       '<td style="padding:6px 8px;text-align:right;color:#DC2626;">' + r.miss.toLocaleString('zh-CN') + '</td>',
-      '<td style="padding:6px 8px;text-align:right;color:#6366F1;">' + r.out.toLocaleString('zh-CN') + '</td>',
+      '<td style="padding:6px 8px;text-align:right;color:var(--aus-token-output);">' + r.out.toLocaleString('zh-CN') + '</td>',
       '<td style="padding:6px 8px;text-align:right;font-weight:600;">' + r.total.toLocaleString('zh-CN') + '</td>',
       '<td style="padding:6px 8px;text-align:right;color:var(--ds-text);">' + costTxt + '</td>',
       '<td style="padding:6px 8px;text-align:right;">' + Math.round(r.avgTokens).toLocaleString('zh-CN') + '</td>',
