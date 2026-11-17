@@ -122,7 +122,7 @@ function dialogHTML(input: {
     'placeholder="什么时候、哪条对话、哪一轮；那次的模型或接入是什么；和你预期的差别在哪"></textarea>' +
 
     '<label class="aus-up-check"><input type="checkbox" id="aus-up-include-chat" checked />' +
-    '<span>附带最近三轮对话正文（各取前 400 字，用于还原当时的上下文）</span></label>' +
+    '<span>附带最近三轮对话正文（每轮前 400 字，用于还原上下文）</span></label>' +
 
     '<details class="aus-up-details">' +
     "<summary>查看会一并上传的内容与隐私说明</summary>" +

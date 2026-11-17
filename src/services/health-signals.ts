@@ -279,6 +279,21 @@ export function scanConsoleHealth(entries = listConsoleEntries()): HealthSignal[
 }
 
 /**
+ * 探针聚簇的展示后缀：用途 + 发起方 + 上下文规模。
+ * 同一 purposeLabel（例如「结构化输出」）可能来自不同发起方、不同上下文规模，
+ * 只写用途会让并列的多条提示长得一模一样，用户无法分辨指的是哪一类请求。
+ */
+function tapClusterLabel(tap: any): string {
+  const parts: string[] = [String(tap?.purposeLabel || '') || '未归类'];
+  const actor = String(tap?.actorLabel || '');
+  if (actor) parts.push(actor);
+  if (String(tap?.requestType || '') === 'quiet') parts.push('静默请求');
+  const msgs = Number(tap?.messageCount) || 0;
+  if (msgs > 0) parts.push(msgs + ' 条消息');
+  return parts.join(' · ');
+}
+
+/**
  * 扫请求探针：orphan（发出去但一直没被历史收尾）且「看起来就是一次正常对话」的记录，
  * 同一归因在窗口内出现多次 → 说明这类对话一直没被记录，值得提示。
  */
@@ -318,7 +333,7 @@ export function scanTapHealth(taps: TapRecord[] = []): HealthSignal[] {
           reason: 'missing',
           signature: 'tap:' + key,
           severity: 'warn',
-          detail: clipText('有 ' + count + ' 次疑似正常对话的请求没有被记进历史（' + (String((latest as any).purposeLabel || '') || '未归类') + '）'),
+          detail: clipText('有 ' + count + ' 次疑似正常对话的请求没有被记进历史（' + tapClusterLabel(latest) + '）'),
         });
         break;
       }
