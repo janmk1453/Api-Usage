@@ -3780,6 +3780,13 @@
   line-height: 1.7;
 }
 
+#aus-panel .aus-up-target-hint {
+  margin: 8px 0 0;
+  font-size: var(--aus-fs-xs);
+  line-height: 1.6;
+  color: var(--ds-text-3);
+}
+
 #aus-panel .aus-up-label {
   margin: 12px 0 6px;
   font-size: var(--aus-fs-sm);

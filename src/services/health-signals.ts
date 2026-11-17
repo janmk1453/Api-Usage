@@ -14,7 +14,7 @@
 import { listCaptureStages } from './capture-digest';
 import { listConsoleEntries } from './console-ring';
 import { classifyErrorText, errorSignature } from './error-classify';
-import { isEstimatedEntry, isReliablePerformanceSample } from '../data/sample-quality';
+import { interruptKindOf, isEstimatedEntry, isReliablePerformanceSample } from '../data/sample-quality';
 import type { TapRecord } from './request-tap/types';
 import type { FeedbackTarget } from './feedback-pack';
 
@@ -165,6 +165,9 @@ export function scanHistoryHealth(history: any[], limit = HEALTH_HISTORY_SCAN, n
     .sort((a, b) => (Number(b?.timestamp) || 0) - (Number(a?.timestamp) || 0))
     .slice(0, Math.max(1, limit));
   for (const entry of recent) {
+    // 用户主动点「停止」的那一轮：上游必然没给完整 usage、耗时也只到一个半截，
+    // 估算补记是既定行为而不是故障，所以整条记录都不再报任何异常提示。
+    if (interruptKindOf(entry) === 'user') continue;
     const at = Number(entry?.timestamp) || 0;
     const model = String(entry?.model || '未知模型');
     const prompt = Number(entry?.prompt_tokens) || 0;

@@ -343,6 +343,10 @@ function isInterruptedEntry(entry) {
 	const value = entry?.interrupted;
 	return value === "user" || value === "upstream";
 }
+function interruptKindOf(entry) {
+	const value = entry?.interrupted;
+	return value === "user" || value === "upstream" ? value : null;
+}
 /** 速度/TTFT/平均耗时类指标是否可用 */
 function isReliablePerformanceSample(entry) {
 	if (!entry) return false;
@@ -11203,14 +11207,14 @@ function problemForTargets(targets) {
 /** 单条时一行说明；多条时逐条列出，让用户确认「点名的就是这几条」 */
 function targetsHTML(targets) {
 	if (!targets.length) return "";
-	if (targets.length === 1) return "<div class=\"aus-up-targets\"><p class=\"aus-up-target\">" + esc$2(targetLine(targets[0])) + "</p></div>";
+	if (targets.length === 1) return "<div class=\"aus-up-targets\"><p class=\"aus-up-target\">" + esc$2(targetLine(targets[0])) + "</p><p class=\"aus-up-target-hint\">上传成功后，这条提示会自动从历史记录页消失。</p></div>";
 	const rows = targets.map((item) => {
 		const kind = KIND_TEXT$1[String(item.kind || "")] || "异常记录";
 		const when = timeText$1(Number(item.at) || 0) || "--";
 		const model = String(item.model || "").trim() || "未知模型";
 		return "<li class=\"aus-up-target-item\"><span class=\"aus-up-target-when\">" + esc$2(when) + "</span><span class=\"aus-up-target-main\">" + esc$2(model) + " 这一轮</span><span class=\"aus-up-target-kind\">" + esc$2(kind) + "</span></li>";
 	}).join("");
-	return "<div class=\"aus-up-targets\"><p class=\"aus-up-target\">本次反馈逐条点名 " + targets.length + " 条异常记录：</p><ol class=\"aus-up-target-list\">" + rows + "</ol></div>";
+	return "<div class=\"aus-up-targets\"><p class=\"aus-up-target\">本次反馈逐条点名 " + targets.length + " 条异常记录：</p><ol class=\"aus-up-target-list\">" + rows + "</ol><p class=\"aus-up-target-hint\">上传成功后，这几条提示会自动从历史记录页消失。</p></div>";
 }
 function problemButtons(current) {
 	return FEEDBACK_PROBLEMS.map((item) => {
@@ -11223,6 +11227,8 @@ function dialogHTML(input) {
 	return "<div class=\"aus-up\" role=\"dialog\" aria-modal=\"true\" aria-label=\"上传反馈日志\"><div class=\"aus-up-head\"><div class=\"aus-up-title\">上传反馈日志</div><button type=\"button\" class=\"aus-up-close\" data-up-action=\"cancel\" aria-label=\"关闭\">" + icon("close", 16) + "</button></div><div class=\"aus-up-body\">" + targetHTML + "<p class=\"aus-up-text\">遇到<b>对话没有被记录</b>，或者<b>记录下来的 token、费用明显不对</b>时，可将当前这条请求日志和相关诊断信息发送给开发者，便于定位问题。</p><p class=\"aus-up-text aus-up-muted\">" + esc$2(recordLine) + "</p><div class=\"aus-up-label\">这是什么问题</div><div class=\"aus-up-problems\">" + problemButtons(input.problem) + "</div><div class=\"aus-up-label\">补充说明<span class=\"aus-up-optional\">可选</span></div><textarea class=\"aus-up-note\" id=\"aus-up-note\" rows=\"3\" maxlength=\"" + FEEDBACK_NOTE_LIMIT + "\" placeholder=\"什么时候、哪条对话、哪一轮；那次的模型或接入是什么；和你预期的差别在哪\"></textarea><label class=\"aus-up-check\"><input type=\"checkbox\" id=\"aus-up-include-chat\" checked /><span>附带最近三轮对话正文（每轮前 400 字，用于还原上下文）</span></label><details class=\"aus-up-details\"><summary>查看会一并上传的内容与隐私说明</summary><div class=\"aus-up-details-body\"><p class=\"aus-up-details-title\">为排查问题，上传内容可能包括</p><ul class=\"aus-up-list\"><li><b>聊天与提示词</b>：当前这一条请求正文里的历史聊天、你的输入、角色设定、世界书与系统提示词。</li><li><b>生成与结构化数据</b>：模型名称、请求端点、是否流式、finish_reason、用量（token 数）以及请求参数。</li><li><b>记录摘要</b>：最近 10 条历史记录的模型、token、费用与接入名称（<b>不含聊天正文</b>），以及「其他请求」探针里最近 20 条请求的模型、状态与错误。</li><li><b>指向证据</b>：从历史提示上传时，会为每一条被点名的异常（最多 8 条）带上那一轮的完整记录字段、前后各一条历史记录、同类请求最多 4 条，以及前后 2 分钟的控制台输出。</li><li><b>最近对话</b>：最近三轮对话的角色、字数与前 400 字（上面可取消勾选）。</li><li><b>脚本诊断</b>：最近 40 条控制台报错与未处理的 Promise 异常，可能含有酒馆或其他扩展打印的内容。</li><li><b>扩展与运行环境</b>：扩展名称与版本清单、本扩展版本、系统时区、屏幕与视口尺寸、当前对话名与角色名。</li></ul><p class=\"aus-up-details-title\">不会上传</p><ul class=\"aus-up-list\"><li>钱包密钥、API Key、登录凭据：上传前会再把请求头、正文和 URL 里的密钥抹成 <code>***</code>。</li><li>图片与附件内容、扩展源码、酒馆设置原文。</li></ul><p class=\"aus-up-details-title\">脱敏有局限</p><p class=\"aus-up-text\">程序会尝试遮蔽常见密钥、密码和认证头，但不能保证识别聊天正文、脚本输出或自定义字段中的所有敏感信息。请勿把日志视为已经完全脱敏。</p><p class=\"aus-up-details-title\">接收与保存</p><p class=\"aus-up-text\">日志会发送到下面填写的接收地址，接收服务及有权限的收件人可能查看、下载和保存内容；保存期限与删除方式由接收方决定，上传后无法替你撤回。请核对地址，仅向信任的接收方上传。</p></div></details><details class=\"aus-up-details\"><summary>上传地址（高级）</summary><div class=\"aus-up-details-body\"><input type=\"text\" class=\"aus-up-address\" id=\"aus-up-address\" spellcheck=\"false\" value=\"" + esc$2(input.address) + "\" /><p class=\"aus-up-text aus-up-muted\">默认是项目自带的接收端。改成你自己的接收地址时，请确认它愿意接收这些内容。</p></div></details><div class=\"aus-up-result\" id=\"aus-up-result\" hidden></div></div><div class=\"aus-up-foot\"><button type=\"button\" class=\"aus-up-btn\" data-up-action=\"cancel\">取消</button><button type=\"button\" class=\"aus-up-btn is-primary\" data-up-action=\"submit\">同意并上传</button></div></div>";
 }
 var currentProblem = "not-recorded";
+/** 上传成功后的回调（历史提示用它把刚上传的条目从提示条里摘掉） */
+var uploadedCallback = null;
 /** 本次弹窗点名的目标：设置页/日志页为空，历史提示为一条或多条 */
 var currentTargets = [];
 var includeConversation = true;
@@ -11231,6 +11237,7 @@ function closeLogUploadDialog() {
 	if (typeof document === "undefined") return;
 	document.getElementById(MASK_ID)?.remove();
 	uploading = false;
+	uploadedCallback = null;
 }
 function setResult(mask, kind, text) {
 	const box = mask.querySelector("#aus-up-result");
@@ -11272,6 +11279,12 @@ async function submit(mask, appVersion) {
 		}));
 		if (result.ok) {
 			setResult(mask, "ok", "上传成功，感谢反馈。");
+			const keys = currentTargets.map((item) => String(item?.signalKey || "")).filter(Boolean);
+			const done = uploadedCallback;
+			uploadedCallback = null;
+			if (keys.length && done) try {
+				done(keys);
+			} catch {}
 			setTimeout(() => closeLogUploadDialog(), 900);
 			return;
 		}
@@ -11333,6 +11346,7 @@ function openLogUploadDialog(options = {}) {
 	const list = Array.isArray(options.targets) ? options.targets.filter((item) => item && typeof item === "object") : [];
 	if (!list.length && options.target && typeof options.target === "object") list.push(options.target);
 	currentTargets = list;
+	uploadedCallback = typeof options.onUploaded === "function" ? options.onUploaded : null;
 	currentProblem = problemForTargets(currentTargets);
 	includeConversation = true;
 	const panel = document.getElementById("aus-panel") || document.body;
@@ -11902,6 +11916,7 @@ function scanHistoryHealth(history, limit = 30, now = Date.now()) {
 	if (!Array.isArray(history)) return out;
 	const recent = history.slice().sort((a, b) => (Number(b?.timestamp) || 0) - (Number(a?.timestamp) || 0)).slice(0, Math.max(1, limit));
 	for (const entry of recent) {
+		if (interruptKindOf(entry) === "user") continue;
 		const at = Number(entry?.timestamp) || 0;
 		const model = String(entry?.model || "未知模型");
 		const prompt = Number(entry?.prompt_tokens) || 0;
@@ -12183,12 +12198,16 @@ function healthSummaryText(report) {
 * - 总开关（问题反馈 / 请求日志 页）关掉后整条不再出现；
 * - 点「忽略」把当前这批问题按指纹记下来（services/health-prefs，逐条指纹、7 天过期），
 *   同类问题以后不再弹，换成别的问题仍会提示；
-* - 每条明细还能单独「上传这一条」，上传内容会指名道姓指向那条记录。
+* - 每条明细还能单独「上传这一条」，上传内容会指名道姓指向那条记录；
+*   上传成功（HTTP 200）后这几条会按 one 口径落盘并立即从提示条里消失，
+*   否则用户会以为「明明传上去了提示还在」。
 */
 /** 明细最多列几条，再多就只看汇总 */
 var DETAIL_LIMIT = 3;
 /** 当前渲染出来的报告：点「忽略」时按它的指纹落盘 */
 var currentReport = null;
+/** 最近一次渲染用的历史：上传成功后要按同一份数据重算提示条 */
+var lastHistory = [];
 function esc(text) {
 	return String(text ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
@@ -12217,7 +12236,7 @@ function healthBarHTML(report) {
 		const key = healthSignalKey(sig);
 		return `<div class="aus-health-item is-${severityOf(sig)}" data-health-key="${esc(key)}"><span class="aus-health-dot"></span><span class="aus-health-item-text">${esc(sig.detail)}</span>` + (t ? `<span class="aus-health-item-time">${esc(t)}</span>` : "") + `<button type="button" class="aus-health-item-up" data-health-action="upload" data-health-key="${esc(key)}" title="上传这一条的诊断材料">上传这一条</button></div>`;
 	}).join("");
-	const tip = report.infoOnly ? "这些记录是上游没有返回用量、由本地估算补记的，只作提示；上传可帮助改进估算。" : "「上传反馈日志」会把下面每条异常逐条点名一起上传；「上传这一条」只指认它自己（密钥会自动打码）。";
+	const tip = report.infoOnly ? "这些记录是上游没有返回用量、由本地估算补记的，只作提示；上传成功后会从提示条消失。" : "「上传反馈日志」会把下面每条异常逐条点名一起上传，上传成功的条目会立即从提示条消失；「上传这一条」只指认它自己（密钥会自动打码）。";
 	const ignoreText = report.infoOnly ? "不再提示" : "忽略";
 	return `
     <div class="aus-health${report.infoOnly ? " is-info-only" : ""}" role="status">
@@ -12235,6 +12254,18 @@ function healthBarHTML(report) {
         <button type="button" class="aus-health-close" data-health-action="ignore" aria-label="忽略">${icon("close", 14)}</button>
       </div>
     </div>`;
+}
+/**
+* 上传成功后的收尾：把交出去的条目按 one 口径落盘（7 天后若再犯仍会提示），
+* 然后立刻按同一份历史重算提示条——已经报给开发者的问题不该继续挂着。
+*/
+function dropUploaded(host, keys) {
+	const list = (Array.isArray(keys) ? keys : []).filter(Boolean);
+	if (list.length) try {
+		addIgnoredHealthKeys(list, Date.now(), "one");
+	} catch {}
+	currentReport = null;
+	renderHistoryHealthBar(host, { history: lastHistory });
 }
 function hide(host) {
 	host.innerHTML = "";
@@ -12259,13 +12290,15 @@ function bind(host) {
 				const hit = signalOf(key);
 				openLogUploadDialog({
 					appVersion: APP_VERSION,
-					targets: hit ? [healthTargetOf(hit.signal)] : []
+					targets: hit ? [healthTargetOf(hit.signal)] : [],
+					onUploaded: (keys) => dropUploaded(host, keys)
 				});
 				return;
 			}
 			openLogUploadDialog({
 				appVersion: APP_VERSION,
-				targets: (currentReport?.items || []).map(healthTargetOf)
+				targets: (currentReport?.items || []).map(healthTargetOf),
+				onUploaded: (keys) => dropUploaded(host, keys)
 			});
 			return;
 		}
@@ -12284,6 +12317,7 @@ function bind(host) {
 */
 function renderHistoryHealthBar(host, input) {
 	if (!host) return;
+	if (Array.isArray(input?.history)) lastHistory = input.history;
 	if (!isHealthBarEnabled()) {
 		currentReport = null;
 		hide(host);
@@ -13670,14 +13704,14 @@ function renderHistoryInner(doc, fullHist) {
 			failed: "失败"
 		};
 		const badge = historyBadgeOf(h);
-		const originTitle = badge.kind === "interrupted-user" ? "用户中断：已有输出，按实际输出记录" : badge.kind === "interrupted-upstream" ? "上游中断：连接异常，已记录到中断前的输出" : badge.kind === "estimated" ? "本地估算：上游未返回用量，输入与输出由本地估算得出" : isAgentRecord ? [
+		const isEstimated = isEstimatedEntry(h);
+		const originTitle = badge.kind === "interrupted-user" ? isEstimated ? "用户中断：上游没给用量，token 为本地估算" : "用户中断：已有输出，按实际输出记录" : badge.kind === "interrupted-upstream" ? isEstimated ? "上游中断：连接异常且未返回用量，token 为本地估算" : "上游中断：连接异常，已记录到中断前的输出" : badge.kind === "estimated" ? "本地估算：上游未返回用量，输入与输出由本地估算得出" : isAgentRecord ? [
 			"Agent 模式",
 			agentTurnCount > 0 ? agentTurnCount + " 个模型回合" : "",
 			agentStatusLabels[agentStatusKey] || ""
 		].filter(Boolean).join(" · ") : "常规对话";
-		const isEstimated = badge.kind === "estimated";
 		const estTag = isEstimated ? "<span style=\"margin-left:4px;padding:0 4px;border-radius:4px;font-size:10px;font-weight:600;background:var(--ds-yellow-bg);color:var(--ds-yellow);\">估算</span>" : "";
-		const recordStateText = badge.kind === "interrupted-user" ? "用户中断（已记录输出）" : badge.kind === "interrupted-upstream" ? "上游中断（已记录输出）" : isEstimated ? "本地估算（上游未返回用量）" : "正常（上游用量）";
+		const recordStateText = badge.kind === "interrupted-user" ? isEstimated ? "用户中断（token 为本地估算）" : "用户中断（已记录输出）" : badge.kind === "interrupted-upstream" ? isEstimated ? "上游中断（token 为本地估算）" : "上游中断（已记录输出）" : isEstimated ? "本地估算（上游未返回用量）" : "正常（上游用量）";
 		const originBadge = `<span class="aus-origin-badge" title="${esc$3(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:${badge.background};color:${badge.color};">${esc$3(badge.text)}</span>`;
 		const recordDate = new Date(h.timestamp);
 		const recordDateText = recordDate.toLocaleDateString("zh-CN");

@@ -63,6 +63,11 @@ describe('历史记录页健康提示条', () => {
     expect(html).not.toContain('<img src=x>');
   });
 
+  it('提示里写清「上传成功的条目会从提示条消失」，避免传完还挂着', () => {
+    const html = healthBarHTML(report());
+    expect(html).toContain('上传成功的条目会立即从提示条消失');
+  });
+
   it('每条明细带「上传这一条」按钮，并带上该条指纹', () => {
     const html = healthBarHTML(report());
     expect(html).toContain('上传这一条');

@@ -86,7 +86,11 @@ function problemForTargets(targets: FeedbackTarget[]): FeedbackProblem {
 function targetsHTML(targets: FeedbackTarget[]): string {
   if (!targets.length) return "";
   if (targets.length === 1) {
-    return '<div class="aus-up-targets"><p class="aus-up-target">' + esc(targetLine(targets[0])) + "</p></div>";
+    return (
+      '<div class="aus-up-targets"><p class="aus-up-target">' + esc(targetLine(targets[0])) + "</p>" +
+      '<p class="aus-up-target-hint">上传成功后，这条提示会自动从历史记录页消失。</p>' +
+      "</div>"
+    );
   }
   const rows = targets
     .map((item) => {
@@ -106,6 +110,7 @@ function targetsHTML(targets: FeedbackTarget[]): string {
     '<div class="aus-up-targets">' +
     '<p class="aus-up-target">本次反馈逐条点名 ' + targets.length + ' 条异常记录：</p>' +
     '<ol class="aus-up-target-list">' + rows + "</ol>" +
+    '<p class="aus-up-target-hint">上传成功后，这几条提示会自动从历史记录页消失。</p>' +
     "</div>"
   );
 }
@@ -199,6 +204,8 @@ function dialogHTML(input: {
 }
 
 let currentProblem: FeedbackProblem = 'not-recorded';
+/** 上传成功后的回调（历史提示用它把刚上传的条目从提示条里摘掉） */
+let uploadedCallback: ((keys: string[]) => void) | null = null;
 /** 本次弹窗点名的目标：设置页/日志页为空，历史提示为一条或多条 */
 let currentTargets: FeedbackTarget[] = [];
 let includeConversation = true;
@@ -208,6 +215,7 @@ export function closeLogUploadDialog(): void {
   if (typeof document === "undefined") return;
   document.getElementById(MASK_ID)?.remove();
   uploading = false;
+  uploadedCallback = null;
 }
 
 function setResult(mask: HTMLElement, kind: "info" | "ok" | "bad", text: string): void {
@@ -254,6 +262,13 @@ async function submit(mask: HTMLElement, appVersion: string): Promise<void> {
     const result = await uploadLogPayload(address, pack);
     if (result.ok) {
       setResult(mask, "ok", "上传成功，感谢反馈。");
+      // 先通知提示条摘掉这些条目，再延时关闭，避免用户看到「已上传但提示还在」
+      const keys = currentTargets.map((item) => String(item?.signalKey || "")).filter(Boolean);
+      const done = uploadedCallback;
+      uploadedCallback = null;
+      if (keys.length && done) {
+        try { done(keys); } catch {}
+      }
       setTimeout(() => closeLogUploadDialog(), 900);
       return;
     }
@@ -315,6 +330,8 @@ export function openLogUploadDialog(options: {
   appVersion?: string;
   target?: FeedbackTarget | null;
   targets?: FeedbackTarget[] | null;
+  /** 上传成功后回调：参数是本次点名的 signalKey，供提示条把已上报的条目摘掉 */
+  onUploaded?: ((keys: string[]) => void) | null;
 } = {}): void {
   if (typeof document === "undefined") return;
   document.getElementById(MASK_ID)?.remove();
@@ -322,6 +339,7 @@ export function openLogUploadDialog(options: {
   const list = Array.isArray(options.targets) ? options.targets.filter((item) => item && typeof item === "object") : [];
   if (!list.length && options.target && typeof options.target === "object") list.push(options.target);
   currentTargets = list;
+  uploadedCallback = typeof options.onUploaded === "function" ? options.onUploaded : null;
   currentProblem = problemForTargets(currentTargets);
   includeConversation = true;
   const panel = document.getElementById("aus-panel") || document.body;

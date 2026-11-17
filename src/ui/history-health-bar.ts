@@ -9,7 +9,9 @@
  * - 总开关（问题反馈 / 请求日志 页）关掉后整条不再出现；
  * - 点「忽略」把当前这批问题按指纹记下来（services/health-prefs，逐条指纹、7 天过期），
  *   同类问题以后不再弹，换成别的问题仍会提示；
- * - 每条明细还能单独「上传这一条」，上传内容会指名道姓指向那条记录。
+ * - 每条明细还能单独「上传这一条」，上传内容会指名道姓指向那条记录；
+ *   上传成功（HTTP 200）后这几条会按 one 口径落盘并立即从提示条里消失，
+ *   否则用户会以为「明明传上去了提示还在」。
  */
 import { icon } from './icons';
 import { APP_VERSION } from '../constants/version';
@@ -35,6 +37,8 @@ const DETAIL_LIMIT = 3;
 
 /** 当前渲染出来的报告：点「忽略」时按它的指纹落盘 */
 let currentReport: HealthReport | null = null;
+/** 最近一次渲染用的历史：上传成功后要按同一份数据重算提示条 */
+let lastHistory: any[] = [];
 
 function esc(text: unknown): string {
   return String(text ?? '')
@@ -86,8 +90,8 @@ export function healthBarHTML(report: HealthReport): string {
     })
     .join("");
   const tip = report.infoOnly
-    ? "这些记录是上游没有返回用量、由本地估算补记的，只作提示；上传可帮助改进估算。"
-    : "「上传反馈日志」会把下面每条异常逐条点名一起上传；「上传这一条」只指认它自己（密钥会自动打码）。";
+    ? "这些记录是上游没有返回用量、由本地估算补记的，只作提示；上传成功后会从提示条消失。"
+    : "「上传反馈日志」会把下面每条异常逐条点名一起上传，上传成功的条目会立即从提示条消失；「上传这一条」只指认它自己（密钥会自动打码）。";
   const ignoreText = report.infoOnly ? "不再提示" : "忽略";
   return `
     <div class="aus-health${report.infoOnly ? " is-info-only" : ""}" role="status">
@@ -105,6 +109,19 @@ export function healthBarHTML(report: HealthReport): string {
         <button type="button" class="aus-health-close" data-health-action="ignore" aria-label="忽略">${icon("close", 14)}</button>
       </div>
     </div>`;
+}
+
+/**
+ * 上传成功后的收尾：把交出去的条目按 one 口径落盘（7 天后若再犯仍会提示），
+ * 然后立刻按同一份历史重算提示条——已经报给开发者的问题不该继续挂着。
+ */
+function dropUploaded(host: HTMLElement, keys: string[]): void {
+  const list = (Array.isArray(keys) ? keys : []).filter(Boolean);
+  if (list.length) {
+    try { addIgnoredHealthKeys(list, Date.now(), "one"); } catch {}
+  }
+  currentReport = null;
+  renderHistoryHealthBar(host, { history: lastHistory });
 }
 
 function hide(host: HTMLElement): void {
@@ -133,13 +150,14 @@ function bind(host: HTMLElement): void {
         openLogUploadDialog({
           appVersion: APP_VERSION,
           targets: hit ? [healthTargetOf(hit.signal)] : [],
+          onUploaded: (keys) => dropUploaded(host, keys),
         });
         return;
       }
       // 「上传反馈日志」：把提示条里列出的每一条都指名道姓
       // （等价于把每条「上传这一条」并成一份包，弹窗里逐条列出）
       const targets = (currentReport?.items || []).map(healthTargetOf);
-      openLogUploadDialog({ appVersion: APP_VERSION, targets });
+      openLogUploadDialog({ appVersion: APP_VERSION, targets, onUploaded: (keys) => dropUploaded(host, keys) });
       return;
     }
     if (action === "ignore") {
@@ -160,6 +178,7 @@ function bind(host: HTMLElement): void {
  */
 export function renderHistoryHealthBar(host: HTMLElement | null, input?: { history?: any[] }): void {
   if (!host) return;
+  if (Array.isArray(input?.history)) lastHistory = input.history;
   if (!isHealthBarEnabled()) {
     currentReport = null;
     hide(host);

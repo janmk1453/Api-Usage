@@ -174,4 +174,23 @@ describe('信号 → 上传目标（指名道姓）', () => {
     expect(target.historyTimestamp).toBe(1794719200000);
     expect(target.signature).toBe('char-heuristic-v1');
   });
+
+  it('用户主动停止的那一轮不报任何提示：没用量是预期，不是故障', () => {
+    // 估算补记 + 用户中断：两者叠加时最容易被误报成「本地估算」警告
+    const estimated = entry({ timestamp: 1794719400000, usageSource: 'estimated', interrupted: 'user', prompt_tokens: 0 });
+    expect(scanHistoryHealth([estimated])).toHaveLength(0);
+    // 用量全 0 的用户中断记录同样静默
+    const zero = entry({ timestamp: 1794719500000, interrupted: 'user', prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
+    expect(scanHistoryHealth([zero])).toHaveLength(0);
+    const report = buildHealthReport({ history: [estimated, zero], stages: [], consoleEntries: [] });
+    expect(report.shouldShow).toBe(false);
+  });
+
+  it('上游中断导致的估算仍要提示：那是连接出了问题', () => {
+    const signals = scanHistoryHealth([
+      entry({ timestamp: 1794719600000, usageSource: 'estimated', interrupted: 'upstream', prompt_tokens: 0 }),
+    ]);
+    expect(signals).toHaveLength(1);
+    expect(signals[0].kind).toBe('estimated-usage');
+  });
 });

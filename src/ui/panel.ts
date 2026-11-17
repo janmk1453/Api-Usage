@@ -30,6 +30,7 @@ import { initTapView, renderTapView } from './tap-view';
 import { initLogView, renderLogView } from './log-view';
 import { renderHistoryHealthBar } from './history-health-bar';
 import { historyBadgeOf } from './history-badge';
+import { isEstimatedEntry } from '../data/sample-quality';
 import { helpViewHTML } from './help-view';
 import { chartCardHTML } from './chart-picker';
 import { hideAllChartTooltips } from './chart-tooltip';
@@ -549,23 +550,25 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
     const agentStatusKey = String((h as any).agentStatus || '');
     const agentStatusLabels: Record<string, string> = { completed: '已完成', partial_success: '部分完成', cancelled: '已取消', failed: '失败' };
     const badge = historyBadgeOf(h as any);
+    // 估算要按 usageSource 独立判断：中断记录也可能同时是估算补记，
+    // 只看角标会把「中断 + 估算」误判成非估算，详情里就不标 token 来源了。
+    const isEstimated = isEstimatedEntry(h as any);
     const originTitle = badge.kind === 'interrupted-user'
-      ? '用户中断：已有输出，按实际输出记录'
+      ? (isEstimated ? '用户中断：上游没给用量，token 为本地估算' : '用户中断：已有输出，按实际输出记录')
       : badge.kind === 'interrupted-upstream'
-        ? '上游中断：连接异常，已记录到中断前的输出'
+        ? (isEstimated ? '上游中断：连接异常且未返回用量，token 为本地估算' : '上游中断：连接异常，已记录到中断前的输出')
         : badge.kind === 'estimated'
           ? '本地估算：上游未返回用量，输入与输出由本地估算得出'
           : isAgentRecord
             ? ['Agent 模式', agentTurnCount > 0 ? agentTurnCount + ' 个模型回合' : '', agentStatusLabels[agentStatusKey] || ''].filter(Boolean).join(' · ')
             : '常规对话';
-    const isEstimated = badge.kind === 'estimated';
     const estTag = isEstimated
       ? '<span style="margin-left:4px;padding:0 4px;border-radius:4px;font-size:10px;font-weight:600;background:var(--ds-yellow-bg);color:var(--ds-yellow);">估算</span>'
       : '';
     const recordStateText = badge.kind === 'interrupted-user'
-      ? '用户中断（已记录输出）'
+      ? (isEstimated ? '用户中断（token 为本地估算）' : '用户中断（已记录输出）')
       : badge.kind === 'interrupted-upstream'
-        ? '上游中断（已记录输出）'
+        ? (isEstimated ? '上游中断（token 为本地估算）' : '上游中断（已记录输出）')
         : isEstimated
           ? '本地估算（上游未返回用量）'
           : '正常（上游用量）';
