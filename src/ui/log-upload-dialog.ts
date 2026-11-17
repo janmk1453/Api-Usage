@@ -1,9 +1,10 @@
 /**
  * 「上传反馈日志」弹窗：把当前请求日志 + 诊断摘要发给开发者排查。
  *
- * 两条链路共用这个弹窗：
- * - 历史记录页健康提示点「上传这一条」：带 target，弹窗顶部明确写出「本次反馈指向 X 时 Y 模型的这一轮」，
- *   上传体里 report.scope=single + report.target + evidence（目标记录/同簇请求/前后两分钟控制台）；
+ * 三条链路共用这个弹窗：
+ * - 历史记录页健康提示点「上传这一条」：带一个 target，弹窗顶部写明「本次反馈指向 X 时 Y 模型的这一轮」；
+ * - 历史记录页点「上传反馈日志」：带 targets（提示条里列出的每一条），弹窗顶部逐条列出，
+ *   上传体里 report.scope=all + report.targets + evidence.items 为每条各备一份现场证据；
  * - 设置页 / 请求日志页点「上传反馈」：不带 target，report.scope=recent，上传最近一轮请求的详细数据。
  *
  * 交互口径：
@@ -70,11 +71,43 @@ function targetLine(target: FeedbackTarget | null): string {
   return "本次反馈指向：" + (when ? when + " " : "") + who + "（" + kind + "）";
 }
 
-function problemForTarget(target: FeedbackTarget | null): FeedbackProblem {
-  const kind = String(target?.kind || "");
-  if (kind === "missing-usage" || kind === "zero-usage") return "not-recorded";
-  if (kind === "rate-anomaly" || kind === "meta-missing" || kind === "estimated-usage") return "wrong-data";
+/**
+ * 目标类型 → 预选问题类型。
+ * 多条时按「最严重的那类」预选：只要有一条根本没进历史，就是「没有被记录」。
+ */
+function problemForTargets(targets: FeedbackTarget[]): FeedbackProblem {
+  const kinds = targets.map((item) => String(item?.kind || ""));
+  if (kinds.some((kind) => kind === "missing-usage" || kind === "zero-usage")) return "not-recorded";
+  if (kinds.some((kind) => kind === "rate-anomaly" || kind === "meta-missing" || kind === "estimated-usage")) return "wrong-data";
   return "other";
+}
+
+/** 单条时一行说明；多条时逐条列出，让用户确认「点名的就是这几条」 */
+function targetsHTML(targets: FeedbackTarget[]): string {
+  if (!targets.length) return "";
+  if (targets.length === 1) {
+    return '<div class="aus-up-targets"><p class="aus-up-target">' + esc(targetLine(targets[0])) + "</p></div>";
+  }
+  const rows = targets
+    .map((item) => {
+      const kind = KIND_TEXT[String(item.kind || "")] || "异常记录";
+      const when = timeText(Number(item.at) || 0) || "--";
+      const model = String(item.model || "").trim() || "未知模型";
+      return (
+        '<li class="aus-up-target-item">' +
+        '<span class="aus-up-target-when">' + esc(when) + "</span>" +
+        '<span class="aus-up-target-main">' + esc(model) + " 这一轮</span>" +
+        '<span class="aus-up-target-kind">' + esc(kind) + "</span>" +
+        "</li>"
+      );
+    })
+    .join("");
+  return (
+    '<div class="aus-up-targets">' +
+    '<p class="aus-up-target">本次反馈逐条点名 ' + targets.length + ' 条异常记录：</p>' +
+    '<ol class="aus-up-target-list">' + rows + "</ol>" +
+    "</div>"
+  );
 }
 
 function problemButtons(current: FeedbackProblem): string {
@@ -93,15 +126,12 @@ function dialogHTML(input: {
   address: string;
   hasRecord: boolean;
   problem: FeedbackProblem;
-  target: FeedbackTarget | null;
+  targets: FeedbackTarget[];
 }): string {
   const recordLine = input.hasRecord
     ? "当前请求日志：有，会一起上传"
     : "当前请求日志：无（还没有捕获到请求，仅上传下面的诊断摘要）";
-  const target = targetLine(input.target);
-  const targetHTML = target
-    ? '<p class="aus-up-target">' + esc(target) + "</p>"
-    : "";
+  const targetHTML = targetsHTML(input.targets);
   return (
     '<div class="aus-up" role="dialog" aria-modal="true" aria-label="上传反馈日志">' +
     '<div class="aus-up-head">' +
@@ -132,7 +162,7 @@ function dialogHTML(input: {
     '<li><b>聊天与提示词</b>：当前这一条请求正文里的历史聊天、你的输入、角色设定、世界书与系统提示词。</li>' +
     '<li><b>生成与结构化数据</b>：模型名称、请求端点、是否流式、finish_reason、用量（token 数）以及请求参数。</li>' +
     '<li><b>记录摘要</b>：最近 10 条历史记录的模型、token、费用与接入名称（<b>不含聊天正文</b>），以及「其他请求」探针里最近 20 条请求的模型、状态与错误。</li>' +
-    '<li><b>指向证据</b>：点「上传这一条」时，会额外带上出问题那一轮的完整记录字段、前后各一条历史记录、同类请求最多 4 条、以及前后 2 分钟的控制台输出。</li>' +
+    '<li><b>指向证据</b>：从历史提示上传时，会为每一条被点名的异常（最多 8 条）带上那一轮的完整记录字段、前后各一条历史记录、同类请求最多 4 条，以及前后 2 分钟的控制台输出。</li>' +
     '<li><b>最近对话</b>：最近三轮对话的角色、字数与前 400 字（上面可取消勾选）。</li>' +
     '<li><b>脚本诊断</b>：最近 40 条控制台报错与未处理的 Promise 异常，可能含有酒馆或其他扩展打印的内容。</li>' +
     '<li><b>扩展与运行环境</b>：扩展名称与版本清单、本扩展版本、系统时区、屏幕与视口尺寸、当前对话名与角色名。</li>' +
@@ -169,7 +199,8 @@ function dialogHTML(input: {
 }
 
 let currentProblem: FeedbackProblem = 'not-recorded';
-let currentTarget: FeedbackTarget | null = null;
+/** 本次弹窗点名的目标：设置页/日志页为空，历史提示为一条或多条 */
+let currentTargets: FeedbackTarget[] = [];
 let includeConversation = true;
 let uploading = false;
 
@@ -217,7 +248,7 @@ async function submit(mask: HTMLElement, appVersion: string): Promise<void> {
       note,
       appVersion,
       record: readRequestLog(),
-      target: currentTarget,
+      targets: currentTargets,
       includeConversation,
     });
     const result = await uploadLogPayload(address, pack);
@@ -276,17 +307,22 @@ function bind(mask: HTMLElement, appVersion: string): void {
 
 /**
  * 打开弹窗（单例：重复调用先收掉旧的）
- * @param options.target 历史提示「上传这一条」时传目标信号；不传就是「最近一条 + 全量诊断」
+ * @param options.targets 历史提示「上传反馈日志」时传提示条里的每一条，逐条点名
+ * @param options.target 历史提示「上传这一条」时传单条目标（targets 为空时生效）
+ * 都不传就是「最近一条 + 全量诊断」
  */
 export function openLogUploadDialog(options: {
   appVersion?: string;
   target?: FeedbackTarget | null;
+  targets?: FeedbackTarget[] | null;
 } = {}): void {
   if (typeof document === "undefined") return;
   document.getElementById(MASK_ID)?.remove();
   uploading = false;
-  currentTarget = options.target && typeof options.target === "object" ? options.target : null;
-  currentProblem = problemForTarget(currentTarget);
+  const list = Array.isArray(options.targets) ? options.targets.filter((item) => item && typeof item === "object") : [];
+  if (!list.length && options.target && typeof options.target === "object") list.push(options.target);
+  currentTargets = list;
+  currentProblem = problemForTargets(currentTargets);
   includeConversation = true;
   const panel = document.getElementById("aus-panel") || document.body;
   const mask = document.createElement("div");
@@ -297,7 +333,7 @@ export function openLogUploadDialog(options: {
     address: readUploadAddress(),
     hasRecord,
     problem: currentProblem,
-    target: currentTarget,
+    targets: currentTargets,
   });
   panel.appendChild(mask);
   bind(mask, String(options.appVersion || ""));

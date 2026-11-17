@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   buildHealthReport,
   healthSignalKey,
+  healthTargetOf,
   healthSummaryText,
   scanCaptureHealth,
   scanConsoleHealth,
@@ -140,5 +141,37 @@ describe('历史记录页健康信号', () => {
     });
     expect(report.shouldShow).toBe(true);
     expect(healthSummaryText(report)).toBe('用量为 0 1 次');
+  });
+});
+
+describe('信号 → 上传目标（指名道姓）', () => {
+  it('历史类信号带上记录时间戳与请求 ID，弹窗才能指认到具体那一条', () => {
+    const signals = scanHistoryHealth([
+      entry({ timestamp: 1794719123456, requestId: 'req-abc', prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }),
+    ]);
+    expect(signals).toHaveLength(1);
+    const target = healthTargetOf(signals[0]);
+    expect(target.kind).toBe('zero-usage');
+    expect(target.historyTimestamp).toBe(1794719123456);
+    expect(target.requestId).toBe('req-abc');
+    expect(target.signalKey).toBe(healthSignalKey(signals[0]));
+    expect(target.model).toBe('deepseek-flash');
+  });
+
+  it('没有 requestId 的旧记录也能靠时间戳定位，不会变成「未知指向」', () => {
+    const signals = scanHistoryHealth([entry({ timestamp: 1794719000001, total_tokens: 0, prompt_tokens: 0, completion_tokens: 0 })]);
+    const target = healthTargetOf(signals[0]);
+    expect(target.historyTimestamp).toBe(1794719000001);
+    expect(target.requestId).toBe(null);
+  });
+
+  it('估算补记的轻提示同样可被点名（含估算方法与记录时间）', () => {
+    const signals = scanHistoryHealth([
+      entry({ timestamp: 1794719200000, usageSource: 'estimated', estimateMethod: 'char-heuristic-v1', prompt_tokens: 0 }),
+    ]);
+    const target = healthTargetOf(signals[0]);
+    expect(signals[0].kind).toBe('estimated-usage');
+    expect(target.historyTimestamp).toBe(1794719200000);
+    expect(target.signature).toBe('char-heuristic-v1');
   });
 });

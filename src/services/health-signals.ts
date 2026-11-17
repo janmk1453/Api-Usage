@@ -16,6 +16,7 @@ import { listConsoleEntries } from './console-ring';
 import { classifyErrorText, errorSignature } from './error-classify';
 import { isEstimatedEntry, isReliablePerformanceSample } from '../data/sample-quality';
 import type { TapRecord } from './request-tap/types';
+import type { FeedbackTarget } from './feedback-pack';
 
 export type HealthSignalKind =
   | 'zero-usage'
@@ -42,6 +43,12 @@ export interface HealthSignal {
   severity?: HealthSeverity;
   /** 这条信号是否允许「忽略」：没有可靠归因的不允许（否则一点就静音一大片） */
   canIgnore?: boolean;
+  /** 命中的历史记录时间戳（上传反馈时用来指名道姓定位那一条） */
+  historyTimestamp?: number;
+  /** 命中记录的请求 ID（有则优先用它定位，比时间戳精确） */
+  requestId?: string;
+  /** 命中的探针 ID（「这类请求没被记账」时指向最新那一条作样本） */
+  tapId?: string;
 }
 
 /**
@@ -61,6 +68,25 @@ export function canIgnoreSignal(sig: HealthSignal): boolean {
   if (sig.canIgnore === false) return false;
   if (sig.kind === 'plugin-error') return !!sig.signature;
   return true;
+}
+
+/**
+ * 从信号里取出「上传反馈时的指向」：把定位字段一并带上，
+ * 让每条提示都能被指名道姓地指认（历史记录时间戳 / 请求 ID / 探针 ID）。
+ */
+export function healthTargetOf(sig: HealthSignal): FeedbackTarget {
+  return {
+    signalKey: healthSignalKey(sig),
+    kind: sig.kind,
+    at: sig.at || null,
+    detail: sig.detail || '',
+    model: sig.model || '',
+    reason: sig.reason || '',
+    signature: sig.signature || null,
+    requestId: sig.requestId || null,
+    tapId: sig.tapId || null,
+    historyTimestamp: sig.historyTimestamp || null,
+  };
 }
 
 export interface HealthReport {
@@ -144,6 +170,11 @@ export function scanHistoryHealth(history: any[], limit = HEALTH_HISTORY_SCAN, n
     const prompt = Number(entry?.prompt_tokens) || 0;
     const completion = Number(entry?.completion_tokens) || 0;
     const total = Number(entry?.total_tokens) || 0;
+    // 定位信息：上传反馈时用它对上「就是这一条」，不能只留模型名
+    const loc = {
+      historyTimestamp: at || undefined,
+      requestId: String(entry?.requestId || '') || undefined,
+    };
     // 估算补记：轻提示，告诉用户这一轮的数字是本地算的
     if (isEstimatedEntry(entry)) {
       const method = String((entry as any)?.estimateMethod || '');
@@ -154,6 +185,7 @@ export function scanHistoryHealth(history: any[], limit = HEALTH_HISTORY_SCAN, n
         reason: 'estimated',
         signature: method || undefined,
         severity: 'info',
+        ...loc,
         detail: clipText(model + ' 这一轮上游未返回用量，已按本地估算补记' + (method ? '（' + method + '）' : '')),
       });
       continue;
@@ -165,6 +197,7 @@ export function scanHistoryHealth(history: any[], limit = HEALTH_HISTORY_SCAN, n
         model,
         reason: 'model-missing',
         severity: 'warn',
+        ...loc,
         detail: clipText(model + ' 这一轮没取到模型名，已用兜底值记录'),
       });
     }
@@ -175,11 +208,12 @@ export function scanHistoryHealth(history: any[], limit = HEALTH_HISTORY_SCAN, n
         model,
         reason: 'duration-missing',
         severity: 'warn',
+        ...loc,
         detail: clipText(model + ' 这一轮没取到总耗时'),
       });
     }
     if (prompt === 0 && completion === 0 && total === 0) {
-      out.push({ kind: 'zero-usage', at, model, reason: 'zero', severity: 'warn', detail: clipText(model + ' 这一轮用量全为 0') });
+      out.push({ kind: 'zero-usage', at, model, reason: 'zero', severity: 'warn', ...loc, detail: clipText(model + ' 这一轮用量全为 0') });
       continue;
     }
     // 中断与估算记录不进速率口径，避免把「停止时的半截输出」当异常
@@ -187,9 +221,9 @@ export function scanHistoryHealth(history: any[], limit = HEALTH_HISTORY_SCAN, n
     const rate = rateOf(entry);
     if (rate == null) continue;
     if (rate > RATE_ANOMALY_HIGH) {
-      out.push({ kind: 'rate-anomaly', at, model, reason: 'rate-high', severity: 'warn', detail: clipText(model + ' 速率 ' + Math.round(rate) + ' token/s，明显偏高') });
+      out.push({ kind: 'rate-anomaly', at, model, reason: 'rate-high', severity: 'warn', ...loc, detail: clipText(model + ' 速率 ' + Math.round(rate) + ' token/s，明显偏高') });
     } else if (rate < RATE_ANOMALY_LOW && total >= 20) {
-      out.push({ kind: 'rate-anomaly', at, model, reason: 'rate-low', severity: 'warn', detail: clipText(model + ' 速率 ' + rate.toFixed(2) + ' token/s，明显偏低') });
+      out.push({ kind: 'rate-anomaly', at, model, reason: 'rate-low', severity: 'warn', ...loc, detail: clipText(model + ' 速率 ' + rate.toFixed(2) + ' token/s，明显偏低') });
     }
   }
   return out;
@@ -333,6 +367,7 @@ export function scanTapHealth(taps: TapRecord[] = []): HealthSignal[] {
           reason: 'missing',
           signature: 'tap:' + key,
           severity: 'warn',
+          tapId: String((latest as any).id || '') || undefined,
           detail: clipText('有 ' + count + ' 次疑似正常对话的请求没有被记进历史（' + tapClusterLabel(latest) + '）'),
         });
         break;

@@ -17,6 +17,7 @@ import {
   buildHealthReport,
   healthSignalKey,
   healthSummaryText,
+  healthTargetOf,
   type HealthReport,
   type HealthSignal,
 } from '../services/health-signals';
@@ -86,7 +87,7 @@ export function healthBarHTML(report: HealthReport): string {
     .join("");
   const tip = report.infoOnly
     ? "这些记录是上游没有返回用量、由本地估算补记的，只作提示；上传可帮助改进估算。"
-    : "可以把诊断材料上传给开发者，帮助定位问题（密钥会自动打码）；「上传这一条」会指名道姓指向出问题的那一轮。";
+    : "「上传反馈日志」会把下面每条异常逐条点名一起上传；「上传这一条」只指认它自己（密钥会自动打码）。";
   const ignoreText = report.infoOnly ? "不再提示" : "忽略";
   return `
     <div class="aus-health${report.infoOnly ? " is-info-only" : ""}" role="status">
@@ -99,7 +100,7 @@ export function healthBarHTML(report: HealthReport): string {
         <div class="aus-health-tip">${esc(tip)}</div>
       </div>
       <div class="aus-health-actions">
-        <button type="button" class="aus-health-btn is-primary" data-health-action="upload">上传反馈日志</button>
+        <button type="button" class="aus-health-btn is-primary" data-health-action="upload" title="逐条点名本次列出的 ${report.items.length} 条异常，一起上传">上传反馈日志</button>
         <button type="button" class="aus-health-btn" data-health-action="ignore" title="这些提示 7 天内不再出现">${esc(ignoreText)}</button>
         <button type="button" class="aus-health-close" data-health-action="ignore" aria-label="忽略">${icon("close", 14)}</button>
       </div>
@@ -126,12 +127,19 @@ function bind(host: HTMLElement): void {
     const action = btn.getAttribute("data-health-action");
     const key = btn.getAttribute("data-health-key") || "";
     if (action === "upload") {
-      // 带 key 的是「上传这一条」：把目标信号一并交给上传弹窗，让开发者知道指的是哪一轮
-      const hit = key ? signalOf(key) : null;
-      openLogUploadDialog({
-        appVersion: APP_VERSION,
-        target: hit ? { ...hit.signal } : null,
-      });
+      if (key) {
+        // 「上传这一条」：只指认这一条
+        const hit = signalOf(key);
+        openLogUploadDialog({
+          appVersion: APP_VERSION,
+          targets: hit ? [healthTargetOf(hit.signal)] : [],
+        });
+        return;
+      }
+      // 「上传反馈日志」：把提示条里列出的每一条都指名道姓
+      // （等价于把每条「上传这一条」并成一份包，弹窗里逐条列出）
+      const targets = (currentReport?.items || []).map(healthTargetOf);
+      openLogUploadDialog({ appVersion: APP_VERSION, targets });
       return;
     }
     if (action === "ignore") {

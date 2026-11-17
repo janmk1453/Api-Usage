@@ -2,10 +2,12 @@
  * 反馈诊断包：用户遇到「对话没被记录」或「记录数据不对」时，上传的不只是一条请求日志，
  * 而是一份能让开发者还原现场的最小诊断材料。
  *
- * 两条上传链路：
- * - 历史记录页健康提示点「上传这一条」：report.target 指名道姓那一轮（信号 + 记录时间 + 模型），
- *   evidence 里带「目标记录 + 前后各一条历史」「目标探针 + 同簇几条」「±2 分钟控制台」；
+ * 三条上传链路：
+ * - 历史记录页健康提示点「上传这一条」：report.scope=single，report.target 指名道姓那一轮；
+ * - 历史记录页点「上传反馈日志」：report.scope=all，report.targets 把提示条里列出的每一条都逐条点名
+ *   （等价于把每条「上传这一条」并成一份包，最多 FEEDBACK_TARGET_LIMIT 条）；
  * - 设置页 / 请求日志页点「上传反馈」：report.scope=recent，上传最近一轮请求的详细数据 + 其他数据。
+ * 只要带目标，evidence 里就为每条目标准备「记录 + 前后各一条历史」「探针 + 同簇几条」「±2 分钟控制台」。
  *
  * 收集范围（只挑与排查有关的）：
  * - record：请求日志页当前那条记录，含请求正文（已脱敏）；
@@ -32,8 +34,10 @@ export const FEEDBACK_HISTORY_LIMIT = 10;
 export const FEEDBACK_TAP_LIMIT = 20;
 /** 控制台摘要条数 */
 export const FEEDBACK_CONSOLE_LIMIT = 40;
-/** 反馈体版本：2 起带 report / diagnostics；3 起带 report.target 与 diagnostics.evidence */
-export const FEEDBACK_SCHEMA = 3;
+/** 反馈体版本：2 起带 report / diagnostics；3 起带 report.target 与 diagnostics.evidence；4 起支持 report.targets 多条点名 */
+export const FEEDBACK_SCHEMA = 4;
+/** 一次最多逐条点名几条异常（再多只计数，避免上传体膨胀） */
+export const FEEDBACK_TARGET_LIMIT = 8;
 /** 控制台证据的时间窗（前后各 2 分钟） */
 export const EVIDENCE_CONSOLE_WINDOW_MS = 120_000;
 /** 同簇探针最多带几条 */
@@ -41,8 +45,8 @@ export const EVIDENCE_TAP_LIMIT = 4;
 
 export type FeedbackProblem = 'not-recorded' | 'wrong-data' | 'other';
 
-/** 上传口径：single=历史提示指向某一条；recent=最近一轮 + 全量诊断 */
-export type FeedbackScope = 'single' | 'recent';
+/** 上传口径：single=指向某一条；all=指向提示条里的每一条；recent=最近一轮 + 全量诊断 */
+export type FeedbackScope = 'single' | 'all' | 'recent';
 
 export const FEEDBACK_PROBLEMS: Array<{ id: FeedbackProblem; label: string; hint: string }> = [
   {
@@ -74,6 +78,8 @@ export interface FeedbackTarget {
   detail?: string | null;
   model?: string | null;
   reason?: string | null;
+  /** 归因签名（插件报错用它区分是哪一种错误） */
+  signature?: string | null;
   requestId?: string | null;
   tapId?: string | null;
   historyTimestamp?: number | null;
@@ -522,7 +528,12 @@ export interface FeedbackPack {
     problem: FeedbackProblem;
     note: string;
     scope: FeedbackScope;
+    /** 只点名一条时的目标（scope=single），多条时为 null，保证旧解析器仍能读到单条场景 */
     target: FeedbackTarget | null;
+    /** 逐条点名的目标列表（scope=single 时为一条，all 时为多条，recent 时为空数组） */
+    targets: FeedbackTarget[];
+    /** 实际想点名的条数（可能大于 targets.length，超出部分只计数） */
+    targetTotal: number;
   };
   client: { userAgent: string; timeZone: string; language: string };
   record: Record<string, unknown> | null;
@@ -531,7 +542,9 @@ export interface FeedbackPack {
 
 /**
  * 组装完整反馈包。record 允许为空（用户还没发过请求，但仍想反馈别的问题）。
- * target 有值时是「历史提示上传这一条」：指名道姓那一轮，并带目标周边证据。
+ * - target：历史提示「上传这一条」指的那一轮；
+ * - targets：历史提示「上传反馈日志」时提示条里列出的每一条，逐条点名；
+ * 两者都传时以 targets 为准（target 作为单元素兜底）。
  * 所有文本最后统一过一遍 sanitizeJson，防止控制台文本或扩展名里夹带密钥。
  */
 export async function buildFeedbackPack(input: {
@@ -540,7 +553,7 @@ export async function buildFeedbackPack(input: {
   appVersion?: string;
   record?: RequestLogRecord | null;
   target?: FeedbackTarget | null;
-  scope?: FeedbackScope;
+  targets?: FeedbackTarget[] | null;
   includeConversation?: boolean;
   now?: number;
 }): Promise<FeedbackPack> {
@@ -552,24 +565,48 @@ export async function buildFeedbackPack(input: {
   } catch {}
   const problem: FeedbackProblem = isFeedbackProblem(input.problem) ? input.problem : "other";
   const note = clip(input.note, FEEDBACK_NOTE_LIMIT);
-  const target = normalizeTarget(input.target);
-  const scope: FeedbackScope = target ? "single" : input.scope === "recent" ? "recent" : "recent";
+  // 目标列表：targets 优先，单 target 兜底；去掉空值后限制条数，超出的只计数
+  const incoming = Array.isArray(input.targets) && input.targets.length ? input.targets : input.target ? [input.target] : [];
+  const normalized = incoming
+    .map((item) => normalizeTarget(item))
+    .filter((item): item is FeedbackTarget => !!item);
+  const targetTotal = normalized.length;
+  const targets = normalized.slice(0, FEEDBACK_TARGET_LIMIT);
+  const single = targets.length === 1 ? targets[0] : null;
+  const scope: FeedbackScope = targetTotal > 1 ? "all" : targetTotal === 1 ? "single" : "recent";
   const includeConversation = input.includeConversation !== false;
   const record = input.record ? sanitizeLogForUpload(input.record as any) : null;
   let extensions: Array<Record<string, unknown>> = [];
   try {
     extensions = await extensionDigest();
   } catch {}
+  const logAt = record ? num((record as any).at) : null;
+  // 每条目标各自配一份「现场证据」：目标记录 + 前后各一条历史、同簇探针、前后 2 分钟控制台
+  const items = targets.map((item) => ({
+    signal: item,
+    request: { requestId: item.requestId || null, logAt },
+    history: historyEvidence(item),
+    tap: tapEvidence(item),
+    console: consoleEvidence(item.at || now),
+  }));
+  const first = items[0] || {
+    signal: null,
+    request: { requestId: null, logAt },
+    history: { target: null, before: null, after: null },
+    tap: { target: null, cluster: [] },
+    console: consoleEvidence(now),
+  };
   const evidence = {
-    signal: target,
-    request: {
-      scope,
-      requestId: target?.requestId || null,
-      logAt: record ? num((record as any).at) : null,
-    },
-    history: historyEvidence(target),
-    tap: tapEvidence(target),
-    console: consoleEvidence(target?.at || now),
+    scope,
+    targetTotal,
+    sampleLimit: FEEDBACK_TARGET_LIMIT,
+    // 顶层字段保持单目标时的旧结构与含义（第一条），新增 items 存放全部目标
+    signal: first.signal,
+    request: first.request,
+    history: first.history,
+    tap: first.tap,
+    console: first.console,
+    items,
     recentTurns: recentTurnsDigest(includeConversation),
   };
   const diagnostics = sanitizeJson({
@@ -589,7 +626,7 @@ export async function buildFeedbackPack(input: {
     schema: FEEDBACK_SCHEMA,
     appVersion: clip(input.appVersion || APP_VERSION, 40),
     uploadedAt: now,
-    report: { problem, note, scope, target },
+    report: { problem, note, scope, target: single, targets, targetTotal },
     client: {
       userAgent: clip(nav.userAgent, 300),
       timeZone,
@@ -615,6 +652,7 @@ function normalizeTarget(target: FeedbackTarget | null | undefined): FeedbackTar
   put("detail", (target as any).detail, 400);
   put("model", (target as any).model, 120);
   put("reason", (target as any).reason, 200);
+  put("signature", (target as any).signature, 120);
   put("requestId", (target as any).requestId, 120);
   put("tapId", (target as any).tapId, 60);
   if (Number.isFinite(Number((target as any).at)) && Number((target as any).at) > 0) out.at = Number((target as any).at);

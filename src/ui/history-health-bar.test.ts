@@ -31,6 +31,8 @@ describe('历史记录页健康提示条', () => {
     expect(html).toContain('没有取到用量 1 次');
     expect(html).toContain('data-health-action="upload"');
     expect(html).toContain('上传反馈日志');
+    // 主按钮要把「列出的每一条」都点名，标题里写清条数
+    expect(html).toContain('逐条点名本次列出的 2 条异常');
   });
 
   it('「忽略」按钮与右上角关闭都用忽略语义，不再是一次性关闭', () => {

@@ -3717,6 +3717,66 @@
   color: var(--ds-text-3);
 }
 
+/* 上传弹窗顶部的「本次反馈指向」：单条一行，多条逐条列出（时间 + 模型 + 类型） */
+#aus-panel .aus-up-targets {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--ds-border);
+  border-left: 3px solid var(--ds-orange);
+  border-radius: 10px;
+  background: var(--ds-card);
+}
+
+#aus-panel .aus-up-target {
+  margin: 0;
+  font-size: var(--aus-fs-sm);
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--ds-text);
+  overflow-wrap: anywhere;
+}
+
+#aus-panel .aus-up-target-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+#aus-panel .aus-up-target-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--aus-fs-sm);
+  line-height: 1.5;
+  color: var(--ds-text-2);
+}
+
+#aus-panel .aus-up-target-when {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--ds-text-3);
+}
+
+#aus-panel .aus-up-target-main {
+  min-width: 0;
+  font-weight: 600;
+  color: var(--ds-text);
+  overflow-wrap: anywhere;
+}
+
+#aus-panel .aus-up-target-kind {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--ds-card-inner);
+  color: var(--ds-text-3);
+  font-size: var(--aus-fs-xs);
+  line-height: 1.7;
+}
+
 #aus-panel .aus-up-label {
   margin: 12px 0 6px;
   font-size: var(--aus-fs-sm);

@@ -10473,10 +10473,12 @@ function installConsoleRing() {
 * 反馈诊断包：用户遇到「对话没被记录」或「记录数据不对」时，上传的不只是一条请求日志，
 * 而是一份能让开发者还原现场的最小诊断材料。
 *
-* 两条上传链路：
-* - 历史记录页健康提示点「上传这一条」：report.target 指名道姓那一轮（信号 + 记录时间 + 模型），
-*   evidence 里带「目标记录 + 前后各一条历史」「目标探针 + 同簇几条」「±2 分钟控制台」；
+* 三条上传链路：
+* - 历史记录页健康提示点「上传这一条」：report.scope=single，report.target 指名道姓那一轮；
+* - 历史记录页点「上传反馈日志」：report.scope=all，report.targets 把提示条里列出的每一条都逐条点名
+*   （等价于把每条「上传这一条」并成一份包，最多 FEEDBACK_TARGET_LIMIT 条）；
 * - 设置页 / 请求日志页点「上传反馈」：report.scope=recent，上传最近一轮请求的详细数据 + 其他数据。
+* 只要带目标，evidence 里就为每条目标准备「记录 + 前后各一条历史」「探针 + 同簇几条」「±2 分钟控制台」。
 *
 * 收集范围（只挑与排查有关的）：
 * - record：请求日志页当前那条记录，含请求正文（已脱敏）；
@@ -10931,7 +10933,9 @@ async function extensionDigest(timeoutMs = 3e3) {
 }
 /**
 * 组装完整反馈包。record 允许为空（用户还没发过请求，但仍想反馈别的问题）。
-* target 有值时是「历史提示上传这一条」：指名道姓那一轮，并带目标周边证据。
+* - target：历史提示「上传这一条」指的那一轮；
+* - targets：历史提示「上传反馈日志」时提示条里列出的每一条，逐条点名；
+* 两者都传时以 targets 为准（target 作为单元素兜底）。
 * 所有文本最后统一过一遍 sanitizeJson，防止控制台文本或扩展名里夹带密钥。
 */
 async function buildFeedbackPack(input) {
@@ -10943,24 +10947,55 @@ async function buildFeedbackPack(input) {
 	} catch {}
 	const problem = isFeedbackProblem(input.problem) ? input.problem : "other";
 	const note = clip(input.note, FEEDBACK_NOTE_LIMIT);
-	const target = normalizeTarget(input.target);
-	const scope = target ? "single" : input.scope === "recent" ? "recent" : "recent";
+	const normalized = (Array.isArray(input.targets) && input.targets.length ? input.targets : input.target ? [input.target] : []).map((item) => normalizeTarget(item)).filter((item) => !!item);
+	const targetTotal = normalized.length;
+	const targets = normalized.slice(0, 8);
+	const single = targets.length === 1 ? targets[0] : null;
+	const scope = targetTotal > 1 ? "all" : targetTotal === 1 ? "single" : "recent";
 	const includeConversation = input.includeConversation !== false;
 	const record = input.record ? sanitizeLogForUpload(input.record) : null;
 	let extensions = [];
 	try {
 		extensions = await extensionDigest();
 	} catch {}
-	const evidence = {
-		signal: target,
+	const logAt = record ? num(record.at) : null;
+	const items = targets.map((item) => ({
+		signal: item,
 		request: {
-			scope,
-			requestId: target?.requestId || null,
-			logAt: record ? num(record.at) : null
+			requestId: item.requestId || null,
+			logAt
 		},
-		history: historyEvidence(target),
-		tap: tapEvidence(target),
-		console: consoleEvidence(target?.at || now),
+		history: historyEvidence(item),
+		tap: tapEvidence(item),
+		console: consoleEvidence(item.at || now)
+	}));
+	const first = items[0] || {
+		signal: null,
+		request: {
+			requestId: null,
+			logAt
+		},
+		history: {
+			target: null,
+			before: null,
+			after: null
+		},
+		tap: {
+			target: null,
+			cluster: []
+		},
+		console: consoleEvidence(now)
+	};
+	const evidence = {
+		scope,
+		targetTotal,
+		sampleLimit: 8,
+		signal: first.signal,
+		request: first.request,
+		history: first.history,
+		tap: first.tap,
+		console: first.console,
+		items,
 		recentTurns: recentTurnsDigest(includeConversation)
 	};
 	const diagnostics = sanitizeJson({
@@ -10977,14 +11012,16 @@ async function buildFeedbackPack(input) {
 	});
 	return {
 		kind: "aus_request_log",
-		schema: 3,
+		schema: 4,
 		appVersion: clip(input.appVersion || APP_VERSION, 40),
 		uploadedAt: now,
 		report: {
 			problem,
 			note,
 			scope,
-			target
+			target: single,
+			targets,
+			targetTotal
 		},
 		client: {
 			userAgent: clip(nav.userAgent, 300),
@@ -11010,6 +11047,7 @@ function normalizeTarget(target) {
 	put("detail", target.detail, 400);
 	put("model", target.model, 120);
 	put("reason", target.reason, 200);
+	put("signature", target.signature, 120);
 	put("requestId", target.requestId, 120);
 	put("tapId", target.tapId, 60);
 	if (Number.isFinite(Number(target.at)) && Number(target.at) > 0) out.at = Number(target.at);
@@ -11108,9 +11146,10 @@ async function uploadLogPayload(address, payload) {
 /**
 * 「上传反馈日志」弹窗：把当前请求日志 + 诊断摘要发给开发者排查。
 *
-* 两条链路共用这个弹窗：
-* - 历史记录页健康提示点「上传这一条」：带 target，弹窗顶部明确写出「本次反馈指向 X 时 Y 模型的这一轮」，
-*   上传体里 report.scope=single + report.target + evidence（目标记录/同簇请求/前后两分钟控制台）；
+* 三条链路共用这个弹窗：
+* - 历史记录页健康提示点「上传这一条」：带一个 target，弹窗顶部写明「本次反馈指向 X 时 Y 模型的这一轮」；
+* - 历史记录页点「上传反馈日志」：带 targets（提示条里列出的每一条），弹窗顶部逐条列出，
+*   上传体里 report.scope=all + report.targets + evidence.items 为每条各备一份现场证据；
 * - 设置页 / 请求日志页点「上传反馈」：不带 target，report.scope=recent，上传最近一轮请求的详细数据。
 *
 * 交互口径：
@@ -11151,11 +11190,27 @@ function targetLine(target) {
 	const who = model ? model + " 这一轮" : "这一轮";
 	return "本次反馈指向：" + (when ? when + " " : "") + who + "（" + kind + "）";
 }
-function problemForTarget(target) {
-	const kind = String(target?.kind || "");
-	if (kind === "missing-usage" || kind === "zero-usage") return "not-recorded";
-	if (kind === "rate-anomaly" || kind === "meta-missing" || kind === "estimated-usage") return "wrong-data";
+/**
+* 目标类型 → 预选问题类型。
+* 多条时按「最严重的那类」预选：只要有一条根本没进历史，就是「没有被记录」。
+*/
+function problemForTargets(targets) {
+	const kinds = targets.map((item) => String(item?.kind || ""));
+	if (kinds.some((kind) => kind === "missing-usage" || kind === "zero-usage")) return "not-recorded";
+	if (kinds.some((kind) => kind === "rate-anomaly" || kind === "meta-missing" || kind === "estimated-usage")) return "wrong-data";
 	return "other";
+}
+/** 单条时一行说明；多条时逐条列出，让用户确认「点名的就是这几条」 */
+function targetsHTML(targets) {
+	if (!targets.length) return "";
+	if (targets.length === 1) return "<div class=\"aus-up-targets\"><p class=\"aus-up-target\">" + esc$2(targetLine(targets[0])) + "</p></div>";
+	const rows = targets.map((item) => {
+		const kind = KIND_TEXT$1[String(item.kind || "")] || "异常记录";
+		const when = timeText$1(Number(item.at) || 0) || "--";
+		const model = String(item.model || "").trim() || "未知模型";
+		return "<li class=\"aus-up-target-item\"><span class=\"aus-up-target-when\">" + esc$2(when) + "</span><span class=\"aus-up-target-main\">" + esc$2(model) + " 这一轮</span><span class=\"aus-up-target-kind\">" + esc$2(kind) + "</span></li>";
+	}).join("");
+	return "<div class=\"aus-up-targets\"><p class=\"aus-up-target\">本次反馈逐条点名 " + targets.length + " 条异常记录：</p><ol class=\"aus-up-target-list\">" + rows + "</ol></div>";
 }
 function problemButtons(current) {
 	return FEEDBACK_PROBLEMS.map((item) => {
@@ -11164,12 +11219,12 @@ function problemButtons(current) {
 }
 function dialogHTML(input) {
 	const recordLine = input.hasRecord ? "当前请求日志：有，会一起上传" : "当前请求日志：无（还没有捕获到请求，仅上传下面的诊断摘要）";
-	const target = targetLine(input.target);
-	const targetHTML = target ? "<p class=\"aus-up-target\">" + esc$2(target) + "</p>" : "";
-	return "<div class=\"aus-up\" role=\"dialog\" aria-modal=\"true\" aria-label=\"上传反馈日志\"><div class=\"aus-up-head\"><div class=\"aus-up-title\">上传反馈日志</div><button type=\"button\" class=\"aus-up-close\" data-up-action=\"cancel\" aria-label=\"关闭\">" + icon("close", 16) + "</button></div><div class=\"aus-up-body\">" + targetHTML + "<p class=\"aus-up-text\">遇到<b>对话没有被记录</b>，或者<b>记录下来的 token、费用明显不对</b>时，可将当前这条请求日志和相关诊断信息发送给开发者，便于定位问题。</p><p class=\"aus-up-text aus-up-muted\">" + esc$2(recordLine) + "</p><div class=\"aus-up-label\">这是什么问题</div><div class=\"aus-up-problems\">" + problemButtons(input.problem) + "</div><div class=\"aus-up-label\">补充说明<span class=\"aus-up-optional\">可选</span></div><textarea class=\"aus-up-note\" id=\"aus-up-note\" rows=\"3\" maxlength=\"" + FEEDBACK_NOTE_LIMIT + "\" placeholder=\"什么时候、哪条对话、哪一轮；那次的模型或接入是什么；和你预期的差别在哪\"></textarea><label class=\"aus-up-check\"><input type=\"checkbox\" id=\"aus-up-include-chat\" checked /><span>附带最近三轮对话正文（每轮前 400 字，用于还原上下文）</span></label><details class=\"aus-up-details\"><summary>查看会一并上传的内容与隐私说明</summary><div class=\"aus-up-details-body\"><p class=\"aus-up-details-title\">为排查问题，上传内容可能包括</p><ul class=\"aus-up-list\"><li><b>聊天与提示词</b>：当前这一条请求正文里的历史聊天、你的输入、角色设定、世界书与系统提示词。</li><li><b>生成与结构化数据</b>：模型名称、请求端点、是否流式、finish_reason、用量（token 数）以及请求参数。</li><li><b>记录摘要</b>：最近 10 条历史记录的模型、token、费用与接入名称（<b>不含聊天正文</b>），以及「其他请求」探针里最近 20 条请求的模型、状态与错误。</li><li><b>指向证据</b>：点「上传这一条」时，会额外带上出问题那一轮的完整记录字段、前后各一条历史记录、同类请求最多 4 条、以及前后 2 分钟的控制台输出。</li><li><b>最近对话</b>：最近三轮对话的角色、字数与前 400 字（上面可取消勾选）。</li><li><b>脚本诊断</b>：最近 40 条控制台报错与未处理的 Promise 异常，可能含有酒馆或其他扩展打印的内容。</li><li><b>扩展与运行环境</b>：扩展名称与版本清单、本扩展版本、系统时区、屏幕与视口尺寸、当前对话名与角色名。</li></ul><p class=\"aus-up-details-title\">不会上传</p><ul class=\"aus-up-list\"><li>钱包密钥、API Key、登录凭据：上传前会再把请求头、正文和 URL 里的密钥抹成 <code>***</code>。</li><li>图片与附件内容、扩展源码、酒馆设置原文。</li></ul><p class=\"aus-up-details-title\">脱敏有局限</p><p class=\"aus-up-text\">程序会尝试遮蔽常见密钥、密码和认证头，但不能保证识别聊天正文、脚本输出或自定义字段中的所有敏感信息。请勿把日志视为已经完全脱敏。</p><p class=\"aus-up-details-title\">接收与保存</p><p class=\"aus-up-text\">日志会发送到下面填写的接收地址，接收服务及有权限的收件人可能查看、下载和保存内容；保存期限与删除方式由接收方决定，上传后无法替你撤回。请核对地址，仅向信任的接收方上传。</p></div></details><details class=\"aus-up-details\"><summary>上传地址（高级）</summary><div class=\"aus-up-details-body\"><input type=\"text\" class=\"aus-up-address\" id=\"aus-up-address\" spellcheck=\"false\" value=\"" + esc$2(input.address) + "\" /><p class=\"aus-up-text aus-up-muted\">默认是项目自带的接收端。改成你自己的接收地址时，请确认它愿意接收这些内容。</p></div></details><div class=\"aus-up-result\" id=\"aus-up-result\" hidden></div></div><div class=\"aus-up-foot\"><button type=\"button\" class=\"aus-up-btn\" data-up-action=\"cancel\">取消</button><button type=\"button\" class=\"aus-up-btn is-primary\" data-up-action=\"submit\">同意并上传</button></div></div>";
+	const targetHTML = targetsHTML(input.targets);
+	return "<div class=\"aus-up\" role=\"dialog\" aria-modal=\"true\" aria-label=\"上传反馈日志\"><div class=\"aus-up-head\"><div class=\"aus-up-title\">上传反馈日志</div><button type=\"button\" class=\"aus-up-close\" data-up-action=\"cancel\" aria-label=\"关闭\">" + icon("close", 16) + "</button></div><div class=\"aus-up-body\">" + targetHTML + "<p class=\"aus-up-text\">遇到<b>对话没有被记录</b>，或者<b>记录下来的 token、费用明显不对</b>时，可将当前这条请求日志和相关诊断信息发送给开发者，便于定位问题。</p><p class=\"aus-up-text aus-up-muted\">" + esc$2(recordLine) + "</p><div class=\"aus-up-label\">这是什么问题</div><div class=\"aus-up-problems\">" + problemButtons(input.problem) + "</div><div class=\"aus-up-label\">补充说明<span class=\"aus-up-optional\">可选</span></div><textarea class=\"aus-up-note\" id=\"aus-up-note\" rows=\"3\" maxlength=\"" + FEEDBACK_NOTE_LIMIT + "\" placeholder=\"什么时候、哪条对话、哪一轮；那次的模型或接入是什么；和你预期的差别在哪\"></textarea><label class=\"aus-up-check\"><input type=\"checkbox\" id=\"aus-up-include-chat\" checked /><span>附带最近三轮对话正文（每轮前 400 字，用于还原上下文）</span></label><details class=\"aus-up-details\"><summary>查看会一并上传的内容与隐私说明</summary><div class=\"aus-up-details-body\"><p class=\"aus-up-details-title\">为排查问题，上传内容可能包括</p><ul class=\"aus-up-list\"><li><b>聊天与提示词</b>：当前这一条请求正文里的历史聊天、你的输入、角色设定、世界书与系统提示词。</li><li><b>生成与结构化数据</b>：模型名称、请求端点、是否流式、finish_reason、用量（token 数）以及请求参数。</li><li><b>记录摘要</b>：最近 10 条历史记录的模型、token、费用与接入名称（<b>不含聊天正文</b>），以及「其他请求」探针里最近 20 条请求的模型、状态与错误。</li><li><b>指向证据</b>：从历史提示上传时，会为每一条被点名的异常（最多 8 条）带上那一轮的完整记录字段、前后各一条历史记录、同类请求最多 4 条，以及前后 2 分钟的控制台输出。</li><li><b>最近对话</b>：最近三轮对话的角色、字数与前 400 字（上面可取消勾选）。</li><li><b>脚本诊断</b>：最近 40 条控制台报错与未处理的 Promise 异常，可能含有酒馆或其他扩展打印的内容。</li><li><b>扩展与运行环境</b>：扩展名称与版本清单、本扩展版本、系统时区、屏幕与视口尺寸、当前对话名与角色名。</li></ul><p class=\"aus-up-details-title\">不会上传</p><ul class=\"aus-up-list\"><li>钱包密钥、API Key、登录凭据：上传前会再把请求头、正文和 URL 里的密钥抹成 <code>***</code>。</li><li>图片与附件内容、扩展源码、酒馆设置原文。</li></ul><p class=\"aus-up-details-title\">脱敏有局限</p><p class=\"aus-up-text\">程序会尝试遮蔽常见密钥、密码和认证头，但不能保证识别聊天正文、脚本输出或自定义字段中的所有敏感信息。请勿把日志视为已经完全脱敏。</p><p class=\"aus-up-details-title\">接收与保存</p><p class=\"aus-up-text\">日志会发送到下面填写的接收地址，接收服务及有权限的收件人可能查看、下载和保存内容；保存期限与删除方式由接收方决定，上传后无法替你撤回。请核对地址，仅向信任的接收方上传。</p></div></details><details class=\"aus-up-details\"><summary>上传地址（高级）</summary><div class=\"aus-up-details-body\"><input type=\"text\" class=\"aus-up-address\" id=\"aus-up-address\" spellcheck=\"false\" value=\"" + esc$2(input.address) + "\" /><p class=\"aus-up-text aus-up-muted\">默认是项目自带的接收端。改成你自己的接收地址时，请确认它愿意接收这些内容。</p></div></details><div class=\"aus-up-result\" id=\"aus-up-result\" hidden></div></div><div class=\"aus-up-foot\"><button type=\"button\" class=\"aus-up-btn\" data-up-action=\"cancel\">取消</button><button type=\"button\" class=\"aus-up-btn is-primary\" data-up-action=\"submit\">同意并上传</button></div></div>";
 }
 var currentProblem = "not-recorded";
-var currentTarget = null;
+/** 本次弹窗点名的目标：设置页/日志页为空，历史提示为一条或多条 */
+var currentTargets = [];
 var includeConversation = true;
 var uploading = false;
 function closeLogUploadDialog() {
@@ -11212,7 +11267,7 @@ async function submit(mask, appVersion) {
 			note,
 			appVersion,
 			record: readRequestLog(),
-			target: currentTarget,
+			targets: currentTargets,
 			includeConversation
 		}));
 		if (result.ok) {
@@ -11267,14 +11322,18 @@ function bind$2(mask, appVersion) {
 }
 /**
 * 打开弹窗（单例：重复调用先收掉旧的）
-* @param options.target 历史提示「上传这一条」时传目标信号；不传就是「最近一条 + 全量诊断」
+* @param options.targets 历史提示「上传反馈日志」时传提示条里的每一条，逐条点名
+* @param options.target 历史提示「上传这一条」时传单条目标（targets 为空时生效）
+* 都不传就是「最近一条 + 全量诊断」
 */
 function openLogUploadDialog(options = {}) {
 	if (typeof document === "undefined") return;
 	document.getElementById(MASK_ID)?.remove();
 	uploading = false;
-	currentTarget = options.target && typeof options.target === "object" ? options.target : null;
-	currentProblem = problemForTarget(currentTarget);
+	const list = Array.isArray(options.targets) ? options.targets.filter((item) => item && typeof item === "object") : [];
+	if (!list.length && options.target && typeof options.target === "object") list.push(options.target);
+	currentTargets = list;
+	currentProblem = problemForTargets(currentTargets);
 	includeConversation = true;
 	const panel = document.getElementById("aus-panel") || document.body;
 	const mask = document.createElement("div");
@@ -11285,7 +11344,7 @@ function openLogUploadDialog(options = {}) {
 		address: readUploadAddress(),
 		hasRecord,
 		problem: currentProblem,
-		target: currentTarget
+		targets: currentTargets
 	});
 	panel.appendChild(mask);
 	bind$2(mask, String(options.appVersion || ""));
@@ -11784,6 +11843,24 @@ function healthSignalKey(sig) {
 	const detail = sig.signature || sig.reason || "";
 	return sig.kind + "|" + attribution + "|" + detail;
 }
+/**
+* 从信号里取出「上传反馈时的指向」：把定位字段一并带上，
+* 让每条提示都能被指名道姓地指认（历史记录时间戳 / 请求 ID / 探针 ID）。
+*/
+function healthTargetOf(sig) {
+	return {
+		signalKey: healthSignalKey(sig),
+		kind: sig.kind,
+		at: sig.at || null,
+		detail: sig.detail || "",
+		model: sig.model || "",
+		reason: sig.reason || "",
+		signature: sig.signature || null,
+		requestId: sig.requestId || null,
+		tapId: sig.tapId || null,
+		historyTimestamp: sig.historyTimestamp || null
+	};
+}
 var KIND_TEXT = {
 	"zero-usage": "用量为 0",
 	"estimated-usage": "本地估算补记",
@@ -11830,6 +11907,10 @@ function scanHistoryHealth(history, limit = 30, now = Date.now()) {
 		const prompt = Number(entry?.prompt_tokens) || 0;
 		const completion = Number(entry?.completion_tokens) || 0;
 		const total = Number(entry?.total_tokens) || 0;
+		const loc = {
+			historyTimestamp: at || void 0,
+			requestId: String(entry?.requestId || "") || void 0
+		};
 		if (isEstimatedEntry(entry)) {
 			const method = String(entry?.estimateMethod || "");
 			out.push({
@@ -11839,6 +11920,7 @@ function scanHistoryHealth(history, limit = 30, now = Date.now()) {
 				reason: "estimated",
 				signature: method || void 0,
 				severity: "info",
+				...loc,
 				detail: clipText(model + " 这一轮上游未返回用量，已按本地估算补记" + (method ? "（" + method + "）" : ""))
 			});
 			continue;
@@ -11849,6 +11931,7 @@ function scanHistoryHealth(history, limit = 30, now = Date.now()) {
 			model,
 			reason: "model-missing",
 			severity: "warn",
+			...loc,
 			detail: clipText(model + " 这一轮没取到模型名，已用兜底值记录")
 		});
 		if (now - at < 864e5 && total > 0 && !(Number(entry?.duration) > 0) && entry?.streamed !== false) out.push({
@@ -11857,6 +11940,7 @@ function scanHistoryHealth(history, limit = 30, now = Date.now()) {
 			model,
 			reason: "duration-missing",
 			severity: "warn",
+			...loc,
 			detail: clipText(model + " 这一轮没取到总耗时")
 		});
 		if (prompt === 0 && completion === 0 && total === 0) {
@@ -11866,6 +11950,7 @@ function scanHistoryHealth(history, limit = 30, now = Date.now()) {
 				model,
 				reason: "zero",
 				severity: "warn",
+				...loc,
 				detail: clipText(model + " 这一轮用量全为 0")
 			});
 			continue;
@@ -11879,6 +11964,7 @@ function scanHistoryHealth(history, limit = 30, now = Date.now()) {
 			model,
 			reason: "rate-high",
 			severity: "warn",
+			...loc,
 			detail: clipText(model + " 速率 " + Math.round(rate) + " token/s，明显偏高")
 		});
 		else if (rate < .5 && total >= 20) out.push({
@@ -11887,6 +11973,7 @@ function scanHistoryHealth(history, limit = 30, now = Date.now()) {
 			model,
 			reason: "rate-low",
 			severity: "warn",
+			...loc,
 			detail: clipText(model + " 速率 " + rate.toFixed(2) + " token/s，明显偏低")
 		});
 	}
@@ -12021,6 +12108,7 @@ function scanTapHealth(taps = []) {
 					reason: "missing",
 					signature: "tap:" + key,
 					severity: "warn",
+					tapId: String(latest.id || "") || void 0,
 					detail: clipText("有 " + count + " 次疑似正常对话的请求没有被记进历史（" + tapClusterLabel(latest) + "）")
 				});
 				break;
@@ -12129,7 +12217,7 @@ function healthBarHTML(report) {
 		const key = healthSignalKey(sig);
 		return `<div class="aus-health-item is-${severityOf(sig)}" data-health-key="${esc(key)}"><span class="aus-health-dot"></span><span class="aus-health-item-text">${esc(sig.detail)}</span>` + (t ? `<span class="aus-health-item-time">${esc(t)}</span>` : "") + `<button type="button" class="aus-health-item-up" data-health-action="upload" data-health-key="${esc(key)}" title="上传这一条的诊断材料">上传这一条</button></div>`;
 	}).join("");
-	const tip = report.infoOnly ? "这些记录是上游没有返回用量、由本地估算补记的，只作提示；上传可帮助改进估算。" : "可以把诊断材料上传给开发者，帮助定位问题（密钥会自动打码）；「上传这一条」会指名道姓指向出问题的那一轮。";
+	const tip = report.infoOnly ? "这些记录是上游没有返回用量、由本地估算补记的，只作提示；上传可帮助改进估算。" : "「上传反馈日志」会把下面每条异常逐条点名一起上传；「上传这一条」只指认它自己（密钥会自动打码）。";
 	const ignoreText = report.infoOnly ? "不再提示" : "忽略";
 	return `
     <div class="aus-health${report.infoOnly ? " is-info-only" : ""}" role="status">
@@ -12142,7 +12230,7 @@ function healthBarHTML(report) {
         <div class="aus-health-tip">${esc(tip)}</div>
       </div>
       <div class="aus-health-actions">
-        <button type="button" class="aus-health-btn is-primary" data-health-action="upload">上传反馈日志</button>
+        <button type="button" class="aus-health-btn is-primary" data-health-action="upload" title="逐条点名本次列出的 ${report.items.length} 条异常，一起上传">上传反馈日志</button>
         <button type="button" class="aus-health-btn" data-health-action="ignore" title="这些提示 7 天内不再出现">${esc(ignoreText)}</button>
         <button type="button" class="aus-health-close" data-health-action="ignore" aria-label="忽略">${icon("close", 14)}</button>
       </div>
@@ -12167,10 +12255,17 @@ function bind(host) {
 		const action = btn.getAttribute("data-health-action");
 		const key = btn.getAttribute("data-health-key") || "";
 		if (action === "upload") {
-			const hit = key ? signalOf(key) : null;
+			if (key) {
+				const hit = signalOf(key);
+				openLogUploadDialog({
+					appVersion: APP_VERSION,
+					targets: hit ? [healthTargetOf(hit.signal)] : []
+				});
+				return;
+			}
 			openLogUploadDialog({
 				appVersion: APP_VERSION,
-				target: hit ? { ...hit.signal } : null
+				targets: (currentReport?.items || []).map(healthTargetOf)
 			});
 			return;
 		}

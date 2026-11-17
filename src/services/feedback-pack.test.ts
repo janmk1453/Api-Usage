@@ -7,6 +7,7 @@ import type { TapRecord } from './request-tap/types';
 import {
   FEEDBACK_NOTE_LIMIT,
   FEEDBACK_SCHEMA,
+  FEEDBACK_TARGET_LIMIT,
   buildFeedbackPack,
   consoleDigest,
   conversationDigest,
@@ -209,6 +210,68 @@ describe('反馈诊断包', () => {
     expect(pack.record).toBe(null);
     expect(isFeedbackProblem('wrong-data')).toBe(true);
     expect(isFeedbackProblem('nope')).toBe(false);
+  });
+
+  it('历史提示「上传反馈日志」：每条异常都被逐条点名（scope=all）', async () => {
+    (globalThis as any).fetch = vi.fn(async () => ({ ok: false }));
+    state.history = [
+      { timestamp: 3000, model: 'm-c', total_tokens: 30, requestId: 'r-c' },
+      { timestamp: 2000, model: 'm-b', total_tokens: 20, requestId: 'r-b' },
+      { timestamp: 1000, model: 'm-a', total_tokens: 10, requestId: 'r-a' },
+    ] as any;
+    const pack = await buildFeedbackPack({
+      problem: 'wrong-data',
+      now: 4000,
+      targets: [
+        { kind: 'zero-usage', at: 2000, historyTimestamp: 2000, model: 'm-b', reason: 'zero' },
+        { kind: 'rate-anomaly', at: 3000, historyTimestamp: 3000, model: 'm-c', reason: 'rate-high' },
+        { kind: 'missing-usage', at: 99999, model: 'm-a', signature: 'tap:k1' },
+      ],
+    });
+    expect(pack.report.scope).toBe('all');
+    expect(pack.report.target).toBe(null);
+    expect(pack.report.targetTotal).toBe(3);
+    expect(pack.report.targets).toHaveLength(3);
+    const evidence = (pack.diagnostics as any).evidence;
+    expect(evidence.scope).toBe('all');
+    expect(evidence.targetTotal).toBe(3);
+    expect(evidence.items).toHaveLength(3);
+    // 每条目标都有它自己的历史证据，不是只给第一条
+    expect(evidence.items[0].history.target.timestamp).toBe(2000);
+    expect(evidence.items[1].history.target.timestamp).toBe(3000);
+    // 指向的时间与历史都对不上时不硬塞一条别的记录
+    expect(evidence.items[2].history.target).toBe(null);
+    // 顶层字段仍指向第一条，旧解析器照旧
+    expect(evidence.signal.kind).toBe('zero-usage');
+    expect(evidence.history.target.timestamp).toBe(2000);
+  });
+
+  it('单目标仍写 scope=single 与 report.target，弹窗与旧解析都不变', async () => {
+    (globalThis as any).fetch = vi.fn(async () => ({ ok: false }));
+    state.history = [{ timestamp: 5000, model: 'm-a', total_tokens: 10 }] as any;
+    const pack = await buildFeedbackPack({
+      problem: 'not-recorded',
+      now: 6000,
+      target: { kind: 'zero-usage', at: 5000, historyTimestamp: 5000, model: 'm-a' },
+    });
+    expect(pack.report.scope).toBe('single');
+    expect(pack.report.targets).toHaveLength(1);
+    expect(pack.report.target?.model).toBe('m-a');
+    expect(pack.report.targetTotal).toBe(1);
+  });
+
+  it('逐条点名有条数上限，超出的只计数不丢总数', async () => {
+    (globalThis as any).fetch = vi.fn(async () => ({ ok: false }));
+    const many = Array.from({ length: FEEDBACK_TARGET_LIMIT + 4 }, (_, i) => ({
+      kind: 'zero-usage',
+      at: 1000 + i,
+      model: 'm' + i,
+    }));
+    const pack = await buildFeedbackPack({ problem: 'wrong-data', now: 9000, targets: many });
+    expect(pack.report.scope).toBe('all');
+    expect(pack.report.targets).toHaveLength(FEEDBACK_TARGET_LIMIT);
+    expect(pack.report.targetTotal).toBe(FEEDBACK_TARGET_LIMIT + 4);
+    expect((pack.diagnostics as any).evidence.items).toHaveLength(FEEDBACK_TARGET_LIMIT);
   });
 
   it('设置摘要给出定位问题的关键项', () => {
