@@ -346,7 +346,6 @@ function normalizeTapRow(value) {
     at: toInt(value.at, 0, 4102444800000, 0),
     endedAt: toInt(value.endedAt, 0, 4102444800000, 0),
     purposeKey: toStr(value.purposeKey, 80),
-    actorLabel: toStr(value.actorLabel, MAX_MODEL_CHARS),
     promptChars: toInt(value.promptChars, 0, 1e9, 0),
     usageMissing: value.usageMissing === true,
     endpoint: toStr(value.endpoint, 200),
