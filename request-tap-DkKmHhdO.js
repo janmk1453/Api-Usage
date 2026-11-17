@@ -224,6 +224,31 @@ function patchTapRecord(id, patch) {
 	emit();
 	return true;
 }
+/**
+* 批量改写（一次性重判旧记录用）：updater 返回新记录才写回，返回 null 表示不动。
+* 只落盘、通知一次，避免逐条 patch 触发几十次 emit/persist。
+*/
+function updateTapRecords(updater) {
+	const list = load();
+	let changed = 0;
+	for (let i = 0; i < list.length; i += 1) {
+		let next = null;
+		try {
+			next = updater(list[i]);
+		} catch {
+			next = null;
+		}
+		if (next && next !== list[i]) {
+			list[i] = next;
+			changed += 1;
+		}
+	}
+	if (changed) {
+		persist();
+		emit();
+	}
+	return changed;
+}
 /** 清空验证数据 */
 function clearTapRecords() {
 	cache = [];
@@ -357,6 +382,7 @@ function toRecord(ctx, endedAt, status, error) {
 	const hint = promptHintOf(body);
 	const purpose = ctx.__purpose;
 	return {
+		v: 2,
 		id: ctx.id,
 		at: ctx.at,
 		endedAt,
@@ -668,8 +694,10 @@ function probeKeyOf(input) {
 */
 var request_tap_exports = /* @__PURE__ */ __exportAll({
 	RECONCILE_DELAY_MS: () => RECONCILE_DELAY_MS,
+	hydrateLedgerFromHistory: () => hydrateLedgerFromHistory,
 	installRequestTap: () => installRequestTap,
 	noteSettlement: () => noteSettlement,
+	recheckLegacyOrphans: () => recheckLegacyOrphans,
 	reconcilePending: () => reconcilePending,
 	tapDiagnostics: () => tapDiagnostics,
 	uninstallRequestTap: () => uninstallRequestTap
@@ -741,6 +769,103 @@ function reconcilePending(now = Date.now()) {
 		}
 	}
 }
+/**
+* 补齐账本：把已存历史（热 + IndexedDB 冷）也转成 settlement。
+*
+* 运行时账本只收本次会话的 HISTORY_ADDED，页面一刷新就空；旧版本遗留的孤儿探针因此
+* 永远等不到对应入账记录，只能一直挂着「没记进历史」。这里在启动后读一次全量历史，
+* 让重判有据可依（同一 timestamp+total 只入账一次，重复调用幂等）。
+*/
+async function hydrateLedgerFromHistory() {
+	try {
+		const all = await (await import("./persistence-DeIFgZp8.js").then((n) => n.m)).getAllHistory();
+		if (!Array.isArray(all)) return settlements.length;
+		const seen = new Set(settlements.map((s) => s.id));
+		for (const e of all) {
+			if (!e) continue;
+			const ts = Number(e.timestamp) || 0;
+			const total = Number(e.total_tokens) || 0;
+			const id = String(e.requestId || "") || "auto:" + ts + ":" + total;
+			if (!ts || seen.has(id)) continue;
+			seen.add(id);
+			settlements.push({
+				id,
+				model: String(e.model || e.rawModel || ""),
+				prompt: Number(e.prompt_tokens) || 0,
+				completion: Number(e.completion_tokens) || 0,
+				total,
+				ts
+			});
+		}
+		if (settlements.length > SETTLEMENT_MAX) settlements = settlements.slice(-800);
+	} catch {}
+	return settlements.length;
+}
+/**
+* 旧版本遗留孤儿探针的一次性重判。
+*
+* 旧版本的三个缺陷会留下永远消不掉的误报：模型名带方括号前缀导致对不上账、几毫秒的假探针
+* 被算成「疑似对话」、记录本身无法再复核。这些记录不会随时间自愈（reconcilePending 只管
+* pending），所以这里按新规则重判一遍：
+* - 能对上已存历史 → settled（本来就是常规对话，只是旧规则没认出来）
+* - 几毫秒的假探针 → too-short
+* - 仍对不上 → settledBy='legacy'，保留在验证页但不参与健康提示（旧数据无从复核，不再打扰）
+* 新版本写入的记录带 v=TAP_SCHEMA_VERSION，不走这里，照常按真实漏记提示。
+*/
+function recheckLegacyOrphans(now = Date.now()) {
+	const usedByRecheck = /* @__PURE__ */ new Set();
+	const version = 2;
+	return updateTapRecords((rec) => {
+		if (!rec || rec.state !== "orphan") return null;
+		if (Number(rec.v) >= version) return null;
+		if (String(rec.settledBy || "") === "legacy") return null;
+		const durationMs = Number(rec.durationMs) || 0;
+		if (durationMs > 0 && durationMs < 500) return {
+			...rec,
+			v: version,
+			settledBy: "too-short",
+			settledAt: now
+		};
+		const hit = rec.usage ? findSettlement(probeKeyOf({
+			model: rec.model,
+			usage: rec.usage,
+			at: rec.at,
+			endedAt: rec.endedAt
+		}), settlements, usedByRecheck) : null;
+		if (hit) {
+			usedByRecheck.add(hit.settlement.id);
+			return {
+				...rec,
+				v: version,
+				state: "settled",
+				settledBy: hit.by,
+				settledAt: now
+			};
+		}
+		return {
+			...rec,
+			v: version,
+			settledBy: "legacy",
+			settledAt: now
+		};
+	});
+}
+var legacyRecheckDone = false;
+/** 等历史可读后跑一次重判；历史还没 hydrate 出来就退避重试 */
+async function runLegacyRecheck(attempt = 0) {
+	if (legacyRecheckDone) return;
+	if (!await hydrateLedgerFromHistory() && attempt < 3) {
+		setTimeout(() => {
+			runLegacyRecheck(attempt + 1);
+		}, 4e3);
+		return;
+	}
+	if (legacyRecheckDone) return;
+	legacyRecheckDone = true;
+	try {
+		recheckLegacyOrphans();
+	} catch {}
+}
 /** 供验证页显示的诊断信息（只读） */
 function tapDiagnostics() {
 	return {
@@ -767,11 +892,14 @@ function installRequestTap() {
 			reconcilePending();
 		} catch {}
 	}, RECONCILE_INTERVAL_MS);
+	runLegacyRecheck();
 	try {
 		globalThis.__ausTap = {
 			install: installRequestTap,
 			uninstall: uninstallRequestTap,
 			reconcile: reconcilePending,
+			recheckLegacy: recheckLegacyOrphans,
+			hydrateLedger: hydrateLedgerFromHistory,
 			note: noteSettlement,
 			diagnostics: tapDiagnostics,
 			record: tapDebugRecord,

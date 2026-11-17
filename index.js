@@ -11,7 +11,7 @@ import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as 
 import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-CzWOD7tS.js";
 import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-CV7df-vQ.js";
 import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-B_rvY5O8.js";
-import { a as listTapRecords, i as clearTapRecords, n as tapDiagnostics, o as subscribeTap, r as stripModelTag } from "./request-tap-D0LfhaX6.js";
+import { a as listTapRecords, i as clearTapRecords, n as tapDiagnostics, o as subscribeTap, r as stripModelTag } from "./request-tap-DkKmHhdO.js";
 //#region src/constants/version.ts
 var APP_VERSION = String("3.2.2");
 //#endregion
@@ -12141,6 +12141,7 @@ function scanTapHealth(taps = []) {
 		if (!tap || tap.state !== "orphan") continue;
 		if (String(tap.endpoint || "") !== "chat") continue;
 		if (String(tap.settledBy || "") === "too-short") continue;
+		if (String(tap.settledBy || "") === "legacy") continue;
 		const durationMs = Number(tap.durationMs) || 0;
 		if (durationMs > 0 && durationMs < 500) continue;
 		const messageCount = Number(tap.messageCount) || 0;
@@ -15773,7 +15774,7 @@ function onAppReady() {
 		import("./collector-b9qXV89V.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./request-tap-D0LfhaX6.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
+		import("./request-tap-DkKmHhdO.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
 	} catch {}
 }
 function onAppInitialized() {
@@ -15787,7 +15788,7 @@ function onAppInitialized() {
 		import("./collector-b9qXV89V.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./request-tap-D0LfhaX6.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
+		import("./request-tap-DkKmHhdO.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
 	} catch {}
 }
 function onChatChanged() {

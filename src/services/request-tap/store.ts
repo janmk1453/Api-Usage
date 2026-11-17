@@ -91,6 +91,28 @@ export function patchTapRecord(id: string, patch: Partial<TapRecord>): boolean {
   return true;
 }
 
+/**
+ * 批量改写（一次性重判旧记录用）：updater 返回新记录才写回，返回 null 表示不动。
+ * 只落盘、通知一次，避免逐条 patch 触发几十次 emit/persist。
+ */
+export function updateTapRecords(updater: (rec: TapRecord) => TapRecord | null): number {
+  const list = load();
+  let changed = 0;
+  for (let i = 0; i < list.length; i += 1) {
+    let next: TapRecord | null = null;
+    try { next = updater(list[i]); } catch { next = null; }
+    if (next && next !== list[i]) {
+      list[i] = next;
+      changed += 1;
+    }
+  }
+  if (changed) {
+    persist();
+    emit();
+  }
+  return changed;
+}
+
 /** 清空验证数据 */
 export function clearTapRecords(): void {
   cache = [];

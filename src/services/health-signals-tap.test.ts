@@ -76,4 +76,9 @@ describe('scanTapHealth 提示文案', () => {
     expect(out.map((s) => s.detail).join(' ')).toContain('some-extension');
     expect(new Set(out.map((s) => s.signature)).size).toBe(2);
   });
+
+  it('旧版本遗留、已重判为 legacy 的探针不再提示', () => {
+    const legacy = { durationMs: 1200, settledBy: 'legacy' };
+    expect(scanTapHealth([tap(legacy), tap({ ...legacy, at: 2000 })])).toHaveLength(0);
+  });
 });

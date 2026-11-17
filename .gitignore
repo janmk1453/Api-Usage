@@ -21,3 +21,6 @@ cloudflare/wrangler.local.toml
 
 # 本地提交留言临时文件
 .commitmsg.tmp
+.tmp-commit-msg.txt
+.tmp-*.mjs
+.tmp-*.txt

@@ -5,7 +5,7 @@
  * 绝不做：不改 URL、不改 body、不注入参数、不拦响应流（只读 clone）。
  * 因此它和 src/services/interception.ts 的采集链路完全并行，不改变任何现有行为。
  */
-import type { TapEndpointKind, TapRecord, TapUsage } from './types';
+import { TAP_SCHEMA_VERSION, type TapEndpointKind, type TapRecord, type TapUsage } from './types';
 import { classifyPurpose, actorFromLocation, actorFromStack, stackTopFrame, promptHintOf, fingerprint, type TapActor } from './classify';
 import { upsertTapRecord, patchTapRecord, listTapRecords } from './store';
 
@@ -144,6 +144,7 @@ function toRecord(ctx: Ctx, endedAt: number, status: number | null, error: strin
   const hint = promptHintOf(body);
   const purpose = (ctx as any).__purpose;
   return {
+    v: TAP_SCHEMA_VERSION,
     id: ctx.id,
     at: ctx.at,
     endedAt,

@@ -38,8 +38,23 @@ export type TapState = 'pending' | 'settled' | 'orphan';
  */
 export const MIN_TAP_DURATION_MS = 500;
 
+/**
+ * 探针对账规则版本。
+ *
+ * v1：只按「模型名全等 + tokens 全等 + 60s 窗口」对账，模型名带 `[A]` 前缀的请求永远对不上，
+ *     几百毫秒的假探针也会被算成「疑似对话」—— 旧版本遗留的一批误判就是它造成的。
+ * v2：比较前剥前缀标签、过短探针单独归类（too-short），旧版本记录在安装时一次性重判。
+ */
+export const TAP_SCHEMA_VERSION = 2;
+
 /** 一条探针记录（验证期结构，字段可以随时调整） */
 export interface TapRecord {
+  /**
+   * 记录写入时的对账规则版本。
+   * 没有这个字段（或小于 TAP_SCHEMA_VERSION）的记录来自旧版本，安装时会被 recheckLegacyOrphans
+   * 一次性重判：能对上历史 → settled，过短 → too-short，仍对不上 → settledBy='legacy'（不再提示）。
+   */
+  v?: number;
   /** tap:<时间戳>:<序号>，同时作为幂等键 */
   id: string;
   /** 请求开始时刻 */

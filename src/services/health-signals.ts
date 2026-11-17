@@ -344,6 +344,8 @@ export function scanTapHealth(taps: TapRecord[] = []): HealthSignal[] {
     if (String((tap as any).endpoint || '') !== 'chat') continue;
     // 过短请求（几百毫秒就结束）不可能是正常对话，不参与聚簇
     if (String((tap as any).settledBy || '') === 'too-short') continue;
+    // 旧版本遗留、已按新规则重判但仍无法复核的记录：留在验证页，不再制造提示
+    if (String((tap as any).settledBy || '') === 'legacy') continue;
     const durationMs = Number((tap as any).durationMs) || 0;
     if (durationMs > 0 && durationMs < MIN_TAP_DURATION_MS) continue;
     const messageCount = Number((tap as any).messageCount) || 0;
