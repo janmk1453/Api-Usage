@@ -50,6 +50,28 @@ export type HistoryEntry = {
   /** 旧数据同名校验价来源模型名 */
   legacyPricingModel?: string | null;
 
+  // ---- 用量来源与中断（可选，缺省即上游真实用量、未中断） ----
+  /** 用量来源：upstream 上游返回 / estimated 本地估算；无值等同 upstream */
+  usageSource?: 'upstream' | 'estimated';
+  /** 本轮是否被中断：user 用户手动停止 / upstream 上游故障或网络断开 */
+  interrupted?: 'user' | 'upstream' | null;
+  /** 中断或估算的原因原文（截断，仅排查用） */
+  interruptReason?: string | null;
+  /** 模型名是否回退得到（未取到上游真实模型名） */
+  modelFallback?: boolean;
+  /** 估算方法：tavern-token-count / tavern-tokenizer / char-heuristic */
+  estimateMethod?: string | null;
+  /** 估算口径版本，见 services/token-estimate.ts#ESTIMATE_VERSION */
+  estimateVersion?: number | null;
+  /** 请求侧字符规模（只存数字，不含正文） */
+  promptChars?: number | null;
+  /** 输出侧字符规模（正文 + 思维链，只存数字） */
+  outputChars?: number | null;
+  /** 估算时无法区分缓存命中，命中量按 0 处理 */
+  estimateCacheUnknown?: boolean;
+  /** 费用基于估算 token 计算 */
+  costEstimated?: boolean;
+
   // ---- 记录来源（可选，缺省即常规对话；旧记录不迁移） ----
   /** 记录来源：常规对话 / TauriTavern Agent 模式；无值等同 'chat' */
   origin?: 'chat' | 'agent';
@@ -74,6 +96,20 @@ export type HistoryEntry = {
   agentPartial?: boolean | null;
   /** 耗时口径来源 */
   agentTimingSource?: 'events' | null;
+};
+
+/** addEntry 的附加记录元信息（用量来源、中断、估算口径） */
+export type EntryMeta = {
+  usageSource?: 'upstream' | 'estimated';
+  interrupted?: 'user' | 'upstream' | null;
+  interruptReason?: string | null;
+  modelFallback?: boolean;
+  estimateMethod?: string | null;
+  estimateVersion?: number | null;
+  promptChars?: number | null;
+  outputChars?: number | null;
+  estimateCacheUnknown?: boolean;
+  costEstimated?: boolean;
 };
 
 export type Save = {

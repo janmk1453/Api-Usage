@@ -26,6 +26,10 @@ export type ThinkClock = {
   lastReasoningAt: number | null;
   /** 非空正文增量帧数（假流式判定用） */
   contentFrames: number;
+  /** 累计正文增量字符数（上游不回 usage 时的输出估算依据；缺省视为 0） */
+  contentChars?: number;
+  /** 累计思维链增量字符数（同上） */
+  reasoningChars?: number;
 };
 
 export function createThinkClock(): ThinkClock {
@@ -86,12 +90,16 @@ export function scanThinkChunk(clock: ThinkClock, chunk: string, at: number): vo
     let record: any;
     try { record = JSON.parse(payload); } catch { continue; }
     if (!record || typeof record !== 'object') continue;
-    if (reasoningTextOf(record)) {
+    const reasoning = reasoningTextOf(record);
+    if (reasoning) {
       if (clock.startAt == null) clock.startAt = at;
       clock.lastReasoningAt = at;
+      clock.reasoningChars = (clock.reasoningChars || 0) + reasoning.length;
     }
-    if (contentTextOf(record)) {
+    const content = contentTextOf(record);
+    if (content) {
       clock.contentFrames += 1;
+      clock.contentChars = (clock.contentChars || 0) + content.length;
       if (clock.startAt != null && clock.endAt == null) clock.endAt = at;
     }
   }

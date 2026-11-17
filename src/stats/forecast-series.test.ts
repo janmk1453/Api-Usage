@@ -64,6 +64,17 @@ describe('预测序列数据准备', () => {
     expect(prepared[1].miss).toBe(300);
   });
 
+  it('中断与估算记录不进序列，避免把半截输出当成真实增长', () => {
+    const prepared = prepareEntries([
+      entry(0, 100),
+      entry(1, 120, { interrupted: 'user' }),
+      entry(2, 140, { usageSource: 'estimated', estimateCacheUnknown: true }),
+      entry(3, 160),
+    ]);
+    expect(prepared.map((item) => item.prompt)).toEqual([100, 160]);
+    expect(prepared.map((item) => item.round)).toEqual([1, 2]);
+  });
+
   it('识别压缩点并记录本次压缩前的轮数', () => {
     const prepared = prepareEntries(seriesEntries([20_000, 22_000, 24_000, 26_000, 28_000, 30_000, 5_000, 7_000, 9_000]));
     const compactions = detectCompactions(prepared);

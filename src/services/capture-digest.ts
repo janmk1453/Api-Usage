@@ -11,8 +11,17 @@
  * - event-drop    GENERATION_ENDED 时没拿到任何有效 usage，本轮被丢弃
  * - entry-added   repository.addEntry 已调用（唯一落库点）
  * - entry-error   addEntry 抛错
+ * - turn-estimated  上游没给 usage，按输出本地估算后补记
+ * - turn-interrupted 用户停止或上游中断，靠估算补记并标注中断
  */
-export type CaptureStage = 'fetch-start' | 'fetch-parse' | 'event-drop' | 'entry-added' | 'entry-error';
+export type CaptureStage =
+  | 'fetch-start'
+  | 'fetch-parse'
+  | 'event-drop'
+  | 'entry-added'
+  | 'entry-error'
+  | 'turn-estimated'
+  | 'turn-interrupted';
 
 export interface CaptureRecord {
   at: number;

@@ -103,6 +103,66 @@ describe('统计聚合', () => {
     expect(result.avgThinkRatio).toBeCloseTo((50 / 180) * 100, 8);
   });
 
+  it('中断与估算记录只进金额和轮次，不进性能与命中率均值', () => {
+    const result = computeStatsFour([
+      {
+        timestamp: 1,
+        cost: 2,
+        total_tokens: 200,
+        duration: 2_000,
+        tokenRate: 100,
+        cache_hit_tokens: 50,
+        cache_miss_tokens: 50,
+        completion_tokens: 100,
+        ttft: 400,
+        thinkTime: 200,
+        finishReason: 'stop',
+      },
+      {
+        timestamp: 2,
+        cost: 1,
+        total_tokens: 50,
+        duration: 30_000,
+        tokenRate: 2,
+        cache_hit_tokens: 0,
+        cache_miss_tokens: 900,
+        completion_tokens: 50,
+        ttft: 8_000,
+        thinkTime: 2_000,
+        finishReason: 'stop',
+        interrupted: 'user',
+      },
+      {
+        timestamp: 3,
+        cost: 1,
+        total_tokens: 300,
+        duration: 4_000,
+        tokenRate: 75,
+        cache_hit_tokens: 0,
+        cache_miss_tokens: 300,
+        completion_tokens: 120,
+        ttft: 900,
+        thinkTime: 500,
+        finishReason: 'stop',
+        usageSource: 'estimated',
+        estimateCacheUnknown: true,
+      },
+    ]);
+
+    // 金额与 token 照常累计、轮次照算
+    expect(result.rounds).toBe(3);
+    expect(result.avgCost).toBeCloseTo(4 / 3, 6);
+    expect(result.avgTokens).toBeCloseTo(550 / 3, 6);
+    // 性能类只按「正常」那一条算
+    expect(result.avgDuration).toBeCloseTo(2, 6);
+    expect(result.avgRate).toBeCloseTo(100, 6);
+    expect(result.avgTtft).toBeCloseTo(0.4, 6);
+    expect(result.avgThinkTime).toBeCloseTo(0.2, 6);
+    // 命中率同理：中断的 0/900 与估算的 0/300 都不参与
+    expect(result.avgHitRate).toBeCloseTo(50, 6);
+    expect(result.latestHitRate).toBeCloseTo(50, 6);
+  });
+
   it('空四小块返回零值', () => {
     expect(computeStatsFour([])).toMatchObject({
       rounds: 0,

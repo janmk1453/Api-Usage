@@ -3,14 +3,14 @@ import { n as getSelectedSave, o as mobileDeviceHint, r as state$2, t as getHist
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as walletPendingModelCount, D as DEEPSEEK_WALLET_ID, O as WALLET_CATALOG_PROVIDERS, S as walletBalanceToCny, _ as defaultContextLimitForModel, b as findWalletModel, c as isTruncatedFinish, d as getPricing, g as cloneWallet, h as normalizeModel, i as saveWalletApiKey, m as isWalletPeakHour, p as isPeakHour, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as calcSavings, x as mergeWalletCollections, y as findWalletForHistory } from "./repository-DDVCdg7p.js";
+import { C as walletPendingModelCount, D as DEEPSEEK_WALLET_ID, O as WALLET_CATALOG_PROVIDERS, S as walletBalanceToCny, _ as defaultContextLimitForModel, b as findWalletModel, c as isTruncatedFinish, d as getPricing, g as cloneWallet, h as normalizeModel, i as saveWalletApiKey, m as isWalletPeakHour, p as isPeakHour, r as getWalletApiKey, s as sanitizeHistoryTiming, t as repository, u as calcSavings, x as mergeWalletCollections, y as findWalletForHistory } from "./repository-CbOXJf4X.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc$3, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-CJMNKSam.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
-import { a as listCaptureStages, c as readRequestLog, i as captureDigest, l as summarizeRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception } from "./interception-CsGLvKVn.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-utIBGjhR.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-7zUpMnBU.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-DGwby_qx.js";
+import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-BjT6cxMH.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-D45ldtrA.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-KmLCxl_a.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-CUhsjNxb.js";
 import { a as subscribeTap, i as listTapRecords, n as tapDiagnostics, r as clearTapRecords } from "./request-tap-CNHp5RUv.js";
 //#region src/constants/version.ts
 var APP_VERSION = String("3.2.2");
@@ -334,6 +334,37 @@ function renderDiff() {
 	}
 	host.innerHTML = diffMessages(oldEntry.messages || [], newEntry.messages || []);
 }
+//#endregion
+//#region src/data/sample-quality.ts
+function isEstimatedEntry(entry) {
+	return String(entry?.usageSource || "") === "estimated";
+}
+function isInterruptedEntry(entry) {
+	const value = entry?.interrupted;
+	return value === "user" || value === "upstream";
+}
+/** 速度/TTFT/平均耗时类指标是否可用 */
+function isReliablePerformanceSample(entry) {
+	if (!entry) return false;
+	if (isInterruptedEntry(entry)) return false;
+	if (isEstimatedEntry(entry)) return false;
+	return (Number(entry.duration) || 0) > 0;
+}
+/** 命中率类指标是否可用 */
+function isReliableCacheSample(entry) {
+	if (!entry) return false;
+	if (isInterruptedEntry(entry)) return false;
+	if (isEstimatedEntry(entry)) return false;
+	if (entry.estimateCacheUnknown === true) return false;
+	return true;
+}
+/** 趋势预测的序列样本是否可用（token 结构与成本模拟都要求上游真实用量） */
+function isReliableForecastSample(entry) {
+	if (!entry) return false;
+	if (isInterruptedEntry(entry)) return false;
+	if (isEstimatedEntry(entry)) return false;
+	return true;
+}
 function clamp01$1(value) {
 	if (!Number.isFinite(value)) return 0;
 	return Math.max(0, Math.min(1, value));
@@ -373,13 +404,16 @@ function medianAbsoluteDeviation(values) {
 	return median(values.map((value) => Math.abs(value - med)));
 }
 /**
-* 数据准备：按时间升序、过滤空 prompt、计算命中率与截断标记。
+* 数据准备：按时间升序、过滤空 prompt 与不可信样本、计算命中率与截断标记。
+* 中断记录（耗时/输出被截断）与估算记录（token 是本地推的、命中量不可区分）
+* 一律不进入序列：否则压缩识别、增长拟合与成本模拟都会被带偏。
 * 无缓存字段时 hit=0、miss=prompt，仅用于堆叠图展示，不伪造命中率。
 */
 function prepareEntries(history) {
 	const sorted = [...history || []].sort((a, b) => (Number(a?.timestamp) || 0) - (Number(b?.timestamp) || 0));
 	const prepared = [];
 	for (const entry of sorted) {
+		if (!isReliableForecastSample(entry)) continue;
 		const rawHit = Math.max(0, Number(entry?.cache_hit_tokens) || 0);
 		const rawMiss = Math.max(0, Number(entry?.cache_miss_tokens) || 0);
 		const cacheSamples = rawHit + rawMiss;
@@ -1246,27 +1280,29 @@ function computeOverview(balanceWalletId = "all", historyOverride) {
 		}, state$2.settings, findWalletForHistory(state$2.wallets, h));
 	} catch {}
 	const rounds = viewRounds;
+	const perfHist = hist.filter((h) => isReliablePerformanceSample(h));
+	const cacheHist = hist.filter((h) => isReliableCacheSample(h));
 	const avgCost = averagePositive(hist.map((h) => numberValue(h.cost)));
 	const avgTokens = averagePositive(hist.map((h) => numberValue(h.total_tokens)));
-	const avgDuration = averagePositive(hist.map((h) => numberValue(h.duration))) / 1e3;
-	const avgRate = averagePositive(hist.map((h) => numberValue(h.tokenRate)));
-	const avgTtft = averagePositive(hist.map((h) => numberValue(h.ttft))) / 1e3;
+	const avgDuration = averagePositive(perfHist.map((h) => numberValue(h.duration))) / 1e3;
+	const avgRate = averagePositive(perfHist.map((h) => numberValue(h.tokenRate)));
+	const avgTtft = averagePositive(perfHist.map((h) => numberValue(h.ttft))) / 1e3;
 	const avgInputCost = averagePositive(hist.map((h) => numberValue(h.input_cost)));
 	const avgInputTokens = averagePositive(hist.map((h) => numberValue(h.cache_hit_tokens) + numberValue(h.cache_miss_tokens)));
 	const avgOutputCost = averagePositive(hist.map((h) => numberValue(h.output_cost)));
 	const avgOutputTokens = averagePositive(hist.map((h) => numberValue(h.completion_tokens)));
-	const thinkTimes = hist.map((h) => h.thinkTime || 0).filter((v) => v > 0);
-	const thinkTokensArr = hist.map((h) => h.thinkTokens || 0).filter((v) => v > 0);
+	const thinkTimes = perfHist.map((h) => h.thinkTime || 0).filter((v) => v > 0);
+	const thinkTokensArr = perfHist.map((h) => h.thinkTokens || 0).filter((v) => v > 0);
 	const avgThinkTime = thinkTimes.length ? thinkTimes.reduce((a, b) => a + b, 0) / thinkTimes.length / 1e3 : 0;
 	const avgThinkTokens = thinkTokensArr.length ? thinkTokensArr.reduce((a, b) => a + b, 0) / thinkTokensArr.length : 0;
-	const hitRates = hist.map((h) => {
+	const hitRates = cacheHist.map((h) => {
 		const ch = h.cache_hit_tokens || 0, tot = ch + (h.cache_miss_tokens || 0);
 		return tot > 0 ? ch / tot * 100 : 0;
 	}).filter((v) => v > 0);
 	const avgHitRate = hitRates.length ? hitRates.reduce((a, b) => a + b, 0) / hitRates.length : 0;
 	let latestHitRate = null;
-	if (hist.length) {
-		const latest = [...hist].sort((a, b) => b.timestamp - a.timestamp)[0];
+	if (cacheHist.length) {
+		const latest = [...cacheHist].sort((a, b) => b.timestamp - a.timestamp)[0];
 		const ch = latest.cache_hit_tokens || 0, tot = ch + (latest.cache_miss_tokens || 0);
 		latestHitRate = tot > 0 ? ch / tot * 100 : 0;
 	}
@@ -1437,6 +1473,7 @@ function computeStatsFour(filtered) {
 		rounds: 0
 	};
 	const rounds = filtered.length;
+	const cacheFour = filtered.filter((h) => isReliableCacheSample(h));
 	let costSum = 0, costCnt = 0, tokensSum = 0, tokensCnt = 0, durSum = 0, durCnt = 0, rateSum = 0, rateCnt = 0;
 	let inputCostSum = 0, inputCostCnt = 0, inputTokensSum = 0, inputTokensCnt = 0, outputCostSum = 0, outputCostCnt = 0, outputTokensSum = 0, outputTokensCnt = 0;
 	let ttftSum = 0, ttftCnt = 0;
@@ -1455,12 +1492,13 @@ function computeStatsFour(filtered) {
 			tokensSum += tokens;
 			tokensCnt++;
 		}
-		const duration = numberValue(h.duration);
+		const perfOk = isReliablePerformanceSample(h);
+		const duration = perfOk ? numberValue(h.duration) : 0;
 		if (duration > 0) {
 			durSum += duration;
 			durCnt++;
 		}
-		const rate = numberValue(h.tokenRate);
+		const rate = perfOk ? numberValue(h.tokenRate) : 0;
 		if (rate > 0) {
 			rateSum += rate;
 			rateCnt++;
@@ -1485,22 +1523,24 @@ function computeStatsFour(filtered) {
 			outputTokensSum += outputTokens;
 			outputTokensCnt++;
 		}
-		if ((h.ttft || 0) > 0) {
+		if (perfOk && (h.ttft || 0) > 0) {
 			ttftSum += h.ttft;
 			ttftCnt++;
 		}
-		if ((h.thinkTime || 0) > 0) {
+		if (perfOk && (h.thinkTime || 0) > 0) {
 			thinkTimeSum += h.thinkTime;
 			thinkTimeCnt++;
 		}
-		if ((h.thinkTokens || 0) > 0) {
+		if (perfOk && (h.thinkTokens || 0) > 0) {
 			thinkTokensSum += h.thinkTokens;
 			thinkTokensCnt++;
 		}
-		const ch = h.cache_hit_tokens || 0, tot = ch + (h.cache_miss_tokens || 0);
-		if (tot > 0) {
-			hitRateSum += ch / tot * 100;
-			hitRateCnt++;
+		if (isReliableCacheSample(h)) {
+			const ch = h.cache_hit_tokens || 0, tot = ch + (h.cache_miss_tokens || 0);
+			if (tot > 0) {
+				hitRateSum += ch / tot * 100;
+				hitRateCnt++;
+			}
 		}
 		const out = h.completion_tokens || 0, inp = (h.cache_hit_tokens || 0) + (h.cache_miss_tokens || 0), totTok = h.total_tokens || 0;
 		if (out > maxOutput) maxOutput = out;
@@ -1524,7 +1564,8 @@ function computeStatsFour(filtered) {
 		avgThinkTokens: thinkTokensCnt ? thinkTokensSum / thinkTokensCnt : 0,
 		avgHitRate: hitRateCnt ? hitRateSum / hitRateCnt : 0,
 		latestHitRate: (() => {
-			const latest = [...filtered].sort((a, b) => b.timestamp - a.timestamp)[0];
+			if (!cacheFour.length) return null;
+			const latest = [...cacheFour].sort((a, b) => b.timestamp - a.timestamp)[0];
 			const ch = latest.cache_hit_tokens || 0, tot = ch + (latest.cache_miss_tokens || 0);
 			return tot > 0 ? ch / tot * 100 : 0;
 		})(),
@@ -9384,7 +9425,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-utIBGjhR.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-D45ldtrA.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -10432,16 +10473,23 @@ function installConsoleRing() {
 * 反馈诊断包：用户遇到「对话没被记录」或「记录数据不对」时，上传的不只是一条请求日志，
 * 而是一份能让开发者还原现场的最小诊断材料。
 *
+* 两条上传链路：
+* - 历史记录页健康提示点「上传这一条」：report.target 指名道姓那一轮（信号 + 记录时间 + 模型），
+*   evidence 里带「目标记录 + 前后各一条历史」「目标探针 + 同簇几条」「±2 分钟控制台」；
+* - 设置页 / 请求日志页点「上传反馈」：report.scope=recent，上传最近一轮请求的详细数据 + 其他数据。
+*
 * 收集范围（只挑与排查有关的）：
 * - record：请求日志页当前那条记录，含请求正文（已脱敏）；
-* - report：用户选的问题类型 + 自己的文字描述（最先看这个）；
-* - diagnostics：最近历史记录摘要（不含正文）、探针「其他请求」摘要、
-*   控制台最近报错、扩展清单、设置与环境摘要、当前对话与角色名。
+* - report：问题类型 + 目标信号 + 用户自己的文字描述（最先看这个）；
+* - diagnostics：最近历史记录摘要、探针「其他请求」摘要、控制台最近报错、扩展清单、
+*   设置与环境摘要、当前对话与角色名、最近三轮对话摘要（正文可关）。
 *
 * 不收集：钱包密钥、API Key、extensionSettings 原文、图片附件、脚本源码、Discord 身份。
 */
 /** 用户描述上限 */
 var FEEDBACK_NOTE_LIMIT = 2e3;
+/** 控制台证据的时间窗（前后各 2 分钟） */
+var EVIDENCE_CONSOLE_WINDOW_MS = 12e4;
 var FEEDBACK_PROBLEMS = [
 	{
 		id: "not-recorded",
@@ -10470,6 +10518,9 @@ function num(value, fallback = 0) {
 	const n = Number(value);
 	return Number.isFinite(n) ? n : fallback;
 }
+function bool(value) {
+	return value === true;
+}
 /** 最近若干条历史记录的摘要：只给排查要用的数字与标签，不含消息正文 */
 function historyDigest(limit = 10) {
 	let list = [];
@@ -10478,18 +10529,200 @@ function historyDigest(limit = 10) {
 	} catch {
 		return [];
 	}
-	return list.slice().sort((a, b) => num(b?.timestamp) - num(a?.timestamp)).slice(0, limit).map((entry) => ({
+	return list.slice().sort((a, b) => num(b?.timestamp) - num(a?.timestamp)).slice(0, limit).map((entry) => entryDigest(entry));
+}
+function usageNumbersOf(raw) {
+	if (!raw || typeof raw !== "object") return null;
+	const out = {};
+	let count = 0;
+	for (const [key, value] of Object.entries(raw)) {
+		if (count >= 24) break;
+		const n = Number(value);
+		if (!Number.isFinite(n)) continue;
+		out[clip(key, 40)] = n;
+		count += 1;
+	}
+	return count ? out : null;
+}
+/**
+* 单条历史记录的详细摘要：除常规数字外，还带本轮「记录状态」相关字段
+* （估算 / 中断 / 模型名兜底 / 估算方法），这是排查记录问题的核心证据。
+*/
+function entryDigest(entry) {
+	return {
 		timestamp: num(entry?.timestamp),
 		model: clip(entry?.model, 120),
+		rawModel: clip(entry?.rawModel, 120),
 		prompt_tokens: num(entry?.prompt_tokens),
+		cache_hit_tokens: num(entry?.cache_hit_tokens),
+		cache_miss_tokens: num(entry?.cache_miss_tokens),
 		completion_tokens: num(entry?.completion_tokens),
 		total_tokens: num(entry?.total_tokens),
-		cache_hit_tokens: num(entry?.cache_hit_tokens),
 		cost: num(entry?.cost),
+		duration: num(entry?.duration),
+		tokenRate: num(entry?.tokenRate),
+		ttft: num(entry?.ttft),
+		thinkTime: num(entry?.thinkTime),
+		thinkTokens: num(entry?.thinkTokens),
+		streamed: entry?.streamed === null || entry?.streamed === void 0 ? null : bool(entry.streamed),
+		finishReason: clip(entry?.finishReason, 60) || null,
+		isTruncated: bool(entry?.isTruncated),
+		chatId: clip(entry?.chatId, 120),
 		sourceType: clip(entry?.sourceType, 40),
 		endpointLabel: clip(entry?.endpointLabel, 120),
 		credentialLabel: clip(entry?.credentialLabel, 80),
-		chatId: clip(entry?.chatId, 120)
+		pricingSource: clip(entry?.pricingSource, 40),
+		usageSource: clip(entry?.usageSource, 20) || null,
+		interrupted: clip(entry?.interrupted, 20) || null,
+		interruptReason: clip(entry?.interruptReason, 200) || null,
+		modelFallback: bool(entry?.modelFallback) || void 0,
+		estimateMethod: clip(entry?.estimateMethod, 60) || null,
+		estimateVersion: entry?.estimateVersion == null ? null : num(entry.estimateVersion),
+		promptChars: entry?.promptChars == null ? null : num(entry.promptChars),
+		outputChars: entry?.outputChars == null ? null : num(entry.outputChars),
+		estimateCacheUnknown: bool(entry?.estimateCacheUnknown) || void 0,
+		costEstimated: bool(entry?.costEstimated) || void 0,
+		raw_usage: usageNumbersOf(entry?.raw_usage)
+	};
+}
+/** 在热历史里定位目标记录：优先 historyTimestamp，其次时间戳最接近的 ±5 秒内一条 */
+function findTargetEntry(target) {
+	let list = [];
+	try {
+		list = Array.isArray(state$2.history) ? state$2.history : [];
+	} catch {
+		return null;
+	}
+	if (!list.length) return null;
+	if (target?.historyTimestamp) {
+		const hit = list.findIndex((entry) => num(entry?.timestamp) === num(target.historyTimestamp));
+		if (hit >= 0) return {
+			entry: list[hit],
+			index: hit
+		};
+	}
+	if (target?.at) {
+		let best = -1;
+		let bestGap = Number.POSITIVE_INFINITY;
+		for (let i = 0; i < list.length; i += 1) {
+			const gap = Math.abs(num(list[i]?.timestamp) - num(target.at));
+			if (gap < bestGap) {
+				bestGap = gap;
+				best = i;
+			}
+		}
+		if (best >= 0 && bestGap <= 5e3) return {
+			entry: list[best],
+			index: best
+		};
+	}
+	return null;
+}
+/** 目标记录 + 前后各一条（判断是否单点问题，还是整段都记错） */
+function historyEvidence(target) {
+	const hit = findTargetEntry(target);
+	if (!hit) return {
+		target: null,
+		before: null,
+		after: null
+	};
+	const list = state$2.history;
+	return {
+		target: entryDigest(hit.entry),
+		before: hit.index > 0 ? entryDigest(list[hit.index - 1]) : null,
+		after: hit.index + 1 < list.length ? entryDigest(list[hit.index + 1]) : null
+	};
+}
+/** 目标探针 + 同簇（同 purposeKey/actorLabel）几条：判断「整类请求都没记账」 */
+function tapEvidence(target) {
+	let list = [];
+	try {
+		list = listTapRecords();
+	} catch {
+		return {
+			target: null,
+			cluster: []
+		};
+	}
+	if (!list.length) return {
+		target: null,
+		cluster: []
+	};
+	let hit = null;
+	if (target?.tapId) hit = list.find((rec) => rec?.id === target.tapId) || null;
+	if (!hit && target?.at) {
+		let best = null;
+		let bestGap = Number.POSITIVE_INFINITY;
+		for (const rec of list) {
+			const gap = Math.abs(num(rec?.at) - num(target.at));
+			if (gap < bestGap) {
+				bestGap = gap;
+				best = rec;
+			}
+		}
+		if (best && bestGap <= 6e4) hit = best;
+	}
+	const clusterKey = hit ? clip(hit.purposeKey, 80) + "|" + clip(hit.actorLabel, 80) : "";
+	const cluster = clusterKey ? list.filter((rec) => clip(rec?.purposeKey, 80) + "|" + clip(rec?.actorLabel, 80) === clusterKey).sort((a, b) => num(b?.at) - num(a?.at)).slice(0, 4).map((rec) => ({
+		id: clip(rec?.id, 40),
+		at: num(rec?.at),
+		settledBy: clip(rec?.settledBy, 60),
+		status: num(rec?.status),
+		usage: rec?.usage ? {
+			prompt: num(rec.usage.prompt),
+			completion: num(rec.usage.completion),
+			total: num(rec.usage.total),
+			hit: num(rec.usage.hit),
+			miss: num(rec.usage.miss)
+		} : null,
+		error: clip(rec?.error, 200)
+	})) : [];
+	return {
+		target: hit ? {
+			id: clip(hit.id, 40),
+			at: num(hit.at),
+			endpoint: clip(hit.endpoint, 200),
+			model: clip(hit.model, 120),
+			purposeKey: clip(hit.purposeKey, 80),
+			actorLabel: clip(hit.actorLabel, 120),
+			state: clip(hit.state, 20),
+			settledBy: clip(hit.settledBy, 60),
+			messageCount: num(hit.messageCount),
+			promptChars: num(hit.promptChars),
+			usageMissing: bool(hit.usageMissing),
+			error: clip(hit.error, 200)
+		} : null,
+		cluster
+	};
+}
+/** 目标时刻前后各 2 分钟的控制台条目（已脱敏） */
+function consoleEvidence(centerAt) {
+	let list = [];
+	try {
+		list = listConsoleEntries(80);
+	} catch {
+		return [];
+	}
+	const center = num(centerAt) || 0;
+	return (center ? list.filter((entry) => Math.abs(num(entry?.at) - center) <= EVIDENCE_CONSOLE_WINDOW_MS) : list).slice(0, 20).map((entry) => ({
+		at: num(entry?.at),
+		level: clip(entry?.level, 20),
+		text: sanitizeText(clip(entry?.text, 600))
+	}));
+}
+/** 最近三轮对话摘要（正文可关）：快速看懂「当时在聊什么」 */
+function recentTurnsDigest(includeText) {
+	let list = [];
+	try {
+		list = readRecentTurns();
+	} catch {
+		return [];
+	}
+	return list.map((turn) => ({
+		at: num(turn?.at),
+		role: clip(turn?.role, 20),
+		chars: num(turn?.chars),
+		text: includeText ? clip(turn?.text, 400) : ""
 	}));
 }
 /** 探针里最近若干条「其他请求」：orphan（现有逻辑没记过账）最值得看 */
@@ -10698,6 +10931,7 @@ async function extensionDigest(timeoutMs = 3e3) {
 }
 /**
 * 组装完整反馈包。record 允许为空（用户还没发过请求，但仍想反馈别的问题）。
+* target 有值时是「历史提示上传这一条」：指名道姓那一轮，并带目标周边证据。
 * 所有文本最后统一过一遍 sanitizeJson，防止控制台文本或扩展名里夹带密钥。
 */
 async function buildFeedbackPack(input) {
@@ -10709,11 +10943,26 @@ async function buildFeedbackPack(input) {
 	} catch {}
 	const problem = isFeedbackProblem(input.problem) ? input.problem : "other";
 	const note = clip(input.note, FEEDBACK_NOTE_LIMIT);
+	const target = normalizeTarget(input.target);
+	const scope = target ? "single" : input.scope === "recent" ? "recent" : "recent";
+	const includeConversation = input.includeConversation !== false;
 	const record = input.record ? sanitizeLogForUpload(input.record) : null;
 	let extensions = [];
 	try {
 		extensions = await extensionDigest();
 	} catch {}
+	const evidence = {
+		signal: target,
+		request: {
+			scope,
+			requestId: target?.requestId || null,
+			logAt: record ? num(record.at) : null
+		},
+		history: historyEvidence(target),
+		tap: tapEvidence(target),
+		console: consoleEvidence(target?.at || now),
+		recentTurns: recentTurnsDigest(includeConversation)
+	};
 	const diagnostics = sanitizeJson({
 		history: historyDigest(),
 		capture: captureDigest(),
@@ -10723,16 +10972,19 @@ async function buildFeedbackPack(input) {
 		settings: settingsDigest(),
 		env: envDigest(),
 		conversation: conversationDigest(),
-		extensions
+		extensions,
+		evidence
 	});
 	return {
 		kind: "aus_request_log",
-		schema: 2,
+		schema: 3,
 		appVersion: clip(input.appVersion || APP_VERSION, 40),
 		uploadedAt: now,
 		report: {
 			problem,
-			note
+			note,
+			scope,
+			target
 		},
 		client: {
 			userAgent: clip(nav.userAgent, 300),
@@ -10742,6 +10994,27 @@ async function buildFeedbackPack(input) {
 		record: record || null,
 		diagnostics
 	};
+}
+/** 只保留已知字段并裁掉空值，避免把 DOM 对象或事件对象整包塞进上报体 */
+function normalizeTarget(target) {
+	if (!target || typeof target !== "object") return null;
+	const out = {};
+	const put = (key, value, limit) => {
+		if (value == null) return;
+		const text = clip(value, limit).trim();
+		if (!text) return;
+		out[key] = text;
+	};
+	put("signalKey", target.signalKey, 200);
+	put("kind", target.kind, 40);
+	put("detail", target.detail, 400);
+	put("model", target.model, 120);
+	put("reason", target.reason, 200);
+	put("requestId", target.requestId, 120);
+	put("tapId", target.tapId, 60);
+	if (Number.isFinite(Number(target.at)) && Number(target.at) > 0) out.at = Number(target.at);
+	if (Number.isFinite(Number(target.historyTimestamp)) && Number(target.historyTimestamp) > 0) out.historyTimestamp = Number(target.historyTimestamp);
+	return Object.keys(out).length ? out : null;
 }
 //#endregion
 //#region src/services/log-upload.ts
@@ -10835,9 +11108,15 @@ async function uploadLogPayload(address, payload) {
 /**
 * 「上传反馈日志」弹窗：把当前请求日志 + 诊断摘要发给开发者排查。
 *
+* 两条链路共用这个弹窗：
+* - 历史记录页健康提示点「上传这一条」：带 target，弹窗顶部明确写出「本次反馈指向 X 时 Y 模型的这一轮」，
+*   上传体里 report.scope=single + report.target + evidence（目标记录/同簇请求/前后两分钟控制台）；
+* - 设置页 / 请求日志页点「上传反馈」：不带 target，report.scope=recent，上传最近一轮请求的详细数据。
+*
 * 交互口径：
 * - 只有点「同意并上传」才发请求，取消/遮罩外点击都不发；
 * - 上传前先让用户选问题类型、写补充说明，再说清会上传什么、不收集什么；
+* - 最近三轮对话摘要在本地上是「正文前 400 字」，弹窗里给一个可取消勾选的开关；
 * - 地址默认填项目自带的接收端，用户可改成自己的；
 * - 结果就地显示（成功/失败 + 服务端回复），失败不关窗，方便重试。
 */
@@ -10845,16 +11124,53 @@ var MASK_ID = "aus-up-mask";
 function esc$2(text) {
 	return String(text ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
+function timeText$1(at) {
+	if (!at) return "";
+	try {
+		const d = new Date(at);
+		const pad = (n) => String(n).padStart(2, "0");
+		return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+	} catch {
+		return "";
+	}
+}
+/** 健康信号类型 → 人话（只用于弹窗顶部那行目标说明） */
+var KIND_TEXT$1 = {
+	"missing-usage": "没取到用量",
+	"zero-usage": "用量为 0",
+	"rate-anomaly": "速率异常",
+	"meta-missing": "信息缺失",
+	"estimated-usage": "本地估算",
+	"plugin-error": "扩展报错"
+};
+function targetLine(target) {
+	if (!target) return "";
+	const kind = KIND_TEXT$1[String(target.kind || "")] || "异常记录";
+	const model = String(target.model || "").trim();
+	const when = timeText$1(Number(target.at) || 0);
+	const who = model ? model + " 这一轮" : "这一轮";
+	return "本次反馈指向：" + (when ? when + " " : "") + who + "（" + kind + "）";
+}
+function problemForTarget(target) {
+	const kind = String(target?.kind || "");
+	if (kind === "missing-usage" || kind === "zero-usage") return "not-recorded";
+	if (kind === "rate-anomaly" || kind === "meta-missing" || kind === "estimated-usage") return "wrong-data";
+	return "other";
+}
 function problemButtons(current) {
 	return FEEDBACK_PROBLEMS.map((item) => {
 		return "<button type=\"button\" class=\"aus-up-problem" + (item.id === current ? " is-active" : "") + "\" data-up-problem=\"" + item.id + "\"><span class=\"aus-up-problem-label\">" + esc$2(item.label) + "</span><span class=\"aus-up-problem-hint\">" + esc$2(item.hint) + "</span></button>";
 	}).join("");
 }
-function dialogHTML(address, hasRecord) {
-	const recordLine = hasRecord ? "当前请求日志：有，会一起上传" : "当前请求日志：无（还没有捕获到请求，仅上传下面的诊断摘要）";
-	return "<div class=\"aus-up\" role=\"dialog\" aria-modal=\"true\" aria-label=\"上传反馈日志\"><div class=\"aus-up-head\"><div class=\"aus-up-title\">上传反馈日志</div><button type=\"button\" class=\"aus-up-close\" data-up-action=\"cancel\" aria-label=\"关闭\">" + icon("close", 16) + "</button></div><div class=\"aus-up-body\"><p class=\"aus-up-text\">遇到<b>对话没有被记录</b>，或者<b>记录下来的 token、费用明显不对</b>时，可将当前这条请求日志和相关诊断信息发送给开发者，便于定位问题。</p><p class=\"aus-up-text aus-up-muted\">" + esc$2(recordLine) + "</p><div class=\"aus-up-label\">这是什么问题</div><div class=\"aus-up-problems\">" + problemButtons("not-recorded") + "</div><div class=\"aus-up-label\">补充说明<span class=\"aus-up-optional\">可选</span></div><textarea class=\"aus-up-note\" id=\"aus-up-note\" rows=\"3\" maxlength=\"" + FEEDBACK_NOTE_LIMIT + "\" placeholder=\"什么时候、哪条对话、哪一轮；那次的模型或接入是什么；和你预期的差别在哪\"></textarea><details class=\"aus-up-details\"><summary>查看会一并上传的内容与隐私说明</summary><div class=\"aus-up-details-body\"><p class=\"aus-up-details-title\">为排查问题，上传内容可能包括</p><ul class=\"aus-up-list\"><li><b>聊天与提示词</b>：当前这一条请求正文里的历史聊天、你的输入、角色设定、世界书与系统提示词。</li><li><b>生成与结构化数据</b>：模型名称、请求端点、是否流式、finish_reason、用量（token 数）以及请求参数。</li><li><b>记录摘要</b>：最近 10 条历史记录的模型、token、费用与接入名称（<b>不含聊天正文</b>），以及「其他请求」探针里最近 20 条请求的模型、状态与错误。</li><li><b>脚本诊断</b>：最近 40 条控制台报错与未处理的 Promise 异常，可能含有酒馆或其他扩展打印的内容。</li><li><b>扩展与运行环境</b>：扩展名称与版本清单、本扩展版本、系统时区、屏幕与视口尺寸、当前对话名与角色名。</li></ul><p class=\"aus-up-details-title\">不会上传</p><ul class=\"aus-up-list\"><li>钱包密钥、API Key、登录凭据：上传前会再把请求头、正文和 URL 里的密钥抹成 <code>***</code>。</li><li>图片与附件内容、扩展源码、酒馆设置原文。</li></ul><p class=\"aus-up-details-title\">脱敏有局限</p><p class=\"aus-up-text\">程序会尝试遮蔽常见密钥、密码和认证头，但不能保证识别聊天正文、脚本输出或自定义字段中的所有敏感信息。请勿把日志视为已经完全脱敏。</p><p class=\"aus-up-details-title\">接收与保存</p><p class=\"aus-up-text\">日志会发送到下面填写的接收地址，接收服务及有权限的收件人可能查看、下载和保存内容；保存期限与删除方式由接收方决定，上传后无法替你撤回。请核对地址，仅向信任的接收方上传。</p></div></details><details class=\"aus-up-details\"><summary>上传地址（高级）</summary><div class=\"aus-up-details-body\"><input type=\"text\" class=\"aus-up-address\" id=\"aus-up-address\" spellcheck=\"false\" value=\"" + esc$2(address) + "\" /><p class=\"aus-up-text aus-up-muted\">默认是项目自带的接收端。改成你自己的接收地址时，请确认它愿意接收这些内容。</p></div></details><div class=\"aus-up-result\" id=\"aus-up-result\" hidden></div></div><div class=\"aus-up-foot\"><button type=\"button\" class=\"aus-up-btn\" data-up-action=\"cancel\">取消</button><button type=\"button\" class=\"aus-up-btn is-primary\" data-up-action=\"submit\">同意并上传</button></div></div>";
+function dialogHTML(input) {
+	const recordLine = input.hasRecord ? "当前请求日志：有，会一起上传" : "当前请求日志：无（还没有捕获到请求，仅上传下面的诊断摘要）";
+	const target = targetLine(input.target);
+	const targetHTML = target ? "<p class=\"aus-up-target\">" + esc$2(target) + "</p>" : "";
+	return "<div class=\"aus-up\" role=\"dialog\" aria-modal=\"true\" aria-label=\"上传反馈日志\"><div class=\"aus-up-head\"><div class=\"aus-up-title\">上传反馈日志</div><button type=\"button\" class=\"aus-up-close\" data-up-action=\"cancel\" aria-label=\"关闭\">" + icon("close", 16) + "</button></div><div class=\"aus-up-body\">" + targetHTML + "<p class=\"aus-up-text\">遇到<b>对话没有被记录</b>，或者<b>记录下来的 token、费用明显不对</b>时，可将当前这条请求日志和相关诊断信息发送给开发者，便于定位问题。</p><p class=\"aus-up-text aus-up-muted\">" + esc$2(recordLine) + "</p><div class=\"aus-up-label\">这是什么问题</div><div class=\"aus-up-problems\">" + problemButtons(input.problem) + "</div><div class=\"aus-up-label\">补充说明<span class=\"aus-up-optional\">可选</span></div><textarea class=\"aus-up-note\" id=\"aus-up-note\" rows=\"3\" maxlength=\"" + FEEDBACK_NOTE_LIMIT + "\" placeholder=\"什么时候、哪条对话、哪一轮；那次的模型或接入是什么；和你预期的差别在哪\"></textarea><label class=\"aus-up-check\"><input type=\"checkbox\" id=\"aus-up-include-chat\" checked /><span>附带最近三轮对话正文（各取前 400 字，用于还原当时的上下文）</span></label><details class=\"aus-up-details\"><summary>查看会一并上传的内容与隐私说明</summary><div class=\"aus-up-details-body\"><p class=\"aus-up-details-title\">为排查问题，上传内容可能包括</p><ul class=\"aus-up-list\"><li><b>聊天与提示词</b>：当前这一条请求正文里的历史聊天、你的输入、角色设定、世界书与系统提示词。</li><li><b>生成与结构化数据</b>：模型名称、请求端点、是否流式、finish_reason、用量（token 数）以及请求参数。</li><li><b>记录摘要</b>：最近 10 条历史记录的模型、token、费用与接入名称（<b>不含聊天正文</b>），以及「其他请求」探针里最近 20 条请求的模型、状态与错误。</li><li><b>指向证据</b>：点「上传这一条」时，会额外带上出问题那一轮的完整记录字段、前后各一条历史记录、同类请求最多 4 条、以及前后 2 分钟的控制台输出。</li><li><b>最近对话</b>：最近三轮对话的角色、字数与前 400 字（上面可取消勾选）。</li><li><b>脚本诊断</b>：最近 40 条控制台报错与未处理的 Promise 异常，可能含有酒馆或其他扩展打印的内容。</li><li><b>扩展与运行环境</b>：扩展名称与版本清单、本扩展版本、系统时区、屏幕与视口尺寸、当前对话名与角色名。</li></ul><p class=\"aus-up-details-title\">不会上传</p><ul class=\"aus-up-list\"><li>钱包密钥、API Key、登录凭据：上传前会再把请求头、正文和 URL 里的密钥抹成 <code>***</code>。</li><li>图片与附件内容、扩展源码、酒馆设置原文。</li></ul><p class=\"aus-up-details-title\">脱敏有局限</p><p class=\"aus-up-text\">程序会尝试遮蔽常见密钥、密码和认证头，但不能保证识别聊天正文、脚本输出或自定义字段中的所有敏感信息。请勿把日志视为已经完全脱敏。</p><p class=\"aus-up-details-title\">接收与保存</p><p class=\"aus-up-text\">日志会发送到下面填写的接收地址，接收服务及有权限的收件人可能查看、下载和保存内容；保存期限与删除方式由接收方决定，上传后无法替你撤回。请核对地址，仅向信任的接收方上传。</p></div></details><details class=\"aus-up-details\"><summary>上传地址（高级）</summary><div class=\"aus-up-details-body\"><input type=\"text\" class=\"aus-up-address\" id=\"aus-up-address\" spellcheck=\"false\" value=\"" + esc$2(input.address) + "\" /><p class=\"aus-up-text aus-up-muted\">默认是项目自带的接收端。改成你自己的接收地址时，请确认它愿意接收这些内容。</p></div></details><div class=\"aus-up-result\" id=\"aus-up-result\" hidden></div></div><div class=\"aus-up-foot\"><button type=\"button\" class=\"aus-up-btn\" data-up-action=\"cancel\">取消</button><button type=\"button\" class=\"aus-up-btn is-primary\" data-up-action=\"submit\">同意并上传</button></div></div>";
 }
 var currentProblem = "not-recorded";
+var currentTarget = null;
+var includeConversation = true;
 var uploading = false;
 function closeLogUploadDialog() {
 	if (typeof document === "undefined") return;
@@ -10881,6 +11197,8 @@ async function submit(mask, appVersion) {
 		return;
 	}
 	const note = readInput(mask, "#aus-up-note").slice(0, FEEDBACK_NOTE_LIMIT);
+	const chatBox = mask.querySelector("#aus-up-include-chat");
+	includeConversation = chatBox ? chatBox.checked : true;
 	uploading = true;
 	if (submitBtn) {
 		submitBtn.disabled = true;
@@ -10893,7 +11211,9 @@ async function submit(mask, appVersion) {
 			problem: currentProblem,
 			note,
 			appVersion,
-			record: readRequestLog()
+			record: readRequestLog(),
+			target: currentTarget,
+			includeConversation
 		}));
 		if (result.ok) {
 			setResult(mask, "ok", "上传成功，感谢反馈。");
@@ -10945,36 +11265,50 @@ function bind$2(mask, appVersion) {
 	};
 	document.addEventListener("keydown", onKey, true);
 }
-/** 打开弹窗（单例：重复调用先收掉旧的） */
+/**
+* 打开弹窗（单例：重复调用先收掉旧的）
+* @param options.target 历史提示「上传这一条」时传目标信号；不传就是「最近一条 + 全量诊断」
+*/
 function openLogUploadDialog(options = {}) {
 	if (typeof document === "undefined") return;
 	document.getElementById(MASK_ID)?.remove();
 	uploading = false;
-	currentProblem = "not-recorded";
+	currentTarget = options.target && typeof options.target === "object" ? options.target : null;
+	currentProblem = problemForTarget(currentTarget);
+	includeConversation = true;
 	const panel = document.getElementById("aus-panel") || document.body;
 	const mask = document.createElement("div");
 	mask.id = MASK_ID;
 	mask.className = "aus-up-mask";
 	const hasRecord = !!readRequestLog();
-	mask.innerHTML = dialogHTML(readUploadAddress(), hasRecord);
+	mask.innerHTML = dialogHTML({
+		address: readUploadAddress(),
+		hasRecord,
+		problem: currentProblem,
+		target: currentTarget
+	});
 	panel.appendChild(mask);
 	bind$2(mask, String(options.appVersion || ""));
 }
 //#endregion
 //#region src/services/health-prefs.ts
 /**
-* 历史记录页「问题提示」的偏好：总开关 + 已忽略的问题指纹
+* 健康提示的偏好落盘（纯 localStorage，不进 settings、不参与导出）
 *
-* 两件事分开存：
-* - 总开关（默认开启）：关掉后历史记录页不再显示任何提示条，入口在
-*   「问题反馈 / 请求日志」页；用户主动关掉的意图要跨刷新保留。
-* - 忽略列表：点提示条上的「忽略」时，把当前这批问题按指纹记下来，
-*   同类问题以后不再弹；换了模型或换了问题类型仍会重新提示。
+* 两个键：
+* - HEALTH_BAR_ENABLED_KEY  提示条总开关
+* - HEALTH_IGNORE_KEY       已忽略的问题指纹（v2 结构：带过期时间，默认 7 天）
 *
-* 只用 localStorage，失败时退化为「不忽略、保持开启」，绝不阻塞主流程。
+* v1 只存字符串数组，且旧版插件报错的指纹是固定的 plugin-error||console，
+* 一旦点过「忽略」就永久静音所有控制台类报错。迁移时直接丢弃这类无归因条目，
+* 让用户能重新看到真正有归因的报错。
 */
 var HEALTH_BAR_ENABLED_KEY = "aus_health_bar_enabled_v1";
-var HEALTH_IGNORE_KEY = "aus_health_ignore_v1";
+var HEALTH_IGNORE_KEY = "aus_health_ignore_v2";
+/** v1 旧键：只在迁移时读一次 */
+var HEALTH_IGNORE_LEGACY_KEY = "aus_health_ignore_v1";
+/** 忽略有效期：过期后同类问题会重新提示，避免永久静音 */
+var HEALTH_IGNORE_TTL_MS = 6048e5;
 function readStorage(key) {
 	try {
 		return globalThis.localStorage?.getItem(key) ?? null;
@@ -10984,64 +11318,109 @@ function readStorage(key) {
 }
 function writeStorage(key, value) {
 	try {
-		globalThis.localStorage?.setItem(key, value);
+		if (value == null) globalThis.localStorage?.removeItem(key);
+		else globalThis.localStorage?.setItem(key, value);
 	} catch {}
 }
-/** 总开关：没存过（或存坏了）都按「开启」处理 */
+function normalizeEntry(raw, now) {
+	if (!raw || typeof raw !== "object") return null;
+	const key = typeof raw.key === "string" ? raw.key.trim() : "";
+	if (!key) return null;
+	const at = Number(raw.at);
+	const expiresAt = Number(raw.expiresAt);
+	return {
+		key,
+		at: Number.isFinite(at) && at > 0 ? at : now,
+		expiresAt: Number.isFinite(expiresAt) && expiresAt > 0 ? expiresAt : now + HEALTH_IGNORE_TTL_MS,
+		scope: raw.scope === "one" ? "one" : "kind"
+	};
+}
+/** 旧版固定指纹：无归因的插件报错（点一次会静音全部控制台报错） */
+function isLegacyBlanketKey(key) {
+	const s = String(key || "");
+	if (!s.startsWith("plugin-error|")) return false;
+	const parts = s.split("|");
+	return parts.length >= 3 && !parts[1] && parts[2] === "console";
+}
+function writeIgnoreEntries(entries, now = Date.now()) {
+	const alive = entries.filter((entry) => entry && entry.key && entry.expiresAt > now);
+	if (!alive.length) {
+		writeStorage(HEALTH_IGNORE_KEY, null);
+		return;
+	}
+	writeStorage(HEALTH_IGNORE_KEY, JSON.stringify(alive.slice(0, 50)));
+}
+/** 读全部未过期条目（含 v1 迁移） */
+function readIgnoreEntries(now = Date.now()) {
+	const out = [];
+	const seen = /* @__PURE__ */ new Set();
+	const raw = readStorage(HEALTH_IGNORE_KEY);
+	if (raw) try {
+		const parsed = JSON.parse(raw);
+		const list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.entries) ? parsed.entries : [];
+		for (const item of list) {
+			const entry = normalizeEntry(item, now);
+			if (!entry) continue;
+			if (entry.expiresAt <= now) continue;
+			if (seen.has(entry.key)) continue;
+			seen.add(entry.key);
+			out.push(entry);
+		}
+	} catch {}
+	const legacy = readStorage(HEALTH_IGNORE_LEGACY_KEY);
+	if (legacy) {
+		try {
+			const parsed = JSON.parse(legacy);
+			const list = Array.isArray(parsed) ? parsed : [];
+			for (const item of list) {
+				const key = typeof item === "string" ? item : typeof item?.key === "string" ? item.key : "";
+				if (!key || isLegacyBlanketKey(key)) continue;
+				if (seen.has(key)) continue;
+				const at = typeof item?.at === "number" && item.at > 0 ? item.at : now;
+				const expiresAt = at + HEALTH_IGNORE_TTL_MS;
+				if (expiresAt <= now) continue;
+				seen.add(key);
+				out.push({
+					key,
+					at,
+					expiresAt,
+					scope: "kind"
+				});
+			}
+			writeIgnoreEntries(out, now);
+		} catch {}
+		writeStorage(HEALTH_IGNORE_LEGACY_KEY, null);
+	}
+	return out.sort((a, b) => b.at - a.at);
+}
 function isHealthBarEnabled() {
-	const raw = readStorage(HEALTH_BAR_ENABLED_KEY);
-	if (raw === "0") return false;
-	if (raw === "1") return true;
-	return true;
+	return readStorage(HEALTH_BAR_ENABLED_KEY) !== "0";
 }
 function setHealthBarEnabled(enabled) {
 	writeStorage(HEALTH_BAR_ENABLED_KEY, enabled ? "1" : "0");
 }
-function readEntries() {
-	const raw = readStorage(HEALTH_IGNORE_KEY);
-	if (!raw) return [];
-	try {
-		const parsed = JSON.parse(raw);
-		if (!Array.isArray(parsed)) return [];
-		const out = [];
-		for (const item of parsed) {
-			const key = typeof item?.key === "string" ? item.key : "";
-			if (!key) continue;
-			const at = Number(item?.at) || 0;
-			out.push({
-				key,
-				at
-			});
-		}
-		return out;
-	} catch {
-		return [];
-	}
+function readIgnoredHealthKeys(now = Date.now()) {
+	return readIgnoreEntries(now).map((entry) => entry.key);
 }
-/** 已忽略的问题指纹（新→旧） */
-function readIgnoredHealthKeys() {
-	return readEntries().map((e) => e.key);
+function ignoredHealthCount(now = Date.now()) {
+	return readIgnoreEntries(now).length;
 }
-function ignoredHealthCount() {
-	return readEntries().length;
-}
-/** 追加忽略；重复的指纹只更新时间为最新，超出上限淘汰最旧的 */
-function addIgnoredHealthKeys(keys, now = Date.now()) {
-	const incoming = (keys || []).filter((k) => typeof k === "string" && k);
-	if (!incoming.length) return ignoredHealthCount();
+/** 追加忽略：同 key 覆盖时间，按写入时间倒序截断 */
+function addIgnoredHealthKeys(keys, now = Date.now(), scope = "kind") {
+	const incoming = Array.isArray(keys) ? keys.map((key) => String(key || "").trim()).filter(Boolean) : [];
+	if (!incoming.length) return;
 	const map = /* @__PURE__ */ new Map();
-	for (const entry of readEntries()) map.set(entry.key, entry.at);
-	for (const key of incoming) map.set(key, now);
-	const kept = Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, 50).map(([key, at]) => ({
+	for (const entry of readIgnoreEntries(now)) map.set(entry.key, entry);
+	for (const key of incoming) map.set(key, {
 		key,
-		at
-	}));
-	writeStorage(HEALTH_IGNORE_KEY, JSON.stringify(kept));
-	return kept.length;
+		at: now,
+		expiresAt: now + HEALTH_IGNORE_TTL_MS,
+		scope
+	});
+	writeIgnoreEntries([...map.values()].sort((a, b) => b.at - a.at).slice(0, 50), now);
 }
-/** 清空忽略记录（「问题反馈 / 请求日志」页的恢复入口） */
 function clearIgnoredHealthKeys() {
-	writeStorage(HEALTH_IGNORE_KEY, "[]");
+	writeStorage(HEALTH_IGNORE_KEY, null);
 }
 //#endregion
 //#region src/ui/log-view.ts
@@ -11271,32 +11650,157 @@ function initLogView(options) {
 	if (options?.go) goBack = options.go;
 }
 //#endregion
+//#region src/services/error-classify.ts
+/** 明显不代表本扩展功能损坏的来源：网络、汇率、更新、余额、价格同步、同步、上报 */
+var MINOR_PATTERNS = [
+	{
+		re: /ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|EPIPE|socket hang up|fetch failed|network ?error|Failed to fetch|Load failed/i,
+		label: "网络请求"
+	},
+	{
+		re: /AbortError|aborted|The operation was aborted/i,
+		label: "请求被中止"
+	},
+	{
+		re: /\b(429|502|503|504)\b|too many requests|rate limit/i,
+		label: "上游限流或网关错误"
+	},
+	{
+		re: /exchange|汇率|open\.er-api|frankfurter|er-api/i,
+		label: "汇率更新"
+	},
+	{
+		re: /github|jsdelivr|ghproxy|gh-proxy|gitmirror|update-policy|check-?update|检查更新|一键更新/i,
+		label: "检查或更新"
+	},
+	{
+		re: /balance|余额|user\/balance/i,
+		label: "余额校准"
+	},
+	{
+		re: /models\.dev|pricing-?sync|价格同步/i,
+		label: "价格同步"
+	},
+	{
+		re: /webdav|nextcloud|owncloud/i,
+		label: "云同步"
+	},
+	{
+		re: /telemetry|\/collect|上报/i,
+		label: "统计上报"
+	}
+];
+/** 指向本扩展自身的证据：模块名、全局名、存储名 */
+var MAJOR_PATTERNS = [{
+	re: /ApiUsageStat|api-usage-stat|api_usage_stat|aus[-_]|\/api-usage\//i,
+	label: "本扩展代码"
+}, {
+	re: /addEntry|repository|interception|capture-digest|console-ring|health-signals|persist\b|saveHot|cold_history|IndexedDB|deleteDatabase|rebuildAggregates/i,
+	label: "本扩展核心链路"
+}];
+/** 折叠空白与数字，让同类错误归到同一签名 */
+function normalizeErrorText(text) {
+	return String(text ?? "").replace(/\s+/g, " ").replace(/\b\d+\b/g, "#").replace(/0x[0-9a-f]+/gi, "0x#").trim().slice(0, 300);
+}
+/** 极简 32 位 FNV-1a 哈希，输出 8 位十六进制 */
+function errorSignature(text) {
+	const raw = normalizeErrorText(text);
+	if (!raw) return "";
+	let hash = 2166136261;
+	for (let i = 0; i < raw.length; i += 1) {
+		hash ^= raw.charCodeAt(i);
+		hash = hash + ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24)) >>> 0;
+	}
+	return ("00000000" + hash.toString(16)).slice(-8);
+}
+/** 取错误文案：Error、对象或字符串都能吃 */
+function errorTextOf(input) {
+	if (!input) return "";
+	if (typeof input === "string") return input;
+	if (input instanceof Error) return (input.name || "Error") + ": " + input.message;
+	if (typeof input === "object") {
+		const anyInput = input;
+		if (typeof anyInput.message === "string" && anyInput.message) return String(anyInput.message);
+		if (typeof anyInput.text === "string" && anyInput.text) return String(anyInput.text);
+		try {
+			return JSON.stringify(input).slice(0, 300);
+		} catch {
+			return "";
+		}
+	}
+	return String(input);
+}
+/**
+* 分类一条控制台错误。
+* 默认判为 minor：宁可漏提示，也不拿无关报错去打扰用户。
+* 只有出现指向本扩展的证据时才升为 major。
+*/
+function classifyErrorText(input) {
+	const text = errorTextOf(input);
+	if (!text) return {
+		severity: "minor",
+		signature: "",
+		label: "空错误"
+	};
+	for (const rule of MAJOR_PATTERNS) if (rule.re.test(text)) return {
+		severity: "major",
+		signature: errorSignature(text),
+		label: rule.label
+	};
+	for (const rule of MINOR_PATTERNS) if (rule.re.test(text)) return {
+		severity: "minor",
+		signature: errorSignature(text),
+		label: rule.label
+	};
+	return {
+		severity: "minor",
+		signature: errorSignature(text),
+		label: "未归因"
+	};
+}
+//#endregion
 //#region src/services/health-signals.ts
 /**
 * 运行健康信号：历史记录页顶部提示条的数据来源（纯逻辑，无 DOM）
 *
-* 只在「用户能明显感觉到不对」的几种情况下给出信号：
-* - zero-usage  常规对话记下来了，但用量全 0（费用必然错）
-* - missing-usage  常规对话的用量没取到，这一轮没进历史
-* - rate-anomaly  速率离谱（极高 / 极低），多半是耗时或流式判定出错
-* - plugin-error   扩展自身报错 / 入库失败 / 控制台异常
+* 只在「用户能明显感觉到不对」的情况下给出信号：
+* - zero-usage      记下来的用量全 0（费用必然错）
+* - estimated-usage 上游没给用量，已按本地估算补记（黄色轻提示，不是故障）
+* - missing-usage   常规对话的用量没取到、这一轮没进历史（同类连续出现或探针聚簇才提示）
+* - rate-anomaly    速率离谱（极高 / 极低），多半是耗时或流式判定出错
+* - meta-missing    模型名或耗时缺失，只能用兜底值
+* - plugin-error    本扩展自身功能报错（网络/汇率/更新等无关报错不算）
 *
 * 这里只做判断与汇总，怎么展示、要不要上传由 UI 决定。
 */
 /**
-* 信号的「问题指纹」：类型 + 模型 + 细分原因。
+* 信号的「问题指纹」：类型 + 归因 + 细分。
 * 用户点「忽略」时按它落盘 —— 同一个模型同一类问题不再反复弹，
 * 换了模型、换了问题类型（或速率方向）仍会重新提示。
+* 插件报错带上错误签名，因此忽略一条控制台报错不会静音其它报错。
 */
 function healthSignalKey(sig) {
-	return sig.kind + "|" + (sig.model || "") + "|" + (sig.reason || "");
+	const attribution = sig.model || sig.signature || "-";
+	const detail = sig.signature || sig.reason || "";
+	return sig.kind + "|" + attribution + "|" + detail;
 }
 var KIND_TEXT = {
 	"zero-usage": "用量为 0",
+	"estimated-usage": "本地估算补记",
 	"missing-usage": "没有取到用量",
 	"rate-anomaly": "速率异常",
+	"meta-missing": "信息缺失",
 	"plugin-error": "功能报错"
 };
+/** 展示优先级：真的问题在前，轻提示在后 */
+var HEALTH_KIND_ORDER = [
+	"missing-usage",
+	"plugin-error",
+	"zero-usage",
+	"rate-anomaly",
+	"meta-missing",
+	"estimated-usage"
+];
 function healthKindText(kind) {
 	return KIND_TEXT[kind] || "异常";
 }
@@ -11315,8 +11819,8 @@ function clipText(text, max = 120) {
 	const s = String(text || "");
 	return s.length > max ? s.slice(0, max - 1) + "…" : s;
 }
-/** 扫历史：用量全 0、速率离谱 */
-function scanHistoryHealth(history, limit = 30) {
+/** 扫历史：估算补记、用量全 0、速率离谱、元信息缺失 */
+function scanHistoryHealth(history, limit = 30, now = Date.now()) {
 	const out = [];
 	if (!Array.isArray(history)) return out;
 	const recent = history.slice().sort((a, b) => (Number(b?.timestamp) || 0) - (Number(a?.timestamp) || 0)).slice(0, Math.max(1, limit));
@@ -11326,16 +11830,47 @@ function scanHistoryHealth(history, limit = 30) {
 		const prompt = Number(entry?.prompt_tokens) || 0;
 		const completion = Number(entry?.completion_tokens) || 0;
 		const total = Number(entry?.total_tokens) || 0;
+		if (isEstimatedEntry(entry)) {
+			const method = String(entry?.estimateMethod || "");
+			out.push({
+				kind: "estimated-usage",
+				at,
+				model,
+				reason: "estimated",
+				signature: method || void 0,
+				severity: "info",
+				detail: clipText(model + " 这一轮上游未返回用量，已按本地估算补记" + (method ? "（" + method + "）" : ""))
+			});
+			continue;
+		}
+		if (entry?.modelFallback) out.push({
+			kind: "meta-missing",
+			at,
+			model,
+			reason: "model-missing",
+			severity: "warn",
+			detail: clipText(model + " 这一轮没取到模型名，已用兜底值记录")
+		});
+		if (now - at < 864e5 && total > 0 && !(Number(entry?.duration) > 0) && entry?.streamed !== false) out.push({
+			kind: "meta-missing",
+			at,
+			model,
+			reason: "duration-missing",
+			severity: "warn",
+			detail: clipText(model + " 这一轮没取到总耗时")
+		});
 		if (prompt === 0 && completion === 0 && total === 0) {
 			out.push({
 				kind: "zero-usage",
 				at,
 				model,
 				reason: "zero",
+				severity: "warn",
 				detail: clipText(model + " 这一轮用量全为 0")
 			});
 			continue;
 		}
+		if (!isReliablePerformanceSample(entry)) continue;
 		const rate = rateOf(entry);
 		if (rate == null) continue;
 		if (rate > 5e3) out.push({
@@ -11343,6 +11878,7 @@ function scanHistoryHealth(history, limit = 30) {
 			at,
 			model,
 			reason: "rate-high",
+			severity: "warn",
 			detail: clipText(model + " 速率 " + Math.round(rate) + " token/s，明显偏高")
 		});
 		else if (rate < .5 && total >= 20) out.push({
@@ -11350,94 +11886,183 @@ function scanHistoryHealth(history, limit = 30) {
 			at,
 			model,
 			reason: "rate-low",
+			severity: "warn",
 			detail: clipText(model + " 速率 " + rate.toFixed(2) + " token/s，明显偏低")
 		});
 	}
 	return out;
 }
-/** 扫采集链路快照：事件层丢弃（没进历史）、入库失败 */
+/** 事件层丢弃的 reason 前缀（去重后用于聚簇判断） */
+function dropReasonOf(rec) {
+	return String(rec?.reason || "missing").split(":")[0] || "missing";
+}
+/**
+* 扫采集链路快照：
+* - 事件层丢弃：同类（模型 + 原因）在窗口内出现至少 MISSING_CLUSTER_MIN 次才算「多次未计入」，
+*   偶发单次不打扰用户；
+* - 入库失败：功能报错，带错误签名用于「忽略同类」。
+* （fetch-parse 的全 0、turn-estimated / turn-interrupted 都会在历史里体现，这里不重复报。）
+*/
 function scanCaptureHealth(stages = listCaptureStages()) {
 	const out = [];
+	const drops = /* @__PURE__ */ new Map();
 	for (const rec of stages) {
 		if (!rec) continue;
-		if (rec.stage === "event-drop") out.push({
-			kind: "missing-usage",
-			at: rec.at,
-			model: rec.model || "",
-			reason: "missing",
-			detail: clipText((rec.model || "未知模型") + " 的这一轮没有取到用量，未写入历史")
-		});
-		else if (rec.stage === "entry-error") out.push({
-			kind: "plugin-error",
-			at: rec.at,
-			model: rec.model || "",
-			reason: "entry-error",
-			detail: clipText("写入历史失败：" + (rec.reason || "未知错误"))
-		});
-		else if (rec.stage === "fetch-parse" && rec.usageZero) out.push({
-			kind: "zero-usage",
-			at: rec.at,
-			model: rec.model || "",
-			reason: "zero",
-			detail: clipText((rec.model || "未知模型") + " 上游返回的用量全为 0")
-		});
+		if (rec.stage === "event-drop") {
+			const key = (rec.model || "") + "|" + dropReasonOf(rec);
+			const list = drops.get(key) || [];
+			list.push(rec);
+			drops.set(key, list);
+		} else if (rec.stage === "entry-error") {
+			const reason = String(rec.reason || "未知错误");
+			out.push({
+				kind: "plugin-error",
+				at: rec.at,
+				model: rec.model || "",
+				reason: "entry-error",
+				signature: errorSignature(reason),
+				severity: "warn",
+				detail: clipText("写入历史失败：" + reason)
+			});
+		}
+	}
+	for (const [key, list] of drops) {
+		const [model, reason] = key.split("|");
+		const sorted = list.slice().sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
+		let clusterStart = 0;
+		for (let i = 0; i < sorted.length; i += 1) {
+			while (i - clusterStart + 1 > 2 && (Number(sorted[i].at) || 0) - (Number(sorted[clusterStart].at) || 0) > 18e5) clusterStart += 1;
+			if (i - clusterStart + 1 === 2) {
+				const count = i - clusterStart + 1;
+				const latest = sorted[i];
+				out.push({
+					kind: "missing-usage",
+					at: Number(latest.at) || 0,
+					model,
+					reason: "missing",
+					signature: reason,
+					severity: "warn",
+					detail: clipText((model || "未知模型") + " 连续 " + count + " 轮没有取到用量，这些对话未写入历史")
+				});
+				break;
+			}
+		}
 	}
 	return out;
 }
-/** 扫控制台环形缓冲：error / uncaught 视为功能报错 */
+/** 扫控制台环形缓冲：只收「本扩展功能真的报错」的条目 */
 function scanConsoleHealth(entries = listConsoleEntries()) {
 	const out = [];
 	for (const item of entries) {
 		if (!item) continue;
-		if (item.level === "error" || item.level === "uncaught") out.push({
+		if (item.level !== "error" && item.level !== "uncaught") continue;
+		const classified = classifyErrorText(item.text);
+		if (classified.severity !== "major") continue;
+		out.push({
 			kind: "plugin-error",
 			at: item.at || 0,
 			reason: "console",
-			detail: clipText(item.text || "控制台错误")
+			signature: classified.signature || void 0,
+			severity: "warn",
+			detail: clipText("功能报错（" + classified.label + "）：" + (item.text || ""))
 		});
 	}
 	return out;
 }
-/** 合并 + 按类型与时间去重 + 汇总 */
+/**
+* 扫请求探针：orphan（发出去但一直没被历史收尾）且「看起来就是一次正常对话」的记录，
+* 同一归因在窗口内出现多次 → 说明这类对话一直没被记录，值得提示。
+*/
+function scanTapHealth(taps = []) {
+	const out = [];
+	if (!Array.isArray(taps)) return out;
+	const groups = /* @__PURE__ */ new Map();
+	for (const tap of taps) {
+		if (!tap || tap.state !== "orphan") continue;
+		if (String(tap.endpoint || "") !== "chat") continue;
+		const messageCount = Number(tap.messageCount) || 0;
+		const promptChars = Number(tap.promptChars) || 0;
+		if (messageCount < 3 || promptChars < 400) continue;
+		const status = Number(tap.status) || 0;
+		if (status && (status < 200 || status >= 300)) continue;
+		const usage = tap.usage;
+		if (!usage || typeof usage !== "object") continue;
+		const key = String(tap.purposeKey || "") + "|" + String(tap.actorLabel || "");
+		const list = groups.get(key) || [];
+		list.push(tap);
+		groups.set(key, list);
+	}
+	for (const [key, list] of groups) {
+		const sorted = list.slice().sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
+		let clusterStart = 0;
+		for (let i = 0; i < sorted.length; i += 1) {
+			while (i - clusterStart + 1 > 2 && (Number(sorted[i].at) || 0) - (Number(sorted[clusterStart].at) || 0) > 18e5) clusterStart += 1;
+			if (i - clusterStart + 1 === 2) {
+				const count = i - clusterStart + 1;
+				const latest = sorted[i];
+				out.push({
+					kind: "missing-usage",
+					at: Number(latest.at) || 0,
+					model: String(latest.model || ""),
+					reason: "missing",
+					signature: "tap:" + key,
+					severity: "warn",
+					detail: clipText("有 " + count + " 次疑似正常对话的请求没有被记进历史（" + (String(latest.purposeLabel || "") || "未归类") + "）")
+				});
+				break;
+			}
+		}
+	}
+	return out;
+}
+/** 合并 + 按类型/归因/时间去重 + 汇总 */
 function buildHealthReport(input = {}) {
 	const limit = Math.max(1, input.limit || 40);
+	const now = typeof input.now === "number" ? input.now : Date.now();
 	let items = [];
 	try {
 		const stages = input.stages || listCaptureStages();
-		items = items.concat(scanHistoryHealth(input.history || [])).concat(scanCaptureHealth(stages)).concat(scanConsoleHealth(input.consoleEntries || listConsoleEntries()));
+		items = items.concat(scanHistoryHealth(input.history || [], 30, now)).concat(scanCaptureHealth(stages)).concat(scanTapHealth(input.taps || [])).concat(scanConsoleHealth(input.consoleEntries || listConsoleEntries()));
 	} catch {
 		items = [];
 	}
 	const sorted = items.slice().sort((a, b) => a.at - b.at);
 	const kept = [];
-	for (const sig of sorted) if (!kept.find((k) => k.kind === sig.kind && Math.abs(k.at - sig.at) < 9e4)) kept.push(sig);
+	for (const sig of sorted) {
+		const key = healthSignalKey(sig);
+		if (!kept.find((k) => healthSignalKey(k) === key && Math.abs(k.at - sig.at) < 9e4)) kept.push(sig);
+	}
 	const ignoredSet = new Set(input.ignored || []);
 	const visible = ignoredSet.size ? kept.filter((sig) => !ignoredSet.has(healthSignalKey(sig))) : kept;
-	visible.sort((a, b) => b.at - a.at);
+	visible.sort((a, b) => {
+		const orderA = HEALTH_KIND_ORDER.indexOf(a.kind);
+		const orderB = HEALTH_KIND_ORDER.indexOf(b.kind);
+		if (orderA !== orderB) return orderA - orderB;
+		return b.at - a.at;
+	});
 	const counts = {
 		"zero-usage": 0,
+		"estimated-usage": 0,
 		"missing-usage": 0,
 		"rate-anomaly": 0,
+		"meta-missing": 0,
 		"plugin-error": 0
 	};
 	for (const sig of visible) if (counts[sig.kind] != null) counts[sig.kind] += 1;
 	const shown = visible.slice(0, limit);
+	const warnCount = visible.filter((sig) => sig.severity !== "info").length;
 	return {
 		total: visible.length,
 		counts,
 		items: shown,
-		shouldShow: visible.length > 0
+		shouldShow: visible.length > 0,
+		infoOnly: visible.length > 0 && warnCount === 0
 	};
 }
 /** 一句话摘要（标题行用） */
 function healthSummaryText(report) {
 	const parts = [];
-	for (const kind of [
-		"zero-usage",
-		"missing-usage",
-		"rate-anomaly",
-		"plugin-error"
-	]) {
+	for (const kind of HEALTH_KIND_ORDER) {
 		const n = report.counts[kind] || 0;
 		if (n > 0) parts.push(healthKindText(kind) + " " + n + " 次");
 	}
@@ -11448,13 +12073,15 @@ function healthSummaryText(report) {
 /**
 * 历史记录页顶部的运行健康提示条
 *
-* 只在真的出问题时出现：用量为 0、用量没取到导致没进历史、速率离谱、扩展报错。
+* 只在真的出问题时出现：用量为 0、用量没取到导致没进历史、速率离谱、
+* 元信息缺失、重要功能报错；另外有一类「本地估算补记」的轻提示（黄色）。
 * 目的是把「用户感觉不对」变成「一键把诊断材料交给开发者」。
 *
 * 提示条本身不决定「要不要提示」：
 * - 总开关（问题反馈 / 请求日志 页）关掉后整条不再出现；
-* - 点「忽略」把当前这批问题按指纹记下来（services/health-prefs），
-*   同类问题以后不再弹，换成别的问题仍会提示。
+* - 点「忽略」把当前这批问题按指纹记下来（services/health-prefs，逐条指纹、7 天过期），
+*   同类问题以后不再弹，换成别的问题仍会提示；
+* - 每条明细还能单独「上传这一条」，上传内容会指名道姓指向那条记录。
 */
 /** 明细最多列几条，再多就只看汇总 */
 var DETAIL_LIMIT = 3;
@@ -11473,26 +12100,36 @@ function timeText(at) {
 		return "";
 	}
 }
+function severityOf(sig) {
+	return sig.severity === "info" ? "info" : "warn";
+}
+function headTitle(report) {
+	if (report.infoOnly) return `最近有 ${report.total} 次记录是本地估算补记`;
+	return `最近有 ${report.total} 次对话记录异常`;
+}
 function healthBarHTML(report) {
 	const items = report.items.slice(0, DETAIL_LIMIT);
 	const more = report.total > items.length ? `<div class="aus-health-more">还有 ${report.total - items.length} 条未列出</div>` : "";
 	const list = items.map((sig) => {
 		const t = timeText(sig.at);
-		return `<div class="aus-health-item"><span class="aus-health-dot"></span><span class="aus-health-item-text">${esc(sig.detail)}</span>${t ? `<span class="aus-health-item-time">${esc(t)}</span>` : ""}</div>`;
+		const key = healthSignalKey(sig);
+		return `<div class="aus-health-item is-${severityOf(sig)}" data-health-key="${esc(key)}"><span class="aus-health-dot"></span><span class="aus-health-item-text">${esc(sig.detail)}</span>` + (t ? `<span class="aus-health-item-time">${esc(t)}</span>` : "") + `<button type="button" class="aus-health-item-up" data-health-action="upload" data-health-key="${esc(key)}" title="上传这一条的诊断材料">上传这一条</button></div>`;
 	}).join("");
+	const tip = report.infoOnly ? "这些记录是上游没有返回用量、由本地估算补记的，只作提示；上传可帮助改进估算。" : "可以把诊断材料上传给开发者，帮助定位问题（密钥会自动打码）；「上传这一条」会指名道姓指向出问题的那一轮。";
+	const ignoreText = report.infoOnly ? "不再提示" : "忽略";
 	return `
-    <div class="aus-health" role="status">
+    <div class="aus-health${report.infoOnly ? " is-info-only" : ""}" role="status">
       <div class="aus-health-head">
-        <span class="aus-health-title">最近有 ${report.total} 次对话记录异常</span>
+        <span class="aus-health-title">${esc(headTitle(report))}</span>
         <span class="aus-health-summary">${esc(healthSummaryText(report))}</span>
       </div>
       <div class="aus-health-body">
         <div class="aus-health-list">${list}${more}</div>
-        <div class="aus-health-tip">可以把诊断材料上传给开发者，帮助定位问题（密钥会自动打码）。</div>
+        <div class="aus-health-tip">${esc(tip)}</div>
       </div>
       <div class="aus-health-actions">
         <button type="button" class="aus-health-btn is-primary" data-health-action="upload">上传反馈日志</button>
-        <button type="button" class="aus-health-btn" data-health-action="ignore" title="这一类问题以后不再提示">忽略</button>
+        <button type="button" class="aus-health-btn" data-health-action="ignore" title="这些提示 7 天内不再出现">${esc(ignoreText)}</button>
         <button type="button" class="aus-health-close" data-health-action="ignore" aria-label="忽略">${icon("close", 14)}</button>
       </div>
     </div>`;
@@ -11501,13 +12138,26 @@ function hide(host) {
 	host.innerHTML = "";
 	host.style.display = "none";
 }
+function signalOf(key) {
+	const items = currentReport?.items || [];
+	for (let i = 0; i < items.length; i += 1) if (healthSignalKey(items[i]) === key) return {
+		signal: items[i],
+		index: i
+	};
+	return null;
+}
 function bind(host) {
 	host.addEventListener("click", (event) => {
 		const btn = event.target?.closest?.("[data-health-action]");
 		if (!btn) return;
 		const action = btn.getAttribute("data-health-action");
+		const key = btn.getAttribute("data-health-key") || "";
 		if (action === "upload") {
-			openLogUploadDialog({ appVersion: APP_VERSION });
+			const hit = key ? signalOf(key) : null;
+			openLogUploadDialog({
+				appVersion: APP_VERSION,
+				target: hit ? { ...hit.signal } : null
+			});
 			return;
 		}
 		if (action === "ignore") {
@@ -11534,6 +12184,7 @@ function renderHistoryHealthBar(host, input) {
 	try {
 		report = buildHealthReport({
 			history: input?.history || [],
+			taps: listTapRecords(),
 			ignored: readIgnoredHealthKeys()
 		});
 	} catch {
@@ -11553,6 +12204,42 @@ function renderHistoryHealthBar(host, input) {
 		host.__ausHealthBound = true;
 		bind(host);
 	}
+}
+//#endregion
+//#region src/ui/history-badge.ts
+var NORMAL = {
+	kind: "normal",
+	text: "常规",
+	background: "var(--ds-card-inner)",
+	color: "var(--ds-text-3)"
+};
+function historyBadgeOf(entry) {
+	const interrupted = entry?.interrupted;
+	if (interrupted === "user") return {
+		kind: "interrupted-user",
+		text: "中断",
+		background: "var(--ds-yellow-bg)",
+		color: "var(--ds-yellow)"
+	};
+	if (interrupted === "upstream") return {
+		kind: "interrupted-upstream",
+		text: "中断",
+		background: "var(--ds-red-bg)",
+		color: "var(--ds-red)"
+	};
+	if (String(entry?.usageSource || "") === "estimated") return {
+		kind: "estimated",
+		text: "估算",
+		background: "var(--ds-yellow-bg)",
+		color: "var(--ds-yellow)"
+	};
+	if (String(entry?.origin || "") === "agent") return {
+		kind: "agent",
+		text: "Agent",
+		background: "var(--ds-green-bg)",
+		color: "var(--ds-green)"
+	};
+	return { ...NORMAL };
 }
 //#endregion
 //#region src/ui/help-view.ts
@@ -12867,17 +13554,22 @@ function renderHistoryInner(doc, fullHist) {
 		const isAgentRecord = String(h.origin || "") === "agent";
 		const agentTurnCount = Number(h.agentModelTurns) || 0;
 		const agentStatusKey = String(h.agentStatus || "");
-		const originTitle = isAgentRecord ? [
+		const agentStatusLabels = {
+			completed: "已完成",
+			partial_success: "部分完成",
+			cancelled: "已取消",
+			failed: "失败"
+		};
+		const badge = historyBadgeOf(h);
+		const originTitle = badge.kind === "interrupted-user" ? "用户中断：已有输出，按实际输出记录" : badge.kind === "interrupted-upstream" ? "上游中断：连接异常，已记录到中断前的输出" : badge.kind === "estimated" ? "本地估算：上游未返回用量，输入与输出由本地估算得出" : isAgentRecord ? [
 			"Agent 模式",
 			agentTurnCount > 0 ? agentTurnCount + " 个模型回合" : "",
-			{
-				completed: "已完成",
-				partial_success: "部分完成",
-				cancelled: "已取消",
-				failed: "失败"
-			}[agentStatusKey] || ""
+			agentStatusLabels[agentStatusKey] || ""
 		].filter(Boolean).join(" · ") : "常规对话";
-		const originBadge = isAgentRecord ? `<span class="aus-origin-badge" title="${esc$3(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:var(--ds-green-bg);color:var(--ds-green);">Agent</span>` : `<span class="aus-origin-badge" title="${esc$3(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:var(--ds-card-inner);color:var(--ds-text-3);">常规</span>`;
+		const isEstimated = badge.kind === "estimated";
+		const estTag = isEstimated ? "<span style=\"margin-left:4px;padding:0 4px;border-radius:4px;font-size:10px;font-weight:600;background:var(--ds-yellow-bg);color:var(--ds-yellow);\">估算</span>" : "";
+		const recordStateText = badge.kind === "interrupted-user" ? "用户中断（已记录输出）" : badge.kind === "interrupted-upstream" ? "上游中断（已记录输出）" : isEstimated ? "本地估算（上游未返回用量）" : "正常（上游用量）";
+		const originBadge = `<span class="aus-origin-badge" title="${esc$3(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:${badge.background};color:${badge.color};">${esc$3(badge.text)}</span>`;
 		const recordDate = new Date(h.timestamp);
 		const recordDateText = recordDate.toLocaleDateString("zh-CN");
 		const recordTimeText = recordDate.toLocaleTimeString("zh-CN", { hour12: false });
@@ -12917,7 +13609,8 @@ function renderHistoryInner(doc, fullHist) {
                 <section class="aus-dt-block">
                   <div class="aus-dt-head">基础信息</div>
                   <div class="aus-dt-grid">
-                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">模型</span><span class="aus-dt-val">${esc$3(h.model || "—")}</span></div>
+                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">模型</span><span class="aus-dt-val">${esc$3(h.model || "—")}${h.modelFallback ? "<span style=\"margin-left:4px;color:var(--ds-text-3);font-size:var(--aus-fs-xs);\">（请求未带模型名，兜底取值）</span>" : ""}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">记录状态</span><span class="aus-dt-val">${esc$3(recordStateText)}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">时段</span><span class="aus-dt-val">${h.priceType === "new-peak" || h.priceType === "wallet-peak" ? "高峰" : h.priceType === "new-offpeak" || h.priceType === "wallet-offpeak" ? "非高峰" : h.priceType === "unpriced" ? "待定价" : "旧价格"}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">计价来源</span><span class="aus-dt-val">${h.pricingSource === "wallet" ? "钱包规则" : h.pricingSource === "builtin" ? "DeepSeek 内置" : h.pricingSource === "unpriced" ? "待定价" : h.pricingSource === "legacy-match" ? "旧数据同名价" : h.pricingSource === "legacy" ? "旧全局规则" : "旧记录兜底"}</span></div>
                     <div class="aus-dt-item is-wide"><span class="aus-dt-label">钱包</span><span class="aus-dt-val">${esc$3(repository.getWallet(String(h.walletId || ""))?.name || h.endpointLabel || "未归属钱包")}</span></div>
@@ -12951,9 +13644,9 @@ function renderHistoryInner(doc, fullHist) {
                   </div>
                   <div class="aus-dt-grid">
                     <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-hit);"></span>缓存命中</span><span class="aus-dt-val">${(h.cache_hit_tokens || 0).toLocaleString()}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-miss);"></span>缓存未命中</span><span class="aus-dt-val">${(h.cache_miss_tokens || 0).toLocaleString()}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-output);"></span>输出 Token</span><span class="aus-dt-val">${(h.completion_tokens || 0).toLocaleString()}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label">总 Token</span><span class="aus-dt-val is-strong">${(h.total_tokens || 0).toLocaleString()}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-miss);"></span>缓存未命中</span><span class="aus-dt-val">${(h.cache_miss_tokens || 0).toLocaleString()}${estTag}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-output);"></span>输出 Token</span><span class="aus-dt-val">${(h.completion_tokens || 0).toLocaleString()}${estTag}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">总 Token</span><span class="aus-dt-val is-strong">${(h.total_tokens || 0).toLocaleString()}${estTag}</span></div>
                     <div class="aus-dt-item is-wide"><span class="aus-dt-label">思维链 Token</span><span class="aus-dt-val">${h.thinkTokens || 0}</span></div>
                   </div>
                 </section>
@@ -14646,7 +15339,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-kHSYXV_S.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-CBC-5blB.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-B9CwijFJ.js").then((m) => {
@@ -14884,10 +15577,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-CsGLvKVn.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-BjT6cxMH.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-kHSYXV_S.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CBC-5blB.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-CNHp5RUv.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -14898,10 +15591,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-CsGLvKVn.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-BjT6cxMH.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-kHSYXV_S.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CBC-5blB.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-CNHp5RUv.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -14967,10 +15660,10 @@ function ensureWandEntry() {
 /** 运行时收尾：卸载拦截器与采集、拆掉面板 DOM、停全部定时器与事件监听（数据一律不动） */
 async function teardownRuntime() {
 	try {
-		import("./interception-CsGLvKVn.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-BjT6cxMH.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-kHSYXV_S.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-CBC-5blB.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -14986,13 +15679,13 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-utIBGjhR.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-D45ldtrA.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CJMNKSam.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DGwby_qx.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-CUhsjNxb.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -15042,19 +15735,19 @@ async function onClean() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-CsGLvKVn.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-BjT6cxMH.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-kHSYXV_S.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CBC-5blB.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-utIBGjhR.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-D45ldtrA.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-CJMNKSam.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-DGwby_qx.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-CUhsjNxb.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -15097,19 +15790,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-utIBGjhR.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-D45ldtrA.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CJMNKSam.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DGwby_qx.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-CUhsjNxb.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-kHSYXV_S.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CBC-5blB.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -15131,7 +15824,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-DGwby_qx.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-CUhsjNxb.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

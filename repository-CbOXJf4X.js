@@ -1176,16 +1176,26 @@ function isTruncatedFinish(fr) {
 }
 //#endregion
 //#region src/data/fingerprint.ts
-function usageFingerprint(model, total, hit, miss, completion, connection, requestId) {
+/**
+* 一轮对话的去重指纹（两级）
+*
+* 为什么不再把 token 数算进指纹：
+* 估算记录与随后到达的真实 usage 的 token 数必然不同，含 token 的指纹会让两者都写进历史。
+* - 有 requestId：它就是同一请求的幂等键；
+* - 无 requestId：退化为「模型 + 接入身份 + 请求起始秒」，同一秒同一接入的同模型请求视为同一轮。
+*/
+function turnFingerprint(input) {
+	const requestId = String(input.requestId || "").trim();
+	if (requestId) return "req:" + requestId;
+	const startTime = Number(input.startTime);
+	const now = Number(input.now);
+	const base = Number.isFinite(startTime) && startTime > 0 ? startTime : Number.isFinite(now) && now > 0 ? now : Date.now();
 	return [
-		requestId || "",
-		model,
-		total,
-		hit,
-		miss,
-		completion,
-		connection?.endpointId || "",
-		connection?.credentialId || ""
+		"turn",
+		String(input.model || ""),
+		input.connection?.endpointId || "",
+		input.connection?.credentialId || "",
+		Math.round(base / 1e3)
 	].join("|");
 }
 /**
@@ -1354,7 +1364,98 @@ function getCurrentChatName() {
 	return id ? String(id) : null;
 }
 var recentUsageFingerprints = /* @__PURE__ */ new Map();
+/** 去重窗口：fetch 侧与 GENERATION_ENDED 可能相隔十几秒（尤其慢速流式），按 15s 计 */
+var TURN_DEDUPE_WINDOW_MS = 15e3;
+/** 指纹表保留时长：只需覆盖去重窗口，超出即回收 */
+var TURN_FINGERPRINT_TTL_MS = 6e4;
 var storageFailureNotified = false;
+/** 只把已定义的元信息字段写到条目上，避免到处出现 undefined 键 */
+function applyEntryMeta(target, meta) {
+	if (!target || !meta || typeof meta !== "object") return;
+	for (const key of [
+		"usageSource",
+		"interrupted",
+		"interruptReason",
+		"modelFallback",
+		"estimateMethod",
+		"estimateVersion",
+		"promptChars",
+		"outputChars",
+		"estimateCacheUnknown",
+		"costEstimated"
+	]) {
+		const value = meta[key];
+		if (value !== void 0) target[key] = value;
+	}
+}
+/**
+* 估算条目升级为真实用量：token 与费用都要换掉，聚合值与钱包余额按差额修正。
+* 只由去重命中时调用，调用方负责 persist()。
+*/
+function replaceEstimatedEntry(head, params) {
+	try {
+		if (!head) return false;
+		const prevTotal = Number(head.total_tokens) || 0;
+		const prevHit = Number(head.cache_hit_tokens) || 0;
+		const prevMiss = Number(head.cache_miss_tokens) || 0;
+		const prevComp = Number(head.completion_tokens) || 0;
+		const prevCost = Number(head.cost) || 0;
+		const prevInputCost = Number(head.input_cost) || 0;
+		const prevOutputCost = Number(head.output_cost) || 0;
+		const cost = calcCost({
+			timestamp: Number(head.timestamp) || Date.now(),
+			model: params.model,
+			prompt_cache_hit_tokens: params.hit,
+			prompt_cache_miss_tokens: params.miss,
+			completion_tokens: params.comp
+		}, state.settings, params.wallet);
+		head.prompt_tokens = params.hit + params.miss;
+		head.cache_hit_tokens = params.hit;
+		head.cache_miss_tokens = params.miss;
+		head.completion_tokens = params.comp;
+		head.total_tokens = params.total;
+		head.cache_hit_rate = params.hit + params.miss > 0 ? params.hit / (params.hit + params.miss) * 100 : 0;
+		head.cost = cost.total;
+		head.input_cost = cost.input;
+		head.output_cost = cost.output;
+		head.priceType = cost.priceType;
+		head.pricingSource = cost.source;
+		head.usageSource = "upstream";
+		head.estimateMethod = null;
+		head.estimateVersion = null;
+		head.estimateCacheUnknown = false;
+		head.costEstimated = false;
+		if (params.usage) head.raw_usage = params.usage;
+		if (params.fr) {
+			head.finishReason = params.fr;
+			head.isTruncated = isTruncatedFinish(params.fr);
+		}
+		if (params.wallet && !head.walletId) head.walletId = params.wallet.id;
+		state.total_tokens += params.total - prevTotal;
+		state.input_tokens += params.hit + params.miss - (prevHit + prevMiss);
+		state.output_tokens += params.comp - prevComp;
+		state.cache_hit_tokens += params.hit - prevHit;
+		state.cache_miss_tokens += params.miss - prevMiss;
+		state.total_cost += cost.total - prevCost;
+		state.input_cost += cost.input - prevInputCost;
+		state.output_cost += cost.output - prevOutputCost;
+		try {
+			const wallet = params.wallet;
+			if (wallet) {
+				const current = wallet.balance.amount == null || wallet.balance.amount === "" ? NaN : parseFloat(String(wallet.balance.amount));
+				if (Number.isFinite(current)) {
+					const diff = prevCost - cost.total;
+					const delta = wallet.balance.currency === "USD" ? diff / getWalletExchangeRate() : diff;
+					wallet.balance.amount = (current + delta).toFixed(4);
+					wallet.updatedAt = Date.now();
+				}
+			}
+		} catch {}
+		return true;
+	} catch {
+		return false;
+	}
+}
 function notifyStorageFailure(error) {
 	log.error("冷历史写入失败", error);
 	if (storageFailureNotified) return;
@@ -2202,7 +2303,7 @@ var repository = {
 	recalcEntryWallet(entry) {
 		return findWalletForHistory(state.wallets, entry);
 	},
-	addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft = 0, thinkTime = 0, finishReason = null, connection = null, requestId = null, streamed = null) {
+	addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft = 0, thinkTime = 0, finishReason = null, connection = null, requestId = null, streamed = null, meta = null) {
 		messages = messages || [];
 		if (!model) try {
 			model = globalThis.SillyTavern?.getContext?.().model || "deepseek-v4-flash";
@@ -2253,7 +2354,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && !!wallet.catalogProvider) try {
-						import("./pricing-sync-DGwby_qx.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-CUhsjNxb.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
@@ -2261,13 +2362,32 @@ var repository = {
 		} catch {}
 		try {
 			const now = Date.now();
-			const fp = requestId ? usageFingerprint(model, total, hit, miss, comp, connection, requestId) : `anonymous:${now}:${Math.random().toString(36).slice(2)}`;
+			const fp = turnFingerprint({
+				requestId,
+				model,
+				startTime,
+				connection,
+				now
+			});
 			const lastFpTime = recentUsageFingerprints.get(fp);
-			if (requestId && lastFpTime && now - lastFpTime < 5e3) {
+			if (lastFpTime && now - lastFpTime < TURN_DEDUPE_WINDOW_MS) {
 				try {
 					const head = requestId ? state.history.find((entry) => entry.requestId === requestId) || state.history[0] : state.history[0];
 					if (head) {
 						let changed = false;
+						const headEstimated = String(head.usageSource || "") === "estimated";
+						const incomingEstimated = String(meta?.usageSource || "") === "estimated";
+						if (headEstimated && !incomingEstimated) changed = replaceEstimatedEntry(head, {
+							hit,
+							miss,
+							comp,
+							total,
+							usage,
+							fr,
+							connection,
+							wallet,
+							model
+						}) || changed;
 						if (fullResponse && !head.fullResponse) {
 							head.fullResponse = clampResponse(fullResponse);
 							changed = true;
@@ -2347,11 +2467,11 @@ var repository = {
 						}
 					}
 				} catch {}
-				log.debug("addEntry 去重跳过(5s指纹)", { fp });
+				log.debug("addEntry 去重跳过(同轮指纹)", { fp });
 				return null;
 			}
 			recentUsageFingerprints.set(fp, now);
-			for (const [key, timestamp] of recentUsageFingerprints) if (now - timestamp > 3e4) recentUsageFingerprints.delete(key);
+			for (const [key, timestamp] of recentUsageFingerprints) if (now - timestamp > TURN_FINGERPRINT_TTL_MS) recentUsageFingerprints.delete(key);
 		} catch {}
 		const lu = {
 			timestamp: Date.now(),
@@ -2409,6 +2529,7 @@ var repository = {
 			lu.credentialId = connection.credentialId;
 			lu.credentialLabel = connection.credentialLabel;
 		}
+		applyEntryMeta(lu, meta);
 		state.lastUsage = lu;
 		const fr2 = fr;
 		const entry = {
@@ -2448,9 +2569,11 @@ var repository = {
 			walletId: wallet?.id ?? null,
 			pricingSource: c.source
 		};
+		applyEntryMeta(entry, meta);
 		log.debug("addEntry 即将写入", {
 			model: entry.model,
-			total: entry.total_tokens
+			total: entry.total_tokens,
+			usageSource: entry.usageSource || "upstream"
 		});
 		state.history.unshift(entry);
 		state.total_tokens += total;

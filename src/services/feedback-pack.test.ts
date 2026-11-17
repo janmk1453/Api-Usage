@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { state } from '../store';
 import { clearTapRecords, upsertTapRecord } from './request-tap/store';
 import { clearConsoleRing, noteConsole } from './console-ring';
+import { APP_VERSION } from '../constants/version';
 import type { TapRecord } from './request-tap/types';
 import {
   FEEDBACK_NOTE_LIMIT,
@@ -195,7 +196,7 @@ describe('反馈诊断包', () => {
     expect(diagnostics.tap.length).toBe(1);
     expect(diagnostics.tapSummary.total).toBe(1);
     expect(Array.isArray(diagnostics.console)).toBe(true);
-    expect(diagnostics.settings.appVersion).toBe('3.2.1');
+    expect(diagnostics.settings.appVersion).toBe(APP_VERSION);
     expect(diagnostics.conversation).toBeTruthy();
     expect(Array.isArray(diagnostics.extensions)).toBe(true);
     expect(JSON.stringify(pack)).not.toContain('Bearer abcdefgh');

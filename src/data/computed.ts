@@ -9,6 +9,7 @@ import { isTruncatedFinish } from '../utils/finish';
 import type { OverviewView, StatsView, TimeRange } from './types';
 import { formatMoney, getDisplayCurrency, getWalletExchangeRate } from '../services/currency';
 import { findWalletForHistory, walletBalanceToCny } from './wallets';
+import { isReliableCacheSample, isReliablePerformanceSample } from './sample-quality';
 import {
   computeGlobalHitRate as globalHitRate,
   computeModelHitRate as modelHitRate,
@@ -208,31 +209,35 @@ export function computeOverview(balanceWalletId = 'all', historyOverride?: any[]
     }
   } catch {}
   const rounds = viewRounds;
+  // 中断与估算记录不代表上游真实用量：均值、速率、TTFT 与命中率按样本可信度剔除，
+  // 金额与 token 总额仍照常累计（用户要看「花了多少」，见上方 view* 累加）。
+  const perfHist = hist.filter((h: any) => isReliablePerformanceSample(h));
+  const cacheHist = hist.filter((h: any) => isReliableCacheSample(h));
   const avgCost = averagePositive(hist.map((h: any) => numberValue(h.cost)));
   const avgTokens = averagePositive(hist.map((h: any) => numberValue(h.total_tokens)));
-  const avgDuration = averagePositive(hist.map((h: any) => numberValue(h.duration))) / 1000;
-  const avgRate = averagePositive(hist.map((h: any) => numberValue(h.tokenRate)));
-  const avgTtft = averagePositive(hist.map((h: any) => numberValue(h.ttft))) / 1000;
+  const avgDuration = averagePositive(perfHist.map((h: any) => numberValue(h.duration))) / 1000;
+  const avgRate = averagePositive(perfHist.map((h: any) => numberValue(h.tokenRate)));
+  const avgTtft = averagePositive(perfHist.map((h: any) => numberValue(h.ttft))) / 1000;
   // 新增：输入/输出均摊
   const avgInputCost = averagePositive(hist.map((h: any) => numberValue(h.input_cost)));
   const avgInputTokens = averagePositive(hist.map((h: any) => numberValue(h.cache_hit_tokens) + numberValue(h.cache_miss_tokens)));
   const avgOutputCost = averagePositive(hist.map((h: any) => numberValue(h.output_cost)));
   const avgOutputTokens = averagePositive(hist.map((h: any) => numberValue(h.completion_tokens)));
   // 思维链（剔除 0）
-  const thinkTimes = hist.map((h: any) => h.thinkTime || 0).filter((v: number) => v > 0);
-  const thinkTokensArr = hist.map((h: any) => h.thinkTokens || 0).filter((v: number) => v > 0);
+  const thinkTimes = perfHist.map((h: any) => h.thinkTime || 0).filter((v: number) => v > 0);
+  const thinkTokensArr = perfHist.map((h: any) => h.thinkTokens || 0).filter((v: number) => v > 0);
   const avgThinkTime = thinkTimes.length ? (thinkTimes.reduce((a: number, b: number) => a + b, 0) / thinkTimes.length) / 1000 : 0;
   const avgThinkTokens = thinkTokensArr.length ? thinkTokensArr.reduce((a: number, b: number) => a + b, 0) / thinkTokensArr.length : 0;
   // 平均命中率（剔除 0）
-  const hitRates = hist.map((h: any) => {
+  const hitRates = cacheHist.map((h: any) => {
     const ch = h.cache_hit_tokens || 0, cm = h.cache_miss_tokens || 0, tot = ch + cm;
     return tot > 0 ? (ch / tot * 100) : 0;
   }).filter((v: number) => v > 0);
   const avgHitRate = hitRates.length ? hitRates.reduce((a: number, b: number) => a + b, 0) / hitRates.length : 0;
-  // 最新一轮命中率（0 也显示，无数据则 null）
+  // 最新一轮命中率（0 也显示，无可靠缓存样本则 null）
   let latestHitRate: number | null = null;
-  if (hist.length) {
-    const latest = [...hist].sort((a, b) => b.timestamp - a.timestamp)[0];
+  if (cacheHist.length) {
+    const latest = [...cacheHist].sort((a, b) => b.timestamp - a.timestamp)[0];
     const ch = latest.cache_hit_tokens || 0, cm = latest.cache_miss_tokens || 0, tot = ch + cm;
     latestHitRate = tot > 0 ? (ch / tot * 100) : 0;
   }
@@ -395,6 +400,8 @@ export function computeStatsFour(filtered: any[]): { avgCost:number; avgTokens:n
     return { avgCost:0, avgTokens:0, avgDuration:0, avgRate:0, avgTtft:0, avgInputCost:0, avgInputTokens:0, avgOutputCost:0, avgOutputTokens:0, avgThinkTime:0, avgThinkTokens:0, avgHitRate:0, latestHitRate:null, maxOutput:0, maxInput:0, maxTotal:0, avgThinkRatio:0, truncationRate:0, rounds:0 };
   }
   const rounds = filtered.length;
+  // 中断/估算记录只贡献金额与 token 总额，不参与性能与命中率均值（口径同概览）
+  const cacheFour = filtered.filter((h: any) => isReliableCacheSample(h));
   let costSum = 0, costCnt = 0, tokensSum = 0, tokensCnt = 0, durSum = 0, durCnt = 0, rateSum = 0, rateCnt = 0;
   let inputCostSum = 0, inputCostCnt = 0, inputTokensSum = 0, inputTokensCnt = 0, outputCostSum = 0, outputCostCnt = 0, outputTokensSum = 0, outputTokensCnt = 0;
   let ttftSum = 0, ttftCnt = 0;
@@ -405,17 +412,20 @@ export function computeStatsFour(filtered: any[]): { avgCost:number; avgTokens:n
   for (const h of filtered) {
     const cost = numberValue(h.cost); if (cost > 0) { costSum += cost; costCnt++; }
     const tokens = numberValue(h.total_tokens); if (tokens > 0) { tokensSum += tokens; tokensCnt++; }
-    const duration = numberValue(h.duration); if (duration > 0) { durSum += duration; durCnt++; }
-    const rate = numberValue(h.tokenRate); if (rate > 0) { rateSum += rate; rateCnt++; }
+    const perfOk = isReliablePerformanceSample(h);
+    const duration = perfOk ? numberValue(h.duration) : 0; if (duration > 0) { durSum += duration; durCnt++; }
+    const rate = perfOk ? numberValue(h.tokenRate) : 0; if (rate > 0) { rateSum += rate; rateCnt++; }
     const inputCost = numberValue(h.input_cost); if (inputCost > 0) { inputCostSum += inputCost; inputCostCnt++; }
     const inputTokens = numberValue(h.cache_hit_tokens) + numberValue(h.cache_miss_tokens); if (inputTokens > 0) { inputTokensSum += inputTokens; inputTokensCnt++; }
     const outputCost = numberValue(h.output_cost); if (outputCost > 0) { outputCostSum += outputCost; outputCostCnt++; }
     const outputTokens = numberValue(h.completion_tokens); if (outputTokens > 0) { outputTokensSum += outputTokens; outputTokensCnt++; }
-    if ((h.ttft || 0) > 0) { ttftSum += h.ttft; ttftCnt++; }
-    if ((h.thinkTime||0) > 0) { thinkTimeSum += h.thinkTime; thinkTimeCnt++; }
-    if ((h.thinkTokens||0) > 0) { thinkTokensSum += h.thinkTokens; thinkTokensCnt++; }
-    const ch = h.cache_hit_tokens||0, cm = h.cache_miss_tokens||0, tot = ch+cm;
-    if (tot>0) { hitRateSum += ch/tot*100; hitRateCnt++; }
+    if (perfOk && (h.ttft || 0) > 0) { ttftSum += h.ttft; ttftCnt++; }
+    if (perfOk && (h.thinkTime||0) > 0) { thinkTimeSum += h.thinkTime; thinkTimeCnt++; }
+    if (perfOk && (h.thinkTokens||0) > 0) { thinkTokensSum += h.thinkTokens; thinkTokensCnt++; }
+    if (isReliableCacheSample(h)) {
+      const ch = h.cache_hit_tokens||0, cm = h.cache_miss_tokens||0, tot = ch+cm;
+      if (tot>0) { hitRateSum += ch/tot*100; hitRateCnt++; }
+    }
     const out = h.completion_tokens||0, inp = (h.cache_hit_tokens||0)+(h.cache_miss_tokens||0), totTok = h.total_tokens||0;
     if (out>maxOutput) maxOutput=out; if (inp>maxInput) maxInput=inp; if (totTok>maxTotal) maxTotal=totTok;
     sumThink += h.thinkTokens||0; sumOut += h.completion_tokens||0;
@@ -426,7 +436,7 @@ export function computeStatsFour(filtered: any[]): { avgCost:number; avgTokens:n
     avgInputCost: inputCostCnt? inputCostSum/inputCostCnt : 0, avgInputTokens: inputTokensCnt? inputTokensSum/inputTokensCnt : 0, avgOutputCost: outputCostCnt? outputCostSum/outputCostCnt : 0, avgOutputTokens: outputTokensCnt? outputTokensSum/outputTokensCnt : 0,
     avgThinkTime: thinkTimeCnt? thinkTimeSum/thinkTimeCnt/1000 : 0, avgThinkTokens: thinkTokensCnt? thinkTokensSum/thinkTokensCnt : 0,
     avgHitRate: hitRateCnt? hitRateSum/hitRateCnt : 0,
-    latestHitRate: (()=>{ const latest=[...filtered].sort((a,b)=>b.timestamp-a.timestamp)[0]; const ch=latest.cache_hit_tokens||0, cm=latest.cache_miss_tokens||0, tot=ch+cm; return tot>0? ch/tot*100 : 0; })(),
+    latestHitRate: (()=>{ if (!cacheFour.length) return null; const latest=[...cacheFour].sort((a,b)=>b.timestamp-a.timestamp)[0]; const ch=latest.cache_hit_tokens||0, cm=latest.cache_miss_tokens||0, tot=ch+cm; return tot>0? ch/tot*100 : 0; })(),
     maxOutput, maxInput, maxTotal,
     avgThinkRatio: sumOut>0? sumThink/sumOut*100 : 0,
     truncationRate: truncCnt/rounds*100,

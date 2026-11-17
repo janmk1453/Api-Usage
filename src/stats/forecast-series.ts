@@ -9,6 +9,7 @@
  * - 成本、余额轮数、上下文轮数共用同一套逐轮投影，保证图表与数据块口径一致。
  */
 import { isTruncatedFinish } from '../utils/finish';
+import { isReliableForecastSample } from '../data/sample-quality';
 
 export type PriceTrio = { hit: number; miss: number; output: number };
 
@@ -26,6 +27,10 @@ export type ForecastInputEntry = {
   finishReason?: string | null;
   isTruncated?: boolean;
   chatId?: string | null;
+  /** 样本标记：中断/估算记录不参与序列拟合 */
+  usageSource?: string | null;
+  interrupted?: 'user' | 'upstream' | null;
+  estimateCacheUnknown?: boolean;
 };
 
 export type PreparedEntry = {
@@ -253,13 +258,16 @@ function medianAbsoluteDeviation(values: number[]): number {
 }
 
 /**
- * 数据准备：按时间升序、过滤空 prompt、计算命中率与截断标记。
+ * 数据准备：按时间升序、过滤空 prompt 与不可信样本、计算命中率与截断标记。
+ * 中断记录（耗时/输出被截断）与估算记录（token 是本地推的、命中量不可区分）
+ * 一律不进入序列：否则压缩识别、增长拟合与成本模拟都会被带偏。
  * 无缓存字段时 hit=0、miss=prompt，仅用于堆叠图展示，不伪造命中率。
  */
 export function prepareEntries(history: ForecastInputEntry[]): PreparedEntry[] {
   const sorted = [...(history || [])].sort((a, b) => (Number(a?.timestamp) || 0) - (Number(b?.timestamp) || 0));
   const prepared: PreparedEntry[] = [];
   for (const entry of sorted) {
+    if (!isReliableForecastSample(entry as any)) continue;
     const rawHit = Math.max(0, Number(entry?.cache_hit_tokens) || 0);
     const rawMiss = Math.max(0, Number(entry?.cache_miss_tokens) || 0);
     const cacheSamples = rawHit + rawMiss;

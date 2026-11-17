@@ -67,6 +67,9 @@
   --aus-token-hit: #A0DCFD;
   --aus-token-miss: #60B3FE;
   --aus-token-output: #0C70F3;
+  /* 语义黄：过去只有底色与描边，估算/中断角标需要可读的前景色，这里补齐
+     （浅色用深琥珀保证白底可读，深色用提亮的黄保证近黑底可读） */
+  --ds-yellow: #B45309;
   --ds-yellow-bg: #FFFBEB;
   --ds-yellow-border: #FDE68A;
   --ds-radius-card: 14px;
@@ -136,6 +139,7 @@
   --aus-token-hit: #A0DCFD;
   --aus-token-miss: #60B3FE;
   --aus-token-output: #0C70F3;
+  --ds-yellow: #FBBF24;
   --ds-yellow-bg: #2C2410;
   --ds-yellow-border: #8A6A1F;
   /* 顶栏毛玻璃（深色）：更低的底色不透明度 + 更弱的高光分隔线 */

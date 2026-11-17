@@ -4,8 +4,11 @@ import { log } from '../utils/logger';
 import { initConnectionIdentity, resolveRuntimeConnectionContext, type HistoryConnection } from './connection-identity';
 import { mergeIncludeUsage } from './include-usage';
 import { createThinkClock, scanThinkChunk, resolveThinkTime, reasoningTextOf, contentTextOf } from './think-timing';
-import { saveRequestStart, patchRequestLog } from './request-log';
+import { saveRequestStart, patchRequestLog, noteRecentTurns } from './request-log';
 import { noteCaptureStage, isZeroUsage, usageNumbers } from './capture-digest';
+import { decideTurnOutcome } from './turn-outcome';
+import { ESTIMATE_VERSION, estimatePromptTokens, estimateTextTokens } from './token-estimate';
+import type { EntryMeta } from '../types/save';
 
 let lastMessages: any[] = [];
 let lastStart = 0;
@@ -21,6 +24,97 @@ let lastRequestIdTime = 0;
 /** 流式测量到的时序快照（TTFT / 思维链耗时 / 真假流式），与 usage 解耦：
  *  上游不回 usage 时 finish() 也会落一份，避免主路径明明测到了却拿不到。 */
 let lastStreamTiming: { ttft: number; thinkTime: number; streamed: boolean | null; startTime: number; at: number } | null = null;
+
+/**
+ * 本轮请求的现场（fetch 侧填写，生成结束事件消费）。
+ * 用途：上游不回 usage / 中途停止时，靠它判断「有没有输出、是不是中断」，
+ * 再决定按估算补记还是静默丢弃。只存数字与请求原文，不额外采集隐私。
+ */
+type TurnContext = {
+  startTime: number;
+  requestId: string | null;
+  model: string | null;
+  /** 是否未能从请求/响应里拿到模型名，只能兜底 */
+  modelFallback: boolean;
+  status: number;
+  streamError: string | null;
+  /** 实测输出字符（正文 + 思维链） */
+  outputChars: number;
+  reasoningChars: number;
+  /** 已读到的响应原文（SSE / JSON），用于估算输出 token */
+  fullResponse: string | null;
+  fullRequest: any;
+  messages: any[];
+  connection: HistoryConnection | null;
+  ttft: number;
+  thinkTime: number;
+  streamed: boolean | null;
+  /** 本轮是否已经落库（正常路径或估算路径都算） */
+  settled: boolean;
+};
+
+let lastTurn: TurnContext | null = null;
+/** 用户点击「停止」的时刻；只在窗口期内有效，过期自动忽略 */
+let pendingStopAt = 0;
+let pendingStopTimer: any = null;
+/** 停止信号与生成结束事件之间的等待窗口 */
+const STOP_WINDOW_MS = 3000;
+/** 收到停止信号后等这么久再兜底结算（等 GENERATION_ENDED 先到） */
+const STOP_SETTLE_DELAY_MS = 1500;
+
+function currentTurn(startTime?: number): TurnContext | null {
+  const turn = lastTurn;
+  if (!turn) return null;
+  if (typeof startTime === 'number' && startTime > 0 && turn.startTime !== startTime) return null;
+  return turn;
+}
+
+function stopPending(): boolean {
+  return pendingStopAt > 0 && Date.now() - pendingStopAt < STOP_WINDOW_MS;
+}
+
+/**
+ * 正常路径（上游给了 usage）的中断标记：
+ * 用户点了停止 → user；流读出过错 → upstream；都没有则不写 interrupted。
+ * 估算路径的 meta 由 settleTurnWithoutUsage 自己构造。
+ */
+function turnMetaFor(startTime: number): EntryMeta | null {
+  const turn = currentTurn(startTime);
+  const interrupted = stopPending() ? 'user' : turn?.streamError ? 'upstream' : null;
+  const modelFallback = turn?.modelFallback === true;
+  if (!interrupted && !modelFallback) return null;
+  const meta: EntryMeta = { usageSource: 'upstream' };
+  meta.interrupted = interrupted;
+  if (interrupted) meta.interruptReason = interrupted === 'user' ? 'user-stop' : String(turn?.streamError || 'stream-error').slice(0, 200);
+  if (modelFallback) meta.modelFallback = true;
+  return meta;
+}
+
+/** 从响应原文里抽出助手输出文本（正文 + 思维链），只用于本地估算 token */
+function collectOutputText(raw: string): string {
+  const text = String(raw || '');
+  if (!text.trim()) return '';
+  let out = '';
+  const push = (record: any) => {
+    const think = reasoningTextOf(record);
+    if (think) out += think;
+    const body = contentTextOf(record);
+    if (body) out += body;
+  };
+  const trimmed = text.trim();
+  if (trimmed.startsWith('{')) {
+    try { push(JSON.parse(trimmed)); } catch {}
+    return out.slice(0, 200_000);
+  }
+  for (const rawLine of trimmed.split('\n')) {
+    const line = rawLine.trim();
+    if (!line.startsWith('data:')) continue;
+    const payload = line.slice(5).trim();
+    if (!payload || payload === '[DONE]') continue;
+    try { push(JSON.parse(payload)); } catch {}
+  }
+  return out.slice(0, 200_000);
+}
 
 function recentStreamTiming(maxAge = 60000): typeof lastStreamTiming {
   try {
@@ -155,7 +249,31 @@ function installFetchCapture() {
         let msgs: any[] = [];
         try { if (reqBody?.messages?.length) msgs = reqBody.messages.slice(-10); } catch {}
         const startTime = Date.now();
+        // 反馈排查用：留一份「最近三轮在聊什么」（角色 + 前 400 字 + 字数），不进历史、不导出
+        try { if (reqBody?.messages?.length) noteRecentTurns(reqBody.messages, startTime); } catch {}
         try { lastMessages = msgs; lastStart = startTime; } catch {}
+        // 本轮现场：模型名先按请求体判断是否只能兜底，响应带回真实模型名后再清掉标记
+        try {
+          const requestModel = (reqBody as any)?.model;
+          lastTurn = {
+            startTime,
+            requestId,
+            model: typeof requestModel === 'string' && requestModel ? requestModel : null,
+            modelFallback: !(typeof requestModel === 'string' && requestModel),
+            status: 0,
+            streamError: null,
+            outputChars: 0,
+            reasoningChars: 0,
+            fullResponse: null,
+            fullRequest: fullReq,
+            messages: msgs,
+            connection: requestConnection,
+            ttft: 0,
+            thinkTime: 0,
+            streamed: null,
+            settled: false,
+          };
+        } catch {}
         // 通过 custom_include_body 让上游返回流式 usage；上游若不认这个参数则原样重试
         const injected = injectIncludeUsage(reqBody, (reqBody as any)?.chat_completion_source ?? null);
         const performFetch = (init: any) => rawFetch.apply(p, init);
@@ -186,6 +304,7 @@ function installFetchCapture() {
         }).then((res: Response) => {
           // 响应一到达就记下状态与标头（首字节耗时按请求发出时刻算）
           try { patchRequestLog({ status: res.status, statusText: res.statusText, headers: res.headers, firstByteMs: Date.now() - startTime }); } catch {}
+          try { const t = currentTurn(startTime); if (t) t.status = res.status; } catch {}
           try {
             const clone = res.clone();
             // 请求体未声明流式 → 明确非流式，全程不测速
@@ -228,6 +347,12 @@ function installFetchCapture() {
                 finishReason: finishReason ?? null,
                 usage: (data as any)?.usage || null,
               });
+            } catch {}
+            // 响应带回真实模型名 → 不再算「模型缺失兜底」
+            try {
+              const t = currentTurn(startTime);
+              const resModel = (data as any)?.model;
+              if (t && typeof resModel === 'string' && resModel) { t.model = resModel; t.modelFallback = false; }
             } catch {}
             // 采集链路快照：响应解析完成，是否解析到用量、用量是否全 0
             try {
@@ -279,6 +404,18 @@ function installFetchCapture() {
                 const endedAt = nowMs() - t0;
                 const thinkTime = resolveThinkTime(thinkClock, endedAt);
                 const streamed = judgeStreamed();
+                // 现场留档：输出字符数决定「能不能按估算补记」
+                try {
+                  const t = currentTurn(startTime);
+                  if (t) {
+                    t.ttft = ttft || 0;
+                    t.thinkTime = thinkTime || 0;
+                    t.streamed = streamed;
+                    t.outputChars = thinkClock.contentChars || 0;
+                    t.reasoningChars = thinkClock.reasoningChars || 0;
+                    t.fullResponse = fullText || null;
+                  }
+                } catch {}
                 if (thinkTime > 0) log.debug('思维链耗时已测量 ' + thinkTime + 'ms');
                 try { lastStreamTiming = { ttft, thinkTime, streamed, startTime, at: Date.now() }; } catch {}
                 try { patchRequestLog({ durationMs: endedAt, streamed }); } catch {}
@@ -311,7 +448,14 @@ function installFetchCapture() {
             };
             const streamBody = (clone.body as ReadableStream<Uint8Array> | null);
             if (streamBody && typeof (streamBody as any).getReader === 'function') {
-              readStream(streamBody).catch(() => { try { finish(); } catch {} });
+              readStream(streamBody).catch((streamErr: any) => {
+                // 上游断流 / 网络中断 / 用户停止导致的 reader 失败：记下来供中断判定
+                try {
+                  const t = currentTurn(startTime);
+                  if (t) t.streamError = String((streamErr && (streamErr.message || streamErr.name)) || 'stream-error');
+                } catch {}
+                try { finish(); } catch {}
+              });
             } else {
               // 无流式 body：整段文本一次性读取，明确非流式
               clone.text().then((t) => { ttft = Date.now() - startTime; parseAndProcess(t, ttft, 0, false); }).catch(()=>{});
@@ -325,7 +469,13 @@ function installFetchCapture() {
           }
           return res;
         }).catch((e: any) => {
-          try { patchRequestLog({ error: String((e && (e.message || e)) || '请求失败') }); } catch {}
+          const message = String((e && (e.message || e)) || '请求失败');
+          try { patchRequestLog({ error: message }); } catch {}
+          // 请求根本发不出去 / 响应未到就断开：同样算上游中断线索
+          try {
+            const t = currentTurn(startTime);
+            if (t) t.streamError = message;
+          } catch {}
           throw e;
         });
       }
@@ -340,6 +490,21 @@ function installFetchCapture() {
 let interceptionInstalled = false;
 let rawFetchRef: any = null;
 let messageReceivedHandler: any = null;
+
+/**
+ * 用户点「停止」：只置一个时间戳，先不结算。
+ * 留 STOP_SETTLE_DELAY_MS 给 GENERATION_ENDED 先走正常路径；
+ * 若那时仍没落库（上游没回 usage），再按中断补记一次。
+ */
+function onGenerationStopped() {
+  pendingStopAt = Date.now();
+  try { log.debug('收到停止信号，等待结算'); } catch {}
+  if (pendingStopTimer) { try { clearTimeout(pendingStopTimer); } catch {} }
+  pendingStopTimer = setTimeout(() => {
+    pendingStopTimer = null;
+    try { void settleTurnWithoutUsage('stop'); } catch {}
+  }, STOP_SETTLE_DELAY_MS);
+}
 
 export function installInterception() {
   try {
@@ -358,6 +523,10 @@ export function installInterception() {
       if (p?.fetch && !(p.fetch as any).__aus_patched) rawFetchRef = p.fetch.bind(p);
     } catch {}
     es.on(et.GENERATION_ENDED, onGenerationEnded);
+    // GENERATION_STOPPED 只在酒馆支持时挂，用于区分「用户主动中断」与「上游故障」
+    if (et.GENERATION_STOPPED) {
+      try { es.on(et.GENERATION_STOPPED, onGenerationStopped); } catch {}
+    }
     messageReceivedHandler = () => setTimeout(refresh, 400);
     es.on(et.MESSAGE_RECEIVED, messageReceivedHandler);
     (globalThis as any).ApiUsageStatInterceptor = (chat: any[], _ctxSize: number, _abort: any, _type: string) => {
@@ -376,7 +545,11 @@ export function uninstallInterception() {
     const et = ctx?.event_types;
     if (es && et && messageReceivedHandler) {
       try { es.off?.(et.GENERATION_ENDED, onGenerationEnded); } catch {}
+      try { es.off?.(et.GENERATION_STOPPED, onGenerationStopped); } catch {}
       try { es.off?.(et.MESSAGE_RECEIVED, messageReceivedHandler); } catch {}
+      if (pendingStopTimer) { try { clearTimeout(pendingStopTimer); } catch {} pendingStopTimer = null; }
+      pendingStopAt = 0;
+      lastTurn = null;
     }
     try {
       const p: any = (window as any).parent || window;
@@ -431,6 +604,11 @@ function onGenerationEnded(...args: any[]) {
     let usage = pickUsageFromExtra(extra);
     let model = extraModel;
     log.debug('pickUsageFromExtra 结果', { hasUsage: !!usage, isValid: usage ? isValidUsage(usage) : false });
+    // 全 0 / 空用量不算正常记录：交给估算路径判断能否按输出补记
+    if (usage && isValidUsage(usage) && isZeroUsage(usage)) {
+      log.debug('主路径 usage 全 0，转交估算判定');
+      usage = null;
+    }
     if (usage && isValidUsage(usage)) {
       log.debug('命中主路径 extra usage');
       // 主路径也尝试携带最近 fetch 的 TTFT/思维链/截断信息（fetch 已在后台流式测量）
@@ -459,7 +637,7 @@ function onGenerationEnded(...args: any[]) {
       log.debug('尝试 swipe_info 路径');
       for (const v of Object.values(tail.swipe_info as any)) {
         const cand = (v as any)?.extra?.api_usage || (v as any)?.extra?.usage;
-        if (isValidUsage(cand)) {
+        if (isValidUsage(cand) && !isZeroUsage(cand)) {
           usage = cand;
           model = (v as any)?.extra?.model || model;
           log.debug('swipe_info 命中', { model });
@@ -474,7 +652,7 @@ function onGenerationEnded(...args: any[]) {
     }
     const maybeUsage = args[0]?.usage || args[0]?.api_usage;
     log.debug('尝试 args 兜底', { hasMaybeUsage: !!maybeUsage, isValid: maybeUsage ? isValidUsage(maybeUsage) : false });
-    if (isValidUsage(maybeUsage)) {
+    if (isValidUsage(maybeUsage) && !isZeroUsage(maybeUsage)) {
       const m = args[0]?.model || model;
       log.debug('args 命中', { model: m });
       let ttft = 0, think = 0, streamed: boolean | null = null, fr: string | null = (maybeUsage as any)?.__finish_reason ?? null;
@@ -505,25 +683,13 @@ function onGenerationEnded(...args: any[]) {
         log.debug('fetch 有缓存但无效或超时', { has: !!lastFetchUsage, isValid: fu ? isValidUsage(fu) : false, age: Date.now() - lastFetchTime });
       }
     }
-    if (extra.token_count != null && !usage) {
-      log.debug('跳过无效 usage：仅有本地 token_count=' + extra.token_count + ' model=' + model);
-      try {
-        noteCaptureStage('event-drop', {
-          model,
-          requestId: recentRequestId(120000) || '',
-          reason: 'no-usage-with-local-token-count:' + String(extra.token_count),
-        });
-      } catch {}
-      return;
-    }
-    log.debug('未找到任何有效 usage，丢弃本次记录');
-    try {
-      noteCaptureStage('event-drop', {
-        model,
-        requestId: recentRequestId(120000) || '',
-        reason: 'no-usage',
-      });
-    } catch {}
+    // 走到这里说明上游确实没给可用的 usage：不再直接丢弃，
+    // 交给「估算 / 中断 / 静默」判定（有输出就补记，没输出才真的不记）。
+    log.debug('未找到任何有效 usage，进入估算/中断判定', { localTokenCount: extra.token_count ?? null });
+    void settleTurnWithoutUsage('generation-ended', {
+      model,
+      localTokenCount: typeof extra.token_count === 'number' ? extra.token_count : null,
+    });
   } catch (e) {
     log.error('onGenerationEnded 异常 ' + (e as any)?.message || e);
   }
@@ -533,7 +699,103 @@ function refresh() {
   try { (globalThis as any).ApiUsageStat?.refreshUI?.(); } catch {}
 }
 
-export function processUsage(usage: any, model: string, messages: any[], startTime: number, fullRequest: any = null, fullResponse: any = null, ttft = 0, thinkTime = 0, finishReason: string | null = null, connection: HistoryConnection | null = null, requestId: string | null = null, streamed: boolean | null = null) {
+/**
+ * 上游没给可用 usage（或 usage 全 0）时的收尾：判定这一轮该估算补记、标中断、还是静默丢弃。
+ * 依据只有两条硬证据——「实测到了输出」和「有没有中断线索」。
+ * 静默的判定（无输出）不写历史、不产生健康信号，避免把空轮次灌进统计。
+ */
+async function settleTurnWithoutUsage(source: 'generation-ended' | 'stop', opts: { model?: string; localTokenCount?: number | null } = {}): Promise<void> {
+  const turn = currentTurn();
+  if (turn?.settled) return;
+  const model = opts.model || turn?.model || lastFetchModel || 'deepseek-v4-flash';
+  const messages = turn?.messages || lastMessages || [];
+  const startedAt = turn?.startTime || lastStart || Date.now();
+  const requestId = turn?.requestId || recentRequestId(120000) || null;
+  // 响应原文以本轮现场为准，取不到时回退到最近一次 fetch 快照
+  const rawResponse = turn?.fullResponse || (lastFetchUsage as any)?.fullResponse || '';
+  const outputText = collectOutputText(rawResponse);
+  const hasOutput = !!outputText.trim() || !!turn && (turn.outputChars > 0 || turn.reasoningChars > 0);
+  const outcome = decideTurnOutcome({
+    hasUsage: false,
+    usageUsable: false,
+    hasOutput,
+    pendingStop: stopPending(),
+    streamError: turn?.streamError || null,
+  });
+  if (outcome.kind === 'drop') {
+    log.debug('本轮无输出，静默不记录', { source, reason: outcome.reason });
+    try {
+      noteCaptureStage('event-drop', { model, requestId: requestId || '', reason: outcome.reason });
+    } catch {}
+    return;
+  }
+  // 输入/输出分别估算：输入按 messages 原文，输出按实测正文+思维链
+  let promptEst: { tokens: number; chars: number; method: string } = { tokens: 0, chars: 0, method: 'char-heuristic' };
+  let outputEst: { tokens: number; chars: number; method: string } = { tokens: 0, chars: 0, method: 'char-heuristic' };
+  try {
+    promptEst = await estimatePromptTokens(messages);
+    outputEst = await estimateTextTokens(outputText, { preferTokens: opts.localTokenCount ?? null });
+  } catch {}
+  const promptTokens = Math.max(0, Math.round(promptEst.tokens || 0));
+  const completionTokens = Math.max(0, Math.round(outputEst.tokens || 0));
+  if (!promptTokens && !completionTokens) {
+    try {
+      noteCaptureStage('event-drop', { model, requestId: requestId || '', reason: 'estimate-empty' });
+    } catch {}
+    return;
+  }
+  const usage = {
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    total_tokens: promptTokens + completionTokens,
+    prompt_cache_hit_tokens: 0,
+    prompt_cache_miss_tokens: promptTokens,
+    __aus_estimated: true,
+    __finish_reason: outcome.interrupted ? 'interrupted' : 'estimated',
+  };
+  const meta: EntryMeta = {
+    usageSource: 'estimated',
+    interrupted: outcome.interrupted ?? null,
+    interruptReason: outcome.reason,
+    estimateMethod: promptEst.method === outputEst.method ? promptEst.method : promptEst.method + '+' + outputEst.method,
+    estimateVersion: ESTIMATE_VERSION,
+    promptChars: promptEst.chars || 0,
+    outputChars: outputEst.chars || 0,
+    estimateCacheUnknown: true,
+    costEstimated: true,
+  };
+  if (turn?.modelFallback) meta.modelFallback = true;
+  try {
+    repository.addEntry(
+      usage, model, messages, startedAt,
+      turn?.fullRequest ?? null, rawResponse || null,
+      turn?.ttft || 0, turn?.thinkTime || 0, null,
+      turn?.connection || recentConnection(), requestId, turn?.streamed ?? null, meta,
+    );
+  } catch (e) {
+    try {
+      noteCaptureStage('entry-error', { model, requestId: requestId || '', reason: String((e as any)?.message || e) });
+    } catch {}
+    return;
+  }
+  if (turn) turn.settled = true;
+  log.debug('本轮已按估算补记', { source, interrupted: outcome.interrupted || null, promptTokens, completionTokens, method: meta.estimateMethod });
+  try {
+    noteCaptureStage(outcome.kind === 'interrupted' ? 'turn-interrupted' : 'turn-estimated', {
+      model,
+      requestId: requestId || '',
+      streamed: turn?.streamed ?? null,
+      usageFound: false,
+      usageZero: true,
+      usage: usageNumbers(usage),
+      finishReason: null,
+      reason: outcome.reason + ':' + String(meta.estimateMethod || ''),
+    });
+  } catch {}
+  refresh();
+}
+
+export function processUsage(usage: any, model: string, messages: any[], startTime: number, fullRequest: any = null, fullResponse: any = null, ttft = 0, thinkTime = 0, finishReason: string | null = null, connection: HistoryConnection | null = null, requestId: string | null = null, streamed: boolean | null = null, meta: EntryMeta | null = null) {
   // 主路径 usage 多来自 ST，可能缺 reasoning_tokens；从最近 fetch 的估算值补上
   try {
     const fp: any = lastFetchUsage;
@@ -553,8 +815,19 @@ export function processUsage(usage: any, model: string, messages: any[], startTi
       if (streamed == null) streamed = st.streamed;
     }
   } catch {}
+  // 中断标记：用户点停止或流读出过错时，这一轮照样入库但要标明来源（不进速率/预测口径）
+  let resolvedMeta: EntryMeta | null = meta;
+  if (!resolvedMeta) {
+    try { resolvedMeta = turnMetaFor(startTime); } catch {}
+  }
   try {
-    repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason, connection, requestId, streamed);
+    const zeroUsage = isZeroUsage(usage);
+    const added = repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason, connection, requestId, streamed, resolvedMeta);
+    try {
+      const t = currentTurn(startTime);
+      // 全 0 用量不算已入库：留给生成结束事件走估算补记
+      if (t && (added || !zeroUsage)) t.settled = true;
+    } catch {}
   } catch (e) {
     try {
       noteCaptureStage('entry-error', {

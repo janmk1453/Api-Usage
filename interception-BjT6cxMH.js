@@ -1,6 +1,6 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { E as resolveRuntimeConnectionContext, T as initConnectionIdentity, t as repository } from "./repository-DDVCdg7p.js";
+import { E as resolveRuntimeConnectionContext, T as initConnectionIdentity, t as repository } from "./repository-CbOXJf4X.js";
 //#region src/services/include-usage.ts
 /**
 * 流式 usage 注入的纯逻辑：把 stream_options.include_usage 合并进用户/预设自定义的请求体参数。
@@ -144,7 +144,7 @@ function reasoningTextOf(record) {
 	return textOf(record.reasoning_content) || textOf(record.reasoning);
 }
 /** 取一帧增量里的正文文本（空字符串=尚无正文，例如仅带 content:null 的思维链帧） */
-function contentTextOf(record) {
+function contentTextOf$1(record) {
 	if (!record || typeof record !== "object") return "";
 	for (const carrier of frameCarriers(record)) {
 		if (!carrier || typeof carrier !== "object") continue;
@@ -175,12 +175,16 @@ function scanThinkChunk(clock, chunk, at) {
 			continue;
 		}
 		if (!record || typeof record !== "object") continue;
-		if (reasoningTextOf(record)) {
+		const reasoning = reasoningTextOf(record);
+		if (reasoning) {
 			if (clock.startAt == null) clock.startAt = at;
 			clock.lastReasoningAt = at;
+			clock.reasoningChars = (clock.reasoningChars || 0) + reasoning.length;
 		}
-		if (contentTextOf(record)) {
+		const content = contentTextOf$1(record);
+		if (content) {
 			clock.contentFrames += 1;
+			clock.contentChars = (clock.contentChars || 0) + content.length;
 			if (clock.startAt != null && clock.endAt == null) clock.endAt = at;
 		}
 	}
@@ -356,6 +360,7 @@ function clearRequestLog() {
 	} catch {}
 }
 /** 摘要：状态码 + 耗时一行文案，供页面顶部展示 */
+/** 摘要：状态码 + 耗时一行文案，供页面顶部展示 */
 function summarizeRequestLog(record) {
 	if (!record) return "暂无记录";
 	const r = record.response;
@@ -364,6 +369,70 @@ function summarizeRequestLog(record) {
 	if (r.durationMs != null) parts.push(Math.round(r.durationMs) + "ms");
 	else if (r.firstByteMs != null) parts.push("首字 " + Math.round(r.firstByteMs) + "ms");
 	return parts.join(" · ");
+}
+var RECENT_TURNS_KEY = "aus_recent_turns_v1";
+function contentTextOf(content) {
+	if (typeof content === "string") return content;
+	if (Array.isArray(content)) {
+		const parts = [];
+		for (const item of content) if (typeof item === "string") parts.push(item);
+		else if (item && typeof item.text === "string") parts.push(String(item.text));
+		return parts.join("\n");
+	}
+	return "";
+}
+/**
+* 请求发出时记一份「最近几轮在聊什么」：取 messages 尾部 6 条 user/assistant。
+* 只存角色 + 前 400 字 + 字符数，整体不超过 8KB，避免撑爆 localStorage。
+*/
+function noteRecentTurns(messages, at = Date.now()) {
+	try {
+		if (!Array.isArray(messages)) return;
+		const rows = [];
+		for (let i = messages.length - 1; i >= 0 && rows.length < 6; i -= 1) {
+			const msg = messages[i];
+			const role = String(msg?.role || "");
+			if (role !== "user" && role !== "assistant") continue;
+			const full = contentTextOf(msg?.content);
+			if (!full) continue;
+			rows.unshift({
+				at,
+				role,
+				text: full.length <= 400 ? full : full.slice(0, 400),
+				chars: full.length
+			});
+		}
+		if (!rows.length) return;
+		let payload = JSON.stringify(rows);
+		while (payload.length > 8e3 && rows.length > 1) {
+			rows.shift();
+			payload = JSON.stringify(rows);
+		}
+		globalThis.localStorage?.setItem(RECENT_TURNS_KEY, payload);
+	} catch {}
+}
+function readRecentTurns() {
+	try {
+		const text = globalThis.localStorage?.getItem(RECENT_TURNS_KEY);
+		if (!text) return [];
+		const parsed = JSON.parse(text);
+		if (!Array.isArray(parsed)) return [];
+		const out = [];
+		for (const item of parsed) {
+			if (!item || typeof item !== "object") continue;
+			const role = String(item.role || "");
+			if (!role) continue;
+			out.push({
+				at: Number(item.at) || 0,
+				role,
+				text: String(item.text || ""),
+				chars: Number(item.chars) || 0
+			});
+		}
+		return out;
+	} catch {
+		return [];
+	}
 }
 var USAGE_KEYS = [
 	"prompt_tokens",
@@ -462,6 +531,148 @@ function captureDigest(limit = 24) {
 	});
 }
 //#endregion
+//#region src/services/turn-outcome.ts
+/** 本次生成结果 → 处置决定；调用方只按 kind 分派，不再自己拼条件 */
+function decideTurnOutcome(signals) {
+	const hasUsage = signals.hasUsage === true;
+	const usable = signals.usageUsable === true;
+	const hasOutput = signals.hasOutput === true;
+	const pendingStop = signals.pendingStop === true;
+	const streamError = signals.streamError ? String(signals.streamError) : null;
+	if (usable) {
+		const interrupted = pendingStop ? "user" : streamError ? "upstream" : null;
+		return {
+			kind: "record",
+			interrupted,
+			reason: interrupted ? "usage-" + interrupted + "-interrupted" : "usage"
+		};
+	}
+	if (!hasOutput) return {
+		kind: "drop",
+		interrupted: null,
+		reason: hasUsage ? "usage-all-zero-no-output" : "no-usage-no-output"
+	};
+	if (pendingStop) return {
+		kind: "interrupted",
+		interrupted: "user",
+		reason: "no-usage-user-stop"
+	};
+	if (streamError) return {
+		kind: "interrupted",
+		interrupted: "upstream",
+		reason: "no-usage-stream-error"
+	};
+	return {
+		kind: "estimate",
+		interrupted: null,
+		reason: hasUsage ? "usage-all-zero-with-output" : "no-usage-with-output"
+	};
+}
+//#endregion
+//#region src/services/token-estimate.ts
+/** CJK 与全角标点：这些字符的 token 密度明显高于拉丁字母 */
+var CJK_RE = /[\u3000-\u303f\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef\uac00-\ud7af]/g;
+function charStats(text) {
+	const raw = typeof text === "string" ? text : "";
+	const chars = raw.length;
+	if (!chars) return {
+		chars: 0,
+		cjkChars: 0
+	};
+	const matched = raw.match(CJK_RE);
+	return {
+		chars,
+		cjkChars: matched ? matched.length : 0
+	};
+}
+/** 字符 → token 的兜底口径：CJK 0.6/字，其余 3.5 字符/token */
+function tokensFromChars(stats) {
+	const chars = Math.max(0, Math.floor(stats.chars || 0));
+	const cjk = Math.min(chars, Math.max(0, Math.floor(stats.cjkChars || 0)));
+	const ascii = Math.max(0, chars - cjk);
+	const tokens = Math.ceil(cjk * .6 + ascii / 3.5);
+	return Math.max(0, tokens);
+}
+function contentToText(value) {
+	if (typeof value === "string") return value;
+	if (Array.isArray(value)) {
+		let out = "";
+		for (const part of value) {
+			if (typeof part === "string") {
+				out += part;
+				continue;
+			}
+			if (part && typeof part === "object") {
+				const text = part.text;
+				if (typeof text === "string") out += text;
+			}
+		}
+		return out;
+	}
+	if (value && typeof value === "object" && typeof value.text === "string") return String(value.text);
+	return "";
+}
+/** 把一轮请求的 messages 拍平成纯文本（只用于计数，不上传、不落盘） */
+function messagesText(messages) {
+	if (!Array.isArray(messages)) return "";
+	let out = "";
+	for (const message of messages) {
+		if (!message || typeof message !== "object") continue;
+		const role = typeof message.role === "string" ? message.role : "";
+		const text = contentToText(message.content);
+		if (role) out += role + ": ";
+		out += text + "\n";
+	}
+	return out;
+}
+/** 酒馆 tokenizer：拿不到（旧版本、未就绪、报错）一律返回 null，绝不抛出 */
+async function tavernTokenCount(text) {
+	if (!text) return 0;
+	try {
+		const ctx = globalThis.SillyTavern?.getContext?.();
+		const counter = ctx?.getTokenCountAsync || globalThis.getTokenCountAsync;
+		if (typeof counter !== "function") return null;
+		const value = await counter.call(ctx || globalThis, text);
+		const num = Number(value);
+		return Number.isFinite(num) && num >= 0 ? Math.round(num) : null;
+	} catch {
+		return null;
+	}
+}
+/**
+* 估算一段文本的 token 数。
+* preferTokens 适合「酒馆已经算好了」的场景（extra.token_count），优先级最高。
+*/
+async function estimateTextTokens(text, options = {}) {
+	const stats = charStats(text);
+	const prefer = Number(options.preferTokens);
+	if (Number.isFinite(prefer) && prefer > 0) return {
+		tokens: Math.round(prefer),
+		method: "tavern-token-count",
+		chars: stats.chars,
+		cjkChars: stats.cjkChars
+	};
+	if (stats.chars > 0) {
+		const counted = await tavernTokenCount(typeof text === "string" ? text : "");
+		if (counted != null && counted > 0) return {
+			tokens: counted,
+			method: "tavern-tokenizer",
+			chars: stats.chars,
+			cjkChars: stats.cjkChars
+		};
+	}
+	return {
+		tokens: tokensFromChars(stats),
+		method: "char-heuristic",
+		chars: stats.chars,
+		cjkChars: stats.cjkChars
+	};
+}
+/** 输入侧估算：按整轮 messages 拍平后的文本计数 */
+async function estimatePromptTokens(messages) {
+	return estimateTextTokens(messagesText(messages));
+}
+//#endregion
 //#region src/services/interception.ts
 var interception_exports = /* @__PURE__ */ __exportAll({
 	installInterception: () => installInterception,
@@ -483,6 +694,68 @@ var lastRequestIdTime = 0;
 /** 流式测量到的时序快照（TTFT / 思维链耗时 / 真假流式），与 usage 解耦：
 *  上游不回 usage 时 finish() 也会落一份，避免主路径明明测到了却拿不到。 */
 var lastStreamTiming = null;
+var lastTurn = null;
+/** 用户点击「停止」的时刻；只在窗口期内有效，过期自动忽略 */
+var pendingStopAt = 0;
+var pendingStopTimer = null;
+/** 停止信号与生成结束事件之间的等待窗口 */
+var STOP_WINDOW_MS = 3e3;
+/** 收到停止信号后等这么久再兜底结算（等 GENERATION_ENDED 先到） */
+var STOP_SETTLE_DELAY_MS = 1500;
+function currentTurn(startTime) {
+	const turn = lastTurn;
+	if (!turn) return null;
+	if (typeof startTime === "number" && startTime > 0 && turn.startTime !== startTime) return null;
+	return turn;
+}
+function stopPending() {
+	return pendingStopAt > 0 && Date.now() - pendingStopAt < STOP_WINDOW_MS;
+}
+/**
+* 正常路径（上游给了 usage）的中断标记：
+* 用户点了停止 → user；流读出过错 → upstream；都没有则不写 interrupted。
+* 估算路径的 meta 由 settleTurnWithoutUsage 自己构造。
+*/
+function turnMetaFor(startTime) {
+	const turn = currentTurn(startTime);
+	const interrupted = stopPending() ? "user" : turn?.streamError ? "upstream" : null;
+	const modelFallback = turn?.modelFallback === true;
+	if (!interrupted && !modelFallback) return null;
+	const meta = { usageSource: "upstream" };
+	meta.interrupted = interrupted;
+	if (interrupted) meta.interruptReason = interrupted === "user" ? "user-stop" : String(turn?.streamError || "stream-error").slice(0, 200);
+	if (modelFallback) meta.modelFallback = true;
+	return meta;
+}
+/** 从响应原文里抽出助手输出文本（正文 + 思维链），只用于本地估算 token */
+function collectOutputText(raw) {
+	const text = String(raw || "");
+	if (!text.trim()) return "";
+	let out = "";
+	const push = (record) => {
+		const think = reasoningTextOf(record);
+		if (think) out += think;
+		const body = contentTextOf$1(record);
+		if (body) out += body;
+	};
+	const trimmed = text.trim();
+	if (trimmed.startsWith("{")) {
+		try {
+			push(JSON.parse(trimmed));
+		} catch {}
+		return out.slice(0, 2e5);
+	}
+	for (const rawLine of trimmed.split("\n")) {
+		const line = rawLine.trim();
+		if (!line.startsWith("data:")) continue;
+		const payload = line.slice(5).trim();
+		if (!payload || payload === "[DONE]") continue;
+		try {
+			push(JSON.parse(payload));
+		} catch {}
+	}
+	return out.slice(0, 2e5);
+}
 function recentStreamTiming(maxAge = 6e4) {
 	try {
 		const st = lastStreamTiming;
@@ -555,7 +828,7 @@ function estimateThinkTokens(text, usage) {
 	const collect = (record) => {
 		const think = reasoningTextOf(record);
 		if (think) thinkChars += think.length;
-		const body = contentTextOf(record);
+		const body = contentTextOf$1(record);
 		if (body) contentChars += body.length;
 	};
 	const trimmed = String(text || "").trim();
@@ -607,8 +880,32 @@ function installFetchCapture() {
 				} catch {}
 				const startTime = Date.now();
 				try {
+					if (reqBody?.messages?.length) noteRecentTurns(reqBody.messages, startTime);
+				} catch {}
+				try {
 					lastMessages = msgs;
 					lastStart = startTime;
+				} catch {}
+				try {
+					const requestModel = reqBody?.model;
+					lastTurn = {
+						startTime,
+						requestId,
+						model: typeof requestModel === "string" && requestModel ? requestModel : null,
+						modelFallback: !(typeof requestModel === "string" && requestModel),
+						status: 0,
+						streamError: null,
+						outputChars: 0,
+						reasoningChars: 0,
+						fullResponse: null,
+						fullRequest: fullReq,
+						messages: msgs,
+						connection: requestConnection,
+						ttft: 0,
+						thinkTime: 0,
+						streamed: null,
+						settled: false
+					};
 				} catch {}
 				const injected = injectIncludeUsage(reqBody, reqBody?.chat_completion_source ?? null);
 				const performFetch = (init) => rawFetch.apply(p, init);
@@ -653,6 +950,10 @@ function installFetchCapture() {
 							headers: res.headers,
 							firstByteMs: Date.now() - startTime
 						});
+					} catch {}
+					try {
+						const t = currentTurn(startTime);
+						if (t) t.status = res.status;
 					} catch {}
 					try {
 						const clone = res.clone();
@@ -705,6 +1006,14 @@ function installFetchCapture() {
 									finishReason: finishReason ?? null,
 									usage: data?.usage || null
 								});
+							} catch {}
+							try {
+								const t = currentTurn(startTime);
+								const resModel = data?.model;
+								if (t && typeof resModel === "string" && resModel) {
+									t.model = resModel;
+									t.modelFallback = false;
+								}
 							} catch {}
 							try {
 								const parsedUsage = data?.usage || null;
@@ -772,6 +1081,17 @@ function installFetchCapture() {
 									const endedAt = nowMs() - t0;
 									const thinkTime = resolveThinkTime(thinkClock, endedAt);
 									const streamed = judgeStreamed();
+									try {
+										const t = currentTurn(startTime);
+										if (t) {
+											t.ttft = ttft || 0;
+											t.thinkTime = thinkTime || 0;
+											t.streamed = streamed;
+											t.outputChars = thinkClock.contentChars || 0;
+											t.reasoningChars = thinkClock.reasoningChars || 0;
+											t.fullResponse = fullText || null;
+										}
+									} catch {}
 									if (thinkTime > 0) log.debug("思维链耗时已测量 " + thinkTime + "ms");
 									try {
 										lastStreamTiming = {
@@ -820,7 +1140,11 @@ function installFetchCapture() {
 								finish();
 							};
 							const streamBody = clone.body;
-							if (streamBody && typeof streamBody.getReader === "function") readStream(streamBody).catch(() => {
+							if (streamBody && typeof streamBody.getReader === "function") readStream(streamBody).catch((streamErr) => {
+								try {
+									const t = currentTurn(startTime);
+									if (t) t.streamError = String(streamErr && (streamErr.message || streamErr.name) || "stream-error");
+								} catch {}
 								try {
 									finish();
 								} catch {}
@@ -842,8 +1166,13 @@ function installFetchCapture() {
 					}
 					return res;
 				}).catch((e) => {
+					const message = String(e && (e.message || e) || "请求失败");
 					try {
-						patchRequestLog({ error: String(e && (e.message || e) || "请求失败") });
+						patchRequestLog({ error: message });
+					} catch {}
+					try {
+						const t = currentTurn(startTime);
+						if (t) t.streamError = message;
 					} catch {}
 					throw e;
 				});
@@ -858,6 +1187,26 @@ function installFetchCapture() {
 var interceptionInstalled = false;
 var rawFetchRef = null;
 var messageReceivedHandler = null;
+/**
+* 用户点「停止」：只置一个时间戳，先不结算。
+* 留 STOP_SETTLE_DELAY_MS 给 GENERATION_ENDED 先走正常路径；
+* 若那时仍没落库（上游没回 usage），再按中断补记一次。
+*/
+function onGenerationStopped() {
+	pendingStopAt = Date.now();
+	try {
+		log.debug("收到停止信号，等待结算");
+	} catch {}
+	if (pendingStopTimer) try {
+		clearTimeout(pendingStopTimer);
+	} catch {}
+	pendingStopTimer = setTimeout(() => {
+		pendingStopTimer = null;
+		try {
+			settleTurnWithoutUsage("stop");
+		} catch {}
+	}, STOP_SETTLE_DELAY_MS);
+}
 function installInterception() {
 	try {
 		try {
@@ -873,6 +1222,9 @@ function installInterception() {
 			if (p?.fetch && !p.fetch.__aus_patched) rawFetchRef = p.fetch.bind(p);
 		} catch {}
 		es.on(et.GENERATION_ENDED, onGenerationEnded);
+		if (et.GENERATION_STOPPED) try {
+			es.on(et.GENERATION_STOPPED, onGenerationStopped);
+		} catch {}
 		messageReceivedHandler = () => setTimeout(refresh, 400);
 		es.on(et.MESSAGE_RECEIVED, messageReceivedHandler);
 		globalThis.ApiUsageStatInterceptor = (chat, _ctxSize, _abort, _type) => {
@@ -899,8 +1251,19 @@ function uninstallInterception() {
 				es.off?.(et.GENERATION_ENDED, onGenerationEnded);
 			} catch {}
 			try {
+				es.off?.(et.GENERATION_STOPPED, onGenerationStopped);
+			} catch {}
+			try {
 				es.off?.(et.MESSAGE_RECEIVED, messageReceivedHandler);
 			} catch {}
+			if (pendingStopTimer) {
+				try {
+					clearTimeout(pendingStopTimer);
+				} catch {}
+				pendingStopTimer = null;
+			}
+			pendingStopAt = 0;
+			lastTurn = null;
 		}
 		try {
 			const p = window.parent || window;
@@ -945,6 +1308,10 @@ function onGenerationEnded(...args) {
 			hasUsage: !!usage,
 			isValid: usage ? isValidUsage(usage) : false
 		});
+		if (usage && isValidUsage(usage) && isZeroUsage(usage)) {
+			log.debug("主路径 usage 全 0，转交估算判定");
+			usage = null;
+		}
 		if (usage && isValidUsage(usage)) {
 			log.debug("命中主路径 extra usage");
 			let ttft = 0, think = 0, streamed = null, fr = usage?.__finish_reason ?? usage?.finish_reason ?? null;
@@ -969,7 +1336,7 @@ function onGenerationEnded(...args) {
 			log.debug("尝试 swipe_info 路径");
 			for (const v of Object.values(tail.swipe_info)) {
 				const cand = v?.extra?.api_usage || v?.extra?.usage;
-				if (isValidUsage(cand)) {
+				if (isValidUsage(cand) && !isZeroUsage(cand)) {
 					usage = cand;
 					model = v?.extra?.model || model;
 					log.debug("swipe_info 命中", { model });
@@ -995,7 +1362,7 @@ function onGenerationEnded(...args) {
 			hasMaybeUsage: !!maybeUsage,
 			isValid: maybeUsage ? isValidUsage(maybeUsage) : false
 		});
-		if (isValidUsage(maybeUsage)) {
+		if (isValidUsage(maybeUsage) && !isZeroUsage(maybeUsage)) {
 			const m = args[0]?.model || model;
 			log.debug("args 命中", { model: m });
 			let ttft = 0, think = 0, streamed = null, fr = maybeUsage?.__finish_reason ?? null;
@@ -1038,25 +1405,11 @@ function onGenerationEnded(...args) {
 				});
 			}
 		}
-		if (extra.token_count != null && !usage) {
-			log.debug("跳过无效 usage：仅有本地 token_count=" + extra.token_count + " model=" + model);
-			try {
-				noteCaptureStage("event-drop", {
-					model,
-					requestId: recentRequestId(12e4) || "",
-					reason: "no-usage-with-local-token-count:" + String(extra.token_count)
-				});
-			} catch {}
-			return;
-		}
-		log.debug("未找到任何有效 usage，丢弃本次记录");
-		try {
-			noteCaptureStage("event-drop", {
-				model,
-				requestId: recentRequestId(12e4) || "",
-				reason: "no-usage"
-			});
-		} catch {}
+		log.debug("未找到任何有效 usage，进入估算/中断判定", { localTokenCount: extra.token_count ?? null });
+		settleTurnWithoutUsage("generation-ended", {
+			model,
+			localTokenCount: typeof extra.token_count === "number" ? extra.token_count : null
+		});
 	} catch (e) {
 		log.error("onGenerationEnded 异常 " + e?.message || e);
 	}
@@ -1066,7 +1419,123 @@ function refresh() {
 		globalThis.ApiUsageStat?.refreshUI?.();
 	} catch {}
 }
-function processUsage(usage, model, messages, startTime, fullRequest = null, fullResponse = null, ttft = 0, thinkTime = 0, finishReason = null, connection = null, requestId = null, streamed = null) {
+/**
+* 上游没给可用 usage（或 usage 全 0）时的收尾：判定这一轮该估算补记、标中断、还是静默丢弃。
+* 依据只有两条硬证据——「实测到了输出」和「有没有中断线索」。
+* 静默的判定（无输出）不写历史、不产生健康信号，避免把空轮次灌进统计。
+*/
+async function settleTurnWithoutUsage(source, opts = {}) {
+	const turn = currentTurn();
+	if (turn?.settled) return;
+	const model = opts.model || turn?.model || lastFetchModel || "deepseek-v4-flash";
+	const messages = turn?.messages || lastMessages || [];
+	const startedAt = turn?.startTime || lastStart || Date.now();
+	const requestId = turn?.requestId || recentRequestId(12e4) || null;
+	const rawResponse = turn?.fullResponse || lastFetchUsage?.fullResponse || "";
+	const outputText = collectOutputText(rawResponse);
+	const outcome = decideTurnOutcome({
+		hasUsage: false,
+		usageUsable: false,
+		hasOutput: !!outputText.trim() || !!turn && (turn.outputChars > 0 || turn.reasoningChars > 0),
+		pendingStop: stopPending(),
+		streamError: turn?.streamError || null
+	});
+	if (outcome.kind === "drop") {
+		log.debug("本轮无输出，静默不记录", {
+			source,
+			reason: outcome.reason
+		});
+		try {
+			noteCaptureStage("event-drop", {
+				model,
+				requestId: requestId || "",
+				reason: outcome.reason
+			});
+		} catch {}
+		return;
+	}
+	let promptEst = {
+		tokens: 0,
+		chars: 0,
+		method: "char-heuristic"
+	};
+	let outputEst = {
+		tokens: 0,
+		chars: 0,
+		method: "char-heuristic"
+	};
+	try {
+		promptEst = await estimatePromptTokens(messages);
+		outputEst = await estimateTextTokens(outputText, { preferTokens: opts.localTokenCount ?? null });
+	} catch {}
+	const promptTokens = Math.max(0, Math.round(promptEst.tokens || 0));
+	const completionTokens = Math.max(0, Math.round(outputEst.tokens || 0));
+	if (!promptTokens && !completionTokens) {
+		try {
+			noteCaptureStage("event-drop", {
+				model,
+				requestId: requestId || "",
+				reason: "estimate-empty"
+			});
+		} catch {}
+		return;
+	}
+	const usage = {
+		prompt_tokens: promptTokens,
+		completion_tokens: completionTokens,
+		total_tokens: promptTokens + completionTokens,
+		prompt_cache_hit_tokens: 0,
+		prompt_cache_miss_tokens: promptTokens,
+		__aus_estimated: true,
+		__finish_reason: outcome.interrupted ? "interrupted" : "estimated"
+	};
+	const meta = {
+		usageSource: "estimated",
+		interrupted: outcome.interrupted ?? null,
+		interruptReason: outcome.reason,
+		estimateMethod: promptEst.method === outputEst.method ? promptEst.method : promptEst.method + "+" + outputEst.method,
+		estimateVersion: 1,
+		promptChars: promptEst.chars || 0,
+		outputChars: outputEst.chars || 0,
+		estimateCacheUnknown: true,
+		costEstimated: true
+	};
+	if (turn?.modelFallback) meta.modelFallback = true;
+	try {
+		repository.addEntry(usage, model, messages, startedAt, turn?.fullRequest ?? null, rawResponse || null, turn?.ttft || 0, turn?.thinkTime || 0, null, turn?.connection || recentConnection(), requestId, turn?.streamed ?? null, meta);
+	} catch (e) {
+		try {
+			noteCaptureStage("entry-error", {
+				model,
+				requestId: requestId || "",
+				reason: String(e?.message || e)
+			});
+		} catch {}
+		return;
+	}
+	if (turn) turn.settled = true;
+	log.debug("本轮已按估算补记", {
+		source,
+		interrupted: outcome.interrupted || null,
+		promptTokens,
+		completionTokens,
+		method: meta.estimateMethod
+	});
+	try {
+		noteCaptureStage(outcome.kind === "interrupted" ? "turn-interrupted" : "turn-estimated", {
+			model,
+			requestId: requestId || "",
+			streamed: turn?.streamed ?? null,
+			usageFound: false,
+			usageZero: true,
+			usage: usageNumbers(usage),
+			finishReason: null,
+			reason: outcome.reason + ":" + String(meta.estimateMethod || "")
+		});
+	} catch {}
+	refresh();
+}
+function processUsage(usage, model, messages, startTime, fullRequest = null, fullResponse = null, ttft = 0, thinkTime = 0, finishReason = null, connection = null, requestId = null, streamed = null, meta = null) {
 	try {
 		const fp = lastFetchUsage;
 		if (fp?.usage && Date.now() - lastFetchTime < 5e3) {
@@ -1083,8 +1552,17 @@ function processUsage(usage, model, messages, startTime, fullRequest = null, ful
 			if (streamed == null) streamed = st.streamed;
 		}
 	} catch {}
+	let resolvedMeta = meta;
+	if (!resolvedMeta) try {
+		resolvedMeta = turnMetaFor(startTime);
+	} catch {}
 	try {
-		repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason, connection, requestId, streamed);
+		const zeroUsage = isZeroUsage(usage);
+		const added = repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason, connection, requestId, streamed, resolvedMeta);
+		try {
+			const t = currentTurn(startTime);
+			if (t && (added || !zeroUsage)) t.settled = true;
+		} catch {}
 	} catch (e) {
 		try {
 			noteCaptureStage("entry-error", {
@@ -1113,4 +1591,4 @@ function recalcAllCosts() {
 	return repository.recalcAll();
 }
 //#endregion
-export { listCaptureStages as a, readRequestLog as c, captureDigest as i, summarizeRequestLog as l, interception_exports as n, LOG_VALUE_LIMIT as o, recalcAllCosts as r, clearRequestLog as s, installInterception as t };
+export { listCaptureStages as a, readRecentTurns as c, captureDigest as i, readRequestLog as l, interception_exports as n, LOG_VALUE_LIMIT as o, recalcAllCosts as r, clearRequestLog as s, installInterception as t, summarizeRequestLog as u };

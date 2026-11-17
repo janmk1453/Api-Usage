@@ -215,12 +215,108 @@ export function clearRequestLog(): void {
 }
 
 /** 摘要：状态码 + 耗时一行文案，供页面顶部展示 */
+/** 摘要：状态码 + 耗时一行文案，供页面顶部展示 */
 export function summarizeRequestLog(record: RequestLogRecord | null): string {
-  if (!record) return '暂无记录';
+  if (!record) return "暂无记录";
   const r = record.response;
-  if (!r || !r.status) return '请求已发出，等待响应';
+  if (!r || !r.status) return "请求已发出，等待响应";
   const parts: string[] = [String(r.status)];
-  if (r.durationMs != null) parts.push(Math.round(r.durationMs) + 'ms');
-  else if (r.firstByteMs != null) parts.push('首字 ' + Math.round(r.firstByteMs) + 'ms');
-  return parts.join(' · ');
+  if (r.durationMs != null) parts.push(Math.round(r.durationMs) + "ms");
+  else if (r.firstByteMs != null) parts.push("首字 " + Math.round(r.firstByteMs) + "ms");
+  return parts.join(" · ");
+}
+
+/* ------------------------------------------------------------------ */
+/* 最近几轮对话摘要：只给反馈排查用，不进历史、不导出 */
+/* ------------------------------------------------------------------ */
+
+export const RECENT_TURNS_KEY = "aus_recent_turns_v1";
+/** 最多留 6 条消息（约 3 轮） */
+export const RECENT_TURNS_MAX = 6;
+/** 单条正文最多留 400 字 */
+export const RECENT_TURN_TEXT_LIMIT = 400;
+/** 整体落盘上限（字符） */
+export const RECENT_TURNS_BYTES_LIMIT = 8_000;
+
+export interface RecentTurnRecord {
+  /** 这轮请求的时间 */
+  at: number;
+  role: string;
+  /** 正文前 400 字（已截断） */
+  text: string;
+  /** 完整字符数（截断前） */
+  chars: number;
+}
+
+function contentTextOf(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    const parts: string[] = [];
+    for (const item of content) {
+      if (typeof item === "string") parts.push(item);
+      else if (item && typeof (item as any).text === "string") parts.push(String((item as any).text));
+    }
+    return parts.join("\n");
+  }
+  return "";
+}
+
+/**
+ * 请求发出时记一份「最近几轮在聊什么」：取 messages 尾部 6 条 user/assistant。
+ * 只存角色 + 前 400 字 + 字符数，整体不超过 8KB，避免撑爆 localStorage。
+ */
+export function noteRecentTurns(messages: unknown, at = Date.now()): void {
+  try {
+    if (!Array.isArray(messages)) return;
+    const rows: RecentTurnRecord[] = [];
+    for (let i = messages.length - 1; i >= 0 && rows.length < RECENT_TURNS_MAX; i -= 1) {
+      const msg: any = messages[i];
+      const role = String(msg?.role || "");
+      if (role !== "user" && role !== "assistant") continue;
+      const full = contentTextOf(msg?.content);
+      if (!full) continue;
+      rows.unshift({
+        at,
+        role,
+        text: full.length <= RECENT_TURN_TEXT_LIMIT ? full : full.slice(0, RECENT_TURN_TEXT_LIMIT),
+        chars: full.length,
+      });
+    }
+    if (!rows.length) return;
+    // 超上限时从头丢，保留最近的
+    let payload = JSON.stringify(rows);
+    while (payload.length > RECENT_TURNS_BYTES_LIMIT && rows.length > 1) {
+      rows.shift();
+      payload = JSON.stringify(rows);
+    }
+    globalThis.localStorage?.setItem(RECENT_TURNS_KEY, payload);
+  } catch {}
+}
+
+export function readRecentTurns(): RecentTurnRecord[] {
+  try {
+    const text = globalThis.localStorage?.getItem(RECENT_TURNS_KEY);
+    if (!text) return [];
+    const parsed = JSON.parse(text);
+    if (!Array.isArray(parsed)) return [];
+    const out: RecentTurnRecord[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const role = String((item as any).role || "");
+      if (!role) continue;
+      out.push({
+        at: Number((item as any).at) || 0,
+        role,
+        text: String((item as any).text || ""),
+        chars: Number((item as any).chars) || 0,
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+export function clearRecentTurns(): void {
+  try { globalThis.localStorage?.removeItem(RECENT_TURNS_KEY); } catch {}
 }

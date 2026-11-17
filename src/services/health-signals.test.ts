@@ -61,25 +61,41 @@ describe('历史记录页健康信号', () => {
     expect(signals).toHaveLength(0);
   });
 
-  it('没取到用量被事件层丢弃 → 「没有取到用量」', () => {
+  it('偶发一次没取到用量不打扰，连续多次才提示「没有取到用量」', () => {
     noteCaptureStage('event-drop', { model: 'deepseek-flash', reason: 'no-usage', at: 1794719000000 });
+    expect(scanCaptureHealth()).toHaveLength(0);
+
+    noteCaptureStage('event-drop', { model: 'deepseek-flash', reason: 'no-usage', at: 1794719002000 });
     const signals = scanCaptureHealth();
+    expect(signals).toHaveLength(1);
     expect(signals[0].kind).toBe('missing-usage');
+    expect(signals[0].detail).toContain('连续 2 轮');
+    expect(signals[0].signature).toBe('no-usage');
   });
 
-  it('入库失败与控制台 error 都算「功能报错」', () => {
+  it('入库失败与控制台里的本扩展报错都算「功能报错」，网络类控制台错误不算', () => {
     noteCaptureStage('entry-error', { model: 'deepseek-flash', reason: 'boom', at: 1794719000000 });
-    noteConsole('error', ['读取失败'], 1794719005000);
+    noteConsole('error', ['ApiUsageStat addEntry failed'], 1794719005000);
+    noteConsole('error', ['Failed to fetch'], 1794719006000);
+    noteConsole('warn', ['ApiUsageStat 慢'], 1794719007000);
     const signals = scanCaptureHealth().concat(scanConsoleHealth());
     expect(signals.every((s) => s.kind === 'plugin-error')).toBe(true);
     expect(signals).toHaveLength(2);
+    expect(signals[0].signature).toBeTruthy();
+    expect(signals[1].signature).toBeTruthy();
   });
 
-  it('同类型且时间接近的信号只算一次', () => {
+  it('同一簇内的同类信号只算一次，换模型各算各的', () => {
     noteCaptureStage('event-drop', { model: 'a', at: 1794719000000 });
-    noteCaptureStage('event-drop', { model: 'b', at: 1794719000000 + HEALTH_DEDUPE_MS - 1000 });
+    noteCaptureStage('event-drop', { model: 'a', at: 1794719000000 + 1000 });
+    noteCaptureStage('event-drop', { model: 'a', at: 1794719000000 + HEALTH_DEDUPE_MS - 1000 });
     const report = buildHealthReport({ stages: undefined, history: [] });
     expect(report.counts['missing-usage']).toBe(1);
+
+    noteCaptureStage('event-drop', { model: 'b', at: 1794719000000 + HEALTH_DEDUPE_MS });
+    noteCaptureStage('event-drop', { model: 'b', at: 1794719000000 + HEALTH_DEDUPE_MS + 1000 });
+    const two = buildHealthReport({ stages: undefined, history: [] });
+    expect(two.counts['missing-usage']).toBe(2);
   });
 
   it('没有任何异常时不显示', () => {

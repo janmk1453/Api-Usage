@@ -29,6 +29,7 @@ import { initChatManageView, renderChatManageView } from './chat-manage';
 import { initTapView, renderTapView } from './tap-view';
 import { initLogView, renderLogView } from './log-view';
 import { renderHistoryHealthBar } from './history-health-bar';
+import { historyBadgeOf } from './history-badge';
 import { helpViewHTML } from './help-view';
 import { chartCardHTML } from './chart-picker';
 import { hideAllChartTooltips } from './chart-tooltip';
@@ -542,17 +543,33 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
     const hps = hp.toFixed(1), mps = mp.toFixed(1), ops = op.toFixed(1);
     const fmtMoney = (v:number,d=4)=>{ try{  return formatMoney(v||0,d);} catch{ return '¥'+(v||0).toFixed(d)+' CNY'; } };
     const c4 = fmtMoney(h.cost||0,4); const c6 = fmtMoney(h.cost||0,6); const in6 = fmtMoney(h.input_cost||0,6); const out6 = fmtMoney(h.output_cost||0,6);
-    // 记录来源徽标：Agent 模式 / 常规对话（旧记录无 origin 视为常规）
+    // 记录状态徽标：中断（黄/红）> 估算（黄）> Agent（绿）> 常规（灰）
     const isAgentRecord = String((h as any).origin || '') === 'agent';
     const agentTurnCount = Number((h as any).agentModelTurns) || 0;
     const agentStatusKey = String((h as any).agentStatus || '');
     const agentStatusLabels: Record<string, string> = { completed: '已完成', partial_success: '部分完成', cancelled: '已取消', failed: '失败' };
-    const originTitle = isAgentRecord
-      ? ['Agent 模式', agentTurnCount > 0 ? agentTurnCount + ' 个模型回合' : '', agentStatusLabels[agentStatusKey] || ''].filter(Boolean).join(' · ')
-      : '常规对话';
-    const originBadge = isAgentRecord
-      ? `<span class="aus-origin-badge" title="${esc(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:var(--ds-green-bg);color:var(--ds-green);">Agent</span>`
-      : `<span class="aus-origin-badge" title="${esc(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:var(--ds-card-inner);color:var(--ds-text-3);">常规</span>`;
+    const badge = historyBadgeOf(h as any);
+    const originTitle = badge.kind === 'interrupted-user'
+      ? '用户中断：已有输出，按实际输出记录'
+      : badge.kind === 'interrupted-upstream'
+        ? '上游中断：连接异常，已记录到中断前的输出'
+        : badge.kind === 'estimated'
+          ? '本地估算：上游未返回用量，输入与输出由本地估算得出'
+          : isAgentRecord
+            ? ['Agent 模式', agentTurnCount > 0 ? agentTurnCount + ' 个模型回合' : '', agentStatusLabels[agentStatusKey] || ''].filter(Boolean).join(' · ')
+            : '常规对话';
+    const isEstimated = badge.kind === 'estimated';
+    const estTag = isEstimated
+      ? '<span style="margin-left:4px;padding:0 4px;border-radius:4px;font-size:10px;font-weight:600;background:var(--ds-yellow-bg);color:var(--ds-yellow);">估算</span>'
+      : '';
+    const recordStateText = badge.kind === 'interrupted-user'
+      ? '用户中断（已记录输出）'
+      : badge.kind === 'interrupted-upstream'
+        ? '上游中断（已记录输出）'
+        : isEstimated
+          ? '本地估算（上游未返回用量）'
+          : '正常（上游用量）';
+    const originBadge = `<span class="aus-origin-badge" title="${esc(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:${badge.background};color:${badge.color};">${esc(badge.text)}</span>`;
     const recordDate = new Date(h.timestamp);
     const recordDateText = recordDate.toLocaleDateString('zh-CN');
     const recordTimeText = recordDate.toLocaleTimeString('zh-CN', { hour12: false });
@@ -592,7 +609,8 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
                 <section class="aus-dt-block">
                   <div class="aus-dt-head">基础信息</div>
                   <div class="aus-dt-grid">
-                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">模型</span><span class="aus-dt-val">${esc(h.model||'—')}</span></div>
+                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">模型</span><span class="aus-dt-val">${esc(h.model||'—')}${(h as any).modelFallback ? '<span style="margin-left:4px;color:var(--ds-text-3);font-size:var(--aus-fs-xs);">（请求未带模型名，兜底取值）</span>' : ''}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">记录状态</span><span class="aus-dt-val">${esc(recordStateText)}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">时段</span><span class="aus-dt-val">${h.priceType==='new-peak'||h.priceType==='wallet-peak'?'高峰':h.priceType==='new-offpeak'||h.priceType==='wallet-offpeak'?'非高峰':h.priceType==='unpriced'?'待定价':'旧价格'}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">计价来源</span><span class="aus-dt-val">${h.pricingSource==='wallet'?'钱包规则':h.pricingSource==='builtin'?'DeepSeek 内置':h.pricingSource==='unpriced'?'待定价':h.pricingSource==='legacy-match'?'旧数据同名价':h.pricingSource==='legacy'?'旧全局规则':'旧记录兜底'}</span></div>
                     <div class="aus-dt-item is-wide"><span class="aus-dt-label">钱包</span><span class="aus-dt-val">${esc(repository.getWallet(String(h.walletId||''))?.name || h.endpointLabel || '未归属钱包')}</span></div>
@@ -622,9 +640,9 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
                   </div>
                   <div class="aus-dt-grid">
                     <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-hit);"></span>缓存命中</span><span class="aus-dt-val">${(h.cache_hit_tokens||0).toLocaleString()}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-miss);"></span>缓存未命中</span><span class="aus-dt-val">${(h.cache_miss_tokens||0).toLocaleString()}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-output);"></span>输出 Token</span><span class="aus-dt-val">${(h.completion_tokens||0).toLocaleString()}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label">总 Token</span><span class="aus-dt-val is-strong">${(h.total_tokens||0).toLocaleString()}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-miss);"></span>缓存未命中</span><span class="aus-dt-val">${(h.cache_miss_tokens||0).toLocaleString()}${estTag}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-output);"></span>输出 Token</span><span class="aus-dt-val">${(h.completion_tokens||0).toLocaleString()}${estTag}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">总 Token</span><span class="aus-dt-val is-strong">${(h.total_tokens||0).toLocaleString()}${estTag}</span></div>
                     <div class="aus-dt-item is-wide"><span class="aus-dt-label">思维链 Token</span><span class="aus-dt-val">${h.thinkTokens||0}</span></div>
                   </div>
                 </section>
