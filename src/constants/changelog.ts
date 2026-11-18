@@ -37,6 +37,34 @@ export const CHANGELOG_ENTRY_LIMIT = 5;
 /** 更新日志（最新在前） */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'r3.2.3',
+    date: '2026-11-18',
+    sections: [
+      {
+        kind: 'feature',
+        items: [
+          '支持 Gemini 原生接口、Claude、Responses 接口的用量与思维链统计',
+          '支持 Gemini Interactions 接口的用量统计',
+        ],
+      },
+      {
+        kind: 'improve',
+        items: [
+          '手动中断的对话不再算作截断',
+          '请求日志始终显示上游返回的原始内容',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          '修复 TauriTavern 上 Gemini 原生、Claude、Responses 格式的请求报错',
+          '修复扩展误报「连续两轮没有取到用量」',
+          '修复宿主重新加载后取不到用量',
+        ],
+      },
+    ],
+  },
+  {
     version: 'r3.2.2fix',
     date: '2026-11-18',
     sections: [
