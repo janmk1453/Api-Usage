@@ -8,7 +8,7 @@
  * - 检测到一次压缩即可依据“本次压缩前的轮数”预测下次压缩；
  * - 成本、余额轮数、上下文轮数共用同一套逐轮投影，保证图表与数据块口径一致。
  */
-import { isTruncatedFinish } from '../utils/finish';
+import { isTruncatedOf } from '../utils/finish';
 import { isReliableForecastSample } from '../data/sample-quality';
 
 export type PriceTrio = { hit: number; miss: number; output: number };
@@ -289,7 +289,7 @@ export function prepareEntries(history: ForecastInputEntry[]): PreparedEntry[] {
       outputCost: Number(entry?.output_cost) || 0,
       hitRate,
       cacheSamples,
-      truncated: entry?.isTruncated === true || isTruncatedFinish(entry?.finishReason),
+      truncated: isTruncatedOf(entry),
       round: prepared.length + 1,
     });
   }

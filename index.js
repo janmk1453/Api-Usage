@@ -3,14 +3,14 @@ import { n as getSelectedSave, o as mobileDeviceHint, r as state$2, t as getHist
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as walletBalanceToCny, O as DEEPSEEK_WALLET_ID, S as mergeWalletCollections, _ as cloneWallet, b as findWalletForHistory, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as WALLET_CATALOG_PROVIDERS, l as isTruncatedFinish, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as defaultContextLimitForModel, w as walletPendingModelCount, x as findWalletModel } from "./repository-Co3W6Jj8.js";
+import { C as walletBalanceToCny, O as DEEPSEEK_WALLET_ID, S as mergeWalletCollections, _ as cloneWallet, b as findWalletForHistory, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as WALLET_CATALOG_PROVIDERS, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as defaultContextLimitForModel, w as walletPendingModelCount, x as findWalletModel } from "./repository-DobWAaUj.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc$3, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-CJMNKSam.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
-import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-BBzd49pn.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-DerC6xsb.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-DbWYwOEj.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-CEmx09ZZ.js";
+import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-BKZdQB8m.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-CRC100c3.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-C1P9YRl4.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-BKGf7Y-I.js";
 import { a as listTapRecords, i as clearTapRecords, n as tapDiagnostics, o as subscribeTap, r as stripModelTag } from "./request-tap-DkKmHhdO.js";
 //#region src/constants/version.ts
 var APP_VERSION = String("3.2.2");
@@ -439,7 +439,7 @@ function prepareEntries(history) {
 			outputCost: Number(entry?.output_cost) || 0,
 			hitRate,
 			cacheSamples,
-			truncated: entry?.isTruncated === true || isTruncatedFinish(entry?.finishReason),
+			truncated: isTruncatedOf(entry),
 			round: prepared.length + 1
 		});
 	}
@@ -1325,7 +1325,7 @@ function computeOverview(balanceWalletId = "all", historyOverride) {
 		sumOut += h.completion_tokens || 0;
 	}
 	const avgThinkRatio = sumOut > 0 ? sumThink / sumOut * 100 : 0;
-	const truncCnt = hist.filter((h) => isTruncatedFinish(h.finishReason) || h.isTruncated).length;
+	const truncCnt = hist.filter((h) => isTruncatedOf(h)).length;
 	const truncationRate = hist.length ? truncCnt / hist.length * 100 : 0;
 	const ignored = new Set(state$2.walletIgnored || []);
 	const activeWallets = (state$2.wallets || []).filter((wallet) => !ignored.has(wallet.id));
@@ -1552,7 +1552,7 @@ function computeStatsFour(filtered) {
 		if (totTok > maxTotal) maxTotal = totTok;
 		sumThink += h.thinkTokens || 0;
 		sumOut += h.completion_tokens || 0;
-		if (isTruncatedFinish(h.finishReason) || h.isTruncated) truncCnt++;
+		if (isTruncatedOf(h)) truncCnt++;
 	}
 	return {
 		avgCost: costCnt ? costSum / costCnt : 0,
@@ -6689,7 +6689,7 @@ function computeMetricsForChat(history, chatId) {
 		out,
 		efficiency,
 		hitRate: hitRates.length ? hitRates.slice(-5).reduce((a, b) => a + b, 0) / Math.min(5, hitRates.length) : .5,
-		truncRate: filtered.filter((h) => isTruncatedFinish(h.finishReason) || h.isTruncated).length / filtered.length,
+		truncRate: filtered.filter((h) => isTruncatedOf(h)).length / filtered.length,
 		thinkRatio: (() => {
 			const sOut = filtered.reduce((a, b) => a + (b.completion_tokens || 0), 0);
 			const sThink = filtered.reduce((a, b) => a + (b.thinkTokens || 0), 0);
@@ -9429,7 +9429,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-DerC6xsb.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-CRC100c3.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -13874,7 +13874,7 @@ function renderHistoryInner(doc, fullHist) {
 			if (!comp || !th) return "—";
 			return (th / comp * 100).toFixed(1) + "%";
 		})()}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label">是否截断</span><span class="aus-dt-val" style="color:${isTruncatedFinish(h.finishReason) || h.isTruncated ? "var(--ds-red)" : "var(--ds-text)"};">${isTruncatedFinish(h.finishReason) || h.isTruncated ? "是 (" + esc$3(h.finishReason || "length") + ")" : "否"}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">是否截断</span><span class="aus-dt-val" style="color:${isTruncatedOf(h) ? "var(--ds-red)" : "var(--ds-text)"};">${isTruncatedOf(h) ? "是 (" + esc$3(h.finishReason || "length") + ")" : "否"}</span></div>
                   </div>
                 </section>
               </div>
@@ -15600,7 +15600,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-DfwQXfdI.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-C8GCSPke.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-C6ea0US4.js").then((m) => {
@@ -15838,10 +15838,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-BBzd49pn.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-BKZdQB8m.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-DfwQXfdI.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-C8GCSPke.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-DkKmHhdO.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -15852,10 +15852,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-BBzd49pn.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-BKZdQB8m.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-DfwQXfdI.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-C8GCSPke.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-DkKmHhdO.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -15921,10 +15921,10 @@ function ensureWandEntry() {
 /** 运行时收尾：卸载拦截器与采集、拆掉面板 DOM、停全部定时器与事件监听（数据一律不动） */
 async function teardownRuntime() {
 	try {
-		import("./interception-BBzd49pn.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-BKZdQB8m.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-DfwQXfdI.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-C8GCSPke.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -15940,13 +15940,13 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-DerC6xsb.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-CRC100c3.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CJMNKSam.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CEmx09ZZ.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-BKGf7Y-I.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -15996,19 +15996,19 @@ async function onClean() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-BBzd49pn.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-BKZdQB8m.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-DfwQXfdI.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-C8GCSPke.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-DerC6xsb.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-CRC100c3.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-CJMNKSam.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-CEmx09ZZ.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-BKGf7Y-I.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -16051,19 +16051,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-DerC6xsb.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-CRC100c3.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CJMNKSam.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CEmx09ZZ.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-BKGf7Y-I.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-DfwQXfdI.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-C8GCSPke.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -16085,7 +16085,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-CEmx09ZZ.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-BKGf7Y-I.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

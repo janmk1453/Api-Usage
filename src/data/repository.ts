@@ -11,7 +11,7 @@ import { emit, DataEvents } from './events';
 import type { Snapshot } from './types';
 import { defaultSettings } from '../types/settings';
 import { isUnsafeKey, isValidDayKey, localDay } from '../utils/date';
-import { isTruncatedFinish } from '../utils/finish';
+import { isTruncatedFinish, isTruncatedOf } from '../utils/finish';
 import { log, toast } from '../utils/logger';
 import { turnFingerprint } from './fingerprint';
 import { mobileDeviceHint } from '../utils/device';
@@ -147,7 +147,7 @@ function replaceEstimatedEntry(
     if (params.usage) head.raw_usage = params.usage;
     if (params.fr) {
       head.finishReason = params.fr;
-      head.isTruncated = isTruncatedFinish(params.fr);
+      head.isTruncated = isTruncatedOf({ finishReason: params.fr, interrupted: (head as any).interrupted });
     }
     if (params.wallet && !head.walletId) head.walletId = params.wallet.id;
     state.total_tokens += params.total - prevTotal;
@@ -1284,8 +1284,10 @@ export const repository = {
     lu.streamed = streamed;
     lu.tokenRate = nonStreamed ? 0 : computeTokenRate({ duration, ttft: ttft || 0, completionTokens: comp, streamed });
     lu.ttft = nonStreamed ? 0 : (ttft || 0); lu.thinkTime = thinkTime || 0; lu.thinkTokens = thinkTokens;
-    // 截断检测：非正常 finish_reason（length / content_filter / sensitive 等）
-    lu.finishReason = fr; (lu as any).isTruncated = isTruncatedFinish(fr);
+    // 截断检测：非正常 finish_reason（length / content_filter / sensitive 等）。
+    // 用户自己点停止不算截断——这一轮本来就该停在那里，不是模型截不出来。
+    const userStopped = String((meta as any)?.interrupted || '') === 'user';
+    lu.finishReason = fr; (lu as any).isTruncated = !userStopped && isTruncatedFinish(fr);
     lu.messages = (messages || []).map(clampMessage);
     const c: any = calcCost({ timestamp: lu.timestamp, model, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp }, state.settings as any, wallet);
     lu.cost = c.total; lu.input_cost = c.input; lu.output_cost = c.output; lu.priceType = c.priceType;
@@ -1315,7 +1317,7 @@ export const repository = {
       completion_tokens: comp, total_tokens: total, input_cost: lu.input_cost, output_cost: lu.output_cost,
       cost: lu.cost, cache_hit_rate: (hit + miss) > 0 ? (hit / (hit + miss) * 100) : 0, priceType: lu.priceType,
       raw_usage: usage, messages: (messages || []).map(clampMessage), duration, ttft: lu.ttft, thinkTime, thinkTokens, tokenRate: lu.tokenRate, fullRequest, fullResponse: safeResponse,
-      finishReason: fr2, isTruncated: isTruncatedFinish(fr2),
+      finishReason: fr2, isTruncated: !userStopped && isTruncatedFinish(fr2),
       streamed,
       chatId, chatName,
       sourceType: connection?.sourceType ?? null,

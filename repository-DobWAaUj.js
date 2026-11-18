@@ -1174,6 +1174,22 @@ function isTruncatedFinish(fr) {
 	if (!fr) return false;
 	return !NORMAL_FINISH.has(String(fr).toLowerCase());
 }
+/** 用户自己点了停止：这一轮本来就该停在这里，不是模型侧截断 */
+function isUserStoppedFinish(entry) {
+	return String(entry?.interrupted || "") === "user";
+}
+/**
+* 单条记录是否算「截断」的唯一口径。
+* 除了 finish_reason 白名单，还要看中断来源：用户手动停止不计入截断（否则详情会显示
+* 「是 (interrupted)」、截断率与能耗评分也会把用户自己的操作算成模型的问题）。
+* 上游断流、达 max_tokens、安全策略拦截仍然算截断。
+* 展示与统计一律走这里，不要各自拼 isTruncatedFinish(h.finishReason) || h.isTruncated。
+*/
+function isTruncatedOf(entry) {
+	if (!entry) return false;
+	if (isUserStoppedFinish(entry)) return false;
+	return entry.isTruncated === true || isTruncatedFinish(entry.finishReason);
+}
 //#endregion
 //#region src/data/fingerprint.ts
 /**
@@ -1451,7 +1467,10 @@ function replaceEstimatedEntry(head, params) {
 		if (params.usage) head.raw_usage = params.usage;
 		if (params.fr) {
 			head.finishReason = params.fr;
-			head.isTruncated = isTruncatedFinish(params.fr);
+			head.isTruncated = isTruncatedOf({
+				finishReason: params.fr,
+				interrupted: head.interrupted
+			});
 		}
 		if (params.wallet && !head.walletId) head.walletId = params.wallet.id;
 		state.total_tokens += params.total - prevTotal;
@@ -2396,7 +2415,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && !!wallet.catalogProvider) try {
-						import("./pricing-sync-CEmx09ZZ.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-BKGf7Y-I.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
@@ -2541,8 +2560,9 @@ var repository = {
 		lu.ttft = nonStreamed ? 0 : ttft || 0;
 		lu.thinkTime = thinkTime || 0;
 		lu.thinkTokens = thinkTokens;
+		const userStopped = String(meta?.interrupted || "") === "user";
 		lu.finishReason = fr;
-		lu.isTruncated = isTruncatedFinish(fr);
+		lu.isTruncated = !userStopped && isTruncatedFinish(fr);
 		lu.messages = (messages || []).map(clampMessage);
 		const c = calcCost({
 			timestamp: lu.timestamp,
@@ -2601,7 +2621,7 @@ var repository = {
 			fullRequest,
 			fullResponse: safeResponse,
 			finishReason: fr2,
-			isTruncated: isTruncatedFinish(fr2),
+			isTruncated: !userStopped && isTruncatedFinish(fr2),
 			streamed,
 			chatId,
 			chatName,
@@ -3279,4 +3299,4 @@ var repository = {
 	}
 };
 //#endregion
-export { walletBalanceToCny as C, resolveRuntimeConnectionContext as D, initConnectionIdentity as E, DEEPSEEK_WALLET_ID as O, mergeWalletCollections as S, buildEndpointContext as T, cloneWallet as _, decryptKey as a, findWalletForHistory as b, sanitizeHistoryTiming as c, calcSavings as d, getPricing as f, normalizeModel as g, isWalletPeakHour as h, saveWalletApiKey as i, WALLET_CATALOG_PROVIDERS as k, isTruncatedFinish as l, isPeakHour as m, repository_exports as n, encryptKey as o, isDeepSeekOfficialModel as p, getWalletApiKey as r, measureTokenRate as s, repository as t, calcCost as u, defaultContextLimitForModel as v, walletPendingModelCount as w, findWalletModel as x, findWalletForConnection as y };
+export { walletBalanceToCny as C, resolveRuntimeConnectionContext as D, initConnectionIdentity as E, DEEPSEEK_WALLET_ID as O, mergeWalletCollections as S, buildEndpointContext as T, cloneWallet as _, decryptKey as a, findWalletForHistory as b, sanitizeHistoryTiming as c, calcSavings as d, getPricing as f, normalizeModel as g, isWalletPeakHour as h, saveWalletApiKey as i, WALLET_CATALOG_PROVIDERS as k, isTruncatedOf as l, isPeakHour as m, repository_exports as n, encryptKey as o, isDeepSeekOfficialModel as p, getWalletApiKey as r, measureTokenRate as s, repository as t, calcCost as u, defaultContextLimitForModel as v, walletPendingModelCount as w, findWalletModel as x, findWalletForConnection as y };

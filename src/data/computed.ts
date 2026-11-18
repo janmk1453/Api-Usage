@@ -5,7 +5,7 @@
 import { state, getSelectedSave } from '../store/index';
 import { calcSavings } from '../services/pricing';
 import { localDay } from '../utils/date';
-import { isTruncatedFinish } from '../utils/finish';
+import { isTruncatedOf } from '../utils/finish';
 import type { OverviewView, StatsView, TimeRange } from './types';
 import { formatMoney, getDisplayCurrency, getWalletExchangeRate } from '../services/currency';
 import { findWalletForHistory, walletBalanceToCny } from './wallets';
@@ -256,7 +256,7 @@ export function computeOverview(balanceWalletId = 'all', historyOverride?: any[]
   for (const h of hist) { sumThink += h.thinkTokens || 0; sumOut += h.completion_tokens || 0; }
   const avgThinkRatio = sumOut > 0 ? (sumThink / sumOut * 100) : 0;
   // 截断率 = 非正常 finish_reason（length / content_filter / sensitive 等）的占比
-  const truncCnt = hist.filter((h: any) => (isTruncatedFinish(h.finishReason) || h.isTruncated)).length;
+  const truncCnt = hist.filter((h: any) => isTruncatedOf(h)).length;
   const truncationRate = hist.length ? truncCnt / hist.length * 100 : 0;
   const ignored = new Set(state.walletIgnored || []);
   const activeWallets = (state.wallets || []).filter((wallet) => !ignored.has(wallet.id));
@@ -429,7 +429,7 @@ export function computeStatsFour(filtered: any[]): { avgCost:number; avgTokens:n
     const out = h.completion_tokens||0, inp = (h.cache_hit_tokens||0)+(h.cache_miss_tokens||0), totTok = h.total_tokens||0;
     if (out>maxOutput) maxOutput=out; if (inp>maxInput) maxInput=inp; if (totTok>maxTotal) maxTotal=totTok;
     sumThink += h.thinkTokens||0; sumOut += h.completion_tokens||0;
-    if (isTruncatedFinish(h.finishReason) || h.isTruncated) truncCnt++;
+    if (isTruncatedOf(h)) truncCnt++;
   }
   return {
     avgCost: costCnt? costSum/costCnt : 0, avgTokens: tokensCnt? tokensSum/tokensCnt : 0, avgDuration: durCnt? durSum/durCnt/1000 : 0, avgRate: rateCnt? rateSum/rateCnt : 0, avgTtft: ttftCnt? ttftSum/ttftCnt/1000 : 0,

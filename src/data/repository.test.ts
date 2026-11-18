@@ -207,6 +207,25 @@ describe('峰值提示小圆点默认值', () => {
     expect(normalizeSettings({ peakDot: false, theme: 'dark' }).peakDot).toBe(false);
     expect(normalizeSettings({ peakDot: true }).peakDot).toBe(true);
   });
+
+  it('用户手动中断不标记截断，上游中断仍标记', () => {
+    const now = Date.now();
+    repository.addEntry(
+      { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+      'deepseek-flash', [], now, undefined, undefined, 0, 0, 'interrupted', null, 'req-user', true,
+      { usageSource: 'estimated', interrupted: 'user', estimateMethod: 'char-heuristic-v1' },
+    );
+    // finishReason 仍保留 'interrupted'（详情/诊断需要知道这轮是怎么结束的），只是不算截断
+    expect(state.history[0].finishReason).toBe('interrupted');
+    expect(state.history[0].isTruncated).toBe(false);
+
+    repository.addEntry(
+      { prompt_tokens: 100, completion_tokens: 25, total_tokens: 125 },
+      'deepseek-flash', [], now + 1, undefined, undefined, 0, 0, 'interrupted', null, 'req-upstream', true,
+      { interrupted: 'upstream' },
+    );
+    expect(state.history[0].isTruncated).toBe(true);
+  });
 });
 
 

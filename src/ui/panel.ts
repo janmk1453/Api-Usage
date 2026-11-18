@@ -1,7 +1,7 @@
 import { APP_VERSION } from '../constants/version';
 import { state, getSelectedSave, getHistoryForDisplay } from '../store/index';
 import { esc, localDay, localTimeHM } from '../utils/date';
-import { isTruncatedFinish } from '../utils/finish';
+import { isTruncatedOf } from '../utils/finish';
 import { saveHot } from '../store/persistence';
 import { queryBalance } from '../services/balance';
 import { bindImportExport } from '../services/import-export';
@@ -631,7 +631,7 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
                     <div class="aus-dt-item"><span class="aus-dt-label">速率</span><span class="aus-dt-val" style="color:${(h.tokenRate||0)>0?'var(--ds-green)':'var(--ds-text-3)'};">${(h.tokenRate||0)>0?h.tokenRate+' t/s':(h.streamed===false?'非流式':'—')}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">思维链耗时</span><span class="aus-dt-val">${(h.thinkTime||0)>0?((h.thinkTime||0)/1000).toFixed(1)+'s':'—'}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">思维链占比</span><span class="aus-dt-val">${(()=>{ const comp=h.completion_tokens||0, th=h.thinkTokens||0; if(!comp||!th) return '—'; return (th/comp*100).toFixed(1)+'%';})()}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label">是否截断</span><span class="aus-dt-val" style="color:${(isTruncatedFinish(h.finishReason)||h.isTruncated)?'var(--ds-red)':'var(--ds-text)'};">${(isTruncatedFinish(h.finishReason)||h.isTruncated)?'是 ('+(esc(h.finishReason||'length'))+')':'否'}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">是否截断</span><span class="aus-dt-val" style="color:${isTruncatedOf(h)?'var(--ds-red)':'var(--ds-text)'};">${isTruncatedOf(h)?'是 ('+(esc(h.finishReason||'length'))+')':'否'}</span></div>
                   </div>
                 </section>
               </div>
