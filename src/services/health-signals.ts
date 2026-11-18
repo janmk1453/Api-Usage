@@ -239,6 +239,17 @@ function dropReasonOf(rec: any): string {
  */
 export function scanCaptureHealth(stages = listCaptureStages()): HealthSignal[] {
   const out: HealthSignal[] = [];
+  // 同一轮请求后来又正常入库（fetch 解析完成 / 估算补记）时，先写下的 event-drop 只是
+  // 「GENERATION_ENDED 抢在 fetch 的 clone 流结束之前触发」造成的假信号：那一刻还没有输出文本，
+  // 事件层判了「无用量无输出」，但真正落库走的是 fetch 侧解析。按 requestId 交叉校验排除，
+  // 也顺带自愈 localStorage 里已经存在的旧脏快照，不需要用户手动清理。
+  const settledRequests = new Set<string>();
+  for (const rec of stages) {
+    if (!rec) continue;
+    if (rec.stage !== 'entry-added' && rec.stage !== 'turn-estimated' && rec.stage !== 'turn-interrupted') continue;
+    const id = String(rec.requestId || '');
+    if (id) settledRequests.add(id);
+  }
   const drops = new Map<string, any[]>();
   for (const rec of stages) {
     if (!rec) continue;
@@ -246,6 +257,8 @@ export function scanCaptureHealth(stages = listCaptureStages()): HealthSignal[] 
       // 用户主动停止造成的空轮次不是故障（与历史记录层「用户中断不产生健康提示」同一口径），
       // 这类丢弃连估算都无从下手，本来就不该写历史，更不该弹告警
       if (dropReasonOf(rec) === 'user-stop-no-output') continue;
+      const reqId = String(rec.requestId || '');
+      if (reqId && settledRequests.has(reqId)) continue;
       const key = (rec.model || '') + '|' + dropReasonOf(rec);
       const list = drops.get(key) || [];
       list.push(rec);

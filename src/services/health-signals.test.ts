@@ -106,6 +106,24 @@ describe('历史记录页健康信号', () => {
     expect(signals[0].signature).toBe('no-usage-no-output');
   });
 
+  it('事件层抢在 fetch 解析之前丢弃、同一轮后来又入库的，不算「没有取到用量」', () => {
+    // 真机日志复现：GENERATION_ENDED 先到，那一刻还没有输出文本 → 判「无用量无输出」丢弃；
+    // 随后同一 requestId 的 fetch 解析完成并正常 addEntry，这轮其实写进历史了。
+    noteCaptureStage('event-drop', { model: 'hy4-flash', requestId: 'req:1:1', reason: 'no-usage-no-output', at: 1795003350901 });
+    noteCaptureStage('entry-added', { model: 'hy4-flash', requestId: 'req:1:1', at: 1795003351006 });
+    noteCaptureStage('event-drop', { model: 'hy4-flash', requestId: 'req:2:2', reason: 'no-usage-no-output', at: 1795012257501 });
+    noteCaptureStage('turn-interrupted', { model: 'hy4-flash', requestId: 'req:2:2', at: 1795012259044 });
+    expect(scanCaptureHealth()).toHaveLength(0);
+
+    // 没有对应入库记录的真丢弃照常提示
+    noteCaptureStage('event-drop', { model: 'hy4-flash', requestId: 'req:3:3', reason: 'no-usage-no-output', at: 1795012260000 });
+    noteCaptureStage('event-drop', { model: 'hy4-flash', requestId: 'req:4:4', reason: 'no-usage-no-output', at: 1795012262000 });
+    const signals = scanCaptureHealth();
+    expect(signals).toHaveLength(1);
+    expect(signals[0].signature).toBe('no-usage-no-output');
+    expect(signals[0].detail).toContain('连续 2 轮');
+  });
+
   it('入库失败与控制台里的本扩展报错都算「功能报错」，网络类控制台错误不算', () => {
     noteCaptureStage('entry-error', { model: 'deepseek-flash', reason: 'boom', at: 1794719000000 });
     noteConsole('error', ['ApiUsageStat addEntry failed'], 1794719005000);

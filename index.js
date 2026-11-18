@@ -12058,11 +12058,20 @@ function dropReasonOf(rec) {
 */
 function scanCaptureHealth(stages = listCaptureStages()) {
 	const out = [];
+	const settledRequests = /* @__PURE__ */ new Set();
+	for (const rec of stages) {
+		if (!rec) continue;
+		if (rec.stage !== "entry-added" && rec.stage !== "turn-estimated" && rec.stage !== "turn-interrupted") continue;
+		const id = String(rec.requestId || "");
+		if (id) settledRequests.add(id);
+	}
 	const drops = /* @__PURE__ */ new Map();
 	for (const rec of stages) {
 		if (!rec) continue;
 		if (rec.stage === "event-drop") {
 			if (dropReasonOf(rec) === "user-stop-no-output") continue;
+			const reqId = String(rec.requestId || "");
+			if (reqId && settledRequests.has(reqId)) continue;
 			const key = (rec.model || "") + "|" + dropReasonOf(rec);
 			const list = drops.get(key) || [];
 			list.push(rec);
