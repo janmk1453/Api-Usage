@@ -1,6 +1,6 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { D as resolveRuntimeConnectionContext, E as initConnectionIdentity, t as repository } from "./repository-FdmnPKP5.js";
+import { D as resolveRuntimeConnectionContext, E as initConnectionIdentity, t as repository } from "./repository-DrbmYX7D.js";
 //#region src/services/include-usage.ts
 /**
 * 流式 usage 注入的纯逻辑：把 stream_options.include_usage 合并进用户/预设自定义的请求体参数。
@@ -14,7 +14,13 @@ import { D as resolveRuntimeConnectionContext, E as initConnectionIdentity, t as
 * - 空值直接写入 YAML；
 * - 顶层是 JSON/flow 对象时，用 JSON 解析后合并再序列化，保持合法；
 * - 无法安全解析的 flow 写法（非 JSON）、数组/列表、已有 stream_options、文档结束标记一律不介入；
-* - 顶层是块状映射时才允许追加 YAML 键。
+* - 顶层是块状映射时才允许追加 YAML 键；
+* - 不是字符串的值（宿主允许 custom_include_body 传对象）一律不介入，避免被 String() 成 [object Object]。
+*
+* 除了「怎么写」，「要不要写」也有限制：见 isInjectableApiFormat。
+* TauriTavern 会把 custom_include_body 无条件合并进最终上游请求体（Gemini 原生 / Interactions /
+* Claude Messages / Responses 都是如此），这些端点严格校验未知字段会直接 400，而且 TT 把上游
+* 错误包成 200，扩展的「400 就重试」兜底在 TT 上永远不触发。因此只有 OpenAI 兼容格式可以注入。
 */
 var INCLUDE_USAGE_YAML = "stream_options:\n  include_usage: true";
 var INCLUDE_USAGE_OBJECT = { include_usage: true };
@@ -39,6 +45,10 @@ function hasOwn(obj, key) {
 * changed=false 时调用方必须保持原值不变（宁可拿不到 usage，也不能破坏预设参数）。
 */
 function mergeIncludeUsage(raw) {
+	if (raw != null && typeof raw !== "string") return {
+		changed: false,
+		value: ""
+	};
 	const current = String(raw ?? "").trim();
 	if (!current) return {
 		changed: true,
@@ -86,6 +96,21 @@ function mergeIncludeUsage(raw) {
 		changed: true,
 		value: `${current}\n${INCLUDE_USAGE_YAML}\n`
 	};
+}
+/**
+* 宿主是否允许往这次请求里塞 stream_options。
+*
+* SillyTavern 1.19 没有 custom_api_format 字段（custom 恒为 OpenAI 兼容），返回 true。
+* TauriTavern 用 custom_api_format 声明 custom 源的真实协议：只有 openai_compat 认这个参数，
+* 其余四种的中转请求体是各家原生格式，塞进去会被严格校验拒绝。TT 自己也会给 OpenAI 兼容路径
+* 注入同一参数，所以非兼容格式一律不注入，宁可用估算也不打断对话。
+*/
+function isInjectableApiFormat(format) {
+	if (format == null) return true;
+	if (typeof format !== "string") return false;
+	const text = format.trim();
+	if (!text) return true;
+	return text === "openai_compat";
 }
 //#endregion
 //#region src/services/think-timing.ts
@@ -1450,6 +1475,7 @@ function injectIncludeUsage(reqBody, source) {
 		if (reqBody.stream !== true) return false;
 		if (!includeUsageSwitchOn()) return false;
 		if (source !== "custom") return false;
+		if (!isInjectableApiFormat(reqBody.custom_api_format)) return false;
 		const merged = mergeIncludeUsage(reqBody.custom_include_body);
 		if (!merged.changed) return false;
 		reqBody.custom_include_body = merged.value;
@@ -1586,14 +1612,14 @@ function installFetchCapture() {
 					body: JSON.stringify(reqBody)
 				}] : args;
 				try {
-					const sentInit = fetchArgs[1] || {};
-					const sentBody = typeof sentInit.body === "string" ? sentInit.body : "";
+					const rawInit = args[1] || {};
+					const rawBody = typeof rawInit.body === "string" ? rawInit.body : "";
 					saveRequestStart({
 						at: startTime,
-						method: sentInit.method || "POST",
+						method: rawInit.method || "POST",
 						url,
-						headers: sentInit.headers,
-						body: sentBody
+						headers: rawInit.headers,
+						body: rawBody
 					});
 				} catch {}
 				try {

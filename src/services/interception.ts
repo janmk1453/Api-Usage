@@ -2,7 +2,7 @@ import { state } from '../store/index';
 import { repository } from '../data/repository';
 import { log } from '../utils/logger';
 import { initConnectionIdentity, resolveRuntimeConnectionContext, type HistoryConnection } from './connection-identity';
-import { mergeIncludeUsage } from './include-usage';
+import { isInjectableApiFormat, mergeIncludeUsage } from './include-usage';
 import { createThinkClock, scanThinkChunk, resolveThinkTime, reasoningTextOf, contentTextOf } from './think-timing';
 import { createFrameNormalizer } from './frame-normalizer';
 import { saveRequestStart, patchRequestLog, noteRecentTurns } from './request-log';
@@ -161,6 +161,8 @@ function injectIncludeUsage(reqBody: any, source: string | null): boolean {
     if (reqBody.stream !== true) return false;
     if (!includeUsageSwitchOn()) return false;
     if (source !== 'custom') return false;
+    // 只有 OpenAI 兼容格式认 stream_options；TT 的 Gemini 原生 / Interactions / Claude / Responses 会拒收
+    if (!isInjectableApiFormat(reqBody.custom_api_format)) return false;
     const merged = mergeIncludeUsage(reqBody.custom_include_body);
     // 无法安全合并时保持原值：宁可拿不到 usage，也不能破坏预设的请求体参数
     if (!merged.changed) return false;
@@ -296,11 +298,12 @@ function installFetchCapture() {
         const fetchArgs = injected
           ? [args[0], { ...(args[1] as any), body: JSON.stringify(reqBody) }]
           : args;
-        // 请求日志：不管这轮最终有没有算出用量、有没有入库，先把实际发出的标头与正文留下（只保留最近一轮）
+        // 请求日志：不管这轮最终有没有算出用量、有没有入库，先留下原文（只保留最近一轮）。
+        // 存的是宿主交过来的**未经扩展修改**的请求，include_usage 注入只改实际发送、不进日志记录。
         try {
-          const sentInit: any = (fetchArgs as any)[1] || {};
-          const sentBody = typeof sentInit.body === 'string' ? sentInit.body : '';
-          saveRequestStart({ at: startTime, method: sentInit.method || 'POST', url, headers: sentInit.headers, body: sentBody });
+          const rawInit: any = (args as any)[1] || {};
+          const rawBody = typeof rawInit.body === 'string' ? rawInit.body : '';
+          saveRequestStart({ at: startTime, method: rawInit.method || 'POST', url, headers: rawInit.headers, body: rawBody });
         } catch {}
         // 采集链路快照：只记录「请求已发出」，与后续是否入库无关
         try {

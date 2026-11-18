@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { INCLUDE_USAGE_YAML, mergeIncludeUsage } from './include-usage';
+import { INCLUDE_USAGE_YAML, isInjectableApiFormat, mergeIncludeUsage } from './include-usage';
 
 describe('mergeIncludeUsage', () => {
   it('空值直接写入 stream_options', () => {
@@ -76,5 +76,47 @@ describe('mergeIncludeUsage', () => {
     const r = mergeIncludeUsage(raw);
     expect(r.changed).toBe(false);
     expect(r.value).toBe(raw);
+  });
+
+  it('非字符串的 custom_include_body 不介入，避免变成 [object Object]', () => {
+    for (const raw of [{ thinking: { type: 'disabled' } }, 42, true]) {
+      const r = mergeIncludeUsage(raw);
+      expect(r.changed).toBe(false);
+      expect(r.value).toBe('');
+    }
+    // 空的 null/undefined 仍按「没有参数」处理，可以写入
+    expect(mergeIncludeUsage(null).changed).toBe(true);
+    expect(mergeIncludeUsage(undefined).changed).toBe(true);
+  });
+});
+
+describe('isInjectableApiFormat', () => {
+  it('没有 custom_api_format（SillyTavern 的 custom 源）允许注入', () => {
+    expect(isInjectableApiFormat(undefined)).toBe(true);
+    expect(isInjectableApiFormat(null)).toBe(true);
+    expect(isInjectableApiFormat('')).toBe(true);
+    expect(isInjectableApiFormat('   ')).toBe(true);
+  });
+
+  it('OpenAI 兼容格式允许注入', () => {
+    expect(isInjectableApiFormat('openai_compat')).toBe(true);
+    expect(isInjectableApiFormat(' openai_compat ')).toBe(true);
+  });
+
+  it('原生协议格式一律不注入，避免被严格校验拒绝', () => {
+    for (const format of [
+      'gemini_generate_content',
+      'gemini_interactions',
+      'claude_messages',
+      'openai_responses',
+      'some_future_format',
+    ]) {
+      expect(isInjectableApiFormat(format)).toBe(false);
+    }
+  });
+
+  it('格式字段不是字符串时不注入', () => {
+    expect(isInjectableApiFormat(1)).toBe(false);
+    expect(isInjectableApiFormat({})).toBe(false);
   });
 });
