@@ -237,6 +237,8 @@ function installFetchCapture() {
       return;
     }
     const rawFetch = p.fetch.bind(p);
+    // 卸载时还原到「本次包装所用的下一层」，宿主重装过包装也不会还原成过期的一层
+    rawFetchRef = rawFetch;
     const patched: any = function(this: any) {
       const args: any = arguments;
       const url: string = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';

@@ -1,6 +1,6 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { D as resolveRuntimeConnectionContext, E as initConnectionIdentity, t as repository } from "./repository-BlG_Yt7N.js";
+import { D as resolveRuntimeConnectionContext, E as initConnectionIdentity, t as repository } from "./repository-FdmnPKP5.js";
 //#region src/services/include-usage.ts
 /**
 * 流式 usage 注入的纯逻辑：把 stream_options.include_usage 合并进用户/预设自定义的请求体参数。
@@ -1522,6 +1522,7 @@ function installFetchCapture() {
 		const p = window.parent || window;
 		if (!p || !p.fetch || isAusFetchPatch(p.fetch)) return;
 		const rawFetch = p.fetch.bind(p);
+		rawFetchRef = rawFetch;
 		const patched = function() {
 			const args = arguments;
 			const url = typeof args[0] === "string" ? args[0] : args[0]?.url || "";
