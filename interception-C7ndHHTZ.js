@@ -1,6 +1,6 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { D as resolveRuntimeConnectionContext, E as initConnectionIdentity, t as repository } from "./repository-BoctdQaS.js";
+import { D as resolveRuntimeConnectionContext, E as initConnectionIdentity, t as repository } from "./repository-BqXCPmnu.js";
 //#region src/services/include-usage.ts
 /**
 * 流式 usage 注入的纯逻辑：把 stream_options.include_usage 合并进用户/预设自定义的请求体参数。
@@ -754,12 +754,16 @@ async function estimatePromptTokens(messages) {
 //#region src/services/interception.ts
 var interception_exports = /* @__PURE__ */ __exportAll({
 	installInterception: () => installInterception,
+	normalizeTiming: () => normalizeTiming,
+	pickPromptMessages: () => pickPromptMessages,
 	processUsage: () => processUsage,
 	recalcAllCosts: () => recalcAllCosts,
 	setLastRequest: () => setLastRequest,
 	uninstallInterception: () => uninstallInterception
 });
 var lastMessages = [];
+/** 本轮请求的完整 messages：只给输入侧估算用，绝不写进历史（历史仍存 lastMessages 的最近 10 条摘要） */
+var lastPromptMessages = [];
 var lastStart = 0;
 var lastFetchUsage = null;
 var lastFetchModel = null;
@@ -953,8 +957,12 @@ function installFetchCapture() {
 					lastRequestIdTime = Date.now();
 				} catch {}
 				let msgs = [];
+				let promptMessages = [];
 				try {
-					if (reqBody?.messages?.length) msgs = reqBody.messages.slice(-10);
+					if (reqBody?.messages?.length) {
+						msgs = reqBody.messages.slice(-10);
+						promptMessages = reqBody.messages;
+					}
 				} catch {}
 				const startTime = Date.now();
 				try {
@@ -962,6 +970,7 @@ function installFetchCapture() {
 				} catch {}
 				try {
 					lastMessages = msgs;
+					lastPromptMessages = promptMessages;
 					lastStart = startTime;
 				} catch {}
 				try {
@@ -978,6 +987,7 @@ function installFetchCapture() {
 						fullResponse: null,
 						fullRequest: fullReq,
 						messages: msgs,
+						promptMessages,
 						connection: requestConnection,
 						ttft: 0,
 						thinkTime: 0,
@@ -1158,23 +1168,24 @@ function installFetchCapture() {
 								try {
 									const endedAt = nowMs() - t0;
 									const thinkTime = resolveThinkTime(thinkClock, endedAt);
+									const safeThinkTime = ttft > 0 ? thinkTime || 0 : 0;
 									const streamed = judgeStreamed();
 									try {
 										const t = currentTurn(startTime);
 										if (t) {
 											t.ttft = ttft || 0;
-											t.thinkTime = thinkTime || 0;
+											t.thinkTime = safeThinkTime;
 											t.streamed = streamed;
 											t.outputChars = thinkClock.contentChars || 0;
 											t.reasoningChars = thinkClock.reasoningChars || 0;
 											t.fullResponse = fullText || null;
 										}
 									} catch {}
-									if (thinkTime > 0) log.debug("思维链耗时已测量 " + thinkTime + "ms");
+									if (safeThinkTime > 0) log.debug("思维链耗时已测量 " + safeThinkTime + "ms");
 									try {
 										lastStreamTiming = {
 											ttft,
-											thinkTime,
+											thinkTime: safeThinkTime,
 											streamed,
 											startTime,
 											at: Date.now()
@@ -1186,7 +1197,7 @@ function installFetchCapture() {
 											streamed
 										});
 									} catch {}
-									parseAndProcess(fullText, ttft, thinkTime, streamed);
+									parseAndProcess(fullText, ttft, safeThinkTime, streamed);
 								} catch {}
 							};
 							const scanThink = (chunk) => {
@@ -1498,6 +1509,23 @@ function refresh() {
 	} catch {}
 }
 /**
+* 输入侧估算用哪一份 messages：完整上下文优先，最近 10 条的展示摘要只做兜底。
+* 展示摘要曾因共用到估算里，把输入 token 少算到真实值的一成（裁剪掉了大部分上下文）。
+*/
+function pickPromptMessages(complete, truncated) {
+	if (Array.isArray(complete) && complete.length) return complete;
+	if (Array.isArray(truncated) && truncated.length) return truncated;
+	return [];
+}
+/** 时序自洽：没有测到首字（ttft<=0）时，思维链耗时没有锚点，一并归零 */
+function normalizeTiming(ttft, thinkTime) {
+	const first = Math.max(0, Number(ttft) || 0);
+	return {
+		ttft: first,
+		thinkTime: first > 0 ? Math.max(0, Number(thinkTime) || 0) : 0
+	};
+}
+/**
 * 上游没给可用 usage（或 usage 全 0）时的收尾：判定这一轮该估算补记、标中断、还是静默丢弃。
 * 依据只有两条硬证据——「实测到了输出」和「有没有中断线索」。
 * 静默的判定（无输出）不写历史、不产生健康信号，避免把空轮次灌进统计。
@@ -1506,7 +1534,8 @@ async function settleTurnWithoutUsage(source, opts = {}) {
 	const turn = currentTurn();
 	if (turn?.settled) return;
 	const model = opts.model || turn?.model || lastFetchModel || "deepseek-v4-flash";
-	const messages = turn?.messages || lastMessages || [];
+	const storeMessages = turn?.messages || lastMessages || [];
+	const estimateMessages = pickPromptMessages(turn?.promptMessages || lastPromptMessages, storeMessages);
 	const startedAt = turn?.startTime || lastStart || Date.now();
 	const requestId = turn?.requestId || recentRequestId(12e4) || null;
 	const rawResponse = turn?.fullResponse || lastFetchUsage?.fullResponse || "";
@@ -1543,7 +1572,7 @@ async function settleTurnWithoutUsage(source, opts = {}) {
 		method: "char-heuristic"
 	};
 	try {
-		promptEst = await estimatePromptTokens(messages);
+		promptEst = await estimatePromptTokens(estimateMessages);
 		outputEst = await estimateTextTokens(outputText, { preferTokens: opts.localTokenCount ?? null });
 	} catch {}
 	const promptTokens = Math.max(0, Math.round(promptEst.tokens || 0));
@@ -1572,15 +1601,16 @@ async function settleTurnWithoutUsage(source, opts = {}) {
 		interrupted: outcome.interrupted ?? null,
 		interruptReason: outcome.reason,
 		estimateMethod: promptEst.method === outputEst.method ? promptEst.method : promptEst.method + "+" + outputEst.method,
-		estimateVersion: 1,
+		estimateVersion: 2,
 		promptChars: promptEst.chars || 0,
 		outputChars: outputEst.chars || 0,
 		estimateCacheUnknown: true,
 		costEstimated: true
 	};
 	if (turn?.modelFallback) meta.modelFallback = true;
+	const timing = normalizeTiming(turn?.ttft, turn?.thinkTime);
 	try {
-		repository.addEntry(usage, model, messages, startedAt, turn?.fullRequest ?? null, rawResponse || null, turn?.ttft || 0, turn?.thinkTime || 0, null, turn?.connection || recentConnection(), requestId, turn?.streamed ?? null, meta);
+		repository.addEntry(usage, model, storeMessages, startedAt, turn?.fullRequest ?? null, rawResponse || null, timing.ttft, timing.thinkTime, null, turn?.connection || recentConnection(), requestId, turn?.streamed ?? null, meta);
 	} catch (e) {
 		try {
 			noteCaptureStage("entry-error", {
@@ -1629,6 +1659,7 @@ function processUsage(usage, model, messages, startTime, fullRequest = null, ful
 			if (!thinkTime) thinkTime = st.thinkTime || 0;
 			if (streamed == null) streamed = st.streamed;
 		}
+		if (!(ttft > 0)) thinkTime = 0;
 	} catch {}
 	let resolvedMeta = meta;
 	if (!resolvedMeta) try {

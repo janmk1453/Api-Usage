@@ -11,6 +11,8 @@ import { ESTIMATE_VERSION, estimatePromptTokens, estimateTextTokens } from './to
 import type { EntryMeta } from '../types/save';
 
 let lastMessages: any[] = [];
+/** 本轮请求的完整 messages：只给输入侧估算用，绝不写进历史（历史仍存 lastMessages 的最近 10 条摘要） */
+let lastPromptMessages: any[] = [];
 let lastStart = 0;
 let lastFetchUsage: any = null;
 let lastFetchModel: string | null = null;
@@ -44,7 +46,10 @@ type TurnContext = {
   /** 已读到的响应原文（SSE / JSON），用于估算输出 token */
   fullResponse: string | null;
   fullRequest: any;
+  /** 最近 10 条消息摘要：历史详情展示用 */
   messages: any[];
+  /** 完整上下文：输入侧估算用，保证估算口径与上游实际 prompt 一致 */
+  promptMessages: any[];
   connection: HistoryConnection | null;
   ttft: number;
   thinkTime: number;
@@ -247,11 +252,18 @@ function installFetchCapture() {
           lastRequestIdTime = Date.now();
         } catch {}
         let msgs: any[] = [];
-        try { if (reqBody?.messages?.length) msgs = reqBody.messages.slice(-10); } catch {}
+        // 展示用只留最近 10 条；估算必须用完整上下文，否则会按裁剪后的上下文少算输入
+        let promptMessages: any[] = [];
+        try {
+          if (reqBody?.messages?.length) {
+            msgs = reqBody.messages.slice(-10);
+            promptMessages = reqBody.messages;
+          }
+        } catch {}
         const startTime = Date.now();
         // 反馈排查用：留一份「最近三轮在聊什么」（角色 + 前 400 字 + 字数），不进历史、不导出
         try { if (reqBody?.messages?.length) noteRecentTurns(reqBody.messages, startTime); } catch {}
-        try { lastMessages = msgs; lastStart = startTime; } catch {}
+        try { lastMessages = msgs; lastPromptMessages = promptMessages; lastStart = startTime; } catch {}
         // 本轮现场：模型名先按请求体判断是否只能兜底，响应带回真实模型名后再清掉标记
         try {
           const requestModel = (reqBody as any)?.model;
@@ -267,6 +279,7 @@ function installFetchCapture() {
             fullResponse: null,
             fullRequest: fullReq,
             messages: msgs,
+            promptMessages,
             connection: requestConnection,
             ttft: 0,
             thinkTime: 0,
@@ -403,23 +416,25 @@ function installFetchCapture() {
               try {
                 const endedAt = nowMs() - t0;
                 const thinkTime = resolveThinkTime(thinkClock, endedAt);
+                // 时序自洽：思维链耗时以首字为锚，ttft 没测到（<=0）时一律不写，避免「首字 0ms、思维链 65s」的矛盾读数
+                const safeThinkTime = ttft > 0 ? thinkTime || 0 : 0;
                 const streamed = judgeStreamed();
                 // 现场留档：输出字符数决定「能不能按估算补记」
                 try {
                   const t = currentTurn(startTime);
                   if (t) {
                     t.ttft = ttft || 0;
-                    t.thinkTime = thinkTime || 0;
+                    t.thinkTime = safeThinkTime;
                     t.streamed = streamed;
                     t.outputChars = thinkClock.contentChars || 0;
                     t.reasoningChars = thinkClock.reasoningChars || 0;
                     t.fullResponse = fullText || null;
                   }
                 } catch {}
-                if (thinkTime > 0) log.debug('思维链耗时已测量 ' + thinkTime + 'ms');
-                try { lastStreamTiming = { ttft, thinkTime, streamed, startTime, at: Date.now() }; } catch {}
+                if (safeThinkTime > 0) log.debug('思维链耗时已测量 ' + safeThinkTime + 'ms');
+                try { lastStreamTiming = { ttft, thinkTime: safeThinkTime, streamed, startTime, at: Date.now() }; } catch {}
                 try { patchRequestLog({ durationMs: endedAt, streamed }); } catch {}
-                parseAndProcess(fullText, ttft, thinkTime, streamed);
+                parseAndProcess(fullText, ttft, safeThinkTime, streamed);
               } catch {}
             };
             const scanThink = (chunk: string) => {
@@ -700,6 +715,22 @@ function refresh() {
 }
 
 /**
+ * 输入侧估算用哪一份 messages：完整上下文优先，最近 10 条的展示摘要只做兜底。
+ * 展示摘要曾因共用到估算里，把输入 token 少算到真实值的一成（裁剪掉了大部分上下文）。
+ */
+export function pickPromptMessages(complete: unknown, truncated: unknown): any[] {
+  if (Array.isArray(complete) && complete.length) return complete;
+  if (Array.isArray(truncated) && truncated.length) return truncated;
+  return [];
+}
+
+/** 时序自洽：没有测到首字（ttft<=0）时，思维链耗时没有锚点，一并归零 */
+export function normalizeTiming(ttft: unknown, thinkTime: unknown): { ttft: number; thinkTime: number } {
+  const first = Math.max(0, Number(ttft) || 0);
+  return { ttft: first, thinkTime: first > 0 ? Math.max(0, Number(thinkTime) || 0) : 0 };
+}
+
+/**
  * 上游没给可用 usage（或 usage 全 0）时的收尾：判定这一轮该估算补记、标中断、还是静默丢弃。
  * 依据只有两条硬证据——「实测到了输出」和「有没有中断线索」。
  * 静默的判定（无输出）不写历史、不产生健康信号，避免把空轮次灌进统计。
@@ -708,7 +739,9 @@ async function settleTurnWithoutUsage(source: 'generation-ended' | 'stop', opts:
   const turn = currentTurn();
   if (turn?.settled) return;
   const model = opts.model || turn?.model || lastFetchModel || 'deepseek-v4-flash';
-  const messages = turn?.messages || lastMessages || [];
+  // 两个口径必须分开：展示/落库用最近 10 条摘要，输入估算用完整上下文
+  const storeMessages = turn?.messages || lastMessages || [];
+  const estimateMessages = pickPromptMessages(turn?.promptMessages || lastPromptMessages, storeMessages);
   const startedAt = turn?.startTime || lastStart || Date.now();
   const requestId = turn?.requestId || recentRequestId(120000) || null;
   // 响应原文以本轮现场为准，取不到时回退到最近一次 fetch 快照
@@ -733,7 +766,7 @@ async function settleTurnWithoutUsage(source: 'generation-ended' | 'stop', opts:
   let promptEst: { tokens: number; chars: number; method: string } = { tokens: 0, chars: 0, method: 'char-heuristic' };
   let outputEst: { tokens: number; chars: number; method: string } = { tokens: 0, chars: 0, method: 'char-heuristic' };
   try {
-    promptEst = await estimatePromptTokens(messages);
+    promptEst = await estimatePromptTokens(estimateMessages);
     outputEst = await estimateTextTokens(outputText, { preferTokens: opts.localTokenCount ?? null });
   } catch {}
   const promptTokens = Math.max(0, Math.round(promptEst.tokens || 0));
@@ -765,11 +798,12 @@ async function settleTurnWithoutUsage(source: 'generation-ended' | 'stop', opts:
     costEstimated: true,
   };
   if (turn?.modelFallback) meta.modelFallback = true;
+  const timing = normalizeTiming(turn?.ttft, turn?.thinkTime);
   try {
     repository.addEntry(
-      usage, model, messages, startedAt,
+      usage, model, storeMessages, startedAt,
       turn?.fullRequest ?? null, rawResponse || null,
-      turn?.ttft || 0, turn?.thinkTime || 0, null,
+      timing.ttft, timing.thinkTime, null,
       turn?.connection || recentConnection(), requestId, turn?.streamed ?? null, meta,
     );
   } catch (e) {
@@ -814,6 +848,8 @@ export function processUsage(usage: any, model: string, messages: any[], startTi
       if (!thinkTime) thinkTime = st.thinkTime || 0;
       if (streamed == null) streamed = st.streamed;
     }
+    // 补完还拿不到首字：思维链耗时同样没有锚点，不写
+    if (!(ttft > 0)) thinkTime = 0;
   } catch {}
   // 中断标记：用户点停止或流读出过错时，这一轮照样入库但要标明来源（不进速率/预测口径）
   let resolvedMeta: EntryMeta | null = meta;

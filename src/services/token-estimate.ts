@@ -12,7 +12,7 @@
  */
 
 /** 估算口径版本：算法调整时必须加一，便于区分新旧估算数据 */
-export const ESTIMATE_VERSION = 1;
+export const ESTIMATE_VERSION = 2;
 
 export type EstimateMethod = 'tavern-token-count' | 'tavern-tokenizer' | 'char-heuristic';
 
