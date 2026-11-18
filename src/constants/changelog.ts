@@ -45,7 +45,8 @@ export const CHANGELOG: ChangelogEntry[] = [
         items: [
           '检查更新在 TauriTavern 上误报扩展目录不存在',
           '速率异常提示误报',
-          '中断对话时输入用量被低估',
+          '本地估算的输入用量偏低',
+          '同一轮重复入账时耗时丢失',
         ],
       },
       {
