@@ -39,6 +39,22 @@ const MAJOR_PATTERNS: Array<{ re: RegExp; label: string }> = [
   { re: /addEntry|repository|interception|capture-digest|console-ring|health-signals|persist\b|saveHot|cold_history|IndexedDB|deleteDatabase|rebuildAggregates/i, label: '本扩展核心链路' },
 ];
 
+/**
+ * 网络层失败特征：请求根本没到达或没拿到响应，跟是谁发起的无关。
+ * 本扩展包了 window.fetch，别的扩展（脚本运行器、宿主、第三方）的请求失败时，
+ * 栈里同样会出现 interception-*.js，因此这类文本不能单独当作本扩展的证据。
+ */
+const NETWORK_TRANSPORT_RE = /Failed to fetch|Load failed|network ?error|net::ERR_|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|EPIPE|socket hang up|fetch failed/i;
+
+/** 本扩展自身痕迹：URL 段、全局名、存储名，以及透传层文件名 */
+const OWN_EVIDENCE_RE = /api-usage|api_usage_stat|ApiUsageStat|interception/i;
+
+/**
+ * 本扩展业务帧证据：出现这些说明是本扩展自己的逻辑在跑，不做透传降级。
+ * 刻意不含 interception——它是透传层，任何穿过来的外部请求错误都会带上它。
+ */
+const BUSINESS_FRAME_RE = /addEntry|repository|saveHot|persist\b|capture-digest|health-signals|rebuildAggregates|deleteDatabase|IndexedDB/i;
+
 /** 折叠空白与数字，让同类错误归到同一签名 */
 export function normalizeErrorText(text: unknown): string {
   return String(text ?? '')
@@ -83,6 +99,15 @@ export function errorTextOf(input: unknown): string {
 export function classifyErrorText(input: unknown): ClassifiedError {
   const text = errorTextOf(input);
   if (!text) return { severity: 'minor', signature: '', label: '空错误' };
+  // 先认「网络层透传」，再谈本扩展证据。
+  // 反过来的话（先跑 MAJOR_PATTERNS），外部请求失败会在栈里带出
+  // third-party/Api-Usage/interception-*.js，被 /\/api-usage\//i 与 interception 命中，
+  // detail 变成「功能报错（本扩展代码）」，历史上真机误报过一次（plugin-error|8bd68160）。
+  // 门槛两条：文本里确实有本扩展痕迹（否则 MINOR_PATTERNS 的「网络请求」本来就给 minor），
+  // 且没有任何本扩展业务帧——才认定是透传进来的外部失败。
+  if (OWN_EVIDENCE_RE.test(text) && NETWORK_TRANSPORT_RE.test(text) && !BUSINESS_FRAME_RE.test(text)) {
+    return { severity: 'minor', signature: errorSignature(text), label: '网络请求（透传）' };
+  }
   for (const rule of MAJOR_PATTERNS) {
     if (rule.re.test(text)) {
       return { severity: 'major', signature: errorSignature(text), label: rule.label };

@@ -11815,6 +11815,19 @@ var MAJOR_PATTERNS = [{
 	re: /addEntry|repository|interception|capture-digest|console-ring|health-signals|persist\b|saveHot|cold_history|IndexedDB|deleteDatabase|rebuildAggregates/i,
 	label: "本扩展核心链路"
 }];
+/**
+* 网络层失败特征：请求根本没到达或没拿到响应，跟是谁发起的无关。
+* 本扩展包了 window.fetch，别的扩展（脚本运行器、宿主、第三方）的请求失败时，
+* 栈里同样会出现 interception-*.js，因此这类文本不能单独当作本扩展的证据。
+*/
+var NETWORK_TRANSPORT_RE = /Failed to fetch|Load failed|network ?error|net::ERR_|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|EPIPE|socket hang up|fetch failed/i;
+/** 本扩展自身痕迹：URL 段、全局名、存储名，以及透传层文件名 */
+var OWN_EVIDENCE_RE = /api-usage|api_usage_stat|ApiUsageStat|interception/i;
+/**
+* 本扩展业务帧证据：出现这些说明是本扩展自己的逻辑在跑，不做透传降级。
+* 刻意不含 interception——它是透传层，任何穿过来的外部请求错误都会带上它。
+*/
+var BUSINESS_FRAME_RE = /addEntry|repository|saveHot|persist\b|capture-digest|health-signals|rebuildAggregates|deleteDatabase|IndexedDB/i;
 /** 折叠空白与数字，让同类错误归到同一签名 */
 function normalizeErrorText(text) {
 	return String(text ?? "").replace(/\s+/g, " ").replace(/\b\d+\b/g, "#").replace(/0x[0-9a-f]+/gi, "0x#").trim().slice(0, 300);
@@ -11858,6 +11871,11 @@ function classifyErrorText(input) {
 		severity: "minor",
 		signature: "",
 		label: "空错误"
+	};
+	if (OWN_EVIDENCE_RE.test(text) && NETWORK_TRANSPORT_RE.test(text) && !BUSINESS_FRAME_RE.test(text)) return {
+		severity: "minor",
+		signature: errorSignature(text),
+		label: "网络请求（透传）"
 	};
 	for (const rule of MAJOR_PATTERNS) if (rule.re.test(text)) return {
 		severity: "major",

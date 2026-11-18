@@ -106,6 +106,23 @@ describe('历史记录页健康信号', () => {
     expect(signals[1].signature).toBeTruthy();
   });
 
+  it('别的扩展的网络失败穿过 fetch 透传层时，不提示「功能报错」', () => {
+    // 真机包 plugin-error|8bd68160：脚本运行器发起的请求失败，栈里只有我们的 patched 透传帧
+    noteConsole('error', [
+      'TypeError: Failed to fetch\n' +
+      '    at patched (http://127.0.0.1:3512/scripts/extensions/third-party/Api-Usage/interception-BHW4SG4V.js:1258:20)\n' +
+      '    at window.fetch (http://127.0.0.1:3512/scripts/extensions/third-party/JS-Slash-Runner/dist/index.js:74:145210)',
+    ], 1794719010000);
+    expect(scanConsoleHealth()).toHaveLength(0);
+
+    // 同一环形缓冲里本扩展自己的入库报错仍要提示
+    noteConsole('error', ['ApiUsageStat addEntry failed'], 1794719011000);
+    const signals = scanConsoleHealth();
+    expect(signals).toHaveLength(1);
+    expect(signals[0].kind).toBe('plugin-error');
+    expect(signals[0].detail).toContain('本扩展代码');
+  });
+
   it('同一簇内的同类信号只算一次，换模型各算各的', () => {
     noteCaptureStage('event-drop', { model: 'a', at: 1794719000000 });
     noteCaptureStage('event-drop', { model: 'a', at: 1794719000000 + 1000 });
