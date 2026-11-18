@@ -12876,6 +12876,21 @@ function stripGuardState(state) {
 /** 更新日志（最新在前） */
 var CHANGELOG = [
 	{
+		version: "r3.2.2fix",
+		date: "2026-11-18",
+		sections: [{
+			kind: "fix",
+			items: [
+				"检查更新在 TauriTavern 上误报扩展目录不存在",
+				"速率异常提示误报",
+				"中断对话时输入用量被低估"
+			]
+		}, {
+			kind: "improve",
+			items: ["网络中断与请求超时不再算作扩展报错"]
+		}]
+	},
+	{
 		version: "r3.2.2",
 		date: "2026-11-16",
 		sections: [
