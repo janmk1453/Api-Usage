@@ -233,7 +233,7 @@ function estimateThinkTokens(text: string, usage: any) {
 function installFetchCapture() {
   try {
     const p: any = (window as any).parent || window;
-    if (!p || !p.fetch || (p.fetch as any).__aus_patched) {
+    if (!p || !p.fetch || isAusFetchPatch(p.fetch)) {
       return;
     }
     const rawFetch = p.fetch.bind(p);
@@ -526,6 +526,47 @@ let rawFetchRef: any = null;
 let messageReceivedHandler: any = null;
 
 /**
+ * 宿主可能在我们之后重装自己的 fetch 包装（TauriTavern 在后端就绪后会再 patchFetch 一次，
+ * 把当前 fetch 当成 delegate 存起来再换成自己的）。一旦被换到内层，
+ * /api/backends/chat-completions/generate 会被宿主自己的路由直接吃掉，我们就再也看不到响应。
+ * 因此这里定期校验「最外层是不是我们」，不是就重新包一层。
+ */
+const FETCH_GUARD_MS = 4000;
+let fetchGuardTimer: any = null;
+let fetchGuardBootTimers: any[] = [];
+
+function isAusFetchPatch(fn: any): boolean {
+  return typeof fn === 'function' && (fn as any).__aus_patched === true;
+}
+
+function ensureFetchCapture() {
+  try {
+    const p: any = (window as any).parent || window;
+    if (!p || !p.fetch || isAusFetchPatch(p.fetch)) return;
+    installFetchCapture();
+  } catch {}
+}
+
+function startFetchGuard() {
+  if (fetchGuardTimer) return;
+  try {
+    fetchGuardTimer = setInterval(ensureFetchCapture, FETCH_GUARD_MS);
+    // 启动期两次补挂：宿主后端就绪通常在几百毫秒到几秒之间
+    fetchGuardBootTimers = [
+      setTimeout(ensureFetchCapture, 1200),
+      setTimeout(ensureFetchCapture, 3000),
+    ];
+  } catch {}
+}
+
+function stopFetchGuard() {
+  try { if (fetchGuardTimer) clearInterval(fetchGuardTimer); } catch {}
+  fetchGuardTimer = null;
+  try { for (const t of fetchGuardBootTimers) clearTimeout(t); } catch {}
+  fetchGuardBootTimers = [];
+}
+
+/**
  * 用户点「停止」：只置一个时间戳，先不结算。
  * 留 STOP_SETTLE_DELAY_MS 给 GENERATION_ENDED 先走正常路径；
  * 若那时仍没落库（上游没回 usage），再按中断补记一次。
@@ -567,6 +608,7 @@ export function installInterception() {
       try { setLastRequest(chat?.slice(-10) || [], Date.now()); } catch {}
     };
     try { installFetchCapture(); } catch {}
+    startFetchGuard();
     interceptionInstalled = true;
     return true;
   } catch { return false; }
@@ -591,6 +633,7 @@ export function uninstallInterception() {
         p.fetch = rawFetchRef;
       }
     } catch {}
+    stopFetchGuard();
     interceptionInstalled = false;
   } catch {}
 }

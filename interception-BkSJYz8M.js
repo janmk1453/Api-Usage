@@ -1,6 +1,6 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { D as resolveRuntimeConnectionContext, E as initConnectionIdentity, t as repository } from "./repository-DobWAaUj.js";
+import { D as resolveRuntimeConnectionContext, E as initConnectionIdentity, t as repository } from "./repository-BlG_Yt7N.js";
 //#region src/services/include-usage.ts
 /**
 * 流式 usage 注入的纯逻辑：把 stream_options.include_usage 合并进用户/预设自定义的请求体参数。
@@ -231,6 +231,30 @@ var RESPONSES_EVENTS = /* @__PURE__ */ new Set([
 	"response.failed",
 	"response.incomplete"
 ]);
+/**
+* Gemini Interactions（`POST /v1beta/interactions`）流式事件名。
+* 事件名同时出现在 SSE 的 `event:` 行与 data JSON 的 `event_type` 字段里，这里只认后者。
+*/
+var INTERACTIONS_EVENTS = /* @__PURE__ */ new Set([
+	"interaction.created",
+	"interaction.in_progress",
+	"interaction.status_update",
+	"interaction.requires_action",
+	"interaction.completed",
+	"interaction.failed",
+	"step.start",
+	"step.delta",
+	"step.stop"
+]);
+/** Interactions status → OpenAI finish_reason */
+var INTERACTIONS_STATUS = {
+	completed: "stop",
+	incomplete: "length",
+	requires_action: "tool_calls",
+	failed: "other",
+	cancelled: "other",
+	expired: "other"
+};
 /** Gemini finishReason → OpenAI finish_reason */
 var GEMINI_FINISH = {
 	STOP: "stop",
@@ -333,6 +357,28 @@ function responsesUsageIR(u) {
 	const think = pos(num(u.output_tokens_details?.reasoning_tokens));
 	return makeUsage(hit, miss, output, pos(num(u.total_tokens)), think);
 }
+/**
+* Gemini Interactions usage → UsageIR
+* - total_input_tokens 与 total_cached_tokens 的关系同 Gemini 原生（cached 是 input 的子集）
+* - total_thought_tokens 独立于 total_output_tokens（官方示例 11 + 90 + 245 = 346）
+* - total_tool_use_tokens 不在 total_input_tokens 内
+*/
+function interactionsUsageIR(u) {
+	const input = pos(num(u.total_input_tokens) ?? num(u.input_tokens));
+	const cached = pos(num(u.total_cached_tokens) ?? num(u.cached_tokens));
+	const tool = pos(num(u.total_tool_use_tokens) ?? num(u.tool_use_tokens));
+	const output = pos(num(u.total_output_tokens) ?? num(u.output_tokens));
+	const thoughts = pos(num(u.total_thought_tokens) ?? num(u.thought_tokens));
+	const hit = Math.min(cached, input);
+	return makeUsage(hit, Math.max(0, input - hit) + tool, output + thoughts, pos(num(u.total_tokens)), thoughts);
+}
+/** 把 [{ type:'text', text }] 拼成一段文本（Interactions 的 content / summary 都是这个形状） */
+function joinTextBlocks(list) {
+	if (!Array.isArray(list)) return "";
+	let out = "";
+	for (const block of list) if (isObject(block) && typeof block.text === "string" && block.text) out += block.text;
+	return out;
+}
 /** 首帧协议判定（顺序有意义：Gemini 靠 candidates 锁定，不能等末帧的 usageMetadata） */
 function detectProtocol(frame) {
 	if (!isObject(frame)) return "unknown";
@@ -344,6 +390,9 @@ function detectProtocol(frame) {
 		if (type === "message" && Array.isArray(frame.content)) return "anthropic";
 	}
 	if (frame.object === "response" || Array.isArray(frame.output)) return "responses";
+	if (frame.object === "interaction") return "interactions";
+	if (typeof frame.event_type === "string" && INTERACTIONS_EVENTS.has(frame.event_type)) return "interactions";
+	if (isObject(frame.usage) && num(frame.usage.total_input_tokens) != null) return "interactions";
 	if (Array.isArray(frame.choices)) return "openai";
 	if (frame.usage) return "openai";
 	return "unknown";
@@ -528,6 +577,79 @@ function createFrameNormalizer() {
 		}
 		return [];
 	}
+	/**
+	* Gemini Interactions → OpenAI 形状
+	* 流式：interaction.created → step.start（thought/model_output）→ step.delta（thought_summary/text）
+	*       → step.stop → interaction.completed（**usage 只在最后一个事件的 interaction.usage 里**）
+	* 非流式：{ object:'interaction', steps[], usage, status }
+	*/
+	function projectInteractions(frame) {
+		const out = [];
+		const ev = typeof frame.event_type === "string" ? frame.event_type : "";
+		if (ev === "interaction.created" || ev === "interaction.in_progress" || ev === "interaction.status_update") {
+			const model = frame?.interaction?.model;
+			if (typeof model === "string" && model) st.rawModel = model;
+			return out;
+		}
+		if (ev === "step.start") {
+			const step = isObject(frame.step) ? frame.step : null;
+			const type = typeof step?.type === "string" ? step.type : "";
+			if (type === "thought") {
+				const think = joinTextBlocks(step?.summary) || joinTextBlocks(step?.content);
+				if (think) out.push(deltaFrame(void 0, think));
+			} else if (type === "model_output") {
+				const text = joinTextBlocks(step?.content);
+				if (text) out.push(deltaFrame(text));
+			}
+			return out;
+		}
+		if (ev === "step.delta") {
+			const delta = isObject(frame.delta) ? frame.delta : null;
+			const type = typeof delta?.type === "string" ? delta.type : "";
+			if (type === "thought_summary") {
+				const text = typeof delta?.content?.text === "string" ? delta.content.text : typeof delta?.text === "string" ? delta.text : "";
+				if (text) out.push(deltaFrame(void 0, text));
+			} else if (type === "text") {
+				const text = typeof delta?.text === "string" ? delta.text : typeof delta?.content?.text === "string" ? delta.content.text : "";
+				if (text) out.push(deltaFrame(text));
+			}
+			return out;
+		}
+		if (ev === "interaction.completed" || ev === "interaction.failed") {
+			const it = isObject(frame.interaction) ? frame.interaction : {};
+			if (typeof it.model === "string" && it.model) st.rawModel = it.model;
+			const status = typeof it.status === "string" ? it.status : ev === "interaction.failed" ? "failed" : "";
+			if (status) st.rawFinish = status;
+			if (isObject(it.usage)) {
+				st.rawUsage = it.usage;
+				out.push(usageFrame(interactionsUsageIR(it.usage), st.rawModel));
+			}
+			out.push(finishFrame(INTERACTIONS_STATUS[status] || "other"));
+			return out;
+		}
+		if (frame.object === "interaction") {
+			if (typeof frame.model === "string" && frame.model) st.rawModel = frame.model;
+			const steps = Array.isArray(frame.steps) ? frame.steps : [];
+			let text = "";
+			let think = "";
+			for (const step of steps) {
+				if (!isObject(step)) continue;
+				if (step.type === "thought") think += joinTextBlocks(step.summary) || joinTextBlocks(step.content);
+				else if (step.type === "model_output") text += joinTextBlocks(step.content);
+			}
+			if (think) out.push(deltaFrame(void 0, think));
+			if (text) out.push(deltaFrame(text));
+			if (isObject(frame.usage)) {
+				st.rawUsage = frame.usage;
+				out.push(usageFrame(interactionsUsageIR(frame.usage), st.rawModel));
+			}
+			const status = typeof frame.status === "string" ? frame.status : "";
+			if (status) st.rawFinish = status;
+			out.push(finishFrame(INTERACTIONS_STATUS[status] || "other"));
+			return out;
+		}
+		return [];
+	}
 	function projectOpenAI(frame) {
 		const raw = isObject(frame.usage) ? frame.usage : isObject(frame?.choices?.[0]?.usage) ? frame.choices[0].usage : null;
 		const fr = frame?.choices?.[0]?.finish_reason;
@@ -548,6 +670,7 @@ function createFrameNormalizer() {
 		if (st.protocol === "unknown") st.protocol = detectProtocol(frame);
 		switch (st.protocol) {
 			case "gemini": return projectGemini(frame);
+			case "interactions": return projectInteractions(frame);
 			case "anthropic": return projectAnthropic(frame);
 			case "responses": return projectResponses(frame);
 			case "openai": return projectOpenAI(frame);
@@ -1397,7 +1520,7 @@ function estimateThinkTokens(text, usage) {
 function installFetchCapture() {
 	try {
 		const p = window.parent || window;
-		if (!p || !p.fetch || p.fetch.__aus_patched) return;
+		if (!p || !p.fetch || isAusFetchPatch(p.fetch)) return;
 		const rawFetch = p.fetch.bind(p);
 		const patched = function() {
 			const args = arguments;
@@ -1744,6 +1867,42 @@ var interceptionInstalled = false;
 var rawFetchRef = null;
 var messageReceivedHandler = null;
 /**
+* 宿主可能在我们之后重装自己的 fetch 包装（TauriTavern 在后端就绪后会再 patchFetch 一次，
+* 把当前 fetch 当成 delegate 存起来再换成自己的）。一旦被换到内层，
+* /api/backends/chat-completions/generate 会被宿主自己的路由直接吃掉，我们就再也看不到响应。
+* 因此这里定期校验「最外层是不是我们」，不是就重新包一层。
+*/
+var FETCH_GUARD_MS = 4e3;
+var fetchGuardTimer = null;
+var fetchGuardBootTimers = [];
+function isAusFetchPatch(fn) {
+	return typeof fn === "function" && fn.__aus_patched === true;
+}
+function ensureFetchCapture() {
+	try {
+		const p = window.parent || window;
+		if (!p || !p.fetch || isAusFetchPatch(p.fetch)) return;
+		installFetchCapture();
+	} catch {}
+}
+function startFetchGuard() {
+	if (fetchGuardTimer) return;
+	try {
+		fetchGuardTimer = setInterval(ensureFetchCapture, FETCH_GUARD_MS);
+		fetchGuardBootTimers = [setTimeout(ensureFetchCapture, 1200), setTimeout(ensureFetchCapture, 3e3)];
+	} catch {}
+}
+function stopFetchGuard() {
+	try {
+		if (fetchGuardTimer) clearInterval(fetchGuardTimer);
+	} catch {}
+	fetchGuardTimer = null;
+	try {
+		for (const t of fetchGuardBootTimers) clearTimeout(t);
+	} catch {}
+	fetchGuardBootTimers = [];
+}
+/**
 * 用户点「停止」：只置一个时间戳，先不结算。
 * 留 STOP_SETTLE_DELAY_MS 给 GENERATION_ENDED 先走正常路径；
 * 若那时仍没落库（上游没回 usage），再按中断补记一次。
@@ -1791,6 +1950,7 @@ function installInterception() {
 		try {
 			installFetchCapture();
 		} catch {}
+		startFetchGuard();
 		interceptionInstalled = true;
 		return true;
 	} catch {
@@ -1825,6 +1985,7 @@ function uninstallInterception() {
 			const p = window.parent || window;
 			if (p && rawFetchRef && p.fetch.__aus_patched) p.fetch = rawFetchRef;
 		} catch {}
+		stopFetchGuard();
 		interceptionInstalled = false;
 	} catch {}
 }

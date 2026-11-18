@@ -11,13 +11,17 @@
  *    供「请求日志」页原样展示 —— 页面上看到的必须是未经转换的上游数据。
  * 3. **协议首帧锁定**：锁定后不再切换，避免 usage-only 末帧被误判成别的协议。
  *
+ * 已覆盖协议：Gemini 原生（generateContent / streamGenerateContent）、
+ * Gemini Interactions（/v1beta/interactions，含 TauriTavern 归一化前的原始帧）、
+ * Anthropic Messages、OpenAI Responses、OpenAI / DeepSeek Chat Completions。
+ *
  * 口径（与官方定义对齐）：
  *   prompt_tokens     = 命中 + 未命中（缓存命中已含在输入里）
  *   completion_tokens = 计费输出量 = 正文 + 思维（Gemini 的 candidates 不含 thoughts，必须相加）
  *   total_tokens      = 上游 total（若给）否则 hit + miss + completion
  */
 
-export type FrameProtocol = 'gemini' | 'anthropic' | 'responses' | 'openai' | 'unknown';
+export type FrameProtocol = 'gemini' | 'interactions' | 'anthropic' | 'responses' | 'openai' | 'unknown';
 
 /** Anthropic 流式事件名（error 不列入：两家都有，靠其他事件锁定） */
 const ANTHROPIC_EVENTS = new Set([
@@ -48,6 +52,32 @@ const RESPONSES_EVENTS = new Set([
   'response.failed',
   'response.incomplete',
 ]);
+
+/**
+ * Gemini Interactions（`POST /v1beta/interactions`）流式事件名。
+ * 事件名同时出现在 SSE 的 `event:` 行与 data JSON 的 `event_type` 字段里，这里只认后者。
+ */
+const INTERACTIONS_EVENTS = new Set([
+  'interaction.created',
+  'interaction.in_progress',
+  'interaction.status_update',
+  'interaction.requires_action',
+  'interaction.completed',
+  'interaction.failed',
+  'step.start',
+  'step.delta',
+  'step.stop',
+]);
+
+/** Interactions status → OpenAI finish_reason */
+const INTERACTIONS_STATUS: Record<string, string> = {
+  completed: 'stop',
+  incomplete: 'length',
+  requires_action: 'tool_calls',
+  failed: 'other',
+  cancelled: 'other',
+  expired: 'other',
+};
 
 /** Gemini finishReason → OpenAI finish_reason */
 const GEMINI_FINISH: Record<string, string> = {
@@ -200,6 +230,35 @@ export function responsesUsageIR(u: Record<string, any>): UsageIR {
   return makeUsage(hit, miss, output, total, think);
 }
 
+/**
+ * Gemini Interactions usage → UsageIR
+ * - total_input_tokens 与 total_cached_tokens 的关系同 Gemini 原生（cached 是 input 的子集）
+ * - total_thought_tokens 独立于 total_output_tokens（官方示例 11 + 90 + 245 = 346）
+ * - total_tool_use_tokens 不在 total_input_tokens 内
+ */
+export function interactionsUsageIR(u: Record<string, any>): UsageIR {
+  const input = pos(num(u.total_input_tokens) ?? num(u.input_tokens));
+  const cached = pos(num(u.total_cached_tokens) ?? num(u.cached_tokens));
+  const tool = pos(num(u.total_tool_use_tokens) ?? num(u.tool_use_tokens));
+  const output = pos(num(u.total_output_tokens) ?? num(u.output_tokens));
+  const thoughts = pos(num(u.total_thought_tokens) ?? num(u.thought_tokens));
+  const hit = Math.min(cached, input);
+  const miss = Math.max(0, input - hit) + tool;
+  const completion = output + thoughts;
+  const total = pos(num(u.total_tokens));
+  return makeUsage(hit, miss, completion, total, thoughts);
+}
+
+/** 把 [{ type:'text', text }] 拼成一段文本（Interactions 的 content / summary 都是这个形状） */
+function joinTextBlocks(list: unknown): string {
+  if (!Array.isArray(list)) return '';
+  let out = '';
+  for (const block of list) {
+    if (isObject(block) && typeof block.text === 'string' && block.text) out += block.text;
+  }
+  return out;
+}
+
 /** 首帧协议判定（顺序有意义：Gemini 靠 candidates 锁定，不能等末帧的 usageMetadata） */
 export function detectProtocol(frame: any): FrameProtocol {
   if (!isObject(frame)) return 'unknown';
@@ -211,6 +270,10 @@ export function detectProtocol(frame: any): FrameProtocol {
     if (type === 'message' && Array.isArray(frame.content)) return 'anthropic';
   }
   if (frame.object === 'response' || Array.isArray(frame.output)) return 'responses';
+  // Interactions：非流式整包靠 object，流式靠 event_type（两处都与下面 openai 的兜底不冲突）
+  if (frame.object === 'interaction') return 'interactions';
+  if (typeof frame.event_type === 'string' && INTERACTIONS_EVENTS.has(frame.event_type)) return 'interactions';
+  if (isObject(frame.usage) && num(frame.usage.total_input_tokens) != null) return 'interactions';
   if (Array.isArray(frame.choices)) return 'openai';
   if (frame.usage) return 'openai';
   return 'unknown';
@@ -438,6 +501,91 @@ export function createFrameNormalizer(): FrameNormalizer {
     return [];
   }
 
+  /**
+   * Gemini Interactions → OpenAI 形状
+   * 流式：interaction.created → step.start（thought/model_output）→ step.delta（thought_summary/text）
+   *       → step.stop → interaction.completed（**usage 只在最后一个事件的 interaction.usage 里**）
+   * 非流式：{ object:'interaction', steps[], usage, status }
+   */
+  function projectInteractions(frame: any): any[] {
+    const out: any[] = [];
+    const ev = typeof frame.event_type === 'string' ? frame.event_type : '';
+
+    if (ev === 'interaction.created' || ev === 'interaction.in_progress' || ev === 'interaction.status_update') {
+      const model = frame?.interaction?.model;
+      if (typeof model === 'string' && model) st.rawModel = model;
+      return out;
+    }
+
+    if (ev === 'step.start') {
+      const step = isObject(frame.step) ? frame.step : null;
+      const type = typeof step?.type === 'string' ? step.type : '';
+      if (type === 'thought') {
+        // 思维步骤的文本在 summary 里，正文步骤在 content 里
+        const think = joinTextBlocks(step?.summary) || joinTextBlocks(step?.content);
+        if (think) out.push(deltaFrame(undefined, think));
+      } else if (type === 'model_output') {
+        const text = joinTextBlocks(step?.content);
+        if (text) out.push(deltaFrame(text));
+      }
+      return out;
+    }
+
+    if (ev === 'step.delta') {
+      const delta = isObject(frame.delta) ? frame.delta : null;
+      const type = typeof delta?.type === 'string' ? delta.type : '';
+      if (type === 'thought_summary') {
+        const text = typeof delta?.content?.text === 'string' ? delta.content.text
+          : (typeof delta?.text === 'string' ? delta.text : '');
+        if (text) out.push(deltaFrame(undefined, text));
+      } else if (type === 'text') {
+        const text = typeof delta?.text === 'string' ? delta.text
+          : (typeof delta?.content?.text === 'string' ? delta.content.text : '');
+        if (text) out.push(deltaFrame(text));
+      }
+      // thought_signature / text_annotation_delta / function_call 增量：与正文、思维链统计无关，丢弃
+      return out;
+    }
+
+    if (ev === 'interaction.completed' || ev === 'interaction.failed') {
+      const it = isObject(frame.interaction) ? frame.interaction : {};
+      if (typeof it.model === 'string' && it.model) st.rawModel = it.model;
+      const status = typeof it.status === 'string' ? it.status : (ev === 'interaction.failed' ? 'failed' : '');
+      if (status) st.rawFinish = status;
+      if (isObject(it.usage)) {
+        st.rawUsage = it.usage;
+        out.push(usageFrame(interactionsUsageIR(it.usage), st.rawModel));
+      }
+      out.push(finishFrame(INTERACTIONS_STATUS[status] || 'other'));
+      return out;
+    }
+
+    // 非流式整体响应：{ object:'interaction', steps:[...], usage, status }
+    if (frame.object === 'interaction') {
+      if (typeof frame.model === 'string' && frame.model) st.rawModel = frame.model;
+      const steps = Array.isArray(frame.steps) ? frame.steps : [];
+      let text = '';
+      let think = '';
+      for (const step of steps) {
+        if (!isObject(step)) continue;
+        if (step.type === 'thought') think += joinTextBlocks(step.summary) || joinTextBlocks(step.content);
+        else if (step.type === 'model_output') text += joinTextBlocks(step.content);
+      }
+      if (think) out.push(deltaFrame(undefined, think));
+      if (text) out.push(deltaFrame(text));
+      if (isObject(frame.usage)) {
+        st.rawUsage = frame.usage;
+        out.push(usageFrame(interactionsUsageIR(frame.usage), st.rawModel));
+      }
+      const status = typeof frame.status === 'string' ? frame.status : '';
+      if (status) st.rawFinish = status;
+      out.push(finishFrame(INTERACTIONS_STATUS[status] || 'other'));
+      return out;
+    }
+
+    return [];
+  }
+
   function projectOpenAI(frame: any): any[] {
     const raw = isObject(frame.usage) ? frame.usage
       : (isObject(frame?.choices?.[0]?.usage) ? frame.choices[0].usage : null);
@@ -465,6 +613,7 @@ export function createFrameNormalizer(): FrameNormalizer {
     if (st.protocol === 'unknown') st.protocol = detectProtocol(frame);
     switch (st.protocol) {
       case 'gemini': return projectGemini(frame);
+      case 'interactions': return projectInteractions(frame);
       case 'anthropic': return projectAnthropic(frame);
       case 'responses': return projectResponses(frame);
       case 'openai': return projectOpenAI(frame);

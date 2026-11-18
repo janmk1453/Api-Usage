@@ -6,6 +6,7 @@ import {
   openaiUsageIR,
   anthropicUsageIR,
   responsesUsageIR,
+  interactionsUsageIR,
 } from './frame-normalizer';
 
 /** 取出投影结果里的所有 data 帧 */
@@ -288,3 +289,98 @@ describe('OpenAI / DeepSeek 旧链路零改动', () => {
     expect(n.projectSse('data: [DONE]')).toBe('data: [DONE]\n');
   });
 });
+
+
+describe('Gemini Interactions', () => {
+  it('usage 口径：thought 独立于 output、cached 是 input 子集、tool_use 单独并入未命中', () => {
+    const ir = interactionsUsageIR({
+      total_input_tokens: 1000,
+      total_cached_tokens: 700,
+      total_tool_use_tokens: 40,
+      total_output_tokens: 90,
+      total_thought_tokens: 245,
+      total_tokens: 1375,
+    });
+    expect(ir.prompt_cache_hit_tokens).toBe(700);
+    expect(ir.prompt_cache_miss_tokens).toBe(340); // 1000-700 再 +40
+    expect(ir.prompt_tokens).toBe(1040);
+    expect(ir.completion_tokens).toBe(335); // 90 + 245，思维按输出计费
+    expect(ir.completion_tokens_details.reasoning_tokens).toBe(245);
+    expect(ir.total_tokens).toBe(1375);
+  });
+
+  it('流式：thought 步骤进思维链、model_output 进正文、annotation 等事件不污染正文', () => {
+    const n = createFrameNormalizer();
+    const sse = [
+      'event: interaction.created',
+      'data: {"event_type":"interaction.created","interaction":{"id":"i1","status":"in_progress","model":"gemini-3-flash"}}',
+      '',
+      'data: {"event_type":"step.start","index":0,"step":{"type":"thought","summary":[{"type":"text","text":"想一想"}]}}',
+      'data: {"event_type":"step.delta","index":0,"delta":{"type":"thought_summary","content":{"type":"text","text":"再想"}}}',
+      'data: {"event_type":"step.delta","index":0,"delta":{"type":"thought_signature","signature":""}}',
+      'data: {"event_type":"step.stop","index":0}',
+      'data: {"event_type":"step.start","index":1,"step":{"type":"model_output","content":[{"type":"text","text":"你好"}]}}',
+      'data: {"event_type":"step.delta","index":1,"delta":{"type":"text","text":"，世界"}}',
+      'data: {"event_type":"step.delta","index":1,"delta":{"type":"text_annotation_delta","annotations":[]}}',
+      'data: {"event_type":"step.stop","index":1}',
+      'data: {"event_type":"interaction.completed","interaction":{"id":"i1","status":"completed","usage":{"total_input_tokens":1000,"total_cached_tokens":700,"total_output_tokens":90,"total_thought_tokens":245,"total_tokens":1335}}}',
+      'data: [DONE]',
+    ].join('\n');
+    const out = n.projectSse(sse);
+    const d = readDelta(out);
+    expect(d.reasoning).toBe('想一想再想');
+    expect(d.content).toBe('你好，世界');
+    expect(d.finish).toBe('stop');
+    const u = readUsage(out);
+    expect(u.prompt_tokens).toBe(1000);
+    expect(u.prompt_cache_hit_tokens).toBe(700);
+    expect(u.completion_tokens).toBe(335);
+    expect(u.completion_tokens_details.reasoning_tokens).toBe(245);
+    expect(u.total_tokens).toBe(1335);
+    expect(n.protocol()).toBe('interactions');
+    expect(n.rawFinishReason()).toBe('completed');
+    expect(n.rawUsage()?.total_thought_tokens).toBe(245);
+    expect(out).toContain('data: [DONE]');
+  });
+
+  it('流式：status=incomplete 映射成 length，failed 映射成 other', () => {
+    const a = createFrameNormalizer();
+    expect(readDelta(a.projectSse('data: {"event_type":"interaction.completed","interaction":{"status":"incomplete","usage":{"total_input_tokens":5,"total_output_tokens":2,"total_thought_tokens":0,"total_tokens":7}}}')).finish).toBe('length');
+    const b = createFrameNormalizer();
+    expect(readDelta(b.projectSse('data: {"event_type":"interaction.failed","interaction":{"status":"failed"}}')).finish).toBe('other');
+  });
+
+  it('非流式整包：steps 拆思维与正文，usage 换算，status=incomplete 记 length', () => {
+    const n = createFrameNormalizer();
+    const whole = JSON.stringify({
+      object: 'interaction',
+      id: 'i1',
+      status: 'incomplete',
+      model: 'gemini-3-flash',
+      steps: [
+        { type: 'thought', summary: [{ type: 'text', text: '思考' }] },
+        { type: 'google_search_call', id: 's1' },
+        { type: 'model_output', content: [{ type: 'text', text: '正文' }] },
+      ],
+      usage: { total_input_tokens: 11, total_cached_tokens: 0, total_output_tokens: 90, total_thought_tokens: 245, total_tokens: 346 },
+    });
+    const out = JSON.parse(n.projectWhole(whole));
+    expect(out.choices[0].message.content).toBe('正文');
+    expect(out.choices[0].message.reasoning_content).toBe('思考');
+    expect(out.choices[0].finish_reason).toBe('length');
+    expect(out.usage.prompt_tokens).toBe(11);
+    expect(out.usage.completion_tokens).toBe(335);
+    expect(out.usage.total_tokens).toBe(346);
+    expect(out.usage.completion_tokens_details.reasoning_tokens).toBe(245);
+    expect(n.rawModel()).toBe('gemini-3-flash');
+  });
+
+  it('TauriTavern 已归一化的 OpenAI 形状（completion 已含思维、无 reasoning 字段）原样透传', () => {
+    const n = createFrameNormalizer();
+    const chunk = { id: 'gemini-interactions-stream', object: 'chat.completion.chunk', created: 1, model: 'gemini-3.6-flash', choices: [{ index: 0, delta: { content: '好' }, finish_reason: 'stop' }], usage: { prompt_tokens: 3, completion_tokens: 6, total_tokens: 9, prompt_tokens_details: { cached_tokens: 2 } } };
+    const line = 'data: ' + JSON.stringify(chunk);
+    expect(n.projectSse(line)).toBe(line + '\n');
+    expect(n.protocol()).toBe('openai');
+  });
+});
+
