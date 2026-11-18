@@ -94,6 +94,18 @@ describe('历史记录页健康信号', () => {
     expect(signals[0].signature).toBe('no-usage');
   });
 
+  it('用户自己点停止造成的空轮次不算「没有取到用量」', () => {
+    noteCaptureStage('event-drop', { model: 'hy4-flash', reason: 'user-stop-no-output', at: 1794719100000 });
+    noteCaptureStage('event-drop', { model: 'hy4-flash', reason: 'user-stop-no-output', at: 1794719102000 });
+    expect(scanCaptureHealth()).toHaveLength(0);
+    // 上游断流 / 空回复导致的无输出丢弃仍要提示，不能被上面的豁免带偏
+    noteCaptureStage('event-drop', { model: 'hy4-flash', reason: 'no-usage-no-output', at: 1794719104000 });
+    noteCaptureStage('event-drop', { model: 'hy4-flash', reason: 'no-usage-no-output', at: 1794719106000 });
+    const signals = scanCaptureHealth();
+    expect(signals).toHaveLength(1);
+    expect(signals[0].signature).toBe('no-usage-no-output');
+  });
+
   it('入库失败与控制台里的本扩展报错都算「功能报错」，网络类控制台错误不算', () => {
     noteCaptureStage('entry-error', { model: 'deepseek-flash', reason: 'boom', at: 1794719000000 });
     noteConsole('error', ['ApiUsageStat addEntry failed'], 1794719005000);

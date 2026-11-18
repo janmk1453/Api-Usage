@@ -243,6 +243,9 @@ export function scanCaptureHealth(stages = listCaptureStages()): HealthSignal[] 
   for (const rec of stages) {
     if (!rec) continue;
     if (rec.stage === 'event-drop') {
+      // 用户主动停止造成的空轮次不是故障（与历史记录层「用户中断不产生健康提示」同一口径），
+      // 这类丢弃连估算都无从下手，本来就不该写历史，更不该弹告警
+      if (dropReasonOf(rec) === 'user-stop-no-output') continue;
       const key = (rec.model || '') + '|' + dropReasonOf(rec);
       const list = drops.get(key) || [];
       list.push(rec);

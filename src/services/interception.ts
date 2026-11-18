@@ -776,8 +776,12 @@ async function settleTurnWithoutUsage(source: 'generation-ended' | 'stop', opts:
   });
   if (outcome.kind === 'drop') {
     log.debug('本轮无输出，静默不记录', { source, reason: outcome.reason });
+    // 用户自己点了停止、而模型还没吐出任何内容：这不是采集故障，也不是上游异常，
+    // 只是这一轮本来就没有可统计的东西。用独立原因标记，健康提示里跳过它，
+    // 否则「连点两次停止」会被报成「连续两轮没取到用量、这些对话未写入历史」。
+    const reason = stopPending() ? 'user-stop-no-output' : outcome.reason;
     try {
-      noteCaptureStage('event-drop', { model, requestId: requestId || '', reason: outcome.reason });
+      noteCaptureStage('event-drop', { model, requestId: requestId || '', reason });
     } catch {}
     return;
   }
