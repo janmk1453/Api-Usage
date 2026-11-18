@@ -179,6 +179,26 @@ function replaceEstimatedEntry(
   }
 }
 
+/**
+ * 同一轮被写了两次时补回耗时：先写的那条可能没拿到本轮起点（duration 落成 0），
+ * 后到的写者知道真实起点，就把它补上并按同一口径重算速率 —— 否则这条记录会永久显示
+ * 耗时 0 秒、速率 0，还会在历史页被当成「没记录到耗时」提示出来。
+ */
+export function backfillEntryDuration(head: any, startTime: number, now = Date.now()): boolean {
+  if (!head || !startTime) return false;
+  if (Number(head.duration) > 0) return false;
+  const measured = now - startTime;
+  if (!(measured > 0)) return false;
+  head.duration = measured;
+  head.tokenRate = computeTokenRate({
+    duration: measured,
+    ttft: Number(head.ttft) || 0,
+    completionTokens: Number(head.completion_tokens) || 0,
+    streamed: head.streamed ?? null,
+  });
+  return true;
+}
+
 function notifyStorageFailure(error: unknown): void {
   log.error('冷历史写入失败', error);
   if (storageFailureNotified) return;
@@ -1194,6 +1214,8 @@ export const repository = {
               changed =
                 replaceEstimatedEntry(head, { hit, miss, comp, total, usage, fr, connection, wallet, model }) || changed;
             }
+            // 先写的那条可能没拿到本轮起点 → 用这一次的真实起点补回耗时；下面补 TTFT 时会用到补好的时长
+            if (backfillEntryDuration(head, startTime, now)) changed = true;
             if (fullResponse && !head.fullResponse) { head.fullResponse = clampResponse(fullResponse); changed = true; }
             if (fr && !head.finishReason) { head.finishReason = fr; head.isTruncated = isTruncatedFinish(fr); changed = true; }
             const estThink = usage?.completion_tokens_details?.reasoning_tokens || (usage as any)?.__think_tokens_est || 0;
@@ -1231,6 +1253,7 @@ export const repository = {
               if ((state.lastUsage as any)?.timestamp === head.timestamp) {
                 if (head.fullResponse) (state.lastUsage as any).fullResponse = head.fullResponse;
                 if (head.finishReason) { (state.lastUsage as any).finishReason = head.finishReason; (state.lastUsage as any).isTruncated = head.isTruncated; }
+                if (head.duration) (state.lastUsage as any).duration = head.duration;
                 if (head.ttft) { (state.lastUsage as any).ttft = head.ttft; (state.lastUsage as any).tokenRate = head.tokenRate; }
                 if (head.thinkTime) (state.lastUsage as any).thinkTime = head.thinkTime;
                 if (head.thinkTokens) (state.lastUsage as any).thinkTokens = head.thinkTokens;

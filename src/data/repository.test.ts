@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { normalizeSettings, repository } from './repository';
+import { backfillEntryDuration, normalizeSettings, repository } from './repository';
 import { state } from '../store/index';
 import { defaultSettings } from '../types/settings';
 import { createDeepSeekWallet, createWalletFromConnection } from './wallets';
@@ -206,5 +206,38 @@ describe('峰值提示小圆点默认值', () => {
   it('用户显式选择的开关状态一律保留', () => {
     expect(normalizeSettings({ peakDot: false, theme: 'dark' }).peakDot).toBe(false);
     expect(normalizeSettings({ peakDot: true }).peakDot).toBe(true);
+  });
+});
+
+
+describe('同一轮二次写入补回耗时', () => {
+  it('首写没有耗时、后写知道起点时补上并重算速率', () => {
+    const now = 1_800_000_000_000;
+    const head: any = { duration: 0, ttft: 500, completion_tokens: 600, streamed: true, tokenRate: 0 };
+    expect(backfillEntryDuration(head, now - 4000, now)).toBe(true);
+    expect(head.duration).toBe(4000);
+    // 与 computeTokenRate 同口径（扣掉首字耗时的输出侧速率，入库存取整值）：600 / (4000 - 500) * 1000
+    expect(head.tokenRate).toBe(171);
+  });
+
+  it('已经有耗时的不覆盖、没有起点或起点在未来时不动', () => {
+    const now = 1_800_000_000_000;
+    const kept: any = { duration: 3200, ttft: 400, completion_tokens: 100, streamed: true, tokenRate: 35 };
+    expect(backfillEntryDuration(kept, now - 4000, now)).toBe(false);
+    expect(kept.duration).toBe(3200);
+    expect(kept.tokenRate).toBe(35);
+    expect(backfillEntryDuration({ duration: 0 }, 0, now)).toBe(false);
+    const future: any = { duration: 0 };
+    expect(backfillEntryDuration(future, now + 1000, now)).toBe(false);
+    expect(future.duration).toBe(0);
+    expect(backfillEntryDuration(null as any, now - 4000, now)).toBe(false);
+  });
+
+  it('非流式记录补耗时后速率仍为 0', () => {
+    const now = 1_800_000_000_000;
+    const head: any = { duration: 0, ttft: 0, completion_tokens: 900, streamed: false, tokenRate: 0 };
+    expect(backfillEntryDuration(head, now - 5000, now)).toBe(true);
+    expect(head.duration).toBe(5000);
+    expect(head.tokenRate).toBe(0);
   });
 });

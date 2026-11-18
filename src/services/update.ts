@@ -205,6 +205,30 @@ function saveBadgeState(on: boolean, label = '') {
   } catch {}
 }
 
+/**
+ * 从酒馆扩展清单直接读「本扩展装在哪」。
+ * ST 的 /api/extensions/version 只有 global 传对了才找得到扩展目录；拿错位置去探一定会 404，
+ * TauriTavern 还会把它打成一条控制台报错（真机反馈包里见过这类 500ms 的误报，容易当成功能损坏）。
+ * 清单条目形如 { name: 'third-party/Api-Usage', type: 'global' | 'local' }，读不到返回 null 交给兜底顺序。
+ */
+export function extensionScopeHint(): boolean | null {
+  try {
+    const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
+    const list: any[] = Array.isArray(ctx?.extensions) ? ctx.extensions : [];
+    for (const item of list) {
+      const base = String(item?.name || '').split('/').filter(Boolean).pop() || '';
+      if (base !== EXTENSION_FOLDER) continue;
+      const type = String(item?.type || '');
+      if (type === 'global') return true;
+      if (type === 'local') return false;
+    }
+  } catch {}
+  return null;
+}
+
+/** 本次会话已确认成功的安装位置：确认过就不再盲试另一边 */
+let knownGlobal: boolean | null = null;
+
 // 通过 ST 扩展管理 API 获取扩展目录当前提交哈希（服务端会 git fetch origin）
 async function fetchLocalCommit(): Promise<LocalRepoInfo | null> {
   const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
@@ -212,7 +236,10 @@ async function fetchLocalCommit(): Promise<LocalRepoInfo | null> {
   let headers: any;
   try { headers = ctx.getRequestHeaders(); } catch { headers = { 'Content-Type': 'application/json' }; }
   const rf = getParentFetch();
-  for (const isGlobal of [false, true]) {
+  // 先按清单/上次成功的结果定位，正常情况只发一次请求；判定不出来时全局优先（第三方扩展默认全局安装）
+  const hint = extensionScopeHint() ?? knownGlobal;
+  const candidates = hint == null ? [true, false] : [hint, !hint];
+  for (const isGlobal of candidates) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => { try { ctrl.abort(); } catch {} }, LOCAL_TIMEOUT_MS);
     try {
@@ -234,6 +261,7 @@ async function fetchLocalCommit(): Promise<LocalRepoInfo | null> {
             global: isGlobal,
             isUpToDate,
           };
+          knownGlobal = isGlobal;
           cachedLocalRepo = info;
           return info;
         }

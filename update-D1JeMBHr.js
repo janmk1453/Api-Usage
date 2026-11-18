@@ -218,6 +218,27 @@ function saveBadgeState(on, label = "") {
 		else localStorage.removeItem(STATE_KEY);
 	} catch {}
 }
+/**
+* 从酒馆扩展清单直接读「本扩展装在哪」。
+* ST 的 /api/extensions/version 只有 global 传对了才找得到扩展目录；拿错位置去探一定会 404，
+* TauriTavern 还会把它打成一条控制台报错（真机反馈包里见过这类 500ms 的误报，容易当成功能损坏）。
+* 清单条目形如 { name: 'third-party/Api-Usage', type: 'global' | 'local' }，读不到返回 null 交给兜底顺序。
+*/
+function extensionScopeHint() {
+	try {
+		const ctx = globalThis.SillyTavern?.getContext?.();
+		const list = Array.isArray(ctx?.extensions) ? ctx.extensions : [];
+		for (const item of list) {
+			if ((String(item?.name || "").split("/").filter(Boolean).pop() || "") !== EXTENSION_FOLDER) continue;
+			const type = String(item?.type || "");
+			if (type === "global") return true;
+			if (type === "local") return false;
+		}
+	} catch {}
+	return null;
+}
+/** 本次会话已确认成功的安装位置：确认过就不再盲试另一边 */
+var knownGlobal = null;
 async function fetchLocalCommit() {
 	const ctx = globalThis.SillyTavern?.getContext?.();
 	if (!ctx?.getRequestHeaders) return null;
@@ -228,7 +249,9 @@ async function fetchLocalCommit() {
 		headers = { "Content-Type": "application/json" };
 	}
 	const rf = getParentFetch();
-	for (const isGlobal of [false, true]) {
+	const hint = extensionScopeHint() ?? knownGlobal;
+	const candidates = hint == null ? [true, false] : [hint, !hint];
+	for (const isGlobal of candidates) {
 		const ctrl = new AbortController();
 		const timer = setTimeout(() => {
 			try {
@@ -257,6 +280,7 @@ async function fetchLocalCommit() {
 						global: isGlobal,
 						isUpToDate
 					};
+					knownGlobal = isGlobal;
 					cachedLocalRepo = info;
 					return info;
 				}

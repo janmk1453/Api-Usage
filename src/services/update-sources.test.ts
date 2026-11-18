@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { remoteSources } from './update';
+import { afterEach, describe, expect, it } from 'vitest';
+import { extensionScopeHint, remoteSources } from './update';
 
 describe('远端多源列表', () => {
   const sources = remoteSources('manifest.json', 'dev');
@@ -55,5 +55,34 @@ describe('远端多源列表', () => {
       expect(s.url).toContain('update-policy.json');
       expect(s.url).toContain('main');
     }
+  });
+});
+
+describe('扩展安装位置探测', () => {
+  const raw = (globalThis as any).SillyTavern;
+  const setExtensions = (list: any[]) => {
+    (globalThis as any).SillyTavern = { getContext: () => ({ extensions: list }) };
+  };
+  afterEach(() => {
+    (globalThis as any).SillyTavern = raw;
+  });
+
+  it('清单注明全局安装时返回 true', () => {
+    setExtensions([{ name: 'third-party/Api-Usage', type: 'global' }]);
+    expect(extensionScopeHint()).toBe(true);
+  });
+
+  it('清单注明本地安装时返回 false', () => {
+    setExtensions([{ name: 'Api-Usage', type: 'local' }]);
+    expect(extensionScopeHint()).toBe(false);
+  });
+
+  it('没有本扩展条目、宿主缺失或读取抛错时返回 null，交给兜底顺序', () => {
+    setExtensions([{ name: 'third-party/Other', type: 'global' }]);
+    expect(extensionScopeHint()).toBe(null);
+    (globalThis as any).SillyTavern = undefined;
+    expect(extensionScopeHint()).toBe(null);
+    (globalThis as any).SillyTavern = { getContext: () => { throw new Error('boom'); } };
+    expect(extensionScopeHint()).toBe(null);
   });
 });

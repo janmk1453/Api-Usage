@@ -1362,6 +1362,7 @@ function migrateLegacyWalletApiKey(walletId = DEEPSEEK_WALLET_ID) {
 * 已废弃多存档，所有数据归一至 state.history + 聚合字段
 */
 var repository_exports = /* @__PURE__ */ __exportAll({
+	backfillEntryDuration: () => backfillEntryDuration,
 	normalizeSettings: () => normalizeSettings,
 	repository: () => repository
 });
@@ -1477,6 +1478,25 @@ function replaceEstimatedEntry(head, params) {
 	} catch {
 		return false;
 	}
+}
+/**
+* 同一轮被写了两次时补回耗时：先写的那条可能没拿到本轮起点（duration 落成 0），
+* 后到的写者知道真实起点，就把它补上并按同一口径重算速率 —— 否则这条记录会永久显示
+* 耗时 0 秒、速率 0，还会在历史页被当成「没记录到耗时」提示出来。
+*/
+function backfillEntryDuration(head, startTime, now = Date.now()) {
+	if (!head || !startTime) return false;
+	if (Number(head.duration) > 0) return false;
+	const measured = now - startTime;
+	if (!(measured > 0)) return false;
+	head.duration = measured;
+	head.tokenRate = computeTokenRate({
+		duration: measured,
+		ttft: Number(head.ttft) || 0,
+		completionTokens: Number(head.completion_tokens) || 0,
+		streamed: head.streamed ?? null
+	});
+	return true;
 }
 function notifyStorageFailure(error) {
 	log.error("冷历史写入失败", error);
@@ -2376,7 +2396,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && !!wallet.catalogProvider) try {
-						import("./pricing-sync-BYQTbBto.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-B8gpdyTN.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
@@ -2410,6 +2430,7 @@ var repository = {
 							wallet,
 							model
 						}) || changed;
+						if (backfillEntryDuration(head, startTime, now)) changed = true;
 						if (fullResponse && !head.fullResponse) {
 							head.fullResponse = clampResponse(fullResponse);
 							changed = true;
@@ -2473,6 +2494,7 @@ var repository = {
 									state.lastUsage.finishReason = head.finishReason;
 									state.lastUsage.isTruncated = head.isTruncated;
 								}
+								if (head.duration) state.lastUsage.duration = head.duration;
 								if (head.ttft) {
 									state.lastUsage.ttft = head.ttft;
 									state.lastUsage.tokenRate = head.tokenRate;
