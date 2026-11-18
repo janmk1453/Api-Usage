@@ -43,23 +43,34 @@ export const CHANGELOG: ChangelogEntry[] = [
       {
         kind: 'feature',
         items: [
-          '支持 Gemini 原生接口、Claude、Responses 接口的用量与思维链统计',
-          '支持 Gemini Interactions 接口的用量统计',
+          '新增支持：Vertex AI API、Interactions API（TT*）、Gemini 原生 API、Gemini OpenAI 兼容 API、Anthropic API（TT）、Responses API（TT），*标注TT的格式为仅TauriTavern支持',
+          '上游没有返回用量时，支持本地估算数据，且计入历史',
+          '手动中断对话时，可以正确识别并估算用量，且计入历史',
+          '历史记录列表现在可以显示更多信息',
+          '更新说明弹窗',
         ],
       },
       {
         kind: 'improve',
         items: [
+          '改进了国内网络环境下的检查更新',
+          '提高对网络中断，请求超时，用户手动中断等情况的兼容性',
+          '改进错误提示，降低误报率',
           '手动中断的对话不再算作截断',
-          '请求日志始终显示上游返回的原始内容',
         ],
       },
       {
         kind: 'fix',
         items: [
-          '修复 TauriTavern 上 Gemini 原生、Claude、Responses 格式的请求报错',
+          '检查更新在 TauriTavern 上显示扩展目录不存在',
+          '速率异常提示误报',
+          '本地估算的输入用量异常偏低',
+          '同一轮重复入账时耗时丢失',
+          '修复部分模型前缀导致误判',
+          '修复潜在的 TT酒馆 中 Gemini 原生、Claude、Responses 格式的请求报错问题',
           '修复扩展误报「连续两轮没有取到用量」',
           '修复宿主重新加载后取不到用量',
+          '其他已知问题',
         ],
       },
     ],
