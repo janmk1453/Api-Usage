@@ -76,6 +76,8 @@ interface LocalRepoInfo {
   sha: string;
   branch: string;
   global: boolean;
+  /** 服务端认得的扩展名（相对 extensions 目录，可能带 third-party/ 前缀） */
+  extensionName: string;
   isUpToDate: boolean | null;
 }
 
@@ -226,8 +228,42 @@ export function extensionScopeHint(): boolean | null {
   return null;
 }
 
+/**
+ * 清单里的完整扩展名。ST/TauriTavern 的版本接口要的是「相对 extensions 目录的路径」，
+ * 第三方扩展是 `third-party/Api-Usage`，只传裸名 `Api-Usage` 会拼成上一级目录、必然 404。
+ */
+export function extensionNameHint(): string | null {
+  try {
+    const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
+    const list: any[] = Array.isArray(ctx?.extensions) ? ctx.extensions : [];
+    for (const item of list) {
+      const full = String(item?.name || '').trim().replace(/^\/+|\/+$/g, '');
+      if (!full) continue;
+      const base = full.split('/').filter(Boolean).pop() || '';
+      if (base !== EXTENSION_FOLDER) continue;
+      return full;
+    }
+  } catch {}
+  return null;
+}
+
+/** 扩展名候选：清单完整名 → third-party/ 前缀 → 裸名 */
+export function extensionNameCandidates(): string[] {
+  const out: string[] = [];
+  const push = (name: string) => {
+    const value = String(name || '').trim().replace(/^\/+|\/+$/g, '');
+    if (value && !out.includes(value)) out.push(value);
+  };
+  push(extensionNameHint() || '');
+  push(`third-party/${EXTENSION_FOLDER}`);
+  push(EXTENSION_FOLDER);
+  return out;
+}
+
 /** 本次会话已确认成功的安装位置：确认过就不再盲试另一边 */
 let knownGlobal: boolean | null = null;
+/** 本次会话已确认成功的扩展名：确认过就不再盲试其它写法 */
+let knownExtensionName: string | null = null;
 
 // 通过 ST 扩展管理 API 获取扩展目录当前提交哈希（服务端会 git fetch origin）
 async function fetchLocalCommit(): Promise<LocalRepoInfo | null> {
@@ -236,37 +272,48 @@ async function fetchLocalCommit(): Promise<LocalRepoInfo | null> {
   let headers: any;
   try { headers = ctx.getRequestHeaders(); } catch { headers = { 'Content-Type': 'application/json' }; }
   const rf = getParentFetch();
-  // 先按清单/上次成功的结果定位，正常情况只发一次请求；判定不出来时全局优先（第三方扩展默认全局安装）
+  // 扩展名与安装位置都必须对得上，否则服务端拼出来的目录不存在，直接 404。
+  // 先按清单给出的完整名 + 安装位置试，正常情况一次命中；失败再按候选顺序退让。
   const hint = extensionScopeHint() ?? knownGlobal;
-  const candidates = hint == null ? [true, false] : [hint, !hint];
-  for (const isGlobal of candidates) {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => { try { ctrl.abort(); } catch {} }, LOCAL_TIMEOUT_MS);
-    try {
-      const resp: any = await rf('/api/extensions/version', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ extensionName: EXTENSION_FOLDER, global: isGlobal }),
-        signal: ctrl.signal,
-      } as any);
-      clearTimeout(timer);
-      if (resp?.ok) {
-        const data = await resp.json();
-        const sha = String(data?.currentCommitHash || '').trim();
-        const isUpToDate = typeof data?.isUpToDate === 'boolean' ? data.isUpToDate : null;
-        if (sha || isUpToDate !== null) {
-          const info: LocalRepoInfo = {
-            sha,
-            branch: String(data?.currentBranchName || ''),
-            global: isGlobal,
-            isUpToDate,
-          };
-          knownGlobal = isGlobal;
-          cachedLocalRepo = info;
-          return info;
+  const globals = hint == null ? [true, false] : [hint, !hint];
+  const names = extensionNameCandidates();
+  if (knownExtensionName) {
+    const rest = names.filter(name => name !== knownExtensionName);
+    names.length = 0;
+    names.push(knownExtensionName, ...rest);
+  }
+  for (const extensionName of names) {
+    for (const isGlobal of globals) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => { try { ctrl.abort(); } catch {} }, LOCAL_TIMEOUT_MS);
+      try {
+        const resp: any = await rf('/api/extensions/version', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ extensionName, global: isGlobal }),
+          signal: ctrl.signal,
+        } as any);
+        clearTimeout(timer);
+        if (resp?.ok) {
+          const data = await resp.json();
+          const sha = String(data?.currentCommitHash || '').trim();
+          const isUpToDate = typeof data?.isUpToDate === 'boolean' ? data.isUpToDate : null;
+          if (sha || isUpToDate !== null) {
+            const info: LocalRepoInfo = {
+              sha,
+              branch: String(data?.currentBranchName || ''),
+              global: isGlobal,
+              extensionName,
+              isUpToDate,
+            };
+            knownGlobal = isGlobal;
+            knownExtensionName = extensionName;
+            cachedLocalRepo = info;
+            return info;
+          }
         }
-      }
-    } catch { clearTimeout(timer); }
+      } catch { clearTimeout(timer); }
+    }
   }
   return null;
 }
@@ -604,14 +651,14 @@ export interface SelfUpdateResult {
   branch: UpdateBranch;
 }
 
-async function switchToBranch(branch: UpdateBranch, global: boolean, headers: any, rf: typeof fetch): Promise<{ ok: boolean; message: string }> {
+async function switchToBranch(branch: UpdateBranch, global: boolean, headers: any, rf: typeof fetch, extensionName: string): Promise<{ ok: boolean; message: string }> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => { try { ctrl.abort(); } catch {} }, LOCAL_TIMEOUT_MS);
   try {
     const resp: any = await rf('/api/extensions/switch', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ extensionName: EXTENSION_FOLDER, branch: `origin/${branch}`, global }),
+      body: JSON.stringify({ extensionName, branch: `origin/${branch}`, global }),
       signal: ctrl.signal,
     } as any);
     clearTimeout(timer);
@@ -656,12 +703,14 @@ export async function updateSelf(): Promise<SelfUpdateResult> {
     return { ok: false, isUpToDate: false, changed: false, message, branch: targetBranch };
   }
   const global = local?.global ?? false;
+  // 服务端要求的是相对 extensions 目录的完整名（第三方扩展带 third-party/ 前缀）
+  const extensionName = local?.extensionName || knownExtensionName || extensionNameCandidates()[0] || EXTENSION_FOLDER;
   const rf = getParentFetch();
 
   // 目标分支与当前分支不同时，先通过服务端接口切换分支
   let switchedBranch = false;
   if (local && local.sha && local.branch && local.branch !== targetBranch) {
-    const switched = await switchToBranch(targetBranch, global, headers, rf);
+    const switched = await switchToBranch(targetBranch, global, headers, rf, extensionName);
     if (!switched.ok) {
       toast('error', switched.message);
       return { ok: false, isUpToDate: false, changed: false, message: switched.message, branch: targetBranch };
@@ -677,7 +726,7 @@ export async function updateSelf(): Promise<SelfUpdateResult> {
     const resp: any = await rf('/api/extensions/update', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ extensionName: EXTENSION_FOLDER, global }),
+      body: JSON.stringify({ extensionName, global }),
       signal: ctrl.signal,
     } as any);
     clearTimeout(timer);

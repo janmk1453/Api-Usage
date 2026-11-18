@@ -237,8 +237,39 @@ function extensionScopeHint() {
 	} catch {}
 	return null;
 }
+/**
+* 清单里的完整扩展名。ST/TauriTavern 的版本接口要的是「相对 extensions 目录的路径」，
+* 第三方扩展是 `third-party/Api-Usage`，只传裸名 `Api-Usage` 会拼成上一级目录、必然 404。
+*/
+function extensionNameHint() {
+	try {
+		const ctx = globalThis.SillyTavern?.getContext?.();
+		const list = Array.isArray(ctx?.extensions) ? ctx.extensions : [];
+		for (const item of list) {
+			const full = String(item?.name || "").trim().replace(/^\/+|\/+$/g, "");
+			if (!full) continue;
+			if ((full.split("/").filter(Boolean).pop() || "") !== EXTENSION_FOLDER) continue;
+			return full;
+		}
+	} catch {}
+	return null;
+}
+/** 扩展名候选：清单完整名 → third-party/ 前缀 → 裸名 */
+function extensionNameCandidates() {
+	const out = [];
+	const push = (name) => {
+		const value = String(name || "").trim().replace(/^\/+|\/+$/g, "");
+		if (value && !out.includes(value)) out.push(value);
+	};
+	push(extensionNameHint() || "");
+	push(`third-party/${EXTENSION_FOLDER}`);
+	push(EXTENSION_FOLDER);
+	return out;
+}
 /** 本次会话已确认成功的安装位置：确认过就不再盲试另一边 */
 var knownGlobal = null;
+/** 本次会话已确认成功的扩展名：确认过就不再盲试其它写法 */
+var knownExtensionName = null;
 async function fetchLocalCommit() {
 	const ctx = globalThis.SillyTavern?.getContext?.();
 	if (!ctx?.getRequestHeaders) return null;
@@ -250,8 +281,14 @@ async function fetchLocalCommit() {
 	}
 	const rf = getParentFetch();
 	const hint = extensionScopeHint() ?? knownGlobal;
-	const candidates = hint == null ? [true, false] : [hint, !hint];
-	for (const isGlobal of candidates) {
+	const globals = hint == null ? [true, false] : [hint, !hint];
+	const names = extensionNameCandidates();
+	if (knownExtensionName) {
+		const rest = names.filter((name) => name !== knownExtensionName);
+		names.length = 0;
+		names.push(knownExtensionName, ...rest);
+	}
+	for (const extensionName of names) for (const isGlobal of globals) {
 		const ctrl = new AbortController();
 		const timer = setTimeout(() => {
 			try {
@@ -263,7 +300,7 @@ async function fetchLocalCommit() {
 				method: "POST",
 				headers,
 				body: JSON.stringify({
-					extensionName: EXTENSION_FOLDER,
+					extensionName,
 					global: isGlobal
 				}),
 				signal: ctrl.signal
@@ -278,9 +315,11 @@ async function fetchLocalCommit() {
 						sha,
 						branch: String(data?.currentBranchName || ""),
 						global: isGlobal,
+						extensionName,
 						isUpToDate
 					};
 					knownGlobal = isGlobal;
+					knownExtensionName = extensionName;
 					cachedLocalRepo = info;
 					return info;
 				}
@@ -611,7 +650,7 @@ async function readErrorText(resp) {
 		return "";
 	}
 }
-async function switchToBranch(branch, global, headers, rf) {
+async function switchToBranch(branch, global, headers, rf, extensionName) {
 	const ctrl = new AbortController();
 	const timer = setTimeout(() => {
 		try {
@@ -623,7 +662,7 @@ async function switchToBranch(branch, global, headers, rf) {
 			method: "POST",
 			headers,
 			body: JSON.stringify({
-				extensionName: EXTENSION_FOLDER,
+				extensionName,
 				branch: `origin/${branch}`,
 				global
 			}),
@@ -693,10 +732,11 @@ async function updateSelf() {
 		};
 	}
 	const global = local?.global ?? false;
+	const extensionName = local?.extensionName || knownExtensionName || extensionNameCandidates()[0] || EXTENSION_FOLDER;
 	const rf = getParentFetch();
 	let switchedBranch = false;
 	if (local && local.sha && local.branch && local.branch !== targetBranch) {
-		const switched = await switchToBranch(targetBranch, global, headers, rf);
+		const switched = await switchToBranch(targetBranch, global, headers, rf, extensionName);
 		if (!switched.ok) {
 			toast("error", switched.message);
 			return {
@@ -725,7 +765,7 @@ async function updateSelf() {
 			method: "POST",
 			headers,
 			body: JSON.stringify({
-				extensionName: EXTENSION_FOLDER,
+				extensionName,
 				global
 			}),
 			signal: ctrl.signal

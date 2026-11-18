@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { extensionScopeHint, remoteSources } from './update';
+import { extensionNameCandidates, extensionNameHint, extensionScopeHint, remoteSources } from './update';
 
 describe('远端多源列表', () => {
   const sources = remoteSources('manifest.json', 'dev');
@@ -84,5 +84,31 @@ describe('扩展安装位置探测', () => {
     expect(extensionScopeHint()).toBe(null);
     (globalThis as any).SillyTavern = { getContext: () => { throw new Error('boom'); } };
     expect(extensionScopeHint()).toBe(null);
+  });
+
+  it('清单给出的是 third-party/ 完整名，首选项就是它', () => {
+    setExtensions([{ name: 'third-party/Api-Usage', type: 'global' }]);
+    expect(extensionNameHint()).toBe('third-party/Api-Usage');
+    expect(extensionNameCandidates()[0]).toBe('third-party/Api-Usage');
+  });
+
+  it('版本接口要的是相对 extensions 目录的完整名，裸名只作兜底', () => {
+    // TauriTavern 上只传裸名会拼成 default-user/extensions/Api-Usage 或
+    // data/extensions/third-party/Api-Usage，两个目录都不存在 → 404 弹「后端错误」
+    setExtensions([{ name: 'third-party/Api-Usage', type: 'global' }]);
+    expect(extensionScopeHint()).toBe(true);
+    expect(extensionNameCandidates()).toEqual(['third-party/Api-Usage', 'Api-Usage']);
+
+    setExtensions([{ name: 'Api-Usage', type: 'local' }]);
+    expect(extensionNameHint()).toBe('Api-Usage');
+    expect(extensionNameCandidates()).toEqual(['Api-Usage', 'third-party/Api-Usage']);
+  });
+
+  it('读取不到清单时按 third-party/ 前缀再退到裸名', () => {
+    (globalThis as any).SillyTavern = undefined;
+    expect(extensionNameHint()).toBe(null);
+    expect(extensionNameCandidates()).toEqual(['third-party/Api-Usage', 'Api-Usage']);
+    (globalThis as any).SillyTavern = { getContext: () => { throw new Error('boom'); } };
+    expect(extensionNameCandidates()).toEqual(['third-party/Api-Usage', 'Api-Usage']);
   });
 });
