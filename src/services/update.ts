@@ -265,6 +265,42 @@ let knownGlobal: boolean | null = null;
 /** 本次会话已确认成功的扩展名：确认过就不再盲试其它写法 */
 let knownExtensionName: string | null = null;
 
+/**
+ * 从 /api/extensions/discover 的结果里挑出本扩展。
+ * 条目形如 { name: 'third-party/Api-Usage', type: 'local' | 'global' | 'system' }，
+ * type 就是宿主认的安装位置：local 在用户扩展目录，global 在全局扩展目录。
+ */
+export function extensionScopeFromList(list: unknown): { name: string; global: boolean } | null {
+  if (!Array.isArray(list)) return null;
+  for (const item of list) {
+    const full = String((item as any)?.name || '').trim().replace(/^\/+|\/+$/g, '');
+    if (!full) continue;
+    const base = full.split('/').filter(Boolean).pop() || '';
+    if (base !== EXTENSION_FOLDER) continue;
+    return { name: full, global: String((item as any)?.type || '').toLowerCase() === 'global' };
+  }
+  return null;
+}
+
+/** 问宿主本扩展装在哪：discover 是权威来源，读不到再退回本地清单猜测 */
+async function discoverExtensionScope(): Promise<{ name: string; global: boolean } | null> {
+  try {
+    const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
+    if (!ctx?.getRequestHeaders) return null;
+    let headers: any;
+    try { headers = ctx.getRequestHeaders(); } catch { headers = {}; }
+    const rf = getParentFetch();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => { try { ctrl.abort(); } catch {} }, LOCAL_TIMEOUT_MS);
+    try {
+      const resp: any = await rf('/api/extensions/discover', { method: 'GET', headers, signal: ctrl.signal } as any);
+      clearTimeout(timer);
+      if (!resp?.ok) return null;
+      return extensionScopeFromList(await resp.json());
+    } catch { clearTimeout(timer); return null; }
+  } catch { return null; }
+}
+
 // 通过 ST 扩展管理 API 获取扩展目录当前提交哈希（服务端会 git fetch origin）
 async function fetchLocalCommit(): Promise<LocalRepoInfo | null> {
   const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
@@ -272,15 +308,15 @@ async function fetchLocalCommit(): Promise<LocalRepoInfo | null> {
   let headers: any;
   try { headers = ctx.getRequestHeaders(); } catch { headers = { 'Content-Type': 'application/json' }; }
   const rf = getParentFetch();
-  // 扩展名与安装位置都必须对得上，否则服务端拼出来的目录不存在，直接 404。
-  // 先按清单给出的完整名 + 安装位置试，正常情况一次命中；失败再按候选顺序退让。
-  const hint = extensionScopeHint() ?? knownGlobal;
-  const globals = hint == null ? [true, false] : [hint, !hint];
-  const names = extensionNameCandidates();
-  if (knownExtensionName) {
-    const rest = names.filter(name => name !== knownExtensionName);
-    names.length = 0;
-    names.push(knownExtensionName, ...rest);
+  // 位置必须问宿主：TauriTavern 的本地扩展在 default-user/extensions、全局在 extensions/third-party，
+  // 猜错一边服务端只会回 Extension not found。discover 答不出来才按「本地优先」退让。
+  const found = await discoverExtensionScope();
+  const hint = found ? found.global : (extensionScopeHint() ?? knownGlobal);
+  const globals = hint == null ? [false, true] : [hint, !hint];
+  const names: string[] = [];
+  for (const name of [found?.name, knownExtensionName, ...extensionNameCandidates()]) {
+    const value = String(name || '').trim().replace(/^\/+|\/+$/g, '');
+    if (value && !names.includes(value)) names.push(value);
   }
   for (const extensionName of names) {
     for (const isGlobal of globals) {

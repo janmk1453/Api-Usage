@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { extensionNameCandidates, extensionNameHint, extensionScopeHint, remoteSources } from './update';
+import { extensionNameCandidates, extensionNameHint, extensionScopeFromList, extensionScopeHint, remoteSources } from './update';
 
 describe('远端多源列表', () => {
   const sources = remoteSources('manifest.json', 'dev');
@@ -102,6 +102,20 @@ describe('扩展安装位置探测', () => {
     setExtensions([{ name: 'Api-Usage', type: 'local' }]);
     expect(extensionNameHint()).toBe('Api-Usage');
     expect(extensionNameCandidates()).toEqual(['Api-Usage', 'third-party/Api-Usage']);
+  });
+
+  it('按 discover 的 type 判定安装位置，本地与全局不混用', () => {
+    // TauriTavern：本地扩展 = data/default-user/extensions/<folder>，全局 = data/extensions/third-party/<folder>
+    // global 传错一边，服务端只会回 “Extension not found at <另一个目录>”
+    expect(extensionScopeFromList([{ name: 'third-party/Api-Usage', type: 'local' }]))
+      .toEqual({ name: 'third-party/Api-Usage', global: false });
+    expect(extensionScopeFromList([{ name: 'third-party/Api-Usage', type: 'global' }]))
+      .toEqual({ name: 'third-party/Api-Usage', global: true });
+    expect(extensionScopeFromList([{ name: 'Api-Usage', type: 'global' }]))
+      .toEqual({ name: 'Api-Usage', global: true });
+    expect(extensionScopeFromList([{ name: 'regex', type: 'system' }, { name: 'third-party/Other', type: 'local' }])).toBe(null);
+    expect(extensionScopeFromList(null)).toBe(null);
+    expect(extensionScopeFromList({})).toBe(null);
   });
 
   it('读取不到清单时按 third-party/ 前缀再退到裸名', () => {

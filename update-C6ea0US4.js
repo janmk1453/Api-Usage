@@ -270,6 +270,59 @@ function extensionNameCandidates() {
 var knownGlobal = null;
 /** 本次会话已确认成功的扩展名：确认过就不再盲试其它写法 */
 var knownExtensionName = null;
+/**
+* 从 /api/extensions/discover 的结果里挑出本扩展。
+* 条目形如 { name: 'third-party/Api-Usage', type: 'local' | 'global' | 'system' }，
+* type 就是宿主认的安装位置：local 在用户扩展目录，global 在全局扩展目录。
+*/
+function extensionScopeFromList(list) {
+	if (!Array.isArray(list)) return null;
+	for (const item of list) {
+		const full = String(item?.name || "").trim().replace(/^\/+|\/+$/g, "");
+		if (!full) continue;
+		if ((full.split("/").filter(Boolean).pop() || "") !== EXTENSION_FOLDER) continue;
+		return {
+			name: full,
+			global: String(item?.type || "").toLowerCase() === "global"
+		};
+	}
+	return null;
+}
+/** 问宿主本扩展装在哪：discover 是权威来源，读不到再退回本地清单猜测 */
+async function discoverExtensionScope() {
+	try {
+		const ctx = globalThis.SillyTavern?.getContext?.();
+		if (!ctx?.getRequestHeaders) return null;
+		let headers;
+		try {
+			headers = ctx.getRequestHeaders();
+		} catch {
+			headers = {};
+		}
+		const rf = getParentFetch();
+		const ctrl = new AbortController();
+		const timer = setTimeout(() => {
+			try {
+				ctrl.abort();
+			} catch {}
+		}, LOCAL_TIMEOUT_MS);
+		try {
+			const resp = await rf("/api/extensions/discover", {
+				method: "GET",
+				headers,
+				signal: ctrl.signal
+			});
+			clearTimeout(timer);
+			if (!resp?.ok) return null;
+			return extensionScopeFromList(await resp.json());
+		} catch {
+			clearTimeout(timer);
+			return null;
+		}
+	} catch {
+		return null;
+	}
+}
 async function fetchLocalCommit() {
 	const ctx = globalThis.SillyTavern?.getContext?.();
 	if (!ctx?.getRequestHeaders) return null;
@@ -280,13 +333,17 @@ async function fetchLocalCommit() {
 		headers = { "Content-Type": "application/json" };
 	}
 	const rf = getParentFetch();
-	const hint = extensionScopeHint() ?? knownGlobal;
-	const globals = hint == null ? [true, false] : [hint, !hint];
-	const names = extensionNameCandidates();
-	if (knownExtensionName) {
-		const rest = names.filter((name) => name !== knownExtensionName);
-		names.length = 0;
-		names.push(knownExtensionName, ...rest);
+	const found = await discoverExtensionScope();
+	const hint = found ? found.global : extensionScopeHint() ?? knownGlobal;
+	const globals = hint == null ? [false, true] : [hint, !hint];
+	const names = [];
+	for (const name of [
+		found?.name,
+		knownExtensionName,
+		...extensionNameCandidates()
+	]) {
+		const value = String(name || "").trim().replace(/^\/+|\/+$/g, "");
+		if (value && !names.includes(value)) names.push(value);
 	}
 	for (const extensionName of names) for (const isGlobal of globals) {
 		const ctrl = new AbortController();
