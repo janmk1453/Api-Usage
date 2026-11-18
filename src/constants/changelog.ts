@@ -6,7 +6,9 @@
  * 2. 每彻底完成一项用户可感知的「新增 / 改进 / 修复」，就在当前版本条目对应的
  *    sections 下追加一条 items 文案；同一版本只放在一个条目里，不要重复建条目。
  * 3. 版本号推进（manifest.json#version 变化）后才在数组头部新建 `ChangelogEntry`，
- *    条目 version 与新的 manifest.json#version 保持一致（可带 r 前缀）。
+ *    条目 version 与新的 manifest.json#version 保持一致（可带 r 前缀）；条目的 buildNo
+ *    必须写成当次发布的 manifest.json#build_no。只递增构建号重发时，同样在头部新建一条
+ *    同版本号、新 buildNo 的条目（更新弹窗只认 buildNo 等于当前构建的这一条）。
  * 4. 文案风格照 r3.1.7 的样子：口语、极简、一句话说完一件事，动词或名词短语开头，
  *    不加句号、不堆形容词、不自夸效果（「明显改善」「更清爽」「更跟手」一律删掉），
  *    不写文件名 / 色值 / 控件 id / commit hash，细节留给 docs.html。
@@ -26,6 +28,14 @@ export interface ChangelogSection {
 export interface ChangelogEntry {
   /** 版本号，例如 'r3.1.7'（与 manifest.json#version 对应，可带 r 前缀） */
   version: string;
+  /**
+   * 该条目对应的构建号（= manifest.json#build_no）。
+   *
+   * 更新弹窗只弹「buildNo 等于当前构建号」的那一条：某一次发布改了哪些文案，就由
+   * 这一条决定，同一版本号重发修复版也各有自己的条目。没有 buildNo 的历史条目只出现
+   * 在关于页，不会被自动弹出。
+   */
+  buildNo?: number;
   /** 更新日期，YYYY-MM-DD（北京时间） */
   date: string;
   sections: ChangelogSection[];
@@ -38,6 +48,7 @@ export const CHANGELOG_ENTRY_LIMIT = 5;
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: 'r3.2.3',
+    buildNo: 1,
     date: '2026-11-18',
     sections: [
       {

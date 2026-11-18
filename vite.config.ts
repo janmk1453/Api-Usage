@@ -12,6 +12,7 @@ export default defineConfig({
   define: {
     'process.env.NODE_ENV': '"production"',
     '__APP_VERSION__': JSON.stringify(manifest.version || '0.0.0'),
+    '__BUILD_NO__': JSON.stringify(String(manifest.build_no ?? 0)),
   },
   build: {
     lib: {

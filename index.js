@@ -14,6 +14,19 @@ import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, 
 import { a as listTapRecords, i as clearTapRecords, n as tapDiagnostics, o as subscribeTap, r as stripModelTag } from "./request-tap-DkKmHhdO.js";
 //#region src/constants/version.ts
 var APP_VERSION = String("3.2.3");
+/**
+* 构建号：manifest.json#build_no → __BUILD_NO__。
+*
+* 用途只有两个：① 界面上显性展示，方便用户与反馈日志确认拿到的是哪一次构建；
+* ② 更新弹窗的「已读」判定键 = `版本号|构建号`，因此同一版本号重发修复版也能提示，
+* 不必为了提示而推进版本号。
+*
+* 规则（与 AGENTS.md 同步）：未经用户当轮明确要求不得改动；确需改动时在现有值上 +1，
+* 同一次发布内不要重复递增。
+*/
+var BUILD_NO = String("1");
+/** 更新弹窗的已读键：版本号 + 构建号；拿不到构建号时退回纯版本号 */
+var APP_BUILD_TAG = BUILD_NO ? `${APP_VERSION}|${BUILD_NO}` : APP_VERSION;
 //#endregion
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
@@ -12887,6 +12900,7 @@ function stripGuardState(state) {
 var CHANGELOG = [
 	{
 		version: "r3.2.3",
+		buildNo: 1,
 		date: "2026-11-18",
 		sections: [
 			{
@@ -13167,7 +13181,7 @@ function entryHtml(entry, open, isLatest) {
 	const dateText = formatChangelogDate(entry.date);
 	const meta = [dateText ? `${esc$3(dateText)} 更新` : ""].concat(isLatest ? ["<span class=\"aus-changelog-latest\">最新</span>"] : []).filter(Boolean).join("");
 	const sections = changelogSectionsHTML(entry);
-	return "<div class=\"aus-changelog-entry\" data-changelog-entry data-open=\"" + (open ? "1" : "0") + `"><button type="button" class="aus-changelog-head" data-changelog-toggle aria-expanded="${open ? "true" : "false"}"><span class="aus-changelog-version">${esc$3(entry.version)}</span><span class="aus-changelog-meta">${meta}</span><span class="aus-changelog-caret">${icon(open ? "chevron-up" : "chevron-down", 16)}</span></button><div class="aus-changelog-body"${open ? "" : " style=\"display:none;\""}>${sections}</div></div>`;
+	return "<div class=\"aus-changelog-entry\" data-changelog-entry data-open=\"" + (open ? "1" : "0") + `"><button type="button" class="aus-changelog-head" data-changelog-toggle aria-expanded="${open ? "true" : "false"}"><span class="aus-changelog-version">${esc$3(entry.version)}</span>` + (entry.buildNo != null ? `<span class="aus-changelog-build">b${esc$3(String(entry.buildNo))}</span>` : "") + `<span class="aus-changelog-meta">${meta}</span><span class="aus-changelog-caret">${icon(open ? "chevron-up" : "chevron-down", 16)}</span></button><div class="aus-changelog-body"${open ? "" : " style=\"display:none;\""}>${sections}</div></div>`;
 }
 /**
 * 关于页底部的「更新日志」块：默认只展开最新版本，其余版本点击表头展开/收起。
@@ -13209,17 +13223,17 @@ function bindChangelog(doc) {
 * 三条口径：
 * - 内容与关于页「更新日志」同源（src/constants/changelog.ts），弹窗只渲染**最新一版**，
 *   不重复铺整份列表；想看历史版本点「查看全部更新」跳到关于页。
-* - 只在「升级后的第一次打开面板」弹一次：已读版本记在 localStorage
-*   aus_changelog_seen_v1（不进 settings、不参与导出与同步）。没有任何已读记录时靠
-*   「本扩展是否已有使用痕迹」区分「老用户升级」（补弹一次）与「全新安装」（不弹），
-*   免得新用户第一次打开就糊一脸。
+* - 只在「更新后的第一次打开面板」弹一次：已读键记在 localStorage
+*   aus_changelog_seen_v1（不进 settings、不参与导出与同步），存的是「版本号|构建号」，
+*   因此同一版本号重发修复版也能提示。没有任何已读记录时靠「本扩展是否已有使用痕迹」
+*   区分「老用户升级」（补弹一次）与「全新安装」（不弹），免得新用户第一次打开就糊一脸。
 * - 关于页标题「API用量统计」连点 10 次可手动唤出（开发者自测），这条路径不写已读版本，
 *   以免把真正的升级提示吃掉。
 *
 * 样式全部走 style.css「更新弹窗」段，条目沿用关于页的 .aus-changelog-* 类，
 * 两处观感因此完全一致；窄屏改为底部上滑卡片，与上传反馈弹窗同一套手势。
 */
-/** 已读版本号（localStorage）：存的是触发弹窗时的 APP_VERSION */
+/** 已读标识（localStorage）：存的是触发弹窗时的「版本号|构建号」（APP_BUILD_TAG） */
 var CHANGELOG_SEEN_KEY = "aus_changelog_seen_v1";
 var ABOUT_TAP_WINDOW_MS = 8e3;
 var MASK_ID = "aus-cl-mask";
@@ -13242,17 +13256,37 @@ function readSeenVersion() {
 		return "";
 	}
 }
-function writeSeenVersion(version) {
+/** 写入已读标识（版本号|构建号） */
+function writeSeenVersion(tag) {
 	const store = storage();
 	if (!store) return;
 	try {
-		store.setItem(CHANGELOG_SEEN_KEY, String(version || ""));
+		store.setItem(CHANGELOG_SEEN_KEY, String(tag || ""));
 	} catch {}
 }
-/** 最新一版（数组按时间倒序，CHANGELOG[0] 即当前版本应展示的内容） */
+/** 最新一版（数组按时间倒序，CHANGELOG[0]）：关于页与开发者手势用它 */
 function latestChangelogEntry() {
 	const first = Array.isArray(CHANGELOG) ? CHANGELOG[0] : null;
 	return first && String(first.version || "").trim() ? first : null;
+}
+/**
+* 当前构建对应的更新条目 —— 自动弹窗只认这条。
+*
+* 规则：条目 buildNo 必须与当前构建号完全相等，一个构建只弹属于它的记录；找不到就
+* 返回 null（宁可不弹，也不要拿上一版的内容糊弄用户）。没写 buildNo 的历史条目只留在
+* 关于页。
+*/
+function changelogEntryForBuild(buildNo) {
+	const want = String(buildNo ?? "").trim();
+	if (!want) return null;
+	const list = Array.isArray(CHANGELOG) ? CHANGELOG : [];
+	for (let i = 0; i < list.length; i += 1) {
+		const entry = list[i];
+		if (!entry || !String(entry.version || "").trim()) continue;
+		if (entry.buildNo == null) continue;
+		if (String(entry.buildNo) === want) return entry;
+	}
+	return null;
 }
 /** 老用户判定：localStorage 里已有本扩展写过的键（aus_* 偏好、ds_* 旧键）即视为用过 */
 function looksLikeExistingUser(keys) {
@@ -13264,14 +13298,15 @@ function looksLikeExistingUser(keys) {
 	return false;
 }
 /**
-* 是否弹窗的纯判定（便于测试）：
-* - 没有条目或没有当前版本号 → 不弹；
-* - 有已读记录：与当前版本不同才弹（看过旧版本 = 刚升级；看过当前版本 = 已弹过）；
+* 是否弹窗的纯判定（便于测试）。第二个参数是「当前标识」= 版本号|构建号，
+* 只要它变了就算更新（同一版本号重发修复版、构建号 +1 也会弹）：
+* - 没有条目或没有当前标识 → 不弹；
+* - 有已读记录：与当前标识不同才弹（看过旧标识 = 刚更新；相同 = 已弹过）；
 * - 没有已读记录：老用户补弹一次，全新安装不弹。
 */
-function shouldShowChangelog(seen, appVersion, hasEntry, looksLikeUpgrade) {
+function shouldShowChangelog(seen, buildTag, hasEntry, looksLikeUpgrade) {
 	if (!hasEntry) return false;
-	const current = String(appVersion || "").trim();
+	const current = String(buildTag || "").trim();
 	if (!current) return false;
 	const last = String(seen || "").trim();
 	if (last) return last !== current;
@@ -13301,10 +13336,15 @@ function changelogDialogHTML(entry, options = {}) {
 	if (!entry) return "";
 	const dateText = formatChangelogDate(entry.date, options.now);
 	const current = String(options.currentVersion || "").trim();
-	const meta = [dateText ? esc$3(dateText) + " 更新" : "", current ? "当前版本 " + esc$3(current) : ""].filter(Boolean).join(" · ");
+	const build = String(options.buildNo ?? BUILD_NO ?? "").trim();
+	const meta = [dateText ? esc$3(dateText) + " 更新" : "", current ? "当前版本 " + esc$3(current) + (build ? " · 构建 " + esc$3(build) : "") : ""].filter(Boolean).join(" · ");
 	return "<div class=\"aus-cl\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"aus-cl-title\"><div class=\"aus-cl-head\"><div class=\"aus-cl-heading\"><span class=\"aus-cl-title\" id=\"aus-cl-title\">更新了什么</span><span class=\"aus-cl-version\">" + esc$3(entry.version) + "</span></div><button type=\"button\" class=\"aus-cl-close\" data-cl=\"close\" aria-label=\"关闭\">" + icon("close", 16) + "</button></div><div class=\"aus-cl-body\">" + (meta ? "<div class=\"aus-cl-meta\">" + meta + "</div>" : "") + "<div class=\"aus-cl-sections\">" + changelogSectionsHTML(entry) + "</div></div><div class=\"aus-cl-foot\">" + (options.showAll ? "<button type=\"button\" class=\"aus-cl-btn\" data-cl=\"all\">查看全部更新</button>" : "") + "<button type=\"button\" class=\"aus-cl-btn is-primary\" data-cl=\"ok\">知道了</button></div></div>";
 }
-/** 打开弹窗；返回是否真的打开了（没有可展示的条目时返回 false） */
+/**
+* 打开弹窗；返回是否真的打开了（没有可展示的条目时返回 false）。
+* 不传 entry 时用最新一版（开发者手势 / 手动唤出）；自动弹窗必须传 changelogEntryForBuild()
+* 的结果，保证「一个构建只弹属于它的记录」。
+*/
 function openChangelogDialog(options = {}) {
 	if (typeof document === "undefined") return false;
 	const doc = window.parent?.document ?? document;
@@ -13324,7 +13364,7 @@ function openChangelogDialog(options = {}) {
 		showAll: typeof options.onOpenAll === "function"
 	});
 	host.appendChild(mask);
-	if (options.markSeen !== false && version) writeSeenVersion(version);
+	if (options.markSeen !== false) writeSeenVersion(APP_BUILD_TAG);
 	const close = () => {
 		try {
 			mask.remove();
@@ -13351,18 +13391,18 @@ function openChangelogDialog(options = {}) {
 	return true;
 }
 /**
-* 面板打开时调用：只有「升级后的第一次」才弹。
-* 已读版本与「有没有使用痕迹」都由 localStorage 判定，不读 settings。
+* 面板打开时调用：只有「更新后的第一次」才弹。
+* 已读标识（版本号|构建号）与「有没有使用痕迹」都由 localStorage 判定，不读 settings。
 */
 function maybeShowChangelogDialog(options = {}) {
-	const entry = latestChangelogEntry();
+	const entry = changelogEntryForBuild(BUILD_NO);
 	const seen = readSeenVersion();
 	const store = storage();
 	const keys = [];
 	try {
 		if (store) for (let i = 0; i < store.length; i += 1) keys.push(String(store.key(i) || ""));
 	} catch {}
-	if (!shouldShowChangelog(seen, APP_VERSION, !!entry, looksLikeExistingUser(keys))) return false;
+	if (!shouldShowChangelog(seen, APP_BUILD_TAG, !!entry, looksLikeExistingUser(keys))) return false;
 	return openChangelogDialog({
 		entry,
 		currentVersion: APP_VERSION,
@@ -13543,6 +13583,10 @@ function nowTs() {
 /** 当前扩展版本号（构建时由 manifest.version 注入）：侧栏品牌、设置页「关于」入口与关于页共用 */
 function appVersionText() {
 	return APP_VERSION;
+}
+/** 当前构建号（构建时由 manifest.json#build_no 注入）：与版本号并排显性展示，便于对齐反馈 */
+function appBuildText() {
+	return BUILD_NO;
 }
 function getDoc$1() {
 	return window.parent?.document ?? document;
@@ -14961,7 +15005,7 @@ function createPanel() {
           <span class="aus-brand-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--ds-orange);">${icon("brand", 18)}</span>
           <div style="display:flex;flex-direction:column;min-width:0;">
             <span style="font-size:15px;font-weight:700;line-height:20px;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
-            <span style="font-size:var(--aus-fs-sm);line-height:16px;color:var(--ds-text-2);white-space:nowrap;">v${appVersionText()}</span>
+            <span style="font-size:var(--aus-fs-sm);line-height:16px;color:var(--ds-text-2);white-space:nowrap;">v${appVersionText()}${appBuildText() ? " · b" + appBuildText() : ""}</span>
           </div>
         </div>
         <button id="aus-sidebar-toggle" style="width:30px;height:30px;margin-top:13px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;font-size:var(--aus-fs-base);padding:0;line-height:1;">${icon("chevron-left", 14)}</button>
@@ -15329,7 +15373,7 @@ function createPanel() {
           </div>
           <div data-view="settings" style="display:none;">
             <div id="aus-settings-entries" style="display:none;grid-template-columns:1fr;gap:8px;margin-bottom:12px;">${SETTINGS_ENTRIES.map((e) => {
-		const version = e.view === "about" && appVersionText() ? "<span class=\"aus-settings-entry-version\" title=\"当前版本\">v" + appVersionText() + "</span>" : "";
+		const version = e.view === "about" && appVersionText() ? "<span class=\"aus-settings-entry-version\" title=\"当前版本与构建号\">v" + appVersionText() + (appBuildText() ? " · b" + appBuildText() : "") + "</span>" : "";
 		return `
               <div class="aus-settings-entry" data-settings-entry="${e.view}" role="button" tabindex="0">
                 <span class="aus-settings-entry-icon">${icon(e.icon, 20)}</span>
@@ -15349,6 +15393,7 @@ function createPanel() {
             <div style="display:grid;gap:12px;">
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);color:var(--ds-text);">
                 <div id="aus-about-brand" style="font-size:var(--aus-fs-base);font-weight:600;cursor:default;user-select:none;">关于<br/>API用量统计</div>
+                <div style="margin-top:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-3);">v${appVersionText()}${appBuildText() ? " · 构建 " + appBuildText() : ""}</div>
                 <div style="margin-top:8px;color:var(--ds-text-2);">致力于实现最全面的用量可视化统计<br/><br/>仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);">janmk1453/Api-Usage</a></div>
               </div>
               <div class="ds-card" style="display:grid;gap:8px;">

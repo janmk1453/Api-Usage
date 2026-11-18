@@ -4,6 +4,7 @@ import {
   ABOUT_TAP_LIMIT,
   ABOUT_TAP_WINDOW_MS,
   changelogDialogHTML,
+  changelogEntryForBuild,
   createTapTracker,
   latestChangelogEntry,
   looksLikeExistingUser,
@@ -22,20 +23,40 @@ describe('更新弹窗：取哪一版', () => {
   });
 });
 
+describe('更新弹窗：按构建号取条目', () => {
+  it('只认 buildNo 与当前构建号完全相等的那一条', () => {
+    const buildNo = latest.buildNo;
+    expect(buildNo).toBeTypeOf('number');
+    expect(changelogEntryForBuild(buildNo!)!.version).toBe(latest.version);
+    expect(changelogEntryForBuild(String(buildNo))!.version).toBe(latest.version);
+  });
+
+  it('没有对应构建号（还没写这一版的日志）时返回 null，不拿上一版顶替', () => {
+    expect(changelogEntryForBuild('')).toBeNull();
+    expect(changelogEntryForBuild(0)).toBeNull();
+    expect(changelogEntryForBuild(987654)).toBeNull();
+    expect(changelogEntryForBuild(older.buildNo ?? -1) === null).toBe(older.buildNo == null);
+  });
+});
+
 describe('更新弹窗：什么时候弹', () => {
-  it('没有条目 / 没有当前版本号时不弹', () => {
-    expect(shouldShowChangelog('', '3.2.3', false, true)).toBe(false);
+  it('没有条目 / 没有当前标识时不弹', () => {
+    expect(shouldShowChangelog('', '3.2.3|1', false, true)).toBe(false);
     expect(shouldShowChangelog('', '', true, true)).toBe(false);
   });
 
-  it('已读版本与当前版本不同才弹（看过旧版本 = 刚升级）', () => {
-    expect(shouldShowChangelog('3.2.2', '3.2.3', true, true)).toBe(true);
-    expect(shouldShowChangelog('3.2.3', '3.2.3', true, true)).toBe(false);
+  it('已读标识与当前不同才弹（看过旧版本 = 刚升级）', () => {
+    expect(shouldShowChangelog('3.2.2|1', '3.2.3|1', true, true)).toBe(true);
+    expect(shouldShowChangelog('3.2.3|1', '3.2.3|1', true, true)).toBe(false);
+  });
+
+  it('版本号不变、只递增构建号也会弹（重发修复版）', () => {
+    expect(shouldShowChangelog('3.2.3|1', '3.2.3|2', true, true)).toBe(true);
   });
 
   it('没有已读记录时：老用户补弹一次，全新安装不弹', () => {
-    expect(shouldShowChangelog('', '3.2.3', true, true)).toBe(true);
-    expect(shouldShowChangelog('', '3.2.3', true, false)).toBe(false);
+    expect(shouldShowChangelog('', '3.2.3|1', true, true)).toBe(true);
+    expect(shouldShowChangelog('', '3.2.3|1', true, false)).toBe(false);
   });
 
   it('老用户判定只看本扩展写过的键（aus_* / ds_*），不看宿主键', () => {
@@ -72,10 +93,11 @@ describe('更新弹窗：连点十次（开发者入口）', () => {
 
 describe('更新弹窗：内容与关于页同源', () => {
   it('渲染最新一版的版本号、日期与全部条目，不夹带更早版本', () => {
-    const html = changelogDialogHTML(latest, { currentVersion: '3.2.3', now: ts(2026, 11, 18) });
+    const html = changelogDialogHTML(latest, { currentVersion: '3.2.3', buildNo: '1', now: ts(2026, 11, 18) });
     expect(html).toContain('aria-modal="true"');
     expect(html).toContain(latest.version);
     expect(html).toContain('11/18 更新');
+    expect(html).toContain('构建 1');
     for (const section of latest.sections) {
       for (const item of section.items) expect(html).toContain(item);
     }

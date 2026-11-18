@@ -67,6 +67,15 @@ describe('设置页「关于」入口展示当前版本号', () => {
     expect(panelCode).toContain('v${appVersionText()}');
   });
 
+  it('构建号与版本号并排显性展示（品牌区 / 关于入口 / 关于页）', () => {
+    expect(panelCode).toContain('import { APP_VERSION, BUILD_NO }');
+    expect(panelCode).toContain('function appBuildText(): string {');
+    expect(panelCode).toContain('return BUILD_NO;');
+    // 三处展示都要带构建号，缺一处就等于用户看不到自己拿的是哪个构建
+    expect(panelCode.split("appBuildText() ? ' · b' + appBuildText() : ''").length - 1).toBeGreaterThanOrEqual(2);
+    expect(panelCode).toContain("appBuildText() ? ' · 构建 ' + appBuildText() : ''");
+  });
+
   it('版本号胶囊有独立样式，标题行内并排不换行', () => {
     expect(cssSrc).toContain('#aus-settings-entries .aus-settings-entry-version {');
     expect(cssSrc).toContain('#aus-settings-entries .aus-settings-entry-label {');

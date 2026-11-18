@@ -12,6 +12,7 @@ declare global {
   const event_types: any;
   var TavernHelper: any;
   const __APP_VERSION__: string;
+  const __BUILD_NO__: string;
 }
 
 declare module '/script.js' {

@@ -1,4 +1,4 @@
-import { APP_VERSION } from '../constants/version';
+import { APP_VERSION, BUILD_NO } from '../constants/version';
 import { state, getSelectedSave, getHistoryForDisplay } from '../store/index';
 import { esc, localDay, localTimeHM } from '../utils/date';
 import { isTruncatedOf } from '../utils/finish';
@@ -65,6 +65,11 @@ function nowTs(): number {
 /** 当前扩展版本号（构建时由 manifest.version 注入）：侧栏品牌、设置页「关于」入口与关于页共用 */
 function appVersionText(): string {
   return APP_VERSION;
+}
+
+/** 当前构建号（构建时由 manifest.json#build_no 注入）：与版本号并排显性展示，便于对齐反馈 */
+function appBuildText(): string {
+  return BUILD_NO;
 }
 
 function getDoc(): Document { return (window.parent as any)?.document ?? document; }
@@ -1470,7 +1475,7 @@ export function createPanel() {
           <span class="aus-brand-icon" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--ds-orange);">${icon('brand', 18)}</span>
           <div style="display:flex;flex-direction:column;min-width:0;">
             <span style="font-size:15px;font-weight:700;line-height:20px;color:var(--ds-text);white-space:nowrap;">API用量统计</span>
-            <span style="font-size:var(--aus-fs-sm);line-height:16px;color:var(--ds-text-2);white-space:nowrap;">v${appVersionText()}</span>
+            <span style="font-size:var(--aus-fs-sm);line-height:16px;color:var(--ds-text-2);white-space:nowrap;">v${appVersionText()}${appBuildText() ? ' · b' + appBuildText() : ''}</span>
           </div>
         </div>
         <button id="aus-sidebar-toggle" style="width:30px;height:30px;margin-top:13px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);color:var(--ds-text-2);cursor:pointer;flex-shrink:0;font-size:var(--aus-fs-base);padding:0;line-height:1;">${icon('chevron-left', 14)}</button>
@@ -1750,7 +1755,7 @@ export function createPanel() {
           <div data-view="settings" style="display:none;">
             <div id="aus-settings-entries" style="display:none;grid-template-columns:1fr;gap:8px;margin-bottom:12px;">${SETTINGS_ENTRIES.map((e) => {
               // 「关于」入口带上当前版本号：桌面端入口在侧栏、版本显示在品牌区，这里补上窄屏设置页的版本信息
-              const version = e.view === 'about' && appVersionText() ? '<span class="aus-settings-entry-version" title="当前版本">v' + appVersionText() + '</span>' : '';
+              const version = e.view === 'about' && appVersionText() ? '<span class="aus-settings-entry-version" title="当前版本与构建号">v' + appVersionText() + (appBuildText() ? ' · b' + appBuildText() : '') + '</span>' : '';
               return `
               <div class="aus-settings-entry" data-settings-entry="${e.view}" role="button" tabindex="0">
                 <span class="aus-settings-entry-icon">${icon(e.icon, 20)}</span>
@@ -1770,6 +1775,7 @@ export function createPanel() {
             <div style="display:grid;gap:12px;">
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);color:var(--ds-text);">
                 <div id="aus-about-brand" style="font-size:var(--aus-fs-base);font-weight:600;cursor:default;user-select:none;">关于<br/>API用量统计</div>
+                <div style="margin-top:6px;font-size:var(--aus-fs-sm);color:var(--ds-text-3);">v${appVersionText()}${appBuildText() ? ' · 构建 ' + appBuildText() : ''}</div>
                 <div style="margin-top:8px;color:var(--ds-text-2);">致力于实现最全面的用量可视化统计<br/><br/>仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);">janmk1453/Api-Usage</a></div>
               </div>
               <div class="ds-card" style="display:grid;gap:8px;">

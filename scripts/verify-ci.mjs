@@ -97,6 +97,22 @@ checkVersion('package.json', pkg.version, expectedVersion);
 checkVersion('package-lock.json#version', lock.version, expectedVersion);
 checkVersion('package-lock.json#packages[""]', lock.packages?.['']?.version, expectedVersion);
 
+// 构建号：必须是正整数，且更新日志里要有同 buildNo 的条目（更新弹窗按它匹配）
+const buildNo = manifest.build_no;
+if (buildNo == null) {
+  errors.push('manifest.json 缺少 build_no（构建号，从 1 起的正整数）');
+} else if (!/^[1-9]\d*$/.test(String(buildNo))) {
+  errors.push(`manifest.json#build_no 必须是正整数，当前为 ${JSON.stringify(buildNo)}`);
+} else {
+  let changelogSource = '';
+  try { changelogSource = readFileSync(resolve(root, 'src/constants/changelog.ts'), 'utf8'); } catch (error) {
+    errors.push(`src/constants/changelog.ts 无法读取：${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!new RegExp('buildNo:\\s*' + buildNo + '\\b').test(changelogSource)) {
+    errors.push(`src/constants/changelog.ts 缺少 buildNo: ${buildNo} 的更新日志条目（更新弹窗按构建号匹配，缺失则不会弹）`);
+  }
+}
+
 const entry = checkAsset('manifest.json#js', manifest.js);
 checkAsset('manifest.json#css', manifest.css);
 

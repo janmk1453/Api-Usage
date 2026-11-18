@@ -53,6 +53,7 @@ function entryHtml(entry: ChangelogEntry, open: boolean, isLatest: boolean): str
   return '<div class="aus-changelog-entry" data-changelog-entry data-open="' + (open ? '1' : '0') + '">'
     + `<button type="button" class="aus-changelog-head" data-changelog-toggle aria-expanded="${open ? 'true' : 'false'}">`
     + `<span class="aus-changelog-version">${esc(entry.version)}</span>`
+    + (entry.buildNo != null ? `<span class="aus-changelog-build">b${esc(String(entry.buildNo))}</span>` : '')
     + `<span class="aus-changelog-meta">${meta}</span>`
     + `<span class="aus-changelog-caret">${icon(open ? 'chevron-up' : 'chevron-down', 16)}</span>`
     + '</button>'
