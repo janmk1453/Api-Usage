@@ -40,6 +40,7 @@ import { afterNextPaint, closeDropdownInstant } from './dropdown-close';
 import { BACK_GUARD_DEPTH, nextGuardState, readGuardDepth, stripGuardState } from './back-guard';
 import { mobileDeviceHint } from '../utils/device';
 import { bindChangelog, renderChangelogCard } from './changelog';
+import { bindAboutBrandTap, maybeShowChangelogDialog, openChangelogDialog } from './changelog-dialog';
 import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
 import { initPillState } from './pill';
 import { applyTheme } from '../services/theme';
@@ -1768,7 +1769,7 @@ export function createPanel() {
           <div data-view="about" style="display:none;">
             <div style="display:grid;gap:12px;">
               <div class="ds-card" style="line-height:1.7;font-size:var(--aus-fs-base);color:var(--ds-text);">
-                <div style="font-size:var(--aus-fs-base);font-weight:600;">关于<br/>API用量统计</div>
+                <div id="aus-about-brand" style="font-size:var(--aus-fs-base);font-weight:600;cursor:default;user-select:none;">关于<br/>API用量统计</div>
                 <div style="margin-top:8px;color:var(--ds-text-2);">致力于实现最全面的用量可视化统计<br/><br/>仓库：<a href="https://github.com/janmk1453/Api-Usage" target="_blank" style="color:var(--ds-text);">janmk1453/Api-Usage</a></div>
               </div>
               <div class="ds-card" style="display:grid;gap:8px;">
@@ -1973,6 +1974,10 @@ export function createPanel() {
   renderSettings(doc);
   bindHistoryCompare();
   bindChangelog(doc);
+  // 开发者自测入口：关于页「API用量统计」标题连点十次唤出更新弹窗（不写已读版本）
+  bindAboutBrandTap(doc, () => {
+    openChangelogDialog({ currentVersion: APP_VERSION, onOpenAll: () => switchView('about'), markSeen: false });
+  });
   initStatsView();
   initExtraCharts();
   try { initForecastView(); } catch {}
@@ -2254,6 +2259,13 @@ export function openPanel() {
       m.syncUpdateIndicators?.();
       m.maybeAutoCheck();
     });
+  } catch {}
+  // 版本升级后的第一次打开：稍等入场动画与首帧渲染，再把最新一版的更新内容弹出来
+  // （全新安装不弹；已弹过的版本不再重复，判定见 changelog-dialog.ts）
+  try {
+    setTimeout(() => {
+      try { maybeShowChangelogDialog({ onOpenAll: () => switchView('about') }); } catch {}
+    }, 320);
   } catch {}
 }
 export function closePanel() {

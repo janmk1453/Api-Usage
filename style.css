@@ -2884,6 +2884,149 @@
   .aus-changelog-item { font-size: var(--aus-fs-sm); }
 }
 
+/* ==================== 更新弹窗（版本升级后首次打开面板 / 关于页连点十次唤出） ==================== */
+#aus-panel .aus-cl-mask,
+.aus-cl-mask.is-page {
+  position: absolute;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--ds-overlay);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+/* 面板尚未创建时的兜底：整页固定居中 */
+.aus-cl-mask.is-page { position: fixed; }
+
+#aus-panel .aus-cl,
+.aus-cl-mask.is-page .aus-cl {
+  width: min(480px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--ds-card-inner);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-card);
+  overflow: hidden;
+}
+
+#aus-panel .aus-cl-head,
+.aus-cl-mask.is-page .aus-cl-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 16px 0;
+}
+
+.aus-cl-heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
+
+.aus-cl-title { font-size: 16px; font-weight: 600; color: var(--ds-text); }
+
+.aus-cl-version {
+  flex-shrink: 0;
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: var(--ds-orange-bg);
+  color: var(--ds-orange);
+  font-size: var(--aus-fs-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.aus-cl-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ds-text-3);
+  cursor: pointer;
+}
+
+.aus-cl-close:hover { background: var(--ds-hover-bg); color: var(--ds-text); }
+
+.aus-cl-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 10px 16px 4px;
+  overflow-y: auto;
+}
+
+.aus-cl-meta {
+  margin: 0 0 10px;
+  font-size: var(--aus-fs-sm);
+  color: var(--ds-text-3);
+}
+
+.aus-cl-sections { display: grid; gap: 12px; }
+
+.aus-cl-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--ds-border);
+  background: var(--ds-card-inner);
+}
+
+.aus-cl-btn {
+  padding: 7px 14px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-pill);
+  background: var(--ds-card-inner);
+  color: var(--ds-text);
+  font-family: inherit;
+  font-size: var(--aus-fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.aus-cl-btn:hover { border-color: var(--ds-border-strong); }
+
+.aus-cl-btn.is-primary {
+  border-color: var(--ds-black);
+  background: var(--ds-black);
+  color: var(--ds-black-text);
+}
+
+/* 窄屏：底部上滑卡片，与上传反馈弹窗同一套手势 */
+@media (max-width: 760px) {
+  #aus-panel .aus-cl-mask,
+  .aus-cl-mask.is-page {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  #aus-panel .aus-cl,
+  .aus-cl-mask.is-page .aus-cl {
+    width: 100%;
+    max-height: 88%;
+    border-radius: 14px 14px 0 0;
+    border-bottom: 0;
+  }
+
+  #aus-panel .aus-cl-head,
+  .aus-cl-mask.is-page .aus-cl-head { padding: 12px 14px 0; }
+
+  #aus-panel .aus-cl-body,
+  .aus-cl-mask.is-page .aus-cl-body { padding: 8px 14px 4px; }
+
+  #aus-panel .aus-cl-foot,
+  .aus-cl-mask.is-page .aus-cl-foot { padding: 10px 14px 14px; }
+
+  .aus-cl-btn { flex: 1 1 0; text-align: center; }
+}
+
 /* 历史记录卡片 Token 占比条图例色块（三段配色见 --aus-token-*） */
 .aus-token-dot {
   display: inline-block;

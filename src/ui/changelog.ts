@@ -34,13 +34,22 @@ function sectionHtml(section: ChangelogSection): string {
     + '</div>';
 }
 
+/** 单条版本的分类与条目：关于页与「更新了什么」弹窗共用，保证两处文案一字不差 */
+export function changelogSectionsHTML(entry: ChangelogEntry): string {
+  if (!entry || !Array.isArray(entry.sections)) return '';
+  return entry.sections
+    .filter((s) => s && Array.isArray(s.items) && s.items.length)
+    .map(sectionHtml)
+    .join('');
+}
+
 function entryHtml(entry: ChangelogEntry, open: boolean, isLatest: boolean): string {
   const dateText = formatChangelogDate(entry.date);
   const meta = [dateText ? `${esc(dateText)} 更新` : '']
     .concat(isLatest ? ['<span class="aus-changelog-latest">最新</span>'] : [])
     .filter(Boolean)
     .join('');
-  const sections = entry.sections.filter((s) => s && s.items && s.items.length).map(sectionHtml).join('');
+  const sections = changelogSectionsHTML(entry);
   return '<div class="aus-changelog-entry" data-changelog-entry data-open="' + (open ? '1' : '0') + '">'
     + `<button type="button" class="aus-changelog-head" data-changelog-toggle aria-expanded="${open ? 'true' : 'false'}">`
     + `<span class="aus-changelog-version">${esc(entry.version)}</span>`
