@@ -1,6 +1,6 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { D as resolveRuntimeConnectionContext, E as initConnectionIdentity, t as repository } from "./repository-BqXCPmnu.js";
+import { D as resolveRuntimeConnectionContext, E as initConnectionIdentity, t as repository } from "./repository-G2WX6Dzq.js";
 //#region src/services/include-usage.ts
 /**
 * 流式 usage 注入的纯逻辑：把 stream_options.include_usage 合并进用户/预设自定义的请求体参数。
@@ -200,6 +200,466 @@ function resolveThinkTime(clock, endedAt) {
 	const ms = end - clock.startAt;
 	if (!(ms > 0)) return 0;
 	return Math.round(ms);
+}
+//#endregion
+//#region src/services/frame-normalizer.ts
+/** Anthropic 流式事件名（error 不列入：两家都有，靠其他事件锁定） */
+var ANTHROPIC_EVENTS = /* @__PURE__ */ new Set([
+	"message_start",
+	"content_block_start",
+	"content_block_delta",
+	"content_block_stop",
+	"message_delta",
+	"message_stop",
+	"ping"
+]);
+/** OpenAI Responses 流式事件名 */
+var RESPONSES_EVENTS = /* @__PURE__ */ new Set([
+	"response.created",
+	"response.in_progress",
+	"response.queued",
+	"response.output_item.added",
+	"response.output_item.done",
+	"response.content_part.added",
+	"response.content_part.done",
+	"response.output_text.delta",
+	"response.output_text.done",
+	"response.refusal.delta",
+	"response.reasoning_summary_text.delta",
+	"response.reasoning_summary_text.done",
+	"response.completed",
+	"response.failed",
+	"response.incomplete"
+]);
+/** Gemini finishReason → OpenAI finish_reason */
+var GEMINI_FINISH = {
+	STOP: "stop",
+	MAX_TOKENS: "length",
+	SAFETY: "content_filter",
+	RECITATION: "content_filter",
+	LANGUAGE: "content_filter",
+	BLOCKLIST: "content_filter",
+	PROHIBITED_CONTENT: "content_filter",
+	SPII: "content_filter",
+	IMAGE_SAFETY: "content_filter",
+	MALFORMED_FUNCTION_CALL: "tool_calls",
+	UNEXPECTED_TOOL_CALL: "tool_calls",
+	TOO_MANY_TOOL_CALLS: "tool_calls",
+	OTHER: "other"
+};
+/** Anthropic stop_reason → OpenAI finish_reason */
+var ANTHROPIC_FINISH = {
+	end_turn: "stop",
+	max_tokens: "length",
+	stop_sequence: "stop",
+	tool_use: "tool_calls",
+	refusal: "content_filter",
+	pause_turn: "stop"
+};
+function num(value) {
+	return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+function pos(value) {
+	return value != null && value > 0 ? value : 0;
+}
+function isObject(value) {
+	return !!value && typeof value === "object" && !Array.isArray(value);
+}
+function makeUsage(hit, miss, completion, total, think) {
+	const prompt = hit + miss;
+	return {
+		prompt_tokens: prompt,
+		completion_tokens: completion,
+		total_tokens: Math.max(total, prompt + completion),
+		prompt_cache_hit_tokens: hit,
+		prompt_cache_miss_tokens: miss,
+		completion_tokens_details: { reasoning_tokens: think }
+	};
+}
+/**
+* Gemini 原生 usageMetadata → UsageIR
+* - cachedContentTokenCount 是 promptTokenCount 的子集（不是额外量）
+* - toolUsePromptTokenCount 不在 promptTokenCount 内，必须并进未命中
+* - thoughtsTokenCount 不计入 candidatesTokenCount，计费上属于输出
+*/
+function geminiUsageIR(um) {
+	const promptCount = pos(num(um.promptTokenCount));
+	const cached = pos(num(um.cachedContentTokenCount));
+	const tool = pos(num(um.toolUsePromptTokenCount));
+	const candidates = pos(num(um.candidatesTokenCount));
+	const thoughts = pos(num(um.thoughtsTokenCount));
+	const hit = Math.min(cached, promptCount);
+	return makeUsage(hit, Math.max(0, promptCount - hit) + tool, candidates + thoughts, pos(num(um.totalTokenCount)), thoughts);
+}
+/** OpenAI / DeepSeek / Gemini 兼容层 usage → UsageIR */
+function openaiUsageIR(u) {
+	const prompt = pos(num(u.prompt_tokens) ?? num(u.input_tokens));
+	const completionRaw = pos(num(u.completion_tokens) ?? num(u.output_tokens));
+	const hit = pos(num(u.prompt_cache_hit_tokens) ?? num(u.prompt_tokens_details?.cached_tokens) ?? num(u.input_tokens_details?.cached_tokens) ?? num(u.cached_tokens));
+	const missRaw = num(u.prompt_cache_miss_tokens);
+	const miss = missRaw != null && missRaw >= 0 ? missRaw : Math.max(0, prompt - hit);
+	const explicitThink = num(u.completion_tokens_details?.reasoning_tokens) ?? num(u.output_tokens_details?.reasoning_tokens) ?? num(u.reasoning_tokens) ?? num(u.thinking_tokens);
+	let think = pos(explicitThink);
+	let completion = completionRaw;
+	if (explicitThink == null) {
+		const total = num(u.total_tokens);
+		if (total != null && total > 0) {
+			const diff = total - (prompt + completionRaw);
+			if (diff > 0 && diff !== hit && diff !== prompt) {
+				think = diff;
+				completion = completionRaw + diff;
+			}
+		}
+	}
+	const totalRaw = pos(num(u.total_tokens));
+	const total = totalRaw > 0 ? totalRaw : prompt + completion;
+	return makeUsage(hit, miss, completion, total, think);
+}
+/** Anthropic usage → UsageIR（input_tokens 不含缓存，cache_read / cache_creation 单列） */
+function anthropicUsageIR(start, outputTokens) {
+	const s = start || {};
+	const hit = pos(num(s.cache_read_input_tokens));
+	const create = pos(num(s.cache_creation_input_tokens));
+	const miss = pos(num(s.input_tokens)) + create;
+	const output = pos(outputTokens ?? num(s.output_tokens));
+	return makeUsage(hit, miss, output, hit + miss + output, 0);
+}
+/** OpenAI Responses usage → UsageIR（output_tokens 已含 reasoning） */
+function responsesUsageIR(u) {
+	const prompt = pos(num(u.input_tokens));
+	const hit = pos(num(u.input_tokens_details?.cached_tokens));
+	const miss = Math.max(0, prompt - hit);
+	const output = pos(num(u.output_tokens));
+	const think = pos(num(u.output_tokens_details?.reasoning_tokens));
+	return makeUsage(hit, miss, output, pos(num(u.total_tokens)), think);
+}
+/** 首帧协议判定（顺序有意义：Gemini 靠 candidates 锁定，不能等末帧的 usageMetadata） */
+function detectProtocol(frame) {
+	if (!isObject(frame)) return "unknown";
+	if (frame.candidates || frame.usageMetadata || frame.promptFeedback) return "gemini";
+	const type = frame.type;
+	if (typeof type === "string") {
+		if (ANTHROPIC_EVENTS.has(type)) return "anthropic";
+		if (RESPONSES_EVENTS.has(type)) return "responses";
+		if (type === "message" && Array.isArray(frame.content)) return "anthropic";
+	}
+	if (frame.object === "response" || Array.isArray(frame.output)) return "responses";
+	if (Array.isArray(frame.choices)) return "openai";
+	if (frame.usage) return "openai";
+	return "unknown";
+}
+function deltaFrame(content, reasoning) {
+	const delta = {};
+	if (typeof content === "string" && content) delta.content = content;
+	if (typeof reasoning === "string" && reasoning) delta.reasoning_content = reasoning;
+	return { choices: [{ delta }] };
+}
+function finishFrame(reason) {
+	return { choices: [{
+		delta: {},
+		finish_reason: reason
+	}] };
+}
+function usageFrame(usage, model) {
+	const out = {
+		choices: [],
+		usage
+	};
+	if (model) out.model = model;
+	return out;
+}
+function createFrameNormalizer() {
+	const st = {
+		protocol: "unknown",
+		anthropicStart: null,
+		anthropicOutput: null,
+		rawUsage: null,
+		rawFinish: null,
+		rawModel: null
+	};
+	function projectGemini(frame) {
+		const out = [];
+		if (typeof frame.modelVersion === "string" && frame.modelVersion) st.rawModel = frame.modelVersion;
+		const cand = Array.isArray(frame.candidates) ? frame.candidates[0] : null;
+		const parts = cand?.content?.parts;
+		if (Array.isArray(parts)) {
+			let text = "";
+			let think = "";
+			for (const part of parts) {
+				if (!isObject(part) || typeof part.text !== "string" || !part.text) continue;
+				if (part.thought === true) think += part.text;
+				else text += part.text;
+			}
+			if (think) out.push(deltaFrame(void 0, think));
+			if (text) out.push(deltaFrame(text));
+		}
+		const blockReason = frame?.promptFeedback?.blockReason;
+		if (blockReason) {
+			st.rawFinish = String(blockReason);
+			out.push(finishFrame("content_filter"));
+		}
+		const fr = cand?.finishReason;
+		if (typeof fr === "string" && fr) {
+			st.rawFinish = fr;
+			out.push(finishFrame(GEMINI_FINISH[fr] || "other"));
+		}
+		const um = frame.usageMetadata;
+		if (isObject(um)) {
+			st.rawUsage = um;
+			out.push(usageFrame(geminiUsageIR(um), typeof frame.modelVersion === "string" ? frame.modelVersion : null));
+		}
+		return out;
+	}
+	function projectAnthropic(frame) {
+		const out = [];
+		const type = frame.type;
+		if (type === "message_start") {
+			const msg = frame.message || {};
+			if (typeof msg.model === "string" && msg.model) st.rawModel = msg.model;
+			if (isObject(msg.usage)) st.anthropicStart = { ...msg.usage };
+			const u = anthropicUsageIR(st.anthropicStart, st.anthropicOutput);
+			st.rawUsage = { ...st.anthropicStart || {} };
+			out.push(usageFrame(u, st.rawModel));
+			return out;
+		}
+		if (type === "content_block_delta") {
+			const delta = frame.delta || {};
+			if (delta.type === "thinking_delta" && typeof delta.thinking === "string" && delta.thinking) out.push(deltaFrame(void 0, delta.thinking));
+			else if (delta.type === "text_delta" && typeof delta.text === "string" && delta.text) out.push(deltaFrame(delta.text));
+			return out;
+		}
+		if (type === "message_delta") {
+			if (isObject(frame.usage) && typeof frame.usage.output_tokens === "number") st.anthropicOutput = frame.usage.output_tokens;
+			st.rawUsage = {
+				...st.anthropicStart || {},
+				...isObject(frame.usage) ? frame.usage : {}
+			};
+			const stop = frame?.delta?.stop_reason;
+			if (typeof stop === "string" && stop) {
+				st.rawFinish = stop;
+				out.push(finishFrame(ANTHROPIC_FINISH[stop] || "other"));
+			}
+			out.push(usageFrame(anthropicUsageIR(st.anthropicStart, st.anthropicOutput), st.rawModel));
+			return out;
+		}
+		if (type === "message") {
+			if (typeof frame.model === "string" && frame.model) st.rawModel = frame.model;
+			if (Array.isArray(frame.content)) {
+				let text = "";
+				let think = "";
+				for (const block of frame.content) {
+					if (!isObject(block) || typeof block.text !== "string" || !block.text) continue;
+					if (block.type === "thinking") think += block.text;
+					else if (block.type === "text") text += block.text;
+				}
+				if (think) out.push(deltaFrame(void 0, think));
+				if (text) out.push(deltaFrame(text));
+			}
+			if (isObject(frame.usage)) {
+				st.rawUsage = frame.usage;
+				st.anthropicStart = { ...frame.usage };
+				out.push(usageFrame(anthropicUsageIR(st.anthropicStart, null), st.rawModel));
+			}
+			if (typeof frame.stop_reason === "string" && frame.stop_reason) {
+				st.rawFinish = frame.stop_reason;
+				out.push(finishFrame(ANTHROPIC_FINISH[frame.stop_reason] || "other"));
+			}
+			return out;
+		}
+		return [];
+	}
+	function projectResponses(frame) {
+		const out = [];
+		const type = frame.type;
+		if (type === "response.created" || type === "response.in_progress") {
+			const model = frame?.response?.model;
+			if (typeof model === "string" && model) st.rawModel = model;
+			return out;
+		}
+		if (type === "response.output_text.delta") {
+			if (typeof frame.delta === "string" && frame.delta) out.push(deltaFrame(frame.delta));
+			return out;
+		}
+		if (type === "response.reasoning_summary_text.delta") {
+			if (typeof frame.delta === "string" && frame.delta) out.push(deltaFrame(void 0, frame.delta));
+			return out;
+		}
+		if (type === "response.completed" || type === "response.incomplete" || type === "response.failed") {
+			const resp = frame.response || {};
+			if (typeof resp.model === "string" && resp.model) st.rawModel = resp.model;
+			if (isObject(resp.usage)) {
+				st.rawUsage = resp.usage;
+				out.push(usageFrame(responsesUsageIR(resp.usage), st.rawModel));
+			}
+			if (type === "response.incomplete") {
+				const reason = resp?.incomplete_details?.reason;
+				st.rawFinish = typeof reason === "string" ? reason : "incomplete";
+				out.push(finishFrame(reason === "content_filter" ? "content_filter" : "length"));
+			} else if (type === "response.failed") {
+				st.rawFinish = "failed";
+				out.push(finishFrame("other"));
+			} else out.push(finishFrame("stop"));
+			return out;
+		}
+		if (frame.object === "response") {
+			if (typeof frame.model === "string" && frame.model) st.rawModel = frame.model;
+			if (Array.isArray(frame.output)) {
+				let text = "";
+				let think = "";
+				for (const item of frame.output) {
+					if (!isObject(item) || !Array.isArray(item.content)) continue;
+					for (const part of item.content) {
+						if (!isObject(part) || typeof part.text !== "string" || !part.text) continue;
+						if (part.type === "output_text" || part.type === "text") text += part.text;
+						else if (part.type === "reasoning_text" || part.type === "summary_text") think += part.text;
+					}
+				}
+				if (think) out.push(deltaFrame(void 0, think));
+				if (text) out.push(deltaFrame(text));
+			}
+			if (isObject(frame.usage)) {
+				st.rawUsage = frame.usage;
+				out.push(usageFrame(responsesUsageIR(frame.usage), st.rawModel));
+			}
+			if (frame.status === "incomplete") out.push(finishFrame("length"));
+			else if (frame.status === "failed") out.push(finishFrame("other"));
+			else out.push(finishFrame("stop"));
+			return out;
+		}
+		return [];
+	}
+	function projectOpenAI(frame) {
+		const raw = isObject(frame.usage) ? frame.usage : isObject(frame?.choices?.[0]?.usage) ? frame.choices[0].usage : null;
+		const fr = frame?.choices?.[0]?.finish_reason;
+		if (typeof fr === "string" && fr) st.rawFinish = fr;
+		if (typeof frame.model === "string" && frame.model) st.rawModel = frame.model;
+		if (!raw) return [frame];
+		st.rawUsage = raw;
+		if ((num(raw.completion_tokens_details?.reasoning_tokens) ?? num(raw.output_tokens_details?.reasoning_tokens) ?? num(raw.reasoning_tokens) ?? num(raw.thinking_tokens)) != null) return [frame];
+		const usage = openaiUsageIR(raw);
+		const completionRaw = pos(num(raw.completion_tokens) ?? num(raw.output_tokens));
+		if (usage.completion_tokens === completionRaw) return [frame];
+		return [{
+			...frame,
+			usage
+		}];
+	}
+	function projectFrame(frame) {
+		if (st.protocol === "unknown") st.protocol = detectProtocol(frame);
+		switch (st.protocol) {
+			case "gemini": return projectGemini(frame);
+			case "anthropic": return projectAnthropic(frame);
+			case "responses": return projectResponses(frame);
+			case "openai": return projectOpenAI(frame);
+			default: return [frame];
+		}
+	}
+	function projectLine(line) {
+		const trimmed = line.trim();
+		if (!trimmed.startsWith("data:")) return "";
+		const payload = trimmed.slice(5).trim();
+		if (!payload) return "";
+		if (payload === "[DONE]") return "data: [DONE]\n";
+		let frame;
+		try {
+			frame = JSON.parse(payload);
+		} catch {
+			return line + "\n";
+		}
+		try {
+			if (st.protocol === "unknown") st.protocol = detectProtocol(frame);
+			if (st.protocol === "openai" || st.protocol === "unknown") {
+				const out = projectFrame(frame);
+				if (out.length === 1 && out[0] === frame) return line + "\n";
+				return out.map((f) => "data: " + JSON.stringify(f) + "\n").join("");
+			}
+			const frames = projectFrame(frame);
+			if (!frames.length) return "";
+			return frames.map((f) => "data: " + JSON.stringify(f) + "\n").join("");
+		} catch {
+			return line + "\n";
+		}
+	}
+	function mergeProjected(frames) {
+		let content = "";
+		let reasoning = "";
+		let finish = null;
+		let usage = null;
+		let model = null;
+		for (const f of frames) {
+			if (typeof f?.model === "string" && f.model) model = f.model;
+			if (isObject(f?.usage)) usage = f.usage;
+			const c = Array.isArray(f?.choices) ? f.choices[0] : null;
+			if (!c) continue;
+			const d = c.delta || c.message || {};
+			if (typeof d.content === "string") content += d.content;
+			if (typeof d.reasoning_content === "string") reasoning += d.reasoning_content;
+			if (typeof c.finish_reason === "string" && c.finish_reason) finish = c.finish_reason;
+		}
+		const message = {};
+		if (content) message.content = content;
+		if (reasoning) message.reasoning_content = reasoning;
+		const out = { choices: [{
+			message,
+			finish_reason: finish
+		}] };
+		if (usage) out.usage = usage;
+		if (model) out.model = model;
+		return out;
+	}
+	function projectSseText(text) {
+		if (!text) return text;
+		try {
+			let out = "";
+			for (const line of text.split("\n")) out += projectLine(line);
+			return out || text;
+		} catch {
+			return text;
+		}
+	}
+	return {
+		projectSse(text) {
+			return projectSseText(text);
+		},
+		projectWhole(text) {
+			const trimmed = (text || "").trim();
+			if (!trimmed) return text;
+			try {
+				if (trimmed.startsWith("{")) {
+					const frame = JSON.parse(trimmed);
+					const frames = projectFrame(frame);
+					if (frames.length === 1 && frames[0] === frame) return text;
+					return JSON.stringify(mergeProjected(frames));
+				}
+				if (trimmed.startsWith("[")) {
+					const list = JSON.parse(trimmed);
+					if (!Array.isArray(list)) return text;
+					const frames = [];
+					for (const item of list) frames.push(...projectFrame(item));
+					if (!frames.length) return text;
+					return JSON.stringify(mergeProjected(frames));
+				}
+			} catch {
+				return text;
+			}
+			return projectSseText(text);
+		},
+		protocol() {
+			return st.protocol;
+		},
+		rawUsage() {
+			return st.rawUsage;
+		},
+		rawFinishReason() {
+			return st.rawFinish;
+		},
+		rawModel() {
+			return st.rawModel;
+		},
+		active() {
+			return st.protocol !== "openai" && st.protocol !== "unknown";
+		}
+	};
 }
 //#endregion
 //#region src/services/request-log.ts
@@ -1046,7 +1506,8 @@ function installFetchCapture() {
 					try {
 						const clone = res.clone();
 						const requestedStream = reqBody?.stream === true;
-						const parseAndProcess = (text, ttftVal, thinkTimeVal, streamed = null) => {
+						const frameNormalizer = createFrameNormalizer();
+						const parseAndProcess = (text, ttftVal, thinkTimeVal, streamed = null, rawText = null) => {
 							let data = null;
 							let finishReason = null;
 							try {
@@ -1090,9 +1551,9 @@ function installFetchCapture() {
 							}
 							try {
 								patchRequestLog({
-									model: data?.model || reqBody?.model || null,
-									finishReason: finishReason ?? null,
-									usage: data?.usage || null
+									model: frameNormalizer.rawModel() || data?.model || reqBody?.model || null,
+									finishReason: frameNormalizer.rawFinishReason() ?? finishReason ?? null,
+									usage: frameNormalizer.rawUsage() || data?.usage || null
 								});
 							} catch {}
 							try {
@@ -1130,7 +1591,7 @@ function installFetchCapture() {
 									msgs,
 									startTime,
 									fullReq,
-									fullResponse: text,
+									fullResponse: rawText ?? text,
 									ttft: ttftVal,
 									thinkTime: thinkTimeVal,
 									finishReason,
@@ -1159,6 +1620,7 @@ function installFetchCapture() {
 							let ttft = 0;
 							let fullText = "";
 							const thinkClock = createThinkClock();
+							let normText = "";
 							const judgeStreamed = () => {
 								if (!requestedStream) return false;
 								if (!thinkClock.contentFrames) return null;
@@ -1197,11 +1659,16 @@ function installFetchCapture() {
 											streamed
 										});
 									} catch {}
-									parseAndProcess(fullText, ttft, safeThinkTime, streamed);
+									parseAndProcess(normText || fullText, ttft, safeThinkTime, streamed, fullText);
 								} catch {}
 							};
 							const scanThink = (chunk) => {
-								scanThinkChunk(thinkClock, chunk, nowMs() - t0);
+								const projected = frameNormalizer.projectSse(chunk);
+								if (projected) {
+									normText += projected;
+									if (normText.length > STREAM_TEXT_LIMIT) normText = normText.slice(-1e6);
+								}
+								scanThinkChunk(thinkClock, projected || chunk, nowMs() - t0);
 							};
 							const readStream = async (body) => {
 								const reader = body.getReader();
@@ -1240,13 +1707,13 @@ function installFetchCapture() {
 							});
 							else clone.text().then((t) => {
 								ttft = Date.now() - startTime;
-								parseAndProcess(t, ttft, 0, false);
+								parseAndProcess(frameNormalizer.projectWhole(t), ttft, 0, false, t);
 							}).catch(() => {});
 						} catch (innerErr) {
 							log.debug("fetch 流式读取异常，不影响原请求", innerErr?.message || innerErr);
 							try {
 								clone.text().then((t) => {
-									parseAndProcess(t, 0, 0, requestedStream ? null : false);
+									parseAndProcess(frameNormalizer.projectWhole(t), 0, 0, requestedStream ? null : false, t);
 								}).catch(() => {});
 							} catch {}
 						}

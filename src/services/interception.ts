@@ -4,6 +4,7 @@ import { log } from '../utils/logger';
 import { initConnectionIdentity, resolveRuntimeConnectionContext, type HistoryConnection } from './connection-identity';
 import { mergeIncludeUsage } from './include-usage';
 import { createThinkClock, scanThinkChunk, resolveThinkTime, reasoningTextOf, contentTextOf } from './think-timing';
+import { createFrameNormalizer } from './frame-normalizer';
 import { saveRequestStart, patchRequestLog, noteRecentTurns } from './request-log';
 import { noteCaptureStage, isZeroUsage, usageNumbers } from './capture-digest';
 import { decideTurnOutcome } from './turn-outcome';
@@ -322,7 +323,10 @@ function installFetchCapture() {
             const clone = res.clone();
             // 请求体未声明流式 → 明确非流式，全程不测速
             const requestedStream = reqBody?.stream === true;
-            const parseAndProcess = (text: string, ttftVal: number, thinkTimeVal: number, streamed: boolean | null = null) => {
+            // 帧归一化：把任意 provider 的形状投影成 OpenAI/DeepSeek 形状，下游解析不再认识各家字段。
+            // 每个请求一份状态（协议首帧锁定），只在这条 clone 旁路上起作用，原始响应照常透传。
+            const frameNormalizer = createFrameNormalizer();
+            const parseAndProcess = (text: string, ttftVal: number, thinkTimeVal: number, streamed: boolean | null = null, rawText: string | null = null) => {
             let data: any = null;
             let finishReason: string | null = null;
             try {
@@ -353,12 +357,14 @@ function installFetchCapture() {
               log.debug('用量响应解析失败', (e as any)?.message || e);
               return;
             }
-            // 无论有没有 usage，都把这次解析到的模型 / 结束原因 / 用量原样记进日志
+            // 无论有没有 usage，都把这次解析到的模型 / 结束原因 / 用量记进日志。
+            // 请求日志页展示的必须是上游原始数据：这三项优先取归一化前留存的原值，
+            // 只有拿不到原值时才退回投影后的形状，保证页面看到的是「未经转换的响应」。
             try {
               patchRequestLog({
-                model: (data as any)?.model || reqBody?.model || null,
-                finishReason: finishReason ?? null,
-                usage: (data as any)?.usage || null,
+                model: frameNormalizer.rawModel() || (data as any)?.model || reqBody?.model || null,
+                finishReason: frameNormalizer.rawFinishReason() ?? finishReason ?? null,
+                usage: frameNormalizer.rawUsage() || (data as any)?.usage || null,
               });
             } catch {}
             // 响应带回真实模型名 → 不再算「模型缺失兜底」
@@ -387,7 +393,8 @@ function installFetchCapture() {
               try { if (finishReason) (usage as any).__finish_reason = finishReason; } catch {}
               try { estimateThinkTokens(text, usage); } catch {}
               // 完整响应文本（非流式为完整 JSON，流式为 SSE 原文）供历史详情展示
-              lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: text, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason, streamed, connection: requestConnection, requestId };
+              // fullResponse 只用于历史详情展示，必须是上游原文（未经帧归一化投影）
+              lastFetchUsage = { usage, model, msgs, startTime, fullReq, fullResponse: rawText ?? text, ttft: ttftVal, thinkTime: thinkTimeVal, finishReason, streamed, connection: requestConnection, requestId };
               lastFetchModel = typeof model === 'string' ? model : null;
               lastFetchTime = Date.now();
               log.debug('fetch 捕获 usage', { model, hasUsage: !!usage, finishReason, streamed });
@@ -403,6 +410,9 @@ function installFetchCapture() {
             // 思维链时钟：按 JSON 增量识别「首个非空思维链帧」与「首个非空正文帧」
             // （口径见 services/think-timing.ts，禁止再用整行 substring 判断）
             const thinkClock = createThinkClock();
+            // 归一化后的 SSE 文本：与 fullText 一一对应，只用于解析 usage / 结束原因；
+            // fullText 始终保持上游原文，历史详情与请求日志展示的都必须是它
+            let normText = '';
             // 假流式检测：统计承载正文的增量帧数
             const judgeStreamed = (): boolean | null => {
               // 请求未声明流式：明确非流式
@@ -434,11 +444,20 @@ function installFetchCapture() {
                 if (safeThinkTime > 0) log.debug('思维链耗时已测量 ' + safeThinkTime + 'ms');
                 try { lastStreamTiming = { ttft, thinkTime: safeThinkTime, streamed, startTime, at: Date.now() }; } catch {}
                 try { patchRequestLog({ durationMs: endedAt, streamed }); } catch {}
-                parseAndProcess(fullText, ttft, safeThinkTime, streamed);
+                // 优先解析归一化后的文本（能认 Gemini / Anthropic / Responses），
+                // 投影为空时退回原文；原文作为第 5 参传入，只用于展示
+                parseAndProcess(normText || fullText, ttft, safeThinkTime, streamed, fullText);
               } catch {}
             };
             const scanThink = (chunk: string) => {
-              scanThinkChunk(thinkClock, chunk, nowMs() - t0);
+              // 思维链与正文的识别也走归一化结果：投影后的 delta.content / delta.reasoning_content
+              // 正是 think-timing 认的形状，因此不需要为任何新格式改 think-timing
+              const projected = frameNormalizer.projectSse(chunk);
+              if (projected) {
+                normText += projected;
+                if (normText.length > STREAM_TEXT_LIMIT) normText = normText.slice(-STREAM_TEXT_LIMIT);
+              }
+              scanThinkChunk(thinkClock, projected || chunk, nowMs() - t0);
             };
             const readStream = async (body: ReadableStream<Uint8Array>) => {
               const reader = body.getReader();
@@ -473,11 +492,11 @@ function installFetchCapture() {
               });
             } else {
               // 无流式 body：整段文本一次性读取，明确非流式
-              clone.text().then((t) => { ttft = Date.now() - startTime; parseAndProcess(t, ttft, 0, false); }).catch(()=>{});
+              clone.text().then((t) => { ttft = Date.now() - startTime; parseAndProcess(frameNormalizer.projectWhole(t), ttft, 0, false, t); }).catch(()=>{});
             }
           } catch (innerErr) {
             log.debug('fetch 流式读取异常，不影响原请求', (innerErr as any)?.message || innerErr);
-            try { clone.text().then((t) => { parseAndProcess(t, 0, 0, requestedStream ? null : false); }).catch(()=>{}); } catch {}
+            try { clone.text().then((t) => { parseAndProcess(frameNormalizer.projectWhole(t), 0, 0, requestedStream ? null : false, t); }).catch(()=>{}); } catch {}
           }
           } catch (e) {
             log.debug('fetch 克隆解析异常，不影响原请求', (e as any)?.message || e);
