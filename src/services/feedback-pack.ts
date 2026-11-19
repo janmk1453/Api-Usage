@@ -145,6 +145,7 @@ export function entryDigest(entry: any): Record<string, unknown> {
     cost: num(entry?.cost),
     duration: num(entry?.duration),
     tokenRate: num(entry?.tokenRate),
+    rateEstimated: entry?.rateEstimated === 'prefill' || entry?.rateEstimated === 'duration' ? entry.rateEstimated : null,
     ttft: num(entry?.ttft),
     thinkTime: num(entry?.thinkTime),
     thinkTokens: num(entry?.thinkTokens),

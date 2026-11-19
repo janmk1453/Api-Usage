@@ -333,7 +333,7 @@ export function renderOverview(fullHistory?: any[]) {
       const d = getFourDisplay(k, v);
       const isRate = k==='avg_rate';
       const valColor = isRate ? 'var(--ds-green)' : 'var(--ds-text)';
-      return `<div class="ds-card" style="padding:14px;position:relative;overflow:visible;">
+      return `<div class="ds-card" style="padding:14px;position:relative;overflow:visible;"${isRate ? ' title="速率为平均值：包含非流式/首字缺失记录的估算值（历史页对应记录标 ≈）"' : ''}>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
           <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.title}</div>
           <button id="aus-four-btn-${i}" title="切换指标" style="flex-shrink:0;padding:4px 7px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;line-height:1;">${icon('chevron-down', 14)}</button>

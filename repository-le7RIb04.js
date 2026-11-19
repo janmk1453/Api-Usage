@@ -1214,6 +1214,19 @@ function turnFingerprint(input) {
 		Math.round(base / 1e3)
 	].join("|");
 }
+//#endregion
+//#region src/data/token-rate.ts
+/**
+* 输出速率口径（单一来源）
+*
+* 速率 = 输出 Token / 生成阶段耗时（duration - ttft）。
+* 非流式或假流式请求（上游一次性返回全文）会让 duration - ttft 塌缩到几百毫秒，
+* 从而算出上千 t/s 的假速率，因此这里统一做两道防护：
+*   1. streamed === false 直接判定不可测，速率与 TTFT 均不参与统计；
+*   2. 数值兜底：生成阶段窗口过短，或结果超过 MAX_PLAUSIBLE_RATE，一律归 0。
+*/
+/** 速率上限（t/s）；超过视为异常数据 */
+var MAX_PLAUSIBLE_RATE = 1e3;
 /**
 * 清洗历史遗留的速率：非有限值或超过上限一律归 0。
 * 用于 hydrate 迁移与导入数据清洗。
@@ -1249,21 +1262,59 @@ function measureTokenRate(sample) {
 	if (!Number.isFinite(rate) || rate < 0) return null;
 	return rate;
 }
+function median(values) {
+	const sorted = values.slice().sort((a, b) => a - b);
+	const mid = sorted.length >> 1;
+	return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
 /**
-* 计算输出速率（t/s），入库形态：不可测或超过上限一律记 0。
-* @param duration 整轮耗时（ms）
-* @param ttft 首字延迟（ms）
-* @param completionTokens 输出 Token 数
-* @param streamed 是否为真实流式；false 表示非流式/假流式，速率不可测
+* 从历史里取「典型首字延迟」（ms），用作非流式请求的输入处理耗时估计。
+*
+* 优先同模型的真实流式样本；样本不够才退到全部模型。只认可信样本：
+* 真实流式、TTFT > 0、耗时存在、且 TTFT 没有塌到总耗时上（假流式的典型症状）。
+* 拿不到就返回 null，调用方退回整轮耗时口径。
 */
-function computeTokenRate(opts) {
-	const rate = measureTokenRate({
-		duration: opts.duration,
-		ttft: opts.ttft,
-		completion_tokens: opts.completionTokens,
-		streamed: opts.streamed
+function prefillReferenceMs(history, model) {
+	if (!Array.isArray(history) || !history.length) return null;
+	const usable = history.filter((h) => {
+		if (!h || h.streamed === false) return false;
+		const first = Number(h.ttft);
+		const dur = Number(h.duration);
+		if (!Number.isFinite(first) || first <= 0) return false;
+		if (!Number.isFinite(dur) || dur <= 0) return false;
+		if (first >= dur * .98) return false;
+		return true;
 	});
-	return rate == null ? 0 : sanitizeRate(rate);
+	if (!usable.length) return null;
+	const sameModel = model ? usable.filter((h) => String(h.model || "") === String(model)) : [];
+	if (sameModel.length >= 3) return Math.round(median(sameModel.map((h) => Number(h.ttft))));
+	if (usable.length >= 3) return Math.round(median(usable.map((h) => Number(h.ttft))));
+	return null;
+}
+/**
+* 估算输出速率（t/s），只用于「测不出真实速率」的记录：
+* 非流式、上游一次性返回全文（假流式）、首字时间缺失或与总耗时重合。
+*
+* 先扣掉估计的输入处理时间（prefillMs），剩余窗口不足下限就退回整轮耗时口径——
+* 后者会把排队与输入处理算进分母，因此只能当保守下限，UI 必须标「估算」。
+* 与真实速率一样按 MAX_PLAUSIBLE_RATE 封顶，避免短耗时刷出离谱读数。
+*/
+function estimateTokenRate(opts) {
+	const dur = Number(opts.duration);
+	const comp = Number(opts.completionTokens);
+	if (!Number.isFinite(dur) || dur <= 0) return null;
+	if (!Number.isFinite(comp) || comp <= 0) return null;
+	const cap = (rate) => Math.min(MAX_PLAUSIBLE_RATE, Math.round(rate));
+	const prefill = Number(opts.prefillMs);
+	const window = Number.isFinite(prefill) && prefill > 0 ? dur - Math.min(prefill, dur * .9) : 0;
+	if (window >= 200) return {
+		rate: cap(comp / window * 1e3),
+		source: "prefill"
+	};
+	return {
+		rate: cap(comp / dur * 1e3),
+		source: "duration"
+	};
 }
 /**
 * 迁移清洗：把一次性返回造成的异常速率与失真 TTFT 归零。
@@ -1408,6 +1459,86 @@ var TURN_DEDUPE_WINDOW_MS = 15e3;
 /** 指纹表保留时长：只需覆盖去重窗口，超出即回收 */
 var TURN_FINGERPRINT_TTL_MS = 6e4;
 var storageFailureNotified = false;
+/**
+* 一轮记录的速率取值（单一来源）：能测就测，测不出（非流式 / 假流式 / 首字缺失）
+* 才用估算，并记下估算口径，UI 据此加「估算」标注。
+* 估算的首字延迟参考取同模型最近的流式样本，样本不足时退到全模型。
+*/
+function resolveTokenRate(params) {
+	const measured = measureTokenRate({
+		duration: params.duration,
+		ttft: params.ttft,
+		completion_tokens: params.completionTokens,
+		streamed: params.streamed
+	});
+	if (measured != null) return {
+		rate: sanitizeRate(measured),
+		estimated: null
+	};
+	const estimate = estimateTokenRate({
+		duration: params.duration,
+		completionTokens: params.completionTokens,
+		prefillMs: prefillReferenceMs(params.history || state.history, params.model)
+	});
+	if (!estimate) return {
+		rate: 0,
+		estimated: null
+	};
+	return {
+		rate: estimate.rate,
+		estimated: estimate.source
+	};
+}
+/** 把重算结果写回条目（r 为 null 表示这项已不可估算，保留原值） */
+function applyRateTo(target, r) {
+	if (!target) return false;
+	let changed = false;
+	if (Number(target.tokenRate) !== r.rate) {
+		target.tokenRate = r.rate;
+		changed = true;
+	}
+	if (r.estimated) {
+		if (target.rateEstimated !== r.estimated) {
+			target.rateEstimated = r.estimated;
+			changed = true;
+		}
+	} else if (target.rateEstimated !== void 0) {
+		delete target.rateEstimated;
+		changed = true;
+	}
+	return changed;
+}
+/**
+* 迁移：给「测不到真实速率」的历史条目补估算值 —— 明确非流式的记录，
+* 以及流式但首字延迟缺失/被清洗成 0 的记录（假流式、旧数据）。
+*
+* 旧版本把这类记录的速率一律写成 0，升级后它们应显示估算速率（UI 标「估算」）。
+* 幂等：已有速率或已标过估算口径的条目一律跳过，避免反复改写历史。
+*/
+function backfillEstimatedRates(list, model) {
+	let changed = false;
+	for (const h of list || []) {
+		if (!h || typeof h !== "object") continue;
+		if (Number(h.tokenRate) > 0) continue;
+		if (h.rateEstimated) continue;
+		if (h.origin === "agent") continue;
+		const ttft = Number(h.ttft);
+		if (h.streamed !== false && Number.isFinite(ttft) && ttft > 0) continue;
+		const duration = Number(h.duration) || 0;
+		const comp = Number(h.completion_tokens) || 0;
+		if (duration <= 0 || comp <= 0) continue;
+		const estimate = estimateTokenRate({
+			duration,
+			completionTokens: comp,
+			prefillMs: prefillReferenceMs(state.history, model || String(h.model || ""))
+		});
+		if (!estimate) continue;
+		h.tokenRate = estimate.rate;
+		h.rateEstimated = estimate.source;
+		changed = true;
+	}
+	return changed;
+}
 /** 只把已定义的元信息字段写到条目上，避免到处出现 undefined 键 */
 function applyEntryMeta(target, meta) {
 	if (!target || !meta || typeof meta !== "object") return;
@@ -1509,12 +1640,14 @@ function backfillEntryDuration(head, startTime, now = Date.now()) {
 	const measured = now - startTime;
 	if (!(measured > 0)) return false;
 	head.duration = measured;
-	head.tokenRate = computeTokenRate({
+	applyRateTo(head, resolveTokenRate({
 		duration: measured,
 		ttft: Number(head.ttft) || 0,
 		completionTokens: Number(head.completion_tokens) || 0,
-		streamed: head.streamed ?? null
-	});
+		streamed: head.streamed ?? null,
+		model: String(head.model || ""),
+		history: state.history
+	}));
 	return true;
 }
 function notifyStorageFailure(error) {
@@ -2415,7 +2548,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && !!wallet.catalogProvider) try {
-						import("./pricing-sync-BpMpWfqj.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-w8Ku-Fs8.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
@@ -2464,26 +2597,27 @@ var repository = {
 							head.thinkTokens = estThink;
 							changed = true;
 						}
+						const recalcHeadRate = () => applyRateTo(head, resolveTokenRate({
+							duration: Number(head.duration) || 0,
+							ttft: Number(head.ttft) || 0,
+							completionTokens: Number(head.completion_tokens) || 0,
+							streamed: head.streamed ?? null,
+							model
+						}));
 						if (ttft && !head.ttft) {
 							if (streamed === false) {
 								head.ttft = 0;
-								head.tokenRate = 0;
 								head.streamed = false;
 							} else {
 								head.ttft = ttft;
-								head.tokenRate = computeTokenRate({
-									duration: head.duration || 0,
-									ttft,
-									completionTokens: head.completion_tokens || 0,
-									streamed
-								});
 								if (streamed != null) head.streamed = streamed;
 							}
+							recalcHeadRate();
 							changed = true;
 						} else if (streamed === false && !head.streamed) {
 							head.ttft = 0;
-							head.tokenRate = 0;
 							head.streamed = false;
+							recalcHeadRate();
 							changed = true;
 						}
 						if (thinkTime && !head.thinkTime) {
@@ -2514,9 +2648,10 @@ var repository = {
 									state.lastUsage.isTruncated = head.isTruncated;
 								}
 								if (head.duration) state.lastUsage.duration = head.duration;
-								if (head.ttft) {
-									state.lastUsage.ttft = head.ttft;
+								if (head.ttft || head.tokenRate) {
+									state.lastUsage.ttft = head.ttft || 0;
 									state.lastUsage.tokenRate = head.tokenRate;
+									state.lastUsage.rateEstimated = head.rateEstimated ?? null;
 								}
 								if (head.thinkTime) state.lastUsage.thinkTime = head.thinkTime;
 								if (head.thinkTokens) state.lastUsage.thinkTokens = head.thinkTokens;
@@ -2551,12 +2686,15 @@ var repository = {
 		lu.duration = duration;
 		const nonStreamed = streamed === false;
 		lu.streamed = streamed;
-		lu.tokenRate = nonStreamed ? 0 : computeTokenRate({
+		const rate = resolveTokenRate({
 			duration,
 			ttft: ttft || 0,
 			completionTokens: comp,
-			streamed
+			streamed,
+			model
 		});
+		lu.tokenRate = rate.rate;
+		if (rate.estimated) lu.rateEstimated = rate.estimated;
 		lu.ttft = nonStreamed ? 0 : ttft || 0;
 		lu.thinkTime = thinkTime || 0;
 		lu.thinkTokens = thinkTokens;
@@ -2618,6 +2756,7 @@ var repository = {
 			thinkTime,
 			thinkTokens,
 			tokenRate: lu.tokenRate,
+			rateEstimated: lu.rateEstimated ?? null,
 			fullRequest,
 			fullResponse: safeResponse,
 			finishReason: fr2,
@@ -3286,6 +3425,12 @@ var repository = {
 				if (await this.recalcAll(cold)) coldDirty = true;
 			} catch {}
 		}
+		try {
+			if (backfillEstimatedRates(state.history)) try {
+				saveHot({ history: state.history });
+			} catch {}
+			if (backfillEstimatedRates(cold)) coldDirty = true;
+		} catch {}
 		if (coldDirty) try {
 			await saveHistoryCold(cold);
 		} catch {}

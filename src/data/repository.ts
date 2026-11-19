@@ -15,7 +15,7 @@ import { isTruncatedFinish, isTruncatedOf } from '../utils/finish';
 import { log, toast } from '../utils/logger';
 import { turnFingerprint } from './fingerprint';
 import { mobileDeviceHint } from '../utils/device';
-import { computeTokenRate, sanitizeHistoryTiming } from './token-rate';
+import { computeTokenRate, estimateTokenRate, measureTokenRate, prefillReferenceMs, sanitizeHistoryTiming, sanitizeRate, type RateEstimateSource } from './token-rate';
 import { normalizeConnectionEndpoint, type HistoryConnection } from '../services/connection-identity';
 import {
   createDeepSeekWallet,
@@ -68,6 +68,83 @@ const TURN_DEDUPE_WINDOW_MS = 15_000;
 /** 指纹表保留时长：只需覆盖去重窗口，超出即回收 */
 const TURN_FINGERPRINT_TTL_MS = 60_000;
 let storageFailureNotified = false;
+
+/**
+ * 一轮记录的速率取值（单一来源）：能测就测，测不出（非流式 / 假流式 / 首字缺失）
+ * 才用估算，并记下估算口径，UI 据此加「估算」标注。
+ * 估算的首字延迟参考取同模型最近的流式样本，样本不足时退到全模型。
+ */
+function resolveTokenRate(params: {
+  duration: number;
+  ttft: number;
+  completionTokens: number;
+  streamed: boolean | null;
+  model: string;
+  history?: any[] | null;
+}): { rate: number; estimated: RateEstimateSource | null } {
+  const measured = measureTokenRate({
+    duration: params.duration,
+    ttft: params.ttft,
+    completion_tokens: params.completionTokens,
+    streamed: params.streamed,
+  });
+  if (measured != null) return { rate: sanitizeRate(measured), estimated: null };
+  const estimate = estimateTokenRate({
+    duration: params.duration,
+    completionTokens: params.completionTokens,
+    prefillMs: prefillReferenceMs(params.history || state.history, params.model),
+  });
+  if (!estimate) return { rate: 0, estimated: null };
+  return { rate: estimate.rate, estimated: estimate.source };
+}
+
+/** 把重算结果写回条目（r 为 null 表示这项已不可估算，保留原值） */
+function applyRateTo(target: any, r: { rate: number; estimated: RateEstimateSource | null }): boolean {
+  if (!target) return false;
+  let changed = false;
+  if (Number(target.tokenRate) !== r.rate) { target.tokenRate = r.rate; changed = true; }
+  if (r.estimated) {
+    if (target.rateEstimated !== r.estimated) { target.rateEstimated = r.estimated; changed = true; }
+  } else if (target.rateEstimated !== undefined) {
+    delete target.rateEstimated;
+    changed = true;
+  }
+  return changed;
+}
+
+/**
+ * 迁移：给「测不到真实速率」的历史条目补估算值 —— 明确非流式的记录，
+ * 以及流式但首字延迟缺失/被清洗成 0 的记录（假流式、旧数据）。
+ *
+ * 旧版本把这类记录的速率一律写成 0，升级后它们应显示估算速率（UI 标「估算」）。
+ * 幂等：已有速率或已标过估算口径的条目一律跳过，避免反复改写历史。
+ */
+function backfillEstimatedRates(list: any[], model?: string | null): boolean {
+  let changed = false;
+  for (const h of list || []) {
+    if (!h || typeof h !== 'object') continue;
+    if (Number(h.tokenRate) > 0) continue;
+    if ((h as any).rateEstimated) continue;
+    // Agent 记录的耗时是整个 run 的墙钟，不是单次生成的窗口，估出来没有意义
+    if ((h as any).origin === 'agent') continue;
+    // 只补测不到首字的条目；有可信 TTFT 却没速率的，多半是数据异常，不去猜
+    const ttft = Number((h as any).ttft);
+    if ((h as any).streamed !== false && Number.isFinite(ttft) && ttft > 0) continue;
+    const duration = Number(h.duration) || 0;
+    const comp = Number(h.completion_tokens) || 0;
+    if (duration <= 0 || comp <= 0) continue;
+    const estimate = estimateTokenRate({
+      duration,
+      completionTokens: comp,
+      prefillMs: prefillReferenceMs(state.history, model || String(h.model || '')),
+    });
+    if (!estimate) continue;
+    h.tokenRate = estimate.rate;
+    h.rateEstimated = estimate.source;
+    changed = true;
+  }
+  return changed;
+}
 
 /** 只把已定义的元信息字段写到条目上，避免到处出现 undefined 键 */
 function applyEntryMeta(target: any, meta: EntryMeta | null | undefined): void {
@@ -190,12 +267,14 @@ export function backfillEntryDuration(head: any, startTime: number, now = Date.n
   const measured = now - startTime;
   if (!(measured > 0)) return false;
   head.duration = measured;
-  head.tokenRate = computeTokenRate({
+  applyRateTo(head, resolveTokenRate({
     duration: measured,
     ttft: Number(head.ttft) || 0,
     completionTokens: Number(head.completion_tokens) || 0,
     streamed: head.streamed ?? null,
-  });
+    model: String(head.model || ''),
+    history: state.history,
+  }));
   return true;
 }
 
@@ -1220,23 +1299,29 @@ export const repository = {
             if (fr && !head.finishReason) { head.finishReason = fr; head.isTruncated = isTruncatedFinish(fr); changed = true; }
             const estThink = usage?.completion_tokens_details?.reasoning_tokens || (usage as any)?.__think_tokens_est || 0;
             if (estThink && !head.thinkTokens) { head.thinkTokens = estThink; changed = true; }
+            // 速率按「能测就测、测不出就估算」重算；TTFT 仍按流式判定归零
+            const recalcHeadRate = (): boolean => applyRateTo(head, resolveTokenRate({
+              duration: Number(head.duration) || 0,
+              ttft: Number(head.ttft) || 0,
+              completionTokens: Number(head.completion_tokens) || 0,
+              streamed: head.streamed ?? null,
+              model,
+            }));
             if (ttft && !head.ttft) {
-              // 非流式/假流式：TTFT 与速率均不可信，一并归零
+              // 非流式/假流式：TTFT 不可信（等于总耗时）必须归零，速率交给估算
               if (streamed === false) {
                 head.ttft = 0;
-                head.tokenRate = 0;
                 head.streamed = false;
               } else {
                 head.ttft = ttft;
-                const dur = head.duration || 0;
-                head.tokenRate = computeTokenRate({ duration: dur, ttft, completionTokens: head.completion_tokens || 0, streamed });
                 if (streamed != null) head.streamed = streamed;
               }
+              recalcHeadRate();
               changed = true;
             } else if (streamed === false && !head.streamed) {
               head.ttft = 0;
-              head.tokenRate = 0;
               head.streamed = false;
+              recalcHeadRate();
               changed = true;
             }
             if (thinkTime && !head.thinkTime) { head.thinkTime = thinkTime; changed = true; }
@@ -1254,7 +1339,11 @@ export const repository = {
                 if (head.fullResponse) (state.lastUsage as any).fullResponse = head.fullResponse;
                 if (head.finishReason) { (state.lastUsage as any).finishReason = head.finishReason; (state.lastUsage as any).isTruncated = head.isTruncated; }
                 if (head.duration) (state.lastUsage as any).duration = head.duration;
-                if (head.ttft) { (state.lastUsage as any).ttft = head.ttft; (state.lastUsage as any).tokenRate = head.tokenRate; }
+                if (head.ttft || head.tokenRate) {
+                  (state.lastUsage as any).ttft = head.ttft || 0;
+                  (state.lastUsage as any).tokenRate = head.tokenRate;
+                  (state.lastUsage as any).rateEstimated = head.rateEstimated ?? null;
+                }
                 if (head.thinkTime) (state.lastUsage as any).thinkTime = head.thinkTime;
                 if (head.thinkTokens) (state.lastUsage as any).thinkTokens = head.thinkTokens;
                 if (head.sourceType) (state.lastUsage as any).sourceType = head.sourceType;
@@ -1279,10 +1368,13 @@ export const repository = {
     const duration = startTime ? Date.now() - startTime : 0;
     const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || (usage as any)?.__think_tokens_est || 0;
     lu.duration = duration;
-    // 非流式/假流式：TTFT 不可信（等于总耗时），速率分母塌缩会算出假速率，两者一并归零
+    // 非流式/假流式：TTFT 不可信（等于总耗时）必须归零，但速率不再跟着丢——
+    // 测不出真实速率时走估算，并记下估算口径，界面据此标「估算」
     const nonStreamed = streamed === false;
     lu.streamed = streamed;
-    lu.tokenRate = nonStreamed ? 0 : computeTokenRate({ duration, ttft: ttft || 0, completionTokens: comp, streamed });
+    const rate = resolveTokenRate({ duration, ttft: ttft || 0, completionTokens: comp, streamed, model });
+    lu.tokenRate = rate.rate;
+    if (rate.estimated) lu.rateEstimated = rate.estimated;
     lu.ttft = nonStreamed ? 0 : (ttft || 0); lu.thinkTime = thinkTime || 0; lu.thinkTokens = thinkTokens;
     // 截断检测：非正常 finish_reason（length / content_filter / sensitive 等）。
     // 用户自己点停止不算截断——这一轮本来就该停在那里，不是模型截不出来。
@@ -1316,7 +1408,7 @@ export const repository = {
       requestId,
       completion_tokens: comp, total_tokens: total, input_cost: lu.input_cost, output_cost: lu.output_cost,
       cost: lu.cost, cache_hit_rate: (hit + miss) > 0 ? (hit / (hit + miss) * 100) : 0, priceType: lu.priceType,
-      raw_usage: usage, messages: (messages || []).map(clampMessage), duration, ttft: lu.ttft, thinkTime, thinkTokens, tokenRate: lu.tokenRate, fullRequest, fullResponse: safeResponse,
+      raw_usage: usage, messages: (messages || []).map(clampMessage), duration, ttft: lu.ttft, thinkTime, thinkTokens, tokenRate: lu.tokenRate, rateEstimated: lu.rateEstimated ?? null, fullRequest, fullResponse: safeResponse,
       finishReason: fr2, isTruncated: !userStopped && isTruncatedFinish(fr2),
       streamed,
       chatId, chatName,
@@ -1905,6 +1997,12 @@ export const repository = {
       // 对历史成本按归一化模型重算，修复 [masa]/[OR] 前缀导致的 0 费用
       try { if (await this.recalcAll(cold)) coldDirty = true; } catch {}
     }
+    // 迁移：非流式记录补估算速率（条目级幂等，不依赖上面的整库重算门控——
+    // 只重发产物的同版本升级也要能看到估算值）
+    try {
+      if (backfillEstimatedRates(state.history)) { try { saveHot({ history: state.history }); } catch {} }
+      if (backfillEstimatedRates(cold)) coldDirty = true;
+    } catch {}
     // 冷库只在确有改动时写一次（原来无论是否变化都整份重写）
     if (coldDirty) { try { await saveHistoryCold(cold); } catch {} }
     // 热缓存聚合字段必须与热+冷全量历史一致，避免概览与统计页出现两套总额

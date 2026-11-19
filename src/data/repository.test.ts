@@ -229,6 +229,35 @@ describe('峰值提示小圆点默认值', () => {
 });
 
 
+describe('输出速率估算入库', () => {
+  it('非流式记录入库存估算速率并标注口径，TTFT 仍归零', () => {
+    const now = Date.now();
+    repository.addEntry(
+      { prompt_tokens: 1000, completion_tokens: 900, total_tokens: 1900 },
+      'deepseek-flash', [], now - 5000, undefined, undefined, 0, 0, 'stop', null, 'req-nonstream', false,
+    );
+    const h = state.history[0];
+    expect(h.streamed).toBe(false);
+    expect(h.ttft).toBe(0);
+    expect(h.tokenRate).toBeGreaterThan(0);
+    expect(['prefill', 'duration']).toContain(h.rateEstimated);
+  });
+
+  it('真实流式记录按实测速率记录，不带估算标记', () => {
+    const now = Date.now();
+    repository.addEntry(
+      { prompt_tokens: 1000, completion_tokens: 400, total_tokens: 1400 },
+      'deepseek-flash', [], now - 10000, undefined, undefined, 2000, 0, 'stop', null, 'req-stream', true,
+    );
+    const h = state.history[0];
+    // 400 token / (10s - 2s) = 50 t/s
+    expect(h.tokenRate).toBe(50);
+    expect(h.rateEstimated).toBeNull();
+  });
+});
+
+
+
 describe('同一轮二次写入补回耗时', () => {
   it('首写没有耗时、后写知道起点时补上并重算速率', () => {
     const now = 1_800_000_000_000;
@@ -252,11 +281,13 @@ describe('同一轮二次写入补回耗时', () => {
     expect(backfillEntryDuration(null as any, now - 4000, now)).toBe(false);
   });
 
-  it('非流式记录补耗时后速率仍为 0', () => {
+  it('非流式记录补耗时后给出估算速率，并标注估算口径', () => {
     const now = 1_800_000_000_000;
     const head: any = { duration: 0, ttft: 0, completion_tokens: 900, streamed: false, tokenRate: 0 };
     expect(backfillEntryDuration(head, now - 5000, now)).toBe(true);
     expect(head.duration).toBe(5000);
-    expect(head.tokenRate).toBe(0);
+    // 非流式测不到首字：900 token 摊到整轮 5s，得到正数速率供展示（按估算标注）
+    expect(head.tokenRate).toBeGreaterThan(0);
+    expect(['prefill', 'duration']).toContain(head.rateEstimated);
   });
 });

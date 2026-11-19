@@ -64,6 +64,99 @@ export function measureTokenRate(sample: RateSample | null | undefined): number 
 }
 
 /**
+ * 速率估算口径（非流式 / 假流式 / 测不到首字时使用）：
+ * - prefill：先用同模型典型首字延迟估掉输入处理时间，再按剩余生成窗口算；
+ * - duration：连首字延迟都估不出来时，直接按整轮耗时算（保守下限，含排队与输入处理）。
+ */
+export type RateEstimateSource = 'prefill' | 'duration';
+
+export interface RateEstimate {
+  rate: number;
+  source: RateEstimateSource;
+}
+
+/** 估算参考样本：至少这么多条同模型流式记录才敢用来推首字延迟 */
+export const MIN_PREFILL_SAMPLES = 3;
+
+/** 估算时扣掉首字后至少还要有这么久，否则退回整轮耗时口径 */
+export const MIN_ESTIMATE_WINDOW_MS = MIN_OUTPUT_WINDOW_MS;
+
+/** 历史里的一条速率参考样本（只用到这几个字段） */
+export interface PrefillSample {
+  model?: string | null;
+  ttft?: number | null;
+  duration?: number | null;
+  streamed?: boolean | null;
+}
+
+function median(values: number[]): number {
+  const sorted = values.slice().sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * 从历史里取「典型首字延迟」（ms），用作非流式请求的输入处理耗时估计。
+ *
+ * 优先同模型的真实流式样本；样本不够才退到全部模型。只认可信样本：
+ * 真实流式、TTFT > 0、耗时存在、且 TTFT 没有塌到总耗时上（假流式的典型症状）。
+ * 拿不到就返回 null，调用方退回整轮耗时口径。
+ */
+export function prefillReferenceMs(
+  history: PrefillSample[] | null | undefined,
+  model?: string | null,
+): number | null {
+  if (!Array.isArray(history) || !history.length) return null;
+  const usable = history.filter((h) => {
+    if (!h || h.streamed === false) return false;
+    const first = Number(h.ttft);
+    const dur = Number(h.duration);
+    if (!Number.isFinite(first) || first <= 0) return false;
+    if (!Number.isFinite(dur) || dur <= 0) return false;
+    // 首字与全文几乎同时到达：TTFT 不是真的首字延迟
+    if (first >= dur * 0.98) return false;
+    return true;
+  });
+  if (!usable.length) return null;
+  const sameModel = model ? usable.filter((h) => String(h.model || '') === String(model)) : [];
+  if (sameModel.length >= MIN_PREFILL_SAMPLES) {
+    return Math.round(median(sameModel.map((h) => Number(h.ttft))));
+  }
+  if (usable.length >= MIN_PREFILL_SAMPLES) {
+    return Math.round(median(usable.map((h) => Number(h.ttft))));
+  }
+  return null;
+}
+
+/**
+ * 估算输出速率（t/s），只用于「测不出真实速率」的记录：
+ * 非流式、上游一次性返回全文（假流式）、首字时间缺失或与总耗时重合。
+ *
+ * 先扣掉估计的输入处理时间（prefillMs），剩余窗口不足下限就退回整轮耗时口径——
+ * 后者会把排队与输入处理算进分母，因此只能当保守下限，UI 必须标「估算」。
+ * 与真实速率一样按 MAX_PLAUSIBLE_RATE 封顶，避免短耗时刷出离谱读数。
+ */
+export function estimateTokenRate(opts: {
+  duration: number;
+  completionTokens: number;
+  prefillMs?: number | null;
+}): RateEstimate | null {
+  const dur = Number(opts.duration);
+  const comp = Number(opts.completionTokens);
+  if (!Number.isFinite(dur) || dur <= 0) return null;
+  if (!Number.isFinite(comp) || comp <= 0) return null;
+  const cap = (rate: number): number => Math.min(MAX_PLAUSIBLE_RATE, Math.round(rate));
+  const prefill = Number(opts.prefillMs);
+  const window = Number.isFinite(prefill) && prefill > 0
+    ? dur - Math.min(prefill, dur * 0.9)
+    : 0;
+  if (window >= MIN_ESTIMATE_WINDOW_MS) {
+    return { rate: cap((comp / window) * 1000), source: 'prefill' };
+  }
+  return { rate: cap((comp / dur) * 1000), source: 'duration' };
+}
+
+/**
  * 计算输出速率（t/s），入库形态：不可测或超过上限一律记 0。
  * @param duration 整轮耗时（ms）
  * @param ttft 首字延迟（ms）

@@ -3,14 +3,14 @@ import { n as getSelectedSave, o as mobileDeviceHint, r as state$2, t as getHist
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as walletBalanceToCny, O as DEEPSEEK_WALLET_ID, S as mergeWalletCollections, _ as cloneWallet, b as findWalletForHistory, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as WALLET_CATALOG_PROVIDERS, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as defaultContextLimitForModel, w as walletPendingModelCount, x as findWalletModel } from "./repository-BTDUOImG.js";
+import { C as walletBalanceToCny, O as DEEPSEEK_WALLET_ID, S as mergeWalletCollections, _ as cloneWallet, b as findWalletForHistory, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as WALLET_CATALOG_PROVIDERS, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as defaultContextLimitForModel, w as walletPendingModelCount, x as findWalletModel } from "./repository-le7RIb04.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc$3, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-CJMNKSam.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
-import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-BopfS4rX.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-CtIL2RZp.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-BAtc-QEa.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-BpMpWfqj.js";
+import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-B-IZ0k7n.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-BDHvUigl.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-DtKAU16m.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-w8Ku-Fs8.js";
 import { a as listTapRecords, i as clearTapRecords, n as tapDiagnostics, o as subscribeTap, r as stripModelTag } from "./request-tap-DkKmHhdO.js";
 //#region src/constants/version.ts
 var APP_VERSION = String("3.2.3");
@@ -296,6 +296,42 @@ function triggerImport() {
 		inputEl = el;
 	}
 	inputEl.click();
+}
+//#endregion
+//#region src/ui/rate-text.ts
+/** 有效速率（>0 的整数），没有则 0 */
+function rateValueOf(entry) {
+	const value = Number(entry?.tokenRate);
+	if (!Number.isFinite(value) || value <= 0) return 0;
+	return Math.round(value);
+}
+/** 这个速率是不是估算出来的 */
+function isEstimatedRate(entry) {
+	if (!rateValueOf(entry)) return false;
+	return entry?.rateEstimated === "prefill" || entry?.rateEstimated === "duration";
+}
+/**
+* 速率的展示文本。
+* @param fallback 没有速率时显示什么（列表用「未测速」，详情非流式用「非流式」）
+*/
+function rateText(entry, fallback = "未测速") {
+	const value = rateValueOf(entry);
+	if (!value) return fallback;
+	return isEstimatedRate(entry) ? "≈" + value + " t/s" : value + " t/s";
+}
+/** 速率的悬浮说明：空字符串表示不需要 title */
+function rateTitle(entry) {
+	if (!rateValueOf(entry)) {
+		if (entry?.streamed === false) return "非流式请求没有可测的首字时间，若连耗时都缺失就无法估算";
+		return "本轮没有测到输出速率";
+	}
+	if (!isEstimatedRate(entry)) return "实测速率：输出 Token ÷ 生成窗口（总耗时 − 首字延迟）";
+	if (entry?.rateEstimated === "prefill") return "估算速率：非流式响应测不到首字延迟，已按同模型典型首字延迟扣除输入处理时间后计算";
+	return "估算速率：按整轮耗时计算，包含排队与输入处理，只能作为下限参考";
+}
+/** 历史详情里的小标签文本（估算时返回「估算」，否则空串） */
+function rateBadgeText(entry) {
+	return isEstimatedRate(entry) ? "估算" : "";
 }
 //#endregion
 //#region src/ui/compare.ts
@@ -2544,8 +2580,9 @@ function renderOverview(fullHistory) {
 		bindFour();
 		fourHost.innerHTML = keys.map((k, i) => {
 			const d = getFourDisplay(k, v);
-			const valColor = k === "avg_rate" ? "var(--ds-green)" : "var(--ds-text)";
-			return `<div class="ds-card" style="padding:14px;position:relative;overflow:visible;">
+			const isRate = k === "avg_rate";
+			const valColor = isRate ? "var(--ds-green)" : "var(--ds-text)";
+			return `<div class="ds-card" style="padding:14px;position:relative;overflow:visible;"${isRate ? " title=\"速率为平均值：包含非流式/首字缺失记录的估算值（历史页对应记录标 ≈）\"" : ""}>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
           <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.title}</div>
           <button id="aus-four-btn-${i}" title="切换指标" style="flex-shrink:0;padding:4px 7px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;line-height:1;">${icon("chevron-down", 14)}</button>
@@ -6418,8 +6455,9 @@ function renderStatsFour(filtered) {
 	bindStatsFour();
 	host.innerHTML = keys.map((k, i) => {
 		const d = getFourDisplay(k, v);
-		const valColor = k === "avg_rate" ? "var(--ds-green)" : "var(--ds-text)";
-		return `<div class="ds-card" style="padding:14px;position:relative;overflow:visible;">
+		const isRate = k === "avg_rate";
+		const valColor = isRate ? "var(--ds-green)" : "var(--ds-text)";
+		return `<div class="ds-card" style="padding:14px;position:relative;overflow:visible;"${isRate ? " title=\"速率为平均值：包含非流式/首字缺失记录的估算值（历史页对应记录标 ≈）\"" : ""}>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
         <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.title}</div>
         <button id="aus-stats-four-btn-${i}" title="切换指标" style="flex-shrink:0;padding:4px 7px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text-2);font-size:var(--aus-fs-sm);cursor:pointer;line-height:1;">${icon("chevron-down", 14)}</button>
@@ -9442,7 +9480,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-CtIL2RZp.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-BDHvUigl.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -10580,6 +10618,7 @@ function entryDigest(entry) {
 		cost: num(entry?.cost),
 		duration: num(entry?.duration),
 		tokenRate: num(entry?.tokenRate),
+		rateEstimated: entry?.rateEstimated === "prefill" || entry?.rateEstimated === "duration" ? entry.rateEstimated : null,
 		ttft: num(entry?.ttft),
 		thinkTime: num(entry?.thinkTime),
 		thinkTokens: num(entry?.thinkTokens),
@@ -14092,7 +14131,7 @@ function renderHistoryInner(doc, fullHist) {
       <div class="aus-history-card-head" style="display:flex;justify-content:space-between;align-items:center;">
         <div class="aus-history-card-main" style="min-width:0;flex:1;">
           <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${originBadge}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$3(h.model)} · ${esc$3(localTimeHM(h.timestamp))}</span></div>
-          <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · ${(h.tokenRate || 0) > 0 ? h.tokenRate + " t/s" : "未测速"}</div>
+          <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · <span title="${esc$3(rateTitle(h))}">${rateText(h)}</span></div>
         </div>
         <div class="aus-history-card-actions" style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
           <div class="aus-history-card-cost">
@@ -14137,7 +14176,7 @@ function renderHistoryInner(doc, fullHist) {
                   <div class="aus-dt-grid">
                     <div class="aus-dt-item"><span class="aus-dt-label">耗时</span><span class="aus-dt-val">${((h.duration || 0) / 1e3).toFixed(1)}s</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">首字延迟</span><span class="aus-dt-val">${(h.ttft || 0) > 0 ? ((h.ttft || 0) / 1e3).toFixed(1) + "s" : "—"}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label">速率</span><span class="aus-dt-val" style="color:${(h.tokenRate || 0) > 0 ? "var(--ds-green)" : "var(--ds-text-3)"};">${(h.tokenRate || 0) > 0 ? h.tokenRate + " t/s" : h.streamed === false ? "非流式" : "—"}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">速率</span><span class="aus-dt-val" style="color:${(h.tokenRate || 0) > 0 ? "var(--ds-green)" : "var(--ds-text-3)"};" title="${esc$3(rateTitle(h))};">${rateText(h, h.streamed === false ? "非流式" : "—")}${rateBadgeText(h) ? `<span style="margin-left:4px;padding:0 4px;border-radius:4px;font-size:10px;font-weight:600;background:var(--ds-card);color:var(--ds-text-2);">${rateBadgeText(h)}</span>` : ""}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">思维链耗时</span><span class="aus-dt-val">${(h.thinkTime || 0) > 0 ? ((h.thinkTime || 0) / 1e3).toFixed(1) + "s" : "—"}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">思维链占比</span><span class="aus-dt-val">${(() => {
 			const comp = h.completion_tokens || 0, th = h.thinkTokens || 0;
@@ -15129,7 +15168,7 @@ function createPanel() {
             <div id="aus-model-summary" class="ds-card" style="margin-top:12px;overflow:auto;">
               <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:8px;">模型汇总</div>
               <table style="width:100%;border-collapse:collapse;font-size:var(--aus-fs-sm);white-space:nowrap;">
-                <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">模型</th><th data-sort-key="count" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">调用次数<span class="aus-sort-ind"></span></th><th data-sort-key="hit" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输入(命中)<span class="aus-sort-ind"></span></th><th data-sort-key="miss" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输入(未命中)<span class="aus-sort-ind"></span></th><th data-sort-key="out" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输出<span class="aus-sort-ind"></span></th><th data-sort-key="total" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总 Tokens<span class="aus-sort-ind"></span></th><th data-sort-key="cost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总成本<span class="aus-sort-ind"></span></th><th data-sort-key="avgCost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均成本<span class="aus-sort-ind"></span></th><th data-sort-key="avgDur" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均耗时<span class="aus-sort-ind"></span></th><th data-sort-key="avgRate" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均速率<span class="aus-sort-ind"></span></th></tr></thead>
+                <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">模型</th><th data-sort-key="count" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">调用次数<span class="aus-sort-ind"></span></th><th data-sort-key="hit" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输入(命中)<span class="aus-sort-ind"></span></th><th data-sort-key="miss" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输入(未命中)<span class="aus-sort-ind"></span></th><th data-sort-key="out" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输出<span class="aus-sort-ind"></span></th><th data-sort-key="total" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总 Tokens<span class="aus-sort-ind"></span></th><th data-sort-key="cost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总成本<span class="aus-sort-ind"></span></th><th data-sort-key="avgCost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均成本<span class="aus-sort-ind"></span></th><th data-sort-key="avgDur" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均耗时<span class="aus-sort-ind"></span></th><th data-sort-key="avgRate" title="点击排序 · 含非流式/首字缺失记录的估算值" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均速率<span class="aus-sort-ind"></span></th></tr></thead>
                 <tbody id="aus-summary-tbody"><tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
               </table>
             </div>
@@ -15878,7 +15917,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-B7JztoIH.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-2YRJaQgR.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-Supn59IT.js").then((m) => {
@@ -16123,10 +16162,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-BopfS4rX.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-B-IZ0k7n.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-B7JztoIH.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-2YRJaQgR.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-DkKmHhdO.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -16137,10 +16176,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-BopfS4rX.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-B-IZ0k7n.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-B7JztoIH.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-2YRJaQgR.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-DkKmHhdO.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -16206,10 +16245,10 @@ function ensureWandEntry() {
 /** 运行时收尾：卸载拦截器与采集、拆掉面板 DOM、停全部定时器与事件监听（数据一律不动） */
 async function teardownRuntime() {
 	try {
-		import("./interception-BopfS4rX.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-B-IZ0k7n.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-B7JztoIH.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-2YRJaQgR.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -16225,13 +16264,13 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-CtIL2RZp.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-BDHvUigl.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CJMNKSam.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-BpMpWfqj.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-w8Ku-Fs8.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -16281,19 +16320,19 @@ async function onClean() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-BopfS4rX.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-B-IZ0k7n.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-B7JztoIH.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-2YRJaQgR.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-CtIL2RZp.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-BDHvUigl.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-CJMNKSam.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-BpMpWfqj.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-w8Ku-Fs8.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -16336,19 +16375,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-CtIL2RZp.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-BDHvUigl.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-CJMNKSam.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-BpMpWfqj.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-w8Ku-Fs8.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-B7JztoIH.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-2YRJaQgR.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -16370,7 +16409,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-BpMpWfqj.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-w8Ku-Fs8.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

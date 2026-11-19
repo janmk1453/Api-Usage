@@ -2,6 +2,7 @@ import { getSelectedSave } from '../store/index';
 import { esc } from '../utils/date';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 import { icon } from './icons';
+import { rateText, rateTitle } from './rate-text';
 
 let selOld: number | null = null;
 let selNew: number | null = null;
@@ -76,7 +77,7 @@ export function renderUsageDetail(ts: number) {
       <div style="background:var(--ds-card);border-radius:10px;padding:10px;"><div style="color:var(--ds-text-2);font-size:11px;">费用</div><div style="font-weight:700;color:var(--ds-text);">${(()=>{ try{  return formatMoney(h.cost||0,4);} catch{ return '¥'+(h.cost||0).toFixed(4)+' CNY';}})()}</div></div>
       <div style="background:var(--ds-card);border-radius:10px;padding:10px;"><div style="color:var(--ds-text-2);font-size:11px;">Tokens</div><div style="color:var(--ds-text);">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · ${h.total_tokens || 0} 总</div></div>
       <div style="background:var(--ds-card);border-radius:10px;padding:10px;"><div style="color:var(--ds-text-2);font-size:11px;">命中率</div><div style="color:var(--ds-text);">${(h.cache_hit_rate || 0).toFixed(1)}%</div></div>
-      <div style="background:var(--ds-card);border-radius:10px;padding:10px;"><div style="color:var(--ds-text-2);font-size:11px;">耗时/速率</div><div style="color:var(--ds-text);">${h.duration || 0}ms · ${(h.tokenRate||0)>0 ? h.tokenRate+' t/s' : '未测速'} · 首延 ${(h.ttft||0)>0 ? h.ttft+'ms' : '—'}</div></div>
+      <div style="background:var(--ds-card);border-radius:10px;padding:10px;"><div style="color:var(--ds-text-2);font-size:11px;">耗时/速率</div><div style="color:var(--ds-text);">${h.duration || 0}ms · <span title="${esc(rateTitle(h))}">${rateText(h)}</span> · 首延 ${(h.ttft||0)>0 ? h.ttft+'ms' : '—'}</div></div>
       <div style="background:var(--ds-card);border-radius:10px;padding:10px;"><div style="color:var(--ds-text-2);font-size:11px;">思维链</div><div style="color:var(--ds-text);">${h.thinkTokens || 0} tk · ${h.thinkTime || 0}ms</div></div>
     </div>
   `;
