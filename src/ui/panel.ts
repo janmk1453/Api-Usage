@@ -1,5 +1,5 @@
 import { APP_VERSION, BUILD_NO } from '../constants/version';
-import { state, getSelectedSave, getHistoryForDisplay } from '../store/index';
+import { state, getSelectedSave, getHistoryForDisplay, getCurrentChatIdForStore } from '../store/index';
 import { esc, localDay, localTimeHM } from '../utils/date';
 import { isTruncatedOf } from '../utils/finish';
 import { saveHot } from '../store/persistence';
@@ -52,6 +52,7 @@ import { trackOpen, trackPage, trackRender, flushTelemetry } from '../services/t
 import {
   STATS_FILTER_ALL,
   STATS_FILTER_UNKNOWN,
+  STATS_FILTER_CURRENT_CHAT,
   filterStatsHistory,
   getCredentialFilterOptions,
   getEndpointFilterOptions,
@@ -263,6 +264,8 @@ function renderHistoryFilterDropdown(
   options: HistoryFilterOption[],
   emptyText: string,
   onSelect: (value: string) => void,
+  /** 「全部」下方固定插入的项（如对话的「当前对话」动态项），不参与空列表提示 */
+  leading: HistoryFilterOption[] = [],
 ) {
   const doc = getDoc();
   const dropdown = doc.getElementById(`aus-history-${kind}-dropdown`);
@@ -272,6 +275,7 @@ function renderHistoryFilterDropdown(
     return `<div data-history-value="${esc(id)}" title="${esc(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${esc(label)}</div>`;
   };
   let html = item(STATS_FILTER_ALL, '全部');
+  for (const option of leading) html += item(option.id, option.label, option.title || option.label);
   for (const option of options) html += item(option.id, option.label, option.title || option.label);
   if (!options.length) html += `<div style="padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);">${esc(emptyText)}</div>`;
   dropdown.innerHTML = html;
@@ -291,9 +295,15 @@ function renderHistoryFilters(history: any[]) {
   }
   // 全量对话选项用于取值校验与名称回显；下拉里只列未被隐藏的（「对话展示管理」的「下拉选项」集合）
   const chatOptions = getHistoryChatOptions(historyFilterBase);
-  if (historyFilters.chat !== STATS_FILTER_ALL && !chatOptions.some((option) => option.id === historyFilters.chat)) {
+  // 「当前对话」是动态项，不要求出现在已记录对话列表里
+  if (
+    historyFilters.chat !== STATS_FILTER_ALL
+    && historyFilters.chat !== STATS_FILTER_CURRENT_CHAT
+    && !chatOptions.some((option) => option.id === historyFilters.chat)
+  ) {
     historyFilters.chat = STATS_FILTER_ALL;
   }
+  const currentChatId = getCurrentChatIdForStore();
   const chats = filterPickerRows(chatOptions, (option) => option.id);
   const endpoints = getEndpointFilterOptions(historyFilterBase);
   if (historyFilters.endpoint !== STATS_FILTER_ALL && !endpoints.some((option) => option.id === historyFilters.endpoint)) {
@@ -309,7 +319,9 @@ function renderHistoryFilters(history: any[]) {
     model: historyFilters.model === STATS_FILTER_ALL ? '全部' : historyFilters.model,
     chat: historyFilters.chat === STATS_FILTER_ALL
       ? '全部'
-      : chatOptions.find((option) => option.id === historyFilters.chat)?.label || historyFilters.chat,
+      : historyFilters.chat === STATS_FILTER_CURRENT_CHAT
+        ? '当前对话'
+        : chatOptions.find((option) => option.id === historyFilters.chat)?.label || historyFilters.chat,
     endpoint: historyFilters.endpoint === STATS_FILTER_ALL
       ? '全部'
       : historyFilters.endpoint === STATS_FILTER_UNKNOWN
@@ -339,7 +351,11 @@ function renderHistoryFilters(history: any[]) {
     historyPage = 1;
     closeHistoryFilterDropdownsInstant();
     afterNextPaint(() => renderHistory(doc, getSelectedSave()));
-  });
+  }, [{
+    id: STATS_FILTER_CURRENT_CHAT,
+    label: '当前对话',
+    title: currentChatId ? `按当前对话筛选：${currentChatId}` : '当前没有打开的对话',
+  }]);
   renderHistoryFilterDropdown('endpoint', historyFilters.endpoint, endpoints, '暂无接入记录', (value) => {
     historyFilters.endpoint = value;
     historyFilters.credential = STATS_FILTER_ALL;

@@ -1,6 +1,6 @@
 import { icon } from './icons';
 import { bindSortableHeaders, paintSortHeader, type SortState } from './sort-header';
-import { getSelectedSave, state } from '../store/index';
+import { getSelectedSave, state, getCurrentChatIdForStore } from '../store/index';
 import { localDay, esc } from '../utils/date';
 import { Y_OPTIONS, Y_GROUPS, X_OPTIONS, getYSelected, getXSelected, getChartType, setChartType, getAxisLabelMode, setAxisLabelMode, toggleY, setXSelected, aggregateForChart, tokenStackDrawOrder, sortTooltipParams } from './chart-config';
 import { renderExtraCharts } from './extra-charts';
@@ -12,6 +12,7 @@ import { DataEvents, on as onDataEvent } from '../data/events';
 import {
   STATS_FILTER_ALL,
   STATS_FILTER_UNKNOWN,
+  STATS_FILTER_CURRENT_CHAT,
   computeStatsFour,
   filterStatsHistory,
   getCredentialFilterOptions,
@@ -278,10 +279,21 @@ function renderChatPicker(chatHist?: any[]) {
   // 下拉只列出未被隐藏的对话（「对话展示管理」的「下拉选项」集合）；
   // 选中项即使被隐藏也照常按名称显示，统计口径始终按全量历史计算。
   const list = filterPickerRows(fullList);
+  const currentChatId = getCurrentChatIdForStore();
+  const isCurrentChat = selectedChat === STATS_FILTER_CURRENT_CHAT;
+  const currentOption = currentChatId ? fullList.find(c => c.chatId === currentChatId) : undefined;
   const find = fullList.find(c => (c.chatId ?? '__null__') === selectedChat);
-  label.textContent = selectedChat === '__all__' ? '全部' : (find?.displayName || selectedChat);
-  label.title = find?.chatId || find?.displayName || '';
-  let html = `<div data-chat="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${selectedChat==='__all__'?'background:var(--ds-card);font-weight:600;':''}">全部</div>`;
+  label.textContent = selectedChat === STATS_FILTER_ALL
+    ? '全部'
+    : isCurrentChat
+      ? '当前对话'
+      : (find?.displayName || selectedChat);
+  label.title = isCurrentChat
+    ? (currentChatId || '当前没有打开的对话')
+    : (find?.chatId || find?.displayName || '');
+  let html = `<div data-chat="${STATS_FILTER_ALL}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${selectedChat===STATS_FILTER_ALL?'background:var(--ds-card);font-weight:600;':''}">全部</div>`;
+  // 「当前对话」是动态项：打开面板时现场解析当前 chatId，不参与隐藏，也不要求当前对话已有记录
+  html += `<div data-chat="${STATS_FILTER_CURRENT_CHAT}" title="${esc(currentChatId ? `按当前对话筛选：${currentOption?.displayName || currentChatId}` : '当前没有打开的对话')}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${isCurrentChat?'background:var(--ds-card);font-weight:600;':''}">当前对话</div>`;
   for (const c of list) {
     const key = c.chatId ?? '__null__';
     const active = key === selectedChat ? 'background:var(--ds-card);font-weight:600;' : '';

@@ -2,7 +2,7 @@
  * 统一计算层 — 所有展示/统计的唯一来源
  * 禁止在 UI 中直接对 history 做过滤/求和，所有派生在此定义
  */
-import { state, getSelectedSave } from '../store/index';
+import { state, getSelectedSave, getCurrentChatIdForStore } from '../store/index';
 import { calcSavings } from '../services/pricing';
 import { localDay } from '../utils/date';
 import { isTruncatedOf } from '../utils/finish';
@@ -24,6 +24,8 @@ import {
 export const STATS_FILTER_ALL = '__all__';
 export const STATS_FILTER_UNKNOWN = '__unknown__';
 export const STATS_FILTER_NULL = '__null__';
+/** 对话筛选的动态项：按「当前打开的对话」过滤，打开面板时现场解析，不存具体 chatId */
+export const STATS_FILTER_CURRENT_CHAT = '__current_chat__';
 
 export type StatsHistoryFilter = {
   start?: string;
@@ -65,7 +67,11 @@ export function filterStatsHistory(entries: any[], filter: StatsHistoryFilter = 
       if (!models.length || !models.includes(entry.model)) return false;
     }
     if (filter.chat && filter.chat !== STATS_FILTER_ALL) {
-      if (filter.chat === STATS_FILTER_NULL) {
+      if (filter.chat === STATS_FILTER_CURRENT_CHAT) {
+        // 动态项：每次过滤时现场取当前对话；没有打开的对话就没有可匹配的记录
+        const current = getCurrentChatIdForStore();
+        if (!current || (entry.chatId ?? null) !== current) return false;
+      } else if (filter.chat === STATS_FILTER_NULL) {
         if (entry.chatId) return false;
       } else if ((entry.chatId ?? null) !== filter.chat) {
         return false;

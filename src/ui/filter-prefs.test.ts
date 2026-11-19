@@ -65,6 +65,13 @@ describe('filter-prefs 筛选状态持久化', () => {
     expect(readFilterPrefs().stats.range).toBe('7d');
   });
 
+  it('对话筛选的动态「当前对话」哨兵原样存取（不按已记录对话做白名单）', () => {
+    writeFilterPrefs({ stats: { chat: '__current_chat__' }, history: { chat: '__current_chat__' } });
+    const prefs = readFilterPrefs();
+    expect(prefs.stats.chat).toBe('__current_chat__');
+    expect(prefs.history.chat).toBe('__current_chat__');
+  });
+
   it('时间维度白名单：非法值丢弃并保留默认，合法值原样通过', () => {
     expect(normalizeRange('all')).toBe('all');
     expect(normalizeRange('lastMonth')).toBe('lastMonth');

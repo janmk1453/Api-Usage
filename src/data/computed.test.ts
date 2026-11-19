@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  STATS_FILTER_CURRENT_CHAT,
   STATS_FILTER_UNKNOWN,
   computeChatStats,
   computeStatsFour,
@@ -274,6 +275,30 @@ describe('统计聚合', () => {
       { timestamp: 1, model: 'model-a' },
       { timestamp: 3, model: 'model-c' },
     ]);
+  });
+
+  it('对话筛选的「当前对话」动态项按现场打开的对话匹配', () => {
+    const history = [
+      { timestamp: 1, model: 'model-a', chatId: 'chat-a' },
+      { timestamp: 2, model: 'model-a', chatId: 'chat-b' },
+      { timestamp: 3, model: 'model-a', chatId: null },
+    ];
+    const g = globalThis as any;
+    const prev = g.SillyTavern;
+    try {
+      g.SillyTavern = { getContext: () => ({ getCurrentChatId: () => 'chat-b' }) };
+      expect(filterStatsHistory(history, { chat: STATS_FILTER_CURRENT_CHAT }).map((entry: any) => entry.chatId))
+        .toEqual(['chat-b']);
+      // 打开面板期间切换对话，筛选结果跟着走（不缓存 chatId）
+      g.SillyTavern = { getContext: () => ({ getCurrentChatId: () => 'chat-a' }) };
+      expect(filterStatsHistory(history, { chat: STATS_FILTER_CURRENT_CHAT }).map((entry: any) => entry.chatId))
+        .toEqual(['chat-a']);
+      // 没有打开的对话：动态项匹配不到任何记录
+      g.SillyTavern = { getContext: () => ({ getCurrentChatId: () => null }) };
+      expect(filterStatsHistory(history, { chat: STATS_FILTER_CURRENT_CHAT })).toHaveLength(0);
+    } finally {
+      g.SillyTavern = prev;
+    }
   });
 
   it('旧记录可通过未记录和未识别哨兵筛选', () => {

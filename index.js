@@ -1,16 +1,16 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { n as getSelectedSave, o as mobileDeviceHint, r as state$2, t as getHistoryForDisplay } from "./store-UtA6O3mA.js";
+import { i as state$2, n as getHistoryForDisplay, r as getSelectedSave, s as mobileDeviceHint, t as getCurrentChatIdForStore } from "./store-HbexUDAd.js";
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as walletBalanceToCny, O as DEEPSEEK_WALLET_ID, S as mergeWalletCollections, _ as cloneWallet, b as findWalletForHistory, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as WALLET_CATALOG_PROVIDERS, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as defaultContextLimitForModel, w as walletPendingModelCount, x as findWalletModel } from "./repository-le7RIb04.js";
+import { C as walletBalanceToCny, O as DEEPSEEK_WALLET_ID, S as mergeWalletCollections, _ as cloneWallet, b as findWalletForHistory, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as WALLET_CATALOG_PROVIDERS, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as defaultContextLimitForModel, w as walletPendingModelCount, x as findWalletModel } from "./repository-uVzlUJvL.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc$3, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
-import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-CJMNKSam.js";
+import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-vMqQ1McO.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
-import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-B-IZ0k7n.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-BDHvUigl.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-DtKAU16m.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-w8Ku-Fs8.js";
+import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-Dwwzc5vz.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-C9X6SOWT.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-C839SG5A.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-CyiUK6rH.js";
 import { a as listTapRecords, i as clearTapRecords, n as tapDiagnostics, o as subscribeTap, r as stripModelTag } from "./request-tap-DkKmHhdO.js";
 //#region src/constants/version.ts
 var APP_VERSION = String("3.2.3");
@@ -1140,6 +1140,8 @@ function aggregateModelEfficiency(history, options = {}) {
 */
 var STATS_FILTER_ALL = "__all__";
 var STATS_FILTER_UNKNOWN = "__unknown__";
+/** 对话筛选的动态项：按「当前打开的对话」过滤，打开面板时现场解析，不存具体 chatId */
+var STATS_FILTER_CURRENT_CHAT = "__current_chat__";
 function numberValue(value) {
 	const n = typeof value === "number" ? value : parseFloat(String(value));
 	return Number.isFinite(n) ? n : 0;
@@ -1162,7 +1164,10 @@ function filterStatsHistory(entries, filter = {}) {
 			if (!models.length || !models.includes(entry.model)) return false;
 		}
 		if (filter.chat && filter.chat !== "__all__") {
-			if (filter.chat === "__null__") {
+			if (filter.chat === "__current_chat__") {
+				const current = getCurrentChatIdForStore();
+				if (!current || (entry.chatId ?? null) !== current) return false;
+			} else if (filter.chat === "__null__") {
 				if (entry.chatId) return false;
 			} else if ((entry.chatId ?? null) !== filter.chat) return false;
 		}
@@ -5451,10 +5456,14 @@ function renderChatPicker(chatHist) {
 	if (!dropdown || !label) return;
 	const fullList = chatHist ? getRecordedChatsFrom(chatHist) : getRecordedChatsFrom(getSelectedSave()?.history || []);
 	const list = filterPickerRows(fullList);
+	const currentChatId = getCurrentChatIdForStore();
+	const isCurrentChat = selectedChat === STATS_FILTER_CURRENT_CHAT;
+	const currentOption = currentChatId ? fullList.find((c) => c.chatId === currentChatId) : void 0;
 	const find = fullList.find((c) => (c.chatId ?? "__null__") === selectedChat);
-	label.textContent = selectedChat === "__all__" ? "全部" : find?.displayName || selectedChat;
-	label.title = find?.chatId || find?.displayName || "";
-	let html = `<div data-chat="__all__" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${selectedChat === "__all__" ? "background:var(--ds-card);font-weight:600;" : ""}">全部</div>`;
+	label.textContent = selectedChat === "__all__" ? "全部" : isCurrentChat ? "当前对话" : find?.displayName || selectedChat;
+	label.title = isCurrentChat ? currentChatId || "当前没有打开的对话" : find?.chatId || find?.displayName || "";
+	let html = `<div data-chat="${STATS_FILTER_ALL}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${selectedChat === "__all__" ? "background:var(--ds-card);font-weight:600;" : ""}">全部</div>`;
+	html += `<div data-chat="${STATS_FILTER_CURRENT_CHAT}" title="${esc$3(currentChatId ? `按当前对话筛选：${currentOption?.displayName || currentChatId}` : "当前没有打开的对话")}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${isCurrentChat ? "background:var(--ds-card);font-weight:600;" : ""}">当前对话</div>`;
 	for (const c of list) {
 		const key = c.chatId ?? "__null__";
 		const active = key === selectedChat ? "background:var(--ds-card);font-weight:600;" : "";
@@ -9480,7 +9489,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-BDHvUigl.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-C9X6SOWT.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -13826,7 +13835,7 @@ function closeHistoryFilterDropdownsInstant() {
 		"credential"
 	]) closeDropdownInstant(doc.getElementById(`aus-history-${kind}-dropdown`));
 }
-function renderHistoryFilterDropdown(kind, selected, options, emptyText, onSelect) {
+function renderHistoryFilterDropdown(kind, selected, options, emptyText, onSelect, leading = []) {
 	const dropdown = getDoc$1().getElementById(`aus-history-${kind}-dropdown`);
 	if (!dropdown) return;
 	const item = (id, label, title = label) => {
@@ -13834,6 +13843,7 @@ function renderHistoryFilterDropdown(kind, selected, options, emptyText, onSelec
 		return `<div data-history-value="${esc$3(id)}" title="${esc$3(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${esc$3(label)}</div>`;
 	};
 	let html = item(STATS_FILTER_ALL, "全部");
+	for (const option of leading) html += item(option.id, option.label, option.title || option.label);
 	for (const option of options) html += item(option.id, option.label, option.title || option.label);
 	if (!options.length) html += `<div style="padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);">${esc$3(emptyText)}</div>`;
 	dropdown.innerHTML = html;
@@ -13850,7 +13860,8 @@ function renderHistoryFilters(history) {
 	}));
 	if (historyFilters.model !== "__all__" && !models.some((option) => option.id === historyFilters.model)) historyFilters.model = STATS_FILTER_ALL;
 	const chatOptions = getHistoryChatOptions(historyFilterBase);
-	if (historyFilters.chat !== "__all__" && !chatOptions.some((option) => option.id === historyFilters.chat)) historyFilters.chat = STATS_FILTER_ALL;
+	if (historyFilters.chat !== "__all__" && historyFilters.chat !== "__current_chat__" && !chatOptions.some((option) => option.id === historyFilters.chat)) historyFilters.chat = STATS_FILTER_ALL;
+	const currentChatId = getCurrentChatIdForStore();
 	const chats = filterPickerRows(chatOptions, (option) => option.id);
 	const endpoints = getEndpointFilterOptions(historyFilterBase);
 	if (historyFilters.endpoint !== "__all__" && !endpoints.some((option) => option.id === historyFilters.endpoint)) {
@@ -13861,7 +13872,7 @@ function renderHistoryFilters(history) {
 	if (historyFilters.credential !== "__all__" && !credentials.some((option) => option.id === historyFilters.credential)) historyFilters.credential = STATS_FILTER_ALL;
 	const labelMap = {
 		model: historyFilters.model === "__all__" ? "全部" : historyFilters.model,
-		chat: historyFilters.chat === "__all__" ? "全部" : chatOptions.find((option) => option.id === historyFilters.chat)?.label || historyFilters.chat,
+		chat: historyFilters.chat === "__all__" ? "全部" : historyFilters.chat === "__current_chat__" ? "当前对话" : chatOptions.find((option) => option.id === historyFilters.chat)?.label || historyFilters.chat,
 		endpoint: historyFilters.endpoint === "__all__" ? "全部" : historyFilters.endpoint === "__unknown__" ? "未记录接入" : endpoints.find((option) => option.id === historyFilters.endpoint)?.label || historyFilters.endpoint,
 		credential: historyFilters.credential === "__all__" ? "全部" : historyFilters.credential === "__unknown__" ? "未识别密钥" : credentials.find((option) => option.id === historyFilters.credential)?.label || historyFilters.credential
 	};
@@ -13888,7 +13899,11 @@ function renderHistoryFilters(history) {
 		historyPage = 1;
 		closeHistoryFilterDropdownsInstant();
 		afterNextPaint(() => renderHistory(doc, getSelectedSave()));
-	});
+	}, [{
+		id: STATS_FILTER_CURRENT_CHAT,
+		label: "当前对话",
+		title: currentChatId ? `按当前对话筛选：${currentChatId}` : "当前没有打开的对话"
+	}]);
 	renderHistoryFilterDropdown("endpoint", historyFilters.endpoint, endpoints, "暂无接入记录", (value) => {
 		historyFilters.endpoint = value;
 		historyFilters.credential = STATS_FILTER_ALL;
@@ -15918,7 +15933,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-2YRJaQgR.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-CqCEcHkx.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-Supn59IT.js").then((m) => {
@@ -16163,10 +16178,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-B-IZ0k7n.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-Dwwzc5vz.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-2YRJaQgR.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CqCEcHkx.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-DkKmHhdO.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -16177,10 +16192,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-B-IZ0k7n.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-Dwwzc5vz.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-2YRJaQgR.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CqCEcHkx.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-DkKmHhdO.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -16246,10 +16261,10 @@ function ensureWandEntry() {
 /** 运行时收尾：卸载拦截器与采集、拆掉面板 DOM、停全部定时器与事件监听（数据一律不动） */
 async function teardownRuntime() {
 	try {
-		import("./interception-B-IZ0k7n.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-Dwwzc5vz.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-2YRJaQgR.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-CqCEcHkx.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -16265,13 +16280,13 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-BDHvUigl.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-C9X6SOWT.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-CJMNKSam.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-vMqQ1McO.js").then((n) => n.t)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-w8Ku-Fs8.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-CyiUK6rH.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -16321,19 +16336,19 @@ async function onClean() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-B-IZ0k7n.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-Dwwzc5vz.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-2YRJaQgR.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CqCEcHkx.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-BDHvUigl.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-C9X6SOWT.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
-		import("./currency-CJMNKSam.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+		import("./currency-vMqQ1McO.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-w8Ku-Fs8.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-CyiUK6rH.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -16376,19 +16391,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-BDHvUigl.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-C9X6SOWT.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-CJMNKSam.js").then((n) => n.t)).restartRateTimer?.();
+		(await import("./currency-vMqQ1McO.js").then((n) => n.t)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-w8Ku-Fs8.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-CyiUK6rH.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-2YRJaQgR.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CqCEcHkx.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -16410,7 +16425,7 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-w8Ku-Fs8.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-CyiUK6rH.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();
