@@ -21,8 +21,8 @@ export default defineConfig({
       fileName: () => 'index.js',
       formats: ['es'],
     },
-    outDir: '.',
-    emptyOutDir: false,
+    outDir: 'dist',
+    emptyOutDir: true,
     cssCodeSplit: false,
     rollupOptions: {
       output: {

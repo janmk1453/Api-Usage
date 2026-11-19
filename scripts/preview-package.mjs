@@ -158,13 +158,13 @@ for (const file of files) {
   if (!trackedFiles.has(file)) throw new Error(`待打包文件不存在于提交中：${file}`);
   const allowed =
     file === 'manifest.json' ||
-    file === 'index.js' ||
+    file === 'dist/index.js' ||
     file === 'style.css' ||
     file === 'README.md' ||
     file === 'LICENSE' ||
     file.startsWith('i18n/') ||
     file.startsWith('templates/') ||
-    /^[^/]+\.js$/.test(file);
+    /^dist\/.+\.js$/.test(file);
   if (!allowed) throw new Error(`预览包包含非扩展运行文件：${file}`);
 }
 

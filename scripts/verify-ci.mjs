@@ -154,12 +154,18 @@ if (entry) {
     }
   }
 
-  const rootJsFiles = readdirSync(root, { withFileTypes: true })
-    .filter((item) => item.isFile() && item.name.endsWith('.js'))
-    .map((item) => item.name)
-    .sort();
-  const orphanFiles = rootJsFiles.filter((file) => !reachable.has(file));
-  if (orphanFiles.length) errors.push(`发现未被入口引用的根目录 JS 产物：${orphanFiles.join('、')}`);
+  const distDirectory = resolve(root, 'dist');
+  let distJsFiles = [];
+  try {
+    distJsFiles = readdirSync(distDirectory, { withFileTypes: true })
+      .filter((item) => item.isFile() && item.name.endsWith('.js'))
+      .map((item) => `dist/${item.name}`)
+      .sort();
+  } catch (error) {
+    errors.push(`产物目录 dist/ 不存在或无法读取：${error instanceof Error ? error.message : String(error)}`);
+  }
+  const orphanFiles = distJsFiles.filter((file) => !reachable.has(file));
+  if (orphanFiles.length) errors.push(`发现未被入口引用的 dist 产物：${orphanFiles.join('、')}`);
 }
 
 if (errors.length) {

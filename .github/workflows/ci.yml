@@ -45,7 +45,7 @@ jobs:
 
       - name: 检查入口与分包语法
         run: |
-          for file in ./*.js; do
+          for file in ./dist/*.js; do
             node --check "$file"
           done
 

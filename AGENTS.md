@@ -16,9 +16,9 @@ SillyTavern 原生扩展 `API用量统计`（清单 `api-usage-stat`，版本以
 
 ## 技术栈（已确认）
 
-- **打包**：`Vite 8`（`lib: es`，产物 `index.js + 动态分包` 直出，`define: { process.env.NODE_ENV="production", __APP_VERSION__: manifest.version }` 以修复 `process` 未定义并实现版本单源化）
+- **打包**：`Vite 8`（`lib: es`，产物 `dist/index.js + 动态分包` 输出到 `dist/`，`define: { process.env.NODE_ENV="production", __APP_VERSION__: manifest.version }` 以修复 `process` 未定义并实现版本单源化）
 - **语言**：`TypeScript 5 strict`
-- **图表**：`ECharts 6` 按需 `echarts/core + Bar/Line + Grid/Tooltip/CanvasRenderer`，动态分包（已随 `index.js` 提交并按需加载），`Y` 17 选项（Token/费用/请求与性能/比率四组，含平均每轮、请求数、TTFT、耗时、速率、命中率、思维链占比、截断率）×`X` 5 维度（`轮次/每小时/每日/每周/每月`，见下）；自定义图表按 `Y.kind` 与「自动/柱状/曲线/面积」分流渲染——`token` 类堆叠柱（左轴）、`cost/duration/rate/percent` 曲线（右侧独立轴，百分比 0–100%）、`count` 柱状，费用轴按币种换算；`API请求数 趋势` 的 `X` 使用 `X_OPTIONS_WITHOUT_ROUND`（不含 `轮次`，默认 `每日`）；**所有图表悬浮窗标题统一由 `src/ui/chart-time.ts` 生成**（轮次→`#N · 日期 时分秒`、每小时→`日期 周X 14:00–15:00`、每日→`日期 周X`、每周→`起止日期（ISO 周）`、每月→`YYYY 年 M 月`；趋势预测的预测轮次给「预计」时刻，模型占比图给筛选时间范围），X 轴标签仍保持紧凑短格式，禁止图表内各自拼字符串
+- **图表**：`ECharts 6` 按需 `echarts/core + Bar/Line + Grid/Tooltip/CanvasRenderer`，动态分包（已随 `dist/index.js` 提交并按需加载），`Y` 17 选项（Token/费用/请求与性能/比率四组，含平均每轮、请求数、TTFT、耗时、速率、命中率、思维链占比、截断率）×`X` 5 维度（`轮次/每小时/每日/每周/每月`，见下）；自定义图表按 `Y.kind` 与「自动/柱状/曲线/面积」分流渲染——`token` 类堆叠柱（左轴）、`cost/duration/rate/percent` 曲线（右侧独立轴，百分比 0–100%）、`count` 柱状，费用轴按币种换算；`API请求数 趋势` 的 `X` 使用 `X_OPTIONS_WITHOUT_ROUND`（不含 `轮次`，默认 `每日`）；**所有图表悬浮窗标题统一由 `src/ui/chart-time.ts` 生成**（轮次→`#N · 日期 时分秒`、每小时→`日期 周X 14:00–15:00`、每日→`日期 周X`、每周→`起止日期（ISO 周）`、每月→`YYYY 年 M 月`；趋势预测的预测轮次给「预计」时刻，模型占比图给筛选时间范围），X 轴标签仍保持紧凑短格式，禁止图表内各自拼字符串
 - **样式**：无框架，`SmartTheme` 隔离 + `DeepSeek 官方浅色`（`#FFFFFF/#F5F6F7/#111827/#FF6A00/#E6F8EC`，`Microsoft YaHei`，`14px` 圆角，无阴影/无滤镜以保锐利，`absolute` 定位置换修复窄屏 `fixed` 漂移）+ 双主题（`light/dark`，`style.css` 同名变量覆盖 + `services/theme.ts` 切换 + 设置中胶囊下拉，深色对齐 DeepSeek 平台深色 `#151517/#303134/#3A3B3E/#F5F6F7`（页面/块面/块内二级/正文），ECharts 经 `themeColor()` 动态取变量，默认 `light`）
 - **存储**：`extensionSettings[api_usage_stat]` 热 `50` 条 + `IndexedDB api_usage_stat_db` 冷分页（旧多存档已合并为单一历史，`XOR` 密钥兼容，自动迁移备份）；钱包配置、忽略列表、`overviewWalletId` 与 `overviewWalletManuallySet` 随热设置持久化，钱包校准密钥单独存放于 `extensionSettings.walletSecrets` 且不参与导出；匿名统计的匿名标识与待发上报数据单独存放于 `extensionSettings.telemetry`（不进 `state.settings`，因而不参与导出、导入与 WebDAV 同步）
 - **最低版本**：`manifest.minimum_client_version 1.11.0`；接入类型筛选兼容最低版本，API 密钥条目区分依赖酒馆 `>=1.14.0`（更早版本无多条密钥编号，归入未识别密钥）
@@ -28,8 +28,9 @@ SillyTavern 原生扩展 `API用量统计`（清单 `api-usage-stat`，版本以
 ```
 Api-Usage/
 ├── manifest.json          # 扩展清单（display_name/loading_order/js/css/i18n/hooks），版本真源
-├── index.js / style.css   # Vite 产物（ST 直接加载，勿手改，改 src 后重建，index.js 为入口+动态分包引用）
-├── index-*.js / update-*.js / Axis-*.js ... # Vite 动态分包 hash 产物，必须随 index.js 一并提交，否则 404 导致扩展加载失败
+├── style.css              # 手写样式源（非构建产物，直接维护；manifest.css 指向它）
+├── dist/index.js          # Vite 产物（ST 直接加载，勿手改，改 src 后重建，index.js 为入口+动态分包引用）
+├── dist/index-*.js / update-*.js / Axis-*.js ... # Vite 动态分包 hash 产物，必须随 dist/index.js 一并提交，否则 404 导致扩展加载失败
 ├── global.d.ts            # ST 全局类型补全（+ __APP_VERSION__ 声明）
 ├── package.json / vite.config.ts / vitest.config.ts / tsconfig.json
 ├── .github/workflows/ci.yml # GitHub Actions：只读 CI + main 预览预发布
@@ -87,8 +88,8 @@ cd Api-Usage
 npm install
 npm run typecheck   # tsc --noEmit 必须通过
 npm test            # Vitest 核心纯逻辑测试
-npm run build       # 产出 index.js + 拆分 chunk
-node --check index.js
+npm run build       # 产出 dist/index.js + 拆分 chunk
+node --check dist/index.js
 npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 ```
 
@@ -103,7 +104,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链与孤立产物
 - **数据框架**：所有存/取/算/展必须走 `src/data/` — `repository` 唯一写、`wallets.ts` 唯一管理钱包结构和规则、`computed` 唯一算（`computeOverview` 供概览 8 块，`computeStats` 供统计，`computeWalletStats` 供钱包页，`filterStatsHistory` 供统计/历史统一筛选）、`events` 订阅刷新；禁止在 UI 直接读写 `state.history`、`state.wallets` 聚合或手算
 - **持久化**：`saveHot` 节流 `300ms`，`loadHot/migrateIfNeeded` 仅由 `repository.hydrate` 调用，已自动将旧多存档合并为单一历史（`hot 50` + `cold_history`）
 - **CI**：`.github/workflows/ci.yml` 在 `dev/main` 推送及目标为 `dev/main` 的合并请求中执行，使用 Node 24；顺序为 `typecheck → test → build → node --check → verify:ci → 工作区零差异`。`verify` 只读；仅 `main` 推送或从 `main` 手动触发时，成功后再执行 `contents: write` 的 `preview` 作业，创建或更新 `preview-<12位提交哈希>` 预发布。预览说明优先列出上一个 `preview-*` 到当前提交的全部提交；首次预览回退最近正式 `vX.Y.Z` 标签，仍无标签时只列当前提交。`dev` 与合并请求不发布，CI 不提交、不修改三个版本字段、不操作正式 `vX.Y.Z` 标签
-- **提交与推送约定**：每完成一轮改动（源码改完、产物已重建、`typecheck/test/build/node --check/verify:ci` 全部通过、临时校验目录已清理）后，直接提交并推送 `dev`，无需再询问；提交信息用中文概述改动要点，产物 `index.js` 与动态分包随源码一并提交
+- **提交与推送约定**：每完成一轮改动（源码改完、产物已重建、`typecheck/test/build/node --check/verify:ci` 全部通过、临时校验目录已清理）后，直接提交并推送 `dev`，无需再询问；提交信息用中文概述改动要点，产物 `dist/` 与根 `style.css` 随源码一并提交
 
 ## 页面与数据
 
@@ -278,14 +279,14 @@ TauriTavern 的 Agent 模式把「一次 Run 的多次模型调用」交给宿�
 - **版本号推进管控（最高优先级，强制）**：没有用户当轮的**明确要求**，一律禁止推进版本号。禁止执行 `npm version`，禁止改动 `manifest.json#version` 与 `package.json#version`，禁止新建或移动 `vX.Y.Z` 标签，禁止合并到 `main`，禁止执行 `git push origin main --tags`。`dev` 上完成需求只做常规提交与 `git push origin dev`；版本推进、打标签、合并 `main` 与正式发布均属发布动作，必须等用户明确下达（一次明确要求只覆盖当轮那一次发布），未获要求时即使功能已通过 `typecheck + build + node --check` 也不得自行推进。
 - **合并 ≠ 授权推进版本（最高优先级，强制，2026-09-10 事故后追加）**：用户说“合并到主线 / 合并 main / 发布”**只授权合并本身**，不等于授权推进版本号或打标签。除非用户在同一轮**明确说出目标版本号**（如“推进到 3.0.8”）或明确要求“推进 patch/minor 版本号并打标签”，否则合并 `main` 时 `manifest.json#version`、`package.json#version`、`package-lock.json#version` 一律保持原值，禁止 `git tag`、禁止 `git push --tags`，只做 `git merge --no-ff dev` + 常规 `git push origin main`。授权范围按**字面最小化**解释：任何“看起来顺理成章”的配套动作都不构成授权，宁可少做一步、等用户补一句。
 - **PR 审查与合并边界（最高优先级，强制，2026-10-20 追加）**：审查 PR 时，**合并动作的目标只能是 `dev`**，禁止未经批准直接把 PR 合并到 `main`。即使 PR 的 base 是 `main`，也不得使用 GitHub “Merge pull request”、`gh pr merge` 或任何等价方式直接合入 `main`；应先把 PR 内容落到 `dev` 并推送，保持 PR 为 OPEN 或由用户另行批准。**任何准备进入 `main` 的内容，都必须先提交到 `dev` 并推送，再由用户在当轮明确批准后，才允许合并到 `main`**；未获批准时一律等待，不得自行合并。
-- **违规回退义务（最高优先级，强制）**：一旦擅自推进了版本号或打了标签，必须立刻回退：把 `manifest.json` + `package.json` + `package-lock.json` 改回原版本号 → `npm run typecheck && npm run build && node --check index.js` 重建产物 → 提交推送 → 删除本地与远端多余标签（`git tag -d vX.Y.Z`、`git push origin :refs/tags/vX.Y.Z`），并在回复中明确说明已回退。
+- **违规回退义务（最高优先级，强制）**：一旦擅自推进了版本号或打了标签，必须立刻回退：把 `manifest.json` + `package.json` + `package-lock.json` 改回原版本号 → `npm run typecheck && npm run build && node --check dist/index.js` 重建产物 → 提交推送 → 删除本地与远端多余标签（`git tag -d vX.Y.Z`、`git push origin :refs/tags/vX.Y.Z`），并在回复中明确说明已回退。
 - **开发→测试→发布**（合并与版本推进是两次独立授权，缺一不可省略）：
-  1. `feature/* → dev`：`npm run typecheck && npm test && npm run build && node --check index.js && npm run verify:ci` → `git push origin dev` → 酒馆切 `dev` 分支真机测试
-  2. `dev → main`（**仅用户当轮明确批准合并，且内容已提交并推送到 `dev` 后**）：`git checkout main && git merge --no-ff dev` → 解决 `index.js` 等产物冲突 → `git push origin main`；**到合并为止**，版本号与标签保持原样
+  1. `feature/* → dev`：`npm run typecheck && npm test && npm run build && node --check dist/index.js && npm run verify:ci` → `git push origin dev` → 酒馆切 `dev` 分支真机测试
+  2. `dev → main`（**仅用户当轮明确批准合并，且内容已提交并推送到 `dev` 后**）：`git checkout main && git merge --no-ff dev` → 解决 `dist/` 产物冲突 → `git push origin main`；**到合并为止**，版本号与标签保持原样
   3. 版本推进 + 打标签（**必须由用户当轮单独明确授权**）：`manifest.json` + `package.json` + `package-lock.json` 同步改为目标版本 → `npm run build` 重建产物 → 提交 → `git tag vX.Y.Z` → `git push origin main --tags`
   4. 回滚（**仅用户明确要求时**）：按用户指定版本回退并重建产物，多余标签在本地与远端一并删除
 - **预览预发布边界**：`preview-*` 标签与 Release 只允许由 `main` 分支的 `preview` 作业创建，`dev` 与合并请求永不发布；预览标签基于 12 位提交哈希且不可复用或移动，但**不属于正式版本推进**，不得借预览发布修改 `manifest.json`、`package.json`、`package-lock.json` 的版本字段，也不得创建或移动 `vX.Y.Z` 标签。同一提交重复自动运行或手动补发只更新既有 Release 标题、说明与同名资产，不产生第二个标签
-- **产物铁律**：`Vite lib` 产物为 `index.js(入口) + index-*.js/update-*.js + ECharts 9 块`，`index.js` 为 `import "./index-*.js"` 存根，**必须**随 `index.js` 一并 `git add` 提交，缺一则 `404 index-*.js` 导致 `[object Event]` 加载失败并中断后续扩展；`style.css` 同理直出，`outDir: '.' + emptyOutDir:false` 禁止误删。
+- **产物铁律**：`Vite lib` 产物全部输出到 `dist/`（`build.outDir` 为 `dist`、`emptyOutDir: true`）——`dist/index.js`（入口）与 `dist/index-*.js`/`update-*.js` 等 hash 分包，`dist/index.js` 为 `import "./index-*.js"` 存根，**必须**随入口一并 `git add` 提交，缺一则 `404 dist/index-*.js` 导致 `[object Event]` 加载失败并中断后续扩展；`style.css` 是**手写样式源**（非产物，留在根目录，`manifest.css` 指向它，Vite 不生成 CSS），因此 `emptyOutDir` 只会清 `dist/`、不会误删源文件。
 - **主题一致性**：`defaultSettings.theme` 默认为 `light`，与隔离样式浅色保持一致；旧用户无 `theme` 字段时迁移补 `light`，禁止在更新中强制覆为 `dark`
 - **检查更新**：`src/services/update.ts` 支持在关于页选择更新分支 `main/dev`（默认 `main`，`localStorage` 记忆），优先对比所选分支提交哈希（本地扩展提交经 GitHub compare 判领先，并结合 `/api/extensions/version` 的服务端仓库状态，失败回退 `raw.githubusercontent.../<所选分支>/manifest.json` 的 `version` 与本地 `__APP_VERSION__` 对比），自动检查 10 分钟节流（`localStorage + extensionSettings._updateLastCheck`，10 分钟内最多一次，每次打开面板时触发），关于页按钮为手动触发（不受节流）；**自动检查发现「已是最新版本」时静默**（`manual === false` 不 toast），只有手动检查才提示最新状态，自动检查失败静默（只 `log.debug`），手动检查失败才 `toast`；发现更新或当前分支与所选分支不一致时 `toast + 横幅` 并显示“立即更新”，点击后若分支不同先调用 `/api/extensions/switch` 切换，再调用 `/api/extensions/update` 执行 git 更新，成功后自动刷新页面；非 Git 安装或更新失败时提示改用管理扩展程序
 
@@ -295,8 +296,8 @@ TauriTavern 的 Agent 模式把「一次 Run 的多次模型调用」交给宿�
 # 日常开发（在 dev）
 git checkout dev
 # ... 改 src/ ...
-npm run typecheck && npm test && npm run build && node --check index.js && npm run verify:ci
-git add src/ style.css manifest.json index.js index-*.js update-*.js Axis-*.js ...
+npm run typecheck && npm test && npm run build && node --check dist/index.js && npm run verify:ci
+git add src/ style.css manifest.json dist/ ...
 git commit -m "feat/fix: ..."
 gh auth status                         # WSL 认证检查
 git push origin dev                    # 仅 dev，用户无感知
@@ -314,8 +315,8 @@ git tag vX.Y.Z
 git push origin main --tags
 ```
 
-- **自动提交规则**：完整完成一项独立修改后必须立即执行提交推送，无需等待用户二次确认。单项定义：通过 `typecheck + test + build + node --check + verify:ci` 且满足用户当轮需求即视为完成。提交需包含 `src/` 源码与 `index.js/style.css` 产物，`commit` 信息遵循 `fix/feat/docs:` 前缀并简述本次变更点。该自动提交仅限 `dev` 的常规提交，不含版本号推进、合并 `main` 与打标签。
-- **提交时机（强制）**：所有修改必须在完整完成并验证通过后最后统一提交，禁止边改边提、分步提交或提前推送。提交前必须依次通过 `npm run typecheck`、`npm test`、`npm run build`、`node --check index.js`、`npm run verify:ci`，且 `index.js/style.css` 与源码保持一致后，一次性添加源码、测试、CI 配置与产物并推送，单轮需求仅产生一次提交。同样禁止在未获明确要求时改动版本号字段。
+- **自动提交规则**：完整完成一项独立修改后必须立即执行提交推送，无需等待用户二次确认。单项定义：通过 `typecheck + test + build + node --check + verify:ci` 且满足用户当轮需求即视为完成。提交需包含 `src/` 源码、`dist/` 产物与根 `style.css`，`commit` 信息遵循 `fix/feat/docs:` 前缀并简述本次变更点。该自动提交仅限 `dev` 的常规提交，不含版本号推进、合并 `main` 与打标签。
+- **提交时机（强制）**：所有修改必须在完整完成并验证通过后最后统一提交，禁止边改边提、分步提交或提前推送。提交前必须依次通过 `npm run typecheck`、`npm test`、`npm run build`、`node --check dist/index.js`、`npm run verify:ci`，且 `dist/` 产物与根 `style.css` 与源码保持一致后，一次性添加源码、测试、CI 配置与产物并推送，单轮需求仅产生一次提交。同样禁止在未获明确要求时改动版本号字段。
 - **更新日志维护（强制）**：每彻底完成一项用户可感知的新增 / 改进 / 修复（含用户当轮提出的需求），必须在同一次提交里往 `src/constants/changelog.ts` 的 `CHANGELOG` 当前版本条目对应分类（`feature` 新增 / `improve` 改进 / `fix` 修复）追加文案；版本号推进（`manifest.json#version` 变化）时才在数组头部新建条目并把 `date` 写成当天北京时间 `YYYY-MM-DD`；一个版本只允许一个条目。缺少该条目视为改动未完成，不得提交推送。
   - **文案风格（照 `r3.1.7` 用户手写范本，最高优先级）**：口语、极简、一句话说完一件事，名词/动词短语开头，**不加句号**，不堆形容词，不自夸效果（「明显改善」「更清爽」「更跟手」这类评价词一律删掉），不写文件名、色值、控件 id、commit hash、内部实现细节；像「部分选项的选择现在会在刷新网页后留存」「图表和历史记录中的输入输出配色对齐 DeepSeek 官网」这种用户视角的平实说法。
   - **宁少不多**：同一主题的多处改动合并成一条（深浅色模式的整批调色、若干处配色对齐各算一条）；每个分类通常 1～3 条、整版合计不超过 8 条；禁止把本轮提交清单逐条搬进日志，禁止为一个细节单独开一条。
@@ -323,13 +324,13 @@ git push origin main --tags
 
 - **预览包本地验证**：可用 `node scripts/preview-package.mjs <输出目录> HEAD` 复现 `main` 预览包；脚本只读取指定提交，通过 `git archive` 生成压缩包，并校验清单、入口、引用链、允许文件集合、压缩包结构和 SHA-256。可用 `node scripts/preview-notes.mjs <输出文件> HEAD` 复现更新日志，生成时优先读取上一个 `preview-*`（首次回退最近正式标签）到当前提交的全部提交。不得修改源码或提交产物后再打包。
 - **预览包 import 扫描**：`preview-package.mjs` 与 `verify-ci.mjs` 一致，匹配 `import/from/import()` 前先经 `stripCommentsForImportScan` 剥离注释；ECharts 等分包内注释含示例 `import './XxxModel.js'`，若不剥离会被误判为缺失依赖并使 `main` 预览作业失败（曾发生）。
-- 产物入口存根 `index.js` + `ECharts` 等 hash 分包随仓库提交以保离线加载，`style.css` 直出，勿手改产物；`vite.config.ts` 已 `define: { process.env.NODE_ENV, __APP_VERSION__ }` 防浏览器 `process` 报错且实现版本单源化
+- 产物入口存根 `dist/index.js` + `ECharts` 等 hash 分包随仓库提交以保离线加载，根 `style.css` 为手写源，勿手改 `dist/` 产物；`vite.config.ts` 已 `define: { process.env.NODE_ENV, __APP_VERSION__ }` 防浏览器 `process` 报错且实现版本单源化
 - `RE3.0` 仅同步产物备份，不作为提交源
 
 ## 其他经验
 
 - **图表吞滚轮坑**：任何挂了 `dataZoom: [{ type: 'inside' }]` 的 ECharts 图表，都会把落在绘图区上的滚轮事件无条件 `preventDefault`（`roams.js#mergeControllerParams` 把 `zoomOnMouseWheel/moveOnMouseWheel` 写死为 `true`），表现为「鼠标停在图表上滚不动页面」，写 `zoomOnMouseWheel: false` 无效（实测无头 Edge：带 inside 时 `scrollTop` 恒为 0，去掉后正常滚动 300px）；**必须同时写 `zoomLock: true`**，它把 roam 降级为纯 move、不再注册 wheel 监听，滚动恢复且拖动平移保留。现存三处：`stats-view.ts`、`extra-charts.ts`、`model-trends.ts`。
-- **动态分包 404 坑**：`import('../services/update')` 等动态 `import()` 会使 `Vite lib` 输出额外 `index-*.js`，`index.js` 仅为 re-export 存根；若漏提交新 hash 文件，扩展激活时 `GET .../index-*.js 404` → `Could not activate extension [object Event]` 并阻断后续扩展加载，属全站故障
+- **动态分包 404 坑**：`import('../services/update')` 等动态 `import()` 会使 `Vite lib` 输出额外 `dist/index-*.js`，`dist/index.js` 仅为 re-export 存根；若漏提交新 hash 文件，扩展激活时 `GET .../dist/index-*.js 404` → `Could not activate extension [object Event]` 并阻断后续扩展加载，属全站故障
 - **TTFT/思维链为 0 坑**：`GENERATION_ENDED` 主路径不带 `ttft`，需在 `onGenerationEnded` 中合并最近 `lastFetchUsage.ttft/thinkTime/finishReason/streamed`（5s 内有效），否则 `tokenRate` 失真且详情为 0
 - **思维链耗时永远为 0 坑（2026-10 修复）**：旧实现在 SSE 里用整行 substring 匹配 `"reasoning_content"` 与 `"content"`，DeepSeek 官方思维链帧自带 `"content":null`，第一帧就同时命中两者 → 起止同一帧、耗时恒 0；且只认 `reasoning_content`，OpenRouter 等用 `reasoning`/`reasoning_text`/`thinking` 的接入首帧都识别不到。现口径统一在 `src/services/think-timing.ts`（纯函数 + `think-timing.test.ts`）：按 JSON 解析增量，只认**非空**思维链文本与非空正文文本，无正文时回退最后一帧思维链，禁止再用 substring 判断；`contentFrames` 也只计正文帧（假流式判定更准）。另新增 `lastStreamTiming` 时序快照，`finish()` 不论是否解析到 usage 都会落一份，主路径经 `processUsage` 按 `startTime` 匹配后补齐 `ttft/thinkTime/streamed`，避免上游不回 usage 时测到了却丢失
 - **非流式/假流式速率爆炸坑**：速率口径单一来源在 `src/data/token-rate.ts`（`computeTokenRate`）。非流式走 `clone.text()` 分支、假流式首帧即携带全文，两者都让 `duration - ttft` 塌缩到几百毫秒，算出上千 t/s 的假速率。拦截层按 `reqBody.stream === true` 与正文增量帧数（`contentFrames > 1`）判定 `streamed`，沿 `parseAndProcess → processUsage → addEntry` 透传并落到 `HistoryEntry.streamed`；`streamed === false` 时 `tokenRate` 与 `ttft` 一并归零。数值兜底：生成阶段窗口 < 200ms 或结果 > 1000 t/s 一律归 0。历史脏值由 `hydrate` 与导入清洗（`sanitizeHistoryTiming`）修复；`extra-charts` 速率均值分母只计有效样本，`overview.ts` / `panel.ts` / `compare.ts` 在无有效值时显示 `—`
