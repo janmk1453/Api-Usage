@@ -10,13 +10,14 @@
 ## 安卓返回键（一次返回直接关面板）
 
 - **一次返回直接关面板**：窄屏打开面板时 `ui/back-guard.ts#armBackGuard()` 往宿主窗口压**唯一一条** `__ausBackGuard` 记录（`BACK_GUARD_DEPTH = 1`），按一次系统返回即 `closePanel()`、人留在酒馆页面。**不要再引入逐层后退**（`backTargetOf`/`goBackInPanel`/浏览栈已删）：真机实测第二次侧滑不产生 `popstate`，基于历史栈的分层后退不可靠。压哨兵前先 `stripGuardState` 洗掉旧标记。两条硬约束：① **`popstate` 处理里绝不碰历史**（不 `pushState`/`go`/`replaceState`，否则被浏览器「历史操纵干预」吞掉，下一次手势直接退穿成整页重载）；② **哨兵只压一条**。关闭按钮 / Esc / 扩展重载走 `releaseBackGuard(true)`：先 `removeEventListener`，250ms 后按当前 state 深度 `history.go(-depth)`（执行前重读深度，为 0 跳过）；返回键触发时传 `false`，绝不能再 `go`。`isNarrowViewport()` = 宿主 `innerWidth ≤ 760` **或** `utils/device.ts#mobileDeviceHint()`（平板横屏、折叠屏展开会超 760）；桌面不接管。
+- **诊断日志（临时排查工具，定位完可整段删）**：`ui/back-debug.ts#backDebug(kind, extra)` 记环形缓冲（`BACK_DEBUG_MAX = 300`）+ 120ms 节流写 `localStorage[aus_back_debug_v1]` + `console.log('[aus-back]', json)`；`backDebugDump/backDebugClear` 读写清空，`window.__ausBackDebug.dump()` 取全量；`installBackDebug()` 由入口尽早调用（幂等，注册最早的 `popstate` → `pop-raw`、`pagehide`/`pageshow`/`visibilitychange`）；`localStorage[aus_back_debug_off] = '1'` 永久关闭。只为真机排查安卓返回键，不参与业务判断。
 
 
 ## 页面与数据
 
  用量概览（`ui/overview.ts`）
 
-- **双余额卡**：充值余额（默认 DeepSeek 官方钱包，胶囊可切「全部钱包合计」或其他钱包；**只有它影响余额与剩余轮次预测**，其余指标仍按全量历史；旧 `all` 默认值一次性迁到官方钱包，用户手选后由 `overviewWalletManuallySet` 保护）+ 累计消费（显示币种由钱包驱动 `walletDrivenCurrency`，金额经 `formatMoney`/`getDisplayCurrency` 换算）+ `tokens`。
+- **双余额卡**：充值余额（默认 DeepSeek 官方钱包，胶囊可切「全部钱包合计」或其他钱包；**只有它影响余额与剩余轮次预测**，其余指标仍按全量历史；旧 `all` 默认值一次性迁到官方钱包，用户手选后由 `overviewWalletManuallySet` 保护）+ 累计消费（显示币种由钱包驱动 `walletDrivenCurrency`，金额经 `formatMoney`/`getDisplayCurrency` 换算）+ `tokens`。余额汇总按 `CNY/USD` 换算、钱包扣费按钱包自身币种；余额卡按钮文案为「导出记录 / 导入记录」（绑 `#aus-btn-export` / `#aus-btn-import`）。
 - **双明细**：历史消耗（Token 历史 / 命中 / 未命中 / 输出）与支出明细（预计节省 / 支出输入 / 输出）并列；两块主数值统一 `var(--aus-fs-base)` + `font-weight:600` + `tabular-nums`，标签用 `var(--aus-fs-sm)`。
 - **8 小块**：默认 `repeat(4,1fr)`，`≤760px`/`≤480px` 保持 `repeat(2,1fr)`；指标表 `FOUR_OPTIONS` 共 18 项（含 `avg_ttft`），由 `computeOverview` 单源计算，费用类经 `moneyHtml()` 按币种。
 - **热力图**（`ui/heatmap.ts`）：GitHub 风格近 2 年按日聚合，5 级绿阶；卡片自身 `overflow:hidden` + `max-width:100%`，内部 `overflow-x:auto` 横滑，**禁止让块撑开页面**。
@@ -49,6 +50,7 @@
 
 - 桌面从右侧滑入 `clamp(320px,26%,460px)` 抽屉（`border-left` 一条分隔线），手机从底部上滑约 3/4 高、抬在底栏之上并带 `36×4` 拖动把手。
 - 15 字段按「基础 / 性能 / Token / 费用」四块白卡竖直排布（`.aus-dt-*` 骨架：`section.aus-dt-block` + `.aus-dt-head` + `.aus-dt-grid` 两列 `.aus-dt-item`；块内不画描边，靠抽屉 `--ds-card` 与白块 `--ds-card-inner` 分层）；Token 块顶部有 6px 迷你三段占比条（与列表卡、图表同源）。
+- 性能块与 Token 块曾各显示一次「思维链占比」，已收敛为仅性能块保留、Token 块改为单列占满的「思维链 Token」——不要再两边都放。
 - 头部两行（模型名省略 + 记录时间）；4 个 Tab：请求参数 / 完整响应 / Raw 用量 / 消息内容（短名不带英文括号），`pre` 滚动；Tab 选中态由 `data-active="1"` 交 CSS（`--ds-black` 底 + `--ds-black-text` 字），JS 只切属性。
 
 ### 历史页问题提示与反馈上传
@@ -72,20 +74,22 @@
 
 ### 钱包（`ui/wallet-view.ts`，独立页）
 
-- **入口**：桌面侧栏「钱包」；窄屏走设置页顶部入口行。
+- **入口**：桌面侧栏「钱包」；窄屏走设置页顶部入口行；`data-view="wallet"` 独立页，顶部是汇总卡，下面按接入链接列出钱包，最后是已忽略接入口。
 - **粒度**：一个 `endpointId` 一个钱包，同一链接下多个密钥归入同一钱包；默认始终有不可删除、不可忽略的 DeepSeek 官方钱包；`hydrate` 为历史中已识别的接入回填钱包，新请求首次出现未忽略接入时自动建钱包并命名成接入地址。
 - **固定与可编辑**：接入地址 / 接入类型 / 已识别密钥身份只读；名称、模型名、价格、价格来源、峰谷规则、手工余额、忽略状态可编辑；模型改名保留旧名别名，旧请求仍能命中规则。
 - **官方峰谷**：按北京时间，周一至周五（不含法定节假日）`9:00-12:00`、`14:00-18:00` 为高峰，其余（含周末与节假日全天）空闲，调休上班的周末同样按空闲计；节假日数据在 `constants/holidays.ts`（覆盖 2024–2027），`settings.extraOffDays` 可补充；官方钱包的自定义规则同样享受节假日豁免，中转钱包按自身配置。
-- **默认收起**：`WalletConfig.collapsed = true`（旧数据缺字段按收起）；收起态为单行卡片（左侧方形标识取名字首个有意义字符、名称与副标题、右侧只外显余额与模型数、图标按钮：展开 / 同步 / 忽略）；展开状态按钱包独立记忆并随导入导出 / 同步。
+- **默认收起**：`WalletConfig.collapsed = true`（旧数据缺字段按收起）；收起态为单行卡片——左侧 `44px` 方形标识（取名字首个有意义字符，剥离 `http(s)://`、`www.`、`api.` 前缀；窄屏缩到 `36px`）+ 名称与副标题 + 右侧只外显余额与模型数 + 图标按钮（展开 / 同步 / 忽略）；`≤760px` 压成两行（左侧标识与名称/副标题，右侧余额/模型与按钮同排，宽度不足才折行），在保证按钮与数据可见的前提下尽量压低单卡高度；展开状态按钱包独立记忆并随导入导出 / 同步。
+- **计费隔离**：同一模型名在不同钱包可以有完全不同的价格与峰谷；匹配顺序为「钱包当前模型名 → 来源模型名 → 别名」，历史归属先用 `walletId` 定位，旧记录才回退接入地址或全局价格。
+- **模型条目字段**：`sourceModel/model/aliases/price/source/locked`，非峰与高峰各含命中 / 未命中 / 输出三价；每条规则可关闭峰谷、可锁定防同步覆盖；每个钱包可独立配置跨天峰谷时段与「周末全天低谷」。
 - **工具栏**：筛选固定「全部 / 有待定价 / 可查套餐」三项——**「官方」筛选已按用户要求移除，不要再加回**（旧 localStorage 的 `official` 渲染时回落「全部」）；「展开全部 / 收起全部」已合并为单切换胶囊 `[data-wallet-toggle-all]`（由 `anyCollapsed` 决定文案与动作）。
 - **余额**：币种 `CNY/USD`，手工可直接填；自动校准只开放给 DeepSeek 官方直连钱包，默认用钱包内单独保存的校准密钥，可选一个主密钥作账号身份；多密钥不自动相加；每次请求按当前币种预扣，校准成功后覆盖为服务端余额；**自动校准没有全局开关**——钱包页勾选即按设置页间隔轮询（`restartBalanceTimer` 只在存在已勾选且未忽略钱包时启动）。
 - **计价优先级**：钱包规则优先 → 官方钱包无覆盖时用内置 `PRICE_HISTORY` 多段价格 → 其他钱包无价格标「待定价」并计 0；旧全局 `customModels` 复制到官方钱包，作为旧记录 / 未映射记录的只读兜底。旧「新价格机制 / 生效日期」入口已删除：`calcCost/calcSavings` 不再读 `settings.useNewPricing/newPricingDate`，历史统一以 `LEGACY_PEAK_PRICING_DATE`（2026-08-17 北京时间）为默认生效日。
 - **旧价同名校验**（一次迁移）：旧热 / 冷记录按当前钱包规则为 `unpriced` 且任意未忽略钱包有完全同名价格时，写入 `legacyPricingWalletId/legacyPricingModel` 并按该钱包价重算（`pricingSource='legacy-match'`）；新请求不带该标记。
 - **待定价重算**：保存模型价、改峰谷 / 周末规则或同步价格后必须调 `repository.recalcWallet(walletId)`（热 + 冷 + 累计费用一起修正）。
-- **models.dev 同步**：钱包 `catalogProvider` 是唯一开关；价格来源只展示第一方厂商（DeepSeek / OpenAI / Anthropic / Google / Mistral / xAI / Moonshot AI / Z.AI / MiniMax / Cohere），不展示 OpenRouter / Groq / SiliconFlow / Fireworks 等聚合渠道（旧第三方来源标准化为 `null`）；模式 `add-missing / overwrite-unlocked / overwrite-all`，锁定规则只允许全部覆盖模式修改；关闭同步会移除未锁定同步价并重算。
+- **models.dev 同步**：钱包 `catalogProvider` 是唯一开关；价格来源只展示第一方厂商（DeepSeek / OpenAI / Anthropic / Google / Mistral / xAI / Moonshot AI / Z.AI / MiniMax / Cohere），不展示 OpenRouter / Groq / SiliconFlow / Fireworks 等聚合渠道（旧第三方来源标准化为 `null`）；模式 `add-missing / overwrite-unlocked / overwrite-all`，锁定规则只允许全部覆盖模式修改；关闭同步会移除未锁定同步价并重算。**免责口径**：价格来源与模型同步必须写明不对 models.dev 数据中的商业化中转站负责，且不构成推荐或商业关系。
 - **模型匹配**（`services/model-match.ts`）：只写已有模型价格、**不新增模型**；归一化后按相似度打分，完全相等 1.0、别名等价 0.99。阈值 `MODEL_MATCH_ACCEPT = 0.85`、`MODEL_MATCH_AMBIGUITY_GAP = 0.05` **一律不降**（`mini/lite/pro` 与数字版本必须重罚，宁可漏配不可错配）；纯中文名剥完为空则判不可匹配。预览文案由 `ui/wallet-sync-preview.ts` 渲染。
 - **忽略与恢复**：删除钱包 = 加 `walletIgnored`，之后不自动重建、不参与余额合计，历史仍保留 `walletId`；钱包页可恢复。
-- **密钥隐私**：普通官方接口只记录酒馆密钥条目编号、标签、掩码末三位；反向代理 `proxy_password` 与 `custom_include_headers` 不读不存，按「未识别密钥」处理。
+- **密钥隐私**：普通官方接口只记录酒馆密钥条目编号、标签、掩码末三位；反向代理 `proxy_password` 与 `custom_include_headers` 不读不存，按「未识别密钥」处理。**对外文案口径**：酒馆密钥只写「编号、备注、掩码末三位」，用户主动填入的校准密钥才写「实际可用密钥」，任何地方都不得称 XOR 是安全加密。
 - **响应式**：汇总卡所有宽度保持一行三列（只压字号间距）；钱包卡用边框面板、**不嵌套 `.ds-card`**；专用响应式网格必须能覆盖通用网格，否则窄屏会按桌面三栏计算并裁切。
 
 ### 设置（`ui/settings.ts`）
@@ -132,7 +136,7 @@
 - **分段滑块** `.aus-chat-manage-mode-thumb`：位置与宽高只由 `ui/chat-manage.ts#paintModeThumb` 按 `getBoundingClientRect` 实测写入（首次关过渡，两项同 `min-width`），`transition` 只过 `transform/width`。
 - **下拉动画**：选择器只限 `#aus-panel [id$="-dropdown"], #aus-panel [id*="-drop-"], #aus-panel [data-wallet-dropdown], #aus-panel .aus-forecast-dropdown`；关 90ms / 开 140ms（`data-aus-drop-open`）+ `@starting-style` 淡入 `scale(0.97)`；`[style*="display: none"]` 那组**必须写终止值**（`opacity:0` + `translateY(-4px) scale(0.97)` + `pointer-events:none`），少了就「点了没反应、等一下才关」。选中项关闭走 `ui/dropdown-close.ts#closeDropdownInstant / afterNextPaint / closeDropdownThenPaint`；**点外部 / 互斥 / toggle 保持 CSS 淡出**。
 - **按触发元素摆位的浮层**必须 `position:absolute` + `ui/dropdown-placement.ts#placeDropdownRelativeToHost`（只吃 rect，返回相对宿主 padding box 的 left/top/width/maxHeight/openUp，下方放不下且上方更宽则上翻）；**禁 `fixed` + `getBoundingClientRect`**（会被带 transform / filter / will-change 的祖先劫持）；范围取 `#aus-main` 与 `visualViewport` 交集，写 inline `left/top/width/maxWidth/maxHeight` 且 `right/bottom` 置 auto。
-- **图表**：柱圆角由 `ui/chart-bar.ts#barTopRadius(柱宽)`（≈柱宽 1/6）算，禁写死 `[4,4,0,0]`；三段 Token 配色 `TOKEN_SERIES_COLORS` = 命中 `#A0DCFD` / 未命中 `#60B3FE` / 输出 `#0C70F3`，堆叠顺序 `tokenStackDrawOrder()`（输出压底）、悬浮窗顺序 `sortTooltipParams()`（按 Y 选项顺序）；tooltip 统一 `CHART_TOOLTIP_SURFACE`，时间文案归 `ui/chart-time.ts`；`dataZoom` 必须 `zoomLock:true`（`type:'inside'` 会无条件吞滚轮，`zoomOnMouseWheel:false` 无效，现存 `stats-view` / `extra-charts` / `model-trends`）。
+- **图表**：柱圆角由 `ui/chart-bar.ts#barTopRadius(柱宽)`（≈柱宽 1/6）算，禁写死 `[4,4,0,0]`，中间段与柱底固定 `BAR_SQUARE`（直角，堆叠才无缝）、柱宽由 `estimateBarWidth(容器宽, 轴占位, 类目数, barMaxWidth)` 估算（参考实测 38px 柱宽 → 6px 圆角）；tooltip 统一 `CHART_TOOLTIP_SURFACE`（圆角 14、内距 [8,12]，禁各处自写）；三段 Token 配色 `TOKEN_SERIES_COLORS` = 命中 `#A0DCFD` / 未命中 `#60B3FE` / 输出 `#0C70F3`，堆叠顺序 `tokenStackDrawOrder()`（输出压底）、悬浮窗顺序 `sortTooltipParams()`（按 Y 选项顺序）；tooltip 统一 `CHART_TOOLTIP_SURFACE`，时间文案归 `ui/chart-time.ts`；`dataZoom` 必须 `zoomLock:true`（`type:'inside'` 会无条件吞滚轮，`zoomOnMouseWheel:false` 无效，现存 `stats-view` / `extra-charts` / `model-trends`）。
 - **统计页 9 图卡片骨架单一来源** `ui/chart-picker.ts#chartCardHTML`，样式全在 `.aus-chart-card` 段；`min-height:0` 必须写在 `.aus-chart-picker .aus-chart-pill` 上（否则触屏 `min-height:30px` 撑大）；Y 左端、X 右端展开，窄屏 Y 改右端且限宽；窄屏下 `#aus-extra-charts` / `#aus-model-trends` 的 `.ds-card` 必须 `overflow: visible`。
 - **导航配色**：`--aus-nav-hover-bg`、`--ds-nav-active-bg`、`--aus-nav-active-icon` 各深浅一套；`.aus-nav-item.active` 必须写在 `:hover` 之后（同特异性靠顺序），窄屏规则禁写死灰度覆盖选中态。
 - **毛玻璃（顶栏 + 底栏）**：`backdrop-filter: blur(20px) saturate(140%) !important` + `--aus-glass-bg`，滚动后才由 `panel.ts#syncTopbarState` 写 `data-scrolled="1"` 淡出 hairline；**禁给 backdrop-filter 加过渡或 will-change**，`@supports` 缺能力与 `prefers-reduced-transparency` 退回实心 `--ds-panel-bg`。底栏高度 `--aus-bottomnav-h`（默认 58px，矮屏 50px）+ `env(safe-area-inset-bottom)`，`#aus-main` 的 `padding-top/padding-bottom` 必须扣出顶栏 / 底栏与安全区；指示胶囊 `#aus-bottom-indicator` 圆角 18px（**刻意不用 999px**），`transform` 由 `panel.ts#syncBottomNav` 按当前 tab 实测中心写。

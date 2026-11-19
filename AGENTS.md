@@ -112,7 +112,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链、孤立产物
 
 ## 常见任务地图
 
-改定价 / 峰谷 → `constants/pricing.ts` + `services/pricing.ts` + `constants/holidays.ts` + `utils/date.ts` + `data/wallets.ts` + `ui/wallet-view.ts`（`calcCost/calcSavings/getPricing/hasPriceForModel` 均支持可选钱包上下文）｜强制更新策略 → 根目录 `update-policy.json`（平时 `force:false`）｜更新日志 → `constants/changelog.ts` + `ui/changelog.ts` + `style.css#aus-changelog`｜加价格段 → `PRICE_HISTORY[模型].push({since, offpeak, peak, usePeakPricing?, peakHours?, label?})`｜面板 / 导航 → `ui/panel.ts` + `ui/nav-model.ts` + `types/settings.ts#mobileCompatUi`｜任一页面 → 对应 `ui/*-view.ts` + `data/computed.ts`｜使用说明 / 隐私 → `ui/help-view.ts`，并同步 `README.md` 与 `docs/index.html`（**不得声明「不包含任何埋点」「不上传任何数据」**，不得把掩码密钥写成明文，不得称 XOR 是安全加密）｜连接身份 → `services/connection-identity.ts`｜匿名统计 → 客户端 `services/telemetry.ts` + `ui/settings.ts`；服务端 `cloudflare/` + `cloudflare/README.md`｜同步 / 导入导出 → `services/import-export.ts` / `sync.ts`｜自定义小块 → `FOUR_OPTIONS`（18 项）+ `OverviewFourKey/StatsFourKey` + `getFourDisplay` + `normalizeSettings/hydrate` 白名单**四处同步**｜统计 / 历史筛选 → `ui/filter-prefs.ts`（`aus_filter_prefs_v1`）｜图表配置 → `chart-config` / `extra-charts` / `chart-prefs`｜下拉交互 → 确认 `ui/pill.ts` 能配对到 id｜按范围删除记录 → `repository.deleteHistoryByFilter`。
+改定价 / 峰谷 → `constants/pricing.ts` + `services/pricing.ts` + `constants/holidays.ts` + `utils/date.ts` + `data/wallets.ts` + `ui/wallet-view.ts`（`calcCost/calcSavings/getPricing/hasPriceForModel` 均支持可选钱包上下文）｜强制更新策略 → 根目录 `update-policy.json`（平时 `force:false`）｜更新日志 → `constants/changelog.ts` + `ui/changelog.ts` + `style.css#aus-changelog`｜加价格段 → `PRICE_HISTORY[模型].push({since, offpeak, peak, usePeakPricing?, peakHours?, label?})`｜面板 / 导航 → `ui/panel.ts` + `ui/nav-model.ts` + `types/settings.ts#mobileCompatUi`｜任一页面 → 对应 `ui/*-view.ts` + `data/computed.ts`｜使用说明 / 隐私 → `ui/help-view.ts`，并同步 `README.md` 与 `docs/index.html`（**不得声明「不包含任何埋点」「不上传任何数据」**，不得把掩码密钥写成明文，不得称 XOR 是安全加密）｜连接身份 → `services/connection-identity.ts`｜匿名统计 → 客户端 `services/telemetry.ts` + `ui/settings.ts`；服务端 `cloudflare/` + `cloudflare/README.md`｜改看板 → `cloudflare/dashboard.html` + `api.js` + `summary.js`（要点见 `cloudflare/AGENTS.md`）｜同步 / 导入导出 → `services/import-export.ts` / `sync.ts`｜自定义小块 → `FOUR_OPTIONS`（18 项）+ `OverviewFourKey/StatsFourKey` + `getFourDisplay` + `normalizeSettings/hydrate` 白名单**四处同步**｜统计 / 历史筛选 → `ui/filter-prefs.ts`（`aus_filter_prefs_v1`）｜图表配置 → `chart-config` / `extra-charts` / `chart-prefs`｜下拉交互 → 确认 `ui/pill.ts` 能配对到 id｜按范围删除记录 → `repository.deleteHistoryByFilter`。
 
 ## 调试与排查
 
@@ -127,7 +127,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链、孤立产物
 - **版本真源**：`manifest.json#version` 单源，`vite.config.ts` 注入 `__APP_VERSION__`；侧栏 / 关于 / 导出 / 检查更新全取此值，禁硬编码。
 - **构建号**：`build_no` 从 1 起，注入 `__BUILD_NO__` 与 `APP_BUILD_TAG`。**未经当轮明确要求不得改**；须改时必须 +1，同次发布不得重复递增；改 `build_no` 必须同时补 `constants/changelog.ts` 头部对应 `buildNo` 条目，否则更新弹窗静默不弹，`verify-ci.mjs` 也会校验。已读标识 = `localStorage[aus_changelog_seen_v1]`，值为 `版本号|构建号`。
 - **版本号推进管控**：无当轮明确要求一律禁止推进——禁 `npm version`、禁改 `manifest.json#version` / `package.json#version`、禁新建或移动 `vX.Y.Z` 标签、禁合并到 `main`、禁 `git push origin main --tags`；**一次明确要求只覆盖当次，不做延展解释**；**合并 ≠ 授权推进版本**（2026-09-10 事故后追加，授权按字面最小化解释）。
-- **PR 审查只合并到 `dev`**（2026-10-20 追加）：禁用 GitHub「Merge pull request」与 `gh pr merge` 直合 `main`。
+- **PR 审查只合并到 `dev`**（2026-10-20 追加）：禁用 GitHub「Merge pull request」与 `gh pr merge` 直合 `main`；**即使 PR 的 base 是 `main`，也必须先把内容落到 `dev` 再合并**——`dev` 是唯一真源，`main` 只承接稳定发布。
 - **违规回退义务**：一旦误推进，立即改回三处版本号 → `npm run typecheck && npm run build && node --check dist/index.js` → 提交推送 → 删除本地与远端多余标签，并在回复里说明。
 - **四步流程**：① feature 分支 → `dev`：五连验通过 + `git push origin dev`；② `dev` → `main`：仅在明确批准后 `git merge --no-ff dev`、解决 `dist/` 冲突、push，版本与标签保持原样；③ 版本推进 + 打标签必须单独授权；④ 回滚仅在明确要求时。
 - **预览预发布边界**：`preview-<12位哈希>` 只由 `main` 的 preview 作业创建，标签不可复用 / 移动，不得借此改版本字段。
@@ -148,7 +148,7 @@ git push origin dev
 
 - **自动提交**：独立修改完成（五连验通过 + 满足需求）即提交推送 `dev`，无需二次确认；自动提交**不含**版本推进、合并 `main`、打标签。
 - **提交时机（强制）**：一轮需求完整做完后一次性提交；禁边改边提、分步提交、提前推送——单轮需求只产生一次提交。
-- **更新日志**：当前由用户手动维护（强制追加要求已挂起），未经当轮明确要求不得增删条目。若被要求撰写，风格范本：口语、极简、一句话一件事、名词或动词短语开头、不加句号、不自夸、不写文件名 / 色值 / id / hash / 实现细节；同一主题合并成一条，每分类 1–3 条、整版 ≤8 条；只写用户可感知的行为与视觉变化，纯内部重构与像素级微调不写。
+- **更新日志**：当前由用户手动维护（强制追加要求已挂起），未经当轮明确要求不得增删条目。若被要求撰写，风格范本取 `r3.1.7` 的手写风格：口语、极简、一句话一件事、名词或动词短语开头、不加句号、不自夸、不写文件名 / 色值 / id / hash / 实现细节；同一主题合并成一条，每分类 1–3 条、整版 ≤8 条；只写用户可感知的行为与视觉变化，纯内部重构与像素级微调不写。
 - **预览包脚本**：`scripts/preview-package.mjs`（git archive + 清单 / 入口 / 引用链 / 允许文件 / 结构 / SHA-256）与 `scripts/preview-notes.mjs`（提交区间说明）的约束见 `scripts/AGENTS.md`。
 - `pr/RE3.0` 只同步产物备份，不在此开发。
 

@@ -35,3 +35,11 @@ TauriTavern 的 Agent 模式把「一次 Run 的多次模型调用」交给宿�
 - **失败退避**：任何失败（非 Git 安装、403、服务端拉不到）只写 30 分钟退避 + 静默 log，不阻断面板；策略读不到（网络 / 限流）一律当「没有强制要求」，绝不反过来硬更新。策略文件走 GitHub raw + jsDelivr 双源。
 - **硬边界（不要承诺能救）**：坏在 `dist/index.js` 加载阶段的版本（语法错误、分包 404、顶层 import 抛错）自救逻辑没有执行机会；非 Git 安装与无管理员权限的全局扩展只能提示手动更新。所以这条通道必须在健康版本里预埋。
 - **禁用形状**：不要加开关、不要降级、失败不要反复重试刷屏、不要依赖面板 DOM。
+
+## 更新检查（国内多源竞速）
+
+- 源清单单一来源 `services/update.ts#remoteSources(path, branch)`，`manifest.json` / `update-policy.json` / compare 共用；九条分两梯队——实时源 `raw.githubusercontent.com` / `ghproxy.net` / `gh-proxy.com` / `gh-proxy.org` / `raw.gitmirror.com` 用 `raceJson` 并发先到先得，全部失败才退 CDN 缓存源 `cdn.jsdelivr.net` / `fastly.jsdelivr.net` / `cdn.jsdmirror.com` / `jsd.onmicrosoft.cn`（对 `@branch` 最长 12 小时缓存，只能兜底；国内实测 raw 与 cdn.jsdelivr 常双双不可达，`gh-proxy.com` / `fastly` / `jsd.onmicrosoft.cn` 仍可用）。
+- 每梯队独立 `AbortController` + `TIER_TIMEOUT_MS = 3000`；URL 一律带 `?t=` 绕缓存。
+- compare 同样竞速：`api.github.com` 直连 + `gh-proxy.com` 包装；拿不到 compare 不放弃，改用远端 `manifest.json` 版本比 `isNewer`（`remoteKind = 'version'`，提示「发现 <分支> 分支新版本 vX（当前 vY），可在关于页更新」）。
+- 源顺序与 URL 形状由 `services/update-sources.test.ts` 锁定，改源必须同步该测试。
+- 跨分支更新先 `/api/extensions/switch` 再 `/api/extensions/update`，成功后刷新；自动检查 10 分钟节流。
