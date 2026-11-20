@@ -24,7 +24,7 @@ var APP_VERSION = String("3.2.3");
 * 规则（与 AGENTS.md 同步）：未经用户当轮明确要求不得改动；确需改动时在现有值上 +1，
 * 同一次发布内不要重复递增。
 */
-var BUILD_NO = String("1");
+var BUILD_NO = String("2");
 /** 更新弹窗的已读键：版本号 + 构建号；拿不到构建号时退回纯版本号 */
 var APP_BUILD_TAG = BUILD_NO ? `${APP_VERSION}|${BUILD_NO}` : APP_VERSION;
 //#endregion
@@ -12960,6 +12960,23 @@ function stripGuardState(state) {
 }
 /** 更新日志（最新在前） */
 var CHANGELOG = [
+	{
+		version: "r3.2.3",
+		buildNo: 2,
+		date: "2026-11-20",
+		sections: [{
+			kind: "fix",
+			items: [
+				"多轮请求同时进行时，用量被记到别的轮次",
+				"同一次请求被重复记成多条",
+				"估算记录与请求探针对不上，被误报没记进历史",
+				"重新加载宿主后取不到用量"
+			]
+		}, {
+			kind: "improve",
+			items: ["采集安装失败时有提示，不再静默"]
+		}]
+	},
 	{
 		version: "r3.2.3",
 		buildNo: 1,

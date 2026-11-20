@@ -48,6 +48,28 @@ export const CHANGELOG_ENTRY_LIMIT = 5;
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: 'r3.2.3',
+    buildNo: 2,
+    date: '2026-11-20',
+    sections: [
+      {
+        kind: 'fix',
+        items: [
+          '多轮请求同时进行时，用量被记到别的轮次',
+          '同一次请求被重复记成多条',
+          '估算记录与请求探针对不上，被误报没记进历史',
+          '重新加载宿主后取不到用量',
+        ],
+      },
+      {
+        kind: 'improve',
+        items: [
+          '采集安装失败时有提示，不再静默',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'r3.2.3',
     buildNo: 1,
     date: '2026-11-18',
     sections: [
