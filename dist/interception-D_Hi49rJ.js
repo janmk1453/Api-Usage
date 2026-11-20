@@ -1,6 +1,6 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { D as resolveRuntimeConnectionContext, E as initConnectionIdentity, t as repository } from "./repository-uVzlUJvL.js";
+import { D as resolveRuntimeConnectionContext, E as initConnectionIdentity, t as repository } from "./repository--oroyQTL.js";
 //#region src/services/include-usage.ts
 /**
 * 流式 usage 注入的纯逻辑：把 stream_options.include_usage 合并进用户/预设自定义的请求体参数。
@@ -1363,6 +1363,7 @@ async function estimatePromptTokens(messages) {
 var interception_exports = /* @__PURE__ */ __exportAll({
 	installInterception: () => installInterception,
 	normalizeTiming: () => normalizeTiming,
+	pickEndedTurn: () => pickEndedTurn,
 	pickPromptMessages: () => pickPromptMessages,
 	processUsage: () => processUsage,
 	recalcAllCosts: () => recalcAllCosts,
@@ -1370,8 +1371,6 @@ var interception_exports = /* @__PURE__ */ __exportAll({
 	uninstallInterception: () => uninstallInterception
 });
 var lastMessages = [];
-/** 本轮请求的完整 messages：只给输入侧估算用，绝不写进历史（历史仍存 lastMessages 的最近 10 条摘要） */
-var lastPromptMessages = [];
 var lastStart = 0;
 var lastFetchUsage = null;
 var lastFetchModel = null;
@@ -1384,7 +1383,21 @@ var lastRequestIdTime = 0;
 /** 流式测量到的时序快照（TTFT / 思维链耗时 / 真假流式），与 usage 解耦：
 *  上游不回 usage 时 finish() 也会落一份，避免主路径明明测到了却拿不到。 */
 var lastStreamTiming = null;
-var lastTurn = null;
+/**
+* 本轮账本：按 requestId 保存每一轮请求的现场。
+*
+* 早期版本只有一个 lastTurn 单槽，GENERATION_ENDED 取到的是「最后发出的那一轮」。
+* 两轮并发（A 在途、B 后发）时，A 结束时会把 B 的 startedAt / promptMessages /
+* requestId / streamed 当成 A 的现场落库：历史里出现「duration 只有几秒、
+* requestId 却是别人的、输入 token 与那轮真实 prompt 差一截」的错账。
+* 因此这里改为按 requestId 记账，结束事件按模型名与「刚结束」时刻对号入座。
+*/
+var turnLedger = /* @__PURE__ */ new Map();
+/** 账本容量与存活时间：只留最近的若干轮，长会话不会无限增长 */
+var TURN_LEDGER_KEEP = 32;
+var TURN_LEDGER_TTL_MS = 18e5;
+/** 生成结束事件与请求的配对窗口：一轮从发出到结束很少超过 10 分钟 */
+var ENDED_MATCH_WINDOW_MS = 6e5;
 /** 用户点击「停止」的时刻；只在窗口期内有效，过期自动忽略 */
 var pendingStopAt = 0;
 var pendingStopTimer = null;
@@ -1392,11 +1405,101 @@ var pendingStopTimer = null;
 var STOP_WINDOW_MS = 3e3;
 /** 收到停止信号后等这么久再兜底结算（等 GENERATION_ENDED 先到） */
 var STOP_SETTLE_DELAY_MS = 1500;
-function currentTurn(startTime) {
-	const turn = lastTurn;
-	if (!turn) return null;
-	if (typeof startTime === "number" && startTime > 0 && turn.startTime !== startTime) return null;
+function turnKeyOf(turn) {
+	return turn.requestId || "start:" + turn.startTime;
+}
+/** 登记一轮请求现场；同一 requestId 覆盖旧记录（重试会拿到新 id，不会覆盖） */
+function registerTurn(turn) {
+	try {
+		turnLedger.set(turnKeyOf(turn), turn);
+		pruneTurns();
+	} catch {}
 	return turn;
+}
+function pruneTurns(now = Date.now()) {
+	try {
+		for (const [key, t] of turnLedger) if (now - t.startTime > TURN_LEDGER_TTL_MS) turnLedger.delete(key);
+		let over = turnLedger.size - TURN_LEDGER_KEEP;
+		if (over <= 0) return;
+		for (const [key, t] of turnLedger) {
+			if (over <= 0) break;
+			if (!t.settled) continue;
+			turnLedger.delete(key);
+			over -= 1;
+		}
+	} catch {}
+}
+/** 按 startTime 反查现场（fetch 闭包与主路径共用同一把尺子） */
+function turnByStart(startTime) {
+	if (!(startTime > 0)) return null;
+	for (const t of turnLedger.values()) if (t.startTime === startTime) return t;
+	return null;
+}
+function currentTurn(startTime) {
+	if (typeof startTime === "number" && startTime > 0) return turnByStart(startTime);
+	let latest = null;
+	for (const t of turnLedger.values()) if (!latest || t.startTime > latest.startTime) latest = t;
+	return latest;
+}
+function normalizeModel(name) {
+	return String(name ?? "").trim().toLowerCase();
+}
+/** 模型名比对：互为子串也算同一模型（宿主有时给模型名加前缀 / 后缀） */
+function modelMatches(a, b) {
+	const x = normalizeModel(a);
+	const y = normalizeModel(b);
+	if (!x || !y) return false;
+	return x === y || x.indexOf(y) !== -1 || y.indexOf(x) !== -1;
+}
+/** 「刚结束」的先后：读完响应的轮次优先，其次比 endedAt / startTime 谁更晚 */
+function endedRank(t) {
+	return (t.endedAt > 0 ? 0x38d7ea4c68000 : 0) + (t.endedAt || t.startTime);
+}
+/**
+* 找出生成结束事件对应的那一轮。
+*
+* 并发时账本里会有多轮在途，绝不能按「最后发出」取：先用模型名对号
+* （chat tail 的模型就是这一轮刚用的模型），同模型多轮时取最近结束的一轮；
+* 只有一轮候选时直接认领（无歧义，也容忍上游改写模型名）。
+* includeSettled=false 时只看还没落库的轮次。
+*/
+function pickEndedTurn(model, includeSettled = true) {
+	const now = Date.now();
+	const wanted = normalizeModel(model);
+	const candidates = [];
+	/** 模型名明确匹配的候选（严格优先） */
+	const matched = [];
+	/** 模型名缺失的候选（请求体没带 model，或上游没回模型名）：可以认领 */
+	const unknownModel = [];
+	/** 账本里是否存在同模型的轮次（含已结算）：存在就说明结束事件属于它，不能认别人的 */
+	let sameModelAnywhere = false;
+	for (const t of turnLedger.values()) {
+		const inWindow = now - t.startTime <= ENDED_MATCH_WINDOW_MS;
+		const tModel = normalizeModel(t.model);
+		if (inWindow && wanted && tModel && modelMatches(model, t.model)) sameModelAnywhere = true;
+		if (!inWindow) continue;
+		if (!includeSettled && t.settled) continue;
+		candidates.push(t);
+	}
+	if (!candidates.length) return null;
+	const latestOf = (list) => {
+		let out = null;
+		for (const t of list) if (!out || endedRank(t) > endedRank(out)) out = t;
+		return out;
+	};
+	if (!wanted) return latestOf(candidates);
+	for (const t of candidates) {
+		if (!normalizeModel(t.model)) {
+			unknownModel.push(t);
+			continue;
+		}
+		if (modelMatches(model, t.model)) matched.push(t);
+	}
+	if (matched.length) return latestOf(matched);
+	if (sameModelAnywhere) return null;
+	if (unknownModel.length) return latestOf(unknownModel);
+	if (candidates.length === 1) return candidates[0];
+	return null;
 }
 function stopPending() {
 	return pendingStopAt > 0 && Date.now() - pendingStopAt < STOP_WINDOW_MS;
@@ -1580,31 +1683,36 @@ function installFetchCapture() {
 				} catch {}
 				try {
 					lastMessages = msgs;
-					lastPromptMessages = promptMessages;
 					lastStart = startTime;
 				} catch {}
-				try {
-					const requestModel = reqBody?.model;
-					lastTurn = {
-						startTime,
-						requestId,
-						model: typeof requestModel === "string" && requestModel ? requestModel : null,
-						modelFallback: !(typeof requestModel === "string" && requestModel),
-						status: 0,
-						streamError: null,
-						outputChars: 0,
-						reasoningChars: 0,
-						fullResponse: null,
-						fullRequest: fullReq,
-						messages: msgs,
-						promptMessages,
-						connection: requestConnection,
-						ttft: 0,
-						thinkTime: 0,
-						streamed: null,
-						settled: false
-					};
-				} catch {}
+				const requestModel = (() => {
+					try {
+						return reqBody?.model;
+					} catch {
+						return null;
+					}
+				})();
+				const turn = registerTurn({
+					startTime,
+					requestId,
+					model: typeof requestModel === "string" && requestModel ? requestModel : null,
+					modelFallback: !(typeof requestModel === "string" && requestModel),
+					status: 0,
+					streamError: null,
+					outputChars: 0,
+					reasoningChars: 0,
+					fullResponse: null,
+					fullRequest: fullReq,
+					messages: msgs,
+					promptMessages,
+					connection: requestConnection,
+					ttft: 0,
+					thinkTime: 0,
+					streamed: null,
+					endedAt: 0,
+					settled: false,
+					settledBy: null
+				});
 				const injected = injectIncludeUsage(reqBody, reqBody?.chat_completion_source ?? null);
 				const performFetch = (init) => rawFetch.apply(p, init);
 				const fetchArgs = injected ? [args[0], {
@@ -1650,8 +1758,7 @@ function installFetchCapture() {
 						});
 					} catch {}
 					try {
-						const t = currentTurn(startTime);
-						if (t) t.status = res.status;
+						turn.status = res.status;
 					} catch {}
 					try {
 						const clone = res.clone();
@@ -1707,12 +1814,13 @@ function installFetchCapture() {
 								});
 							} catch {}
 							try {
-								const t = currentTurn(startTime);
 								const resModel = data?.model;
-								if (t && typeof resModel === "string" && resModel) {
-									t.model = resModel;
-									t.modelFallback = false;
+								if (typeof resModel === "string" && resModel) {
+									turn.model = resModel;
+									turn.modelFallback = false;
 								}
+								if (!turn.fullResponse) turn.fullResponse = rawText ?? text;
+								if (!turn.endedAt) turn.endedAt = Date.now();
 							} catch {}
 							try {
 								const parsedUsage = data?.usage || null;
@@ -1783,15 +1891,13 @@ function installFetchCapture() {
 									const safeThinkTime = ttft > 0 ? thinkTime || 0 : 0;
 									const streamed = judgeStreamed();
 									try {
-										const t = currentTurn(startTime);
-										if (t) {
-											t.ttft = ttft || 0;
-											t.thinkTime = safeThinkTime;
-											t.streamed = streamed;
-											t.outputChars = thinkClock.contentChars || 0;
-											t.reasoningChars = thinkClock.reasoningChars || 0;
-											t.fullResponse = fullText || null;
-										}
+										turn.ttft = ttft || 0;
+										turn.thinkTime = safeThinkTime;
+										turn.streamed = streamed;
+										turn.outputChars = thinkClock.contentChars || 0;
+										turn.reasoningChars = thinkClock.reasoningChars || 0;
+										turn.fullResponse = fullText || null;
+										if (!turn.endedAt) turn.endedAt = Date.now();
 									} catch {}
 									if (safeThinkTime > 0) log.debug("思维链耗时已测量 " + safeThinkTime + "ms");
 									try {
@@ -1848,8 +1954,8 @@ function installFetchCapture() {
 							const streamBody = clone.body;
 							if (streamBody && typeof streamBody.getReader === "function") readStream(streamBody).catch((streamErr) => {
 								try {
-									const t = currentTurn(startTime);
-									if (t) t.streamError = String(streamErr && (streamErr.message || streamErr.name) || "stream-error");
+									turn.streamError = String(streamErr && (streamErr.message || streamErr.name) || "stream-error");
+									if (!turn.endedAt) turn.endedAt = Date.now();
 								} catch {}
 								try {
 									finish();
@@ -1877,8 +1983,8 @@ function installFetchCapture() {
 						patchRequestLog({ error: message });
 					} catch {}
 					try {
-						const t = currentTurn(startTime);
-						if (t) t.streamError = message;
+						turn.streamError = message;
+						if (!turn.endedAt) turn.endedAt = Date.now();
 					} catch {}
 					throw e;
 				});
@@ -1886,6 +1992,7 @@ function installFetchCapture() {
 			return rawFetch.apply(p, args);
 		};
 		patched.__aus_patched = true;
+		if (rawFetch.__ausTapPatched === true) patched.__ausTapPatched = true;
 		p.fetch = patched;
 		log.debug("fetch 捕获已安装 TARGET_API=" + TARGET_API);
 	} catch {}
@@ -2006,7 +2113,7 @@ function uninstallInterception() {
 				pendingStopTimer = null;
 			}
 			pendingStopAt = 0;
-			lastTurn = null;
+			turnLedger.clear();
 		}
 		try {
 			const p = window.parent || window;
@@ -2052,27 +2159,49 @@ function onGenerationEnded(...args) {
 			hasUsage: !!usage,
 			isValid: usage ? isValidUsage(usage) : false
 		});
+		/**
+		* 解析「刚结束的那一轮」。并发时账本里有多轮在途，按 tail 模型对号入座；
+		* 落库用的 messages / startTime / requestId / connection 一律取自这一轮，
+		* 不再从 lastMessages / lastStart / recentRequestId() 这些「最后发出」的槽里取。
+		*/
+		const endedTurn = (m = model) => pickEndedTurn(m);
+		/** 这一轮已经由 fetch 侧按真实 usage 落库 → 不重复记，也不要用估算覆盖 */
+		const alreadyRecorded = (t) => {
+			if (!t || t.settledBy !== "usage") return false;
+			log.debug("这一轮已按真实用量落库，跳过结束事件", { requestId: t.requestId });
+			lastFetchUsage = null;
+			return true;
+		};
+		/** fetch 快照是否属于这一轮：并发时别把别轮的时序证据 / 用量串过来 */
+		const packMatches = (t, pack) => {
+			if (!t || !pack || !t.requestId || !pack.requestId) return true;
+			return t.requestId === pack.requestId;
+		};
 		if (usage && isValidUsage(usage) && isZeroUsage(usage)) {
 			log.debug("主路径 usage 全 0，转交估算判定");
 			usage = null;
 		}
 		if (usage && isValidUsage(usage)) {
 			log.debug("命中主路径 extra usage");
-			let ttft = 0, think = 0, streamed = null, fr = usage?.__finish_reason ?? usage?.finish_reason ?? null;
+			const ended = endedTurn();
+			if (alreadyRecorded(ended)) return;
+			let ttft = ended?.ttft || 0, think = ended?.thinkTime || 0;
+			let streamed = ended?.streamed ?? null;
+			let fr = usage?.__finish_reason ?? usage?.finish_reason ?? null;
 			try {
 				const fp = lastFetchUsage;
-				if (fp && Date.now() - lastFetchTime < 5e3) {
+				if (fp && packMatches(ended, fp) && Date.now() - lastFetchTime < 5e3) {
 					if (!ttft) ttft = fp.ttft || 0;
 					if (!think) think = fp.thinkTime || 0;
 					if (!fr) fr = fp.finishReason ?? null;
-					if (fp.streamed != null) streamed = fp.streamed;
-					if (!fr) try {
-						const extraFr = extra?.finish_reason ?? tail?.finish_reason ?? null;
-						if (extraFr) fr = extraFr;
-					} catch {}
+					if (fp.streamed != null && streamed == null) streamed = fp.streamed;
+				}
+				if (!fr) {
+					const extraFr = extra?.finish_reason ?? tail?.finish_reason ?? null;
+					if (extraFr) fr = extraFr;
 				}
 			} catch {}
-			processUsage(usage, model, lastMessages, lastStart, null, null, ttft, think, fr, recentConnection(5e3), recentRequestId(), streamed);
+			processUsage(usage, model, ended?.messages?.length ? ended.messages : lastMessages, ended?.startTime || lastStart, null, null, ttft, think, fr, ended?.connection || recentConnection(5e3), ended?.requestId || recentRequestId(), streamed);
 			lastFetchUsage = null;
 			return;
 		}
@@ -2083,18 +2212,22 @@ function onGenerationEnded(...args) {
 				if (isValidUsage(cand) && !isZeroUsage(cand)) {
 					usage = cand;
 					model = v?.extra?.model || model;
+					const ended = endedTurn(model);
+					if (alreadyRecorded(ended)) return;
 					log.debug("swipe_info 命中", { model });
-					let ttft = 0, think = 0, streamed = null, fr = cand?.__finish_reason ?? null;
+					let ttft = ended?.ttft || 0, think = ended?.thinkTime || 0;
+					let streamed = ended?.streamed ?? null;
+					let fr = cand?.__finish_reason ?? null;
 					try {
 						const fp = lastFetchUsage;
-						if (fp && Date.now() - lastFetchTime < 5e3) {
-							ttft = fp.ttft || 0;
-							think = fp.thinkTime || 0;
+						if (fp && packMatches(ended, fp) && Date.now() - lastFetchTime < 5e3) {
+							if (!ttft) ttft = fp.ttft || 0;
+							if (!think) think = fp.thinkTime || 0;
 							if (!fr) fr = fp.finishReason ?? null;
-							if (fp.streamed != null) streamed = fp.streamed;
+							if (fp.streamed != null && streamed == null) streamed = fp.streamed;
 						}
 					} catch {}
-					processUsage(usage, model, lastMessages, lastStart, null, null, ttft, think, fr, recentConnection(5e3), recentRequestId(), streamed);
+					processUsage(usage, model, ended?.messages?.length ? ended.messages : lastMessages, ended?.startTime || lastStart, null, null, ttft, think, fr, ended?.connection || recentConnection(5e3), ended?.requestId || recentRequestId(), streamed);
 					lastFetchUsage = null;
 					return;
 				}
@@ -2108,39 +2241,51 @@ function onGenerationEnded(...args) {
 		});
 		if (isValidUsage(maybeUsage) && !isZeroUsage(maybeUsage)) {
 			const m = args[0]?.model || model;
+			const ended = endedTurn(m);
+			if (alreadyRecorded(ended)) return;
 			log.debug("args 命中", { model: m });
-			let ttft = 0, think = 0, streamed = null, fr = maybeUsage?.__finish_reason ?? null;
+			let ttft = ended?.ttft || 0, think = ended?.thinkTime || 0;
+			let streamed = ended?.streamed ?? null;
+			let fr = maybeUsage?.__finish_reason ?? null;
 			try {
 				const fp = lastFetchUsage;
-				if (fp && Date.now() - lastFetchTime < 5e3) {
-					ttft = fp.ttft || 0;
-					think = fp.thinkTime || 0;
+				if (fp && packMatches(ended, fp) && Date.now() - lastFetchTime < 5e3) {
+					if (!ttft) ttft = fp.ttft || 0;
+					if (!think) think = fp.thinkTime || 0;
 					if (!fr) fr = fp.finishReason ?? null;
-					if (fp.streamed != null) streamed = fp.streamed;
+					if (fp.streamed != null && streamed == null) streamed = fp.streamed;
 				}
 			} catch {}
-			processUsage(maybeUsage, m, lastMessages, lastStart, null, null, ttft, think, fr, recentConnection(5e3), recentRequestId(), streamed);
+			processUsage(maybeUsage, m, ended?.messages?.length ? ended.messages : lastMessages, ended?.startTime || lastStart, null, null, ttft, think, fr, ended?.connection || recentConnection(5e3), ended?.requestId || recentRequestId(), streamed);
 			lastFetchUsage = null;
 			return;
 		}
 		{
-			let fetchPack = lastFetchUsage;
-			let fetchUsage = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
-			if (fetchUsage && isValidUsage(fetchUsage) && Date.now() - lastFetchTime < 12e4) {
-				const fetchedModel = fetchPack && fetchPack.model || lastFetchModel || model;
-				const fetchedMsgs = fetchPack && fetchPack.msgs || lastMessages;
-				const fetchedStart = fetchPack && fetchPack.startTime || lastStart;
-				const fetchedReq = fetchPack && fetchPack.fullReq || null;
-				const fetchedRes = fetchPack && fetchPack.fullResponse || null;
-				const fTtft = fetchPack && fetchPack.ttft || 0;
-				const fThink = fetchPack && fetchPack.thinkTime || 0;
+			const ended = endedTurn();
+			const fetchPack = lastFetchUsage;
+			const fetchUsage = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
+			const usable = !!fetchUsage && isValidUsage(fetchUsage) && Date.now() - lastFetchTime < 12e4;
+			const belongs = packMatches(ended, fetchPack);
+			if (usable && belongs) {
+				if (alreadyRecorded(ended)) return;
+				const fetchedModel = fetchPack && fetchPack.model || ended?.model || lastFetchModel || model;
+				const fetchedMsgs = (ended?.messages?.length ? ended.messages : null) || fetchPack && fetchPack.msgs || lastMessages;
+				const fetchedStart = ended?.startTime || fetchPack && fetchPack.startTime || lastStart;
+				const fetchedReq = fetchPack && fetchPack.fullReq || ended?.fullRequest || null;
+				const fetchedRes = fetchPack && fetchPack.fullResponse || ended?.fullResponse || null;
+				const fTtft = fetchPack && fetchPack.ttft || ended?.ttft || 0;
+				const fThink = fetchPack && fetchPack.thinkTime || ended?.thinkTime || 0;
 				const fFr = fetchPack && fetchPack.finishReason || fetchUsage?.__finish_reason || null;
-				const fStreamed = fetchPack && fetchPack.streamed != null ? fetchPack.streamed : null;
+				const fStreamed = ended?.streamed ?? null ?? (fetchPack && fetchPack.streamed != null ? fetchPack.streamed : null);
 				log.debug("fetch 兜底命中", { model: fetchedModel });
 				lastFetchUsage = null;
-				processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink, fFr, fetchPack?.connection || recentConnection(), fetchPack?.requestId || recentRequestId(12e4), fStreamed);
+				processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink, fFr, ended?.connection || fetchPack?.connection || recentConnection(), ended?.requestId || fetchPack?.requestId || recentRequestId(12e4), fStreamed);
 				return;
-			} else if (lastFetchUsage) {
+			} else if (fetchUsage && isValidUsage(fetchUsage) && !belongs) log.debug("fetch 快照属于另一轮请求，留给那一轮结算", {
+				ended: ended?.requestId || null,
+				pack: fetchPack?.requestId || null
+			});
+			else if (lastFetchUsage) {
 				const fu = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
 				log.debug("fetch 有缓存但无效或超时", {
 					has: !!lastFetchUsage,
@@ -2186,14 +2331,28 @@ function normalizeTiming(ttft, thinkTime) {
 * 静默的判定（无输出）不写历史、不产生健康信号，避免把空轮次灌进统计。
 */
 async function settleTurnWithoutUsage(source, opts = {}) {
-	const turn = currentTurn();
+	const turn = pickEndedTurn(opts.model ?? null, false);
 	if (turn?.settled) return;
+	if (!turn && turnLedger.size > 0) {
+		log.debug("生成结束事件对不上任何请求轮次，跳过估算补记", {
+			source,
+			model: opts.model || null
+		});
+		try {
+			noteCaptureStage("event-drop", {
+				model: opts.model || "",
+				requestId: "",
+				reason: "turn-unmatched"
+			});
+		} catch {}
+		return;
+	}
 	const model = opts.model || turn?.model || lastFetchModel || "deepseek-v4-flash";
-	const storeMessages = turn?.messages || lastMessages || [];
-	const estimateMessages = pickPromptMessages(turn?.promptMessages || lastPromptMessages, storeMessages);
+	const storeMessages = turn?.messages?.length ? turn.messages : lastMessages || [];
+	const estimateMessages = pickPromptMessages(turn?.promptMessages, storeMessages);
 	const startedAt = turn?.startTime || lastStart || Date.now();
 	const requestId = turn?.requestId || recentRequestId(12e4) || null;
-	const rawResponse = turn?.fullResponse || lastFetchUsage?.fullResponse || "";
+	const rawResponse = turn?.fullResponse || "";
 	const outputText = collectOutputText(rawResponse);
 	const outcome = decideTurnOutcome({
 		hasUsage: false,
@@ -2277,9 +2436,13 @@ async function settleTurnWithoutUsage(source, opts = {}) {
 		} catch {}
 		return;
 	}
-	if (turn) turn.settled = true;
+	if (turn) {
+		turn.settled = true;
+		turn.settledBy = "estimated";
+	}
 	log.debug("本轮已按估算补记", {
 		source,
+		turn: turn?.requestId || null,
 		interrupted: outcome.interrupted || null,
 		promptTokens,
 		completionTokens,
@@ -2302,7 +2465,8 @@ async function settleTurnWithoutUsage(source, opts = {}) {
 function processUsage(usage, model, messages, startTime, fullRequest = null, fullResponse = null, ttft = 0, thinkTime = 0, finishReason = null, connection = null, requestId = null, streamed = null, meta = null) {
 	try {
 		const fp = lastFetchUsage;
-		if (fp?.usage && Date.now() - lastFetchTime < 5e3) {
+		const sameTurn = !fp?.requestId || !requestId || fp.requestId === requestId;
+		if (fp?.usage && sameTurn && Date.now() - lastFetchTime < 5e3) {
 			const est = fp.usage.__think_tokens_est;
 			const hasReal = usage?.completion_tokens_details && typeof usage.completion_tokens_details.reasoning_tokens === "number" && usage.completion_tokens_details.reasoning_tokens > 0;
 			if (est && !hasReal && !usage?.__think_tokens_est) usage.__think_tokens_est = est;
@@ -2326,7 +2490,10 @@ function processUsage(usage, model, messages, startTime, fullRequest = null, ful
 		const added = repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason, connection, requestId, streamed, resolvedMeta);
 		try {
 			const t = currentTurn(startTime);
-			if (t && (added || !zeroUsage)) t.settled = true;
+			if (t && (added || !zeroUsage)) {
+				t.settled = true;
+				t.settledBy = "usage";
+			}
 		} catch {}
 	} catch (e) {
 		try {

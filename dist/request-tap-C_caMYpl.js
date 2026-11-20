@@ -258,7 +258,14 @@ function clearTapRecords() {
 	emit();
 }
 var PATCH_FLAG = "__ausTapPatched";
+var WIN_STATE = "__ausTapState";
 var RESCAN_INTERVAL_MS = 4e3;
+/**
+* 每个 window 只挂一个还原闭包。
+* fetch 可能被宿主反复替换、我们每 4s 重装一次，若每次都 push 一个闭包，
+* restores 会随时间无限增长（并一直持有旧 fetch 的引用），长时间开着页面就是内存泄漏。
+*/
+var restoreHooked = /* @__PURE__ */ new WeakSet();
 var seq = 0;
 var installed$1 = false;
 var rescanTimer = null;
@@ -469,8 +476,9 @@ async function consumeClone(res) {
 }
 function patchWindow(w) {
 	try {
-		if (!w || !w.fetch || w[PATCH_FLAG]) return;
-		w[PATCH_FLAG] = true;
+		if (!w || typeof w.fetch !== "function") return;
+		const prevState = w[WIN_STATE];
+		if (prevState && prevState.fetch === w.fetch) return;
 		const actor = actorFromLocation({
 			frameSrc: (() => {
 				try {
@@ -496,36 +504,54 @@ function patchWindow(w) {
 		});
 		const prevFetch = w.fetch.bind(w);
 		const tapFetch = function(input, init) {
-			const url = String(typeof input === "string" ? input : input?.url || "");
-			const endpoint = endpointOf(url);
-			if (!endpoint) return prevFetch(input, init);
-			const ctx = begin(url, endpoint, actor, bodyOf(init, input));
+			const st = w[WIN_STATE];
+			if (!st || st.fetch !== tapFetch) return prevFetch(input, init);
+			let ctx = null;
+			try {
+				const url = String(typeof input === "string" ? input : input?.url || "");
+				const endpoint = endpointOf(url);
+				if (endpoint) ctx = begin(url, endpoint, actor, bodyOf(init, input));
+			} catch {
+				ctx = null;
+			}
+			if (!ctx) return prevFetch(input, init);
+			const record = ctx;
 			return prevFetch(input, init).then((res) => {
-				let status = null;
 				try {
-					status = typeof res?.status === "number" ? res.status : null;
+					let status = null;
+					try {
+						status = typeof res?.status === "number" ? res.status : null;
+					} catch {}
+					let reader;
+					try {
+						const clone = res?.clone?.();
+						if (clone) reader = () => consumeClone(clone);
+					} catch {}
+					finalize(record, status, reader);
 				} catch {}
-				let reader;
-				try {
-					const clone = res?.clone?.();
-					if (clone) reader = () => consumeClone(clone);
-				} catch {}
-				finalize(ctx, status, reader);
 				return res;
 			}, (err) => {
-				finalize(ctx, null, void 0, String(err?.message || err || "请求异常").slice(0, 200));
+				try {
+					finalize(record, null, void 0, String(err?.message || err || "请求异常").slice(0, 200));
+				} catch {}
 				throw err;
 			});
 		};
+		tapFetch[PATCH_FLAG] = true;
+		if (prevFetch.__aus_patched === true) tapFetch.__aus_patched = true;
 		w.fetch = tapFetch;
-		restores.push(() => {
-			try {
-				if (w.fetch === tapFetch) w.fetch = prevFetch;
-			} catch {}
-		});
+		const state = {
+			fetch: tapFetch,
+			prevFetch,
+			xhrOpen: prevState?.xhrOpen,
+			xhrSend: prevState?.xhrSend,
+			xhrRawOpen: prevState?.xhrRawOpen,
+			xhrRawSend: prevState?.xhrRawSend
+		};
+		w[WIN_STATE] = state;
 		const XP = w.XMLHttpRequest?.prototype;
-		if (XP && !XP[PATCH_FLAG]) {
-			XP[PATCH_FLAG] = true;
+		const xhrInPlace = !!(prevState && XP && prevState.xhrOpen === XP.open && prevState.xhrSend === XP.send);
+		if (XP && !xhrInPlace) {
 			const prevOpen = XP.open;
 			const prevSend = XP.send;
 			XP.open = function(method, url) {
@@ -551,17 +577,39 @@ function patchWindow(w) {
 				} catch {}
 				return prevSend.apply(this, arguments);
 			};
+			state.xhrOpen = XP.open;
+			state.xhrSend = XP.send;
+			if (!state.xhrRawOpen) state.xhrRawOpen = prevOpen;
+			if (!state.xhrRawSend) state.xhrRawSend = prevSend;
+		}
+		if (!restoreHooked.has(w)) {
+			restoreHooked.add(w);
 			restores.push(() => {
 				try {
-					XP.open = prevOpen;
-					XP.send = prevSend;
+					const cur = w[WIN_STATE];
+					w[WIN_STATE] = null;
+					if (!cur) return;
+					if (w.fetch === cur.fetch) w.fetch = cur.prevFetch;
+					const P = w.XMLHttpRequest?.prototype;
+					if (P) {
+						if (cur.xhrOpen && P.open === cur.xhrOpen && cur.xhrRawOpen) P.open = cur.xhrRawOpen;
+						if (cur.xhrSend && P.send === cur.xhrSend && cur.xhrRawSend) P.send = cur.xhrRawSend;
+					}
 				} catch {}
 			});
 		}
 	} catch {}
 }
-/** 补扫所有同源 iframe：插件在自己的 iframe 里 fetch 时，只有装到那个 window 上才看得见 */
+/**
+* 补扫：主窗 + 所有同源 iframe。宿主随时可能换掉 window.fetch / XMLHttpRequest
+* （TauriTavern 重绑、ST 刷新、别的补丁再包一层），所以这里必须周期性重装，
+* 否则探针会静默失聪——3.2.3 里那两轮请求零记录就是缺了这一步。
+*/
 function scanFrames() {
+	try {
+		patchWindow(hostWindow());
+		patchWindow(window);
+	} catch {}
 	try {
 		const doc = hostDoc();
 		if (!doc) return;
@@ -672,6 +720,28 @@ function findSettlement(probe, settlements, used, windowMs = MATCH_WINDOW_MS) {
 		by: "total"
 	} : null;
 }
+/**
+* 探针没抓到 usage 时的对账：只按「模型 + 时间窗」配一条本地估算补记的入账记录。
+*
+* 上游不回 usage 的轮次，扩展会按本地估算补记一条历史（usageSource='estimated'），
+* 它的 token 数和探针侧（无用量）永远不可能全等，所以走不到 findSettlement。
+* 早期版本因此把这类轮次一律判成 orphan，健康提示里就变成「疑似没记进历史」的误报。
+* 这是「确认记过账」的弱匹配：只认模型对得上、且时间落窗内的估算条目，并优先取最近的一条。
+*/
+function findEstimatedSettlement(probe, settlements, used, windowMs = MATCH_WINDOW_MS) {
+	if (probe.total > 0 || probe.prompt > 0 || probe.completion > 0) return null;
+	const model = normalizeModel(probe.model);
+	const anchor = probe.endedAt || probe.at;
+	let best = null;
+	for (const s of settlements) {
+		if (used.has(s.id)) continue;
+		if (!s.estimated) continue;
+		if (model && s.model && normalizeModel(s.model) !== model) continue;
+		if (!inWindow(s, probe, windowMs)) continue;
+		if (!best || Math.abs(s.ts - anchor) < Math.abs(best.ts - anchor)) best = s;
+	}
+	return best;
+}
 /** 探针侧可选用量 → 对账键 */
 function probeKeyOf(input) {
 	return {
@@ -724,7 +794,8 @@ function noteSettlement(entry) {
 			prompt: Number(entry.prompt_tokens) || 0,
 			completion: Number(entry.completion_tokens) || 0,
 			total: Number(entry.total_tokens) || 0,
-			ts
+			ts,
+			estimated: String(entry.usageSource || "") === "estimated"
 		});
 		if (settlements.length > SETTLEMENT_MAX) settlements = settlements.slice(-800);
 	} catch {}
@@ -745,12 +816,20 @@ function reconcilePending(now = Date.now()) {
 		if (rec.state !== "pending") continue;
 		if (now - (rec.endedAt || rec.at) < 12e3) continue;
 		let hit = null;
-		if (rec.usage) hit = findSettlement(probeKeyOf({
+		const probe = probeKeyOf({
 			model: rec.model,
 			usage: rec.usage,
 			at: rec.at,
 			endedAt: rec.endedAt
-		}), settlements, used);
+		});
+		if (rec.usage) hit = findSettlement(probe, settlements, used);
+		else {
+			const est = findEstimatedSettlement(probe, settlements, used);
+			if (est) hit = {
+				settlement: est,
+				by: "estimated"
+			};
+		}
 		if (hit) {
 			used.add(hit.settlement.id);
 			patchTapRecord(rec.id, {
@@ -794,7 +873,8 @@ async function hydrateLedgerFromHistory() {
 				prompt: Number(e.prompt_tokens) || 0,
 				completion: Number(e.completion_tokens) || 0,
 				total,
-				ts
+				ts,
+				estimated: String(e.usageSource || "") === "estimated"
 			});
 		}
 		if (settlements.length > SETTLEMENT_MAX) settlements = settlements.slice(-800);
