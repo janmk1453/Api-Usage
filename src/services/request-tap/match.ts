@@ -51,6 +51,23 @@ export function normalizeModel(model: string): string {
   return stripModelTag(model).toLowerCase();
 }
 
+/**
+ * 宽松模型名比较：反代 / 上游经常在模型名后面挂档位后缀
+ * （`deepseek-v4.1-flash` → `deepseek-v4.1-flash-free`、`-thinking`、`-preview`）。
+ * 严格相等会把「确实记过账」的请求判成没记录——3.2.3 里那条 missing-usage 假警报就是这么来的。
+ * 只允许在 `-` 分隔符处截断，且后缀不以数字开头，避免 `deepseek-v4` 撞上 `deepseek-v4.1-flash`。
+ */
+export function modelLooseMatch(a: string, b: string): boolean {
+  const x = normalizeModel(a);
+  const y = normalizeModel(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  if (!long.startsWith(short)) return false;
+  const rest = long.slice(short.length);
+  return rest.startsWith('-') && rest.length <= 24 && !/^-\d/.test(rest);
+}
+
 /** 入账时刻是否落在探针请求的合理时间范围（请求发出 ~ 结束 + 窗口）内 */
 function inWindow(s: Settlement, p: ProbeKey, windowMs: number): boolean {
   const lo = p.at - windowMs;
@@ -58,7 +75,7 @@ function inWindow(s: Settlement, p: ProbeKey, windowMs: number): boolean {
   return s.ts >= lo && s.ts <= hi;
 }
 
-export type MatchBy = 'tokens' | 'total' | 'estimated';
+export type MatchBy = 'tokens' | 'total' | 'estimated' | 'model';
 
 /**
  * 为一条探针记录找入账记录。
@@ -73,16 +90,25 @@ export function findSettlement(
 ): { settlement: Settlement; by: MatchBy } | null {
   const model = normalizeModel(probe.model);
   let totalFallback: Settlement | null = null;
+  // 名字对不上、但用量全等的候选：反代可能改模型名，严格匹配全落空后再用宽松名字确认
+  const looseCandidates: Settlement[] = [];
   for (const s of settlements) {
     if (used.has(s.id)) continue;
-    if (model && s.model && normalizeModel(s.model) !== model) continue;
     if (!inWindow(s, probe, windowMs)) continue;
-    if (probe.prompt > 0 && probe.completion > 0 && s.prompt === probe.prompt && s.completion === probe.completion) {
-      return { settlement: s, by: 'tokens' };
+    const sModel = normalizeModel(s.model);
+    const tokenEq = probe.prompt > 0 && probe.completion > 0 && s.prompt === probe.prompt && s.completion === probe.completion;
+    if (model && sModel && sModel !== model) {
+      if (tokenEq) looseCandidates.push(s);
+      continue;
     }
+    if (tokenEq) return { settlement: s, by: 'tokens' };
     if (!totalFallback && probe.total > 0 && s.total === probe.total) totalFallback = s;
   }
-  return totalFallback ? { settlement: totalFallback, by: 'total' } : null;
+  if (totalFallback) return { settlement: totalFallback, by: 'total' };
+  for (const s of looseCandidates) {
+    if (modelLooseMatch(probe.model, s.model)) return { settlement: s, by: 'model' };
+  }
+  return null;
 }
 
 /**

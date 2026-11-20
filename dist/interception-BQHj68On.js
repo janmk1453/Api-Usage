@@ -1,6 +1,6 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { D as resolveRuntimeConnectionContext, E as initConnectionIdentity, t as repository } from "./repository--oroyQTL.js";
+import { D as resolveRuntimeConnectionContext, E as initConnectionIdentity, t as repository } from "./repository-CTe-UtI8.js";
 //#region src/services/include-usage.ts
 /**
 * 流式 usage 注入的纯逻辑：把 stream_options.include_usage 合并进用户/预设自定义的请求体参数。
@@ -1650,10 +1650,12 @@ function installFetchCapture() {
 	try {
 		const p = window.parent || window;
 		if (!p || !p.fetch || isAusFetchPatch(p.fetch)) return;
-		const rawFetch = p.fetch.bind(p);
+		const prevFetchFn = p.fetch;
+		const rawFetch = prevFetchFn.bind(p);
 		rawFetchRef = rawFetch;
 		const patched = function() {
 			const args = arguments;
+			if (activeCapture !== patched) return rawFetch.apply(p, args);
 			const url = typeof args[0] === "string" ? args[0] : args[0]?.url || "";
 			if (typeof url === "string" && url.indexOf(TARGET_API) !== -1) {
 				let reqBody = null;
@@ -1711,7 +1713,9 @@ function installFetchCapture() {
 					streamed: null,
 					endedAt: 0,
 					settled: false,
-					settledBy: null
+					settledBy: null,
+					usage: null,
+					finishReason: null
 				});
 				const injected = injectIncludeUsage(reqBody, reqBody?.chat_completion_source ?? null);
 				const performFetch = (init) => rawFetch.apply(p, init);
@@ -1839,6 +1843,10 @@ function installFetchCapture() {
 								const usage = data.usage;
 								try {
 									if (finishReason) usage.__finish_reason = finishReason;
+								} catch {}
+								try {
+									turn.usage = usage;
+									turn.finishReason = finishReason ?? null;
 								} catch {}
 								try {
 									estimateThinkTokens(text, usage);
@@ -1992,7 +2000,13 @@ function installFetchCapture() {
 			return rawFetch.apply(p, args);
 		};
 		patched.__aus_patched = true;
-		if (rawFetch.__ausTapPatched === true) patched.__ausTapPatched = true;
+		try {
+			Object.defineProperty(patched, "__ausTapPatched", {
+				configurable: true,
+				get: () => prevFetchFn.__ausTapPatched === true
+			});
+		} catch {}
+		activeCapture = patched;
 		p.fetch = patched;
 		log.debug("fetch 捕获已安装 TARGET_API=" + TARGET_API);
 	} catch {}
@@ -2000,6 +2014,16 @@ function installFetchCapture() {
 var interceptionInstalled = false;
 var rawFetchRef = null;
 var messageReceivedHandler = null;
+/**
+* 当前「在岗」的那一代采集包装。
+*
+* 为什么需要它：宿主（TauriTavern）会反复把自己的 patchedFetch 装到最外层，我们的 4s 自愈
+* 守卫每次都会把「当时的顶层」当 delegate 再包一层，旧层并不会从链上消失。旧层若继续解析
+* 响应，同一次请求就会被每一层各解析一次、各生成一个 requestId 各写一条历史——
+* 指纹按 requestId 计算，彼此不同，去重完全拦不住（3.2.3 出现过一次请求记 12 条）。
+* 所以只认「最新一代」干活，旧代一律纯直通。
+*/
+var activeCapture = null;
 /**
 * 宿主可能在我们之后重装自己的 fetch 包装（TauriTavern 在后端就绪后会再 patchFetch 一次，
 * 把当前 fetch 当成 delegate 存起来再换成自己的）。一旦被换到内层，
@@ -2119,6 +2143,7 @@ function uninstallInterception() {
 			const p = window.parent || window;
 			if (p && rawFetchRef && p.fetch.__aus_patched) p.fetch = rawFetchRef;
 		} catch {}
+		activeCapture = null;
 		stopFetchGuard();
 		interceptionInstalled = false;
 	} catch {}
@@ -2263,25 +2288,30 @@ function onGenerationEnded(...args) {
 		{
 			const ended = endedTurn();
 			const fetchPack = lastFetchUsage;
-			const fetchUsage = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
-			const usable = !!fetchUsage && isValidUsage(fetchUsage) && Date.now() - lastFetchTime < 12e4;
+			const packUsage = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
+			const usageFromTurn = ended?.usage && isValidUsage(ended.usage) ? ended.usage : null;
+			const usableFromPack = !!packUsage && isValidUsage(packUsage) && Date.now() - lastFetchTime < 12e4;
 			const belongs = packMatches(ended, fetchPack);
-			if (usable && belongs) {
+			const fetchUsage = usageFromTurn || (usableFromPack && belongs ? packUsage : null);
+			if (fetchUsage) {
 				if (alreadyRecorded(ended)) return;
-				const fetchedModel = fetchPack && fetchPack.model || ended?.model || lastFetchModel || model;
+				const fetchedModel = ended?.model || fetchPack && fetchPack.model || lastFetchModel || model;
 				const fetchedMsgs = (ended?.messages?.length ? ended.messages : null) || fetchPack && fetchPack.msgs || lastMessages;
 				const fetchedStart = ended?.startTime || fetchPack && fetchPack.startTime || lastStart;
-				const fetchedReq = fetchPack && fetchPack.fullReq || ended?.fullRequest || null;
-				const fetchedRes = fetchPack && fetchPack.fullResponse || ended?.fullResponse || null;
-				const fTtft = fetchPack && fetchPack.ttft || ended?.ttft || 0;
-				const fThink = fetchPack && fetchPack.thinkTime || ended?.thinkTime || 0;
-				const fFr = fetchPack && fetchPack.finishReason || fetchUsage?.__finish_reason || null;
+				const fetchedReq = ended?.fullRequest || fetchPack && fetchPack.fullReq || null;
+				const fetchedRes = ended?.fullResponse || fetchPack && fetchPack.fullResponse || null;
+				const fTtft = ended?.ttft || fetchPack && fetchPack.ttft || 0;
+				const fThink = ended?.thinkTime || fetchPack && fetchPack.thinkTime || 0;
+				const fFr = ended?.finishReason || fetchPack && fetchPack.finishReason || fetchUsage?.__finish_reason || null;
 				const fStreamed = ended?.streamed ?? null ?? (fetchPack && fetchPack.streamed != null ? fetchPack.streamed : null);
-				log.debug("fetch 兜底命中", { model: fetchedModel });
-				lastFetchUsage = null;
+				log.debug("fetch 兜底命中", {
+					model: fetchedModel,
+					from: usageFromTurn ? "turn" : "pack"
+				});
+				if (!usageFromTurn) lastFetchUsage = null;
 				processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink, fFr, ended?.connection || fetchPack?.connection || recentConnection(), ended?.requestId || fetchPack?.requestId || recentRequestId(12e4), fStreamed);
 				return;
-			} else if (fetchUsage && isValidUsage(fetchUsage) && !belongs) log.debug("fetch 快照属于另一轮请求，留给那一轮结算", {
+			} else if (packUsage && isValidUsage(packUsage) && !belongs) log.debug("fetch 快照属于另一轮请求，留给那一轮结算", {
 				ended: ended?.requestId || null,
 				pack: fetchPack?.requestId || null
 			});

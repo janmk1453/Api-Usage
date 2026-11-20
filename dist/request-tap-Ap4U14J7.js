@@ -207,7 +207,18 @@ function upsertTapRecord(record) {
 	const idx = list.findIndex((r) => r.id === record.id);
 	if (idx >= 0) list[idx] = record;
 	else list.push(record);
-	if (list.length > 500) list.splice(0, list.length - 500);
+	if (list.length > 500) {
+		let over = list.length - 500;
+		for (let i = 0; i < list.length && over > 0;) {
+			if (list[i].state === "pending") {
+				i += 1;
+				continue;
+			}
+			list.splice(i, 1);
+			over -= 1;
+		}
+		if (over > 0) list.splice(0, over);
+	}
 	persist();
 	emit();
 }
@@ -268,6 +279,18 @@ var RESCAN_INTERVAL_MS = 4e3;
 var restoreHooked = /* @__PURE__ */ new WeakSet();
 var seq = 0;
 var installed$1 = false;
+/**
+* 每个 window 当前「在岗」的那一代探针包装。
+*
+* 判退役只能认这一代自己的身份，不能判 `w.fetch === tapFetch`：
+* 采集层（interception.ts）和宿主的自愈守卫都可能又把包装套在我们外面，
+* 那时我们仍留在链上、仍是唯一在岗的一代，按 `w.fetch` 判会把自己误判成退役，
+* 探针就静默失聪（表现为「采集日志有、探针零记录」）。
+*
+* 必须按 window 分别记：主窗与各个 iframe 各有自己的 fetch，若共用一个全局变量，
+* 给第二个窗口安装时就会把第一个窗口的那一代判成退役，被退役的窗口从此不再记录。
+*/
+var activeTapByWin = /* @__PURE__ */ new WeakMap();
 var rescanTimer = null;
 var observer = null;
 var restores = [];
@@ -478,6 +501,7 @@ function patchWindow(w) {
 	try {
 		if (!w || typeof w.fetch !== "function") return;
 		const prevState = w[WIN_STATE];
+		if (w.fetch.__ausTapActive === true) return;
 		if (prevState && prevState.fetch === w.fetch) return;
 		const actor = actorFromLocation({
 			frameSrc: (() => {
@@ -502,10 +526,10 @@ function patchWindow(w) {
 				}
 			})()
 		});
-		const prevFetch = w.fetch.bind(w);
+		const prevFetchFn = w.fetch;
+		const prevFetch = prevFetchFn.bind(w);
 		const tapFetch = function(input, init) {
-			const st = w[WIN_STATE];
-			if (!st || st.fetch !== tapFetch) return prevFetch(input, init);
+			if (activeTapByWin.get(w) !== tapFetch) return prevFetch(input, init);
 			let ctx = null;
 			try {
 				const url = String(typeof input === "string" ? input : input?.url || "");
@@ -538,7 +562,18 @@ function patchWindow(w) {
 			});
 		};
 		tapFetch[PATCH_FLAG] = true;
-		if (prevFetch.__aus_patched === true) tapFetch.__aus_patched = true;
+		tapFetch.__ausTapActive = true;
+		try {
+			Object.defineProperty(tapFetch, "__aus_patched", {
+				configurable: true,
+				get: () => prevFetchFn.__aus_patched === true
+			});
+		} catch {}
+		const prevActive = activeTapByWin.get(w);
+		if (prevActive && prevActive !== tapFetch) try {
+			prevActive.__ausTapActive = false;
+		} catch {}
+		activeTapByWin.set(w, tapFetch);
 		w.fetch = tapFetch;
 		const state = {
 			fetch: tapFetch,
@@ -588,6 +623,9 @@ function patchWindow(w) {
 				try {
 					const cur = w[WIN_STATE];
 					w[WIN_STATE] = null;
+					try {
+						if (activeTapByWin.get(w) === cur?.fetch) activeTapByWin.delete(w);
+					} catch {}
 					if (!cur) return;
 					if (w.fetch === cur.fetch) w.fetch = cur.prevFetch;
 					const P = w.XMLHttpRequest?.prototype;
@@ -691,6 +729,22 @@ function stripModelTag(model) {
 function normalizeModel(model) {
 	return stripModelTag(model).toLowerCase();
 }
+/**
+* 宽松模型名比较：反代 / 上游经常在模型名后面挂档位后缀
+* （`deepseek-v4.1-flash` → `deepseek-v4.1-flash-free`、`-thinking`、`-preview`）。
+* 严格相等会把「确实记过账」的请求判成没记录——3.2.3 里那条 missing-usage 假警报就是这么来的。
+* 只允许在 `-` 分隔符处截断，且后缀不以数字开头，避免 `deepseek-v4` 撞上 `deepseek-v4.1-flash`。
+*/
+function modelLooseMatch(a, b) {
+	const x = normalizeModel(a);
+	const y = normalizeModel(b);
+	if (!x || !y) return false;
+	if (x === y) return true;
+	const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+	if (!long.startsWith(short)) return false;
+	const rest = long.slice(short.length);
+	return rest.startsWith("-") && rest.length <= 24 && !/^-\d/.test(rest);
+}
 /** 入账时刻是否落在探针请求的合理时间范围（请求发出 ~ 结束 + 窗口）内 */
 function inWindow(s, p, windowMs) {
 	const lo = p.at - windowMs;
@@ -705,20 +759,31 @@ function inWindow(s, p, windowMs) {
 function findSettlement(probe, settlements, used, windowMs = MATCH_WINDOW_MS) {
 	const model = normalizeModel(probe.model);
 	let totalFallback = null;
+	const looseCandidates = [];
 	for (const s of settlements) {
 		if (used.has(s.id)) continue;
-		if (model && s.model && normalizeModel(s.model) !== model) continue;
 		if (!inWindow(s, probe, windowMs)) continue;
-		if (probe.prompt > 0 && probe.completion > 0 && s.prompt === probe.prompt && s.completion === probe.completion) return {
+		const sModel = normalizeModel(s.model);
+		const tokenEq = probe.prompt > 0 && probe.completion > 0 && s.prompt === probe.prompt && s.completion === probe.completion;
+		if (model && sModel && sModel !== model) {
+			if (tokenEq) looseCandidates.push(s);
+			continue;
+		}
+		if (tokenEq) return {
 			settlement: s,
 			by: "tokens"
 		};
 		if (!totalFallback && probe.total > 0 && s.total === probe.total) totalFallback = s;
 	}
-	return totalFallback ? {
+	if (totalFallback) return {
 		settlement: totalFallback,
 		by: "total"
-	} : null;
+	};
+	for (const s of looseCandidates) if (modelLooseMatch(probe.model, s.model)) return {
+		settlement: s,
+		by: "model"
+	};
+	return null;
 }
 /**
 * 探针没抓到 usage 时的对账：只按「模型 + 时间窗」配一条本地估算补记的入账记录。

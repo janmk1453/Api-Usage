@@ -13,7 +13,7 @@ import { defaultSettings } from '../types/settings';
 import { isUnsafeKey, isValidDayKey, localDay } from '../utils/date';
 import { isTruncatedFinish, isTruncatedOf } from '../utils/finish';
 import { log, toast } from '../utils/logger';
-import { turnFingerprint } from './fingerprint';
+import { turnFingerprint, usageFingerprint } from './fingerprint';
 import { mobileDeviceHint } from '../utils/device';
 import { computeTokenRate, estimateTokenRate, measureTokenRate, prefillReferenceMs, sanitizeHistoryTiming, sanitizeRate, type RateEstimateSource } from './token-rate';
 import { normalizeConnectionEndpoint, type HistoryConnection } from '../services/connection-identity';
@@ -63,6 +63,14 @@ function getCurrentChatName(): string | null {
 }
 
 const recentUsageFingerprints = new Map<string, number>();
+/**
+ * 第二代去重：按「模型 + 四元 token + 接入」算内容指纹。
+ *
+ * 轮次指纹认的是 requestId，前提是「一次请求只会被解析一次」。当宿主把 fetch 换成多层包装、
+ * 每一层都解析同一个响应时，每层都会生成自己的 requestId，轮次指纹各不相同（3.2.3 出现过
+ * 一次请求写 12 条历史）。此时唯一还能对上号的就是用量本身，所以这里再做一层内容去重兜底。
+ */
+const recentContentFingerprints = new Map<string, number>();
 /** 去重窗口：fetch 侧与 GENERATION_ENDED 可能相隔十几秒（尤其慢速流式），按 15s 计 */
 const TURN_DEDUPE_WINDOW_MS = 15_000;
 /** 指纹表保留时长：只需覆盖去重窗口，超出即回收 */
@@ -1277,13 +1285,29 @@ export const repository = {
       // 指纹不含 token 数：估算条目与随后到达的真实 usage 的 token 必然不同，
       // 含 token 会让两者都入库；这里用 requestId / 请求起始秒作为轮次标识。
       const fp = turnFingerprint({ requestId, model, startTime, connection, now });
+      // 内容指纹：多层 fetch 包装各生成一个 requestId 时轮次指纹拦不住，只能靠「同模型 + 同四元 token」。
+      // 再拼上请求起始秒：各层包装取的 startTime 只差几毫秒，同一秒内必然一致；
+      // 而两次真正的独立请求通常隔了不止一秒，这样不会把「同一秒内的两次真实请求」误并。
+      const contentFp = total > 0
+        ? usageFingerprint(model, total, hit, miss, comp, connection, null) + '|' + Math.round((startTime || now) / 1000)
+        : '';
       const lastFpTime = recentUsageFingerprints.get(fp);
-      if (lastFpTime && now - lastFpTime < TURN_DEDUPE_WINDOW_MS) {
+      const lastContentTime = contentFp ? recentContentFingerprints.get(contentFp) : 0;
+      const dupByTurn = !!lastFpTime && now - lastFpTime < TURN_DEDUPE_WINDOW_MS;
+      const dupByContent = !dupByTurn && !!lastContentTime && now - lastContentTime < TURN_DEDUPE_WINDOW_MS;
+      if (dupByTurn || dupByContent) {
         // 重复记录：主路径先写入时缺完整响应/finish_reason，fetch 后解析到则回填
         try {
-          const head: any = requestId
+          // 同轮（requestId 相同）直接按 requestId 找；内容重复（requestId 不同）只能按用量找，
+          // 绝不能退化成「回填历史第一条」，那会把别的轮次覆盖掉。
+          const head: any = dupByTurn && requestId
             ? state.history.find((entry: any) => entry.requestId === requestId) || state.history[0]
-            : state.history[0];
+            : state.history.find((entry: any) => (
+                now - (Number(entry.timestamp) || 0) < TURN_DEDUPE_WINDOW_MS
+                && Number(entry.total_tokens) === total
+                && Number(entry.prompt_tokens) === hit + miss
+                && Number(entry.completion_tokens) === comp
+              )) || null; // 内容重复却找不到原条目：什么都不回填，绝不退化成「回填历史第一条」
           if (head) {
             let changed = false;
             // 估算条目被真实 usage 追上：整条换成真实值，别让估算 token 留在历史里
@@ -1356,12 +1380,16 @@ export const repository = {
             }
           }
         } catch {}
-        log.debug('addEntry 去重跳过(同轮指纹)', { fp });
+        log.debug('addEntry 去重跳过', { fp, by: dupByTurn ? 'turn' : 'content' });
         return null as any;
       }
       recentUsageFingerprints.set(fp, now);
+      if (contentFp) recentContentFingerprints.set(contentFp, now);
       for (const [key, timestamp] of recentUsageFingerprints) {
         if (now - timestamp > TURN_FINGERPRINT_TTL_MS) recentUsageFingerprints.delete(key);
+      }
+      for (const [key, timestamp] of recentContentFingerprints) {
+        if (now - timestamp > TURN_FINGERPRINT_TTL_MS) recentContentFingerprints.delete(key);
       }
     } catch {}
     const lu: any = { timestamp: Date.now(), model, rawModel: rawModel !== model ? rawModel : null, prompt_tokens: hit + miss, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp, total_tokens: total };

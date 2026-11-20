@@ -42,6 +42,18 @@ const restoreHooked = new WeakSet<object>();
 
 let seq = 0;
 let installed = false;
+/**
+ * 每个 window 当前「在岗」的那一代探针包装。
+ *
+ * 判退役只能认这一代自己的身份，不能判 `w.fetch === tapFetch`：
+ * 采集层（interception.ts）和宿主的自愈守卫都可能又把包装套在我们外面，
+ * 那时我们仍留在链上、仍是唯一在岗的一代，按 `w.fetch` 判会把自己误判成退役，
+ * 探针就静默失聪（表现为「采集日志有、探针零记录」）。
+ *
+ * 必须按 window 分别记：主窗与各个 iframe 各有自己的 fetch，若共用一个全局变量，
+ * 给第二个窗口安装时就会把第一个窗口的那一代判成退役，被退役的窗口从此不再记录。
+ */
+const activeTapByWin = new WeakMap<any, any>();
 let rescanTimer: any = null;
 let observer: MutationObserver | null = null;
 const restores: (() => void)[] = [];
@@ -265,6 +277,8 @@ function patchWindow(w: any): void {
   try {
     if (!w || typeof w.fetch !== 'function') return;
     const prevState: WinState | undefined = w[WIN_STATE];
+    // 幂等：最外层已经是在岗的探针（可能是别的东西又把我们包了一层），不必再套一代
+    if ((w.fetch as any).__ausTapActive === true) return;
     // 在位判定：当前 fetch 必须仍然是我们装上去的那一只，否则重装
     if (prevState && prevState.fetch === w.fetch) return;
 
@@ -274,11 +288,13 @@ function patchWindow(w: any): void {
       isTop: (() => { try { return w === w.parent; } catch { return true; } })(),
     });
 
-    const prevFetch = w.fetch.bind(w);
+    // 记下被包住的原始函数：`bind` 出来的新函数不继承任何自定义属性，
+    // 之前用 bind 产物去读 `__aus_patched` 永远读不到，采集标记的透传就一直是失效的。
+    const prevFetchFn: any = w.fetch;
+    const prevFetch = prevFetchFn.bind(w);
     const tapFetch = function (input: any, init?: any) {
-      // 已被更新的一代包装取代：只做直通，绝不再记一次（否则会重复入账、也会让包装层层叠加）
-      const st: WinState | undefined = w[WIN_STATE];
-      if (!st || st.fetch !== tapFetch) return prevFetch(input, init);
+      // 已被本窗口更新的一代包装取代：只做直通，绝不再记一次（否则会重复入账、也会让包装层层叠加）
+      if (activeTapByWin.get(w) !== tapFetch) return prevFetch(input, init);
       // 探针是旁路，任何自身的异常都不允许打断宿主的请求
       let ctx: Ctx | null = null;
       try {
@@ -313,7 +329,21 @@ function patchWindow(w: any): void {
     // 标记角色：自己是探针，同时把「里面已经包过采集」的事实一并透传，
     // 免得采集守卫（isAusFetchPatch）把探针包装当成没装过、再包一层，两边无限对套。
     (tapFetch as any)[PATCH_FLAG] = true;
-    if ((prevFetch as any).__aus_patched === true) (tapFetch as any).__aus_patched = true;
+    (tapFetch as any).__ausTapActive = true;
+    // 采集标记用 getter 动态读取：宿主随时会重绑 fetch，安装时快照的布尔值会过期，
+    // 一旦过期采集守卫就以为采集还在岗，再也不会自愈（采集彻底失聪）。
+    try {
+      Object.defineProperty(tapFetch, '__aus_patched', {
+        configurable: true,
+        get: () => (prevFetchFn as any).__aus_patched === true,
+      });
+    } catch {}
+    const prevActive: any = activeTapByWin.get(w);
+    if (prevActive && prevActive !== tapFetch) {
+      // 旧代退役：清掉在岗标记，免得它在下一次 scanFrames 里被误认成「已经装好」
+      try { prevActive.__ausTapActive = false; } catch {}
+    }
+    activeTapByWin.set(w, tapFetch);
     w.fetch = tapFetch;
     // 状态跨代继承：XHR 只在第一次安装时补，原始函数一路带下去，卸载时才能还原干净
     const state: WinState = {
@@ -364,6 +394,8 @@ function patchWindow(w: any): void {
         try {
           const cur: WinState | undefined = w[WIN_STATE];
           w[WIN_STATE] = null;
+          // 卸载后残留的探针层一律作废：判定取不到记录即直通
+          try { if (activeTapByWin.get(w) === cur?.fetch) activeTapByWin.delete(w); } catch {}
           if (!cur) return;
           if (w.fetch === cur.fetch) w.fetch = cur.prevFetch;
           const P = w.XMLHttpRequest?.prototype;

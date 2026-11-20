@@ -75,7 +75,17 @@ export function upsertTapRecord(record: TapRecord): void {
   const idx = list.findIndex((r) => r.id === record.id);
   if (idx >= 0) list[idx] = record;
   else list.push(record);
-  if (list.length > TAP_MAX_RECORDS) list.splice(0, list.length - TAP_MAX_RECORDS);
+  if (list.length > TAP_MAX_RECORDS) {
+    let over = list.length - TAP_MAX_RECORDS;
+    // 先淘汰已结算的最旧记录：pending（还在等回填）的记录一丢就永远配不上账，
+    // 验证页会出现「明明有请求却没记录」的假象。只有在全部未结算的极端情况下才退化为丢弃最旧。
+    for (let i = 0; i < list.length && over > 0;) {
+      if (list[i].state === 'pending') { i += 1; continue; }
+      list.splice(i, 1);
+      over -= 1;
+    }
+    if (over > 0) list.splice(0, over);
+  }
   persist();
   emit();
 }

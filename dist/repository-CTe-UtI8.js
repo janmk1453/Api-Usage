@@ -1214,6 +1214,18 @@ function turnFingerprint(input) {
 		Math.round(base / 1e3)
 	].join("|");
 }
+function usageFingerprint(model, total, hit, miss, completion, connection, requestId) {
+	return [
+		requestId || "",
+		model,
+		total,
+		hit,
+		miss,
+		completion,
+		connection?.endpointId || "",
+		connection?.credentialId || ""
+	].join("|");
+}
 //#endregion
 //#region src/data/token-rate.ts
 /**
@@ -1454,6 +1466,14 @@ function getCurrentChatName() {
 	return id ? String(id) : null;
 }
 var recentUsageFingerprints = /* @__PURE__ */ new Map();
+/**
+* 第二代去重：按「模型 + 四元 token + 接入」算内容指纹。
+*
+* 轮次指纹认的是 requestId，前提是「一次请求只会被解析一次」。当宿主把 fetch 换成多层包装、
+* 每一层都解析同一个响应时，每层都会生成自己的 requestId，轮次指纹各不相同（3.2.3 出现过
+* 一次请求写 12 条历史）。此时唯一还能对上号的就是用量本身，所以这里再做一层内容去重兜底。
+*/
+var recentContentFingerprints = /* @__PURE__ */ new Map();
 /** 去重窗口：fetch 侧与 GENERATION_ENDED 可能相隔十几秒（尤其慢速流式），按 15s 计 */
 var TURN_DEDUPE_WINDOW_MS = 15e3;
 /** 指纹表保留时长：只需覆盖去重窗口，超出即回收 */
@@ -2548,7 +2568,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && !!wallet.catalogProvider) try {
-						import("./pricing-sync-p7Jj_8p1.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-xO0ZpfwP.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
@@ -2563,10 +2583,14 @@ var repository = {
 				connection,
 				now
 			});
+			const contentFp = total > 0 ? usageFingerprint(model, total, hit, miss, comp, connection, null) + "|" + Math.round((startTime || now) / 1e3) : "";
 			const lastFpTime = recentUsageFingerprints.get(fp);
-			if (lastFpTime && now - lastFpTime < TURN_DEDUPE_WINDOW_MS) {
+			const lastContentTime = contentFp ? recentContentFingerprints.get(contentFp) : 0;
+			const dupByTurn = !!lastFpTime && now - lastFpTime < TURN_DEDUPE_WINDOW_MS;
+			const dupByContent = !dupByTurn && !!lastContentTime && now - lastContentTime < TURN_DEDUPE_WINDOW_MS;
+			if (dupByTurn || dupByContent) {
 				try {
-					const head = requestId ? state.history.find((entry) => entry.requestId === requestId) || state.history[0] : state.history[0];
+					const head = dupByTurn && requestId ? state.history.find((entry) => entry.requestId === requestId) || state.history[0] : state.history.find((entry) => now - (Number(entry.timestamp) || 0) < TURN_DEDUPE_WINDOW_MS && Number(entry.total_tokens) === total && Number(entry.prompt_tokens) === hit + miss && Number(entry.completion_tokens) === comp) || null;
 					if (head) {
 						let changed = false;
 						const headEstimated = String(head.usageSource || "") === "estimated";
@@ -2665,11 +2689,16 @@ var repository = {
 						}
 					}
 				} catch {}
-				log.debug("addEntry 去重跳过(同轮指纹)", { fp });
+				log.debug("addEntry 去重跳过", {
+					fp,
+					by: dupByTurn ? "turn" : "content"
+				});
 				return null;
 			}
 			recentUsageFingerprints.set(fp, now);
+			if (contentFp) recentContentFingerprints.set(contentFp, now);
 			for (const [key, timestamp] of recentUsageFingerprints) if (now - timestamp > TURN_FINGERPRINT_TTL_MS) recentUsageFingerprints.delete(key);
+			for (const [key, timestamp] of recentContentFingerprints) if (now - timestamp > TURN_FINGERPRINT_TTL_MS) recentContentFingerprints.delete(key);
 		} catch {}
 		const lu = {
 			timestamp: Date.now(),

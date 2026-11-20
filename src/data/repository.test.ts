@@ -291,3 +291,40 @@ describe('同一轮二次写入补回耗时', () => {
     expect(['prefill', 'duration']).toContain(head.rateEstimated);
   });
 });
+
+describe('同一份用量被多层 fetch 包装各写一次（内容去重兜底）', () => {
+  it('requestId 不同、用量全等的第二次写入被吞掉，历史只留一条', () => {
+    const now = Date.now();
+    // 固定在同一秒内：真实场景里各层包装的 startTime 只差几毫秒
+    const base = Math.floor(now / 1000) * 1000 + 200;
+    const usage = { prompt_tokens: 34249, completion_tokens: 7731, total_tokens: 41980 };
+    const model = 'deepseek-v4.1-flash-free';
+    const first = repository.addEntry(usage, model, [], base - 91300, undefined, undefined, 0, 0, 'stop', null, 'req:1795179501447:274', false);
+    expect(first).not.toBeNull();
+    const second = repository.addEntry(usage, model, [], base - 91295, undefined, undefined, 0, 0, 'stop', null, 'req:1795179501448:275', false);
+    expect(second).toBeNull();
+    expect(state.history.filter((h: any) => Number(h.total_tokens) === 41980)).toHaveLength(1);
+    // 同一份用量再再来一次也还是那一条
+    repository.addEntry(usage, model, [], base - 91290, undefined, undefined, 0, 0, 'stop', null, 'req:1795179501449:276', false);
+    expect(state.history.filter((h: any) => Number(h.total_tokens) === 41980)).toHaveLength(1);
+  });
+
+  it('隔着几秒的两次真实请求即使用量全等也照常入库（不并轮）', () => {
+    const now = Date.now();
+    const base = Math.floor(now / 1000) * 1000 + 200;
+    const usage = { prompt_tokens: 900, completion_tokens: 100, total_tokens: 1000 };
+    const model = 'gemini-4-argon';
+    repository.addEntry(usage, model, [], base - 20000, undefined, undefined, 0, 0, 'stop', null, 'req:s1', false);
+    repository.addEntry(usage, model, [], base - 10000, undefined, undefined, 0, 0, 'stop', null, 'req:s2', false);
+    expect(state.history.filter((h: any) => Number(h.total_tokens) === 1000)).toHaveLength(2);
+  });
+
+  it('用量不同就是另一轮，照常入库', () => {
+    const now = Date.now();
+    const model = 'deepseek-v4.1-flash-free';
+    repository.addEntry({ prompt_tokens: 500, completion_tokens: 100, total_tokens: 600 }, model, [], now - 2000, undefined, undefined, 0, 0, 'stop', null, 'req:q1', false);
+    repository.addEntry({ prompt_tokens: 500, completion_tokens: 101, total_tokens: 601 }, model, [], now - 1000, undefined, undefined, 0, 0, 'stop', null, 'req:q2', false);
+    expect(state.history.filter((h: any) => Number(h.total_tokens) === 600)).toHaveLength(1);
+    expect(state.history.filter((h: any) => Number(h.total_tokens) === 601)).toHaveLength(1);
+  });
+});

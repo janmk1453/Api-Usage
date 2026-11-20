@@ -17,7 +17,7 @@ import {
   structuralLabel,
   PROMPT_HINT_LIMIT,
 } from './classify';
-import { findEstimatedSettlement, findSettlement, MATCH_WINDOW_MS, normalizeModel, probeKeyOf, stripModelTag, type Settlement } from './match';
+import { findEstimatedSettlement, findSettlement, MATCH_WINDOW_MS, modelLooseMatch, normalizeModel, probeKeyOf, stripModelTag, type Settlement } from './match';
 
 describe('端点识别', () => {
   it('只认酒馆后端转发的 generate 端点', () => {
@@ -221,5 +221,28 @@ describe('对账匹配', () => {
     const probe = probeKeyOf({ ...base, model: '[A]gemini-3.8-flash', usage: { prompt: 100, completion: 20, total: 120 } });
     const hit = findSettlement(probe, [settlement({ model: 'gemini-3.8-flash' })], new Set());
     expect(hit?.by).toBe('tokens');
+  });
+
+  it('反代给模型名挂后缀（-free / -thinking）时，用量全等仍能认账', () => {
+    // 3.2.3 的 missing-usage 假警报：探针存请求名 deepseek-v4.1-flash，
+    // 入账存响应名 deepseek-v4.1-flash-free，严格比较永远对不上。
+    expect(modelLooseMatch('deepseek-v4.1-flash', 'deepseek-v4.1-flash-free')).toBe(true);
+    expect(modelLooseMatch('deepseek-v4.1-flash-free', 'DeepSeek-V4.1-Flash')).toBe(true);
+    expect(modelLooseMatch('gemini-4-argon', 'gemini-4-argon-thinking')).toBe(true);
+    // 跨版本不许撞：deepseek-v4 与 deepseek-v4.1-flash 是不同模型
+    expect(modelLooseMatch('deepseek-v4', 'deepseek-v4.1-flash')).toBe(false);
+    expect(modelLooseMatch('deepseek-v4.1', 'deepseek-v4.1-flash')).toBe(true);
+    expect(modelLooseMatch('gpt-x', 'deepseek-flash')).toBe(false);
+    expect(modelLooseMatch('', 'deepseek-flash')).toBe(false);
+
+    const probe = probeKeyOf({ ...base, model: 'deepseek-v4.1-flash', usage: { prompt: 100, completion: 20, total: 120 } });
+    const hit = findSettlement(probe, [settlement({ model: 'deepseek-v4.1-flash-free' })], new Set());
+    expect(hit?.by).toBe('model');
+    expect(hit?.settlement.model).toBe('deepseek-v4.1-flash-free');
+  });
+
+  it('用量全等但模型完全不同时不认账（不拿宽松匹配掩盖真漏记）', () => {
+    const probe = probeKeyOf({ ...base, model: 'deepseek-v4.1-flash', usage: { prompt: 100, completion: 20, total: 120 } });
+    expect(findSettlement(probe, [settlement({ model: 'gpt-4o' })], new Set())).toBeNull();
   });
 });

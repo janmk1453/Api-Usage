@@ -61,6 +61,15 @@ type TurnContext = {
   settled: boolean;
   /** 落库来源：真实 usage 还是本地估算，决定结束事件还要不要覆盖 */
   settledBy: 'usage' | 'estimated' | null;
+  /**
+   * 本轮自己在响应当里解析到的用量与结束原因。
+   *
+   * 之前这两个值只存在全局单槽 lastFetchUsage 里，而它是「最后发出那一轮」的快照：
+   * 并发时刚结束的那一轮要取自己的用量，只能靠 requestId 猜。存进账本后，
+   * 每一轮都握着属于自己的现场，GENERATION_ENDED 不再需要跨轮捞数据。
+   */
+  usage: any | null;
+  finishReason: string | null;
 };
 
 /**
@@ -208,7 +217,7 @@ export function registerTurnForTest(patch: Partial<TurnContext>): TurnContext {
     startTime: Date.now(), requestId: null, model: null, modelFallback: false, status: 0,
     streamError: null, outputChars: 0, reasoningChars: 0, fullResponse: null, fullRequest: null,
     messages: [], promptMessages: [], connection: null, ttft: 0, thinkTime: 0, streamed: null,
-    endedAt: 0, settled: false, settledBy: null,
+    endedAt: 0, settled: false, settledBy: null, usage: null, finishReason: null,
   };
   return registerTurn({ ...base, ...patch });
 }
@@ -381,11 +390,18 @@ function installFetchCapture() {
     if (!p || !p.fetch || isAusFetchPatch(p.fetch)) {
       return;
     }
-    const rawFetch = p.fetch.bind(p);
+    // 记下被包住的原始函数：bind 产物不继承自定义属性，读标记必须读它
+    const prevFetchFn: any = p.fetch;
+    const rawFetch = prevFetchFn.bind(p);
     // 卸载时还原到「本次包装所用的下一层」，宿主重装过包装也不会还原成过期的一层
     rawFetchRef = rawFetch;
     const patched: any = function(this: any) {
       const args: any = arguments;
+      // 旧代退役：只有当前在岗的那一代才解析响应。
+      // 宿主重绑后我们会在外层再包一层，旧层仍留在链里；若旧层也解析，一次请求会被记 N 遍。
+      if (activeCapture !== patched) {
+        return rawFetch.apply(p, args);
+      }
       const url: string = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
       if (typeof url === 'string' && url.indexOf(TARGET_API) !== -1) {
         let reqBody: any = null;
@@ -435,6 +451,8 @@ function installFetchCapture() {
           endedAt: 0,
           settled: false,
           settledBy: null,
+          usage: null,
+          finishReason: null,
         });
         // 通过 custom_include_body 让上游返回流式 usage；上游若不认这个参数则原样重试
         const injected = injectIncludeUsage(reqBody, (reqBody as any)?.chat_completion_source ?? null);
@@ -541,6 +559,8 @@ function installFetchCapture() {
               const usage = (data as any).usage;
               // 将 finish_reason 挂到 usage 以便 repository 统一处理
               try { if (finishReason) (usage as any).__finish_reason = finishReason; } catch {}
+              // 本轮现场自己留一份用量：并发时 GENERATION_ENDED 只认账本，不再跨轮捞单槽
+              try { turn.usage = usage; turn.finishReason = finishReason ?? null; } catch {}
               try { estimateThinkTokens(text, usage); } catch {}
               // 完整响应文本（非流式为完整 JSON，流式为 SSE 原文）供历史详情展示
               // fullResponse 只用于历史详情展示，必须是上游原文（未经帧归一化投影）
@@ -666,7 +686,14 @@ function installFetchCapture() {
     patched.__aus_patched = true;
     // 里面如果已经包了探针，把探针的身份标记透传上来：
     // 两边各有 4s 自愈守卫，互相把对方当成「没装过」就会一层套一层地无限对套。
-    if ((rawFetch as any).__ausTapPatched === true) patched.__ausTapPatched = true;
+    // 用 getter 动态读内层：安装时快照的布尔值会随宿主重绑过期，过期后就是对套。
+    try {
+      Object.defineProperty(patched, '__ausTapPatched', {
+        configurable: true,
+        get: () => (prevFetchFn as any).__ausTapPatched === true,
+      });
+    } catch {}
+    activeCapture = patched;
     p.fetch = patched;
     log.debug('fetch 捕获已安装 TARGET_API=' + TARGET_API);
   } catch {}
@@ -675,6 +702,17 @@ function installFetchCapture() {
 let interceptionInstalled = false;
 let rawFetchRef: any = null;
 let messageReceivedHandler: any = null;
+
+/**
+ * 当前「在岗」的那一代采集包装。
+ *
+ * 为什么需要它：宿主（TauriTavern）会反复把自己的 patchedFetch 装到最外层，我们的 4s 自愈
+ * 守卫每次都会把「当时的顶层」当 delegate 再包一层，旧层并不会从链上消失。旧层若继续解析
+ * 响应，同一次请求就会被每一层各解析一次、各生成一个 requestId 各写一条历史——
+ * 指纹按 requestId 计算，彼此不同，去重完全拦不住（3.2.3 出现过一次请求记 12 条）。
+ * 所以只认「最新一代」干活，旧代一律纯直通。
+ */
+let activeCapture: any = null;
 
 /**
  * 宿主可能在我们之后重装自己的 fetch 包装（TauriTavern 在后端就绪后会再 patchFetch 一次，
@@ -784,6 +822,8 @@ export function uninstallInterception() {
         p.fetch = rawFetchRef;
       }
     } catch {}
+    // 卸载后不许任何残留层再记账
+    activeCapture = null;
     stopFetchGuard();
     interceptionInstalled = false;
   } catch {}
@@ -930,26 +970,30 @@ function onGenerationEnded(...args: any[]) {
     {
       const ended = endedTurn();
       const fetchPack: any = lastFetchUsage as any;
-      const fetchUsage = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
-      const usable = !!fetchUsage && isValidUsage(fetchUsage) && Date.now() - lastFetchTime < 120000;
+      const packUsage = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
+      // 首选「刚结束那一轮」自己在响应当里解析到的用量：它属于这一轮，与并发无关。
+      // lastFetchUsage 是单槽（最后发出的那一轮），只有在 requestId 对得上时才允许兜底。
+      const usageFromTurn = ended?.usage && isValidUsage(ended.usage) ? ended.usage : null;
+      const usableFromPack = !!packUsage && isValidUsage(packUsage) && Date.now() - lastFetchTime < 120000;
       // 并发保护：快照属于另一轮时不能拿来给这一轮记账，留着给那一轮自己的结束事件
       const belongs = packMatches(ended, fetchPack);
-      if (usable && belongs) {
+      const fetchUsage = usageFromTurn || (usableFromPack && belongs ? packUsage : null);
+      if (fetchUsage) {
         if (alreadyRecorded(ended)) return;
-        const fetchedModel = (fetchPack && fetchPack.model) || ended?.model || lastFetchModel || model;
+        const fetchedModel = ended?.model || (fetchPack && fetchPack.model) || lastFetchModel || model;
         const fetchedMsgs = (ended?.messages?.length ? ended.messages : null) || (fetchPack && fetchPack.msgs) || lastMessages;
         const fetchedStart = ended?.startTime || (fetchPack && fetchPack.startTime) || lastStart;
-        const fetchedReq = (fetchPack && fetchPack.fullReq) || ended?.fullRequest || null;
-        const fetchedRes = (fetchPack && fetchPack.fullResponse) || ended?.fullResponse || null;
-        const fTtft = (fetchPack && fetchPack.ttft) || ended?.ttft || 0;
-        const fThink = (fetchPack && fetchPack.thinkTime) || ended?.thinkTime || 0;
-        const fFr = (fetchPack && fetchPack.finishReason) || (fetchUsage as any)?.__finish_reason || null;
+        const fetchedReq = ended?.fullRequest || (fetchPack && fetchPack.fullReq) || null;
+        const fetchedRes = ended?.fullResponse || (fetchPack && fetchPack.fullResponse) || null;
+        const fTtft = ended?.ttft || (fetchPack && fetchPack.ttft) || 0;
+        const fThink = ended?.thinkTime || (fetchPack && fetchPack.thinkTime) || 0;
+        const fFr = ended?.finishReason || (fetchPack && fetchPack.finishReason) || (fetchUsage as any)?.__finish_reason || null;
         const fStreamed: boolean | null = (ended?.streamed ?? null) ?? (fetchPack && fetchPack.streamed != null ? fetchPack.streamed : null);
-        log.debug('fetch 兜底命中', { model: fetchedModel });
-        lastFetchUsage = null;
+        log.debug('fetch 兜底命中', { model: fetchedModel, from: usageFromTurn ? 'turn' : 'pack' });
+        if (!usageFromTurn) lastFetchUsage = null;
         processUsage(fetchUsage, fetchedModel, fetchedMsgs, fetchedStart, fetchedReq, fetchedRes, fTtft, fThink, fFr, ended?.connection || fetchPack?.connection || recentConnection(), ended?.requestId || fetchPack?.requestId || recentRequestId(120000), fStreamed);
         return;
-      } else if (fetchUsage && isValidUsage(fetchUsage) && !belongs) {
+      } else if (packUsage && isValidUsage(packUsage) && !belongs) {
         log.debug('fetch 快照属于另一轮请求，留给那一轮结算', { ended: ended?.requestId || null, pack: fetchPack?.requestId || null });
       } else if (lastFetchUsage) {
         const fu = fetchPack && fetchPack.usage ? fetchPack.usage : fetchPack;
