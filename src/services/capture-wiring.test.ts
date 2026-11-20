@@ -15,11 +15,38 @@ describe('采集包装：单实例 + 旧代退役', () => {
     expect(interceptionSrc).toContain('let activeCapture: any = null;');
     expect(interceptionSrc).toContain('if (activeCapture !== patched) {');
     expect(interceptionSrc).toContain('return rawFetch.apply(p, args);');
-    expect(interceptionSrc).toContain('activeCapture = patched;');
+    expect(interceptionSrc).toContain('activateCapture(patched);');
+    // 上岗动作集中在 activateCapture：旧代标记退役 + 新代标记在岗 + 退避复位
+    expect(interceptionSrc).toContain('activeCapture = fn;');
   });
 
   it('卸载后不留能继续记账的层', () => {
     expect(interceptionSrc).toContain('activeCapture = null;');
+  });
+
+  it('层数封顶 + 重装退避 + 安装失败不再静默', () => {
+    // 硬上限：宿主反复重绑时停止再包一层，旧代直通（层数只增会导致每次请求都被解析 N 遍）
+    expect(interceptionSrc).toContain('const MAX_CAPTURE_DEPTH = 6;');
+    expect(interceptionSrc).toContain('if (depth > MAX_CAPTURE_DEPTH) {');
+    expect(interceptionSrc).toContain("patched.__ausCaptureDepth = depth;");
+    // 退避：被反复替换时把 4s 拉长到 60s，别和宿主互相刷层
+    expect(interceptionSrc).toContain('const MAX_GUARD_BACKOFF_MS = 60_000;');
+    expect(interceptionSrc).toContain('function growGuardBackoff(): void {');
+    expect(interceptionSrc).toContain('if (Date.now() < nextInstallAllowedAt) return;');
+    // 失败必须留痕：计数 + 采集日志 + 健康信号，绝不再被一个空 catch 吞掉
+    expect(interceptionSrc).toContain('function noteInstallProblem(');
+    expect(interceptionSrc).toContain("noteCaptureStage('install-failed'");
+    expect(interceptionSrc).not.toContain('function ensureFetchCapture() {\n  try {\n    const p: any = (window as any).parent || window;\n    if (!p || !p.fetch || isAusFetchPatch(p.fetch)) return;\n    installFetchCapture();\n  } catch {}');
+  });
+
+  it('无主轮次尽量补记，但绝不借用别轮的现场', () => {
+    // 拒凑 → 尽量记上：不再整轮丢弃
+    expect(interceptionSrc).not.toContain('跳过估算补记');
+    expect(interceptionSrc).toContain('按无主轮次估算补记');
+    // 但开始时间与 requestId 必须留空，不能拿 lastStart / recentRequestId 顶上（串账根源）
+    expect(interceptionSrc).toContain('const startedAt = turn?.startTime || null;');
+    expect(interceptionSrc).toContain('const requestId = turn?.requestId || null;');
+    expect(interceptionSrc).toContain("meta.interruptReason = String(meta.interruptReason || '') + '|turn-unmatched';");
   });
 
   it('探针身份用 getter 动态读内层，不再用 bind 产物上的快照标记', () => {
@@ -31,6 +58,29 @@ describe('采集包装：单实例 + 旧代退役', () => {
 });
 
 describe('探针包装：按代际令牌判退役', () => {
+  it('XHR 探针：安全读文本 + 首字节 + 中止也收尾', () => {
+    // responseType 非 text 时读 responseText 会抛 InvalidStateError，老代码等于永远拿不到 usage
+    expect(captureSrc).toContain('function readXhrText(');
+    expect(captureSrc).not.toContain("readUsageFromText(String(this.responseText || ''))");
+    // 首字节与「只收尾一次」：progress 记首字节，loadend / error / timeout / send 抛错 四条路径共用 finish
+    expect(captureSrc).toContain("xhr.addEventListener('progress'");
+    expect(captureSrc).toContain("xhr.addEventListener('loadend', () => finish());");
+    expect(captureSrc).toContain("xhr.addEventListener('error', () => finish());");
+    expect(captureSrc).toContain("xhr.addEventListener('timeout', () => finish());");
+    expect(captureSrc).toContain('if (done) return;');
+    // send 自己抛错也必须收尾，否则探针只剩 pending（fetch 分支的 rejection 已有对应处理）
+    expect(captureSrc).toContain("finish('XHR send failed: '");
+  });
+
+  it('补扫节流 + 卸载后可重装', () => {
+    // 流式输出会持续触发 MutationObserver，无节流等于每帧全量补扫所有 iframe
+    expect(captureSrc).toContain('function scheduleScan(): void {');
+    expect(captureSrc).toContain('observer = new MutationObserver(() => { scheduleScan(); });');
+    // 还原闭包挂在 window 上，卸载后必须允许重新挂，否则重装时 fetch / XHR 再也还不回去
+    expect(captureSrc).toContain('let restoreHooked = new WeakSet<object>();');
+    expect(captureSrc).toContain('restoreHooked = new WeakSet<object>();');
+  });
+
   it('退役判定认自己这一代，不认 w.fetch（否则被包一层就失聪）', () => {
     expect(captureSrc).toContain('const activeTapByWin = new WeakMap<any, any>();');
     expect(captureSrc).toContain('if (activeTapByWin.get(w) !== tapFetch) return prevFetch(input, init);');

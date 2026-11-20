@@ -13,7 +13,7 @@ import { defaultSettings } from '../types/settings';
 import { isUnsafeKey, isValidDayKey, localDay } from '../utils/date';
 import { isTruncatedFinish, isTruncatedOf } from '../utils/finish';
 import { log, toast } from '../utils/logger';
-import { turnFingerprint, usageFingerprint } from './fingerprint';
+import { turnFingerprint, usageFingerprint, messageDigest } from './fingerprint';
 import { mobileDeviceHint } from '../utils/device';
 import { computeTokenRate, estimateTokenRate, measureTokenRate, prefillReferenceMs, sanitizeHistoryTiming, sanitizeRate, type RateEstimateSource } from './token-rate';
 import { normalizeConnectionEndpoint, type HistoryConnection } from '../services/connection-identity';
@@ -73,6 +73,13 @@ const recentUsageFingerprints = new Map<string, number>();
 const recentContentFingerprints = new Map<string, number>();
 /** 去重窗口：fetch 侧与 GENERATION_ENDED 可能相隔十几秒（尤其慢速流式），按 15s 计 */
 const TURN_DEDUPE_WINDOW_MS = 15_000;
+/**
+ * 内容去重窗口：只覆盖「同一次响应被多层包装各解析一遍」这种毫秒级重复。
+ *
+ * 不能复用 15s：内容指纹抹掉了 requestId 与起始时间，窗口越长，越容易把两次真实请求并成一条。
+ * 多层包装的重复总是在同一次响应解析后紧挨着发生（实测相邻两条相隔 15ms），给 3s 足够宽。
+ */
+const CONTENT_DEDUPE_WINDOW_MS = 3_000;
 /** 指纹表保留时长：只需覆盖去重窗口，超出即回收 */
 const TURN_FINGERPRINT_TTL_MS = 60_000;
 let storageFailureNotified = false;
@@ -269,7 +276,7 @@ function replaceEstimatedEntry(
  * 后到的写者知道真实起点，就把它补上并按同一口径重算速率 —— 否则这条记录会永久显示
  * 耗时 0 秒、速率 0，还会在历史页被当成「没记录到耗时」提示出来。
  */
-export function backfillEntryDuration(head: any, startTime: number, now = Date.now()): boolean {
+export function backfillEntryDuration(head: any, startTime: number | null, now = Date.now()): boolean {
   if (!head || !startTime) return false;
   if (Number(head.duration) > 0) return false;
   const measured = now - startTime;
@@ -1202,7 +1209,8 @@ export const repository = {
     usage: any,
     model: string,
     messages: any[],
-    startTime: number,
+    /** 本轮起点；未知（无主轮次）时传 null，耗时记 0 而不是编一个值 */
+    startTime: number | null,
     fullRequest?: any,
     fullResponse?: any,
     ttft = 0,
@@ -1285,16 +1293,20 @@ export const repository = {
       // 指纹不含 token 数：估算条目与随后到达的真实 usage 的 token 必然不同，
       // 含 token 会让两者都入库；这里用 requestId / 请求起始秒作为轮次标识。
       const fp = turnFingerprint({ requestId, model, startTime, connection, now });
-      // 内容指纹：多层 fetch 包装各生成一个 requestId 时轮次指纹拦不住，只能靠「同模型 + 同四元 token」。
-      // 再拼上请求起始秒：各层包装取的 startTime 只差几毫秒，同一秒内必然一致；
-      // 而两次真正的独立请求通常隔了不止一秒，这样不会把「同一秒内的两次真实请求」误并。
-      const contentFp = total > 0
-        ? usageFingerprint(model, total, hit, miss, comp, connection, null) + '|' + Math.round((startTime || now) / 1000)
+      // 内容指纹：多层 fetch 包装各生成一个 requestId 时轮次指纹拦不住，只能靠「同模型 + 同四元 token + 同请求体」。
+      // 不再拼「请求起始秒」——那是拿时间边界当身份：同一份响应被不同层解析时 startTime 可能跨秒
+      // （差几毫秒就跨），漏并；而两次真实请求若恰巧落在同一秒也会被误并。改用 messages 摘要，
+      // 它才是「是不是同一份请求」的稳定现场（见 src/data/fingerprint.ts#messageDigest）。
+      // 取不到内容摘要（messages 为空或异常）时不做这层去重：此时指纹只剩「同模型 + 同 token」，
+      // 在 3s 内足以把两次真实请求并成一条，宁可多记一条也不能少记。
+      const digest = messageDigest(messages);
+      const contentFp = total > 0 && digest
+        ? usageFingerprint(model, total, hit, miss, comp, connection, null) + '|' + digest
         : '';
       const lastFpTime = recentUsageFingerprints.get(fp);
       const lastContentTime = contentFp ? recentContentFingerprints.get(contentFp) : 0;
       const dupByTurn = !!lastFpTime && now - lastFpTime < TURN_DEDUPE_WINDOW_MS;
-      const dupByContent = !dupByTurn && !!lastContentTime && now - lastContentTime < TURN_DEDUPE_WINDOW_MS;
+      const dupByContent = !dupByTurn && !!lastContentTime && now - lastContentTime < CONTENT_DEDUPE_WINDOW_MS;
       if (dupByTurn || dupByContent) {
         // 重复记录：主路径先写入时缺完整响应/finish_reason，fetch 后解析到则回填
         try {
@@ -1303,7 +1315,7 @@ export const repository = {
           const head: any = dupByTurn && requestId
             ? state.history.find((entry: any) => entry.requestId === requestId) || state.history[0]
             : state.history.find((entry: any) => (
-                now - (Number(entry.timestamp) || 0) < TURN_DEDUPE_WINDOW_MS
+                now - (Number(entry.timestamp) || 0) < CONTENT_DEDUPE_WINDOW_MS
                 && Number(entry.total_tokens) === total
                 && Number(entry.prompt_tokens) === hit + miss
                 && Number(entry.completion_tokens) === comp

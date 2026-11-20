@@ -1214,6 +1214,49 @@ function turnFingerprint(input) {
 		Math.round(base / 1e3)
 	].join("|");
 }
+/**
+* 请求内容的摘要指纹（FNV-1a 32 位，只为「是不是同一份请求体」服务，不做安全用途）。
+*
+* 用途：多层 fetch 包装各自解析同一个响应时，requestId 各不相同、起始时间也差几毫秒，
+* 唯一稳定可比的现场就是「这一轮发出的 messages」。两次真实请求即使 token 数完全一致，
+* 请求体也几乎不可能相同，所以拿它做内容去重的判据比「请求起始秒」稳得多。
+* 任何异常都退化成空串（调用方据此跳过这层去重，绝不因为摘要失败而丢记录）。
+*/
+/**
+* 长文本抽样：整段上下文可能有几十万字符，逐字哈希没必要——
+* 同一份请求体抽样结果必然一致，不同请求体在头尾各一段上也几乎不可能撞。
+*/
+function sampleText(text) {
+	const s = String(text || "");
+	if (s.length <= 4e3) return s;
+	return s.slice(0, 2e3) + "#" + s.length + "#" + s.slice(-1500);
+}
+function messageDigest(messages) {
+	if (!Array.isArray(messages) || messages.length === 0) return "";
+	let hash = 2166136261;
+	const feed = (s) => {
+		for (let i = 0; i < s.length; i += 1) {
+			hash ^= s.charCodeAt(i);
+			hash = hash + ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24)) >>> 0;
+		}
+		hash ^= 31;
+		hash = hash >>> 0;
+	};
+	for (const m of messages) try {
+		if (!m || typeof m !== "object") {
+			feed(String(m ?? ""));
+			continue;
+		}
+		feed(String(m.role || ""));
+		const c = m.content;
+		if (typeof c === "string") feed(sampleText(c));
+		else if (c == null) feed("");
+		else feed(sampleText(JSON.stringify(c)));
+	} catch {
+		feed("");
+	}
+	return messages.length + ":" + (hash >>> 0).toString(36);
+}
 function usageFingerprint(model, total, hit, miss, completion, connection, requestId) {
 	return [
 		requestId || "",
@@ -1476,6 +1519,13 @@ var recentUsageFingerprints = /* @__PURE__ */ new Map();
 var recentContentFingerprints = /* @__PURE__ */ new Map();
 /** 去重窗口：fetch 侧与 GENERATION_ENDED 可能相隔十几秒（尤其慢速流式），按 15s 计 */
 var TURN_DEDUPE_WINDOW_MS = 15e3;
+/**
+* 内容去重窗口：只覆盖「同一次响应被多层包装各解析一遍」这种毫秒级重复。
+*
+* 不能复用 15s：内容指纹抹掉了 requestId 与起始时间，窗口越长，越容易把两次真实请求并成一条。
+* 多层包装的重复总是在同一次响应解析后紧挨着发生（实测相邻两条相隔 15ms），给 3s 足够宽。
+*/
+var CONTENT_DEDUPE_WINDOW_MS = 3e3;
 /** 指纹表保留时长：只需覆盖去重窗口，超出即回收 */
 var TURN_FINGERPRINT_TTL_MS = 6e4;
 var storageFailureNotified = false;
@@ -2568,7 +2618,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && !!wallet.catalogProvider) try {
-						import("./pricing-sync-xO0ZpfwP.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-BNnCqXr5.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
@@ -2583,14 +2633,15 @@ var repository = {
 				connection,
 				now
 			});
-			const contentFp = total > 0 ? usageFingerprint(model, total, hit, miss, comp, connection, null) + "|" + Math.round((startTime || now) / 1e3) : "";
+			const digest = messageDigest(messages);
+			const contentFp = total > 0 && digest ? usageFingerprint(model, total, hit, miss, comp, connection, null) + "|" + digest : "";
 			const lastFpTime = recentUsageFingerprints.get(fp);
 			const lastContentTime = contentFp ? recentContentFingerprints.get(contentFp) : 0;
 			const dupByTurn = !!lastFpTime && now - lastFpTime < TURN_DEDUPE_WINDOW_MS;
-			const dupByContent = !dupByTurn && !!lastContentTime && now - lastContentTime < TURN_DEDUPE_WINDOW_MS;
+			const dupByContent = !dupByTurn && !!lastContentTime && now - lastContentTime < CONTENT_DEDUPE_WINDOW_MS;
 			if (dupByTurn || dupByContent) {
 				try {
-					const head = dupByTurn && requestId ? state.history.find((entry) => entry.requestId === requestId) || state.history[0] : state.history.find((entry) => now - (Number(entry.timestamp) || 0) < TURN_DEDUPE_WINDOW_MS && Number(entry.total_tokens) === total && Number(entry.prompt_tokens) === hit + miss && Number(entry.completion_tokens) === comp) || null;
+					const head = dupByTurn && requestId ? state.history.find((entry) => entry.requestId === requestId) || state.history[0] : state.history.find((entry) => now - (Number(entry.timestamp) || 0) < CONTENT_DEDUPE_WINDOW_MS && Number(entry.total_tokens) === total && Number(entry.prompt_tokens) === hit + miss && Number(entry.completion_tokens) === comp) || null;
 					if (head) {
 						let changed = false;
 						const headEstimated = String(head.usageSource || "") === "estimated";

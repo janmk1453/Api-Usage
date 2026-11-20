@@ -13,6 +13,8 @@
  * - entry-error   addEntry 抛错
  * - turn-estimated  上游没给 usage，按输出本地估算后补记
  * - turn-interrupted 用户停止或上游中断，靠估算补记并标注中断
+ * - turn-unmatched  生成结束事件对不上任何请求轮次（按无主轮次估算补记，见 interception）
+ * - install-failed  采集包装安装失败（层深上限 / 安装期间被替换 / 异常），采集可能失聪
  */
 export type CaptureStage =
   | 'fetch-start'
@@ -21,7 +23,9 @@ export type CaptureStage =
   | 'entry-added'
   | 'entry-error'
   | 'turn-estimated'
-  | 'turn-interrupted';
+  | 'turn-interrupted'
+  | 'turn-unmatched'
+  | 'install-failed';
 
 export interface CaptureRecord {
   at: number;

@@ -38,7 +38,7 @@ interface WinState {
  * fetch 可能被宿主反复替换、我们每 4s 重装一次，若每次都 push 一个闭包，
  * restores 会随时间无限增长（并一直持有旧 fetch 的引用），长时间开着页面就是内存泄漏。
  */
-const restoreHooked = new WeakSet<object>();
+let restoreHooked = new WeakSet<object>();
 
 let seq = 0;
 let installed = false;
@@ -55,6 +55,8 @@ let installed = false;
  */
 const activeTapByWin = new WeakMap<any, any>();
 let rescanTimer: any = null;
+/** 扫描节流：MutationObserver 在流式输出时每帧都会触发，合并成一次补扫 */
+let rescanQueued: any = null;
 let observer: MutationObserver | null = null;
 const restores: (() => void)[] = [];
 
@@ -149,6 +151,7 @@ function promptCharsOf(body: any): number {
 }
 
 function begin(url: string, endpoint: TapEndpointKind, ctxActor: TapActor, body: any): Ctx {
+  const now = Date.now();
   let stack = '';
   try { stack = String(new Error().stack || ''); } catch {}
   const stackActor = actorFromStack(stack);
@@ -164,8 +167,8 @@ function begin(url: string, endpoint: TapEndpointKind, ctxActor: TapActor, body:
     endpoint,
   });
   return {
-    id: 'tap:' + Date.now() + ':' + (++seq),
-    at: Date.now(),
+    id: 'tap:' + now + ':' + (++seq),
+    at: now,
     url,
     endpoint,
     actor,
@@ -273,6 +276,34 @@ async function consumeClone(res: Response): Promise<{ usage: TapUsage | null; tt
   return { usage: readUsageFromText(text), ttft: Date.now() - t0 };
 }
 
+/**
+ * 读 XHR 响应文本，绝不因为读不到而抛错。
+ *
+ * 历史缺陷：老代码直接 `String(this.responseText || '')`。
+ * responseType 一旦是 json / blob / arraybuffer，读 responseText 会直接抛 InvalidStateError，
+ * 于是整条探针只能记端点、永远拿不到 usage。这里按 responseType 分流：
+ * text / 空串走 responseText；json 转回字符串（usage 本来就在 JSON 里）；其余类型放弃解析，
+ * 只保留端点与耗时——宁可少一条 usage，也不能让探针把宿主请求带崩。
+ */
+function readXhrText(xhr: any): string {
+  try {
+    const rt = String(xhr?.responseType || '');
+    if (rt && rt !== 'text') {
+      if (rt === 'json') {
+        const r = xhr?.response;
+        if (r && typeof r === 'object') {
+          try { return JSON.stringify(r).slice(-400000); } catch { return ''; }
+        }
+      }
+      return '';
+    }
+    const t = xhr?.responseText;
+    return typeof t === 'string' ? t.slice(-400000) : '';
+  } catch {
+    return '';
+  }
+}
+
 function patchWindow(w: any): void {
   try {
     if (!w || typeof w.fetch !== 'function') return;
@@ -367,19 +398,56 @@ function patchWindow(w: any): void {
         return prevOpen.apply(this, arguments as any);
       };
       XP.send = function (this: any, body?: any) {
+        let record: Ctx | null = null;
         try {
           const url = String(this.__ausTapUrl || '');
           const endpoint = endpointOf(url);
-          if (endpoint) {
-            const ctx = begin(url, endpoint, actor, bodyOf({ body }, null));
-            this.addEventListener('loadend', () => {
-              const status = typeof this.status === 'number' ? this.status : null;
-              const ok = status !== null && status >= 200 && status < 400;
-              finalize(ctx, status, async () => ({ usage: readUsageFromText(String(this.responseText || '')), ttft: 0 }), ok ? null : 'HTTP ' + status);
-            });
-          }
+          if (endpoint) record = begin(url, endpoint, actor, bodyOf({ body }, null));
+        } catch {
+          record = null;
+        }
+        if (!record) return prevSend.apply(this, arguments as any);
+
+        const ctx = record;
+        const t0 = Date.now();
+        const xhr = this;
+        let firstByte = 0;
+        let done = false;
+        // 收尾只做一次：loadend / error / timeout / send 抛错 四条路径共用，靠 done 幂等
+        const finish = (errMsg?: string) => {
+          if (done) return;
+          done = true;
+          try {
+            const status = typeof xhr.status === 'number' ? xhr.status : null;
+            const ok = status !== null && status >= 200 && status < 400;
+            // 错误响应也可能带用量（429 / 400 里的 usage），所以照样读；读不到只是空串
+            const text = readXhrText(xhr);
+            finalize(
+              ctx,
+              status,
+              async () => ({ usage: text ? readUsageFromText(text) : null, ttft: firstByte }),
+              errMsg || (ok ? null : (status === 0 ? 'XHR aborted' : 'HTTP ' + status)),
+            );
+          } catch {}
+        };
+        try {
+          // 首字节延迟：XHR 没有 fetch 的 clone 流，只能用 progress 的第一次触发近似
+          xhr.addEventListener('progress', () => {
+            if (!firstByte) firstByte = Date.now() - t0;
+          });
+          // loadend 覆盖成功 / 失败 / 中止三条路径；error 与 timeout 再兜一层，
+          // 它们在某些宿主实现里会先于 loadend 派发，重复触发由 done 幂等挡掉
+          xhr.addEventListener('loadend', () => finish());
+          xhr.addEventListener('error', () => finish());
+          xhr.addEventListener('timeout', () => finish());
         } catch {}
-        return prevSend.apply(this, arguments as any);
+        try {
+          return prevSend.apply(this, arguments as any);
+        } catch (err) {
+          // send 自己抛错（参数非法 / 已在发送中）：同样要收尾，否则这条探针只剩 pending
+          try { finish('XHR send failed: ' + String((err as any)?.message || err).slice(0, 120)); } catch {}
+          throw err;
+        }
       };
       state.xhrOpen = XP.open;
       state.xhrSend = XP.send;
@@ -414,6 +482,14 @@ function patchWindow(w: any): void {
  * （TauriTavern 重绑、ST 刷新、别的补丁再包一层），所以这里必须周期性重装，
  * 否则探针会静默失聪——3.2.3 里那两轮请求零记录就是缺了这一步。
  */
+function scheduleScan(): void {
+  if (rescanQueued) return;
+  rescanQueued = setTimeout(() => {
+    rescanQueued = null;
+    try { scanFrames(); } catch {}
+  }, 300);
+}
+
 function scanFrames(): void {
   try {
     patchWindow(hostWindow());
@@ -432,13 +508,12 @@ function scanFrames(): void {
 export function installTapCapture(): void {
   if (installed) return;
   installed = true;
-  try { patchWindow(hostWindow()); } catch {}
-  try { patchWindow(window); } catch {}
   scanFrames();
   try {
     const doc = hostDoc();
     if (doc && typeof MutationObserver === 'function') {
-      observer = new MutationObserver(() => { try { scanFrames(); } catch {} });
+      // 宿主改 DOM 的频率远高于「fetch 被换掉」的频率，没必要每次变动都全量补扫
+      observer = new MutationObserver(() => { scheduleScan(); });
       observer.observe(doc.documentElement, { childList: true, subtree: true });
     }
   } catch {}
@@ -451,6 +526,9 @@ export function uninstallTapCapture(): void {
   installed = false;
   try { if (rescanTimer) clearInterval(rescanTimer); } catch {}
   rescanTimer = null;
+  if (rescanQueued) { try { clearTimeout(rescanQueued); } catch {} rescanQueued = null; }
+  // 还原闭包已全部执行完；重建 WeakSet，否则卸载后重新安装时再也挂不上还原闭包（fetch / XHR 无法还原）
+  restoreHooked = new WeakSet<object>();
   try { observer?.disconnect(); } catch {}
   observer = null;
   for (const restore of restores.splice(0)) {

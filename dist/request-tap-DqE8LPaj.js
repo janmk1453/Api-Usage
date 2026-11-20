@@ -292,6 +292,8 @@ var installed$1 = false;
 */
 var activeTapByWin = /* @__PURE__ */ new WeakMap();
 var rescanTimer = null;
+/** 扫描节流：MutationObserver 在流式输出时每帧都会触发，合并成一次补扫 */
+var rescanQueued = null;
 var observer = null;
 var restores = [];
 function hostWindow() {
@@ -378,6 +380,7 @@ function promptCharsOf(body) {
 	return 0;
 }
 function begin(url, endpoint, ctxActor, body) {
+	const now = Date.now();
 	let stack = "";
 	try {
 		stack = String((/* @__PURE__ */ new Error()).stack || "");
@@ -395,8 +398,8 @@ function begin(url, endpoint, ctxActor, body) {
 		endpoint
 	});
 	return {
-		id: "tap:" + Date.now() + ":" + ++seq,
-		at: Date.now(),
+		id: "tap:" + now + ":" + ++seq,
+		at: now,
 		url,
 		endpoint,
 		actor,
@@ -497,6 +500,35 @@ async function consumeClone(res) {
 		ttft: Date.now() - t0
 	};
 }
+/**
+* 读 XHR 响应文本，绝不因为读不到而抛错。
+*
+* 历史缺陷：老代码直接 `String(this.responseText || '')`。
+* responseType 一旦是 json / blob / arraybuffer，读 responseText 会直接抛 InvalidStateError，
+* 于是整条探针只能记端点、永远拿不到 usage。这里按 responseType 分流：
+* text / 空串走 responseText；json 转回字符串（usage 本来就在 JSON 里）；其余类型放弃解析，
+* 只保留端点与耗时——宁可少一条 usage，也不能让探针把宿主请求带崩。
+*/
+function readXhrText(xhr) {
+	try {
+		const rt = String(xhr?.responseType || "");
+		if (rt && rt !== "text") {
+			if (rt === "json") {
+				const r = xhr?.response;
+				if (r && typeof r === "object") try {
+					return JSON.stringify(r).slice(-4e5);
+				} catch {
+					return "";
+				}
+			}
+			return "";
+		}
+		const t = xhr?.responseText;
+		return typeof t === "string" ? t.slice(-4e5) : "";
+	} catch {
+		return "";
+	}
+}
 function patchWindow(w) {
 	try {
 		if (!w || typeof w.fetch !== "function") return;
@@ -596,21 +628,49 @@ function patchWindow(w) {
 				return prevOpen.apply(this, arguments);
 			};
 			XP.send = function(body) {
+				let record = null;
 				try {
 					const url = String(this.__ausTapUrl || "");
 					const endpoint = endpointOf(url);
-					if (endpoint) {
-						const ctx = begin(url, endpoint, actor, bodyOf({ body }, null));
-						this.addEventListener("loadend", () => {
-							const status = typeof this.status === "number" ? this.status : null;
-							finalize(ctx, status, async () => ({
-								usage: readUsageFromText(String(this.responseText || "")),
-								ttft: 0
-							}), status !== null && status >= 200 && status < 400 ? null : "HTTP " + status);
-						});
-					}
+					if (endpoint) record = begin(url, endpoint, actor, bodyOf({ body }, null));
+				} catch {
+					record = null;
+				}
+				if (!record) return prevSend.apply(this, arguments);
+				const ctx = record;
+				const t0 = Date.now();
+				const xhr = this;
+				let firstByte = 0;
+				let done = false;
+				const finish = (errMsg) => {
+					if (done) return;
+					done = true;
+					try {
+						const status = typeof xhr.status === "number" ? xhr.status : null;
+						const ok = status !== null && status >= 200 && status < 400;
+						const text = readXhrText(xhr);
+						finalize(ctx, status, async () => ({
+							usage: text ? readUsageFromText(text) : null,
+							ttft: firstByte
+						}), errMsg || (ok ? null : status === 0 ? "XHR aborted" : "HTTP " + status));
+					} catch {}
+				};
+				try {
+					xhr.addEventListener("progress", () => {
+						if (!firstByte) firstByte = Date.now() - t0;
+					});
+					xhr.addEventListener("loadend", () => finish());
+					xhr.addEventListener("error", () => finish());
+					xhr.addEventListener("timeout", () => finish());
 				} catch {}
-				return prevSend.apply(this, arguments);
+				try {
+					return prevSend.apply(this, arguments);
+				} catch (err) {
+					try {
+						finish("XHR send failed: " + String(err?.message || err).slice(0, 120));
+					} catch {}
+					throw err;
+				}
 			};
 			state.xhrOpen = XP.open;
 			state.xhrSend = XP.send;
@@ -643,6 +703,15 @@ function patchWindow(w) {
 * （TauriTavern 重绑、ST 刷新、别的补丁再包一层），所以这里必须周期性重装，
 * 否则探针会静默失聪——3.2.3 里那两轮请求零记录就是缺了这一步。
 */
+function scheduleScan() {
+	if (rescanQueued) return;
+	rescanQueued = setTimeout(() => {
+		rescanQueued = null;
+		try {
+			scanFrames();
+		} catch {}
+	}, 300);
+}
 function scanFrames() {
 	try {
 		patchWindow(hostWindow());
@@ -662,20 +731,12 @@ function scanFrames() {
 function installTapCapture() {
 	if (installed$1) return;
 	installed$1 = true;
-	try {
-		patchWindow(hostWindow());
-	} catch {}
-	try {
-		patchWindow(window);
-	} catch {}
 	scanFrames();
 	try {
 		const doc = hostDoc();
 		if (doc && typeof MutationObserver === "function") {
 			observer = new MutationObserver(() => {
-				try {
-					scanFrames();
-				} catch {}
+				scheduleScan();
 			});
 			observer.observe(doc.documentElement, {
 				childList: true,
@@ -693,6 +754,13 @@ function uninstallTapCapture() {
 		if (rescanTimer) clearInterval(rescanTimer);
 	} catch {}
 	rescanTimer = null;
+	if (rescanQueued) {
+		try {
+			clearTimeout(rescanQueued);
+		} catch {}
+		rescanQueued = null;
+	}
+	restoreHooked = /* @__PURE__ */ new WeakSet();
 	try {
 		observer?.disconnect();
 	} catch {}
@@ -862,8 +930,18 @@ function noteSettlement(entry) {
 			ts,
 			estimated: String(entry.usageSource || "") === "estimated"
 		});
-		if (settlements.length > SETTLEMENT_MAX) settlements = settlements.slice(-800);
+		trimLedger();
 	} catch {}
+}
+/**
+* 账本裁剪：settlements 只留最近 SETTLEMENT_MAX 条，同时把已经不在账本里的
+* consumed 标记一并丢掉——否则 used 会随运行时长无限增长（每个请求一个字符串）。
+*/
+function trimLedger() {
+	if (settlements.length <= SETTLEMENT_MAX) return;
+	settlements = settlements.slice(-800);
+	const alive = new Set(settlements.map((s) => s.id));
+	for (const id of used) if (!alive.has(id)) used.delete(id);
 }
 /**
 * 扫描一次：到期的 pending 记录按「用量全等 → 总数相等 + 时间窗」对账。
@@ -942,7 +1020,7 @@ async function hydrateLedgerFromHistory() {
 				estimated: String(e.usageSource || "") === "estimated"
 			});
 		}
-		if (settlements.length > SETTLEMENT_MAX) settlements = settlements.slice(-800);
+		trimLedger();
 	} catch {}
 	return settlements.length;
 }
@@ -1067,6 +1145,9 @@ function uninstallRequestTap() {
 	unsubscribe = null;
 	try {
 		uninstallTapCapture();
+	} catch {}
+	try {
+		delete globalThis.__ausTap;
 	} catch {}
 }
 //#endregion

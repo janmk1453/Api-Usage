@@ -40,8 +40,21 @@ export function noteSettlement(entry: any): void {
       ts,
       estimated: String(entry.usageSource || '') === 'estimated',
     });
-    if (settlements.length > SETTLEMENT_MAX) settlements = settlements.slice(-SETTLEMENT_MAX);
+    trimLedger();
   } catch {}
+}
+
+/**
+ * 账本裁剪：settlements 只留最近 SETTLEMENT_MAX 条，同时把已经不在账本里的
+ * consumed 标记一并丢掉——否则 used 会随运行时长无限增长（每个请求一个字符串）。
+ */
+function trimLedger(): void {
+  if (settlements.length <= SETTLEMENT_MAX) return;
+  settlements = settlements.slice(-SETTLEMENT_MAX);
+  const alive = new Set(settlements.map((s) => s.id));
+  for (const id of used) {
+    if (!alive.has(id)) used.delete(id);
+  }
 }
 
 /**
@@ -110,7 +123,7 @@ export async function hydrateLedgerFromHistory(): Promise<number> {
         estimated: String(e.usageSource || '') === 'estimated',
       });
     }
-    if (settlements.length > SETTLEMENT_MAX) settlements = settlements.slice(-SETTLEMENT_MAX);
+    trimLedger();
   } catch {}
   return settlements.length;
 }
@@ -207,4 +220,5 @@ export function uninstallRequestTap(): void {
   try { unsubscribe?.(); } catch {}
   unsubscribe = null;
   try { uninstallTapCapture(); } catch {}
+  try { delete (globalThis as any).__ausTap; } catch {}
 }

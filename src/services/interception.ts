@@ -384,14 +384,29 @@ function estimateThinkTokens(text: string, usage: any) {
   }
 }
 
-function installFetchCapture() {
+/**
+ * 采集包装的安装结果：成功返回 true，未装 / 装了但被抢先替换返回 false。
+ * 返回值供自愈守卫判断要不要退避——以前安装失败被一个空 catch 吞掉，
+ * 真机上表现为「采集整段静默、没有任何线索」，只能靠用户发现「没记录了」。
+ */
+function installFetchCapture(): boolean {
   try {
     const p: any = (window as any).parent || window;
-    if (!p || !p.fetch || isAusFetchPatch(p.fetch)) {
-      return;
+    if (!p || typeof p.fetch !== 'function') return false;
+    if (isAusFetchPatch(p.fetch)) {
+      // 顶层已经是我们装的某一代（可能是宿主把它装回来了）：让它重新在岗，不新增任何一层
+      if ((p.fetch as any).__ausCaptureLayer === true) activateCapture(p.fetch);
+      return true;
     }
     // 记下被包住的原始函数：bind 产物不继承自定义属性，读标记必须读它
     const prevFetchFn: any = p.fetch;
+    // 层深是硬约束：宿主反复重绑时我们每跟一次就 +1 层，只靠「旧代直通」不会重复记账，
+    // 但层数会无限长。到上限就停下并报警，这是最后一道闸门。
+    const depth = (Number((prevFetchFn as any).__ausCaptureDepth) || 0) + 1;
+    if (depth > MAX_CAPTURE_DEPTH) {
+      noteInstallProblem('depth-limit:' + depth, '采集包装层数已达上限，停止再包一层（宿主可能在反复重绑 fetch）', { depth });
+      return false;
+    }
     const rawFetch = prevFetchFn.bind(p);
     // 卸载时还原到「本次包装所用的下一层」，宿主重装过包装也不会还原成过期的一层
     rawFetchRef = rawFetch;
@@ -693,10 +708,49 @@ function installFetchCapture() {
         get: () => (prevFetchFn as any).__ausTapPatched === true,
       });
     } catch {}
-    activeCapture = patched;
+    // 安装期间顶层被别人换掉了：放弃这一代，免得把别人的新包装整个吃掉
+    if (p.fetch !== prevFetchFn) {
+      noteInstallProblem('replaced-during-install', '采集包装安装期间顶层被替换，放弃本次安装');
+      return false;
+    }
+    patched.__ausCaptureDepth = depth;
+    patched.__ausCaptureLayer = true;
+    activateCapture(patched);
+    captureHealth.installed = true;
+    captureHealth.generations += 1;
+    captureHealth.depth = depth;
+    captureHealth.lastInstallAt = Date.now();
+    captureHealth.lastError = null;
     p.fetch = patched;
-    log.debug('fetch 捕获已安装 TARGET_API=' + TARGET_API);
-  } catch {}
+    log.debug('fetch 捕获已安装 TARGET_API=' + TARGET_API, { depth, generations: captureHealth.generations });
+    return true;
+  } catch (e) {
+    noteInstallProblem('install-threw', String((e as any)?.message || e));
+    return false;
+  }
+}
+
+/** 安装期的所有异常都从这里出去：计数 + 首次/每 10 次告警 + 写进采集日志摘要 */
+function noteInstallProblem(code: string, message: string, extra: Record<string, any> = {}): void {
+  captureHealth.failures += 1;
+  captureHealth.lastError = code;
+  const first = captureHealth.failures === 1;
+  const everyTen = captureHealth.failures % 10 === 0;
+  try { if (first || everyTen) log.warn(message, { failures: captureHealth.failures, ...extra }); } catch {}
+  try { noteCaptureStage('install-failed', { model: '', requestId: '', reason: code }); } catch {}
+}
+
+/**
+ * 采集包装的健康快照：真机排查「为什么这一整段没记录」时先看它。
+ * 暴露在 window.__ausCapture.diagnostics()，也随采集日志一起上报。
+ */
+export function captureDiagnostics() {
+  return {
+    ...captureHealth,
+    backoffMs: guardBackoff,
+    hasActive: !!activeCapture,
+    guardMs: FETCH_GUARD_MS,
+  };
 }
 
 let interceptionInstalled = false;
@@ -714,6 +768,18 @@ let messageReceivedHandler: any = null;
  */
 let activeCapture: any = null;
 
+/** 让某一代成为「在岗的那一代」；其余旧代自动降级为直通 */
+function activateCapture(fn: any): void {
+  if (!fn) return;
+  try {
+    if (activeCapture && activeCapture !== fn) (activeCapture as any).__ausCaptureActive = false;
+    (fn as any).__ausCaptureActive = true;
+  } catch {}
+  activeCapture = fn;
+  // 能真正上岗说明链路已经稳了，把重装退避立刻收回正常节奏
+  resetGuardBackoff();
+}
+
 /**
  * 宿主可能在我们之后重装自己的 fetch 包装（TauriTavern 在后端就绪后会再 patchFetch 一次，
  * 把当前 fetch 当成 delegate 存起来再换成自己的）。一旦被换到内层，
@@ -721,18 +787,52 @@ let activeCapture: any = null;
  * 因此这里定期校验「最外层是不是我们」，不是就重新包一层。
  */
 const FETCH_GUARD_MS = 4000;
+/** 重装退避上限：反复被替换时把 4s 拉长到 60s，避免和宿主互相刷层 */
+const MAX_GUARD_BACKOFF_MS = 60_000;
+/** 包装链的硬上限：旧代直通不记账，但层数不能无限长（每层都是一次函数调用） */
+const MAX_CAPTURE_DEPTH = 6;
 let fetchGuardTimer: any = null;
 let fetchGuardBootTimers: any[] = [];
+let guardBackoff = FETCH_GUARD_MS;
+let nextInstallAllowedAt = 0;
+
+/** 采集包装健康状态：安装次数 / 失败次数 / 层深 / 退避，用于真机定位「采集为什么静默」 */
+const captureHealth = {
+  installed: false,
+  generations: 0,
+  failures: 0,
+  depth: 0,
+  lastError: null as string | null,
+  lastInstallAt: 0,
+};
 
 function isAusFetchPatch(fn: any): boolean {
   return typeof fn === 'function' && (fn as any).__aus_patched === true;
 }
 
+function resetGuardBackoff(): void {
+  guardBackoff = FETCH_GUARD_MS;
+  nextInstallAllowedAt = 0;
+}
+
+function growGuardBackoff(): void {
+  guardBackoff = Math.min(Math.max(guardBackoff * 2, FETCH_GUARD_MS), MAX_GUARD_BACKOFF_MS);
+  nextInstallAllowedAt = Date.now() + guardBackoff;
+  try { log.debug('采集包装重装退避', { backoffMs: guardBackoff, failures: captureHealth.failures }); } catch {}
+}
+
 function ensureFetchCapture() {
   try {
     const p: any = (window as any).parent || window;
-    if (!p || !p.fetch || isAusFetchPatch(p.fetch)) return;
-    installFetchCapture();
+    if (!p || typeof p.fetch !== 'function') return;
+    if (isAusFetchPatch(p.fetch)) {
+      // 顶层是我们装的某一代：被宿主装回来的旧代直接复用在岗，不新增层
+      if ((p.fetch as any).__ausCaptureLayer === true) activateCapture(p.fetch);
+      return;
+    }
+    if (Date.now() < nextInstallAllowedAt) return;
+    if (installFetchCapture()) resetGuardBackoff();
+    else growGuardBackoff();
   } catch {}
 }
 
@@ -798,6 +898,8 @@ export function installInterception() {
     };
     try { installFetchCapture(); } catch {}
     startFetchGuard();
+    // 真机自检口子：__ausCapture.diagnostics() 一次看全「装没装上 / 层数 / 失败次数 / 退避」
+    try { (globalThis as any).__ausCapture = { diagnostics: captureDiagnostics }; } catch {}
     interceptionInstalled = true;
     return true;
   } catch { return false; }
@@ -824,6 +926,8 @@ export function uninstallInterception() {
     } catch {}
     // 卸载后不许任何残留层再记账
     activeCapture = null;
+    captureHealth.installed = false;
+    try { delete (globalThis as any).__ausCapture; } catch {}
     stopFetchGuard();
     interceptionInstalled = false;
   } catch {}
@@ -860,6 +964,65 @@ function pickUsageFromExtra(extra: any): any {
   return null;
 }
 
+/** fetch 快照是否属于这一轮：双方都有 requestId 时必须一致，否则别把别轮的时序证据串过来 */
+function packMatches(turn: TurnContext | null, pack: any): boolean {
+  if (!turn || !pack || !turn.requestId || !pack.requestId) return true;
+  return turn.requestId === pack.requestId;
+}
+
+/**
+ * 「上游真的给了用量」的统一落库出口：主路径 / swipe_info / args / fetch 兜底共用的那段收尾。
+ *
+ * 这四处原本各抄了一遍「从 lastFetchUsage 补 ttft / 思维链 / finishReason / streamed」，
+ * 抄漏一处就会把别轮的时序证据串过来（lastFetchUsage 是「最后发出那一轮」的单槽）。
+ * 现在只留一份实现，规则也只有一条：快照的 requestId 与本轮对不上时一律不补。
+ */
+function recordUpstreamUsage(params: {
+  usage: any;
+  model: string;
+  ended: TurnContext | null;
+  /** usage 自带或调用方确定的 finishReason */
+  finishReason?: string | null;
+  /** 另一个来源的 finishReason（如 chat tail），仅在前面都为空时使用 */
+  fallbackFinishReason?: string | null;
+  fullRequest?: any;
+  fullResponse?: any;
+  /** 兜底用的快照有效期：流式长输出可能晚到，默认 5s */
+  packMaxAge?: number;
+}): void {
+  const ended = params.ended;
+  const packMaxAge = params.packMaxAge ?? 5000;
+  let ttft = ended?.ttft || 0;
+  let think = ended?.thinkTime || 0;
+  let streamed: boolean | null = ended?.streamed ?? null;
+  let fr: string | null = params.finishReason ?? null;
+  try {
+    const fp: any = lastFetchUsage;
+    if (fp && packMatches(ended, fp) && Date.now() - lastFetchTime < packMaxAge) {
+      if (!ttft) ttft = fp.ttft || 0;
+      if (!think) think = fp.thinkTime || 0;
+      if (!fr) fr = fp.finishReason ?? null;
+      if (fp.streamed != null && streamed == null) streamed = fp.streamed;
+    }
+  } catch {}
+  if (!fr && params.fallbackFinishReason) fr = params.fallbackFinishReason;
+  processUsage(
+    params.usage,
+    params.model,
+    ended?.messages?.length ? ended.messages : lastMessages,
+    ended?.startTime || lastStart,
+    params.fullRequest ?? null,
+    params.fullResponse ?? null,
+    ttft,
+    think,
+    fr,
+    ended?.connection || recentConnection(5000),
+    ended?.requestId || recentRequestId(),
+    streamed,
+  );
+  lastFetchUsage = null;
+}
+
 function onGenerationEnded(...args: any[]) {
   try {
     const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
@@ -886,11 +1049,6 @@ function onGenerationEnded(...args: any[]) {
       lastFetchUsage = null;
       return true;
     };
-    /** fetch 快照是否属于这一轮：并发时别把别轮的时序证据 / 用量串过来 */
-    const packMatches = (t: TurnContext | null, pack: any): boolean => {
-      if (!t || !pack || !t.requestId || !pack.requestId) return true;
-      return t.requestId === pack.requestId;
-    };
 
     // 全 0 / 空用量不算正常记录：交给估算路径判断能否按输出补记
     if (usage && isValidUsage(usage) && isZeroUsage(usage)) {
@@ -901,34 +1059,13 @@ function onGenerationEnded(...args: any[]) {
       log.debug('命中主路径 extra usage');
       const ended = endedTurn();
       if (alreadyRecorded(ended)) return;
-      // 主路径也尝试携带本轮 fetch 的 TTFT/思维链/截断信息（fetch 已在后台流式测量）
-      let ttft = ended?.ttft || 0, think = ended?.thinkTime || 0;
-      let streamed: boolean | null = ended?.streamed ?? null;
-      let fr: string | null = (usage as any)?.__finish_reason ?? (usage as any)?.finish_reason ?? null;
-      try {
-        const fp: any = lastFetchUsage;
-        if (fp && packMatches(ended, fp) && Date.now() - lastFetchTime < 5000) {
-          if (!ttft) ttft = fp.ttft || 0;
-          if (!think) think = fp.thinkTime || 0;
-          if (!fr) fr = fp.finishReason ?? null;
-          if (fp.streamed != null && streamed == null) streamed = fp.streamed;
-        }
-        // 尝试从 tail SSE 最后一个 chunk 补 finish_reason（若 usage 未带）
-        if (!fr) {
-          const extraFr = (extra as any)?.finish_reason ?? (tail as any)?.finish_reason ?? null;
-          if (extraFr) fr = extraFr;
-        }
-      } catch {}
-      processUsage(
-        usage, model,
-        ended?.messages?.length ? ended.messages : lastMessages,
-        ended?.startTime || lastStart,
-        null, null, ttft, think, fr,
-        ended?.connection || recentConnection(5000),
-        ended?.requestId || recentRequestId(),
-        streamed,
-      );
-      lastFetchUsage = null;
+      recordUpstreamUsage({
+        usage,
+        model,
+        ended,
+        // usage 未带 finish_reason 时，退到 tail SSE 最后一个 chunk 里补
+        fallbackFinishReason: (extra as any)?.finish_reason ?? (tail as any)?.finish_reason ?? null,
+      });
       return;
     }
     if (tail?.swipe_info && typeof tail.swipe_info === 'object') {
@@ -941,12 +1078,12 @@ function onGenerationEnded(...args: any[]) {
           const ended = endedTurn(model);
           if (alreadyRecorded(ended)) return;
           log.debug('swipe_info 命中', { model });
-          let ttft = ended?.ttft || 0, think = ended?.thinkTime || 0;
-          let streamed: boolean | null = ended?.streamed ?? null;
-          let fr: string | null = (cand as any)?.__finish_reason ?? null;
-          try { const fp:any=lastFetchUsage; if (fp && packMatches(ended, fp) && Date.now()-lastFetchTime<5000){ if(!ttft) ttft=fp.ttft||0; if(!think) think=fp.thinkTime||0; if(!fr) fr=fp.finishReason??null; if (fp.streamed != null && streamed == null) streamed = fp.streamed; } } catch {}
-          processUsage(usage, model, ended?.messages?.length ? ended.messages : lastMessages, ended?.startTime || lastStart, null, null, ttft, think, fr, ended?.connection || recentConnection(5000), ended?.requestId || recentRequestId(), streamed);
-          lastFetchUsage = null;
+          recordUpstreamUsage({
+            usage,
+            model,
+            ended,
+            finishReason: (cand as any)?.__finish_reason ?? null,
+          });
           return;
         }
       }
@@ -959,12 +1096,12 @@ function onGenerationEnded(...args: any[]) {
       const ended = endedTurn(m);
       if (alreadyRecorded(ended)) return;
       log.debug('args 命中', { model: m });
-      let ttft = ended?.ttft || 0, think = ended?.thinkTime || 0;
-      let streamed: boolean | null = ended?.streamed ?? null;
-      let fr: string | null = (maybeUsage as any)?.__finish_reason ?? null;
-      try { const fp:any=lastFetchUsage; if (fp && packMatches(ended, fp) && Date.now()-lastFetchTime<5000){ if(!ttft) ttft=fp.ttft||0; if(!think) think=fp.thinkTime||0; if(!fr) fr=fp.finishReason??null; if (fp.streamed != null && streamed == null) streamed = fp.streamed; } } catch {}
-      processUsage(maybeUsage, m, ended?.messages?.length ? ended.messages : lastMessages, ended?.startTime || lastStart, null, null, ttft, think, fr, ended?.connection || recentConnection(5000), ended?.requestId || recentRequestId(), streamed);
-      lastFetchUsage = null;
+      recordUpstreamUsage({
+        usage: maybeUsage,
+        model: m,
+        ended,
+        finishReason: (maybeUsage as any)?.__finish_reason ?? null,
+      });
       return;
     }
     {
@@ -1043,21 +1180,26 @@ async function settleTurnWithoutUsage(source: 'generation-ended' | 'stop', opts:
   // 「最后发出」的槽位去顶替——那正是 3.2.3 里时长/输入量/requestId 串到另一轮请求的根因。
   const turn = pickEndedTurn(opts.model ?? null, false);
   if (turn?.settled) return;
-  // 账本里还有请求对不上号：宁可这一轮不记，也不要把别的请求的现场（开始时间 / requestId /
-  // 输入量）搬过来凑一条——3.2.3 里 argon 的估算记录带上 hydrogen 的开始时间就是这么来的。
-  if (!turn && turnLedger.size > 0) {
-    log.debug('生成结束事件对不上任何请求轮次，跳过估算补记', { source, model: opts.model || null });
-    try {
-      noteCaptureStage('event-drop', { model: opts.model || '', requestId: '', reason: 'turn-unmatched' });
-    } catch {}
-    return;
+  /**
+   * 对不上号（账本里没有这一轮）：尽量记上，但绝不借用别轮的现场。
+   *
+   * 上一版是「账本非空但对不上就整轮丢弃」，宁可漏记不串账；实际使用中漏记更难接受——
+   * 一轮真实对话直接消失，统计里看不出来，只能靠探针孤儿提示间接发现。
+   * 折中做法：照常估算补记，但把会被串坏的字段全部置空——
+   * 开始时间留空（时长记 0，而不是编一个别的请求的时长）、requestId 留空（不冒名顶替）。
+   * 输入内容仍取最近一次请求体（估算需要它），并在 meta 里标出来源不确定。
+   */
+  const orphan = !turn;
+  if (orphan) {
+    log.debug('生成结束事件对不上任何请求轮次，按无主轮次估算补记', { source, model: opts.model || null, ledger: turnLedger.size });
+    try { noteCaptureStage('turn-unmatched', { model: opts.model || '', requestId: '', reason: 'turn-unmatched' }); } catch {}
   }
   const model = opts.model || turn?.model || lastFetchModel || 'deepseek-v4-flash';
   // 两个口径必须分开：展示/落库用最近 10 条摘要，输入估算用完整上下文
   const storeMessages = turn?.messages?.length ? turn.messages : lastMessages || [];
   const estimateMessages = pickPromptMessages(turn?.promptMessages, storeMessages);
-  const startedAt = turn?.startTime || lastStart || Date.now();
-  const requestId = turn?.requestId || recentRequestId(120000) || null;
+  const startedAt = turn?.startTime || null;
+  const requestId = turn?.requestId || null;
   // 响应原文只认本轮现场：lastFetchUsage 属于「最后发出」那一轮，借用会少算/串算输出
   const rawResponse = turn?.fullResponse || '';
   const outputText = collectOutputText(rawResponse);
@@ -1116,6 +1258,8 @@ async function settleTurnWithoutUsage(source: 'generation-ended' | 'stop', opts:
     costEstimated: true,
   };
   if (turn?.modelFallback) meta.modelFallback = true;
+  // 无主轮次：开始时间与 requestId 都是空的，明确标出来，别让「时长为 0」被当成真的很快
+  if (orphan) meta.interruptReason = String(meta.interruptReason || '') + '|turn-unmatched';
   const timing = normalizeTiming(turn?.ttft, turn?.thinkTime);
   try {
     repository.addEntry(

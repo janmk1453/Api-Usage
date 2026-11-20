@@ -124,6 +124,21 @@ describe('历史记录页健康信号', () => {
     expect(signals[0].detail).toContain('连续 2 轮');
   });
 
+  it('采集安装反复失败要报「功能报错」（整段静默，历史里看不出来）', () => {
+    noteCaptureStage('install-failed', { model: '', reason: 'depth-limit:7', at: 1794719000000 });
+    noteCaptureStage('install-failed', { model: '', reason: 'depth-limit:7', at: 1794719004000 });
+    // 只失败两次：可能是宿主恰好重绑，不打扰
+    expect(scanCaptureHealth()).toHaveLength(0);
+    noteCaptureStage('install-failed', { model: '', reason: 'replaced-during-install', at: 1794719008000 });
+    const signals = scanCaptureHealth();
+    expect(signals).toHaveLength(1);
+    expect(signals[0].kind).toBe('plugin-error');
+    expect(signals[0].reason).toBe('install-failed');
+    expect(signals[0].detail).toContain('3 次');
+    // 原因里的层数/细节不进签名，同一类失败才聚得起来
+    expect(signals[0].signature).toBeTruthy();
+  });
+
   it('入库失败与控制台里的本扩展报错都算「功能报错」，网络类控制台错误不算', () => {
     noteCaptureStage('entry-error', { model: 'deepseek-flash', reason: 'boom', at: 1794719000000 });
     noteConsole('error', ['ApiUsageStat addEntry failed'], 1794719005000);
