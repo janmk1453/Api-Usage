@@ -58,6 +58,9 @@ const CAPTURE_STAGE_SET = new Set<string>([
   'entry-error',
   'turn-estimated',
   'turn-interrupted',
+  // 采集失聪的两种现场：漏掉它们，刷新后从落盘镜像读回时会被静默丢弃
+  'turn-unmatched',
+  'install-failed',
 ]);
 
 const USAGE_KEYS = [

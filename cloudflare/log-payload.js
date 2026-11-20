@@ -337,6 +337,10 @@ function normalizeHistoryRow(value) {
     interruptReason: toStr(value.interruptReason, 200) || null,
     modelFallback: value.modelFallback === true,
     estimateMethod: toStr(value.estimateMethod, 60) || null,
+    // 速率是实测还是估算（prefill / duration）：缺了它，估算值看起来和真实测量一模一样
+    rateEstimated: value.rateEstimated === 'prefill' || value.rateEstimated === 'duration'
+      ? value.rateEstimated
+      : null,
     estimateVersion: toInt(value.estimateVersion, 0, 1e6, 0),
     promptChars: toInt(value.promptChars, 0, 1e9, 0),
     outputChars: toInt(value.outputChars, 0, 1e9, 0),
@@ -420,6 +424,10 @@ const CAPTURE_STAGES = [
   'entry-error',
   'turn-interrupted',
   'turn-estimated',
+  // 采集失聪的两种现场：生成结束事件对不上请求轮次、包装安装失败。
+  // 客户端 capture-digest 会记，这里不同步就会被整行丢弃，反馈包里只剩「一切正常」。
+  'turn-unmatched',
+  'install-failed',
 ];
 const CAPTURE_USAGE_KEYS = [
   'prompt_tokens',
@@ -490,6 +498,9 @@ export function normalizeDiagnostics(value) {
     console: listOf(value.console, MAX_DIAG_CONSOLE, normalizeConsoleRow),
     settings: {
       appVersion: toVersion(settings.appVersion, 40),
+      // 版本号相同、构建号不同的包行为可能不同：没有构建号就无法判断设备跑的是哪一版
+      buildNo: toVersion(settings.buildNo, 20),
+      buildTag: toStr(settings.buildTag, 40),
       mobileCompatUi: toBoolOrNull(settings.mobileCompatUi),
       theme: toStr(settings.theme, 20),
       historyScope: toStr(settings.historyScope, 20),

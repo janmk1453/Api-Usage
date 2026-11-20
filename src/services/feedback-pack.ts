@@ -18,7 +18,7 @@
  * 不收集：钱包密钥、API Key、extensionSettings 原文、图片附件、脚本源码、Discord 身份。
  */
 import { state } from '../store';
-import { APP_VERSION } from '../constants/version';
+import { APP_BUILD_TAG, APP_VERSION, BUILD_NO } from '../constants/version';
 import { captureDigest } from './capture-digest';
 import { listTapRecords } from './request-tap/store';
 import { sanitizeJson, sanitizeText, sanitizeLogForUpload } from './log-sanitize';
@@ -399,6 +399,9 @@ export function settingsDigest(): Record<string, unknown> {
   } catch {}
   return {
     appVersion: clip(APP_VERSION, 40),
+    // 同一版本号可能对应多个构建：不带构建号，接收端无法判断设备跑的是哪一版
+    buildNo: clip(BUILD_NO, 20),
+    buildTag: clip(APP_BUILD_TAG, 40),
     mobileCompatUi: settings.mobileCompatUi === true,
     theme: clip(settings.theme, 20),
     historyScope: clip(settings.historyScope, 20),
