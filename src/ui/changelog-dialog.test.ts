@@ -103,8 +103,9 @@ describe('更新弹窗：内容与关于页同源', () => {
     for (const section of latest.sections) {
       for (const item of section.items) expect(html).toContain(item);
     }
-    // 同版本号重发（只递增构建号）时，版本号会重复出现，改按条目文案判断没有夹带上一版
-    if (older.version !== latest.version) expect(html).not.toContain(older.version);
+    // 同版本号重发（只递增构建号）时，版本号会重复出现，改按条目文案判断没有夹带上一版；
+    // 版本号可能互为前缀（r3.2.3fix 包含 r3.2.3），所以比对整段标签而不是裸字符串
+    if (older.version !== latest.version) expect(html).not.toContain(`>${older.version}<`);
     const olderItem = older.sections[0]?.items[0];
     if (olderItem) expect(html).not.toContain(olderItem);
     expect(html).toContain('data-cl="ok"');
