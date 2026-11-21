@@ -213,18 +213,28 @@ function saveBadgeState(on: boolean, label = '') {
  * TauriTavern 还会把它打成一条控制台报错（真机反馈包里见过这类 500ms 的误报，容易当成功能损坏）。
  * 清单条目形如 { name: 'third-party/Api-Usage', type: 'global' | 'local' }，读不到返回 null 交给兜底顺序。
  */
-export function extensionScopeHint(): boolean | null {
+function extensionManifestEntries(): { name: string; type: string }[] {
+  const out: { name: string; type: string }[] = [];
   try {
     const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
     const list: any[] = Array.isArray(ctx?.extensions) ? ctx.extensions : [];
     for (const item of list) {
-      const base = String(item?.name || '').split('/').filter(Boolean).pop() || '';
-      if (base !== EXTENSION_FOLDER) continue;
-      const type = String(item?.type || '');
-      if (type === 'global') return true;
-      if (type === 'local') return false;
+      // 两种形态都见过：{ name, type } 对象，以及裸字符串名单
+      const name = String((typeof item === 'string' ? item : item?.name) || '').trim();
+      if (!name) continue;
+      out.push({ name, type: String((typeof item === 'string' ? '' : item?.type) || '') });
     }
   } catch {}
+  return out;
+}
+
+export function extensionScopeHint(): boolean | null {
+  for (const item of extensionManifestEntries()) {
+    const base = item.name.split('/').filter(Boolean).pop() || '';
+    if (base !== EXTENSION_FOLDER) continue;
+    if (item.type === 'global') return true;
+    if (item.type === 'local') return false;
+  }
   return null;
 }
 
@@ -233,17 +243,13 @@ export function extensionScopeHint(): boolean | null {
  * 第三方扩展是 `third-party/Api-Usage`，只传裸名 `Api-Usage` 会拼成上一级目录、必然 404。
  */
 export function extensionNameHint(): string | null {
-  try {
-    const ctx: any = (globalThis as any).SillyTavern?.getContext?.();
-    const list: any[] = Array.isArray(ctx?.extensions) ? ctx.extensions : [];
-    for (const item of list) {
-      const full = String(item?.name || '').trim().replace(/^\/+|\/+$/g, '');
-      if (!full) continue;
-      const base = full.split('/').filter(Boolean).pop() || '';
-      if (base !== EXTENSION_FOLDER) continue;
-      return full;
-    }
-  } catch {}
+  for (const item of extensionManifestEntries()) {
+    const full = item.name.replace(/^\/+|\/+$/g, '');
+    if (!full) continue;
+    const base = full.split('/').filter(Boolean).pop() || '';
+    if (base !== EXTENSION_FOLDER) continue;
+    return full;
+  }
   return null;
 }
 
@@ -282,6 +288,26 @@ export function extensionScopeFromList(list: unknown): { name: string; global: b
   return null;
 }
 
+/**
+ * 决定要拿哪些「扩展名 × 位置」去问 /api/extensions/version。
+ * discover 给出的位置是权威答案：位置一旦确定，请求失败就只会是网络（git 连不上 GitHub），
+ * 换另一边重试除了多等一轮，还会让宿主回一条 “Extension not found at …” 的假错误，
+ * 所以权威位置只试一处；只有读不到清单时才按本地优先盲试两边。
+ */
+export function versionProbePlan(
+  found: { name: string; global: boolean } | null,
+  hint: boolean | null,
+  extraNames: (string | null | undefined)[] = [],
+): { names: string[]; globals: boolean[] } {
+  if (found) return { names: [found.name], globals: [found.global] };
+  const names: string[] = [];
+  for (const name of [...extraNames, ...extensionNameCandidates()]) {
+    const value = String(name || '').trim().replace(/^\/+|\/+$/g, '');
+    if (value && !names.includes(value)) names.push(value);
+  }
+  return { names, globals: hint == null ? [false, true] : [hint, !hint] };
+}
+
 /** 问宿主本扩展装在哪：discover 是权威来源，读不到再退回本地清单猜测 */
 async function discoverExtensionScope(): Promise<{ name: string; global: boolean } | null> {
   try {
@@ -311,15 +337,9 @@ async function fetchLocalCommit(): Promise<LocalRepoInfo | null> {
   // 位置必须问宿主：TauriTavern 的本地扩展在 default-user/extensions、全局在 extensions/third-party，
   // 猜错一边服务端只会回 Extension not found。discover 答不出来才按「本地优先」退让。
   const found = await discoverExtensionScope();
-  const hint = found ? found.global : (extensionScopeHint() ?? knownGlobal);
-  const globals = hint == null ? [false, true] : [hint, !hint];
-  const names: string[] = [];
-  for (const name of [found?.name, knownExtensionName, ...extensionNameCandidates()]) {
-    const value = String(name || '').trim().replace(/^\/+|\/+$/g, '');
-    if (value && !names.includes(value)) names.push(value);
-  }
-  for (const extensionName of names) {
-    for (const isGlobal of globals) {
+  const plan = versionProbePlan(found, extensionScopeHint() ?? knownGlobal, [knownExtensionName]);
+  for (const extensionName of plan.names) {
+    for (const isGlobal of plan.globals) {
       const ctrl = new AbortController();
       const timer = setTimeout(() => { try { ctrl.abort(); } catch {} }, LOCAL_TIMEOUT_MS);
       try {

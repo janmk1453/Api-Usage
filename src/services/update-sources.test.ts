@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { extensionNameCandidates, extensionNameHint, extensionScopeFromList, extensionScopeHint, remoteSources } from './update';
+import { extensionNameCandidates, extensionNameHint, extensionScopeFromList, extensionScopeHint, remoteSources, versionProbePlan } from './update';
 
 describe('远端多源列表', () => {
   const sources = remoteSources('manifest.json', 'dev');
@@ -116,6 +116,28 @@ describe('扩展安装位置探测', () => {
     expect(extensionScopeFromList([{ name: 'regex', type: 'system' }, { name: 'third-party/Other', type: 'local' }])).toBe(null);
     expect(extensionScopeFromList(null)).toBe(null);
     expect(extensionScopeFromList({})).toBe(null);
+  });
+
+  it('discover 给出位置时只探那一处，不再拿另一边去换一条假报错', () => {
+    // 真机：全局装、git 连不上 GitHub 时，先试 global（网络错）再试 local，
+    // 宿主就会补一条 “Extension not found at .../third-party/Api-Usage”
+    const plan = versionProbePlan({ name: 'third-party/Api-Usage', global: true }, false);
+    expect(plan).toEqual({ names: ['third-party/Api-Usage'], globals: [true] });
+    expect(versionProbePlan({ name: 'Api-Usage', global: false }, true))
+      .toEqual({ names: ['Api-Usage'], globals: [false] });
+  });
+
+  it('没有 discover 时才按 hint 盲试两边，名字优先用已确认过的', () => {
+    expect(versionProbePlan(null, true, ['third-party/Api-Usage']))
+      .toEqual({ names: ['third-party/Api-Usage', 'Api-Usage'], globals: [true, false] });
+    expect(versionProbePlan(null, null).globals).toEqual([false, true]);
+  });
+
+  it('清单是字符串名单时也能取到完整名，位置未知交给 discover', () => {
+    setExtensions(['third-party/Api-Usage', 'third-party/Other']);
+    expect(extensionNameHint()).toBe('third-party/Api-Usage');
+    expect(extensionScopeHint()).toBe(null);
+    expect(extensionNameCandidates()).toEqual(['third-party/Api-Usage', 'Api-Usage']);
   });
 
   it('读取不到清单时按 third-party/ 前缀再退到裸名', () => {

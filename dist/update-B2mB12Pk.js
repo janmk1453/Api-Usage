@@ -224,17 +224,28 @@ function saveBadgeState(on, label = "") {
 * TauriTavern 还会把它打成一条控制台报错（真机反馈包里见过这类 500ms 的误报，容易当成功能损坏）。
 * 清单条目形如 { name: 'third-party/Api-Usage', type: 'global' | 'local' }，读不到返回 null 交给兜底顺序。
 */
-function extensionScopeHint() {
+function extensionManifestEntries() {
+	const out = [];
 	try {
 		const ctx = globalThis.SillyTavern?.getContext?.();
 		const list = Array.isArray(ctx?.extensions) ? ctx.extensions : [];
 		for (const item of list) {
-			if ((String(item?.name || "").split("/").filter(Boolean).pop() || "") !== EXTENSION_FOLDER) continue;
-			const type = String(item?.type || "");
-			if (type === "global") return true;
-			if (type === "local") return false;
+			const name = String((typeof item === "string" ? item : item?.name) || "").trim();
+			if (!name) continue;
+			out.push({
+				name,
+				type: String((typeof item === "string" ? "" : item?.type) || "")
+			});
 		}
 	} catch {}
+	return out;
+}
+function extensionScopeHint() {
+	for (const item of extensionManifestEntries()) {
+		if ((item.name.split("/").filter(Boolean).pop() || "") !== EXTENSION_FOLDER) continue;
+		if (item.type === "global") return true;
+		if (item.type === "local") return false;
+	}
 	return null;
 }
 /**
@@ -242,16 +253,12 @@ function extensionScopeHint() {
 * 第三方扩展是 `third-party/Api-Usage`，只传裸名 `Api-Usage` 会拼成上一级目录、必然 404。
 */
 function extensionNameHint() {
-	try {
-		const ctx = globalThis.SillyTavern?.getContext?.();
-		const list = Array.isArray(ctx?.extensions) ? ctx.extensions : [];
-		for (const item of list) {
-			const full = String(item?.name || "").trim().replace(/^\/+|\/+$/g, "");
-			if (!full) continue;
-			if ((full.split("/").filter(Boolean).pop() || "") !== EXTENSION_FOLDER) continue;
-			return full;
-		}
-	} catch {}
+	for (const item of extensionManifestEntries()) {
+		const full = item.name.replace(/^\/+|\/+$/g, "");
+		if (!full) continue;
+		if ((full.split("/").filter(Boolean).pop() || "") !== EXTENSION_FOLDER) continue;
+		return full;
+	}
 	return null;
 }
 /** 扩展名候选：清单完整名 → third-party/ 前缀 → 裸名 */
@@ -287,6 +294,27 @@ function extensionScopeFromList(list) {
 		};
 	}
 	return null;
+}
+/**
+* 决定要拿哪些「扩展名 × 位置」去问 /api/extensions/version。
+* discover 给出的位置是权威答案：位置一旦确定，请求失败就只会是网络（git 连不上 GitHub），
+* 换另一边重试除了多等一轮，还会让宿主回一条 “Extension not found at …” 的假错误，
+* 所以权威位置只试一处；只有读不到清单时才按本地优先盲试两边。
+*/
+function versionProbePlan(found, hint, extraNames = []) {
+	if (found) return {
+		names: [found.name],
+		globals: [found.global]
+	};
+	const names = [];
+	for (const name of [...extraNames, ...extensionNameCandidates()]) {
+		const value = String(name || "").trim().replace(/^\/+|\/+$/g, "");
+		if (value && !names.includes(value)) names.push(value);
+	}
+	return {
+		names,
+		globals: hint == null ? [false, true] : [hint, !hint]
+	};
 }
 /** 问宿主本扩展装在哪：discover 是权威来源，读不到再退回本地清单猜测 */
 async function discoverExtensionScope() {
@@ -333,19 +361,8 @@ async function fetchLocalCommit() {
 		headers = { "Content-Type": "application/json" };
 	}
 	const rf = getParentFetch();
-	const found = await discoverExtensionScope();
-	const hint = found ? found.global : extensionScopeHint() ?? knownGlobal;
-	const globals = hint == null ? [false, true] : [hint, !hint];
-	const names = [];
-	for (const name of [
-		found?.name,
-		knownExtensionName,
-		...extensionNameCandidates()
-	]) {
-		const value = String(name || "").trim().replace(/^\/+|\/+$/g, "");
-		if (value && !names.includes(value)) names.push(value);
-	}
-	for (const extensionName of names) for (const isGlobal of globals) {
+	const plan = versionProbePlan(await discoverExtensionScope(), extensionScopeHint() ?? knownGlobal, [knownExtensionName]);
+	for (const extensionName of plan.names) for (const isGlobal of plan.globals) {
 		const ctrl = new AbortController();
 		const timer = setTimeout(() => {
 			try {
