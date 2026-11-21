@@ -12963,7 +12963,7 @@ function stripGuardState(state) {
 /** 更新日志（最新在前） */
 var CHANGELOG = [
 	{
-		version: "r3.2.3",
+		version: "r3.2.3fix",
 		buildNo: 2,
 		date: "2026-11-20",
 		sections: [{
