@@ -93,15 +93,20 @@ describe('更新弹窗：连点十次（开发者入口）', () => {
 
 describe('更新弹窗：内容与关于页同源', () => {
   it('渲染最新一版的版本号、日期与全部条目，不夹带更早版本', () => {
-    const html = changelogDialogHTML(latest, { currentVersion: '3.2.3', buildNo: '1', now: ts(2026, 11, 18) });
+    const html = changelogDialogHTML(latest, { currentVersion: '3.2.3', buildNo: String(latest.buildNo ?? ''), now: ts(2026, 11, 20) });
     expect(html).toContain('aria-modal="true"');
     expect(html).toContain(latest.version);
-    expect(html).toContain('11/18 更新');
-    expect(html).toContain('构建 1');
+    // 日期与构建号跟条目自身保持一致，避免每次发版都要改测试
+    const [, month, day] = latest.date.split('-').map(Number);
+    expect(html).toContain(`${month}/${day} 更新`);
+    expect(html).toContain(`构建 ${latest.buildNo}`);
     for (const section of latest.sections) {
       for (const item of section.items) expect(html).toContain(item);
     }
-    expect(html).not.toContain(older.version);
+    // 同版本号重发（只递增构建号）时，版本号会重复出现，改按条目文案判断没有夹带上一版
+    if (older.version !== latest.version) expect(html).not.toContain(older.version);
+    const olderItem = older.sections[0]?.items[0];
+    if (olderItem) expect(html).not.toContain(olderItem);
     expect(html).toContain('data-cl="ok"');
     expect(html).toContain('data-cl="close"');
   });

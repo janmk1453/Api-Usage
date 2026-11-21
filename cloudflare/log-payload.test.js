@@ -397,3 +397,47 @@ describe('请求日志上报体校验', () => {
     expect(normalizeLogUpload(v1Pack({ record: baseRecord({ url: '' }) }), NOW).error).toBe('bad_record');
   });
 });
+
+/**
+ * 排查关键字段：曾经因为接收端白名单没跟上客户端，rateEstimated / 采集失聪阶段 /
+ * 构建号全在上传包里消失，导致「设备明明是新包，却被判成旧包」。
+ */
+describe('诊断摘要保留排查关键字段', () => {
+  it('历史行保留 rateEstimated，枚举外的值归 null', () => {
+    const pack = v2Pack({
+      diagnostics: {
+        history: [
+          { timestamp: NOW - 9000, model: 'm', rateEstimated: 'prefill' },
+          { timestamp: NOW - 8000, model: 'm', rateEstimated: 'duration' },
+          { timestamp: NOW - 7000, model: 'm', rateEstimated: 'guess' },
+        ],
+      },
+    });
+    const rows = normalizeLogUpload(pack, NOW).value.diagnostics.history;
+    expect(rows.map((row) => row.rateEstimated)).toEqual(['prefill', 'duration', null]);
+  });
+
+  it('采集快照保留 turn-unmatched 与 install-failed，未知阶段丢弃', () => {
+    const pack = v2Pack({
+      diagnostics: {
+        capture: [
+          { at: NOW - 3000, stage: 'turn-unmatched', model: 'm', reason: 'turn-unmatched' },
+          { at: NOW - 2000, stage: 'install-failed', model: '', reason: 'depth-limit:7' },
+          { at: NOW - 1000, stage: 'unknown-stage', model: 'm' },
+        ],
+      },
+    });
+    const rows = normalizeLogUpload(pack, NOW).value.diagnostics.capture;
+    expect(rows.map((row) => row.stage)).toEqual(['turn-unmatched', 'install-failed']);
+    expect(rows[1].reason).toBe('depth-limit:7');
+  });
+
+  it('设置摘要保留构建号与构建标签', () => {
+    const pack = v2Pack({
+      diagnostics: { settings: { appVersion: '3.2.3', buildNo: '2', buildTag: '3.2.3|2' } },
+    });
+    const settings = normalizeLogUpload(pack, NOW).value.diagnostics.settings;
+    expect(settings.buildNo).toBe('2');
+    expect(settings.buildTag).toBe('3.2.3|2');
+  });
+});

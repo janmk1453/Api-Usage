@@ -48,6 +48,30 @@ export const CHANGELOG_ENTRY_LIMIT = 5;
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: 'r3.2.3',
+    buildNo: 2,
+    date: '2026-11-20',
+    sections: [
+      {
+        kind: 'fix',
+        items: [
+          '多请求并发导致的竞态问题与大量复杂错误',
+          '同一次请求被重复记成多条',
+          '改善修复错误报告',
+          '重新加载宿主后取不到用量',
+        ],
+      },
+      {
+        kind: 'improve',
+        items: [
+          '非流式与假流式不再错误展示首字延迟',
+          '改进速率估算准确性',
+          '采集安装流程',
+        ],
+      },
+    ],
+  },
+  {
+    version: 'r3.2.3',
     buildNo: 1,
     date: '2026-11-18',
     sections: [

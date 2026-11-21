@@ -17,7 +17,7 @@ import {
   structuralLabel,
   PROMPT_HINT_LIMIT,
 } from './classify';
-import { findSettlement, MATCH_WINDOW_MS, normalizeModel, probeKeyOf, stripModelTag, type Settlement } from './match';
+import { findEstimatedSettlement, findSettlement, MATCH_WINDOW_MS, modelLooseMatch, normalizeModel, probeKeyOf, stripModelTag, type Settlement } from './match';
 
 describe('端点识别', () => {
   it('只认酒馆后端转发的 generate 端点', () => {
@@ -185,6 +185,31 @@ describe('对账匹配', () => {
     expect(findSettlement(probe, [settlement({ model: ' DeepSeek-Flash ' })], new Set())).not.toBeNull();
   });
 
+  it('探针没抓到 usage 时，按模型+时间窗认下「本地估算补记」的那一条', () => {
+    const probe = probeKeyOf({ ...base, usage: null });
+    const est = settlement({ id: 'est', prompt: 90, completion: 12, total: 102, ts: 1_010_000, estimated: true });
+    expect(findEstimatedSettlement(probe, [est], new Set())?.id).toBe('est');
+    // 不是估算条目（真上游用量）不能用来给无用量探针兜底，否则会掩盖真故障
+    expect(findEstimatedSettlement(probe, [settlement({ ts: 1_010_000 })], new Set())).toBeNull();
+    // 模型对不上 / 超出时间窗 / 已被别的探针消费，都不认
+    expect(findEstimatedSettlement(probe, [{ ...est, model: 'gpt-x' }], new Set())).toBeNull();
+    expect(findEstimatedSettlement(probe, [{ ...est, ts: base.endedAt + MATCH_WINDOW_MS + 1 }], new Set())).toBeNull();
+    expect(findEstimatedSettlement(probe, [est], new Set(['est']))).toBeNull();
+  });
+
+  it('探针自己有 usage 时不走估算兜底（用量对不上就是没记账）', () => {
+    const probe = probeKeyOf({ ...base, usage: { prompt: 100, completion: 20, total: 120 } });
+    const est = settlement({ id: 'est', total: 102, estimated: true });
+    expect(findEstimatedSettlement(probe, [est], new Set())).toBeNull();
+  });
+
+  it('多条估算候选取时间最近的一条（并发轮次别配错）', () => {
+    const probe = probeKeyOf({ ...base, usage: null });
+    const far = settlement({ id: 'far', ts: base.at - 30000, estimated: true });
+    const near = settlement({ id: 'near', ts: base.endedAt + 1000, estimated: true });
+    expect(findEstimatedSettlement(probe, [far, near], new Set())?.id).toBe('near');
+  });
+
   it('模型名前缀 [A] / [D] 不参与比较（探针存请求体原名，入账存去掉前缀的 model）', () => {
     expect(stripModelTag('[A]gemini-3.8-flash')).toBe('gemini-3.8-flash');
     expect(stripModelTag('  [D] deepseek-flash ')).toBe('deepseek-flash');
@@ -196,5 +221,28 @@ describe('对账匹配', () => {
     const probe = probeKeyOf({ ...base, model: '[A]gemini-3.8-flash', usage: { prompt: 100, completion: 20, total: 120 } });
     const hit = findSettlement(probe, [settlement({ model: 'gemini-3.8-flash' })], new Set());
     expect(hit?.by).toBe('tokens');
+  });
+
+  it('反代给模型名挂后缀（-free / -thinking）时，用量全等仍能认账', () => {
+    // 3.2.3 的 missing-usage 假警报：探针存请求名 deepseek-v4.1-flash，
+    // 入账存响应名 deepseek-v4.1-flash-free，严格比较永远对不上。
+    expect(modelLooseMatch('deepseek-v4.1-flash', 'deepseek-v4.1-flash-free')).toBe(true);
+    expect(modelLooseMatch('deepseek-v4.1-flash-free', 'DeepSeek-V4.1-Flash')).toBe(true);
+    expect(modelLooseMatch('gemini-4-argon', 'gemini-4-argon-thinking')).toBe(true);
+    // 跨版本不许撞：deepseek-v4 与 deepseek-v4.1-flash 是不同模型
+    expect(modelLooseMatch('deepseek-v4', 'deepseek-v4.1-flash')).toBe(false);
+    expect(modelLooseMatch('deepseek-v4.1', 'deepseek-v4.1-flash')).toBe(true);
+    expect(modelLooseMatch('gpt-x', 'deepseek-flash')).toBe(false);
+    expect(modelLooseMatch('', 'deepseek-flash')).toBe(false);
+
+    const probe = probeKeyOf({ ...base, model: 'deepseek-v4.1-flash', usage: { prompt: 100, completion: 20, total: 120 } });
+    const hit = findSettlement(probe, [settlement({ model: 'deepseek-v4.1-flash-free' })], new Set());
+    expect(hit?.by).toBe('model');
+    expect(hit?.settlement.model).toBe('deepseek-v4.1-flash-free');
+  });
+
+  it('用量全等但模型完全不同时不认账（不拿宽松匹配掩盖真漏记）', () => {
+    const probe = probeKeyOf({ ...base, model: 'deepseek-v4.1-flash', usage: { prompt: 100, completion: 20, total: 120 } });
+    expect(findSettlement(probe, [settlement({ model: 'gpt-4o' })], new Set())).toBeNull();
   });
 });

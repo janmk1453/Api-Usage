@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { state } from '../store';
 import { clearTapRecords, upsertTapRecord } from './request-tap/store';
 import { clearConsoleRing, noteConsole } from './console-ring';
-import { APP_VERSION } from '../constants/version';
+import { APP_BUILD_TAG, APP_VERSION, BUILD_NO } from '../constants/version';
 import type { TapRecord } from './request-tap/types';
 import { clearRecentTurns, noteRecentTurns } from './request-log';
 import {
@@ -200,6 +200,9 @@ describe('反馈诊断包', () => {
     expect(diagnostics.tapSummary.total).toBe(1);
     expect(Array.isArray(diagnostics.console)).toBe(true);
     expect(diagnostics.settings.appVersion).toBe(APP_VERSION);
+    // 构建号是区分「同一版本号的不同构建」的唯一线索，必须随包上传
+    expect(diagnostics.settings.buildNo).toBe(BUILD_NO);
+    expect(diagnostics.settings.buildTag).toBe(APP_BUILD_TAG);
     expect(diagnostics.conversation).toBeTruthy();
     expect(Array.isArray(diagnostics.extensions)).toBe(true);
     expect(JSON.stringify(pack)).not.toContain('Bearer abcdefgh');

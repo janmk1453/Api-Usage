@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { backfillEntryDuration, normalizeSettings, repository } from './repository';
+import { backfillEntryDuration, dropDuplicateTurns, normalizeSettings, repository } from './repository';
 import { state } from '../store/index';
 import { defaultSettings } from '../types/settings';
 import { createDeepSeekWallet, createWalletFromConnection } from './wallets';
@@ -240,7 +240,22 @@ describe('输出速率估算入库', () => {
     expect(h.streamed).toBe(false);
     expect(h.ttft).toBe(0);
     expect(h.tokenRate).toBeGreaterThan(0);
-    expect(['prefill', 'duration']).toContain(h.rateEstimated);
+    expect(h.rateEstimated).toBe('duration');
+  });
+
+  it('假流式记录：首字与总耗时重合时不写首字延迟，速率按整轮耗时估算', () => {
+    const now = Date.now();
+    // 真机样本：输出 4085、总耗时 50360ms、上游把正文憋到 50327ms 才吐完
+    repository.addEntry(
+      { prompt_tokens: 13989, completion_tokens: 4085, total_tokens: 18074 },
+      'gemini-3.8-flash', [], now - 50360, undefined, undefined, 50327, 0, 'tool_calls', null, 'req-fake-stream', null,
+    );
+    const h = state.history[0];
+    expect(h.ttft).toBe(0);
+    expect(Number(h.duration)).toBeGreaterThan(0);
+    const expected = Math.round(4085 / (Number(h.duration) / 1000));
+    expect(Math.abs(Number(h.tokenRate) - expected)).toBeLessThanOrEqual(1);
+    expect(h.rateEstimated).toBe('duration');
   });
 
   it('真实流式记录按实测速率记录，不带估算标记', () => {
@@ -257,6 +272,40 @@ describe('输出速率估算入库', () => {
 });
 
 
+
+describe('同轮重复条目清理（多层包装时期的历史残留）', () => {
+  const base = { chatId: 'c1', model: 'm', prompt_tokens: 84746, cache_hit_tokens: 81571, completion_tokens: 2169, total_tokens: 86915 };
+
+  it('同对话同模型同用量、落库相差不到 1.5s 的条目只留一条', () => {
+    const list = [
+      { ...base, timestamp: 1_795_022_671_330 },
+      { ...base, timestamp: 1_795_022_671_326 },
+      { ...base, timestamp: 1_795_022_671_321 },
+    ];
+    const { kept, removed } = dropDuplicateTurns(list);
+    expect(kept).toHaveLength(1);
+    expect(removed).toHaveLength(2);
+  });
+
+  it('真正分开的两轮（相差超过窗口）、不同对话都保留', () => {
+    const list = [
+      { ...base, timestamp: 1_795_022_671_330 },
+      { ...base, timestamp: 1_795_022_730_000 },
+      { ...base, chatId: 'c2', timestamp: 1_795_022_671_331 },
+      { ...base, completion_tokens: 2170, total_tokens: 86916, timestamp: 1_795_022_671_332 },
+    ];
+    const { kept, removed } = dropDuplicateTurns(list);
+    expect(kept).toHaveLength(4);
+    expect(removed).toHaveLength(0);
+  });
+
+  it('缺时间戳或总量的条目一律保留，不去猜', () => {
+    const list = [{ ...base, timestamp: 0 }, { ...base, timestamp: 0 }, { ...base, total_tokens: 0, timestamp: 1 }];
+    const { kept, removed } = dropDuplicateTurns(list);
+    expect(kept).toHaveLength(3);
+    expect(removed).toHaveLength(0);
+  });
+});
 
 describe('同一轮二次写入补回耗时', () => {
   it('首写没有耗时、后写知道起点时补上并重算速率', () => {
@@ -288,6 +337,60 @@ describe('同一轮二次写入补回耗时', () => {
     expect(head.duration).toBe(5000);
     // 非流式测不到首字：900 token 摊到整轮 5s，得到正数速率供展示（按估算标注）
     expect(head.tokenRate).toBeGreaterThan(0);
-    expect(['prefill', 'duration']).toContain(head.rateEstimated);
+    expect(head.rateEstimated).toBe('duration');
+  });
+});
+
+describe('同一份用量被多层 fetch 包装各写一次（内容去重兜底）', () => {
+  const sameBody = [{ role: 'system', content: '你是江知弈。' }, { role: 'user', content: '继续。' }];
+
+  it('requestId 不同、请求体与用量全等的第二次写入被吞掉，历史只留一条', () => {
+    const now = Date.now();
+    const usage = { prompt_tokens: 34249, completion_tokens: 7731, total_tokens: 41980 };
+    const model = 'deepseek-v4.1-flash-free';
+    const first = repository.addEntry(usage, model, sameBody, now - 91300, undefined, undefined, 0, 0, 'stop', null, 'req:1795179501447:274', false);
+    expect(first).not.toBeNull();
+    const second = repository.addEntry(usage, model, sameBody, now - 91295, undefined, undefined, 0, 0, 'stop', null, 'req:1795179501448:275', false);
+    expect(second).toBeNull();
+    expect(state.history.filter((h: any) => Number(h.total_tokens) === 41980)).toHaveLength(1);
+    // 同一份用量再再来一次也还是那一条
+    repository.addEntry(usage, model, sameBody, now - 91290, undefined, undefined, 0, 0, 'stop', null, 'req:1795179501449:276', false);
+    expect(state.history.filter((h: any) => Number(h.total_tokens) === 41980)).toHaveLength(1);
+  });
+
+  it('请求体不同的两次真实请求即使用量全等也照常入库（不并轮）', () => {
+    const now = Date.now();
+    const usage = { prompt_tokens: 900, completion_tokens: 100, total_tokens: 1000 };
+    const model = 'gemini-4-argon';
+    repository.addEntry(usage, model, [{ role: 'user', content: '第一句' }], now - 20000, undefined, undefined, 0, 0, 'stop', null, 'req:s1', false);
+    repository.addEntry(usage, model, [{ role: 'user', content: '第二句' }], now - 10000, undefined, undefined, 0, 0, 'stop', null, 'req:s2', false);
+    expect(state.history.filter((h: any) => Number(h.total_tokens) === 1000)).toHaveLength(2);
+  });
+
+  it('同请求体但超出内容去重窗口的两次写入照常入库', async () => {
+    const usage = { prompt_tokens: 900, completion_tokens: 100, total_tokens: 1000 };
+    const model = 'gemini-4-argon';
+    repository.addEntry(usage, model, sameBody, Date.now() - 20000, undefined, undefined, 0, 0, 'stop', null, 'req:w1', false);
+    await new Promise((r) => setTimeout(r, 3100));
+    repository.addEntry(usage, model, sameBody, Date.now() - 10000, undefined, undefined, 0, 0, 'stop', null, 'req:w2', false);
+    expect(state.history.filter((h: any) => Number(h.total_tokens) === 1000).length).toBeGreaterThanOrEqual(2);
+  }, 10000);
+
+  it('请求体为空时不启用内容去重（宁可多记也不误并）', () => {
+    const now = Date.now();
+    const usage = { prompt_tokens: 700, completion_tokens: 70, total_tokens: 770 };
+    const model = 'gemini-4-argon';
+    repository.addEntry(usage, model, [], now - 500, undefined, undefined, 0, 0, 'stop', null, 'req:e1', false);
+    repository.addEntry(usage, model, [], now - 400, undefined, undefined, 0, 0, 'stop', null, 'req:e2', false);
+    expect(state.history.filter((h: any) => Number(h.total_tokens) === 770)).toHaveLength(2);
+  });
+
+  it('用量不同就是另一轮，照常入库', () => {
+    const now = Date.now();
+    const model = 'deepseek-v4.1-flash-free';
+    repository.addEntry({ prompt_tokens: 500, completion_tokens: 100, total_tokens: 600 }, model, [], now - 2000, undefined, undefined, 0, 0, 'stop', null, 'req:q1', false);
+    repository.addEntry({ prompt_tokens: 500, completion_tokens: 101, total_tokens: 601 }, model, [], now - 1000, undefined, undefined, 0, 0, 'stop', null, 'req:q2', false);
+    expect(state.history.filter((h: any) => Number(h.total_tokens) === 600)).toHaveLength(1);
+    expect(state.history.filter((h: any) => Number(h.total_tokens) === 601)).toHaveLength(1);
   });
 });

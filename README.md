@@ -61,7 +61,7 @@
 ```bash
 npm install
 npm run typecheck && npm test
-npm run build && node --check index.js
+npm run build && node --check dist/index.js
 npm run verify:ci
 ```
 

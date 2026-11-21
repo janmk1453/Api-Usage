@@ -116,6 +116,11 @@ export const HEALTH_DEDUPE_MS = 90000;
 export const MISSING_CLUSTER_MS = 30 * 60 * 1000;
 /** 缺失用量聚簇阈值：至少这么多轮才算「多次」 */
 export const MISSING_CLUSTER_MIN = 2;
+/**
+ * 采集安装失败的告警门槛：失败不会让「某一轮」丢记录，而是让整段采集静默，
+ * 所以不看时间窗口聚合，只按次数——偶发一次（宿主恰好重绑）不打扰，反复失败必须提示。
+ */
+export const INSTALL_FAIL_MIN = 3;
 /** 元信息缺失只检查最近这段时间的记录，避免旧数据一直报警 */
 export const META_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 
@@ -275,6 +280,23 @@ export function scanCaptureHealth(stages = listCaptureStages()): HealthSignal[] 
         detail: clipText('写入历史失败：' + reason),
       });
     }
+  }
+  // 采集包装安装失败：症状是「整段没有记录」，历史里看不出来，只能靠这里报出来
+  const installFails = stages.filter((rec) => rec && rec.stage === 'install-failed');
+  if (installFails.length >= INSTALL_FAIL_MIN) {
+    const reasons = [...new Set(installFails.map((rec) => String(rec.reason || 'unknown').split(':')[0]))].sort();
+    const lastAt = installFails.reduce((max, rec) => Math.max(max, Number(rec.at) || 0), 0);
+    out.push({
+      kind: 'plugin-error',
+      at: lastAt,
+      model: '',
+      reason: 'install-failed',
+      signature: errorSignature(reasons.join(',')),
+      severity: 'warn',
+      detail: clipText(
+        '采集包装安装失败 ' + installFails.length + ' 次（' + reasons.join(' / ') + '），可能出现整段对话没有写入历史',
+      ),
+    });
   }
   for (const [key, list] of drops) {
     const [model, reason] = key.split('|');

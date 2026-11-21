@@ -57,6 +57,15 @@ describe('采集链路快照', () => {
     expect(rows[1].usage).toEqual({ total_tokens: 12 });
   });
 
+  it('采集失聪的两个阶段能穿过落盘镜像', async () => {
+    noteCaptureStage('turn-unmatched', { at: 1, model: 'm', reason: 'turn-unmatched' });
+    noteCaptureStage('install-failed', { at: 2, reason: 'depth-limit:7' });
+    const fresh = await reloadModule();
+    const rows = fresh.listCaptureStages();
+    expect(rows.map((r) => r.stage)).toEqual(['turn-unmatched', 'install-failed']);
+    expect(rows[1].reason).toBe('depth-limit:7');
+  });
+
   it('超过上限只留最近的一批', async () => {
     for (let i = 0; i < CAPTURE_MAX + 5; i += 1) noteCaptureStage('fetch-start', { at: i });
     const rows = listCaptureStages();

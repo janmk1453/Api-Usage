@@ -13,9 +13,9 @@ import { defaultSettings } from '../types/settings';
 import { isUnsafeKey, isValidDayKey, localDay } from '../utils/date';
 import { isTruncatedFinish, isTruncatedOf } from '../utils/finish';
 import { log, toast } from '../utils/logger';
-import { turnFingerprint } from './fingerprint';
+import { turnFingerprint, usageFingerprint, messageDigest } from './fingerprint';
 import { mobileDeviceHint } from '../utils/device';
-import { computeTokenRate, estimateTokenRate, measureTokenRate, prefillReferenceMs, sanitizeHistoryTiming, sanitizeRate, type RateEstimateSource } from './token-rate';
+import { computeTokenRate, estimateTokenRate, measureTokenRate, normalizeTtft, sanitizeHistoryTiming, sanitizeRate, type RateEstimateSource } from './token-rate';
 import { normalizeConnectionEndpoint, type HistoryConnection } from '../services/connection-identity';
 import {
   createDeepSeekWallet,
@@ -63,8 +63,23 @@ function getCurrentChatName(): string | null {
 }
 
 const recentUsageFingerprints = new Map<string, number>();
+/**
+ * 第二代去重：按「模型 + 四元 token + 接入」算内容指纹。
+ *
+ * 轮次指纹认的是 requestId，前提是「一次请求只会被解析一次」。当宿主把 fetch 换成多层包装、
+ * 每一层都解析同一个响应时，每层都会生成自己的 requestId，轮次指纹各不相同（3.2.3 出现过
+ * 一次请求写 12 条历史）。此时唯一还能对上号的就是用量本身，所以这里再做一层内容去重兜底。
+ */
+const recentContentFingerprints = new Map<string, number>();
 /** 去重窗口：fetch 侧与 GENERATION_ENDED 可能相隔十几秒（尤其慢速流式），按 15s 计 */
 const TURN_DEDUPE_WINDOW_MS = 15_000;
+/**
+ * 内容去重窗口：只覆盖「同一次响应被多层包装各解析一遍」这种毫秒级重复。
+ *
+ * 不能复用 15s：内容指纹抹掉了 requestId 与起始时间，窗口越长，越容易把两次真实请求并成一条。
+ * 多层包装的重复总是在同一次响应解析后紧挨着发生（实测相邻两条相隔 15ms），给 3s 足够宽。
+ */
+const CONTENT_DEDUPE_WINDOW_MS = 3_000;
 /** 指纹表保留时长：只需覆盖去重窗口，超出即回收 */
 const TURN_FINGERPRINT_TTL_MS = 60_000;
 let storageFailureNotified = false;
@@ -72,15 +87,13 @@ let storageFailureNotified = false;
 /**
  * 一轮记录的速率取值（单一来源）：能测就测，测不出（非流式 / 假流式 / 首字缺失）
  * 才用估算，并记下估算口径，UI 据此加「估算」标注。
- * 估算的首字延迟参考取同模型最近的流式样本，样本不足时退到全模型。
+ * 估算口径与实测一致：输出 Token（含思维链）÷（总耗时 − 首字延迟），首字不可信时首字记 0。
  */
 function resolveTokenRate(params: {
   duration: number;
   ttft: number;
   completionTokens: number;
   streamed: boolean | null;
-  model: string;
-  history?: any[] | null;
 }): { rate: number; estimated: RateEstimateSource | null } {
   const measured = measureTokenRate({
     duration: params.duration,
@@ -92,7 +105,7 @@ function resolveTokenRate(params: {
   const estimate = estimateTokenRate({
     duration: params.duration,
     completionTokens: params.completionTokens,
-    prefillMs: prefillReferenceMs(params.history || state.history, params.model),
+    ttft: params.ttft,
   });
   if (!estimate) return { rate: 0, estimated: null };
   return { rate: estimate.rate, estimated: estimate.source };
@@ -119,7 +132,7 @@ function applyRateTo(target: any, r: { rate: number; estimated: RateEstimateSour
  * 旧版本把这类记录的速率一律写成 0，升级后它们应显示估算速率（UI 标「估算」）。
  * 幂等：已有速率或已标过估算口径的条目一律跳过，避免反复改写历史。
  */
-function backfillEstimatedRates(list: any[], model?: string | null): boolean {
+function backfillEstimatedRates(list: any[]): boolean {
   let changed = false;
   for (const h of list || []) {
     if (!h || typeof h !== 'object') continue;
@@ -133,17 +146,56 @@ function backfillEstimatedRates(list: any[], model?: string | null): boolean {
     const duration = Number(h.duration) || 0;
     const comp = Number(h.completion_tokens) || 0;
     if (duration <= 0 || comp <= 0) continue;
-    const estimate = estimateTokenRate({
-      duration,
-      completionTokens: comp,
-      prefillMs: prefillReferenceMs(state.history, model || String(h.model || '')),
-    });
+    const estimate = estimateTokenRate({ duration, completionTokens: comp, ttft });
     if (!estimate) continue;
     h.tokenRate = estimate.rate;
     h.rateEstimated = estimate.source;
     changed = true;
   }
   return changed;
+}
+
+/** 同轮重复落库的判定窗口：多层包装各解析一次时，落库时间通常只差几毫秒 */
+const DEDUPE_TURN_WINDOW_MS = 1500;
+
+/** 重复条目备份键：清理是破坏性操作，先留一份可回溯的副本 */
+const DEDUPE_BACKUP_KEY = 'aus_dedupe_backup_v1';
+const DEDUPE_BACKUP_MAX = 200;
+
+function backupDroppedTurns(rows: any[]): void {
+  if (!rows.length) return;
+  try {
+    const prev = JSON.parse(localStorage.getItem(DEDUPE_BACKUP_KEY) || '[]');
+    const list = Array.isArray(prev) ? prev : [];
+    localStorage.setItem(DEDUPE_BACKUP_KEY, JSON.stringify(list.concat(rows).slice(-DEDUPE_BACKUP_MAX)));
+  } catch {}
+}
+
+/**
+ * 迁移：删掉「一次请求被多层 fetch 包装各写一遍」时期留下的同轮重复条目。
+ *
+ * 判据是「同一对话 + 同一模型 + 三段 Token 与缓存命中数完全相同 + 落库时间相差 <1.5s」——
+ * 真实的两轮请求不可能连缓存命中数都分毫不差，所以这个组合足够安全；
+ * 重复组里保留先遍历到的那条，其余进备份。
+ */
+export function dropDuplicateTurns(list: any[]): { kept: any[]; removed: any[] } {
+  const kept: any[] = [];
+  const removed: any[] = [];
+  const seen = new Map<string, number>();
+  for (const h of list || []) {
+    if (!h || typeof h !== 'object') { kept.push(h); continue; }
+    const ts = Number(h.timestamp) || 0;
+    const total = Number(h.total_tokens) || 0;
+    if (ts > 0 && total > 0) {
+      const hit = Number((h as any).cache_hit_tokens ?? (h as any).prompt_cache_hit_tokens) || 0;
+      const key = [String((h as any).chatId || ''), String(h.model || ''), Number(h.prompt_tokens) || 0, hit, Number(h.completion_tokens) || 0, total].join('|');
+      const prev = seen.get(key);
+      if (prev !== undefined && Math.abs(ts - prev) <= DEDUPE_TURN_WINDOW_MS) { removed.push(h); continue; }
+      seen.set(key, ts);
+    }
+    kept.push(h);
+  }
+  return { kept, removed };
 }
 
 /** 只把已定义的元信息字段写到条目上，避免到处出现 undefined 键 */
@@ -261,7 +313,7 @@ function replaceEstimatedEntry(
  * 后到的写者知道真实起点，就把它补上并按同一口径重算速率 —— 否则这条记录会永久显示
  * 耗时 0 秒、速率 0，还会在历史页被当成「没记录到耗时」提示出来。
  */
-export function backfillEntryDuration(head: any, startTime: number, now = Date.now()): boolean {
+export function backfillEntryDuration(head: any, startTime: number | null, now = Date.now()): boolean {
   if (!head || !startTime) return false;
   if (Number(head.duration) > 0) return false;
   const measured = now - startTime;
@@ -269,11 +321,9 @@ export function backfillEntryDuration(head: any, startTime: number, now = Date.n
   head.duration = measured;
   applyRateTo(head, resolveTokenRate({
     duration: measured,
-    ttft: Number(head.ttft) || 0,
+    ttft: normalizeTtft(measured, head.ttft),
     completionTokens: Number(head.completion_tokens) || 0,
     streamed: head.streamed ?? null,
-    model: String(head.model || ''),
-    history: state.history,
   }));
   return true;
 }
@@ -1194,7 +1244,8 @@ export const repository = {
     usage: any,
     model: string,
     messages: any[],
-    startTime: number,
+    /** 本轮起点；未知（无主轮次）时传 null，耗时记 0 而不是编一个值 */
+    startTime: number | null,
     fullRequest?: any,
     fullResponse?: any,
     ttft = 0,
@@ -1277,13 +1328,33 @@ export const repository = {
       // 指纹不含 token 数：估算条目与随后到达的真实 usage 的 token 必然不同，
       // 含 token 会让两者都入库；这里用 requestId / 请求起始秒作为轮次标识。
       const fp = turnFingerprint({ requestId, model, startTime, connection, now });
+      // 内容指纹：多层 fetch 包装各生成一个 requestId 时轮次指纹拦不住，只能靠「同模型 + 同四元 token + 同请求体」。
+      // 不再拼「请求起始秒」——那是拿时间边界当身份：同一份响应被不同层解析时 startTime 可能跨秒
+      // （差几毫秒就跨），漏并；而两次真实请求若恰巧落在同一秒也会被误并。改用 messages 摘要，
+      // 它才是「是不是同一份请求」的稳定现场（见 src/data/fingerprint.ts#messageDigest）。
+      // 取不到内容摘要（messages 为空或异常）时不做这层去重：此时指纹只剩「同模型 + 同 token」，
+      // 在 3s 内足以把两次真实请求并成一条，宁可多记一条也不能少记。
+      const digest = messageDigest(messages);
+      const contentFp = total > 0 && digest
+        ? usageFingerprint(model, total, hit, miss, comp, connection, null) + '|' + digest
+        : '';
       const lastFpTime = recentUsageFingerprints.get(fp);
-      if (lastFpTime && now - lastFpTime < TURN_DEDUPE_WINDOW_MS) {
+      const lastContentTime = contentFp ? recentContentFingerprints.get(contentFp) : 0;
+      const dupByTurn = !!lastFpTime && now - lastFpTime < TURN_DEDUPE_WINDOW_MS;
+      const dupByContent = !dupByTurn && !!lastContentTime && now - lastContentTime < CONTENT_DEDUPE_WINDOW_MS;
+      if (dupByTurn || dupByContent) {
         // 重复记录：主路径先写入时缺完整响应/finish_reason，fetch 后解析到则回填
         try {
-          const head: any = requestId
+          // 同轮（requestId 相同）直接按 requestId 找；内容重复（requestId 不同）只能按用量找，
+          // 绝不能退化成「回填历史第一条」，那会把别的轮次覆盖掉。
+          const head: any = dupByTurn && requestId
             ? state.history.find((entry: any) => entry.requestId === requestId) || state.history[0]
-            : state.history[0];
+            : state.history.find((entry: any) => (
+                now - (Number(entry.timestamp) || 0) < CONTENT_DEDUPE_WINDOW_MS
+                && Number(entry.total_tokens) === total
+                && Number(entry.prompt_tokens) === hit + miss
+                && Number(entry.completion_tokens) === comp
+              )) || null; // 内容重复却找不到原条目：什么都不回填，绝不退化成「回填历史第一条」
           if (head) {
             let changed = false;
             // 估算条目被真实 usage 追上：整条换成真实值，别让估算 token 留在历史里
@@ -1302,10 +1373,9 @@ export const repository = {
             // 速率按「能测就测、测不出就估算」重算；TTFT 仍按流式判定归零
             const recalcHeadRate = (): boolean => applyRateTo(head, resolveTokenRate({
               duration: Number(head.duration) || 0,
-              ttft: Number(head.ttft) || 0,
+              ttft: normalizeTtft(Number(head.duration) || 0, head.ttft),
               completionTokens: Number(head.completion_tokens) || 0,
               streamed: head.streamed ?? null,
-              model,
             }));
             if (ttft && !head.ttft) {
               // 非流式/假流式：TTFT 不可信（等于总耗时）必须归零，速率交给估算
@@ -1313,8 +1383,9 @@ export const repository = {
                 head.ttft = 0;
                 head.streamed = false;
               } else {
-                head.ttft = ttft;
-                if (streamed != null) head.streamed = streamed;
+                // 首字与总耗时重合（假流式）同样不可信，归一后为 0，界面显示「—」
+                head.ttft = normalizeTtft(Number(head.duration) || 0, ttft);
+                if (head.ttft > 0 && streamed != null) head.streamed = streamed;
               }
               recalcHeadRate();
               changed = true;
@@ -1356,26 +1427,31 @@ export const repository = {
             }
           }
         } catch {}
-        log.debug('addEntry 去重跳过(同轮指纹)', { fp });
+        log.debug('addEntry 去重跳过', { fp, by: dupByTurn ? 'turn' : 'content' });
         return null as any;
       }
       recentUsageFingerprints.set(fp, now);
+      if (contentFp) recentContentFingerprints.set(contentFp, now);
       for (const [key, timestamp] of recentUsageFingerprints) {
         if (now - timestamp > TURN_FINGERPRINT_TTL_MS) recentUsageFingerprints.delete(key);
+      }
+      for (const [key, timestamp] of recentContentFingerprints) {
+        if (now - timestamp > TURN_FINGERPRINT_TTL_MS) recentContentFingerprints.delete(key);
       }
     } catch {}
     const lu: any = { timestamp: Date.now(), model, rawModel: rawModel !== model ? rawModel : null, prompt_tokens: hit + miss, prompt_cache_hit_tokens: hit, prompt_cache_miss_tokens: miss, completion_tokens: comp, total_tokens: total };
     const duration = startTime ? Date.now() - startTime : 0;
     const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || (usage as any)?.__think_tokens_est || 0;
     lu.duration = duration;
-    // 非流式/假流式：TTFT 不可信（等于总耗时）必须归零，但速率不再跟着丢——
-    // 测不出真实速率时走估算，并记下估算口径，界面据此标「估算」
+    // 首字延迟只在「首字确实早于结尾」时才有意义：非流式与假流式（正文憋到最后一次性吐出）
+    // 一律记 0，界面显示「—」；速率按同一口径「输出 Token ÷（总耗时 − 首字）」估算
     const nonStreamed = streamed === false;
     lu.streamed = streamed;
-    const rate = resolveTokenRate({ duration, ttft: ttft || 0, completionTokens: comp, streamed, model });
+    const effectiveTtft = nonStreamed ? 0 : normalizeTtft(duration, ttft || 0);
+    const rate = resolveTokenRate({ duration, ttft: effectiveTtft, completionTokens: comp, streamed });
     lu.tokenRate = rate.rate;
     if (rate.estimated) lu.rateEstimated = rate.estimated;
-    lu.ttft = nonStreamed ? 0 : (ttft || 0); lu.thinkTime = thinkTime || 0; lu.thinkTokens = thinkTokens;
+    lu.ttft = effectiveTtft; lu.thinkTime = thinkTime || 0; lu.thinkTokens = thinkTokens;
     // 截断检测：非正常 finish_reason（length / content_filter / sensitive 等）。
     // 用户自己点停止不算截断——这一轮本来就该停在那里，不是模型截不出来。
     const userStopped = String((meta as any)?.interrupted || '') === 'user';
@@ -1997,6 +2073,21 @@ export const repository = {
       // 对历史成本按归一化模型重算，修复 [masa]/[OR] 前缀导致的 0 费用
       try { if (await this.recalcAll(cold)) coldDirty = true; } catch {}
     }
+    // 迁移：清掉「一次请求被多层包装各写一遍」留下的同轮重复条目（先备份再删，幂等）
+    try {
+      const hotDedup = dropDuplicateTurns(state.history);
+      if (hotDedup.removed.length) {
+        state.history = hotDedup.kept;
+        backupDroppedTurns(hotDedup.removed);
+        try { saveHot({ history: state.history }); } catch {}
+      }
+      const coldDedup = dropDuplicateTurns(cold);
+      if (coldDedup.removed.length) {
+        cold.splice(0, cold.length, ...coldDedup.kept);
+        backupDroppedTurns(coldDedup.removed);
+        coldDirty = true;
+      }
+    } catch {}
     // 迁移：非流式记录补估算速率（条目级幂等，不依赖上面的整库重算门控——
     // 只重发产物的同版本升级也要能看到估算值）
     try {

@@ -21,7 +21,7 @@ export type HistoryEntry = {
   fullResponse?: unknown;
   duration?: number;
   tokenRate?: number;
-  /** 速率是估算值时记口径：prefill 扣同模型典型首字 / duration 按整轮耗时；空即有实测值 */
+  /** 速率是估算值时记口径：duration 按「输出 ÷（总耗时 − 首字）」；prefill 为旧版本口径（已停用）；空即有实测值 */
   rateEstimated?: 'prefill' | 'duration' | null;
   ttft?: number;
   /** 本轮是否为真实流式；false 表示非流式或上游一次性返回，速率与 TTFT 均不可信 */

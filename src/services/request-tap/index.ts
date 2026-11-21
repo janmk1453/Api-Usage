@@ -7,7 +7,7 @@
  */
 import { DataEvents, on } from '../../data/events';
 import { installTapCapture, uninstallTapCapture, tapDebugRecord } from './capture';
-import { findSettlement, probeKeyOf, type Settlement } from './match';
+import { findEstimatedSettlement, findSettlement, probeKeyOf, type Settlement } from './match';
 import { clearTapRecords, listTapRecords, patchTapRecord, updateTapRecords } from './store';
 import { MIN_TAP_DURATION_MS, TAP_SCHEMA_VERSION, type TapRecord } from './types';
 
@@ -38,9 +38,23 @@ export function noteSettlement(entry: any): void {
       completion: Number(entry.completion_tokens) || 0,
       total: Number(entry.total_tokens) || 0,
       ts,
+      estimated: String(entry.usageSource || '') === 'estimated',
     });
-    if (settlements.length > SETTLEMENT_MAX) settlements = settlements.slice(-SETTLEMENT_MAX);
+    trimLedger();
   } catch {}
+}
+
+/**
+ * 账本裁剪：settlements 只留最近 SETTLEMENT_MAX 条，同时把已经不在账本里的
+ * consumed 标记一并丢掉——否则 used 会随运行时长无限增长（每个请求一个字符串）。
+ */
+function trimLedger(): void {
+  if (settlements.length <= SETTLEMENT_MAX) return;
+  settlements = settlements.slice(-SETTLEMENT_MAX);
+  const alive = new Set(settlements.map((s) => s.id));
+  for (const id of used) {
+    if (!alive.has(id)) used.delete(id);
+  }
 }
 
 /**
@@ -55,12 +69,13 @@ export function reconcilePending(now = Date.now()): void {
     if (rec.state !== 'pending') continue;
     if (now - (rec.endedAt || rec.at) < RECONCILE_DELAY_MS) continue;
     let hit: { settlement: Settlement; by: string } | null = null;
+    const probe = probeKeyOf({ model: rec.model, usage: rec.usage, at: rec.at, endedAt: rec.endedAt });
     if (rec.usage) {
-      hit = findSettlement(
-        probeKeyOf({ model: rec.model, usage: rec.usage, at: rec.at, endedAt: rec.endedAt }),
-        settlements,
-        used,
-      );
+      hit = findSettlement(probe, settlements, used);
+    } else {
+      // 探针没拿到用量 ≠ 没记账：上游不回 usage 的轮次会走本地估算补记，按模型+时间窗认账
+      const est = findEstimatedSettlement(probe, settlements, used);
+      if (est) hit = { settlement: est, by: 'estimated' };
     }
     if (hit) {
       used.add(hit.settlement.id);
@@ -105,9 +120,10 @@ export async function hydrateLedgerFromHistory(): Promise<number> {
         completion: Number(e.completion_tokens) || 0,
         total,
         ts,
+        estimated: String(e.usageSource || '') === 'estimated',
       });
     }
-    if (settlements.length > SETTLEMENT_MAX) settlements = settlements.slice(-SETTLEMENT_MAX);
+    trimLedger();
   } catch {}
   return settlements.length;
 }
@@ -204,4 +220,5 @@ export function uninstallRequestTap(): void {
   try { unsubscribe?.(); } catch {}
   unsubscribe = null;
   try { uninstallTapCapture(); } catch {}
+  try { delete (globalThis as any).__ausTap; } catch {}
 }
