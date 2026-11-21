@@ -1317,41 +1317,28 @@ function measureTokenRate(sample) {
 	if (!Number.isFinite(rate) || rate < 0) return null;
 	return rate;
 }
-function median(values) {
-	const sorted = values.slice().sort((a, b) => a - b);
-	const mid = sorted.length >> 1;
-	return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
 /**
-* 从历史里取「典型首字延迟」（ms），用作非流式请求的输入处理耗时估计。
+* 首字延迟归一：拿不到可信首字时一律记 0。
 *
-* 优先同模型的真实流式样本；样本不够才退到全部模型。只认可信样本：
-* 真实流式、TTFT > 0、耗时存在、且 TTFT 没有塌到总耗时上（假流式的典型症状）。
-* 拿不到就返回 null，调用方退回整轮耗时口径。
+* 不可信包括：非正值、没有耗时、首字与总耗时几乎重合（假流式 / 上游一次性返回，
+* 此时 ttft 实际是「收完正文的耗时」而不是首字延迟）。
+* 入库、速率估算与迁移清洗共用这一口径，保证「界面不显示首字延迟」与「速率分母」一致。
 */
-function prefillReferenceMs(history, model) {
-	if (!Array.isArray(history) || !history.length) return null;
-	const usable = history.filter((h) => {
-		if (!h || h.streamed === false) return false;
-		const first = Number(h.ttft);
-		const dur = Number(h.duration);
-		if (!Number.isFinite(first) || first <= 0) return false;
-		if (!Number.isFinite(dur) || dur <= 0) return false;
-		if (first >= dur * .98) return false;
-		return true;
-	});
-	if (!usable.length) return null;
-	const sameModel = model ? usable.filter((h) => String(h.model || "") === String(model)) : [];
-	if (sameModel.length >= 3) return Math.round(median(sameModel.map((h) => Number(h.ttft))));
-	if (usable.length >= 3) return Math.round(median(usable.map((h) => Number(h.ttft))));
-	return null;
+function normalizeTtft(duration, ttft) {
+	const first = Number(ttft);
+	const dur = Number(duration);
+	if (!Number.isFinite(first) || first <= 0) return 0;
+	if (!Number.isFinite(dur) || dur <= 0) return 0;
+	if (first >= dur * .98) return 0;
+	return first;
 }
 /**
 * 估算输出速率（t/s），只用于「测不出真实速率」的记录：
 * 非流式、上游一次性返回全文（假流式）、首字时间缺失或与总耗时重合。
 *
-* 先扣掉估计的输入处理时间（prefillMs），剩余窗口不足下限就退回整轮耗时口径——
-* 后者会把排队与输入处理算进分母，因此只能当保守下限，UI 必须标「估算」。
+* 口径与实测一致：输出 Token（含思维链）÷（总耗时 − 首字延迟）；
+* 首字不可信时按 0 处理，退化成「输出 Token ÷ 总耗时」——
+* 分母含排队与输入处理，只能当保守下限，UI 必须标「估算」。
 * 与真实速率一样按 MAX_PLAUSIBLE_RATE 封顶，避免短耗时刷出离谱读数。
 */
 function estimateTokenRate(opts) {
@@ -1360,11 +1347,10 @@ function estimateTokenRate(opts) {
 	if (!Number.isFinite(dur) || dur <= 0) return null;
 	if (!Number.isFinite(comp) || comp <= 0) return null;
 	const cap = (rate) => Math.min(MAX_PLAUSIBLE_RATE, Math.round(rate));
-	const prefill = Number(opts.prefillMs);
-	const window = Number.isFinite(prefill) && prefill > 0 ? dur - Math.min(prefill, dur * .9) : 0;
+	const window = dur - normalizeTtft(dur, opts.ttft);
 	if (window >= 200) return {
 		rate: cap(comp / window * 1e3),
-		source: "prefill"
+		source: "duration"
 	};
 	return {
 		rate: cap(comp / dur * 1e3),
@@ -1388,6 +1374,7 @@ function sanitizeHistoryTiming(entry) {
 	if (dur > 0 && first > 0 && first >= dur * .98) {
 		entry.ttft = 0;
 		entry.tokenRate = 0;
+		if (entry.rateEstimated) entry.rateEstimated = null;
 		changed = true;
 	}
 	return changed;
@@ -1485,6 +1472,7 @@ function migrateLegacyWalletApiKey(walletId = DEEPSEEK_WALLET_ID) {
 */
 var repository_exports = /* @__PURE__ */ __exportAll({
 	backfillEntryDuration: () => backfillEntryDuration,
+	dropDuplicateTurns: () => dropDuplicateTurns,
 	normalizeSettings: () => normalizeSettings,
 	repository: () => repository
 });
@@ -1532,7 +1520,7 @@ var storageFailureNotified = false;
 /**
 * 一轮记录的速率取值（单一来源）：能测就测，测不出（非流式 / 假流式 / 首字缺失）
 * 才用估算，并记下估算口径，UI 据此加「估算」标注。
-* 估算的首字延迟参考取同模型最近的流式样本，样本不足时退到全模型。
+* 估算口径与实测一致：输出 Token（含思维链）÷（总耗时 − 首字延迟），首字不可信时首字记 0。
 */
 function resolveTokenRate(params) {
 	const measured = measureTokenRate({
@@ -1548,7 +1536,7 @@ function resolveTokenRate(params) {
 	const estimate = estimateTokenRate({
 		duration: params.duration,
 		completionTokens: params.completionTokens,
-		prefillMs: prefillReferenceMs(params.history || state.history, params.model)
+		ttft: params.ttft
 	});
 	if (!estimate) return {
 		rate: 0,
@@ -1585,7 +1573,7 @@ function applyRateTo(target, r) {
 * 旧版本把这类记录的速率一律写成 0，升级后它们应显示估算速率（UI 标「估算」）。
 * 幂等：已有速率或已标过估算口径的条目一律跳过，避免反复改写历史。
 */
-function backfillEstimatedRates(list, model) {
+function backfillEstimatedRates(list) {
 	let changed = false;
 	for (const h of list || []) {
 		if (!h || typeof h !== "object") continue;
@@ -1600,7 +1588,7 @@ function backfillEstimatedRates(list, model) {
 		const estimate = estimateTokenRate({
 			duration,
 			completionTokens: comp,
-			prefillMs: prefillReferenceMs(state.history, model || String(h.model || ""))
+			ttft
 		});
 		if (!estimate) continue;
 		h.tokenRate = estimate.rate;
@@ -1608,6 +1596,60 @@ function backfillEstimatedRates(list, model) {
 		changed = true;
 	}
 	return changed;
+}
+/** 同轮重复落库的判定窗口：多层包装各解析一次时，落库时间通常只差几毫秒 */
+var DEDUPE_TURN_WINDOW_MS = 1500;
+/** 重复条目备份键：清理是破坏性操作，先留一份可回溯的副本 */
+var DEDUPE_BACKUP_KEY = "aus_dedupe_backup_v1";
+function backupDroppedTurns(rows) {
+	if (!rows.length) return;
+	try {
+		const prev = JSON.parse(localStorage.getItem(DEDUPE_BACKUP_KEY) || "[]");
+		const list = Array.isArray(prev) ? prev : [];
+		localStorage.setItem(DEDUPE_BACKUP_KEY, JSON.stringify(list.concat(rows).slice(-200)));
+	} catch {}
+}
+/**
+* 迁移：删掉「一次请求被多层 fetch 包装各写一遍」时期留下的同轮重复条目。
+*
+* 判据是「同一对话 + 同一模型 + 三段 Token 与缓存命中数完全相同 + 落库时间相差 <1.5s」——
+* 真实的两轮请求不可能连缓存命中数都分毫不差，所以这个组合足够安全；
+* 重复组里保留先遍历到的那条，其余进备份。
+*/
+function dropDuplicateTurns(list) {
+	const kept = [];
+	const removed = [];
+	const seen = /* @__PURE__ */ new Map();
+	for (const h of list || []) {
+		if (!h || typeof h !== "object") {
+			kept.push(h);
+			continue;
+		}
+		const ts = Number(h.timestamp) || 0;
+		const total = Number(h.total_tokens) || 0;
+		if (ts > 0 && total > 0) {
+			const hit = Number(h.cache_hit_tokens ?? h.prompt_cache_hit_tokens) || 0;
+			const key = [
+				String(h.chatId || ""),
+				String(h.model || ""),
+				Number(h.prompt_tokens) || 0,
+				hit,
+				Number(h.completion_tokens) || 0,
+				total
+			].join("|");
+			const prev = seen.get(key);
+			if (prev !== void 0 && Math.abs(ts - prev) <= DEDUPE_TURN_WINDOW_MS) {
+				removed.push(h);
+				continue;
+			}
+			seen.set(key, ts);
+		}
+		kept.push(h);
+	}
+	return {
+		kept,
+		removed
+	};
 }
 /** 只把已定义的元信息字段写到条目上，避免到处出现 undefined 键 */
 function applyEntryMeta(target, meta) {
@@ -1712,11 +1754,9 @@ function backfillEntryDuration(head, startTime, now = Date.now()) {
 	head.duration = measured;
 	applyRateTo(head, resolveTokenRate({
 		duration: measured,
-		ttft: Number(head.ttft) || 0,
+		ttft: normalizeTtft(measured, head.ttft),
 		completionTokens: Number(head.completion_tokens) || 0,
-		streamed: head.streamed ?? null,
-		model: String(head.model || ""),
-		history: state.history
+		streamed: head.streamed ?? null
 	}));
 	return true;
 }
@@ -2618,7 +2658,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && !!wallet.catalogProvider) try {
-						import("./pricing-sync-BWS-_Hg8.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-BAoyAPn3.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
@@ -2674,18 +2714,17 @@ var repository = {
 						}
 						const recalcHeadRate = () => applyRateTo(head, resolveTokenRate({
 							duration: Number(head.duration) || 0,
-							ttft: Number(head.ttft) || 0,
+							ttft: normalizeTtft(Number(head.duration) || 0, head.ttft),
 							completionTokens: Number(head.completion_tokens) || 0,
-							streamed: head.streamed ?? null,
-							model
+							streamed: head.streamed ?? null
 						}));
 						if (ttft && !head.ttft) {
 							if (streamed === false) {
 								head.ttft = 0;
 								head.streamed = false;
 							} else {
-								head.ttft = ttft;
-								if (streamed != null) head.streamed = streamed;
+								head.ttft = normalizeTtft(Number(head.duration) || 0, ttft);
+								if (head.ttft > 0 && streamed != null) head.streamed = streamed;
 							}
 							recalcHeadRate();
 							changed = true;
@@ -2766,16 +2805,16 @@ var repository = {
 		lu.duration = duration;
 		const nonStreamed = streamed === false;
 		lu.streamed = streamed;
+		const effectiveTtft = nonStreamed ? 0 : normalizeTtft(duration, ttft || 0);
 		const rate = resolveTokenRate({
 			duration,
-			ttft: ttft || 0,
+			ttft: effectiveTtft,
 			completionTokens: comp,
-			streamed,
-			model
+			streamed
 		});
 		lu.tokenRate = rate.rate;
 		if (rate.estimated) lu.rateEstimated = rate.estimated;
-		lu.ttft = nonStreamed ? 0 : ttft || 0;
+		lu.ttft = effectiveTtft;
 		lu.thinkTime = thinkTime || 0;
 		lu.thinkTokens = thinkTokens;
 		const userStopped = String(meta?.interrupted || "") === "user";
@@ -3505,6 +3544,22 @@ var repository = {
 				if (await this.recalcAll(cold)) coldDirty = true;
 			} catch {}
 		}
+		try {
+			const hotDedup = dropDuplicateTurns(state.history);
+			if (hotDedup.removed.length) {
+				state.history = hotDedup.kept;
+				backupDroppedTurns(hotDedup.removed);
+				try {
+					saveHot({ history: state.history });
+				} catch {}
+			}
+			const coldDedup = dropDuplicateTurns(cold);
+			if (coldDedup.removed.length) {
+				cold.splice(0, cold.length, ...coldDedup.kept);
+				backupDroppedTurns(coldDedup.removed);
+				coldDirty = true;
+			}
+		} catch {}
 		try {
 			if (backfillEstimatedRates(state.history)) try {
 				saveHot({ history: state.history });

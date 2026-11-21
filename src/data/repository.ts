@@ -15,7 +15,7 @@ import { isTruncatedFinish, isTruncatedOf } from '../utils/finish';
 import { log, toast } from '../utils/logger';
 import { turnFingerprint, usageFingerprint, messageDigest } from './fingerprint';
 import { mobileDeviceHint } from '../utils/device';
-import { computeTokenRate, estimateTokenRate, measureTokenRate, prefillReferenceMs, sanitizeHistoryTiming, sanitizeRate, type RateEstimateSource } from './token-rate';
+import { computeTokenRate, estimateTokenRate, measureTokenRate, normalizeTtft, sanitizeHistoryTiming, sanitizeRate, type RateEstimateSource } from './token-rate';
 import { normalizeConnectionEndpoint, type HistoryConnection } from '../services/connection-identity';
 import {
   createDeepSeekWallet,
@@ -87,15 +87,13 @@ let storageFailureNotified = false;
 /**
  * 一轮记录的速率取值（单一来源）：能测就测，测不出（非流式 / 假流式 / 首字缺失）
  * 才用估算，并记下估算口径，UI 据此加「估算」标注。
- * 估算的首字延迟参考取同模型最近的流式样本，样本不足时退到全模型。
+ * 估算口径与实测一致：输出 Token（含思维链）÷（总耗时 − 首字延迟），首字不可信时首字记 0。
  */
 function resolveTokenRate(params: {
   duration: number;
   ttft: number;
   completionTokens: number;
   streamed: boolean | null;
-  model: string;
-  history?: any[] | null;
 }): { rate: number; estimated: RateEstimateSource | null } {
   const measured = measureTokenRate({
     duration: params.duration,
@@ -107,7 +105,7 @@ function resolveTokenRate(params: {
   const estimate = estimateTokenRate({
     duration: params.duration,
     completionTokens: params.completionTokens,
-    prefillMs: prefillReferenceMs(params.history || state.history, params.model),
+    ttft: params.ttft,
   });
   if (!estimate) return { rate: 0, estimated: null };
   return { rate: estimate.rate, estimated: estimate.source };
@@ -134,7 +132,7 @@ function applyRateTo(target: any, r: { rate: number; estimated: RateEstimateSour
  * 旧版本把这类记录的速率一律写成 0，升级后它们应显示估算速率（UI 标「估算」）。
  * 幂等：已有速率或已标过估算口径的条目一律跳过，避免反复改写历史。
  */
-function backfillEstimatedRates(list: any[], model?: string | null): boolean {
+function backfillEstimatedRates(list: any[]): boolean {
   let changed = false;
   for (const h of list || []) {
     if (!h || typeof h !== 'object') continue;
@@ -148,17 +146,56 @@ function backfillEstimatedRates(list: any[], model?: string | null): boolean {
     const duration = Number(h.duration) || 0;
     const comp = Number(h.completion_tokens) || 0;
     if (duration <= 0 || comp <= 0) continue;
-    const estimate = estimateTokenRate({
-      duration,
-      completionTokens: comp,
-      prefillMs: prefillReferenceMs(state.history, model || String(h.model || '')),
-    });
+    const estimate = estimateTokenRate({ duration, completionTokens: comp, ttft });
     if (!estimate) continue;
     h.tokenRate = estimate.rate;
     h.rateEstimated = estimate.source;
     changed = true;
   }
   return changed;
+}
+
+/** 同轮重复落库的判定窗口：多层包装各解析一次时，落库时间通常只差几毫秒 */
+const DEDUPE_TURN_WINDOW_MS = 1500;
+
+/** 重复条目备份键：清理是破坏性操作，先留一份可回溯的副本 */
+const DEDUPE_BACKUP_KEY = 'aus_dedupe_backup_v1';
+const DEDUPE_BACKUP_MAX = 200;
+
+function backupDroppedTurns(rows: any[]): void {
+  if (!rows.length) return;
+  try {
+    const prev = JSON.parse(localStorage.getItem(DEDUPE_BACKUP_KEY) || '[]');
+    const list = Array.isArray(prev) ? prev : [];
+    localStorage.setItem(DEDUPE_BACKUP_KEY, JSON.stringify(list.concat(rows).slice(-DEDUPE_BACKUP_MAX)));
+  } catch {}
+}
+
+/**
+ * 迁移：删掉「一次请求被多层 fetch 包装各写一遍」时期留下的同轮重复条目。
+ *
+ * 判据是「同一对话 + 同一模型 + 三段 Token 与缓存命中数完全相同 + 落库时间相差 <1.5s」——
+ * 真实的两轮请求不可能连缓存命中数都分毫不差，所以这个组合足够安全；
+ * 重复组里保留先遍历到的那条，其余进备份。
+ */
+export function dropDuplicateTurns(list: any[]): { kept: any[]; removed: any[] } {
+  const kept: any[] = [];
+  const removed: any[] = [];
+  const seen = new Map<string, number>();
+  for (const h of list || []) {
+    if (!h || typeof h !== 'object') { kept.push(h); continue; }
+    const ts = Number(h.timestamp) || 0;
+    const total = Number(h.total_tokens) || 0;
+    if (ts > 0 && total > 0) {
+      const hit = Number((h as any).cache_hit_tokens ?? (h as any).prompt_cache_hit_tokens) || 0;
+      const key = [String((h as any).chatId || ''), String(h.model || ''), Number(h.prompt_tokens) || 0, hit, Number(h.completion_tokens) || 0, total].join('|');
+      const prev = seen.get(key);
+      if (prev !== undefined && Math.abs(ts - prev) <= DEDUPE_TURN_WINDOW_MS) { removed.push(h); continue; }
+      seen.set(key, ts);
+    }
+    kept.push(h);
+  }
+  return { kept, removed };
 }
 
 /** 只把已定义的元信息字段写到条目上，避免到处出现 undefined 键 */
@@ -284,11 +321,9 @@ export function backfillEntryDuration(head: any, startTime: number | null, now =
   head.duration = measured;
   applyRateTo(head, resolveTokenRate({
     duration: measured,
-    ttft: Number(head.ttft) || 0,
+    ttft: normalizeTtft(measured, head.ttft),
     completionTokens: Number(head.completion_tokens) || 0,
     streamed: head.streamed ?? null,
-    model: String(head.model || ''),
-    history: state.history,
   }));
   return true;
 }
@@ -1338,10 +1373,9 @@ export const repository = {
             // 速率按「能测就测、测不出就估算」重算；TTFT 仍按流式判定归零
             const recalcHeadRate = (): boolean => applyRateTo(head, resolveTokenRate({
               duration: Number(head.duration) || 0,
-              ttft: Number(head.ttft) || 0,
+              ttft: normalizeTtft(Number(head.duration) || 0, head.ttft),
               completionTokens: Number(head.completion_tokens) || 0,
               streamed: head.streamed ?? null,
-              model,
             }));
             if (ttft && !head.ttft) {
               // 非流式/假流式：TTFT 不可信（等于总耗时）必须归零，速率交给估算
@@ -1349,8 +1383,9 @@ export const repository = {
                 head.ttft = 0;
                 head.streamed = false;
               } else {
-                head.ttft = ttft;
-                if (streamed != null) head.streamed = streamed;
+                // 首字与总耗时重合（假流式）同样不可信，归一后为 0，界面显示「—」
+                head.ttft = normalizeTtft(Number(head.duration) || 0, ttft);
+                if (head.ttft > 0 && streamed != null) head.streamed = streamed;
               }
               recalcHeadRate();
               changed = true;
@@ -1408,14 +1443,15 @@ export const repository = {
     const duration = startTime ? Date.now() - startTime : 0;
     const thinkTokens = usage.completion_tokens_details?.reasoning_tokens || (usage as any)?.__think_tokens_est || 0;
     lu.duration = duration;
-    // 非流式/假流式：TTFT 不可信（等于总耗时）必须归零，但速率不再跟着丢——
-    // 测不出真实速率时走估算，并记下估算口径，界面据此标「估算」
+    // 首字延迟只在「首字确实早于结尾」时才有意义：非流式与假流式（正文憋到最后一次性吐出）
+    // 一律记 0，界面显示「—」；速率按同一口径「输出 Token ÷（总耗时 − 首字）」估算
     const nonStreamed = streamed === false;
     lu.streamed = streamed;
-    const rate = resolveTokenRate({ duration, ttft: ttft || 0, completionTokens: comp, streamed, model });
+    const effectiveTtft = nonStreamed ? 0 : normalizeTtft(duration, ttft || 0);
+    const rate = resolveTokenRate({ duration, ttft: effectiveTtft, completionTokens: comp, streamed });
     lu.tokenRate = rate.rate;
     if (rate.estimated) lu.rateEstimated = rate.estimated;
-    lu.ttft = nonStreamed ? 0 : (ttft || 0); lu.thinkTime = thinkTime || 0; lu.thinkTokens = thinkTokens;
+    lu.ttft = effectiveTtft; lu.thinkTime = thinkTime || 0; lu.thinkTokens = thinkTokens;
     // 截断检测：非正常 finish_reason（length / content_filter / sensitive 等）。
     // 用户自己点停止不算截断——这一轮本来就该停在那里，不是模型截不出来。
     const userStopped = String((meta as any)?.interrupted || '') === 'user';
@@ -2037,6 +2073,21 @@ export const repository = {
       // 对历史成本按归一化模型重算，修复 [masa]/[OR] 前缀导致的 0 费用
       try { if (await this.recalcAll(cold)) coldDirty = true; } catch {}
     }
+    // 迁移：清掉「一次请求被多层包装各写一遍」留下的同轮重复条目（先备份再删，幂等）
+    try {
+      const hotDedup = dropDuplicateTurns(state.history);
+      if (hotDedup.removed.length) {
+        state.history = hotDedup.kept;
+        backupDroppedTurns(hotDedup.removed);
+        try { saveHot({ history: state.history }); } catch {}
+      }
+      const coldDedup = dropDuplicateTurns(cold);
+      if (coldDedup.removed.length) {
+        cold.splice(0, cold.length, ...coldDedup.kept);
+        backupDroppedTurns(coldDedup.removed);
+        coldDirty = true;
+      }
+    } catch {}
     // 迁移：非流式记录补估算速率（条目级幂等，不依赖上面的整库重算门控——
     // 只重发产物的同版本升级也要能看到估算值）
     try {

@@ -49,9 +49,9 @@ export function rateTitle(entry: RateLike | null | undefined): string {
   }
   if (!isEstimatedRate(entry)) return '实测速率：输出 Token ÷ 生成窗口（总耗时 − 首字延迟）';
   if (entry?.rateEstimated === 'prefill') {
-    return '估算速率：非流式响应测不到首字延迟，已按同模型典型首字延迟扣除输入处理时间后计算';
+    return '估算速率（旧版本口径）：已按同模型典型首字延迟扣除输入处理时间后计算';
   }
-  return '估算速率：按整轮耗时计算，包含排队与输入处理，只能作为下限参考';
+  return '估算速率：输出 Token（含思维链）÷（总耗时 − 首字延迟）；拿不到可信首字时按总耗时计算，分母含排队与输入处理，只能当下限';
 }
 
 /** 历史详情里的小标签文本（估算时返回「估算」，否则空串） */

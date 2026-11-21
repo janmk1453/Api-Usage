@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { backfillEntryDuration, normalizeSettings, repository } from './repository';
+import { backfillEntryDuration, dropDuplicateTurns, normalizeSettings, repository } from './repository';
 import { state } from '../store/index';
 import { defaultSettings } from '../types/settings';
 import { createDeepSeekWallet, createWalletFromConnection } from './wallets';
@@ -240,7 +240,22 @@ describe('输出速率估算入库', () => {
     expect(h.streamed).toBe(false);
     expect(h.ttft).toBe(0);
     expect(h.tokenRate).toBeGreaterThan(0);
-    expect(['prefill', 'duration']).toContain(h.rateEstimated);
+    expect(h.rateEstimated).toBe('duration');
+  });
+
+  it('假流式记录：首字与总耗时重合时不写首字延迟，速率按整轮耗时估算', () => {
+    const now = Date.now();
+    // 真机样本：输出 4085、总耗时 50360ms、上游把正文憋到 50327ms 才吐完
+    repository.addEntry(
+      { prompt_tokens: 13989, completion_tokens: 4085, total_tokens: 18074 },
+      'gemini-3.8-flash', [], now - 50360, undefined, undefined, 50327, 0, 'tool_calls', null, 'req-fake-stream', null,
+    );
+    const h = state.history[0];
+    expect(h.ttft).toBe(0);
+    expect(Number(h.duration)).toBeGreaterThan(0);
+    const expected = Math.round(4085 / (Number(h.duration) / 1000));
+    expect(Math.abs(Number(h.tokenRate) - expected)).toBeLessThanOrEqual(1);
+    expect(h.rateEstimated).toBe('duration');
   });
 
   it('真实流式记录按实测速率记录，不带估算标记', () => {
@@ -257,6 +272,40 @@ describe('输出速率估算入库', () => {
 });
 
 
+
+describe('同轮重复条目清理（多层包装时期的历史残留）', () => {
+  const base = { chatId: 'c1', model: 'm', prompt_tokens: 84746, cache_hit_tokens: 81571, completion_tokens: 2169, total_tokens: 86915 };
+
+  it('同对话同模型同用量、落库相差不到 1.5s 的条目只留一条', () => {
+    const list = [
+      { ...base, timestamp: 1_795_022_671_330 },
+      { ...base, timestamp: 1_795_022_671_326 },
+      { ...base, timestamp: 1_795_022_671_321 },
+    ];
+    const { kept, removed } = dropDuplicateTurns(list);
+    expect(kept).toHaveLength(1);
+    expect(removed).toHaveLength(2);
+  });
+
+  it('真正分开的两轮（相差超过窗口）、不同对话都保留', () => {
+    const list = [
+      { ...base, timestamp: 1_795_022_671_330 },
+      { ...base, timestamp: 1_795_022_730_000 },
+      { ...base, chatId: 'c2', timestamp: 1_795_022_671_331 },
+      { ...base, completion_tokens: 2170, total_tokens: 86916, timestamp: 1_795_022_671_332 },
+    ];
+    const { kept, removed } = dropDuplicateTurns(list);
+    expect(kept).toHaveLength(4);
+    expect(removed).toHaveLength(0);
+  });
+
+  it('缺时间戳或总量的条目一律保留，不去猜', () => {
+    const list = [{ ...base, timestamp: 0 }, { ...base, timestamp: 0 }, { ...base, total_tokens: 0, timestamp: 1 }];
+    const { kept, removed } = dropDuplicateTurns(list);
+    expect(kept).toHaveLength(3);
+    expect(removed).toHaveLength(0);
+  });
+});
 
 describe('同一轮二次写入补回耗时', () => {
   it('首写没有耗时、后写知道起点时补上并重算速率', () => {
@@ -288,7 +337,7 @@ describe('同一轮二次写入补回耗时', () => {
     expect(head.duration).toBe(5000);
     // 非流式测不到首字：900 token 摊到整轮 5s，得到正数速率供展示（按估算标注）
     expect(head.tokenRate).toBeGreaterThan(0);
-    expect(['prefill', 'duration']).toContain(head.rateEstimated);
+    expect(head.rateEstimated).toBe('duration');
   });
 });
 

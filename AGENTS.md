@@ -101,7 +101,7 @@ npm run verify:ci   # 版本单源、清单路径、引用链、孤立产物
 2. **总额同源**：概览与统计的「累计消费 / Tokens」必须由 `computeOverview(activeWalletId, fullHistory)` 从热+冷全量逐条累加，不读热缓存聚合；`hydrate` 结束处 `rebuildAggregates() + persist()` 对齐缓存。（曾出现概览 ¥1.4356 / 2,108,164 与统计「全部」¥3.06 / 3,651,493 冲突。）
 3. **平均值忽略 0/空值**：所有 `avg_*` 统一走 `averagePositive`，单轮为 0 或空时从分子分母同时剔除。
 4. **统计口径单一来源**：`src/data/sample-quality.ts` 的 `isReliablePerformanceSample` / `isReliableCacheSample` / `isReliableForecastSample` 分别把关性能均值、命中率、预测序列；`computeOverview`、`computeStatsFour`、`forecast-series.prepareEntries` 三处必须同口径。
-5. **速率口径单一来源**：`src/data/token-rate.ts#computeTokenRate`；`streamed === false` 时 `tokenRate` 与 `ttft` 一并归零；生成窗口 < 200ms 或结果 > 1000 t/s 归 0。
+5. **速率口径单一来源**：`src/data/token-rate.ts`；实测与估算同一公式「输出 Token（含思维链）÷（总耗时 − 首字延迟）」；`streamed === false` 或首字 ≥ 总耗时 98%（假流式）时首字归一为 0、界面显示「—」；测不出实测值时按同公式估算并标 `rateEstimated`；生成窗口 < 200ms 或结果 > 1000 t/s 归 0。
 6. **不写死版本 / 价格 / 颜色**：版本走 `__APP_VERSION__`、构建号走 `__BUILD_NO__`；价格走 `PRICE_HISTORY` + 钱包规则；Token 三段色只取 `TOKEN_SERIES_COLORS` 与 `--aus-token-hit/miss/output`。
 7. **不做全局开关**：价格同步由钱包 `catalogProvider` 决定（`hasSyncableWallet` 为假时静默不联网），显示币种由钱包 `balance.currency` 驱动，余额自动校准由钱包卡片逐项勾选——旧 `pricingSync.enabled` / 全局余额校准开关已删除，勿再新增。
 8. **删数据只走白名单**：禁止 `localStorage.clear()`、禁止无差别 `deleteDatabase`、禁止把在用数据（`cold_history`/`aus_cold*`）标为可清理；只删 `DB_NAME = 'api_usage_stat_db'` 一个库。
