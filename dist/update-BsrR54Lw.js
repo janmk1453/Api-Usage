@@ -65,6 +65,12 @@ function setUpdateBranch(branch) {
 * fastly.jsdelivr.net / jsd.onmicrosoft.cn 通常仍可用，故两梯队都放了多个来源，先到先得。
 * query 串带时间戳，用于绕开浏览器与中间层缓存。
 */
+/**
+* 生成某个分支 / 标签下同一份文件的多源镜像列表。
+*
+* `branch` 故意放宽成 `string` 而不限于 `UpdateBranch`：公告走独立的 `announce` 分支，
+* 那里只有一份静态 JSON，与「检查更新读 main / dev」是两件事。
+*/
 function remoteSources(path, branch) {
 	const t = Date.now();
 	const raw = `https://raw.githubusercontent.com/${REPO}/${branch}/${path}`;

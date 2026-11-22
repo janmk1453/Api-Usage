@@ -47,7 +47,6 @@ Api-Usage/
 ├── dist/                   # Vite 产物：index.js + 全部 hash 分包，必须提交
 ├── global.d.ts             # ST 全局类型 + __APP_VERSION__/__BUILD_NO__ 声明
 ├── update-policy.json      # 强制更新策略真源（force/minVersion/reason）
-├── announcement.json       # 公告真源（客户端永远读 main，改完提交即生效，不发版）
 ├── package.json / package-lock.json / vite.config.ts / vitest.config.ts / tsconfig.json
 ├── .github/workflows/      # ci.yml（只读 CI + main 预览预发布）、pages.yml
 ├── scripts/                # verify-ci.mjs、preview-package.mjs、preview-notes.mjs
@@ -66,7 +65,7 @@ Api-Usage/
 | `types/` | `save.ts`（`HistoryEntry`）、`settings.ts`、`wallet.ts`、`agent.ts` |
 | `data/` | ★ 唯一数据通路：`repository`（写）、`computed`（算）、`wallets`（钱包纯逻辑）、`fingerprint`、`sample-quality`（统计口径）、`token-rate`、`events`、`types` |
 | `store/` | `index.ts` + `persistence.ts`：单一历史聚合、热 50 + 冷库、`DB_NAME`、迁移备份 |
-| `services/` | 采集与业务：`interception`、`request-origin`、`think-timing`、`turn-outcome`、`token-estimate`、`connection-identity`、`pricing`/`pricing-sync`、`model-match`、`currency`、`balance`、`wallet-secrets`、`plan-quota`、`import-export`、`sync`、`update`/`update-policy`、`telemetry`、`storage-usage`、`wipe-data`/`wipe-hooks`、`theme`、`debug`、`logger`、`announcement`（公告：拉取 / 已读 / 版本与有效期过滤） |
+| `services/` | 采集与业务：`interception`、`request-origin`、`think-timing`、`turn-outcome`、`token-estimate`、`connection-identity`、`pricing`/`pricing-sync`、`model-match`、`currency`、`balance`、`wallet-secrets`、`plan-quota`、`import-export`、`sync`、`update`/`update-policy`、`telemetry`、`storage-usage`、`wipe-data`/`wipe-hooks`、`theme`、`debug`、`logger`、`announcement`（公告：拉取 / 已读 / 版本与有效期过滤；公告文件在远端 `announce` 分支） |
 | `services/request-tap/` | 请求探针账本：`capture`/`match`/`classify`/`store`/`types`/`index` |
 | `services/message-cost/` | 聊天消息头元信息：`match`（消息↔记录配对）/`render`/`settings-row`（注入宿主设置页）/`index` |
 | `services/`（诊断） | `health-signals`、`health-prefs`、`error-classify`、`console-ring`、`capture-digest`、`frame-normalizer`、`log-sanitize`、`log-upload`、`feedback-pack`、`request-log`、`include-usage` |

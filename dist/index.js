@@ -15421,7 +15421,7 @@ function createPanel() {
 	doc.body.appendChild(overlay);
 	doc.body.appendChild(panel);
 	try {
-		import("./update-CCaFvj26.js").then((n) => n.n).then((mod) => mod.syncUpdateIndicators?.());
+		import("./update-BsrR54Lw.js").then((n) => n.n).then((mod) => mod.syncUpdateIndicators?.());
 	} catch {}
 	try {
 		applyTheme(theme);
@@ -15582,7 +15582,7 @@ function createPanel() {
 		initForecastView();
 	} catch {}
 	try {
-		import("./update-CCaFvj26.js").then((n) => n.n).then((m) => {
+		import("./update-BsrR54Lw.js").then((n) => n.n).then((m) => {
 			const branchBtn = doc.getElementById("aus-update-branch-btn");
 			const branchLabel = doc.getElementById("aus-update-branch-label");
 			const branchDrop = doc.getElementById("aus-update-branch-dropdown");
@@ -15621,7 +15621,7 @@ function createPanel() {
 		if (updBtn) updBtn.onclick = () => {
 			updBtn.textContent = "检查中…";
 			updBtn.setAttribute("disabled", "");
-			import("./update-CCaFvj26.js").then((n) => n.n).then((m) => m.checkUpdate(true).finally(() => {
+			import("./update-BsrR54Lw.js").then((n) => n.n).then((m) => m.checkUpdate(true).finally(() => {
 				updBtn.textContent = "检查更新";
 				updBtn.removeAttribute("disabled");
 			}));
@@ -15631,7 +15631,7 @@ function createPanel() {
 			if (runUpdBtn.hasAttribute("disabled")) return;
 			runUpdBtn.textContent = "更新中…";
 			runUpdBtn.setAttribute("disabled", "");
-			import("./update-CCaFvj26.js").then((n) => n.n).then((m) => m.updateSelf()).then((res) => {
+			import("./update-BsrR54Lw.js").then((n) => n.n).then((m) => m.updateSelf()).then((res) => {
 				if (res.ok && res.changed) {
 					const bannerEl = doc.getElementById("aus-update-banner");
 					if (bannerEl) {
@@ -15854,7 +15854,7 @@ function openPanel() {
 		import("./collector-ByBhS3r7.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
-		import("./update-CCaFvj26.js").then((n) => n.n).then((m) => {
+		import("./update-BsrR54Lw.js").then((n) => n.n).then((m) => {
 			m.syncUpdateIndicators?.();
 			m.maybeAutoCheck();
 		});
@@ -15867,7 +15867,7 @@ function openPanel() {
 			} catch {}
 			if (changelogShown) return;
 			try {
-				import("./announcement-dialog-Dj9c7An8.js").then((m) => m.maybeShowAnnouncementDialog()).catch(() => {});
+				import("./announcement-dialog-D6sHJOsM.js").then((m) => m.maybeShowAnnouncementDialog()).catch(() => {});
 			} catch {}
 		}, 320);
 	} catch {}
@@ -16749,7 +16749,7 @@ async function init() {
 	ensureStyleScope();
 	try {
 		setTimeout(() => {
-			import("./update-CCaFvj26.js").then((n) => n.n).then((m) => m.probeForcedUpdateAtStartup()).catch(() => {});
+			import("./update-BsrR54Lw.js").then((n) => n.n).then((m) => m.probeForcedUpdateAtStartup()).catch(() => {});
 		}, 3e3);
 	} catch {}
 	try {

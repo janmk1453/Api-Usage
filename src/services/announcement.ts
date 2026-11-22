@@ -3,7 +3,8 @@
  *
  * 与更新日志的区别（也是它存在的理由）：
  * - 更新日志跟构建号走，发一次版才能说一句话；公告是**仓库里的一个静态文件**，改完提交
- *   就生效（读 main 分支），不用动版本号、不用重新打包、可以随时撤回或加一条。
+ *   就生效（读独立的 announce 分支，见下方 ANNOUNCEMENT_BRANCH），不用动版本号、不用重新打包、
+ *   可以随时撤回或加一条。
  * - 更新日志按「构建/版本」记已读；公告按**条目 id** 记已读，一条一条地看过，同一条不会
  *   再弹第二次，新发的公告照常弹。
  *
@@ -20,10 +21,17 @@
  */
 import { remoteSources } from './update';
 
-/** 仓库根目录的公告文件（独立于版本，改完提交 main 即生效） */
+/** 公告分支根目录的公告文件（独立于版本，改完提交该分支即生效） */
 export const ANNOUNCEMENT_PATH = 'announcement.json';
-/** 公告永远读 main：dev 分支的用户也在等正式公告，不能让公告只对测试分支可见 */
-export const ANNOUNCEMENT_BRANCH = 'main' as const;
+/**
+ * 公告读独立的 `announce` 分支，**不放 main**：
+ * - 检查更新是用 `compare/{localSha}...main` 的 `ahead_by > 0` 判定的，只看分支领先几个提交、
+ *   与改了哪些文件无关 —— 公告若提交到 main，已装 main 版本的用户每次都会收到一次
+ *   「发现新提交 main@xxxx」提示与「立即更新」横幅，等于用公告打扰了全部用户。
+ * - 放独立分支后只推那一支，main 的 head 不动，任何人都不会被提示。
+ * - dev 分支的用户也读同一支，避免公告只对测试分支可见。
+ */
+export const ANNOUNCEMENT_BRANCH = 'announce' as const;
 
 /** 已读 id 列表（localStorage，JSON 字符串数组） */
 export const ANNOUNCEMENT_SEEN_KEY = 'aus_announcement_seen_v1';
