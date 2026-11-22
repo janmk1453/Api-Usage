@@ -47,6 +47,34 @@ export const CHANGELOG_ENTRY_LIMIT = 5;
 /** 更新日志（最新在前） */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'r3.2.4',
+    buildNo: 3,
+    date: '2026-11-22',
+    sections: [
+      {
+        kind: 'feature',
+        items: [
+          '每条回复旁显示这一轮的花费，用户设置里可开关',
+          '回复旁还能显示首字延迟、生成速度、缓存命中率',
+          '历史记录标出请求来自扩展还是脚本，详情里写清是谁',
+        ],
+      },
+      {
+        kind: 'improve',
+        items: [
+          '趋势预测只统计对话本身发起的请求',
+          '详情里的计价来源换成中文说法',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          '同一供应商被扩展请求拆成两个钱包，费用记成 0',
+        ],
+      },
+    ],
+  },
+  {
     version: 'r3.2.3fix',
     buildNo: 2,
     date: '2026-11-20',
