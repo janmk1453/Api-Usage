@@ -144,6 +144,8 @@ export function normalizePayload(raw, now = Date.now()) {
       ts: normalizeMinute(raw.ts, now),
       tz: clampTz(raw.tz),
       app: toStr(raw.app, 16),
+      /** 构建号（manifest.json#build_no）：版本号相同、只递增构建号重发时靠它区分；旧客户端缺失时为空串 */
+      build: toVersion(raw.build, 8),
       env,
       counters: {
         opens: toInt(countersRaw.opens, 0, MAX_OPENS),

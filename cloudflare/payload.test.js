@@ -18,6 +18,7 @@ function goodPayload(overrides = {}) {
     day: '2026-10-10',
     tz: 8,
     app: '3.1.1',
+    build: '5',
     env: {
       b: 'Chrome', bv: '141', os: 'Windows', arch: 'x86_64', lang: 'zh-CN',
       w: 'gt1024', dark: true, standalone: false, touch: false, stv: '1.13.5', ttv: '2.3.0', tm: 'auto',
@@ -72,6 +73,7 @@ describe('上报体归一', () => {
     expect(result.value.day).toBe('2026-10-10');
     expect(result.value.tz).toBe(8);
     expect(result.value.app).toBe('3.1.1');
+    expect(result.value.build).toBe('5');
     expect(result.value.env).toEqual({
       b: 'Chrome', bv: '141', os: 'Windows', arch: 'x86_64', lang: 'zh-CN',
       w: 'gt1024', dark: 1, standalone: 0, touch: 0, stv: '1.13.5', ttv: '2.3.0', tm: 'auto',
@@ -99,6 +101,22 @@ describe('上报体归一', () => {
     expect(normalizePayload(goodPayload({ hc: 'abc' }), NOW).value.hc).toBe(0);
     expect(normalizePayload(goodPayload({ hc: 999999999999 }), NOW).value.hc).toBe(100000000);
     expect(normalizePayload(goodPayload({ hc: undefined }), NOW).value.hc).toBe(0);
+  });
+
+  it('构建号只留字母数字与 . + -，旧客户端缺失时为空串', () => {
+    expect(normalizePayload(goodPayload({ build: '12' }), NOW).value.build).toBe('12');
+    expect(normalizePayload(goodPayload({ build: ' b5 ' }), NOW).value.build).toBe('b5');
+    expect(normalizePayload(goodPayload({ build: 'v3.2.4' }), NOW).value.build).toBe('v3.2.4');
+    // 上限 8 字符：更长的构建标签按前缀截断（manifest 里的 build_no 只是数字，远不到上限）
+    expect(normalizePayload(goodPayload({ build: 'v3.2.4+b4' }), NOW).value.build).toBe('v3.2.4+b');
+    // 先按 8 字符截断、再剥非法字符，因此标签里的 < 会连同后文一起被截掉
+    expect(normalizePayload(goodPayload({ build: '12<script>' }), NOW).value.build).toBe('12scrip');
+    expect(normalizePayload(goodPayload({ build: 'abcd1234x' }), NOW).value.build).toBe('abcd1234');
+    // 完全不含数字的标签视为无效（与版本号同一条规则）
+    expect(normalizePayload(goodPayload({ build: 'abcdefghi' }), NOW).value.build).toBe('');
+    expect(normalizePayload(goodPayload({ build: '---' }), NOW).value.build).toBe('');
+    expect(normalizePayload(goodPayload({ build: 7 }), NOW).value.build).toBe('');
+    expect(normalizePayload(goodPayload({ build: undefined }), NOW).value.build).toBe('');
   });
 
   it('关闭标记只接受布尔真值', () => {

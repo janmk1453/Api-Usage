@@ -1375,7 +1375,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       generatedAt: Date.now(), today, startDay: today, endDay: today, pageKeys: PAGE_KEYS,
       dailyFrom: today, dailyTo: today, hourlyFrom: null, hourlyTo: null,
       renderFrom: today, renderTo: today,
-      summary: { totals: {}, userGrowth: [], pages: {}, historyCount: [], versions: [], env: {}, durationHistogram: [] },
+      summary: { totals: {}, userGrowth: [], pages: {}, historyCount: [], versions: [], builds: [], env: {}, durationHistogram: [] },
       daily: [], hourly: [], hourlyGrowth: [], render: [],
     };
   }
@@ -1386,6 +1386,13 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
     const text = String(value === null || value === undefined ? '' : value).trim();
     if (!text || text.toLowerCase() === 'unknown' || text === '未知') return '未知';
     return /^v/i.test(text) ? text : 'v' + text;
+  }
+
+  /** 构建号标签：服务端存的是 manifest.json#build_no 原文（如 5），页面按 b5 展示 */
+  function buildLabel(value) {
+    const text = String(value === null || value === undefined ? '' : value).trim();
+    if (!text || text.toLowerCase() === 'unknown' || text === '未知') return '未知';
+    return /^b/i.test(text) ? text : 'b' + text;
   }
 
   function renderRows(list) {
@@ -1535,6 +1542,10 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       })),
       versions: (Array.isArray(summary.versions) ? summary.versions : []).map((item) => ({
         label: versionLabel(item && item.label), count: num(item && item.count),
+      })),
+      // 构建号：'5' → 'b5'，空值/旧客户端 → 未知
+      builds: (Array.isArray(summary.builds) ? summary.builds : []).map((item) => ({
+        label: buildLabel(item && item.label), count: num(item && item.count),
       })),
       env,
       durationHistogram: (Array.isArray(summary.durationHistogram) ? summary.durationHistogram : []).map((item) => ({
@@ -4634,6 +4645,29 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
   function softwareTab() {
     const total = TEL.data.meta.users;
     const versions = TEL.data.versions;
+    // 构建号分布：同一版本号可能先后重发多个构建（如 3.2.3 的 b2 → b4），用来看各构建的采用情况
+    const buildAll = TEL.data.builds || [];
+    const buildKnown = buildAll.filter((x) => x.label !== '未知');
+    const buildUnknown = buildAll.filter((x) => x.label === '未知');
+    const buildTotal = C.sum(buildAll, (x) => x.count);
+    const buildItems = buildKnown.slice(0, 8).map((x, i) => ({
+      label: x.label, value: x.count, display: C.fmtInt(x.count), total: buildTotal,
+      color: i === 0 ? 'var(--accent)' : i < 3 ? 'var(--chart-2)' : 'var(--chart-8)',
+      tag: '',
+    }));
+    if (buildKnown.length > 8) {
+      const rest = buildKnown.slice(8).reduce((s, x) => s + x.count, 0);
+      buildItems.push({ label: '其他', value: rest, display: C.fmtInt(rest), total: buildTotal, color: 'var(--chart-8)' });
+    }
+    buildUnknown.forEach((x) => buildItems.push({
+      label: '未知', value: x.count, display: C.fmtInt(x.count), total: buildTotal, color: 'var(--surface-3)',
+    }));
+    const buildCard = buildItems.length
+      ? '<section class="card dim-card rise">'
+        + S.head('构建号分布', '同一版本号重发的各构建 · 共 ' + C.fmtInt(buildTotal) + ' 台')
+        + '<div class="card-body">' + S.rankList(buildItems, { showShare: true, compact: true }) + '</div>'
+        + '</section>'
+      : '';
     // 最新版 = 版本号最大的一个（不能取用量最多的那个）
     const latest = S.sortVersionItems(versions.filter((v) => /^v\d/.test(v.label)))[0] || null;
     const line = latest ? latest.label.split('.').slice(0, 2).join('.') : '';
@@ -4693,6 +4727,7 @@ html[data-rail="mini"] .tabs-collapse { display: none; }
       + dimCard('browser', { note: '浏览器家族 · 每设备最近一次上报', color: 'var(--chart-2)' })
       + dimCard('browserVersion', { note: '浏览器 + 主版本号', color: 'var(--chart-2)', byVersion: true })
       + dimCard('stVersion', { note: 'SillyTavern 前端版本', color: 'var(--chart-4)', byVersion: true })
+      + buildCard
       + dimCard('ttVersion', { note: '仅 TauriTavern 宿主上报', color: 'var(--chart-1)', limit: 6, byVersion: true })
       + dimCard('lang', { note: '界面语言', color: 'var(--chart-3)', limit: 6 })
       + dimCard('tz', { note: 'UTC 偏移', color: 'var(--chart-6)', limit: 7 })

@@ -90,6 +90,8 @@ export type TelemetryPayload = {
   ts: number;
   tz: number;
   app: string;
+  /** 扩展构建号（manifest.json#build_no，同一版本号重发时靠它区分）；旧客户端不含该字段 */
+  build: string;
   env: TelemetryEnv;
   s: TelemetryCounters & {
     /** 酒馆页面运行时长（自页面加载起的墙钟时间增量，毫秒）；旧版本客户端不含该字段 */
@@ -281,6 +283,18 @@ let bound = false;
 function appVersion(): string {
   try {
     return typeof __APP_VERSION__ !== 'undefined' ? String(__APP_VERSION__) : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * 构建号：manifest.json#build_no → __BUILD_NO__。
+ * 版本号相同、只递增构建号重发时，只有它能区分两次发布（旧版客户端不上报该字段）。
+ */
+function appBuild(): string {
+  try {
+    return typeof __BUILD_NO__ !== 'undefined' ? String(__BUILD_NO__) : '';
   } catch {
     return '';
   }
@@ -715,6 +729,7 @@ function buildPayload(
     ts: now,
     tz: roundTz(-new Date(now).getTimezoneOffset() / 60),
     app: appVersion(),
+    build: appBuild(),
     env,
     s: {
       opens: Math.max(0, Number(merged.opens) || 0),

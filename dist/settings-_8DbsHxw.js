@@ -3,13 +3,13 @@ import { i as state } from "./store-CVamS-ER.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, d as isMigrationBackupKey, h as saveExtensionSettings, s as deleteMigrationBackups, u as getExtensionSettings, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as mergeWalletCollections, a as decryptKey, f as getPricing$1, o as encryptKey, p as isDeepSeekOfficialModel, t as repository, u as calcCost } from "./repository-CyKiFul9.js";
+import { C as mergeWalletCollections, a as decryptKey, f as getPricing$1, o as encryptKey, p as isDeepSeekOfficialModel, t as repository, u as calcCost } from "./repository-CtYHEzBE.js";
 import { a as isUnsafeKey, o as isValidDayKey, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { a as getDisplayCurrency, r as fetchLiveRate } from "./currency-Dr655frw.js";
-import { r as recalcAllCosts } from "./interception-CxHgyrEh.js";
-import { i as saveApiKey } from "./balance-CGFx7exH.js";
+import { r as recalcAllCosts } from "./interception-CpoHbEq2.js";
+import { i as saveApiKey } from "./balance-zanySRSV.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
-import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-9AyKf0vn.js";
+import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-Bna4fDY2.js";
 //#region src/ui/switch.ts
 function escAttr(value) {
 	return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -1304,6 +1304,17 @@ function appVersion() {
 		return "";
 	}
 }
+/**
+* 构建号：manifest.json#build_no → __BUILD_NO__。
+* 版本号相同、只递增构建号重发时，只有它能区分两次发布（旧版客户端不上报该字段）。
+*/
+function appBuild() {
+	try {
+		return String("5");
+	} catch {
+		return "";
+	}
+}
 function safeWindow() {
 	try {
 		return typeof window === "undefined" ? null : window;
@@ -1693,6 +1704,7 @@ function buildPayload(identity, incoming, pending, now, final = false) {
 		ts: now,
 		tz: roundTz(-new Date(now).getTimezoneOffset() / 60),
 		app: appVersion(),
+		build: appBuild(),
 		env,
 		s: {
 			opens: Math.max(0, Number(merged.opens) || 0),
@@ -2323,7 +2335,7 @@ function renderSettings(doc) {
 		state.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state.settings });
 		try {
-			import("./balance-CGFx7exH.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-zanySRSV.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2367,7 +2379,7 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-CyKiFul9.js").then((n) => n.n);
+				const { repository } = await import("./repository-CtYHEzBE.js").then((n) => n.n);
 				const { state: st } = await import("./store-CVamS-ER.js").then((n) => n.a);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
@@ -2514,7 +2526,7 @@ function renderSettings(doc) {
 					closeDropdownInstant(intervalDrop);
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-9AyKf0vn.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./pricing-sync-Bna4fDY2.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 						import("./currency-Dr655frw.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};

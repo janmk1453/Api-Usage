@@ -66,6 +66,10 @@ function createDb(fixtures, options) {
         sqls: stmts.map((stmt) => stmt.sql),
         params: stmts.map((stmt) => stmt.params),
       });
+      // 模拟既有库尚未执行 migrate-app-build.sql：含 app_build 列的语句整体失败
+      if (opts.failBuildColumn && stmts[0] && String(stmts[0].sql).includes('app_build')) {
+        throw new Error('no such column: app_build');
+      }
       // 模拟既有库尚未执行 migrate-hourly.sql：带小时表的三条事务整体失败
       if (opts.failTripleBatch && stmts.length === 3) throw new Error('no such table: device_hourly');
       // 模拟既有库尚未执行 migrate-tt-version.sql：含 tt_version 列的语句整体失败
@@ -298,6 +302,8 @@ describe('/collect 写入契约保持不变', () => {
     expect(batch.params[0][28]).toBe(0);
     // 设备语句末位为颜色模式（未携带该字段的旧版本上报为空字符串）
     expect(batch.params[0][29]).toBe('');
+    // 再往后是运行时长与构建号：旧版本上报两者都缺，按空值写入（COALESCE 保留旧状态）
+    expect(batch.params[0][31]).toBe('');
     expect(batch.params[2][0]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}$/);
     expect(batch.params[2][19] % 60000).toBe(0);
   });
@@ -323,8 +329,8 @@ describe('/collect 写入契约保持不变', () => {
       body: legacyBody(),
     }), env, { waitUntil() {} });
     expect(res.status).toBe(204);
-    // 依次为：运行时长三条（小时表缺列也一并失败）→ 设备+日+小时 → 设备+日
-    expect(db.calls.filter((call) => call.batch).map((call) => call.batch)).toEqual([3, 3, 2]);
+    // 依次为：构建号三条 → 运行时长三条 → 设备+日+小时 → 设备+日（带小时表的事务全部失败）
+    expect(db.calls.filter((call) => call.batch).map((call) => call.batch)).toEqual([3, 3, 3, 2]);
   });
 
   it('运行时长列已迁移时设备、日与小时三处都写入运行时长', async () => {
@@ -344,7 +350,7 @@ describe('/collect 写入契约保持不变', () => {
     }), env, { waitUntil() {} });
     expect(res.status).toBe(204);
     const batches = db.calls.filter((call) => call.batch);
-    // 第一条即运行时长三条写入，不再走降级链
+    // 第一条即「构建号 + 运行时长」三条写入，不再走降级链
     expect(batches.map((call) => call.batch)).toEqual([3]);
     expect(batches[0].sqls[0]).toContain('run_ms_total');
     expect(batches[0].sqls[1]).toContain('run_ms');
@@ -354,6 +360,35 @@ describe('/collect 写入契约保持不变', () => {
     expect(batches[0].params[1][20]).toBe(90000);
     expect(batches[0].params[2][20]).toBe(90000);
     expect(batches[0].params[0][16]).toBe(60000);
+  });
+
+  it('构建号随设备语句写入（同一版本号重发多个构建时靠它区分）', async () => {
+    const { env, db } = makeEnv();
+    const res = await worker.fetch(new Request('https://stat.example.com/collect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: legacyBody({ build: '7' }),
+    }), env, { waitUntil() {} });
+    expect(res.status).toBe(204);
+    const batch = db.calls.find((call) => call.batch);
+    expect(batch.batch).toBe(3);
+    expect(batch.sqls[0]).toContain('app_build');
+    // 设备语句末尾依次是 run_ms_total(?31) 与 app_build(?32)
+    expect(batch.params[0][31]).toBe('7');
+  });
+
+  it('构建号列尚未迁移时回退到运行时长语句，上报仍返回 204', async () => {
+    const { env, db } = makeEnv({}, { failBuildColumn: true });
+    const res = await worker.fetch(new Request('https://stat.example.com/collect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: legacyBody({ build: '7' }),
+    }), env, { waitUntil() {} });
+    expect(res.status).toBe(204);
+    const batches = db.calls.filter((call) => call.batch);
+    expect(batches.map((call) => call.batch)).toEqual([3, 3]);
+    expect(batches[1].sqls[0]).toContain('run_ms_total');
+    expect(batches[1].sqls[0]).not.toContain('app_build');
   });
 
   it('旧客户端不报运行时长时，使用时长按运行时长入账且不再计入真实使用时长', async () => {
@@ -400,8 +435,8 @@ describe('/collect 写入契约保持不变', () => {
     }), env, { waitUntil() {} });
     expect(res.status).toBe(204);
     const batches = db.calls.filter((call) => call.batch);
-    expect(batches.map((call) => call.batch)).toEqual([3, 3, 2, 2, 2, 2]);
-    expect(batches[5].sqls[0]).not.toContain('st_version');
+    expect(batches.map((call) => call.batch)).toEqual([3, 3, 3, 2, 2, 2, 2]);
+    expect(batches[6].sqls[0]).not.toContain('st_version');
   });
 
   it('TauriTavern 版本列尚未迁移时保留酒馆版本列写入', async () => {
@@ -413,10 +448,10 @@ describe('/collect 写入契约保持不变', () => {
     }), env, { waitUntil() {} });
     expect(res.status).toBe(204);
     const batches = db.calls.filter((call) => call.batch);
-    // 前三次（含 tt_version）失败，第四次落到只含 st_version 的语句并成功
-    expect(batches.map((call) => call.batch)).toEqual([3, 3, 2, 2, 2]);
-    expect(batches[4].sqls[0]).toContain('st_version');
-    expect(batches[4].sqls[0]).not.toContain('tt_version');
+    // 前五次（含 tt_version）失败，第六次落到只含 st_version 的语句并成功
+    expect(batches.map((call) => call.batch)).toEqual([3, 3, 3, 2, 2, 2]);
+    expect(batches[5].sqls[0]).toContain('st_version');
+    expect(batches[5].sqls[0]).not.toContain('tt_version');
   });
 
   it('颜色模式列尚未迁移时降级为不含 theme_mode 的语句，上报仍返回 204', async () => {
@@ -431,9 +466,9 @@ describe('/collect 写入契约保持不变', () => {
     }), env, { waitUntil() {} });
     expect(res.status).toBe(204);
     const batches = db.calls.filter((call) => call.batch);
-    expect(batches.map((call) => call.batch)).toEqual([3, 3, 2, 2]);
-    expect(batches[3].sqls[0]).toContain('tt_version');
-    expect(batches[3].sqls[0]).not.toContain('theme_mode');
+    expect(batches.map((call) => call.batch)).toEqual([3, 3, 3, 2, 2]);
+    expect(batches[4].sqls[0]).toContain('tt_version');
+    expect(batches[4].sqls[0]).not.toContain('theme_mode');
   });
 
   it('颜色模式写入设备最新状态（light / dark / auto）', async () => {

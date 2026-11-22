@@ -175,6 +175,31 @@ WHERE excluded.last_seq > device.last_seq
 `;
 
 /**
+ * 构建号列（app_build）已迁移（migrate-app-build.sql）时的首选语句：
+ * 在运行时长列的完整列集合之后再追加 app_build（参数 ?32），
+ * 未迁移的库会在 batch 失败后自动降级到 DEVICE_UPSERT_RUN_SQL，再逐级降级。
+ */
+const DEVICE_UPSERT_BUILD_RUN_SQL = `
+INSERT INTO device (
+  ${DEVICE_BASE_COLUMNS},
+  ${TOTAL_COLUMNS.join(', ')}, st_version, tt_version, history_count, telemetry_off, theme_mode,
+  run_ms_total, app_build
+) VALUES (
+  ${DEVICE_BASE_VALUES},
+  ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32
+)
+${DEVICE_UPSERT_SET},
+  st_version = COALESCE(NULLIF(excluded.st_version, ''), device.st_version),
+  tt_version = COALESCE(NULLIF(excluded.tt_version, ''), device.tt_version),
+  history_count = excluded.history_count,
+  telemetry_off = excluded.telemetry_off,
+  theme_mode = COALESCE(NULLIF(excluded.theme_mode, ''), device.theme_mode),
+  run_ms_total = device.run_ms_total + excluded.run_ms_total,
+  app_build = COALESCE(NULLIF(excluded.app_build, ''), device.app_build)
+WHERE excluded.last_seq > device.last_seq
+`;
+
+/**
  * 设备累加列（opens/dur_ms/pages）在冲突时逐列相加，run_ms_total 同样按增量累加；
  * 由于 SET 片段由 DEVICE_UPSERT_SET 拼装，这里再补一列 run_ms_total。
  */
@@ -431,6 +456,8 @@ async function writeRow(db, payload, now) {
   const runHourlyArgs = [...hourlyArgs];
   runHourlyArgs[3] = durMs;
   runHourlyArgs.push(runMs);
+  // app_build 列（migrate-app-build.sql）已迁移时，构建号追加在运行时长之后的末位（?32）
+  const buildThemeArgs = [...runThemeArgs, payload.build];
 
   // 每次重试重新 prepare：batch 事务失败会整体回滚，last_seq 判据保证重放不会重复累加
   const buildDevice = (mode) => {
@@ -441,15 +468,23 @@ async function writeRow(db, payload, now) {
   };
   const buildDaily = () => db.prepare(DEVICE_DAILY_UPSERT_SQL).bind(...dailyArgs);
   const buildHourly = () => db.prepare(DEVICE_HOURLY_UPSERT_SQL).bind(...hourlyArgs);
-  const buildRun = () => db.batch([
-    db.prepare(DEVICE_UPSERT_RUN_SQL).bind(...runThemeArgs),
+  // withBuild：构建号列已迁移时设备语句多带一个 app_build；日/小时表不变
+  const buildRun = (withBuild) => db.batch([
+    withBuild
+      ? db.prepare(DEVICE_UPSERT_BUILD_RUN_SQL).bind(...buildThemeArgs)
+      : db.prepare(DEVICE_UPSERT_RUN_SQL).bind(...runThemeArgs),
     db.prepare(DEVICE_DAILY_UPSERT_RUN_SQL).bind(...runDailyArgs),
     db.prepare(DEVICE_HOURLY_UPSERT_RUN_SQL).bind(...runHourlyArgs),
   ]);
 
   try {
-    // 运行时长列已迁移：设备 / 日 / 小时三条都带上酒馆运行时长
-    await buildRun();
+    // 构建号列已迁移：设备 / 日 / 小时三条都带上酒馆运行时长与构建号
+    await buildRun(true);
+    return;
+  } catch {}
+  try {
+    // app_build 列尚未迁移（migrate-app-build.sql）：保留运行时长，本次不写构建号
+    await buildRun(false);
     return;
   } catch {}
   try {

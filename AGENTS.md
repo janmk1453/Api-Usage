@@ -76,7 +76,7 @@ Api-Usage/
 | `ui/`（交互） | `pill`、`source-badge`、`dropdown-placement`、`dropdown-close`、`switch`、`icons`、`nav-model`、`sort-header`、`filter-prefs`、`request-type-filter`、`chat-visibility`、`back-guard`、`history-badge`、`history-health-bar`、`log-upload-dialog`、`storage-usage-card`、`wallet-plan`、`wallet-sync-preview`、`peak-dot`、`compare`、`changelog`、`changelog-dialog`、`announcement-dialog`、`rate-text`、`vendor-icons`、`back-debug`（临时工具） |
 | `utils/` | `device`（设备判定单一来源）、`date`、`crypto`（XOR）、`history-key`、`finish`、`logger` |
 
-`cloudflare/`：`worker.js`（路由 + cron 清理 + Cache API）、`api.js`、`boot.js`、`summary.js`、`payload.js`、`log-payload.js`、`dashboard.html`、`schema.sql`、`schema-request-log.sql`、9 个 `migrate-*.sql`（`device-totals` / `hourly` / `st-version` / `device-metrics` / `theme-mode` / `backfill-device-totals` / `legacy-dur-to-run` / `run-ms` / `tt-version`）、`vendor/echarts.min.js`（自托管 full 构建）、`scripts/build-preview.mjs`、`wrangler.toml`、`README.md`、`*.test.js`。
+`cloudflare/`：`worker.js`（路由 + cron 清理 + Cache API）、`api.js`、`boot.js`、`summary.js`、`payload.js`、`log-payload.js`、`dashboard.html`、`schema.sql`、`schema-request-log.sql`、10 个 `migrate-*.sql`（`device-totals` / `hourly` / `st-version` / `device-metrics` / `theme-mode` / `backfill-device-totals` / `legacy-dur-to-run` / `run-ms` / `tt-version` / `app-build`）、`vendor/echarts.min.js`（自托管 full 构建）、`scripts/build-preview.mjs`、`wrangler.toml`、`README.md`、`*.test.js`。
 
 
 ## 开发流程

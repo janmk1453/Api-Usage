@@ -41,6 +41,7 @@ import {
   trackRender,
   widthBucket,
 } from './telemetry';
+import { BUILD_NO } from '../constants/version';
 
 const FIXED_NOW = new Date('2026-10-10T12:00:00+08:00').getTime();
 /** 测试用端点：默认常量是占位符，需要覆盖后才能走通上报路径 */
@@ -349,6 +350,8 @@ describe('累加与上报', () => {
     expect(init.headers['Content-Type']).toBe('text/plain;charset=UTF-8');
     const payload = JSON.parse(init.body);
     expect(payload.v).toBe(1);
+    // 构建号取自 manifest.json#build_no，同一版本号重发多个构建时只靠它区分
+    expect(payload.build).toBe(BUILD_NO);
     expect(payload.id).toMatch(/^[0-9a-f]{32}$/);
     expect(payload.seq).toBe(1);
     // 日期与时区偏移都取决于运行环境时区，按同一时区规则计算期望值
