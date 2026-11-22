@@ -13,11 +13,14 @@ import { initTelemetry } from './services/telemetry';
 import { log } from './utils/logger';
 import { installBackDebug } from './ui/back-debug';
 import { installConsoleRing } from './services/console-ring';
+import { registerRequestOriginSelf } from './services/request-origin';
 
 // 返回键诊断日志（临时排查用）：入口尽早安装，面板打开之前的返回事件也要记上
 try { installBackDebug(); } catch {}
 // 控制台环形缓冲：只留最近若干条报错，供「请求日志 → 上传反馈」取证
 try { installConsoleRing(); } catch {}
+// 请求来源判定要排除自己：先把本扩展目录登记掉（抓栈时自己的帧一定在最上面）
+try { registerRequestOriginSelf(import.meta.url); } catch {}
 
 const MODULE = 'api_usage_stat';
 let wandRetryTimer: any = null;

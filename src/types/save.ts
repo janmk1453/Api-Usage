@@ -98,7 +98,23 @@ export type HistoryEntry = {
   agentPartial?: boolean | null;
   /** 耗时口径来源 */
   agentTimingSource?: 'events' | null;
+  /**
+   * 请求发起方：谁调用的 fetch（扩展 / 脚本 / 酒馆主界面）。
+   * 只认调用栈，不看请求体；旧记录无此字段即「未识别」，不回填、不迁移。
+   */
+  requestOrigin?: RequestOrigin | null;
 };
+
+/** 请求发起方种类：扩展直连 / iframe 脚本 / 酒馆主界面 / 认不出 */
+export type RequestOriginKind = 'extension' | 'script' | 'tavern' | 'unknown';
+
+export interface RequestOrigin {
+  kind: RequestOriginKind;
+  /** 判定依据（命中的栈帧原文或 srcdoc 地址），仅用于展示与排查 */
+  id: string;
+  /** 展示名：扩展目录名 / 脚本宿主 / 酒馆主界面 */
+  label: string;
+}
 
 /** addEntry 的附加记录元信息（用量来源、中断、估算口径） */
 export type EntryMeta = {
@@ -112,6 +128,8 @@ export type EntryMeta = {
   outputChars?: number | null;
   estimateCacheUnknown?: boolean;
   costEstimated?: boolean;
+  /** 请求发起方（由 fetch 包装当场抓栈得出，落库即固化） */
+  requestOrigin?: RequestOrigin | null;
 };
 
 export type Save = {

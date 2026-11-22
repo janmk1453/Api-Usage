@@ -1664,7 +1664,8 @@ function applyEntryMeta(target, meta) {
 		"promptChars",
 		"outputChars",
 		"estimateCacheUnknown",
-		"costEstimated"
+		"costEstimated",
+		"requestOrigin"
 	]) {
 		const value = meta[key];
 		if (value !== void 0) target[key] = value;
@@ -2658,7 +2659,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && !!wallet.catalogProvider) try {
-						import("./pricing-sync-BAoyAPn3.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-DKuwJV6S.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;

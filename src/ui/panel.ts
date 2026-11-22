@@ -30,6 +30,7 @@ import { initTapView, renderTapView } from './tap-view';
 import { initLogView, renderLogView } from './log-view';
 import { renderHistoryHealthBar } from './history-health-bar';
 import { historyBadgeOf } from './history-badge';
+import { sourceBadgeOf, originTextOf } from './source-badge';
 import { rateText, rateTitle, rateBadgeText } from './rate-text';
 import { isEstimatedEntry } from '../data/sample-quality';
 import { helpViewHTML } from './help-view';
@@ -597,6 +598,11 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
         : isEstimated
           ? '本地估算（上游未返回用量）'
           : '正常（上游用量）';
+    // 来源角标与状态角标并排：来源在左（先看「谁发的」），状态在右
+    const sourceBadge = sourceBadgeOf(h as any);
+    const sourceBadgeHTML = sourceBadge
+      ? `<span class="aus-source-badge" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:${sourceBadge.background};color:${sourceBadge.color};" title="${esc(sourceBadge.title)}">${esc(sourceBadge.text)}</span>`
+      : '';
     const originBadge = `<span class="aus-origin-badge" title="${esc(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:${badge.background};color:${badge.color};">${esc(badge.text)}</span>`;
     const recordDate = new Date(h.timestamp);
     const recordDateText = recordDate.toLocaleDateString('zh-CN');
@@ -605,7 +611,7 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
     <div style="padding:10px 12px;background:var(--ds-card);border-radius:10px;margin-bottom:8px;font-size:var(--aus-fs-base);">
       <div class="aus-history-card-head" style="display:flex;justify-content:space-between;align-items:center;">
         <div class="aus-history-card-main" style="min-width:0;flex:1;">
-          <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${originBadge}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(h.model)} · ${esc(localTimeHM(h.timestamp))}</span></div>
+          <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${sourceBadgeHTML}${originBadge}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(h.model)} · ${esc(localTimeHM(h.timestamp))}</span></div>
           <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · <span title="${esc(rateTitle(h))}">${rateText(h)}</span></div>
         </div>
         <div class="aus-history-card-actions" style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
@@ -638,6 +644,7 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
                   <div class="aus-dt-head">基础信息</div>
                   <div class="aus-dt-grid">
                     <div class="aus-dt-item is-wide"><span class="aus-dt-label">模型</span><span class="aus-dt-val">${esc(h.model||'—')}${(h as any).modelFallback ? '<span style="margin-left:4px;color:var(--ds-text-3);font-size:var(--aus-fs-xs);">（请求未带模型名，兜底取值）</span>' : ''}</span></div>
+                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">请求来源</span><span class="aus-dt-val">${esc(originTextOf(h as any))}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">记录状态</span><span class="aus-dt-val">${esc(recordStateText)}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">时段</span><span class="aus-dt-val">${h.priceType==='new-peak'||h.priceType==='wallet-peak'?'高峰':h.priceType==='new-offpeak'||h.priceType==='wallet-offpeak'?'非高峰':h.priceType==='unpriced'?'待定价':'旧价格'}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">计价来源</span><span class="aus-dt-val">${h.pricingSource==='wallet'?'钱包规则':h.pricingSource==='builtin'?'DeepSeek 内置':h.pricingSource==='unpriced'?'待定价':h.pricingSource==='legacy-match'?'旧数据同名价':h.pricingSource==='legacy'?'旧全局规则':'旧记录兜底'}</span></div>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pickPromptMessages, normalizeTiming, pickEndedTurn, registerTurnForTest, clearTurnLedgerForTest } from './interception';
+import { pickPromptMessages, normalizeTiming, pickEndedTurn, registerTurnForTest, clearTurnLedgerForTest, requestOriginOfRequest } from './interception';
 import { estimatePromptTokens } from './token-estimate';
 
 /** 真机样本：35 条消息、25903 字符的完整上下文，对照被 slice(-10) 裁剪后的 1826 字符 */
@@ -121,5 +121,38 @@ describe('normalizeTiming（首字与思维链耗时自洽）', () => {
     expect(normalizeTiming(1603, 12000)).toEqual({ ttft: 1603, thinkTime: 12000 });
     expect(normalizeTiming(500, -1)).toEqual({ ttft: 500, thinkTime: 0 });
     expect(normalizeTiming(500, Number.NaN)).toEqual({ ttft: 500, thinkTime: 0 });
+  });
+});
+
+describe('requestOriginOfRequest（并发来源）', () => {
+  it('同一毫秒连发：各取各的来源，谁也别串给谁', () => {
+    clearTurnLedgerForTest();
+    const now = Date.now();
+    registerTurnForTest({
+      startTime: now, requestId: 'req:origin-a',
+      requestOrigin: { kind: 'extension', id: 'ST-BaiBai-Image', label: 'ST-BaiBai-Image' },
+    });
+    registerTurnForTest({
+      startTime: now, requestId: 'req:origin-b',
+      requestOrigin: { kind: 'tavern', id: 'tavern', label: '酒馆主界面' },
+    });
+    expect(requestOriginOfRequest('req:origin-a', now)?.label).toBe('ST-BaiBai-Image');
+    expect(requestOriginOfRequest('req:origin-b', now)?.kind).toBe('tavern');
+  });
+
+  it('没有 requestId 时退回 startTime 反查', () => {
+    clearTurnLedgerForTest();
+    const now = Date.now();
+    registerTurnForTest({
+      startTime: now, requestId: 'req:origin-c',
+      requestOrigin: { kind: 'script', id: 'about:srcdoc', label: 'iframe 脚本' },
+    });
+    expect(requestOriginOfRequest(null, now)?.kind).toBe('script');
+  });
+
+  it('查不到现场就返回 null，不编一个来源出来', () => {
+    clearTurnLedgerForTest();
+    expect(requestOriginOfRequest('req:none', 0)).toBeNull();
+    expect(requestOriginOfRequest(null, 0)).toBeNull();
   });
 });

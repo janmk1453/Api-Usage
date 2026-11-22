@@ -10,6 +10,7 @@ import { noteCaptureStage, isZeroUsage, usageNumbers } from './capture-digest';
 import { decideTurnOutcome } from './turn-outcome';
 import { ESTIMATE_VERSION, estimatePromptTokens, estimateTextTokens } from './token-estimate';
 import type { EntryMeta } from '../types/save';
+import { detectRequestOrigin, type RequestOrigin } from './request-origin';
 
 let lastMessages: any[] = [];
 /** 本轮请求的完整 messages：只给输入侧估算用，绝不写进历史（历史仍存 lastMessages 的最近 10 条摘要） */
@@ -70,6 +71,11 @@ type TurnContext = {
    */
   usage: any | null;
   finishReason: string | null;
+  /**
+   * 这一轮是谁打出去的（扩展 / iframe 脚本 / 酒馆主界面）。
+   * 只在 fetch 包装的同步段抓一次栈——那时调用链还在，等响应回来再抓就只剩自己的帧。
+   */
+  requestOrigin: RequestOrigin | null;
 };
 
 /**
@@ -132,6 +138,28 @@ function turnByStart(startTime: number): TurnContext | null {
     if (t.startTime === startTime) return t;
   }
   return null;
+}
+
+/**
+ * 按 requestId 精确反查现场。并发时这是唯一可靠的键：
+ * startTime 取的是 Date.now()，同一毫秒内连发两个请求就会撞在一起，
+ * 而「这条记录是谁发的」必须跟着自己那一轮走，不能串到邻居身上。
+ */
+function turnByRequestId(requestId: string | null): TurnContext | null {
+  if (!requestId) return null;
+  return turnLedger.get(requestId) || null;
+}
+
+/**
+ * 取某一轮请求的来源（扩展 / 脚本 / 酒馆）。
+ *
+ * 并发下同一毫秒可能连发多个请求（对话 + 向量化 + 摘要一起打出去），
+ * startTime 会撞、lastFetchUsage 只有单槽，只有 requestId 是唯一键；
+ * 查不到 requestId 时才退回 startTime，两样都没有就返回 null（不猜）。
+ */
+export function requestOriginOfRequest(requestId: string | null, startTime: number): RequestOrigin | null {
+  const turn = turnByRequestId(requestId) || currentTurn(startTime);
+  return turn?.requestOrigin || null;
 }
 
 function currentTurn(startTime?: number): TurnContext | null {
@@ -218,6 +246,7 @@ export function registerTurnForTest(patch: Partial<TurnContext>): TurnContext {
     streamError: null, outputChars: 0, reasoningChars: 0, fullResponse: null, fullRequest: null,
     messages: [], promptMessages: [], connection: null, ttft: 0, thinkTime: 0, streamed: null,
     endedAt: 0, settled: false, settledBy: null, usage: null, finishReason: null,
+    requestOrigin: null,
   };
   return registerTurn({ ...base, ...patch });
 }
@@ -236,16 +265,22 @@ function stopPending(): boolean {
  * 用户点了停止 → user；流读出过错 → upstream；都没有则不写 interrupted。
  * 估算路径的 meta 由 settleTurnWithoutUsage 自己构造。
  */
-function turnMetaFor(startTime: number): EntryMeta | null {
-  const turn = currentTurn(startTime);
+function metaForTurn(turn: TurnContext | null): EntryMeta | null {
   const interrupted = stopPending() ? 'user' : turn?.streamError ? 'upstream' : null;
   const modelFallback = turn?.modelFallback === true;
-  if (!interrupted && !modelFallback) return null;
+  const requestOrigin = turn?.requestOrigin || null;
+  // 来源也要能单独把 meta 带出来：常规轮次没有中断标记，但来源照样要落库
+  if (!interrupted && !modelFallback && !requestOrigin) return null;
   const meta: EntryMeta = { usageSource: 'upstream' };
+  if (requestOrigin) meta.requestOrigin = requestOrigin;
   meta.interrupted = interrupted;
   if (interrupted) meta.interruptReason = interrupted === 'user' ? 'user-stop' : String(turn?.streamError || 'stream-error').slice(0, 200);
   if (modelFallback) meta.modelFallback = true;
   return meta;
+}
+
+function turnMetaFor(startTime: number): EntryMeta | null {
+  return metaForTurn(currentTurn(startTime));
 }
 
 /** 从响应原文里抽出助手输出文本（正文 + 思维链），只用于本地估算 token */
@@ -468,6 +503,8 @@ function installFetchCapture(): boolean {
           settledBy: null,
           usage: null,
           finishReason: null,
+          // 抓栈就在这一行：fetch 调用链唯一还在场的时刻
+          requestOrigin: detectRequestOrigin(),
         });
         // 通过 custom_include_body 让上游返回流式 usage；上游若不认这个参数则原样重试
         const injected = injectIncludeUsage(reqBody, (reqBody as any)?.chat_completion_source ?? null);
@@ -1258,6 +1295,7 @@ async function settleTurnWithoutUsage(source: 'generation-ended' | 'stop', opts:
     costEstimated: true,
   };
   if (turn?.modelFallback) meta.modelFallback = true;
+  if (turn?.requestOrigin) meta.requestOrigin = turn.requestOrigin;
   // 无主轮次：开始时间与 requestId 都是空的，明确标出来，别让「时长为 0」被当成真的很快
   if (orphan) meta.interruptReason = String(meta.interruptReason || '') + '|turn-unmatched';
   const timing = normalizeTiming(turn?.ttft, turn?.thinkTime);
@@ -1321,13 +1359,14 @@ export function processUsage(usage: any, model: string, messages: any[], startTi
   // 中断标记：用户点停止或流读出过错时，这一轮照样入库但要标明来源（不进速率/预测口径）
   let resolvedMeta: EntryMeta | null = meta;
   if (!resolvedMeta) {
-    try { resolvedMeta = turnMetaFor(startTime); } catch {}
+    // 并发时 requestId 才是唯一键：startTime 同毫秒会撞，来源必须跟着自己那一轮
+    try { resolvedMeta = metaForTurn(turnByRequestId(requestId) || currentTurn(startTime)); } catch {}
   }
   try {
     const zeroUsage = isZeroUsage(usage);
     const added = repository.addEntry(usage, model, messages, startTime, fullRequest, fullResponse, ttft, thinkTime, finishReason, connection, requestId, streamed, resolvedMeta);
     try {
-      const t = currentTurn(startTime);
+      const t = turnByRequestId(requestId) || currentTurn(startTime);
       // 全 0 用量不算已入库：留给生成结束事件走估算补记
       if (t && (added || !zeroUsage)) {
         t.settled = true;

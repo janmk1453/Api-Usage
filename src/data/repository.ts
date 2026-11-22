@@ -212,6 +212,7 @@ function applyEntryMeta(target: any, meta: EntryMeta | null | undefined): void {
     'outputChars',
     'estimateCacheUnknown',
     'costEstimated',
+    'requestOrigin',
   ] as const;
   for (const key of keys) {
     const value = (meta as any)[key];
