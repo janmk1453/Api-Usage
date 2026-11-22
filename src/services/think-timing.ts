@@ -24,8 +24,12 @@ export type ThinkClock = {
   endAt: number | null;
   /** 最后一帧非空思维链的相对时刻（ms），用于无正文时兜底 */
   lastReasoningAt: number | null;
-  /** 非空正文增量帧数（假流式判定用） */
+  /** 非空正文增量帧数（思维链结束锚点用） */
   contentFrames: number;
+  /** 含真实增量的帧数：正文 / 思维链 / 工具调用任一非空即 +1（真假流式判定用） */
+  deltaFrames?: number;
+  /** 解析成功的 SSE 帧数（含只带 usage 的末帧）；为 0 说明响应体根本不是 SSE */
+  sseFrames?: number;
   /** 累计正文增量字符数（上游不回 usage 时的输出估算依据；缺省视为 0） */
   contentChars?: number;
   /** 累计思维链增量字符数（同上） */
@@ -33,7 +37,7 @@ export type ThinkClock = {
 };
 
 export function createThinkClock(): ThinkClock {
-  return { startAt: null, endAt: null, lastReasoningAt: null, contentFrames: 0 };
+  return { startAt: null, endAt: null, lastReasoningAt: null, contentFrames: 0, deltaFrames: 0, sseFrames: 0 };
 }
 
 function textOf(value: unknown): string {
@@ -78,6 +82,27 @@ export function contentTextOf(record: any): string {
 }
 
 /**
+ * 一帧里是否有工具调用增量。
+ * 工具调用响应里没有 delta.content，若只数正文帧就会把正常的一次流式调用判成「未知」。
+ * 覆盖 OpenAI tool_calls、Anthropic input_json_delta / tool_use 起始块、Gemini functionCall。
+ */
+export function hasToolCallDelta(record: any): boolean {
+  if (!record || typeof record !== 'object') return false;
+  for (const carrier of frameCarriers(record)) {
+    if (!carrier || typeof carrier !== 'object') continue;
+    const calls = (carrier as any).tool_calls;
+    if (Array.isArray(calls) && calls.length > 0) return true;
+    const type = (carrier as any).type;
+    if (type === 'input_json_delta' || type === 'tool_use_delta') return true;
+    const block = (carrier as any).content_block;
+    if (block && typeof block === 'object' && block.type === 'tool_use') return true;
+  }
+  const parts = (record as any)?.candidates?.[0]?.content?.parts;
+  if (Array.isArray(parts) && parts.some((part: any) => part && typeof part === 'object' && part.functionCall)) return true;
+  return false;
+}
+
+/**
  * 扫一段已是完整行的 SSE 文本（可含多行），更新时钟。
  * @param at 该段数据的相对时刻（ms）；同段内的帧共用同一时刻，粒度足够
  */
@@ -90,6 +115,7 @@ export function scanThinkChunk(clock: ThinkClock, chunk: string, at: number): vo
     let record: any;
     try { record = JSON.parse(payload); } catch { continue; }
     if (!record || typeof record !== 'object') continue;
+    clock.sseFrames = (clock.sseFrames || 0) + 1;
     const reasoning = reasoningTextOf(record);
     if (reasoning) {
       if (clock.startAt == null) clock.startAt = at;
@@ -102,7 +128,31 @@ export function scanThinkChunk(clock: ThinkClock, chunk: string, at: number): vo
       clock.contentChars = (clock.contentChars || 0) + content.length;
       if (clock.startAt != null && clock.endAt == null) clock.endAt = at;
     }
+    // 工具调用帧同样是「流在吐东西」，必须计入增量帧，否则整轮会被判成未知
+    if (reasoning || content || hasToolCallDelta(record)) {
+      clock.deltaFrames = (clock.deltaFrames || 0) + 1;
+    }
   }
+}
+
+/** 真假流式判定结果：true 真流式 / false 非流式或一次性返回 / null 观测不足 */
+export type StreamedVerdict = boolean | null;
+
+/**
+ * 真假流式判定（单一来源）。
+ * - 未声明 stream：false
+ * - 增量帧 > 1：true
+ * - 增量帧 = 1：false（上游把全文塞进一帧，含单帧工具调用）
+ * - 零增量帧且没有任何 SSE 帧：false（上游无视 stream:true，直接回整段 JSON）
+ * - 零增量帧但收到过 SSE 帧：null（只有 usage / 心跳，观测不足，交给数值兜底）
+ */
+export function judgeStreamedFromClock(clock: ThinkClock | null | undefined, requestedStream: boolean): StreamedVerdict {
+  if (!requestedStream) return false;
+  const frames = clock?.deltaFrames || 0;
+  if (frames > 1) return true;
+  if (frames === 1) return false;
+  if (!(clock?.sseFrames || 0)) return false;
+  return null;
 }
 
 /**

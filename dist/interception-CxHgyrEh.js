@@ -1,6 +1,6 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { D as initConnectionIdentity, O as resolveRuntimeConnectionContext, t as repository } from "./repository-phjItzfR.js";
+import { D as initConnectionIdentity, O as resolveRuntimeConnectionContext, t as repository } from "./repository-CyKiFul9.js";
 //#region src/services/include-usage.ts
 /**
 * 流式 usage 注入的纯逻辑：把 stream_options.include_usage 合并进用户/预设自定义的请求体参数。
@@ -141,7 +141,9 @@ function createThinkClock() {
 		startAt: null,
 		endAt: null,
 		lastReasoningAt: null,
-		contentFrames: 0
+		contentFrames: 0,
+		deltaFrames: 0,
+		sseFrames: 0
 	};
 }
 function textOf(value) {
@@ -184,6 +186,26 @@ function contentTextOf$1(record) {
 	return "";
 }
 /**
+* 一帧里是否有工具调用增量。
+* 工具调用响应里没有 delta.content，若只数正文帧就会把正常的一次流式调用判成「未知」。
+* 覆盖 OpenAI tool_calls、Anthropic input_json_delta / tool_use 起始块、Gemini functionCall。
+*/
+function hasToolCallDelta(record) {
+	if (!record || typeof record !== "object") return false;
+	for (const carrier of frameCarriers(record)) {
+		if (!carrier || typeof carrier !== "object") continue;
+		const calls = carrier.tool_calls;
+		if (Array.isArray(calls) && calls.length > 0) return true;
+		const type = carrier.type;
+		if (type === "input_json_delta" || type === "tool_use_delta") return true;
+		const block = carrier.content_block;
+		if (block && typeof block === "object" && block.type === "tool_use") return true;
+	}
+	const parts = record?.candidates?.[0]?.content?.parts;
+	if (Array.isArray(parts) && parts.some((part) => part && typeof part === "object" && part.functionCall)) return true;
+	return false;
+}
+/**
 * 扫一段已是完整行的 SSE 文本（可含多行），更新时钟。
 * @param at 该段数据的相对时刻（ms）；同段内的帧共用同一时刻，粒度足够
 */
@@ -200,6 +222,7 @@ function scanThinkChunk(clock, chunk, at) {
 			continue;
 		}
 		if (!record || typeof record !== "object") continue;
+		clock.sseFrames = (clock.sseFrames || 0) + 1;
 		const reasoning = reasoningTextOf(record);
 		if (reasoning) {
 			if (clock.startAt == null) clock.startAt = at;
@@ -212,7 +235,24 @@ function scanThinkChunk(clock, chunk, at) {
 			clock.contentChars = (clock.contentChars || 0) + content.length;
 			if (clock.startAt != null && clock.endAt == null) clock.endAt = at;
 		}
+		if (reasoning || content || hasToolCallDelta(record)) clock.deltaFrames = (clock.deltaFrames || 0) + 1;
 	}
+}
+/**
+* 真假流式判定（单一来源）。
+* - 未声明 stream：false
+* - 增量帧 > 1：true
+* - 增量帧 = 1：false（上游把全文塞进一帧，含单帧工具调用）
+* - 零增量帧且没有任何 SSE 帧：false（上游无视 stream:true，直接回整段 JSON）
+* - 零增量帧但收到过 SSE 帧：null（只有 usage / 心跳，观测不足，交给数值兜底）
+*/
+function judgeStreamedFromClock(clock, requestedStream) {
+	if (!requestedStream) return false;
+	const frames = clock?.deltaFrames || 0;
+	if (frames > 1) return true;
+	if (frames === 1) return false;
+	if (!(clock?.sseFrames || 0)) return false;
+	return null;
 }
 /**
 * 结算思维链耗时（ms）。
@@ -2057,11 +2097,7 @@ function installFetchCapture() {
 							let fullText = "";
 							const thinkClock = createThinkClock();
 							let normText = "";
-							const judgeStreamed = () => {
-								if (!requestedStream) return false;
-								if (!thinkClock.contentFrames) return null;
-								return thinkClock.contentFrames > 1;
-							};
+							const judgeStreamed = () => judgeStreamedFromClock(thinkClock, requestedStream);
 							const finish = () => {
 								try {
 									const endedAt = nowMs() - t0;

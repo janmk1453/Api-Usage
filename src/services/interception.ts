@@ -3,7 +3,7 @@ import { repository } from '../data/repository';
 import { log } from '../utils/logger';
 import { initConnectionIdentity, resolveRuntimeConnectionContext, type HistoryConnection } from './connection-identity';
 import { isInjectableApiFormat, mergeIncludeUsage } from './include-usage';
-import { createThinkClock, scanThinkChunk, resolveThinkTime, reasoningTextOf, contentTextOf } from './think-timing';
+import { createThinkClock, scanThinkChunk, resolveThinkTime, reasoningTextOf, contentTextOf, judgeStreamedFromClock } from './think-timing';
 import { createFrameNormalizer } from './frame-normalizer';
 import { saveRequestStart, patchRequestLog, noteRecentTurns } from './request-log';
 import { noteCaptureStage, isZeroUsage, usageNumbers } from './capture-digest';
@@ -635,15 +635,9 @@ function installFetchCapture(): boolean {
             // 归一化后的 SSE 文本：与 fullText 一一对应，只用于解析 usage / 结束原因；
             // fullText 始终保持上游原文，历史详情与请求日志展示的都必须是它
             let normText = '';
-            // 假流式检测：统计承载正文的增量帧数
-            const judgeStreamed = (): boolean | null => {
-              // 请求未声明流式：明确非流式
-              if (!requestedStream) return false;
-              // 未观测到正文帧（可能是纯 usage 帧或异常响应）：未知，交给数值兜底
-              if (!thinkClock.contentFrames) return null;
-              // 真正的流式会持续吐出多帧正文；只有一帧说明上游一次性返回全文
-              return thinkClock.contentFrames > 1;
-            };
+            // 假流式检测：口径见 think-timing.ts#judgeStreamedFromClock
+            // （增量帧含正文 / 思维链 / 工具调用；工具调用响应没有 delta.content 也能判对）
+            const judgeStreamed = (): boolean | null => judgeStreamedFromClock(thinkClock, requestedStream);
             const finish = () => {
               try {
                 const endedAt = nowMs() - t0;
