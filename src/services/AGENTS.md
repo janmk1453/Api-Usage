@@ -14,6 +14,16 @@
 - **请求来源**（`services/request-origin.ts`，纯逻辑可直接单测）：只认调用栈，**禁止用请求体特征反推发起方**（扩展改一行模板就漂移，方案阶段已否掉）。判据以「酒馆发送脚本帧」为锚点——`SEND_SCRIPTS = ['/scripts/openai.js', '/scripts/textgen-settings.js']`（聊天/文本补全的唯一两个真 fetch 处，文件级判断，改名压缩不影响），排在它**外面**的 third-party 帧才是发起者，排在它**里面**的只是包装 fetch（酒馆助手/预设脚本的常规操作，判酒馆）；栈里没有发送帧时任何 third-party 帧即扩展直连（此时 `/script.js` 帧只是触发它的 UI 事件）。三个必须守住的点：① 必须跳过自身帧（`SELF_MARKERS` 默认 `api-usage`，入口 `registerRequestOriginSelf(import.meta.url)` 补真实目录名）——自身帧漏排会把内层包装器反判成更外层发起者，实测踩过；② `detectRequestOrigin()` 只能在 fetch 包装的同步段调用，任何 `await` 之后栈就断了；③ 认不出返回 `null`、界面不标角标、绝不编一个来源。来源随 `TurnContext` 落地，**并发一律按 `requestId` 配对**（`turnByRequestId`；`startTime` 是 `Date.now()`，同毫秒连发会撞），查不到 `requestId` 才退回 `startTime`，都没有就返回空。
 - **探针**（`services/request-tap/`）：采集 / 判定 / 匹配 / 账本各自单文件，为历史页健康提示提供「请求是否真的没记进历史」的证据，**不要让探针逻辑渗进拦截主链**。
 
+## 聊天消息头元信息（`services/message-cost/`）
+
+在酒馆聊天页每条回复的头部标「这一轮花了多少钱」，可选带首字延迟 / 生成速度 / 缓存命中率。**只读 `state.history` 画 DOM，绝不回写 `message.extra`**——那会随聊天落盘、进导出与 WebDAV。
+
+- **配对**（`match.ts`，纯逻辑可单测）：锚点只取内核写的消息字段 `gen_started` / `gen_finished` / `extra.prompt_cache` / `extra.model`，**不读请求体**。L1 指纹——`prompt_cache.input_tokens`/`cached_tokens` 与记录的 `prompt_tokens`/`cache_hit_tokens` 完全相等；L2 时间窗（`MATCH_WINDOW_BEFORE_MS = 1500` / `MATCH_WINDOW_AFTER_MS = 5000`）+ 只认 `requestOrigin.kind` 为 `tavern`/`unknown`/空（扩展直连与 iframe 脚本的请求不算这一轮对话）；L3 无 `gen_finished` 时只有唯一候选才采用。两条候选与锚点距离差 < `MATCH_AMBIGUITY_MS = 300` 且 Token 不同 → 判并发歧义**直接不显示**（宁缺勿错）。记录侧 `timestamp` 是**入库时刻**（≈ 响应结束），不是请求开始。
+- **swipe**：`swipe_info[swipe_id]` 里才是那条分支自己的 `gen_started`/`gen_finished`/`extra`，切 swipe 必须用它，否则会拿主字段（最后一次生成）错配。
+- **环境分叉**（`render.ts#hasNativeGenerationInfo`，探针是 `#messageFirstTokenEnabled`）：TauriTavern 内核自带首字 / 速度 / 命中三块，扩展**只补价格**；SillyTavern 没有，四项全画。显示口径：`moneyText()` 4 位小数不带币种码，`pricingSource === 'unpriced'` 显示「待定价」，`costEstimated` 加 `≈`。
+- **开关**（`settings-row.ts`）：注入到宿主「用户设置 → 消息显示」栏（ST 接 `#messageTokensEnabled`、TT 接 `#messageCacheEnabled` 那个 `label` 之后），状态存扩展自己的 `settings.messageCost/messageTtft/messageRate/messageCache`（默认全关），**不写 `power_user`**，避免污染宿主设置导出。
+- **刷新**（`index.ts`）：`CHARACTER_MESSAGE_RENDERED` / `MESSAGE_SWIPED` / `CHAT_CHANGED` / `MESSAGE_UPDATED` / `GENERATION_ENDED`（400ms 与 1200ms 各一次，记录可能晚于事件入库）+ `#chat` 的 `MutationObserver` 兜底（只含自身 `.aus-mes-meta` 的变更要过滤掉，否则自激）。
+
 ## TauriTavern Agent 模式（兼容层，禁止改动酒馆侧采集）
 
 TauriTavern 的 Agent 模式把「一次 Run 的多次模型调用」交给宿主记账，酒馆侧 `GENERATION_ENDED` 根本不触发，所以 `src/services/agent-usage/` 单独走宿主 API 采集。**适配逻辑必须落在 `src/services/agent-usage/` 内，`interception.ts` 等服务酒馆本身的采集代码一律不动**（用户明确要求）。

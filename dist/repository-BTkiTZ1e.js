@@ -1,10 +1,10 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { i as state, o as defaultSettings, r as getSelectedSave, s as mobileDeviceHint } from "./store-HbexUDAd.js";
+import { i as state, o as defaultSettings, r as getSelectedSave, s as mobileDeviceHint } from "./store-CVamS-ER.js";
 import { a as HIDDEN_PRICING_MODELS, c as PRICE_HISTORY, l as PRICING, r as DEFAULT_PEAK_HOURS, s as MAX_HISTORY, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, a as clearHistoryCold, f as loadHistoryCold, g as saveHistoryCold, h as saveExtensionSettings, l as getAllHistory, p as loadHot, r as appendHistoryCold, u as getExtensionSettings, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
 import { a as isUnsafeKey, c as localDay, i as isPeakHour$1, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay } from "./date-Dsu8hrMO.js";
-import { a as getWalletExchangeRate } from "./currency-vMqQ1McO.js";
+import { o as getWalletExchangeRate } from "./currency-Dr655frw.js";
 import { n as emit, t as DataEvents } from "./events-BD2MbRMW.js";
 //#region src/types/wallet.ts
 var DEEPSEEK_WALLET_ID = "wallet:deepseek-official";
@@ -1102,6 +1102,17 @@ function effectivePricingFor(model, uTs, settings, base) {
 		peak: seg.peak
 	};
 	return base;
+}
+/** 计价来源的中文文案：历史详情与消息头提示共用一处，避免两套说法分叉 */
+function pricingSourceLabel(source) {
+	switch (source) {
+		case "wallet": return "钱包规则";
+		case "builtin": return "DeepSeek 内置";
+		case "unpriced": return "待定价";
+		case "legacy-match": return "旧数据同名价";
+		case "legacy": return "旧全局规则";
+		default: return "旧记录兜底";
+	}
 }
 function calcCost(u, settings, wallet) {
 	const model = u.model || "deepseek-v4-flash";
@@ -2699,7 +2710,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && !!wallet.catalogProvider) try {
-						import("./pricing-sync-DAUvGEH4.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-BqDgbeJS.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
@@ -3631,4 +3642,4 @@ var repository = {
 	}
 };
 //#endregion
-export { walletBalanceToCny as C, resolveRuntimeConnectionContext as D, initConnectionIdentity as E, DEEPSEEK_WALLET_ID as O, mergeWalletCollections as S, buildEndpointContext as T, cloneWallet as _, decryptKey as a, findWalletForHistory as b, sanitizeHistoryTiming as c, calcSavings as d, getPricing as f, normalizeModel as g, isWalletPeakHour as h, saveWalletApiKey as i, WALLET_CATALOG_PROVIDERS as k, isTruncatedOf as l, isPeakHour as m, repository_exports as n, encryptKey as o, isDeepSeekOfficialModel as p, getWalletApiKey as r, measureTokenRate as s, repository as t, calcCost as u, defaultContextLimitForModel as v, walletPendingModelCount as w, findWalletModel as x, findWalletForConnection as y };
+export { WALLET_CATALOG_PROVIDERS as A, mergeWalletCollections as C, initConnectionIdentity as D, buildEndpointContext as E, resolveRuntimeConnectionContext as O, findWalletModel as S, walletPendingModelCount as T, pricingSourceLabel as _, decryptKey as a, findWalletForConnection as b, sanitizeHistoryTiming as c, calcSavings as d, getPricing as f, normalizeModel as g, isWalletPeakHour as h, saveWalletApiKey as i, DEEPSEEK_WALLET_ID as k, isTruncatedOf as l, isPeakHour as m, repository_exports as n, encryptKey as o, isDeepSeekOfficialModel as p, getWalletApiKey as r, measureTokenRate as s, repository as t, calcCost as u, cloneWallet as v, walletBalanceToCny as w, findWalletForHistory as x, defaultContextLimitForModel as y };

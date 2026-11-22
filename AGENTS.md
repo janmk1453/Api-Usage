@@ -67,6 +67,7 @@ Api-Usage/
 | `store/` | `index.ts` + `persistence.ts`：单一历史聚合、热 50 + 冷库、`DB_NAME`、迁移备份 |
 | `services/` | 采集与业务：`interception`、`request-origin`、`think-timing`、`turn-outcome`、`token-estimate`、`connection-identity`、`pricing`/`pricing-sync`、`model-match`、`currency`、`balance`、`wallet-secrets`、`plan-quota`、`import-export`、`sync`、`update`/`update-policy`、`telemetry`、`storage-usage`、`wipe-data`/`wipe-hooks`、`theme`、`debug`、`logger` |
 | `services/request-tap/` | 请求探针账本：`capture`/`match`/`classify`/`store`/`types`/`index` |
+| `services/message-cost/` | 聊天消息头元信息：`match`（消息↔记录配对）/`render`/`settings-row`（注入宿主设置页）/`index` |
 | `services/`（诊断） | `health-signals`、`health-prefs`、`error-classify`、`console-ring`、`capture-digest`、`frame-normalizer`、`log-sanitize`、`log-upload`、`feedback-pack`、`request-log`、`include-usage` |
 | `services/agent-usage/` | TauriTavern 兼容层：`tt-agent-api`/`collector`/`normalize`/`snapshot-probe` |
 | `stats/` | `forecast-series`（预测核心）、`forecast`（旧 API 兼容）、`model-efficiency`、`energyScore` |

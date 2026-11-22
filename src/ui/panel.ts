@@ -31,6 +31,7 @@ import { initLogView, renderLogView } from './log-view';
 import { renderHistoryHealthBar } from './history-health-bar';
 import { historyBadgeOf, shouldShowStateBadge } from './history-badge';
 import { sourceBadgeOf, originTextOf } from './source-badge';
+import { pricingSourceLabel } from '../services/pricing';
 import { rateText, rateTitle, rateBadgeText } from './rate-text';
 import { isEstimatedEntry } from '../data/sample-quality';
 import { helpViewHTML } from './help-view';
@@ -649,7 +650,7 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
                     <div class="aus-dt-item is-wide"><span class="aus-dt-label">请求来源</span><span class="aus-dt-val">${esc(originTextOf(h as any))}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">记录状态</span><span class="aus-dt-val">${esc(recordStateText)}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">时段</span><span class="aus-dt-val">${h.priceType==='new-peak'||h.priceType==='wallet-peak'?'高峰':h.priceType==='new-offpeak'||h.priceType==='wallet-offpeak'?'非高峰':h.priceType==='unpriced'?'待定价':'旧价格'}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label">计价来源</span><span class="aus-dt-val">${h.pricingSource==='wallet'?'钱包规则':h.pricingSource==='builtin'?'DeepSeek 内置':h.pricingSource==='unpriced'?'待定价':h.pricingSource==='legacy-match'?'旧数据同名价':h.pricingSource==='legacy'?'旧全局规则':'旧记录兜底'}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">计价来源</span><span class="aus-dt-val">${esc(pricingSourceLabel(h.pricingSource))}</span></div>
                     <div class="aus-dt-item is-wide"><span class="aus-dt-label">钱包</span><span class="aus-dt-val">${esc(repository.getWallet(String(h.walletId||''))?.name || h.endpointLabel || '未归属钱包')}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">日期</span><span class="aus-dt-val">${esc(recordDateText)}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">时间</span><span class="aus-dt-val">${esc(recordTimeText)}</span></div>

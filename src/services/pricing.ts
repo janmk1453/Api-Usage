@@ -212,6 +212,18 @@ function effectivePricingFor(model: string, uTs: number, settings: Settings, bas
   return base;
 }
 
+/** 计价来源的中文文案：历史详情与消息头提示共用一处，避免两套说法分叉 */
+export function pricingSourceLabel(source: string | null | undefined): string {
+  switch (source) {
+    case 'wallet': return '钱包规则';
+    case 'builtin': return 'DeepSeek 内置';
+    case 'unpriced': return '待定价';
+    case 'legacy-match': return '旧数据同名价';
+    case 'legacy': return '旧全局规则';
+    default: return '旧记录兜底';
+  }
+}
+
 export function calcCost(
   u: { timestamp: number; model: string; prompt_cache_hit_tokens: number; prompt_cache_miss_tokens: number; completion_tokens: number },
   settings: Settings,

@@ -85,6 +85,14 @@ export type Settings = {
   overviewFour: OverviewFourKey[];
   statsFour: StatsFourKey[];
   modelsPricingCollapsed?: boolean;
+  /** 聊天消息头：本轮费用（默认关闭，由宿主设置页注入的开关控制） */
+  messageCost: boolean;
+  /** 聊天消息头：首字延迟（TauriTavern 内核自带，扩展只在缺失的内核里补） */
+  messageTtft: boolean;
+  /** 聊天消息头：生成速度 */
+  messageRate: boolean;
+  /** 聊天消息头：缓存命中率 */
+  messageCache: boolean;
   pricingSync: PricingSyncSettings;
 };
 
@@ -112,6 +120,10 @@ export const defaultSettings = (): Settings => ({
   overviewFour: ['avg_cost', 'avg_tokens', 'avg_duration', 'avg_rate', 'avg_input_tokens', 'avg_output_tokens', 'avg_hit_rate', 'max_total'],
   statsFour: ['avg_cost', 'avg_tokens', 'avg_think_ratio', 'truncation_rate'],
   modelsPricingCollapsed: true,
+  messageCost: false,
+  messageTtft: false,
+  messageRate: false,
+  messageCache: false,
   pricingSync: {
     mode: 'add-missing',
     exchangeRate: 7.2,

@@ -47,6 +47,12 @@
 - **请求来源角标**单一来源 `ui/source-badge.ts#sourceBadgeOf`，**与记录状态角标是两条正交线**（状态讲这条记录准不准，来源讲是谁打出去的），同一条记录可以两枚并挂：来源在左、状态在右。只有 `extension` / `script` 出角标（蓝「扩展」/ 紫「脚本」），`tavern` / `unknown` 一律不标——主界面是默认情况，标出来只是噪音。
 - **记录状态角标**单一来源 `ui/history-badge.ts#historyBadgeOf`，优先级：用户中断（黄「中断」）→ 上游中断（红「中断」）→ 估算（黄「估算」）→ Agent（绿）→ 对话（灰，默认态）；面板只渲染 `badge.background/color/text` 并按 `kind` 给 title，**不许在面板里重新分支**。**默认态那枚由 `shouldShowStateBadge(badge, !!sourceBadge)` 决定是否渲染**——已有来源角标（扩展 / 脚本）时不再并排一枚「对话」（一条记录只留一枚描述性角标），中断 / 估算 / Agent 照常显示。**详情里的「记录状态」与 Token「估算」小标必须用 `isEstimatedEntry(entry)`（读 `usageSource`）**——中断又靠估算补记时角标是「中断」，按角标判断会把本地推算值当成上游真实用量。
 
+### 聊天消息头（注入宿主聊天区）
+
+- 节点是宿主的 `#chat .mes` 里插的 `small.mes_generation_info.aus-mes-meta`，**不在 `#aus-panel` 内**，所以 `style.css` 里这段规则不能挂在 `[data-extension]` 作用域下；尺寸/透明度对齐 TauriTavern 原生 `.mes_generation_info`（`opacity .7`、`0.8 × --mainFontSize`、`nowrap`）。
+- 单项由 `data-kind`（`cost` / `ttft` / `rate` / `cache`）区分；窄屏 `@media (max-width:760px)` 只留 `cost`，与面板两套断点规则分开写（这条在宿主聊天区，不涉及 `@container ausbody`）。
+- 开关行注入宿主设置页，勾选状态由扩展设置驱动，重绘一律走 `paintMessageMeta()`（先删旧节点再画，避免堆叠）。
+
 ### 历史详情窗口
 
 - 桌面从右侧滑入 `clamp(320px,26%,460px)` 抽屉（`border-left` 一条分隔线），手机从底部上滑约 3/4 高、抬在底栏之上并带 `36×4` 拖动把手。

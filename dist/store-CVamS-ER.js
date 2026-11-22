@@ -85,6 +85,10 @@ var defaultSettings = () => ({
 		"truncation_rate"
 	],
 	modelsPricingCollapsed: true,
+	messageCost: false,
+	messageTtft: false,
+	messageRate: false,
+	messageCache: false,
 	pricingSync: {
 		mode: "add-missing",
 		exchangeRate: 7.2,
