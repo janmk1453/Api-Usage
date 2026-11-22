@@ -21,7 +21,7 @@ var update_exports = /* @__PURE__ */ __exportAll({
 	updateSelf: () => updateSelf,
 	versionProbePlan: () => versionProbePlan
 });
-var CURRENT_VERSION = "3.2.3";
+var CURRENT_VERSION = "3.2.4";
 var REPO = "janmk1453/Api-Usage";
 var EXTENSION_FOLDER = "Api-Usage";
 /** 自动检查节流：每 10 分钟内首次打开面板才真正联网检查一次 */

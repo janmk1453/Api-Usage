@@ -1,7 +1,7 @@
 import { t as esc } from "./date-Dsu8hrMO.js";
-import { r as formatChangelogDate, s as APP_VERSION } from "./changelog-D2edt_kC.js";
+import { r as formatChangelogDate, s as APP_VERSION } from "./changelog-e06A3fQu.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
-import { t as remoteSources } from "./update-CFccFrbo.js";
+import { t as remoteSources } from "./update-CCaFvj26.js";
 //#region src/services/announcement.ts
 /**
 * 公告：作者在仓库根目录的 announcement.json 里写公告，客户端打开面板时若「有未读」就弹一次。

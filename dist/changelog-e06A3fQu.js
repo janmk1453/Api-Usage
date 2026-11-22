@@ -1,7 +1,7 @@
 import { t as esc } from "./date-Dsu8hrMO.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
 //#region src/constants/version.ts
-var APP_VERSION = String("3.2.3");
+var APP_VERSION = String("3.2.4");
 /**
 * 构建号：manifest.json#build_no → __BUILD_NO__。
 *
@@ -12,11 +12,37 @@ var APP_VERSION = String("3.2.3");
 * 规则（与 AGENTS.md 同步）：未经用户当轮明确要求不得改动；确需改动时在现有值上 +1，
 * 同一次发布内不要重复递增。
 */
-var BUILD_NO = String("4");
+var BUILD_NO = String("5");
 /** 更新弹窗的已读键：版本号 + 构建号；拿不到构建号时退回纯版本号 */
 var APP_BUILD_TAG = BUILD_NO ? `${APP_VERSION}|${BUILD_NO}` : APP_VERSION;
 /** 更新日志（最新在前） */
 var CHANGELOG = [
+	{
+		version: "r3.2.4",
+		buildNo: 5,
+		date: "2026-11-22",
+		sections: [
+			{
+				kind: "feature",
+				items: [
+					"消息顶部展示对话数据与费用",
+					"TT酒馆：在 酒馆-用户设置 中，提供额外的消息费用选择框，基于TT原有逻辑，在消息顶部额外展示对话费用",
+					"ST酒馆：TT在ST的基础上在 酒馆-用户设置 中增加了 首字延迟、生成速度、缓存命中率 的勾选显示，对此我们迁移了相关能力并额外提供了 对话费用 展示",
+					"记录现在支持定位区分不同扩展/脚本的请求",
+					"统计与历史页现在可以通过请求类型进行筛选了",
+					"新增公告能力"
+				]
+			},
+			{
+				kind: "improve",
+				items: ["趋势预测只统计对话类请求"]
+			},
+			{
+				kind: "fix",
+				items: ["同一供应商被扩展请求拆成两个钱包"]
+			}
+		]
+	},
 	{
 		version: "r3.2.3",
 		buildNo: 4,
