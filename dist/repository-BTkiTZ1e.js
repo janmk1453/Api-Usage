@@ -1,10 +1,10 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { i as state, o as defaultSettings, r as getSelectedSave, s as mobileDeviceHint } from "./store-HbexUDAd.js";
+import { i as state, o as defaultSettings, r as getSelectedSave, s as mobileDeviceHint } from "./store-CVamS-ER.js";
 import { a as HIDDEN_PRICING_MODELS, c as PRICE_HISTORY, l as PRICING, r as DEFAULT_PEAK_HOURS, s as MAX_HISTORY, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, a as clearHistoryCold, f as loadHistoryCold, g as saveHistoryCold, h as saveExtensionSettings, l as getAllHistory, p as loadHot, r as appendHistoryCold, u as getExtensionSettings, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
 import { a as isUnsafeKey, c as localDay, i as isPeakHour$1, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay } from "./date-Dsu8hrMO.js";
-import { a as getWalletExchangeRate } from "./currency-vMqQ1McO.js";
+import { o as getWalletExchangeRate } from "./currency-Dr655frw.js";
 import { n as emit, t as DataEvents } from "./events-BD2MbRMW.js";
 //#region src/types/wallet.ts
 var DEEPSEEK_WALLET_ID = "wallet:deepseek-official";
@@ -233,7 +233,7 @@ function buildEndpointIdentity(sourceType, rawEndpoint) {
 	const isOfficial = sourceIsOfficial || endpointIsOfficial;
 	return {
 		sourceType,
-		endpointId: isOfficial ? officialEndpointId("deepseek") : sourceType || endpoint ? shortHash(`${sourceType || "unknown"}|${endpoint?.canonical || "official:" + (sourceType || "unknown")}`) : null,
+		endpointId: isOfficial ? officialEndpointId("deepseek") : endpoint ? shortHash(`endpoint|${endpoint.canonical}`) : sourceType ? officialEndpointId(sourceType) : null,
 		endpointLabel: isOfficial ? "DeepSeek 官方" : endpoint?.label || (sourceType ? OFFICIAL_LABELS[sourceType] || `${sourceType} 接口` : null)
 	};
 }
@@ -361,12 +361,33 @@ function isDeepSeekOfficialConnection(connection) {
 	if (endpointId === DEEPSEEK_OFFICIAL_ENDPOINT_ID || isDeepSeekOfficialEndpoint(endpointId) || isDeepSeekOfficialEndpoint(endpointLabel) || endpointLabel === "DeepSeek 官方") return true;
 	return sourceType === "deepseek" && !endpointId;
 }
+/** 从接入标签里取出可比对的主机名；「DeepSeek 官方」这类中文标签返回空串 */
+function hostOfEndpointLabel(value) {
+	const text = cleanText(value).toLowerCase();
+	if (!text) return "";
+	const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`;
+	try {
+		const host = new URL(candidate).host.toLowerCase().replace(/\.$/, "");
+		return host.includes(".") ? host : "";
+	} catch {
+		return "";
+	}
+}
+/** 钱包与接入的匹配方式；endpoint 是地址身份严格相等，host 是同一域名兜底 */
+function walletMatchKind(wallet, connection) {
+	if (!wallet || !connection) return null;
+	if (wallet.id === "wallet:deepseek-official") return isDeepSeekOfficialConnection(connection) ? "endpoint" : null;
+	if (wallet.endpointId && connection.endpointId) {
+		if (wallet.endpointId === connection.endpointId) return "endpoint";
+		const walletHost = hostOfEndpointLabel(wallet.endpointLabel) || hostOfEndpointLabel(wallet.endpointDisplay);
+		const connectionHost = hostOfEndpointLabel(connection.endpointLabel);
+		return walletHost && connectionHost && walletHost === connectionHost ? "host" : null;
+	}
+	if (wallet.sourceType && connection.sourceType) return wallet.sourceType === connection.sourceType && !wallet.endpointId && !connection.endpointId ? "source" : null;
+	return null;
+}
 function walletMatchesConnection(wallet, connection) {
-	if (!wallet || !connection) return false;
-	if (wallet.id === "wallet:deepseek-official") return isDeepSeekOfficialConnection(connection);
-	if (wallet.endpointId && connection.endpointId) return wallet.endpointId === connection.endpointId;
-	if (wallet.sourceType && connection.sourceType) return wallet.sourceType === connection.sourceType && !wallet.endpointId && !connection.endpointId;
-	return false;
+	return walletMatchKind(wallet, connection) !== null;
 }
 function findWalletForConnection(wallets, connection) {
 	if (!connection) return null;
@@ -1082,6 +1103,17 @@ function effectivePricingFor(model, uTs, settings, base) {
 	};
 	return base;
 }
+/** 计价来源的中文文案：历史详情与消息头提示共用一处，避免两套说法分叉 */
+function pricingSourceLabel(source) {
+	switch (source) {
+		case "wallet": return "钱包规则";
+		case "builtin": return "DeepSeek 内置";
+		case "unpriced": return "待定价";
+		case "legacy-match": return "旧数据同名价";
+		case "legacy": return "旧全局规则";
+		default: return "旧记录兜底";
+	}
+}
 function calcCost(u, settings, wallet) {
 	const model = u.model || "deepseek-v4-flash";
 	const walletRule = wallet ? findWalletModel(wallet, model) : null;
@@ -1664,7 +1696,8 @@ function applyEntryMeta(target, meta) {
 		"promptChars",
 		"outputChars",
 		"estimateCacheUnknown",
-		"costEstimated"
+		"costEstimated",
+		"requestOrigin"
 	]) {
 		const value = meta[key];
 		if (value !== void 0) target[key] = value;
@@ -1861,7 +1894,7 @@ function ensureWalletForConnection(wallets, ignored, connection, now = Date.now(
 		wallet = created;
 		changed = true;
 	}
-	if (connection.endpointId && wallet.endpointId !== connection.endpointId && wallet.id !== "wallet:deepseek-official") {
+	if (connection.endpointId && !wallet.endpointId && wallet.id !== "wallet:deepseek-official") {
 		wallet.endpointId = connection.endpointId;
 		wallet.updatedAt = now;
 		changed = true;
@@ -2021,23 +2054,15 @@ function migrateWalletEndpoints(ignored, now = Date.now()) {
 	}
 	return changed;
 }
-function migrateWallets(hot, cold = []) {
-	const now = Date.now();
-	const normalized = normalizeWallets(state.wallets, state.settings, now);
-	let changed = normalized !== state.wallets;
-	state.wallets = normalized;
-	state.walletIgnored = Array.isArray(state.walletIgnored) ? Array.from(new Set(state.walletIgnored.map((id) => String(id || "").trim()).filter(Boolean))) : [];
-	const ignored = new Set(state.walletIgnored);
-	const official = state.wallets.find((wallet) => wallet.id === "wallet:deepseek-official") || createDeepSeekWallet(state.settings, now);
-	if (!state.wallets.some((wallet) => wallet.id === official.id)) state.wallets.unshift(official);
-	changed = migrateLegacyPricing(official, state.settings.customModels || []) || changed;
-	changed = migrateLegacyBalance(official) || changed;
-	changed = refreshBuiltinWalletModels(official, now) || changed;
-	migrateLegacyWalletApiKey(official.id);
-	changed = migrateWalletEndpoints(ignored, now) || changed;
-	const allHistory = [...cold || [], ...state.history || []];
-	changed = migrateHistoryModels(allHistory) || changed;
-	for (const entry of allHistory) {
+/**
+* 把历史条目的接入身份与钱包归属归一：
+* - endpointId / endpointLabel 按当前算法重算（旧版本掺过 sourceType，同一域名会有两个 id）；
+* - 找不到钱包时按接入自动补一个，条目钱包 id 跟着钱包走。
+* 幂等：已是目标状态时逐条不动。hydrate 的接入身份迁移与 migrateWallets 共用这一份。
+*/
+function migrateHistoryWalletLinks(allHistory, ignored, now = Date.now()) {
+	let changed = false;
+	for (const entry of allHistory || []) {
 		const connection = historyConnection(entry);
 		if (!connection) continue;
 		if (entry.endpointId !== connection.endpointId || entry.endpointLabel !== connection.endpointLabel) {
@@ -2079,6 +2104,25 @@ function migrateWallets(hot, cold = []) {
 			changed = true;
 		}
 	}
+	return changed;
+}
+function migrateWallets(hot, cold = []) {
+	const now = Date.now();
+	const normalized = normalizeWallets(state.wallets, state.settings, now);
+	let changed = normalized !== state.wallets;
+	state.wallets = normalized;
+	state.walletIgnored = Array.isArray(state.walletIgnored) ? Array.from(new Set(state.walletIgnored.map((id) => String(id || "").trim()).filter(Boolean))) : [];
+	const ignored = new Set(state.walletIgnored);
+	const official = state.wallets.find((wallet) => wallet.id === "wallet:deepseek-official") || createDeepSeekWallet(state.settings, now);
+	if (!state.wallets.some((wallet) => wallet.id === official.id)) state.wallets.unshift(official);
+	changed = migrateLegacyPricing(official, state.settings.customModels || []) || changed;
+	changed = migrateLegacyBalance(official) || changed;
+	changed = refreshBuiltinWalletModels(official, now) || changed;
+	migrateLegacyWalletApiKey(official.id);
+	changed = migrateWalletEndpoints(ignored, now) || changed;
+	const allHistory = [...cold || [], ...state.history || []];
+	changed = migrateHistoryModels(allHistory) || changed;
+	changed = migrateHistoryWalletLinks(allHistory, ignored, now) || changed;
 	if (!(Number(hot?._walletPricingBackfillVersion || 0) >= WALLET_PRICING_BACKFILL_VERSION)) {
 		changed = backfillLegacyExactPricing(allHistory) || changed;
 		if (hot && typeof hot === "object") hot._walletPricingBackfillVersion = WALLET_PRICING_BACKFILL_VERSION;
@@ -2091,6 +2135,14 @@ function migrateWallets(hot, cold = []) {
 	return changed;
 }
 var WALLET_PRICING_BACKFILL_VERSION = 1;
+/**
+* 接入身份算法版本：1 = 旧算法（endpointId 掺了 sourceType），2 = 只由接入地址决定。
+* 旧数据里同一个供应商会因 chat_completion_source 不同被拆成两个接入、两个钱包，
+* 扩展/脚本自己拼请求体触发的那次还会落到没配价的新钱包上，费用记 0。
+* 升级时借这个版本号强制走一次完整迁移（钱包合并 + 历史归位 + 整库重算），跑完落版本号。
+*/
+var ENDPOINT_IDENTITY_VERSION = 2;
+var ENDPOINT_IDENTITY_KEY = "_endpointIdentityVersion";
 /**
 * Agent 模式条目的重算：一次 Run 可能跨多个钱包、多个时段，
 * 因此按 raw_usage.agent.walletBreakdown 逐项计价后求和。
@@ -2658,12 +2710,17 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && !!wallet.catalogProvider) try {
-						import("./pricing-sync-BAoyAPn3.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-BqDgbeJS.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
 			}
 		} catch {}
+		if (wallet && connection && wallet.endpointId && connection.endpointId && wallet.endpointId !== connection.endpointId) connection = {
+			...connection,
+			endpointId: wallet.endpointId,
+			endpointLabel: wallet.endpointLabel || connection.endpointLabel
+		};
 		try {
 			const now = Date.now();
 			const fp = turnFingerprint({
@@ -3495,7 +3552,9 @@ var repository = {
 		} catch (error) {
 			log.error("冷历史读取失败", error);
 		}
-		const needFullRecalc = (hot && typeof hot[CALC_FINGERPRINT_KEY] === "string" ? String(hot[CALC_FINGERPRINT_KEY]) : "") !== computeCalcFingerprint();
+		const storedFingerprint = hot && typeof hot[CALC_FINGERPRINT_KEY] === "string" ? String(hot[CALC_FINGERPRINT_KEY]) : "";
+		const identityDone = Number(hot?.[ENDPOINT_IDENTITY_KEY] || 0) >= ENDPOINT_IDENTITY_VERSION;
+		const needFullRecalc = storedFingerprint !== computeCalcFingerprint() || !identityDone;
 		let coldDirty = false;
 		if (needFullRecalc) {
 			try {
@@ -3543,6 +3602,10 @@ var repository = {
 			try {
 				if (await this.recalcAll(cold)) coldDirty = true;
 			} catch {}
+			if (!identityDone) try {
+				saveHot({ [ENDPOINT_IDENTITY_KEY]: ENDPOINT_IDENTITY_VERSION });
+				if (hot && typeof hot === "object") hot[ENDPOINT_IDENTITY_KEY] = ENDPOINT_IDENTITY_VERSION;
+			} catch {}
 		}
 		try {
 			const hotDedup = dropDuplicateTurns(state.history);
@@ -3579,4 +3642,4 @@ var repository = {
 	}
 };
 //#endregion
-export { walletBalanceToCny as C, resolveRuntimeConnectionContext as D, initConnectionIdentity as E, DEEPSEEK_WALLET_ID as O, mergeWalletCollections as S, buildEndpointContext as T, cloneWallet as _, decryptKey as a, findWalletForHistory as b, sanitizeHistoryTiming as c, calcSavings as d, getPricing as f, normalizeModel as g, isWalletPeakHour as h, saveWalletApiKey as i, WALLET_CATALOG_PROVIDERS as k, isTruncatedOf as l, isPeakHour as m, repository_exports as n, encryptKey as o, isDeepSeekOfficialModel as p, getWalletApiKey as r, measureTokenRate as s, repository as t, calcCost as u, defaultContextLimitForModel as v, walletPendingModelCount as w, findWalletModel as x, findWalletForConnection as y };
+export { WALLET_CATALOG_PROVIDERS as A, mergeWalletCollections as C, initConnectionIdentity as D, buildEndpointContext as E, resolveRuntimeConnectionContext as O, findWalletModel as S, walletPendingModelCount as T, pricingSourceLabel as _, decryptKey as a, findWalletForConnection as b, sanitizeHistoryTiming as c, calcSavings as d, getPricing as f, normalizeModel as g, isWalletPeakHour as h, saveWalletApiKey as i, DEEPSEEK_WALLET_ID as k, isTruncatedOf as l, isPeakHour as m, repository_exports as n, encryptKey as o, isDeepSeekOfficialModel as p, getWalletApiKey as r, measureTokenRate as s, repository as t, calcCost as u, cloneWallet as v, walletBalanceToCny as w, findWalletForHistory as x, defaultContextLimitForModel as y };

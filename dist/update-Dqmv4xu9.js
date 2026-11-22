@@ -224,45 +224,67 @@ function saveBadgeState(on, label = "") {
 * TauriTavern 还会把它打成一条控制台报错（真机反馈包里见过这类 500ms 的误报，容易当成功能损坏）。
 * 清单条目形如 { name: 'third-party/Api-Usage', type: 'global' | 'local' }，读不到返回 null 交给兜底顺序。
 */
-function extensionScopeHint() {
+function extensionManifestEntries() {
+	const out = [];
 	try {
 		const ctx = globalThis.SillyTavern?.getContext?.();
 		const list = Array.isArray(ctx?.extensions) ? ctx.extensions : [];
 		for (const item of list) {
-			if ((String(item?.name || "").split("/").filter(Boolean).pop() || "") !== EXTENSION_FOLDER) continue;
-			const type = String(item?.type || "");
-			if (type === "global") return true;
-			if (type === "local") return false;
+			const name = String((typeof item === "string" ? item : item?.name) || "").trim();
+			if (!name) continue;
+			out.push({
+				name,
+				type: String((typeof item === "string" ? "" : item?.type) || "")
+			});
 		}
 	} catch {}
+	return out;
+}
+function extensionScopeHint() {
+	for (const item of extensionManifestEntries()) {
+		if ((item.name.split("/").filter(Boolean).pop() || "") !== EXTENSION_FOLDER) continue;
+		if (item.type === "global") return true;
+		if (item.type === "local") return false;
+	}
 	return null;
 }
 /**
-* 清单里的完整扩展名。ST/TauriTavern 的版本接口要的是「相对 extensions 目录的路径」，
-* 第三方扩展是 `third-party/Api-Usage`，只传裸名 `Api-Usage` 会拼成上一级目录、必然 404。
+* 从任意写法里取扩展的**目录名**。
+*
+* ST 的 /api/extensions/version|update|branches|switch 都是先 `sanitize(extensionName)`
+* 再 `path.join(basePath, name)`，而 basePath 本身已经是用户扩展目录
+* （data/default-user/extensions）或全局扩展目录（public/scripts/extensions/third-party）。
+* 所以只认单段目录名：传 `third-party/Api-Usage` 会被 sanitize-filename 把斜杠吃掉，
+* 拼成 `data/default-user/extensions/third-partyApi-Usage` → 服务端 404
+* （真机现象：「Directory does not exist at …third-partyApi-Usage」）。
+* TauriTavern 的 parse_third_party_extension_folder_name 两种写法都接受，统一取目录名最稳。
+*/
+function extensionFolderName(value) {
+	let name = String(value || "").trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+	if (!name) return "";
+	if (name === "third-party" || name.startsWith("third-party/")) name = name.slice(12);
+	return name.split("/").filter(Boolean).pop() || "";
+}
+/**
+* 清单里本扩展的目录名。清单条目形如 `third-party/Api-Usage`，
+* 但要传给宿主的是目录名 `Api-Usage`（原因见 extensionFolderName）。
 */
 function extensionNameHint() {
-	try {
-		const ctx = globalThis.SillyTavern?.getContext?.();
-		const list = Array.isArray(ctx?.extensions) ? ctx.extensions : [];
-		for (const item of list) {
-			const full = String(item?.name || "").trim().replace(/^\/+|\/+$/g, "");
-			if (!full) continue;
-			if ((full.split("/").filter(Boolean).pop() || "") !== EXTENSION_FOLDER) continue;
-			return full;
-		}
-	} catch {}
+	for (const item of extensionManifestEntries()) {
+		const folder = extensionFolderName(item.name);
+		if (folder !== EXTENSION_FOLDER) continue;
+		return folder;
+	}
 	return null;
 }
-/** 扩展名候选：清单完整名 → third-party/ 前缀 → 裸名 */
+/** 扩展名候选：清单目录名 → 打包目录名（归一化后通常只剩一个） */
 function extensionNameCandidates() {
 	const out = [];
 	const push = (name) => {
-		const value = String(name || "").trim().replace(/^\/+|\/+$/g, "");
+		const value = extensionFolderName(name);
 		if (value && !out.includes(value)) out.push(value);
 	};
 	push(extensionNameHint() || "");
-	push(`third-party/${EXTENSION_FOLDER}`);
 	push(EXTENSION_FOLDER);
 	return out;
 }
@@ -274,19 +296,40 @@ var knownExtensionName = null;
 * 从 /api/extensions/discover 的结果里挑出本扩展。
 * 条目形如 { name: 'third-party/Api-Usage', type: 'local' | 'global' | 'system' }，
 * type 就是宿主认的安装位置：local 在用户扩展目录，global 在全局扩展目录。
+* name 只是逻辑名，回传给宿主时必须用目录名（见 extensionFolderName）。
 */
 function extensionScopeFromList(list) {
 	if (!Array.isArray(list)) return null;
 	for (const item of list) {
-		const full = String(item?.name || "").trim().replace(/^\/+|\/+$/g, "");
-		if (!full) continue;
-		if ((full.split("/").filter(Boolean).pop() || "") !== EXTENSION_FOLDER) continue;
+		const folder = extensionFolderName(item?.name);
+		if (!folder || folder !== EXTENSION_FOLDER) continue;
 		return {
-			name: full,
+			name: folder,
 			global: String(item?.type || "").toLowerCase() === "global"
 		};
 	}
 	return null;
+}
+/**
+* 决定要拿哪些「扩展名 × 位置」去问 /api/extensions/version。
+* discover 给出的位置是权威答案：位置一旦确定，请求失败就只会是网络（git 连不上 GitHub），
+* 换另一边重试除了多等一轮，还会让宿主回一条 “Extension not found at …” 的假错误，
+* 所以权威位置只试一处；只有读不到清单时才按本地优先盲试两边。
+*/
+function versionProbePlan(found, hint, extraNames = []) {
+	if (found) return {
+		names: [extensionFolderName(found.name)],
+		globals: [found.global]
+	};
+	const names = [];
+	for (const name of [...extraNames, ...extensionNameCandidates()]) {
+		const value = extensionFolderName(name);
+		if (value && !names.includes(value)) names.push(value);
+	}
+	return {
+		names,
+		globals: hint == null ? [false, true] : [hint, !hint]
+	};
 }
 /** 问宿主本扩展装在哪：discover 是权威来源，读不到再退回本地清单猜测 */
 async function discoverExtensionScope() {
@@ -333,19 +376,8 @@ async function fetchLocalCommit() {
 		headers = { "Content-Type": "application/json" };
 	}
 	const rf = getParentFetch();
-	const found = await discoverExtensionScope();
-	const hint = found ? found.global : extensionScopeHint() ?? knownGlobal;
-	const globals = hint == null ? [false, true] : [hint, !hint];
-	const names = [];
-	for (const name of [
-		found?.name,
-		knownExtensionName,
-		...extensionNameCandidates()
-	]) {
-		const value = String(name || "").trim().replace(/^\/+|\/+$/g, "");
-		if (value && !names.includes(value)) names.push(value);
-	}
-	for (const extensionName of names) for (const isGlobal of globals) {
+	const plan = versionProbePlan(await discoverExtensionScope(), extensionScopeHint() ?? knownGlobal, [knownExtensionName]);
+	for (const extensionName of plan.names) for (const isGlobal of plan.globals) {
 		const ctrl = new AbortController();
 		const timer = setTimeout(() => {
 			try {

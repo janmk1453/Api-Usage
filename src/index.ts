@@ -13,11 +13,15 @@ import { initTelemetry } from './services/telemetry';
 import { log } from './utils/logger';
 import { installBackDebug } from './ui/back-debug';
 import { installConsoleRing } from './services/console-ring';
+import { registerRequestOriginSelf } from './services/request-origin';
+import { installMessageCost, uninstallMessageCost, refreshMessageCost } from './services/message-cost';
 
 // 返回键诊断日志（临时排查用）：入口尽早安装，面板打开之前的返回事件也要记上
 try { installBackDebug(); } catch {}
 // 控制台环形缓冲：只留最近若干条报错，供「请求日志 → 上传反馈」取证
 try { installConsoleRing(); } catch {}
+// 请求来源判定要排除自己：先把本扩展目录登记掉（抓栈时自己的帧一定在最上面）
+try { registerRequestOriginSelf(import.meta.url); } catch {}
 
 const MODULE = 'api_usage_stat';
 let wandRetryTimer: any = null;
@@ -58,6 +62,8 @@ function onAppReady() {
   try { import('./services/agent-usage/collector').then(m => m.initAgentUsage()).catch(() => {}); } catch {}
   // 请求探针（技术验证）：旁路记录后端请求并和既有入账对账，只写独立的 localStorage 键，不进任何统计口径
   try { import('./services/request-tap').then(m => m.installRequestTap()).catch(() => {}); } catch {}
+  // 消息头元信息（费用/首字/速度/命中）：DOM 就绪后再注入开关行与刷新
+  try { installMessageCost(); } catch {}
 }
 
 function onAppInitialized() {
@@ -65,6 +71,7 @@ function onAppInitialized() {
   try { import('./services/interception').then(m=>m.installInterception()).catch(() => {}); } catch {}
   try { import('./services/agent-usage/collector').then(m => m.initAgentUsage()).catch(() => {}); } catch {}
   try { import('./services/request-tap').then(m => m.installRequestTap()).catch(() => {}); } catch {}
+  try { installMessageCost(); } catch {}
 }
 
 function onChatChanged() {
@@ -134,6 +141,7 @@ function ensureWandEntry() {
 
 /** 运行时收尾：卸载拦截器与采集、拆掉面板 DOM、停全部定时器与事件监听（数据一律不动） */
 async function teardownRuntime(): Promise<void> {
+  try { uninstallMessageCost(); } catch {}
   try { import('./services/interception').then(m => (m as any).uninstallInterception?.()); } catch {}
   try { import('./services/agent-usage/collector').then(m => (m as any).uninstallAgentUsage?.()).catch(() => {}); } catch {}
   try {
@@ -181,7 +189,7 @@ export async function onClean() {
   }
 }
 
-export function onEnable() { log.debug('enabled'); try { import('./services/interception').then(m=>m.installInterception()); } catch {} try { import('./services/agent-usage/collector').then(m=>m.initAgentUsage()).catch(() => {}); } catch {} try { import('./services/balance').then(m=> (m as any).restartBalanceTimer?.()); } catch {} try { import('./services/currency').then(m=> (m as any).restartRateTimer?.()); } catch {} try { import('./services/pricing-sync').then(m=> (m as any).restartPricingSyncTimer?.()); } catch {} }
+export function onEnable() { log.debug('enabled'); try { installMessageCost(); } catch {} try { import('./services/interception').then(m=>m.installInterception()); } catch {} try { import('./services/agent-usage/collector').then(m=>m.initAgentUsage()).catch(() => {}); } catch {} try { import('./services/balance').then(m=> (m as any).restartBalanceTimer?.()); } catch {} try { import('./services/currency').then(m=> (m as any).restartRateTimer?.()); } catch {} try { import('./services/pricing-sync').then(m=> (m as any).restartPricingSyncTimer?.()); } catch {} }
 export async function onDisable() {
   log.debug('disabled');
   try { const { flushSaveHot } = await import('./store/persistence'); flushSaveHot(); } catch {}
@@ -218,6 +226,7 @@ async function init() {
     try { ensureWandEntry(); } catch {}
     try { createPeakDot(); } catch {}
     try { refreshUI(); } catch {}
+    try { installMessageCost(); } catch {}
     // 版本更新后自动清理历史遗留：早期版本把 models.dev 全量模型写进了“模型与价格”列表
     try { import('./services/pricing-sync').then((m: any) => m.markLegacySyncedModels?.()).catch(() => {}); } catch {}
   };
@@ -253,7 +262,7 @@ async function init() {
   try { window.addEventListener('pagehide', onPageHide); } catch {}
   // 不在启动期做常规更新检查（外网不可达时会长时间挂起请求），改由用户打开面板时触发（openPanel → maybeAutoCheck）；
   // 唯一的例外是上面的强制更新探测：只问远端策略，读不到就当作没有要求，全程静默。
-  (globalThis as any).ApiUsageStat = { MODULE, refreshUI, refreshTheme, updatePeakDot, openPanel, closePanel, togglePanel, state, injectWandEntry: ensureWandEntry };
+  (globalThis as any).ApiUsageStat = { MODULE, refreshUI, refreshTheme, updatePeakDot, openPanel, closePanel, togglePanel, state, injectWandEntry: ensureWandEntry, refreshMessageCost };
 }
 
 init();

@@ -25,6 +25,7 @@ import { toast } from '../utils/logger';
 import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
 import { filterPickerRows } from './chat-visibility';
 import { closeDropdownInstant, closeDropdownThenPaint } from './dropdown-close';
+import { REQUEST_TYPE_OPTIONS, requestTypeLabel, requestTypeTitle } from './request-type-filter';
 
 type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom' | 'all';
 // 默认时间维度：工具栏「重置筛选」与首次进入共用同一口径
@@ -41,6 +42,8 @@ let selectedEndpoint: string = STATS_FILTER_ALL;
 let endpointPickerOpen = false;
 let selectedCredential: string = STATS_FILTER_ALL;
 let credentialPickerOpen = false;
+let selectedRequestType: string = STATS_FILTER_ALL;
+let typePickerOpen = false;
 let lastStatsHistory: any[] = [];
 
 // 五维筛选跨刷新记忆：时间维度/模型/对话/接入/密钥写入 localStorage，
@@ -53,6 +56,7 @@ if (restoredStatsPrefs.models) selectedModels = restoredStatsPrefs.models.slice(
 if (restoredStatsPrefs.chat) selectedChat = restoredStatsPrefs.chat;
 if (restoredStatsPrefs.endpoint) selectedEndpoint = restoredStatsPrefs.endpoint;
 if (restoredStatsPrefs.credential) selectedCredential = restoredStatsPrefs.credential;
+if (restoredStatsPrefs.requestType) selectedRequestType = restoredStatsPrefs.requestType;
 
 function persistStatsFilters() {
   writeFilterPrefs({
@@ -64,6 +68,7 @@ function persistStatsFilters() {
       chat: selectedChat,
       endpoint: selectedEndpoint,
       credential: selectedCredential,
+      requestType: selectedRequestType,
     },
   });
 }
@@ -79,12 +84,14 @@ function resetStatsFilters() {
   selectedChat = STATS_FILTER_ALL;
   selectedEndpoint = STATS_FILTER_ALL;
   selectedCredential = STATS_FILTER_ALL;
+  selectedRequestType = STATS_FILTER_ALL;
   pickerOpen = false;
   modelPickerOpen = false;
   chatPickerOpen = false;
   endpointPickerOpen = false;
   credentialPickerOpen = false;
-  ['aus-range-dropdown', 'aus-model-dropdown', 'aus-chat-dropdown', 'aus-endpoint-dropdown', 'aus-credential-dropdown'].forEach((id) => {
+  typePickerOpen = false;
+  ['aus-range-dropdown', 'aus-model-dropdown', 'aus-chat-dropdown', 'aus-endpoint-dropdown', 'aus-credential-dropdown', 'aus-type-dropdown'].forEach((id) => {
     const el = doc.getElementById(id);
     if (el) el.style.display = 'none';
   });
@@ -174,6 +181,7 @@ function currentStatsFilter(): StatsHistoryFilter {
     chat: selectedChat,
     endpoint: selectedEndpoint,
     credential: selectedCredential,
+    requestType: selectedRequestType,
   };
 }
 
@@ -379,6 +387,29 @@ function renderCredentialPicker(history?: any[], endpoint = selectedEndpoint) {
   });
 }
 
+function renderTypePicker() {
+  const doc = getDoc();
+  const dropdown = doc.getElementById('aus-type-dropdown');
+  const label = doc.getElementById('aus-type-label');
+  if (!dropdown || !label) return;
+  label.textContent = requestTypeLabel(selectedRequestType);
+  label.title = requestTypeTitle(selectedRequestType);
+  const optionHtml = (id: string, text: string, title: string) => {
+    const active = id === selectedRequestType ? 'background:var(--ds-card);font-weight:600;' : '';
+    return `<div data-request-type="${esc(id)}" title="${esc(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${esc(text)}</div>`;
+  };
+  let html = optionHtml(STATS_FILTER_ALL, '全部', '按请求类型筛选');
+  for (const option of REQUEST_TYPE_OPTIONS) html += optionHtml(option.id, option.label, option.title);
+  dropdown.innerHTML = html;
+  dropdown.querySelectorAll('[data-request-type]').forEach((el: any) => {
+    el.onclick = () => {
+      selectedRequestType = el.getAttribute('data-request-type') || STATS_FILTER_ALL;
+      typePickerOpen = false;
+      closeDropdownThenPaint(dropdown, () => renderStatsView());
+    };
+  });
+}
+
 export function positionFilterDropdown(btn: HTMLElement, dropdown: HTMLElement) {
   try {
     const doc = getDoc();
@@ -397,7 +428,7 @@ export function positionFilterDropdown(btn: HTMLElement, dropdown: HTMLElement) 
   } catch {}
 }
 
-function closeFilterDropdowns(except?: 'range' | 'model' | 'chat' | 'endpoint' | 'credential') {
+function closeFilterDropdowns(except?: 'range' | 'model' | 'chat' | 'endpoint' | 'credential' | 'type') {
   const doc = getDoc();
   if (except !== 'range') {
     pickerOpen = false;
@@ -422,6 +453,11 @@ function closeFilterDropdowns(except?: 'range' | 'model' | 'chat' | 'endpoint' |
   if (except !== 'credential') {
     credentialPickerOpen = false;
     const el = doc.getElementById('aus-credential-dropdown');
+    if (el) el.style.display = 'none';
+  }
+  if (except !== 'type') {
+    typePickerOpen = false;
+    const el = doc.getElementById('aus-type-dropdown');
     if (el) el.style.display = 'none';
   }
 }
@@ -509,6 +545,19 @@ function bindPicker() {
       }
     };
   }
+  const tBtn = doc.getElementById('aus-type-btn');
+  const tDropdown = doc.getElementById('aus-type-dropdown');
+  if (tBtn && tDropdown) {
+    tBtn.onclick = () => {
+      typePickerOpen = !typePickerOpen;
+      closeFilterDropdowns('type');
+      tDropdown.style.display = typePickerOpen ? 'block' : 'none';
+      if (typePickerOpen) {
+        renderTypePicker();
+        positionFilterDropdown(tBtn as HTMLElement, tDropdown as HTMLElement);
+      }
+    };
+  }
   const statsResetBtn = doc.getElementById('aus-stats-filter-reset');
   if (statsResetBtn) {
     statsResetBtn.onclick = () => {
@@ -540,6 +589,11 @@ function bindPicker() {
     if (credentialPickerOpen && !t.closest('#aus-credential-dropdown') && !t.closest('#aus-credential-btn')) {
       credentialPickerOpen = false;
       const d = doc.getElementById('aus-credential-dropdown');
+      if (d) d.style.display = 'none';
+    }
+    if (typePickerOpen && !t.closest('#aus-type-dropdown') && !t.closest('#aus-type-btn')) {
+      typePickerOpen = false;
+      const d = doc.getElementById('aus-type-dropdown');
       if (d) d.style.display = 'none';
     }
   });
@@ -1049,6 +1103,7 @@ export async function renderStatsView() {
   renderChatPicker(allHistory);
   renderEndpointPicker(allHistory);
   renderCredentialPicker(allHistory);
+  renderTypePicker();
   renderChartSelectors();
   // 首次加载时统计页为 display:none，跳过图表渲染，等待 switchView 切到统计页时再渲染，避免 0 尺寸报错
   const statsViewEl = doc.querySelector('[data-view="stats"]') as HTMLElement | null;

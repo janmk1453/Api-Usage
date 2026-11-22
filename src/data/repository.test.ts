@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { backfillEntryDuration, dropDuplicateTurns, normalizeSettings, repository } from './repository';
 import { state } from '../store/index';
 import { defaultSettings } from '../types/settings';
-import { createDeepSeekWallet, createWalletFromConnection } from './wallets';
+import { createDeepSeekWallet, createWalletFromConnection, observeModel } from './wallets';
 import { DEEPSEEK_WALLET_ID } from '../types/wallet';
 import {
   appendHistoryCold,
@@ -154,6 +154,60 @@ describe('仓库全量处理', () => {
     expect(relayWallets).toHaveLength(1);
     expect(relayWallets[0].endpointLabel).toBe('youzi.today');
     expect(state.history.map((item) => item.walletId)).toEqual([relayWallets[0].id, relayWallets[0].id]);
+  });
+
+  it('同一供应商因接入来源不同被拆成两个钱包时合并并按已配价格重算', async () => {
+    const settings = defaultSettings();
+    const official = createDeepSeekWallet(settings, 1000);
+    const priced = createWalletFromConnection({
+      sourceType: 'custom',
+      endpointId: 'hash-custom',
+      endpointLabel: 'tokenhub.tencentmaas.com',
+      credentialId: null,
+      credentialLabel: null,
+    }, settings, 2000)!;
+    const blank = createWalletFromConnection({
+      sourceType: 'openai',
+      endpointId: 'hash-openai',
+      endpointLabel: 'tokenhub.tencentmaas.com',
+      credentialId: null,
+      credentialLabel: null,
+    }, settings, 3000)!;
+    const model = observeModel(priced, 'hy4-flash', 2000).model!;
+    model.price = { usePeakPricing: false, offpeak: { hit: 0, miss: 1, output: 2 }, peak: { hit: 0, miss: 1, output: 2 }, priceConfigured: true };
+    model.source = 'manual';
+
+    const pricedEntry = {
+      ...entry(4000, 10, 0),
+      model: 'hy4-flash',
+      sourceType: 'custom',
+      endpointId: 'hash-custom',
+      endpointLabel: 'tokenhub.tencentmaas.com',
+      walletId: priced.id,
+    };
+    const blankEntry = {
+      ...entry(5000, 20, 0),
+      model: 'hy4-flash',
+      sourceType: 'openai',
+      endpointId: 'hash-openai',
+      endpointLabel: 'tokenhub.tencentmaas.com',
+      walletId: blank.id,
+    };
+    context.extensionSettings['api_usage_stat'] = {
+      _migrated: true,
+      history: [pricedEntry, blankEntry],
+      wallets: [official, priced, blank],
+      settings,
+    };
+
+    await repository.hydrate();
+
+    const relayWallets = state.wallets.filter((wallet) => wallet.id !== DEEPSEEK_WALLET_ID);
+    expect(relayWallets).toHaveLength(1);
+    expect(relayWallets[0].endpointLabel).toBe('tokenhub.tencentmaas.com');
+    expect(state.history.map((item) => item.walletId)).toEqual([relayWallets[0].id, relayWallets[0].id]);
+    // 合并后两个记录都能按已配好的价格算钱，不再落在空钱包上记 0
+    for (const item of state.history) expect(item.cost).toBeGreaterThan(0);
   });
 
   it('重算只在金额真有变化时回写冷库', async () => {

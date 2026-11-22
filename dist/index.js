@@ -1,16 +1,16 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { i as state$2, n as getHistoryForDisplay, r as getSelectedSave, s as mobileDeviceHint, t as getCurrentChatIdForStore } from "./store-HbexUDAd.js";
+import { i as state$2, n as getHistoryForDisplay, r as getSelectedSave, s as mobileDeviceHint, t as getCurrentChatIdForStore } from "./store-CVamS-ER.js";
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as walletBalanceToCny, O as DEEPSEEK_WALLET_ID, S as mergeWalletCollections, _ as cloneWallet, b as findWalletForHistory, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as WALLET_CATALOG_PROVIDERS, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as defaultContextLimitForModel, w as walletPendingModelCount, x as findWalletModel } from "./repository-BY6WPeK_.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as pricingSourceLabel, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-BTkiTZ1e.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc$3, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
-import { a as getWalletExchangeRate, i as getDisplayCurrency, r as formatMoney } from "./currency-vMqQ1McO.js";
+import { a as getDisplayCurrency, i as formatMoney, o as getWalletExchangeRate, t as cnyToDisplay$1 } from "./currency-Dr655frw.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
-import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-DFmhAMpn.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-Df4jyFCR.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-CKtvXkSn.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-BAoyAPn3.js";
+import { a as captureDigest, c as clearRequestLog, d as summarizeRequestLog, i as registerRequestOriginSelf, l as readRecentTurns, o as listCaptureStages, s as LOG_VALUE_LIMIT, t as installInterception, u as readRequestLog } from "./interception-DwJ2kGGX.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-4Vm-ReTn.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-BOSmIQOU.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-BqDgbeJS.js";
 import { a as listTapRecords, i as clearTapRecords, n as tapDiagnostics, o as subscribeTap, r as stripModelTag } from "./request-tap-DqE8LPaj.js";
 //#region src/constants/version.ts
 var APP_VERSION = String("3.2.3");
@@ -24,7 +24,7 @@ var APP_VERSION = String("3.2.3");
 * 规则（与 AGENTS.md 同步）：未经用户当轮明确要求不得改动；确需改动时在现有值上 +1，
 * 同一次发布内不要重复递增。
 */
-var BUILD_NO = String("2");
+var BUILD_NO = String("4");
 /** 更新弹窗的已读键：版本号 + 构建号；拿不到构建号时退回纯版本号 */
 var APP_BUILD_TAG = BUILD_NO ? `${APP_VERSION}|${BUILD_NO}` : APP_VERSION;
 //#endregion
@@ -418,6 +418,55 @@ function isReliableForecastSample(entry) {
 	if (isEstimatedEntry(entry)) return false;
 	return true;
 }
+/**
+* 是否「对话本身」发起的请求。
+*
+* 趋势预测看的是同一串上下文怎么长、每轮花多少：只有酒馆主流程的对话请求共享这条上下文。
+* 扩展 / 脚本直连的请求（摘要、向量、翻译、脚本调用……）各自独立、随时并发，
+* 塞进序列会把上下文增长曲线、压缩点和每轮成本全算歪，所以一律不进趋势统计。
+*
+* 旧记录没有 requestOrigin（null / undefined / kind:'unknown'）按对话放行——
+* 否则升级后历史数据会凭空消失。
+*/
+function isConversationEntry(entry) {
+	if (!entry) return false;
+	const kind = entry?.requestOrigin?.kind;
+	return kind !== "extension" && kind !== "script";
+}
+var REQUEST_TYPE_KEYS = [
+	"conversation",
+	"extension",
+	"script",
+	"interrupted",
+	"estimated",
+	"agent"
+];
+/**
+* 一条记录命中的请求类型。
+*
+* 这里并存两条正交的轴：
+* - 来源轴：对话（酒馆主流程或未识别）/ 扩展 / 脚本；
+* - 状态轴：中断 / 估算 / Agent。
+* 所以一条记录可能同时命中多个键——筛选时用「包含」而非互斥，
+* 选「扩展」也能看到那几条被中断的扩展请求，选「中断」也能看到中断的对话请求。
+*/
+function requestTypeKeysOf(entry) {
+	if (!entry) return [];
+	const keys = [];
+	const kind = String(entry?.requestOrigin?.kind || "");
+	if (kind === "extension") keys.push("extension");
+	else if (kind === "script") keys.push("script");
+	else keys.push("conversation");
+	if (isInterruptedEntry(entry)) keys.push("interrupted");
+	if (isEstimatedEntry(entry)) keys.push("estimated");
+	if (String(entry?.origin || "") === "agent") keys.push("agent");
+	return keys;
+}
+/** 是否属于某个请求类型（调用方负责先把「全部」这种哨兵值排除掉） */
+function matchesRequestType(entry, type) {
+	if (!type) return true;
+	return requestTypeKeysOf(entry).includes(type);
+}
 function clamp01$1(value) {
 	if (!Number.isFinite(value)) return 0;
 	return Math.max(0, Math.min(1, value));
@@ -460,6 +509,7 @@ function medianAbsoluteDeviation(values) {
 * 数据准备：按时间升序、过滤空 prompt 与不可信样本、计算命中率与截断标记。
 * 中断记录（耗时/输出被截断）与估算记录（token 是本地推的、命中量不可区分）
 * 一律不进入序列：否则压缩识别、增长拟合与成本模拟都会被带偏。
+* 扩展 / 脚本直连的请求同样剔除（见 isConversationEntry）：它们不属于这串上下文。
 * 无缓存字段时 hit=0、miss=prompt，仅用于堆叠图展示，不伪造命中率。
 */
 function prepareEntries(history) {
@@ -467,6 +517,7 @@ function prepareEntries(history) {
 	const prepared = [];
 	for (const entry of sorted) {
 		if (!isReliableForecastSample(entry)) continue;
+		if (!isConversationEntry(entry)) continue;
 		const rawHit = Math.max(0, Number(entry?.cache_hit_tokens) || 0);
 		const rawMiss = Math.max(0, Number(entry?.cache_miss_tokens) || 0);
 		const cacheSamples = rawHit + rawMiss;
@@ -1175,6 +1226,9 @@ function filterStatsHistory(entries, filter = {}) {
 			if (filter.endpoint === "__unknown__") {
 				if (entry.endpointId) return false;
 			} else if (entry.endpointId !== filter.endpoint) return false;
+		}
+		if (filter.requestType && filter.requestType !== "__all__") {
+			if (!matchesRequestType(entry, filter.requestType)) return false;
 		}
 		if (filter.credential && filter.credential !== "__all__") {
 			if (filter.credential === "__unknown__") {
@@ -5026,7 +5080,7 @@ function renderXDrop(id) {
 //#endregion
 //#region src/ui/filter-prefs.ts
 /**
-* 统计页 / 历史记录页筛选状态的持久化（时间维度、模型、对话、接入类型、API 密钥）。
+* 统计页 / 历史记录页筛选状态的持久化（时间维度、请求类型、模型、对话、接入类型、API 密钥）。
 *
 * 为什么放 localStorage 而不是 settings：与 `chart-prefs.ts`、`aus_forecast_prefs_v1`
 * 同一定位——纯展示偏好，不进导出、不参与 WebDAV 同步、不污染 `extensionSettings`。
@@ -5049,11 +5103,14 @@ var STATS_RANGE_KEYS = [
 ];
 var DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 var HISTORY_KEYS = [
+	"requestType",
 	"model",
 	"chat",
 	"endpoint",
 	"credential"
 ];
+/** 与 data/computed.ts#STATS_FILTER_ALL 同一哨兵值；「全部」是默认态，不必落盘 */
+var FILTER_ALL = "__all__";
 function isPlainObject(value) {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -5077,6 +5134,11 @@ function normalizeDate(value) {
 }
 function normalizeText(value) {
 	return typeof value === "string" && value ? value : void 0;
+}
+/** 请求类型白名单校验：脏值直接丢弃，回落到「全部」 */
+function normalizeRequestType(value) {
+	if (typeof value !== "string" || !value || value === FILTER_ALL) return void 0;
+	return REQUEST_TYPE_KEYS.includes(value) ? value : void 0;
 }
 function normalizeModels(value) {
 	if (!Array.isArray(value)) return void 0;
@@ -5104,6 +5166,8 @@ function normalizeStatsPrefs(value) {
 	if (endpoint) out.endpoint = endpoint;
 	const credential = normalizeText(value.credential);
 	if (credential) out.credential = credential;
+	const requestType = normalizeRequestType(value.requestType);
+	if (requestType) out.requestType = requestType;
 	return out;
 }
 function normalizeHistoryPrefs(value) {
@@ -5156,6 +5220,49 @@ function writeFilterPrefs(patch) {
 	} catch {}
 }
 //#endregion
+//#region src/ui/request-type-filter.ts
+var REQUEST_TYPE_OPTIONS = [
+	{
+		id: "conversation",
+		label: "对话",
+		title: "酒馆主流程或未识别来源发起的请求（含其中的中断与估算）"
+	},
+	{
+		id: "extension",
+		label: "扩展",
+		title: "第三方扩展自己直连生成的请求"
+	},
+	{
+		id: "script",
+		label: "脚本",
+		title: "酒馆助手等 iframe 脚本发起的请求"
+	},
+	{
+		id: "interrupted",
+		label: "中断",
+		title: "生成被中断（用户停止或上游断开）的记录"
+	},
+	{
+		id: "estimated",
+		label: "估算",
+		title: "用量由本地估算补记的记录"
+	},
+	{
+		id: "agent",
+		label: "Agent",
+		title: "TauriTavern 的 Agent 运行发起的记录"
+	}
+];
+var BY_ID = new Map(REQUEST_TYPE_OPTIONS.map((option) => [option.id, option]));
+function requestTypeLabel(id) {
+	if (!id || id === "__all__") return "全部";
+	return BY_ID.get(id)?.label || "全部";
+}
+function requestTypeTitle(id) {
+	if (!id || id === "__all__") return "按请求类型筛选";
+	return BY_ID.get(id)?.title || "按请求类型筛选";
+}
+//#endregion
 //#region src/ui/stats-view.ts
 var DEFAULT_RANGE = "30d";
 var currentRange = DEFAULT_RANGE;
@@ -5170,6 +5277,8 @@ var selectedEndpoint = STATS_FILTER_ALL;
 var endpointPickerOpen = false;
 var selectedCredential = STATS_FILTER_ALL;
 var credentialPickerOpen = false;
+var selectedRequestType = STATS_FILTER_ALL;
+var typePickerOpen = false;
 var lastStatsHistory = [];
 var restoredStatsPrefs = readFilterPrefs().stats;
 if (restoredStatsPrefs.range) currentRange = restoredStatsPrefs.range;
@@ -5179,6 +5288,7 @@ if (restoredStatsPrefs.models) selectedModels = restoredStatsPrefs.models.slice(
 if (restoredStatsPrefs.chat) selectedChat = restoredStatsPrefs.chat;
 if (restoredStatsPrefs.endpoint) selectedEndpoint = restoredStatsPrefs.endpoint;
 if (restoredStatsPrefs.credential) selectedCredential = restoredStatsPrefs.credential;
+if (restoredStatsPrefs.requestType) selectedRequestType = restoredStatsPrefs.requestType;
 function persistStatsFilters() {
 	writeFilterPrefs({ stats: {
 		range: currentRange,
@@ -5187,7 +5297,8 @@ function persistStatsFilters() {
 		models: selectedModels.slice(),
 		chat: selectedChat,
 		endpoint: selectedEndpoint,
-		credential: selectedCredential
+		credential: selectedCredential,
+		requestType: selectedRequestType
 	} });
 }
 function resetStatsFilters() {
@@ -5199,17 +5310,20 @@ function resetStatsFilters() {
 	selectedChat = STATS_FILTER_ALL;
 	selectedEndpoint = STATS_FILTER_ALL;
 	selectedCredential = STATS_FILTER_ALL;
+	selectedRequestType = STATS_FILTER_ALL;
 	pickerOpen = false;
 	modelPickerOpen = false;
 	chatPickerOpen = false;
 	endpointPickerOpen = false;
 	credentialPickerOpen = false;
+	typePickerOpen = false;
 	[
 		"aus-range-dropdown",
 		"aus-model-dropdown",
 		"aus-chat-dropdown",
 		"aus-endpoint-dropdown",
-		"aus-credential-dropdown"
+		"aus-credential-dropdown",
+		"aus-type-dropdown"
 	].forEach((id) => {
 		const el = doc.getElementById(id);
 		if (el) el.style.display = "none";
@@ -5346,7 +5460,8 @@ function currentStatsFilter() {
 		model: selectedModels.length ? selectedModels : STATS_FILTER_ALL,
 		chat: selectedChat,
 		endpoint: selectedEndpoint,
-		credential: selectedCredential
+		credential: selectedCredential,
+		requestType: selectedRequestType
 	};
 }
 function updateRangeHighlight() {
@@ -5533,6 +5648,28 @@ function renderCredentialPicker$1(history, endpoint = selectedEndpoint) {
 		};
 	});
 }
+function renderTypePicker() {
+	const doc = getDoc$7();
+	const dropdown = doc.getElementById("aus-type-dropdown");
+	const label = doc.getElementById("aus-type-label");
+	if (!dropdown || !label) return;
+	label.textContent = requestTypeLabel(selectedRequestType);
+	label.title = requestTypeTitle(selectedRequestType);
+	const optionHtml = (id, text, title) => {
+		const active = id === selectedRequestType ? "background:var(--ds-card);font-weight:600;" : "";
+		return `<div data-request-type="${esc$3(id)}" title="${esc$3(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${esc$3(text)}</div>`;
+	};
+	let html = optionHtml(STATS_FILTER_ALL, "全部", "按请求类型筛选");
+	for (const option of REQUEST_TYPE_OPTIONS) html += optionHtml(option.id, option.label, option.title);
+	dropdown.innerHTML = html;
+	dropdown.querySelectorAll("[data-request-type]").forEach((el) => {
+		el.onclick = () => {
+			selectedRequestType = el.getAttribute("data-request-type") || "__all__";
+			typePickerOpen = false;
+			closeDropdownThenPaint(dropdown, () => renderStatsView());
+		};
+	});
+}
 function positionFilterDropdown(btn, dropdown) {
 	try {
 		const panel = getDoc$7().getElementById("aus-panel");
@@ -5574,6 +5711,11 @@ function closeFilterDropdowns(except) {
 	if (except !== "credential") {
 		credentialPickerOpen = false;
 		const el = doc.getElementById("aus-credential-dropdown");
+		if (el) el.style.display = "none";
+	}
+	if (except !== "type") {
+		typePickerOpen = false;
+		const el = doc.getElementById("aus-type-dropdown");
 		if (el) el.style.display = "none";
 	}
 }
@@ -5653,6 +5795,17 @@ function bindPicker() {
 			positionFilterDropdown(kBtn, kDropdown);
 		}
 	};
+	const tBtn = doc.getElementById("aus-type-btn");
+	const tDropdown = doc.getElementById("aus-type-dropdown");
+	if (tBtn && tDropdown) tBtn.onclick = () => {
+		typePickerOpen = !typePickerOpen;
+		closeFilterDropdowns("type");
+		tDropdown.style.display = typePickerOpen ? "block" : "none";
+		if (typePickerOpen) {
+			renderTypePicker();
+			positionFilterDropdown(tBtn, tDropdown);
+		}
+	};
 	const statsResetBtn = doc.getElementById("aus-stats-filter-reset");
 	if (statsResetBtn) statsResetBtn.onclick = () => {
 		resetStatsFilters();
@@ -5682,6 +5835,11 @@ function bindPicker() {
 		if (credentialPickerOpen && !t.closest("#aus-credential-dropdown") && !t.closest("#aus-credential-btn")) {
 			credentialPickerOpen = false;
 			const d = doc.getElementById("aus-credential-dropdown");
+			if (d) d.style.display = "none";
+		}
+		if (typePickerOpen && !t.closest("#aus-type-dropdown") && !t.closest("#aus-type-btn")) {
+			typePickerOpen = false;
+			const d = doc.getElementById("aus-type-dropdown");
 			if (d) d.style.display = "none";
 		}
 	});
@@ -6387,6 +6545,7 @@ async function renderStatsView() {
 	renderChatPicker(allHistory);
 	renderEndpointPicker(allHistory);
 	renderCredentialPicker$1(allHistory);
+	renderTypePicker();
 	renderChartSelectors();
 	const statsViewEl = doc.querySelector("[data-view=\"stats\"]");
 	if (!(statsViewEl ? statsViewEl.style.display === "none" || statsViewEl.offsetParent === null : false)) {
@@ -8446,6 +8605,7 @@ async function renderForecastView() {
 		fullHist = state$2.history || [];
 	}
 	if (token !== renderToken$1) return;
+	fullHist = (fullHist || []).filter(isConversationEntry);
 	lastFullHistory = fullHist;
 	bindGlobalClose();
 	const effective = getEffectiveHist(fullHist);
@@ -9489,7 +9649,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-Df4jyFCR.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-4Vm-ReTn.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -10466,7 +10626,7 @@ function sanitizeLogForUpload(record) {
 	return next;
 }
 var ring$1 = [];
-var installed$1 = false;
+var installed$2 = false;
 /** 把任意参数安全地转成一行文本 */
 function stringifyConsoleArgs(args) {
 	const parts = [];
@@ -10505,8 +10665,8 @@ function listConsoleEntries(limit = 80) {
 }
 /** 幂等安装：包一层 console.error / warn，并监听未捕获错误 */
 function installConsoleRing() {
-	if (installed$1) return;
-	installed$1 = true;
+	if (installed$2) return;
+	installed$2 = true;
 	try {
 		const con = globalThis.console;
 		if (con) for (const level of ["error", "warn"]) {
@@ -12494,7 +12654,7 @@ function renderHistoryHealthBar(host, input) {
 //#region src/ui/history-badge.ts
 var NORMAL = {
 	kind: "normal",
-	text: "常规",
+	text: "对话",
 	background: "var(--ds-card-inner)",
 	color: "var(--ds-text-3)"
 };
@@ -12525,6 +12685,45 @@ function historyBadgeOf(entry) {
 		color: "var(--ds-green)"
 	};
 	return { ...NORMAL };
+}
+/**
+* 状态角标是否要渲染。
+*
+* 「对话」是默认态，本身不传递信息；一旦这一条已经用来源角标说明了「是扩展 / 脚本发出的」，
+* 再并排一枚「对话」只会占位。中断 / 估算 / Agent 这类带信息量的照常显示。
+*/
+function shouldShowStateBadge(badge, hasSourceBadge) {
+	if (!badge) return false;
+	if (hasSourceBadge && badge.kind === "normal") return false;
+	return true;
+}
+//#endregion
+//#region src/ui/source-badge.ts
+function sourceBadgeOf(entry) {
+	const kind = String(entry?.requestOrigin?.kind || "");
+	const label = String(entry?.requestOrigin?.label || "").trim();
+	if (kind === "extension") return {
+		text: "扩展",
+		title: label ? "由扩展「" + label + "」发起（按调用栈定位）" : "由第三方扩展发起",
+		background: "var(--ds-blue-bg)",
+		color: "var(--ds-blue)"
+	};
+	if (kind === "script") return {
+		text: "脚本",
+		title: "由酒馆助手的 iframe 脚本发起：脚本跑在 srcdoc / blob 里，栈帧定位不到具体脚本文件",
+		background: "var(--ds-purple-bg)",
+		color: "var(--ds-purple)"
+	};
+	return null;
+}
+/** 详情里的「请求来源」文案 */
+function originTextOf(entry) {
+	const kind = String(entry?.requestOrigin?.kind || "");
+	const label = String(entry?.requestOrigin?.label || "").trim();
+	if (kind === "extension") return label ? "扩展 · " + label : "扩展";
+	if (kind === "script") return "脚本 · " + (label || "iframe 脚本");
+	if (kind === "tavern") return "酒馆主界面";
+	return "未识别";
 }
 //#endregion
 //#region src/ui/help-view.ts
@@ -12739,7 +12938,7 @@ var BACK_DEBUG_KEY = "aus_back_debug_v1";
 var BACK_DEBUG_OFF_KEY = "aus_back_debug_off";
 var ring = [];
 var loaded = false;
-var installed = false;
+var installed$1 = false;
 var flushTimer = null;
 var bootTs = Date.now();
 function storage$1() {
@@ -12877,8 +13076,8 @@ function backDebugClear() {
 * 保证面板还没打开时的返回事件也会被记上。
 */
 function installBackDebug(target) {
-	if (installed) return;
-	installed = true;
+	if (installed$1) return;
+	installed$1 = true;
 	loadOnce();
 	const w = target || (typeof window !== "undefined" ? window : null);
 	if (!w) return;
@@ -12962,6 +13161,15 @@ function stripGuardState(state) {
 }
 /** 更新日志（最新在前） */
 var CHANGELOG = [
+	{
+		version: "r3.2.3",
+		buildNo: 4,
+		date: "2026-11-22",
+		sections: [{
+			kind: "fix",
+			items: ["ST酒馆中自更新失效，极端条件下历史数据错位"]
+		}]
+	},
 	{
 		version: "r3.2.3fix",
 		buildNo: 2,
@@ -13541,7 +13749,7 @@ var TRIGGER_SELECTOR = [
 	"[id*=\"-btn-\"]",
 	...WALLET_KINDS.map((kind) => `[data-wallet-${kind}-btn]`)
 ].join(", ");
-var observer = null;
+var observer$1 = null;
 var observedPanel = null;
 function dropdownFor(button, doc) {
 	const id = button.id || "";
@@ -13601,7 +13809,7 @@ function syncPillState() {
 function initPillState(doc) {
 	const panel = doc.getElementById("aus-panel");
 	if (!panel) return;
-	if (observer && observedPanel === panel) {
+	if (observer$1 && observedPanel === panel) {
 		syncPillState();
 		return;
 	}
@@ -13631,17 +13839,17 @@ function initPillState(doc) {
 			attributes: true,
 			attributeFilter: ["style"]
 		});
-		observer = local;
+		observer$1 = local;
 	} catch {
-		observer = null;
+		observer$1 = null;
 	}
 	syncPillState();
 }
 function disposePillState() {
 	try {
-		observer?.disconnect();
+		observer$1?.disconnect();
 	} catch {}
-	observer = null;
+	observer$1 = null;
 	observedPanel = null;
 }
 //#endregion
@@ -13799,6 +14007,7 @@ var invalidateHistoryCache = () => {
 	historyPage = 1;
 };
 var historyFilters = {
+	requestType: STATS_FILTER_ALL,
 	model: STATS_FILTER_ALL,
 	chat: STATS_FILTER_ALL,
 	endpoint: STATS_FILTER_ALL,
@@ -13809,12 +14018,22 @@ if (restoredHistoryPrefs.model) historyFilters.model = restoredHistoryPrefs.mode
 if (restoredHistoryPrefs.chat) historyFilters.chat = restoredHistoryPrefs.chat;
 if (restoredHistoryPrefs.endpoint) historyFilters.endpoint = restoredHistoryPrefs.endpoint;
 if (restoredHistoryPrefs.credential) historyFilters.credential = restoredHistoryPrefs.credential;
+if (restoredHistoryPrefs.requestType) historyFilters.requestType = restoredHistoryPrefs.requestType;
 var historyFilterBase = [];
 try {
 	on(DataEvents.HISTORY_ADDED, invalidateHistoryCache);
 	on(DataEvents.UPDATED, invalidateHistoryCache);
 } catch {}
+var HISTORY_FILTER_ID = {
+	requestType: "type",
+	model: "model",
+	chat: "chat",
+	endpoint: "endpoint",
+	credential: "credential"
+};
+var historyFilterId = (kind, part) => `aus-history-${HISTORY_FILTER_ID[kind]}-${part}`;
 function resetHistoryFilters() {
+	historyFilters.requestType = STATS_FILTER_ALL;
 	historyFilters.model = STATS_FILTER_ALL;
 	historyFilters.chat = STATS_FILTER_ALL;
 	historyFilters.endpoint = STATS_FILTER_ALL;
@@ -13853,27 +14072,29 @@ function getHistoryChatOptions(history) {
 function closeHistoryFilterDropdowns() {
 	const doc = getDoc$1();
 	for (const kind of [
+		"requestType",
 		"model",
 		"chat",
 		"endpoint",
 		"credential"
 	]) {
-		const dropdown = doc.getElementById(`aus-history-${kind}-dropdown`);
+		const dropdown = doc.getElementById(historyFilterId(kind, "dropdown"));
 		if (dropdown) dropdown.style.display = "none";
 	}
 }
-/** 选中某一项后要重建列表时用：先把四个浮层瞬时收掉，重绘留到下一帧。 */
+/** 选中某一项后要重建列表时用：先把五个浮层瞬时收掉，重绘留到下一帧。 */
 function closeHistoryFilterDropdownsInstant() {
 	const doc = getDoc$1();
 	for (const kind of [
+		"requestType",
 		"model",
 		"chat",
 		"endpoint",
 		"credential"
-	]) closeDropdownInstant(doc.getElementById(`aus-history-${kind}-dropdown`));
+	]) closeDropdownInstant(doc.getElementById(historyFilterId(kind, "dropdown")));
 }
 function renderHistoryFilterDropdown(kind, selected, options, emptyText, onSelect, leading = []) {
-	const dropdown = getDoc$1().getElementById(`aus-history-${kind}-dropdown`);
+	const dropdown = getDoc$1().getElementById(historyFilterId(kind, "dropdown"));
 	if (!dropdown) return;
 	const item = (id, label, title = label) => {
 		const active = id === selected ? "background:var(--ds-card);font-weight:600;" : "";
@@ -13908,23 +14129,31 @@ function renderHistoryFilters(history) {
 	const credentials = getCredentialFilterOptions(historyFilterBase, historyFilters.endpoint);
 	if (historyFilters.credential !== "__all__" && !credentials.some((option) => option.id === historyFilters.credential)) historyFilters.credential = STATS_FILTER_ALL;
 	const labelMap = {
+		requestType: requestTypeLabel(historyFilters.requestType),
 		model: historyFilters.model === "__all__" ? "全部" : historyFilters.model,
 		chat: historyFilters.chat === "__all__" ? "全部" : historyFilters.chat === "__current_chat__" ? "当前对话" : chatOptions.find((option) => option.id === historyFilters.chat)?.label || historyFilters.chat,
 		endpoint: historyFilters.endpoint === "__all__" ? "全部" : historyFilters.endpoint === "__unknown__" ? "未记录接入" : endpoints.find((option) => option.id === historyFilters.endpoint)?.label || historyFilters.endpoint,
 		credential: historyFilters.credential === "__all__" ? "全部" : historyFilters.credential === "__unknown__" ? "未识别密钥" : credentials.find((option) => option.id === historyFilters.credential)?.label || historyFilters.credential
 	};
 	for (const kind of [
+		"requestType",
 		"model",
 		"chat",
 		"endpoint",
 		"credential"
 	]) {
-		const label = doc.getElementById(`aus-history-${kind}-label`);
+		const label = doc.getElementById(historyFilterId(kind, "label"));
 		if (label) {
 			label.textContent = labelMap[kind];
 			label.title = labelMap[kind];
 		}
 	}
+	renderHistoryFilterDropdown("requestType", historyFilters.requestType, REQUEST_TYPE_OPTIONS, "暂无记录", (value) => {
+		historyFilters.requestType = value;
+		historyPage = 1;
+		closeHistoryFilterDropdownsInstant();
+		afterNextPaint(() => renderHistory(doc, getSelectedSave()));
+	});
 	renderHistoryFilterDropdown("model", historyFilters.model, models, "暂无模型", (value) => {
 		historyFilters.model = value;
 		historyPage = 1;
@@ -13955,6 +14184,7 @@ function renderHistoryFilters(history) {
 		afterNextPaint(() => renderHistory(doc, getSelectedSave()));
 	});
 	writeFilterPrefs({ history: {
+		requestType: historyFilters.requestType,
 		model: historyFilters.model,
 		chat: historyFilters.chat,
 		endpoint: historyFilters.endpoint,
@@ -13963,6 +14193,7 @@ function renderHistoryFilters(history) {
 }
 function filteredHistoryForDisplay(history) {
 	return filterStatsHistory(history, {
+		requestType: historyFilters.requestType,
 		model: historyFilters.model,
 		chat: historyFilters.chat,
 		endpoint: historyFilters.endpoint,
@@ -13971,13 +14202,14 @@ function filteredHistoryForDisplay(history) {
 }
 function bindHistoryFilters(doc) {
 	for (const [kind, selector] of [
+		["requestType", "#aus-history-type-btn"],
 		["model", "#aus-history-model-btn"],
 		["chat", "#aus-history-chat-btn"],
 		["endpoint", "#aus-history-endpoint-btn"],
 		["credential", "#aus-history-credential-btn"]
 	]) {
 		const button = doc.querySelector(selector);
-		const dropdown = doc.getElementById(`aus-history-${kind}-dropdown`);
+		const dropdown = doc.getElementById(historyFilterId(kind, "dropdown"));
 		if (!button || !dropdown) continue;
 		button.onclick = () => {
 			const willOpen = dropdown.style.display !== "block";
@@ -14175,7 +14407,9 @@ function renderHistoryInner(doc, fullHist) {
 		].filter(Boolean).join(" · ") : "常规对话";
 		const estTag = isEstimated ? "<span style=\"margin-left:4px;padding:0 4px;border-radius:4px;font-size:10px;font-weight:600;background:var(--ds-yellow-bg);color:var(--ds-yellow);\">估算</span>" : "";
 		const recordStateText = badge.kind === "interrupted-user" ? isEstimated ? "用户中断（token 为本地估算）" : "用户中断（已记录输出）" : badge.kind === "interrupted-upstream" ? isEstimated ? "上游中断（token 为本地估算）" : "上游中断（已记录输出）" : isEstimated ? "本地估算（上游未返回用量）" : "正常（上游用量）";
-		const originBadge = `<span class="aus-origin-badge" title="${esc$3(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:${badge.background};color:${badge.color};">${esc$3(badge.text)}</span>`;
+		const sourceBadge = sourceBadgeOf(h);
+		const sourceBadgeHTML = sourceBadge ? `<span class="aus-source-badge" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:${sourceBadge.background};color:${sourceBadge.color};" title="${esc$3(sourceBadge.title)}">${esc$3(sourceBadge.text)}</span>` : "";
+		const stateBadgeHTML = shouldShowStateBadge(badge, !!sourceBadge) ? `<span class="aus-origin-badge" title="${esc$3(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:${badge.background};color:${badge.color};">${esc$3(badge.text)}</span>` : "";
 		const recordDate = new Date(h.timestamp);
 		const recordDateText = recordDate.toLocaleDateString("zh-CN");
 		const recordTimeText = recordDate.toLocaleTimeString("zh-CN", { hour12: false });
@@ -14183,7 +14417,7 @@ function renderHistoryInner(doc, fullHist) {
     <div style="padding:10px 12px;background:var(--ds-card);border-radius:10px;margin-bottom:8px;font-size:var(--aus-fs-base);">
       <div class="aus-history-card-head" style="display:flex;justify-content:space-between;align-items:center;">
         <div class="aus-history-card-main" style="min-width:0;flex:1;">
-          <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${originBadge}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$3(h.model)} · ${esc$3(localTimeHM(h.timestamp))}</span></div>
+          <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${sourceBadgeHTML}${stateBadgeHTML}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$3(h.model)} · ${esc$3(localTimeHM(h.timestamp))}</span></div>
           <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · <span title="${esc$3(rateTitle(h))}">${rateText(h)}</span></div>
         </div>
         <div class="aus-history-card-actions" style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
@@ -14216,9 +14450,10 @@ function renderHistoryInner(doc, fullHist) {
                   <div class="aus-dt-head">基础信息</div>
                   <div class="aus-dt-grid">
                     <div class="aus-dt-item is-wide"><span class="aus-dt-label">模型</span><span class="aus-dt-val">${esc$3(h.model || "—")}${h.modelFallback ? "<span style=\"margin-left:4px;color:var(--ds-text-3);font-size:var(--aus-fs-xs);\">（请求未带模型名，兜底取值）</span>" : ""}</span></div>
+                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">请求来源</span><span class="aus-dt-val">${esc$3(originTextOf(h))}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">记录状态</span><span class="aus-dt-val">${esc$3(recordStateText)}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">时段</span><span class="aus-dt-val">${h.priceType === "new-peak" || h.priceType === "wallet-peak" ? "高峰" : h.priceType === "new-offpeak" || h.priceType === "wallet-offpeak" ? "非高峰" : h.priceType === "unpriced" ? "待定价" : "旧价格"}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label">计价来源</span><span class="aus-dt-val">${h.pricingSource === "wallet" ? "钱包规则" : h.pricingSource === "builtin" ? "DeepSeek 内置" : h.pricingSource === "unpriced" ? "待定价" : h.pricingSource === "legacy-match" ? "旧数据同名价" : h.pricingSource === "legacy" ? "旧全局规则" : "旧记录兜底"}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">计价来源</span><span class="aus-dt-val">${esc$3(pricingSourceLabel(h.pricingSource))}</span></div>
                     <div class="aus-dt-item is-wide"><span class="aus-dt-label">钱包</span><span class="aus-dt-val">${esc$3(repository.getWallet(String(h.walletId || ""))?.name || h.endpointLabel || "未归属钱包")}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">日期</span><span class="aus-dt-val">${esc$3(recordDateText)}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">时间</span><span class="aus-dt-val">${esc$3(recordTimeText)}</span></div>
@@ -15195,6 +15430,10 @@ function createPanel() {
                 </div>
               </div>
               <div class="aus-stats-filter">
+                <div id="aus-type-btn" class="aus-pill"><span style="color:var(--ds-text-2);">请求类型</span><span id="aus-type-label" style="font-weight:600;color:var(--ds-text);">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-type-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:150px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
                 <div id="aus-model-btn" class="aus-pill"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
@@ -15441,6 +15680,10 @@ function createPanel() {
             <div id="aus-history-health" style="display:none;"></div>
             <div id="aus-history-filter-host" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div class="aus-stats-filter">
+                <div id="aus-history-type-btn" class="aus-pill"><span style="color:var(--ds-text-2);">请求类型</span><span id="aus-history-type-label" style="font-weight:600;color:var(--ds-text);">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-history-type-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:150px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
                 <div id="aus-history-model-btn" class="aus-pill"><span style="color:var(--ds-text-2);">模型</span><span id="aus-history-model-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-history-model-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
@@ -15540,7 +15783,7 @@ function createPanel() {
 	doc.body.appendChild(overlay);
 	doc.body.appendChild(panel);
 	try {
-		import("./update-Supn59IT.js").then((mod) => mod.syncUpdateIndicators?.());
+		import("./update-Dqmv4xu9.js").then((mod) => mod.syncUpdateIndicators?.());
 	} catch {}
 	try {
 		applyTheme(theme);
@@ -15701,7 +15944,7 @@ function createPanel() {
 		initForecastView();
 	} catch {}
 	try {
-		import("./update-Supn59IT.js").then((m) => {
+		import("./update-Dqmv4xu9.js").then((m) => {
 			const branchBtn = doc.getElementById("aus-update-branch-btn");
 			const branchLabel = doc.getElementById("aus-update-branch-label");
 			const branchDrop = doc.getElementById("aus-update-branch-dropdown");
@@ -15740,7 +15983,7 @@ function createPanel() {
 		if (updBtn) updBtn.onclick = () => {
 			updBtn.textContent = "检查中…";
 			updBtn.setAttribute("disabled", "");
-			import("./update-Supn59IT.js").then((m) => m.checkUpdate(true).finally(() => {
+			import("./update-Dqmv4xu9.js").then((m) => m.checkUpdate(true).finally(() => {
 				updBtn.textContent = "检查更新";
 				updBtn.removeAttribute("disabled");
 			}));
@@ -15750,7 +15993,7 @@ function createPanel() {
 			if (runUpdBtn.hasAttribute("disabled")) return;
 			runUpdBtn.textContent = "更新中…";
 			runUpdBtn.setAttribute("disabled", "");
-			import("./update-Supn59IT.js").then((m) => m.updateSelf()).then((res) => {
+			import("./update-Dqmv4xu9.js").then((m) => m.updateSelf()).then((res) => {
 				if (res.ok && res.changed) {
 					const bannerEl = doc.getElementById("aus-update-banner");
 					if (bannerEl) {
@@ -15970,10 +16213,10 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-CH1QTgU9.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-CQaqlyaO.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
-		import("./update-Supn59IT.js").then((m) => {
+		import("./update-Dqmv4xu9.js").then((m) => {
 			m.syncUpdateIndicators?.();
 			m.maybeAutoCheck();
 		});
@@ -16146,6 +16389,441 @@ function createPeakDot() {
 	});
 }
 //#endregion
+//#region src/services/message-cost/render.ts
+/**
+* 消息头元信息渲染（DOM 侧）
+*
+* 只在消息头部插入 <small class="aus-mes-meta">，**绝不写 message.extra / chat 数据**——
+* 那会随聊天落盘、进导出与 WebDAV，用户换个扩展就脏了。
+*
+* 环境分叉：
+*  - TauriTavern 内核已自带「首字延迟 / 生成速度 / 缓存命中率」三块（.mes_generation_ttft 等），
+*    扩展只补一个价格，避免两份数字并排；
+*  - SillyTavern 内核只有 token 计数、没有这几项，扩展把四项全画出来。
+*/
+/** 注入节点类名：刷新时先按它删旧节点再重画，避免重复堆叠 */
+var MESSAGE_META_CLASS = "aus-mes-meta";
+/** 内核是否已自带这三块（TauriTavern 的开关就挂在设置页上，是最稳的探针） */
+function hasNativeGenerationInfo() {
+	try {
+		return !!document.getElementById("messageFirstTokenEnabled");
+	} catch {
+		return false;
+	}
+}
+/** 价格文本：与面板同口径（4 位小数），但不带币种码，免得消息头太长 */
+function moneyText(cny) {
+	const cur = getDisplayCurrency();
+	const v = cnyToDisplay$1(Number.isFinite(cny) ? cny : 0);
+	return `${cur.symbol}${v.toFixed(4)}`;
+}
+function tokenText(n) {
+	return Math.round(Number.isFinite(n) ? n : 0).toLocaleString("zh-CN");
+}
+/**
+* 从酒馆消息里取配对锚点。swipe_info[swipe_id] 是那一条分支自己的起止与 extra，
+* 切 swipe 后必须用它，否则会拿主字段（最后一次生成）错配。
+*/
+function anchorOfMessage(message, chatId) {
+	const msg = message || {};
+	const swipeId = Number(msg.swipe_id);
+	const swipes = Array.isArray(msg.swipe_info) ? msg.swipe_info : [];
+	const swipe = Number.isInteger(swipeId) && swipeId >= 0 ? swipes[swipeId] : null;
+	const genStarted = swipe?.gen_started ?? msg.gen_started;
+	const genFinished = swipe?.gen_finished ?? msg.gen_finished;
+	const extra = swipe?.extra && typeof swipe.extra === "object" ? swipe.extra : msg.extra;
+	const cache = extra && typeof extra === "object" ? extra.prompt_cache : null;
+	return {
+		chatId,
+		genStarted,
+		genFinished,
+		promptCache: cache && typeof cache === "object" ? {
+			input_tokens: cache.input_tokens,
+			cached_tokens: cache.cached_tokens
+		} : null,
+		model: extra && typeof extra === "object" ? extra.model : null
+	};
+}
+/** 组装消息头要显示的片段；返回空数组表示无需插入任何节点 */
+function buildMessageMetaParts(usage, options, native) {
+	if (!usage) return [];
+	const parts = [];
+	const title = [
+		usage.model || "未知模型",
+		`命中 ${tokenText(usage.cacheHitTokens)} · 未命中 ${tokenText(usage.cacheMissTokens)} · 输出 ${tokenText(usage.completionTokens)}`,
+		pricingSourceLabel(usage.pricingSource)
+	].filter(Boolean).join("｜");
+	if (!native && options.ttft && usage.ttft > 0) parts.push({
+		kind: "ttft",
+		text: `TTFT ${(usage.ttft / 1e3).toFixed(1)}s`,
+		title: `首字延迟 ${Math.round(usage.ttft)}ms｜${title}`
+	});
+	if (!native && options.rate && usage.tokenRate > 0) parts.push({
+		kind: "rate",
+		text: `${usage.tokenRate.toFixed(1)} token/s`,
+		title: `生成速度（输出 Token ÷ 生成耗时）｜${title}`
+	});
+	if (!native && options.cache && usage.promptTokens > 0) parts.push({
+		kind: "cache",
+		text: `Cache hit ${usage.cacheHitRate.toFixed(0)}%`,
+		title: `缓存命中率 ${usage.cacheHitRate.toFixed(1)}%｜${title}`
+	});
+	if (options.cost) {
+		const text = usage.pricingSource === "unpriced" ? "待定价" : `${usage.costEstimated ? "≈" : ""}${moneyText(usage.cost)}`;
+		parts.push({
+			kind: "cost",
+			text,
+			title: `本条对话费用｜${title}`
+		});
+	}
+	return parts;
+}
+/** 把片段画进消息头；没有片段就把旧节点清掉 */
+function paintMessageMeta(mesEl, parts) {
+	if (!mesEl) return;
+	const host = mesEl.querySelector(".mes_header_info .alignItemsBaseline") || mesEl.querySelector(".ch_name .alignItemsBaseline") || mesEl.querySelector(".ch_name") || mesEl;
+	host.querySelectorAll(`.${MESSAGE_META_CLASS}`).forEach((node) => node.remove());
+	if (!parts.length) return;
+	for (const part of parts) {
+		const el = document.createElement("small");
+		el.className = `mes_generation_info ${MESSAGE_META_CLASS}`;
+		el.dataset.kind = part.kind;
+		el.textContent = part.text;
+		if (part.title) el.title = part.title;
+		host.appendChild(el);
+	}
+}
+//#endregion
+//#region src/services/message-cost/settings-row.ts
+/**
+* 在宿主「用户设置 → 消息显示」一栏里注入 API 用量统计自己的开关。
+*
+* 为什么不写进宿主 power_user 设置：那些字段会随酒馆的设置导出、跨设备同步，
+* 我们把状态留在扩展自己的 settings 里，卸载/重装互不影响；这里只借用宿主的 checkbox 样式。
+*/
+/** 注入行的类名，卸载时按它整体删除 */
+var SETTING_ROW_CLASS = "aus-mes-cost-row";
+/** 价格一项两套内核都有；另外三项 TauriTavern 内核自带，不需要重复注入 */
+var ROWS = [
+	{
+		key: "messageCost",
+		id: "aus_message_cost_enabled",
+		label: "消息费用",
+		title: "在每条回复旁显示这一轮对话的费用"
+	},
+	{
+		key: "messageTtft",
+		id: "aus_message_ttft_enabled",
+		label: "首字延迟",
+		title: "在每条回复旁显示首字延迟"
+	},
+	{
+		key: "messageRate",
+		id: "aus_message_rate_enabled",
+		label: "生成速度",
+		title: "在每条回复旁显示生成速度（输出 Token ÷ 生成耗时）"
+	},
+	{
+		key: "messageCache",
+		id: "aus_message_cache_enabled",
+		label: "缓存命中率",
+		title: "在每条回复旁显示缓存命中率"
+	}
+];
+function rowsToInstall() {
+	return hasNativeGenerationInfo() ? ROWS.filter((row) => row.key === "messageCost") : ROWS;
+}
+function anchorLabel() {
+	const id = hasNativeGenerationInfo() ? "messageCacheEnabled" : "messageTokensEnabled";
+	return (document.getElementById(id) || document.getElementById("messageTokensEnabled"))?.closest("label") || null;
+}
+function removeMessageCostRows() {
+	document.querySelectorAll(`.${SETTING_ROW_CLASS}`).forEach((node) => node.remove());
+}
+/**
+* 注入开关行。onChange 在用户勾选后回调，由调用方决定何时重画消息头
+* （用回调而不是直接 import，避免 settings-row ↔ index 循环依赖）。
+*/
+function installMessageCostRows(onChange) {
+	removeMessageCostRows();
+	const anchor = anchorLabel();
+	if (!anchor || !anchor.parentElement) return;
+	let cursor = anchor;
+	for (const row of rowsToInstall()) {
+		const label = document.createElement("label");
+		label.className = `checkbox_label ${SETTING_ROW_CLASS}`;
+		label.setAttribute("for", row.id);
+		label.title = row.title;
+		const input = document.createElement("input");
+		input.type = "checkbox";
+		input.id = row.id;
+		input.checked = !!state$2.settings?.[row.key];
+		const small = document.createElement("small");
+		small.textContent = row.label;
+		label.appendChild(input);
+		label.appendChild(small);
+		input.addEventListener("change", () => {
+			state$2.settings[row.key] = input.checked;
+			saveHot({ settings: state$2.settings });
+			onChange();
+		});
+		cursor.insertAdjacentElement("afterend", label);
+		cursor = label;
+	}
+}
+/** 内核把 gen_started/gen_finished 写成 Date，structuredClone 后仍是 Date；老数据可能是数字或字符串 */
+function toMs(value) {
+	if (value == null) return null;
+	if (typeof value === "number") return Number.isFinite(value) ? value : null;
+	if (value instanceof Date) {
+		const t = value.getTime();
+		return Number.isFinite(t) ? t : null;
+	}
+	if (typeof value === "string") {
+		const t = Date.parse(value);
+		return Number.isFinite(t) ? t : null;
+	}
+	const getTime = value?.getTime;
+	if (typeof getTime === "function") {
+		const t = Number(getTime.call(value));
+		return Number.isFinite(t) ? t : null;
+	}
+	return null;
+}
+function finiteNumber(value) {
+	if (typeof value === "number") return Number.isFinite(value) ? value : null;
+	if (typeof value === "string" && value.trim() !== "") {
+		const n = parseFloat(value);
+		return Number.isFinite(n) ? n : null;
+	}
+	return null;
+}
+/** 只认「酒馆主流程」的记录：旧记录没有 requestOrigin，按空来源放行 */
+function isTavernEntry(entry) {
+	const kind = entry?.requestOrigin?.kind;
+	return kind == null || kind === "tavern" || kind === "unknown";
+}
+function toUsage(entry, confidence) {
+	const promptTokens = finiteNumber(entry?.prompt_tokens) ?? 0;
+	const cacheHitTokens = finiteNumber(entry?.cache_hit_tokens) ?? 0;
+	const cacheMissTokens = finiteNumber(entry?.cache_miss_tokens) ?? Math.max(0, promptTokens - cacheHitTokens);
+	const hitRate = finiteNumber(entry?.cache_hit_rate) ?? (promptTokens > 0 ? cacheHitTokens / promptTokens * 100 : 0);
+	return {
+		timestamp: finiteNumber(entry?.timestamp) ?? 0,
+		model: String(entry?.model || ""),
+		cost: finiteNumber(entry?.cost) ?? 0,
+		costEstimated: entry?.costEstimated === true || entry?.usageSource === "estimated",
+		pricingSource: String(entry?.pricingSource || ""),
+		promptTokens,
+		cacheHitTokens,
+		cacheMissTokens,
+		completionTokens: finiteNumber(entry?.completion_tokens) ?? 0,
+		ttft: finiteNumber(entry?.ttft) ?? 0,
+		tokenRate: finiteNumber(entry?.tokenRate) ?? 0,
+		cacheHitRate: hitRate,
+		confidence
+	};
+}
+/**
+* 在 entries（通常是 state.history，最近的在前）里找出这条消息对应的记录。
+* 认不出返回 null —— 调用方不显示任何东西，绝不猜一条。
+*/
+function matchMessageUsage(anchor, entries) {
+	if (!anchor || !Array.isArray(entries) || !entries.length) return null;
+	const start = toMs(anchor.genStarted);
+	const end = toMs(anchor.genFinished);
+	const chatId = anchor.chatId ? String(anchor.chatId) : null;
+	const wantInput = finiteNumber(anchor.promptCache?.input_tokens);
+	const wantCached = finiteNumber(anchor.promptCache?.cached_tokens);
+	const inWindow = [];
+	for (const entry of entries) {
+		const ts = finiteNumber(entry?.timestamp);
+		if (ts == null) continue;
+		if (chatId && entry.chatId && String(entry.chatId) !== chatId) continue;
+		if (start != null && ts < start - 1500) continue;
+		if (end != null) {
+			if (ts > end + 5e3) continue;
+		} else if (start != null && ts < start) continue;
+		inWindow.push(entry);
+	}
+	if (!inWindow.length) return null;
+	if (wantInput != null && wantCached != null) {
+		const byFingerprint = inWindow.filter((entry) => finiteNumber(entry.prompt_tokens) === wantInput && (finiteNumber(entry.cache_hit_tokens) ?? 0) === wantCached);
+		if (byFingerprint.length) {
+			const best = pickNearest(byFingerprint, end ?? start);
+			if (best) return toUsage(best, "fingerprint");
+		}
+	}
+	const tavern = inWindow.filter(isTavernEntry);
+	if (!tavern.length) return null;
+	const ref = end ?? start;
+	const ranked = ref == null ? tavern.slice().sort((a, b) => (finiteNumber(b.timestamp) ?? 0) - (finiteNumber(a.timestamp) ?? 0)) : pickNearest(tavern, ref) ? sortByDistance(tavern, ref) : tavern.slice();
+	const chosen = ranked[0];
+	if (!chosen) return null;
+	if (end != null && ranked.length > 1) {
+		const d0 = Math.abs((finiteNumber(ranked[0].timestamp) ?? 0) - end);
+		const d1 = Math.abs((finiteNumber(ranked[1].timestamp) ?? 0) - end);
+		if (Math.abs(d1 - d0) < 300 && !(finiteNumber(ranked[0].prompt_tokens) === finiteNumber(ranked[1].prompt_tokens) && finiteNumber(ranked[0].completion_tokens) === finiteNumber(ranked[1].completion_tokens))) return null;
+	}
+	return toUsage(chosen, end != null ? "time" : ranked.length === 1 ? "loose" : "time");
+}
+function sortByDistance(entries, ref) {
+	return entries.slice().sort((a, b) => {
+		return Math.abs((finiteNumber(a.timestamp) ?? 0) - ref) - Math.abs((finiteNumber(b.timestamp) ?? 0) - ref);
+	});
+}
+function pickNearest(entries, ref) {
+	if (!entries.length) return null;
+	if (ref == null) return entries[0] || null;
+	return sortByDistance(entries, ref)[0] || null;
+}
+//#endregion
+//#region src/services/message-cost/index.ts
+/**
+* 消息费用 / 首字延迟 / 生成速度 / 缓存命中率：面板外的一层展示
+*
+* 数据全部取自 Api-Usage 自己的历史记录（state.history，热 50 + 冷库分页），
+* 这里只做「消息 ↔ 记录」配对与 DOM 绘制，不改采集链路，也不写聊天数据。
+*/
+var REFRESH_DEBOUNCE_MS = 250;
+/** 生成结束后记录可能还没入库，稍等再画一次 */
+var SETTLE_DELAY_MS = 400;
+var installed = false;
+var observer = null;
+var timer = null;
+var painting = false;
+function ctx() {
+	try {
+		return globalThis.SillyTavern?.getContext?.() || null;
+	} catch {
+		return null;
+	}
+}
+function optionsOf() {
+	const s = state$2.settings || {};
+	return {
+		cost: s.messageCost === true,
+		ttft: s.messageTtft === true,
+		rate: s.messageRate === true,
+		cache: s.messageCache === true
+	};
+}
+function isOwnNode(node) {
+	if (!node) return false;
+	if (node.nodeType === Node.TEXT_NODE) return isOwnNode(node.parentNode);
+	if (node.nodeType !== Node.ELEMENT_NODE) return true;
+	const el = node;
+	return el.classList.contains("aus-mes-meta") || !!el.querySelector?.(`.aus-mes-meta`);
+}
+function clearMeta(mesEl) {
+	mesEl.querySelectorAll(`.${MESSAGE_META_CLASS}`).forEach((node) => node.remove());
+}
+function paintAll() {
+	const opts = optionsOf();
+	const native = hasNativeGenerationInfo();
+	const anyOn = opts.cost || !native && (opts.ttft || opts.rate || opts.cache);
+	const c = ctx();
+	const chat = Array.isArray(c?.chat) ? c.chat : [];
+	const chatId = (() => {
+		try {
+			const id = c?.getCurrentChatId?.();
+			return id == null || id === "" ? null : String(id);
+		} catch {
+			return null;
+		}
+	})();
+	const nodes = document.querySelectorAll("#chat .mes");
+	painting = true;
+	try {
+		if (!anyOn) {
+			nodes.forEach((node) => clearMeta(node));
+			return;
+		}
+		nodes.forEach((node) => {
+			const mesid = Number(node.getAttribute("mesid"));
+			const message = Number.isInteger(mesid) ? chat[mesid] : null;
+			if (!message || message.is_user || message.is_system) {
+				clearMeta(node);
+				return;
+			}
+			paintMessageMeta(node, buildMessageMetaParts(matchMessageUsage(anchorOfMessage(message, chatId), state$2.history), opts, native));
+		});
+	} finally {
+		setTimeout(() => {
+			painting = false;
+		}, 0);
+	}
+}
+function schedule(delay = 0) {
+	if (!installed) return;
+	if (timer) clearTimeout(timer);
+	timer = setTimeout(() => {
+		timer = null;
+		try {
+			paintAll();
+		} catch (err) {
+			console.warn("[Api-Usage] 消息费用渲染失败", err);
+		}
+	}, Math.max(0, delay));
+}
+/** 外部可调用：数据变化后重画（index.ts 的 ApiUsageStat 门面会暴露它） */
+function refreshMessageCost(delay = 0) {
+	schedule(delay);
+}
+function installMessageCost() {
+	if (installed) return;
+	installed = true;
+	installMessageCostRows(() => schedule(0));
+	const es = ctx()?.eventSource;
+	const et = ctx()?.event_types;
+	if (es?.on && et) {
+		const bind = (name, delay) => {
+			const type = et[name];
+			if (!type) return;
+			try {
+				es.on(type, () => schedule(delay));
+			} catch {}
+		};
+		bind("CHARACTER_MESSAGE_RENDERED", 0);
+		bind("MESSAGE_UPDATED", 300);
+		bind("MESSAGE_SWIPED", 0);
+		bind("CHAT_CHANGED", 100);
+		bind("GENERATION_ENDED", SETTLE_DELAY_MS);
+		bind("MESSAGE_RECEIVED", SETTLE_DELAY_MS);
+		bind("GENERATION_ENDED", SETTLE_DELAY_MS * 3);
+	}
+	try {
+		const chatEl = document.getElementById("chat");
+		if (chatEl && typeof MutationObserver !== "undefined") {
+			observer = new MutationObserver((records) => {
+				if (painting) return;
+				if (records.some((record) => {
+					if (record.type !== "childList") return false;
+					return [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)].some((node) => !isOwnNode(node));
+				})) schedule(REFRESH_DEBOUNCE_MS);
+			});
+			observer.observe(chatEl, {
+				childList: true,
+				subtree: true
+			});
+		}
+	} catch {}
+	schedule(0);
+}
+function uninstallMessageCost() {
+	installed = false;
+	if (timer) {
+		clearTimeout(timer);
+		timer = null;
+	}
+	observer?.disconnect();
+	observer = null;
+	removeMessageCostRows();
+	try {
+		document.querySelectorAll(`#chat .mes .${MESSAGE_META_CLASS}`).forEach((node) => node.remove());
+	} catch {}
+}
+//#endregion
 //#region src/index.ts
 /**
 * API用量统计 — 全屏独立面板 + 魔法棒入口
@@ -16157,6 +16835,9 @@ try {
 } catch {}
 try {
 	installConsoleRing();
+} catch {}
+try {
+	registerRequestOriginSelf(import.meta.url);
 } catch {}
 var MODULE = "api_usage_stat";
 var wandRetryTimer = null;
@@ -16215,13 +16896,16 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-DFmhAMpn.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DwJ2kGGX.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-CH1QTgU9.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CQaqlyaO.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-DqE8LPaj.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
+	} catch {}
+	try {
+		installMessageCost();
 	} catch {}
 }
 function onAppInitialized() {
@@ -16229,13 +16913,16 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-DFmhAMpn.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DwJ2kGGX.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-CH1QTgU9.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CQaqlyaO.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-DqE8LPaj.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
+	} catch {}
+	try {
+		installMessageCost();
 	} catch {}
 }
 function onChatChanged() {
@@ -16298,10 +16985,13 @@ function ensureWandEntry() {
 /** 运行时收尾：卸载拦截器与采集、拆掉面板 DOM、停全部定时器与事件监听（数据一律不动） */
 async function teardownRuntime() {
 	try {
-		import("./interception-DFmhAMpn.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		uninstallMessageCost();
 	} catch {}
 	try {
-		import("./collector-CH1QTgU9.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./interception-DwJ2kGGX.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+	} catch {}
+	try {
+		import("./collector-CQaqlyaO.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -16317,13 +17007,13 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-Df4jyFCR.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-4Vm-ReTn.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-vMqQ1McO.js").then((n) => n.t)).stopRateTimer?.();
+		(await import("./currency-Dr655frw.js").then((n) => n.n)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-BAoyAPn3.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-BqDgbeJS.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -16373,19 +17063,22 @@ async function onClean() {
 function onEnable() {
 	log.debug("enabled");
 	try {
-		import("./interception-DFmhAMpn.js").then((n) => n.n).then((m) => m.installInterception());
+		installMessageCost();
 	} catch {}
 	try {
-		import("./collector-CH1QTgU9.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./interception-DwJ2kGGX.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./balance-Df4jyFCR.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./collector-CQaqlyaO.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./currency-vMqQ1McO.js").then((n) => n.t).then((m) => m.restartRateTimer?.());
+		import("./balance-4Vm-ReTn.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-BAoyAPn3.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./currency-Dr655frw.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
+	} catch {}
+	try {
+		import("./pricing-sync-BqDgbeJS.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -16413,7 +17106,7 @@ async function init() {
 	ensureStyleScope();
 	try {
 		setTimeout(() => {
-			import("./update-Supn59IT.js").then((m) => m.probeForcedUpdateAtStartup()).catch(() => {});
+			import("./update-Dqmv4xu9.js").then((m) => m.probeForcedUpdateAtStartup()).catch(() => {});
 		}, 3e3);
 	} catch {}
 	try {
@@ -16428,19 +17121,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-Df4jyFCR.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-4Vm-ReTn.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-vMqQ1McO.js").then((n) => n.t)).restartRateTimer?.();
+		(await import("./currency-Dr655frw.js").then((n) => n.n)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-BAoyAPn3.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-BqDgbeJS.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-CH1QTgU9.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CQaqlyaO.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -16462,7 +17155,10 @@ async function init() {
 			refreshUI();
 		} catch {}
 		try {
-			import("./pricing-sync-BAoyAPn3.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			installMessageCost();
+		} catch {}
+		try {
+			import("./pricing-sync-BqDgbeJS.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();
@@ -16504,7 +17200,8 @@ async function init() {
 		closePanel,
 		togglePanel,
 		state: state$2,
-		injectWandEntry: ensureWandEntry
+		injectWandEntry: ensureWandEntry,
+		refreshMessageCost
 	};
 }
 init();

@@ -32,24 +32,32 @@
 
 ### 用量统计（`ui/stats-view.ts`）
 
-- **五维度**：时间（全部 / 今天 / 昨天 / 近 7 天 / 近 30 天 / 本月 / 上月 / 自定义，自定义为直输日期两框、`max` 限今日、自动纠正起止倒置；「全部」= `2020-01-01~今日`）、模型、对话、接入类型、API 密钥；筛选为 `time ∩ model ∩ chat ∩ endpoint ∩ credential`，五胶囊互斥关闭、点外关闭。接入类型优先联动密钥（切换接入后密钥重置为全部）；对话与密钥选项按 `lastSeen` 倒序。
+- **六维度**：时间（全部 / 今天 / 昨天 / 近 7 天 / 近 30 天 / 本月 / 上月 / 自定义，自定义为直输日期两框、`max` 限今日、自动纠正起止倒置；「全部」= `2020-01-01~今日`）、**请求类型**、模型、对话、接入类型、API 密钥；筛选为 `time ∩ requestType ∩ model ∩ chat ∩ endpoint ∩ credential`，六胶囊互斥关闭、点外关闭。
+- **请求类型胶囊**（`#aus-type-btn` / `#aus-type-dropdown`，选项文案与 title 来自 `ui/request-type-filter.ts`）：全部 + 对话 / 扩展 / 脚本 / 中断 / 估算 / Agent，判定口径只由 `data/sample-quality.ts#requestTypeKeysOf` 提供（来源轴与状态轴并存、按「包含」命中）。选项是固定 6 项，不按记录联动、也不参与失效剔除；历史页同一份选项（`#aus-history-type-btn`）。接入类型优先联动密钥（切换接入后密钥重置为全部）；对话与密钥选项按 `lastSeen` 倒序。
 - **「当前对话」动态项**：对话胶囊在「全部」下方固定一枚，哨兵 `STATS_FILTER_CURRENT_CHAT = '__current_chat__'`（`src/data/computed.ts`）——过滤时现场解析 `getCurrentChatIdForStore()`、不缓存 chatId；不参与隐藏管理、不要求当前对话已有记录。历史页同一口径。
-- **重置筛选**：`#aus-stats-filter-reset` → `resetStatsFilters()`（五维回 `DEFAULT_RANGE` = 近 30 天 + 全部、关闭下拉、渲染后落盘）；历史页 `#aus-history-filter-reset`。两枚按钮 inline `background:transparent`，故其 hover/active 规则必须带 `!important`。
-- **三块 + 四小块**：消费金额 / API 请求次数 / Tokens；四小块 `repeat(4,1fr)`（竖屏 2×2）由 `computeStatsFour` 单源、随五维过滤、选项与概览共用 `FOUR_OPTIONS`。
+- **重置筛选**：`#aus-stats-filter-reset` → `resetStatsFilters()`（六维回 `DEFAULT_RANGE` = 近 30 天 + 全部、关闭下拉、渲染后落盘）；历史页 `#aus-history-filter-reset`。两枚按钮 inline `background:transparent`，故其 hover/active 规则必须带 `!important`。
+- **三块 + 四小块**：消费金额 / API 请求次数 / Tokens；四小块 `repeat(4,1fr)`（竖屏 2×2）由 `computeStatsFour` 单源、随六维过滤、选项与概览共用 `FOUR_OPTIONS`。
 - **模型汇总表**：10 列（模型 / 调用 / 命中 / 未命中 / 输出 / 总 / 总成本 / 平均成本 / 平均耗时 / 平均速率），横向滚动；全站唯一保留描边的块（见样式规范）。
 - **图表**：首图 `图表`（`Y` 多选 + `X` 双胶囊，Y 下拉底部切「自动 / 柱状 / 曲线 / 面积」；默认 `DEFAULT_Y_KEYS = ['input_hit_token','input_miss_token','output_token','total_cost','hit_rate']`、`X = 'round'`，常量在 `ui/chart-config.ts`）；下方 6 图（Token 三段堆叠、费用曲线、命中 100% 面积、请求数柱、耗时/速率双轴、模型环——窄屏 <560px 只画前 5、宽屏前 8，其余合并「其他 N 个模型」并进悬浮窗，legend 单行滚动）。`API请求数 趋势` 的 X 走 `X_OPTIONS_WITHOUT_ROUND`（无轮次、默认每日）。**所有图表配置（Y 多选 / X / 展示方式 / 轴标签 / 占比口径）必须经 `ui/chart-prefs.ts` 落 localStorage 并在初始化时恢复**，重开面板不得回默认；图表 `display:none` 时跳过初始化、切到统计页下一帧再建，避免 `clientWidth 0` 误报。
 
 ### 历史记录（`ui/panel.ts`）
 
-- **四维度**：模型 / 对话 / 接入类型 / API 密钥按交集过滤，先作用热+冷全量历史再按 `30/页` 分页（筛选无结果显示清除按钮）；接入类型优先联动密钥；「当前对话」同统计页哨兵，`renderHistoryFilterDropdown` 用 `leading` 参数插入。
+- **五维度**：请求类型 / 模型 / 对话 / 接入类型 / API 密钥按交集过滤，先作用热+冷全量历史再按 `30/页` 分页（筛选无结果显示清除按钮）；接入类型优先联动密钥；「当前对话」同统计页哨兵，`renderHistoryFilterDropdown` 用 `leading` 参数插入。请求类型选项固定 6 项、不参与失效剔除；元素 id 的中间段由 `HISTORY_FILTER_ID`（`requestType` → `type`）决定，新增维度必须同时登记这张表、模板与 `controls` 绑定，否则 `ui/pill.ts` 配不到 `-btn` / `-dropdown` 这一对。
 - **两枚二级入口**：「其他请求」`#aus-history-tap-btn`（`switchView('tap')`，父级为历史）、「请求日志」`#aus-history-log-btn`（`openRequestLog('history')`）；后者与设置页「问题反馈 / 请求日志」是同一页（`data-view="log"`）。`panel.ts#logOrigin` 记来源，`viewSourceOf(view)` 同时供 `paintNavState` 高亮与 `handleBottomTabTap` 的「重复点当前 tab」判定。**以后再加没有独立导航项的二级页，必须同时接好这三件套（origin / viewSourceOf / returnFromChild）**，只改 `returnFromChild` 会让底栏高亮跟错。
 - 列表按 `timestamp` 倒序；卡片含模型 / 时间 / `in/out/rate` / 费用 / 旧·新·详情；**卡片不外显毫秒耗时**，耗时只在详情窗口按秒展示。
-- **记录状态角标**单一来源 `ui/history-badge.ts#historyBadgeOf`，优先级：用户中断（黄「中断」）→ 上游中断（红「中断」）→ 估算（黄「估算」）→ Agent（绿）→ 常规（灰）；面板只渲染 `badge.background/color/text` 并按 `kind` 给 title，**不许在面板里重新分支**。**详情里的「记录状态」与 Token「估算」小标必须用 `isEstimatedEntry(entry)`（读 `usageSource`）**——中断又靠估算补记时角标是「中断」，按角标判断会把本地推算值当成上游真实用量。
+- **请求来源角标**单一来源 `ui/source-badge.ts#sourceBadgeOf`，**与记录状态角标是两条正交线**（状态讲这条记录准不准，来源讲是谁打出去的），同一条记录可以两枚并挂：来源在左、状态在右。只有 `extension` / `script` 出角标（蓝「扩展」/ 紫「脚本」），`tavern` / `unknown` 一律不标——主界面是默认情况，标出来只是噪音。
+- **记录状态角标**单一来源 `ui/history-badge.ts#historyBadgeOf`，优先级：用户中断（黄「中断」）→ 上游中断（红「中断」）→ 估算（黄「估算」）→ Agent（绿）→ 对话（灰，默认态）；面板只渲染 `badge.background/color/text` 并按 `kind` 给 title，**不许在面板里重新分支**。**默认态那枚由 `shouldShowStateBadge(badge, !!sourceBadge)` 决定是否渲染**——已有来源角标（扩展 / 脚本）时不再并排一枚「对话」（一条记录只留一枚描述性角标），中断 / 估算 / Agent 照常显示。**详情里的「记录状态」与 Token「估算」小标必须用 `isEstimatedEntry(entry)`（读 `usageSource`）**——中断又靠估算补记时角标是「中断」，按角标判断会把本地推算值当成上游真实用量。
+
+### 聊天消息头（注入宿主聊天区）
+
+- 节点是宿主的 `#chat .mes` 里插的 `small.mes_generation_info.aus-mes-meta`，**不在 `#aus-panel` 内**，所以 `style.css` 里这段规则不能挂在 `[data-extension]` 作用域下；尺寸/透明度对齐 TauriTavern 原生 `.mes_generation_info`（`opacity .7`、`0.8 × --mainFontSize`、`nowrap`）。
+- 单项由 `data-kind`（`cost` / `ttft` / `rate` / `cache`）区分；窄屏 `@media (max-width:760px)` 只留 `cost`，与面板两套断点规则分开写（这条在宿主聊天区，不涉及 `@container ausbody`）。
+- 开关行注入宿主设置页，勾选状态由扩展设置驱动，重绘一律走 `paintMessageMeta()`（先删旧节点再画，避免堆叠）。
 
 ### 历史详情窗口
 
 - 桌面从右侧滑入 `clamp(320px,26%,460px)` 抽屉（`border-left` 一条分隔线），手机从底部上滑约 3/4 高、抬在底栏之上并带 `36×4` 拖动把手。
-- 15 字段按「基础 / 性能 / Token / 费用」四块白卡竖直排布（`.aus-dt-*` 骨架：`section.aus-dt-block` + `.aus-dt-head` + `.aus-dt-grid` 两列 `.aus-dt-item`；块内不画描边，靠抽屉 `--ds-card` 与白块 `--ds-card-inner` 分层）；Token 块顶部有 6px 迷你三段占比条（与列表卡、图表同源）。
+- 16 字段按「基础 / 性能 / Token / 费用」四块白卡竖直排布（基础块含「请求来源」，文案走 `ui/source-badge.ts#originTextOf`：扩展 · 名字 / 脚本 · iframe 脚本 / 酒馆主界面 / 未识别；`HistoryEntry.requestOrigin` 缺省即旧记录，显示「未识别」且不回填）（`.aus-dt-*` 骨架：`section.aus-dt-block` + `.aus-dt-head` + `.aus-dt-grid` 两列 `.aus-dt-item`；块内不画描边，靠抽屉 `--ds-card` 与白块 `--ds-card-inner` 分层）；Token 块顶部有 6px 迷你三段占比条（与列表卡、图表同源）。
 - 性能块与 Token 块曾各显示一次「思维链占比」，已收敛为仅性能块保留、Token 块改为单列占满的「思维链 Token」——不要再两边都放。
 - 头部两行（模型名省略 + 记录时间）；4 个 Tab：请求参数 / 完整响应 / Raw 用量 / 消息内容（短名不带英文括号），`pre` 滚动；Tab 选中态由 `data-active="1"` 交 CSS（`--ds-black` 底 + `--ds-black-text` 字），JS 只切属性。
 
@@ -67,7 +75,8 @@
 - **工具栏**：对话胶囊（当前对话 / 全部 / 各对话，默认 `__current__`）、计价模型胶囊（多模型时显示，默认最近）、视界胶囊（5/10/20/50/100，默认 10）、压缩情景开关；偏好存 `localStorage[aus_forecast_prefs_v1]`（不进 `settings`、不参与导出）。选「全部」时禁用逐轮预测并提示，模型效率表仍可用。
 - **窄屏例外规则**：`@media (max-width:760px)` 里 `[data-view="forecast"] [id^="aus-forecast-"]{width:100% !important}` 会误伤工具栏按钮，因此紧跟 `#aus-forecast-chat-manage-btn{width:auto !important;max-width:100% !important;flex:0 0 auto !important}`；**给趋势页新增任何胶囊类按钮都要照此放行**。
 - **内容**：8 块 KPI（下一轮输入 / 输出 / 成本、命中率、Δ、余额可撑、上下文可撑、未来 N 轮总成本）+ 主趋势图（全部历史命中 / 未命中堆叠 + 输出 + 成本双轴、未来虚线、95% 置信带、压缩标记、上限线）+ 命中率图 + 累计成本图；三图由 `ui/forecast-chart.ts` 统一管实例 / 主题 / resize / dispose。
-- **预测核心**（`stats/forecast-series.ts`）：排序清洗（`isReliableForecastSample` 先剔除中断与估算）→ 压缩识别（环比回落 ≥20% 且绝对降幅 ≥1500 tok）→ 末段稳健回归（近期加权 / 离群剔除 / `linear` 与 `recent-mean` 择优）→ 命中率测算（有缓存样本时最近 10 条 token 加权，无数据才回退全站 / 同模型 / 手动）→ 输出中位数、成本与余额逐轮模拟；`stats/forecast.ts` 保留旧 API 兼容 `energyScore` 与旧测试。
+- **数据范围**：本页所有统计（逐轮序列、压缩检测、命中率回退、模型效率、Top 对话、对话胶囊）只含**对话来源**的记录——`renderForecastView` 一进来就用 `isConversationEntry` 过滤全量历史，扩展 / 脚本直连的请求不计入，所以这里的「全部历史 N 条」会小于历史页条数，属预期。
+- **预测核心**（`stats/forecast-series.ts`）：排序清洗（`isReliableForecastSample` 先剔除中断与估算，`isConversationEntry` 再剔除扩展与脚本）→ 压缩识别（环比回落 ≥20% 且绝对降幅 ≥1500 tok）→ 末段稳健回归（近期加权 / 离群剔除 / `linear` 与 `recent-mean` 择优）→ 命中率测算（有缓存样本时最近 10 条 token 加权，无数据才回退全站 / 同模型 / 手动）→ 输出中位数、成本与余额逐轮模拟；`stats/forecast.ts` 保留旧 API 兼容 `energyScore` 与旧测试。
 - **压缩预测**：检测到一次压缩即以「最近一次压缩前的段长度」为周期，结合保留比例与压缩后首轮命中率做锯齿投影；卡片展示周期、保留比例、当前段已持续、预计下次压缩轮次；压缩点用橙色虚线标出。
 - **模型效率**（`stats/model-efficiency.ts`）：按模型聚合输入输出比、每 1k 输出成本、命中率、缓存节省、平均每轮成本，按每 1k 输出成本升序（无价最后）；范围可切全部历史 / 当前对话，点行切计价模型。
 - **能耗评分**（`stats/energyScore.ts`）：6 指标加权（Δ 25% / out 20% / 效率 20% / 命中 15% / 截断 10% / 思维链占比 10%）→ A–G，冷启动用绝对阈值表、随后按历史分位；「对话健康」卡展示色带与指标，最耗对话 Top 默认折叠。

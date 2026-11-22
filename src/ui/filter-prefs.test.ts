@@ -4,6 +4,7 @@ import {
   normalizeDate,
   normalizeHistoryPrefs,
   normalizeRange,
+  normalizeRequestType,
   normalizeStatsPrefs,
   readFilterPrefs,
   writeFilterPrefs,
@@ -102,10 +103,21 @@ describe('filter-prefs 筛选状态持久化', () => {
     expect(() => writeFilterPrefs({ stats: { range: 'all' } })).not.toThrow();
   });
 
-  it('历史页四维筛选走同样的文本字段校验', () => {
+  it('历史页五维筛选走同样的文本字段校验', () => {
     expect(normalizeHistoryPrefs({ model: 'm', chat: '', endpoint: 5 as any, credential: 'c' }))
       .toEqual({ model: 'm', credential: 'c' });
     expect(normalizeHistoryPrefs(null)).toEqual({});
+  });
+
+  it('请求类型走白名单，脏值与「全部」都不落盘', () => {
+    expect(normalizeHistoryPrefs({ requestType: 'extension' })).toEqual({ requestType: 'extension' });
+    expect(normalizeStatsPrefs({ requestType: 'script' })).toEqual({ requestType: 'script' });
+    expect(normalizeRequestType('__all__')).toBeUndefined();
+    expect(normalizeRequestType('bogus')).toBeUndefined();
+    expect(normalizeRequestType(3 as any)).toBeUndefined();
+    writeFilterPrefs({ stats: { requestType: 'interrupted' }, history: { requestType: 'agent' } });
+    expect(readFilterPrefs().stats.requestType).toBe('interrupted');
+    expect(readFilterPrefs().history.requestType).toBe('agent');
   });
 
   it('内容无变化时不重写存储', () => {

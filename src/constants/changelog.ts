@@ -47,6 +47,19 @@ export const CHANGELOG_ENTRY_LIMIT = 5;
 /** 更新日志（最新在前） */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: 'r3.2.3',
+    buildNo: 4,
+    date: '2026-11-22',
+    sections: [
+      {
+        kind: 'fix',
+        items: [
+          'ST酒馆中自更新失效，极端条件下历史数据错位',
+        ],
+      },
+    ],
+  },
+  {
     version: 'r3.2.3fix',
     buildNo: 2,
     date: '2026-11-20',

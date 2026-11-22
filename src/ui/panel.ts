@@ -29,7 +29,10 @@ import { initChatManageView, renderChatManageView } from './chat-manage';
 import { initTapView, renderTapView } from './tap-view';
 import { initLogView, renderLogView } from './log-view';
 import { renderHistoryHealthBar } from './history-health-bar';
-import { historyBadgeOf } from './history-badge';
+import { historyBadgeOf, shouldShowStateBadge } from './history-badge';
+import { sourceBadgeOf, originTextOf } from './source-badge';
+import { REQUEST_TYPE_OPTIONS, requestTypeLabel } from './request-type-filter';
+import { pricingSourceLabel } from '../services/pricing';
 import { rateText, rateTitle, rateBadgeText } from './rate-text';
 import { isEstimatedEntry } from '../data/sample-quality';
 import { helpViewHTML } from './help-view';
@@ -182,19 +185,21 @@ const invalidateHistoryCache = () => {
   historyPage = 1;
 };
 const historyFilters = {
+  requestType: STATS_FILTER_ALL,
   model: STATS_FILTER_ALL,
   chat: STATS_FILTER_ALL,
   endpoint: STATS_FILTER_ALL,
   credential: STATS_FILTER_ALL,
 };
 
-// 四维筛选跨刷新记忆（与统计页共用 aus_filter_prefs_v1，分片存储互不覆盖）；
+// 五维筛选跨刷新记忆（与统计页共用 aus_filter_prefs_v1，分片存储互不覆盖）；
 // 记录里已不存在的选项仍由 renderHistoryFilters 的校验剔除。
 const restoredHistoryPrefs = readFilterPrefs().history;
 if (restoredHistoryPrefs.model) historyFilters.model = restoredHistoryPrefs.model;
 if (restoredHistoryPrefs.chat) historyFilters.chat = restoredHistoryPrefs.chat;
 if (restoredHistoryPrefs.endpoint) historyFilters.endpoint = restoredHistoryPrefs.endpoint;
 if (restoredHistoryPrefs.credential) historyFilters.credential = restoredHistoryPrefs.credential;
+if (restoredHistoryPrefs.requestType) historyFilters.requestType = restoredHistoryPrefs.requestType;
 let historyFilterBase: any[] = [];
 try {
   onDataEvent(DataEvents.HISTORY_ADDED, invalidateHistoryCache);
@@ -204,11 +209,23 @@ try {
 type HistoryFilterKind = keyof typeof historyFilters;
 type HistoryFilterOption = { id: string; label: string; title?: string; unknown?: boolean };
 
+// 每一维对应的 DOM id 片段：请求类型的字段名是 requestType，元素 id 用更短的 type
+const HISTORY_FILTER_ID: Record<HistoryFilterKind, string> = {
+  requestType: 'type',
+  model: 'model',
+  chat: 'chat',
+  endpoint: 'endpoint',
+  credential: 'credential',
+};
+const historyFilterId = (kind: HistoryFilterKind, part: 'btn' | 'dropdown' | 'label') =>
+  `aus-history-${HISTORY_FILTER_ID[kind]}-${part}`;
+
 function historyFiltersActive(): boolean {
   return Object.values(historyFilters).some((value) => value !== STATS_FILTER_ALL);
 }
 
 function resetHistoryFilters() {
+  historyFilters.requestType = STATS_FILTER_ALL;
   historyFilters.model = STATS_FILTER_ALL;
   historyFilters.chat = STATS_FILTER_ALL;
   historyFilters.endpoint = STATS_FILTER_ALL;
@@ -244,17 +261,17 @@ function getHistoryChatOptions(history: any[]): HistoryFilterOption[] {
 
 function closeHistoryFilterDropdowns() {
   const doc = getDoc();
-  for (const kind of ['model', 'chat', 'endpoint', 'credential'] as HistoryFilterKind[]) {
-    const dropdown = doc.getElementById(`aus-history-${kind}-dropdown`);
+  for (const kind of ['requestType', 'model', 'chat', 'endpoint', 'credential'] as HistoryFilterKind[]) {
+    const dropdown = doc.getElementById(historyFilterId(kind, 'dropdown'));
     if (dropdown) (dropdown as HTMLElement).style.display = 'none';
   }
 }
 
-/** 选中某一项后要重建列表时用：先把四个浮层瞬时收掉，重绘留到下一帧。 */
+/** 选中某一项后要重建列表时用：先把五个浮层瞬时收掉，重绘留到下一帧。 */
 function closeHistoryFilterDropdownsInstant() {
   const doc = getDoc();
-  for (const kind of ['model', 'chat', 'endpoint', 'credential'] as HistoryFilterKind[]) {
-    closeDropdownInstant(doc.getElementById(`aus-history-${kind}-dropdown`) as HTMLElement | null);
+  for (const kind of ['requestType', 'model', 'chat', 'endpoint', 'credential'] as HistoryFilterKind[]) {
+    closeDropdownInstant(doc.getElementById(historyFilterId(kind, 'dropdown')) as HTMLElement | null);
   }
 }
 
@@ -268,7 +285,7 @@ function renderHistoryFilterDropdown(
   leading: HistoryFilterOption[] = [],
 ) {
   const doc = getDoc();
-  const dropdown = doc.getElementById(`aus-history-${kind}-dropdown`);
+  const dropdown = doc.getElementById(historyFilterId(kind, 'dropdown'));
   if (!dropdown) return;
   const item = (id: string, label: string, title = label) => {
     const active = id === selected ? 'background:var(--ds-card);font-weight:600;' : '';
@@ -316,6 +333,7 @@ function renderHistoryFilters(history: any[]) {
   }
 
   const labelMap: Record<HistoryFilterKind, string> = {
+    requestType: requestTypeLabel(historyFilters.requestType),
     model: historyFilters.model === STATS_FILTER_ALL ? '全部' : historyFilters.model,
     chat: historyFilters.chat === STATS_FILTER_ALL
       ? '全部'
@@ -333,13 +351,19 @@ function renderHistoryFilters(history: any[]) {
         ? '未识别密钥'
         : credentials.find((option) => option.id === historyFilters.credential)?.label || historyFilters.credential,
   };
-  for (const kind of ['model', 'chat', 'endpoint', 'credential'] as HistoryFilterKind[]) {
-    const label = doc.getElementById(`aus-history-${kind}-label`);
+  for (const kind of ['requestType', 'model', 'chat', 'endpoint', 'credential'] as HistoryFilterKind[]) {
+    const label = doc.getElementById(historyFilterId(kind, 'label'));
     if (label) {
       label.textContent = labelMap[kind];
       label.title = labelMap[kind];
     }
   }
+  renderHistoryFilterDropdown('requestType', historyFilters.requestType, REQUEST_TYPE_OPTIONS, '暂无记录', (value) => {
+    historyFilters.requestType = value;
+    historyPage = 1;
+    closeHistoryFilterDropdownsInstant();
+    afterNextPaint(() => renderHistory(doc, getSelectedSave()));
+  });
   renderHistoryFilterDropdown('model', historyFilters.model, models, '暂无模型', (value) => {
     historyFilters.model = value;
     historyPage = 1;
@@ -372,6 +396,7 @@ function renderHistoryFilters(history: any[]) {
   // 纯展示偏好：每次渲染筛选器后落盘（含校验剔除后的值），供下次打开还原
   writeFilterPrefs({
     history: {
+      requestType: historyFilters.requestType,
       model: historyFilters.model,
       chat: historyFilters.chat,
       endpoint: historyFilters.endpoint,
@@ -382,6 +407,7 @@ function renderHistoryFilters(history: any[]) {
 
 function filteredHistoryForDisplay(history: any[]): any[] {
   return filterStatsHistory(history, {
+    requestType: historyFilters.requestType,
     model: historyFilters.model,
     chat: historyFilters.chat,
     endpoint: historyFilters.endpoint,
@@ -391,6 +417,7 @@ function filteredHistoryForDisplay(history: any[]): any[] {
 
 function bindHistoryFilters(doc: Document) {
   const controls: Array<[HistoryFilterKind, string]> = [
+    ['requestType', '#aus-history-type-btn'],
     ['model', '#aus-history-model-btn'],
     ['chat', '#aus-history-chat-btn'],
     ['endpoint', '#aus-history-endpoint-btn'],
@@ -398,7 +425,7 @@ function bindHistoryFilters(doc: Document) {
   ];
   for (const [kind, selector] of controls) {
     const button = doc.querySelector(selector) as HTMLElement | null;
-    const dropdown = doc.getElementById(`aus-history-${kind}-dropdown`) as HTMLElement | null;
+    const dropdown = doc.getElementById(historyFilterId(kind, 'dropdown')) as HTMLElement | null;
     if (!button || !dropdown) continue;
     button.onclick = () => {
       const willOpen = dropdown.style.display !== 'block';
@@ -409,7 +436,7 @@ function bindHistoryFilters(doc: Document) {
       positionFilterDropdown(button, dropdown);
     };
   }
-  // 顶部筛选「重置筛选」：四维恢复为全部、分页回第一页，并随 renderHistoryFilters 落盘
+  // 顶部筛选「重置筛选」：五维恢复为全部、分页回第一页，并随 renderHistoryFilters 落盘
   const historyResetBtn = doc.getElementById('aus-history-filter-reset');
   if (historyResetBtn) {
     historyResetBtn.onclick = () => {
@@ -597,7 +624,14 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
         : isEstimated
           ? '本地估算（上游未返回用量）'
           : '正常（上游用量）';
-    const originBadge = `<span class="aus-origin-badge" title="${esc(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:${badge.background};color:${badge.color};">${esc(badge.text)}</span>`;
+    // 来源角标与状态角标并排：来源在左（先看「谁发的」），状态在右
+    const sourceBadge = sourceBadgeOf(h as any);
+    const sourceBadgeHTML = sourceBadge
+      ? `<span class="aus-source-badge" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:${sourceBadge.background};color:${sourceBadge.color};" title="${esc(sourceBadge.title)}">${esc(sourceBadge.text)}</span>`
+      : '';
+    const stateBadgeHTML = shouldShowStateBadge(badge, !!sourceBadge)
+      ? `<span class="aus-origin-badge" title="${esc(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:${badge.background};color:${badge.color};">${esc(badge.text)}</span>`
+      : '';
     const recordDate = new Date(h.timestamp);
     const recordDateText = recordDate.toLocaleDateString('zh-CN');
     const recordTimeText = recordDate.toLocaleTimeString('zh-CN', { hour12: false });
@@ -605,7 +639,7 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
     <div style="padding:10px 12px;background:var(--ds-card);border-radius:10px;margin-bottom:8px;font-size:var(--aus-fs-base);">
       <div class="aus-history-card-head" style="display:flex;justify-content:space-between;align-items:center;">
         <div class="aus-history-card-main" style="min-width:0;flex:1;">
-          <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${originBadge}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(h.model)} · ${esc(localTimeHM(h.timestamp))}</span></div>
+          <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${sourceBadgeHTML}${stateBadgeHTML}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(h.model)} · ${esc(localTimeHM(h.timestamp))}</span></div>
           <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · <span title="${esc(rateTitle(h))}">${rateText(h)}</span></div>
         </div>
         <div class="aus-history-card-actions" style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
@@ -638,9 +672,10 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
                   <div class="aus-dt-head">基础信息</div>
                   <div class="aus-dt-grid">
                     <div class="aus-dt-item is-wide"><span class="aus-dt-label">模型</span><span class="aus-dt-val">${esc(h.model||'—')}${(h as any).modelFallback ? '<span style="margin-left:4px;color:var(--ds-text-3);font-size:var(--aus-fs-xs);">（请求未带模型名，兜底取值）</span>' : ''}</span></div>
+                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">请求来源</span><span class="aus-dt-val">${esc(originTextOf(h as any))}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">记录状态</span><span class="aus-dt-val">${esc(recordStateText)}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">时段</span><span class="aus-dt-val">${h.priceType==='new-peak'||h.priceType==='wallet-peak'?'高峰':h.priceType==='new-offpeak'||h.priceType==='wallet-offpeak'?'非高峰':h.priceType==='unpriced'?'待定价':'旧价格'}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label">计价来源</span><span class="aus-dt-val">${h.pricingSource==='wallet'?'钱包规则':h.pricingSource==='builtin'?'DeepSeek 内置':h.pricingSource==='unpriced'?'待定价':h.pricingSource==='legacy-match'?'旧数据同名价':h.pricingSource==='legacy'?'旧全局规则':'旧记录兜底'}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">计价来源</span><span class="aus-dt-val">${esc(pricingSourceLabel(h.pricingSource))}</span></div>
                     <div class="aus-dt-item is-wide"><span class="aus-dt-label">钱包</span><span class="aus-dt-val">${esc(repository.getWallet(String(h.walletId||''))?.name || h.endpointLabel || '未归属钱包')}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">日期</span><span class="aus-dt-val">${esc(recordDateText)}</span></div>
                     <div class="aus-dt-item"><span class="aus-dt-label">时间</span><span class="aus-dt-val">${esc(recordTimeText)}</span></div>
@@ -1590,6 +1625,10 @@ export function createPanel() {
                 </div>
               </div>
               <div class="aus-stats-filter">
+                <div id="aus-type-btn" class="aus-pill"><span style="color:var(--ds-text-2);">请求类型</span><span id="aus-type-label" style="font-weight:600;color:var(--ds-text);">全部</span>${icon('chevron-down', 14)}</div>
+                <div id="aus-type-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:150px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
                 <div id="aus-model-btn" class="aus-pill"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon('chevron-down', 14)}</div>
                 <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
@@ -1746,6 +1785,10 @@ export function createPanel() {
           <div data-view="history" style="display:none;">
             <div id="aus-history-health" style="display:none;"></div>
             <div id="aus-history-filter-host" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
+              <div class="aus-stats-filter">
+                <div id="aus-history-type-btn" class="aus-pill"><span style="color:var(--ds-text-2);">请求类型</span><span id="aus-history-type-label" style="font-weight:600;color:var(--ds-text);">全部</span>${icon('chevron-down', 14)}</div>
+                <div id="aus-history-type-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:150px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
               <div class="aus-stats-filter">
                 <div id="aus-history-model-btn" class="aus-pill"><span style="color:var(--ds-text-2);">模型</span><span id="aus-history-model-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon('chevron-down', 14)}</div>
                 <div id="aus-history-model-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>

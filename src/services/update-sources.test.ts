@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { extensionNameCandidates, extensionNameHint, extensionScopeFromList, extensionScopeHint, remoteSources } from './update';
+import { extensionFolderName, extensionNameCandidates, extensionNameHint, extensionScopeFromList, extensionScopeHint, remoteSources, versionProbePlan } from './update';
 
 describe('远端多源列表', () => {
   const sources = remoteSources('manifest.json', 'dev');
@@ -86,31 +86,40 @@ describe('扩展安装位置探测', () => {
     expect(extensionScopeHint()).toBe(null);
   });
 
-  it('清单给出的是 third-party/ 完整名，首选项就是它', () => {
+  it('清单给出的是带 third-party/ 的逻辑名，回传时只留目录名', () => {
     setExtensions([{ name: 'third-party/Api-Usage', type: 'global' }]);
-    expect(extensionNameHint()).toBe('third-party/Api-Usage');
-    expect(extensionNameCandidates()[0]).toBe('third-party/Api-Usage');
+    expect(extensionNameHint()).toBe('Api-Usage');
+    expect(extensionNameCandidates()).toEqual(['Api-Usage']);
   });
 
-  it('版本接口要的是相对 extensions 目录的完整名，裸名只作兜底', () => {
-    // TauriTavern 上只传裸名会拼成 default-user/extensions/Api-Usage 或
-    // data/extensions/third-party/Api-Usage，两个目录都不存在 → 404 弹「后端错误」
+  it('服务端只认目录名一段，带 third-party/ 会被 sanitize 成同一个目录而 404', () => {
+    // ST：sanitize('third-party/Api-Usage') = 'third-partyApi-Usage'，
+    // 再 join 上 data/default-user/extensions → 目录不存在 → 404
     setExtensions([{ name: 'third-party/Api-Usage', type: 'global' }]);
     expect(extensionScopeHint()).toBe(true);
-    expect(extensionNameCandidates()).toEqual(['third-party/Api-Usage', 'Api-Usage']);
+    expect(extensionNameCandidates()).toEqual(['Api-Usage']);
 
     setExtensions([{ name: 'Api-Usage', type: 'local' }]);
     expect(extensionNameHint()).toBe('Api-Usage');
-    expect(extensionNameCandidates()).toEqual(['Api-Usage', 'third-party/Api-Usage']);
+    expect(extensionNameCandidates()).toEqual(['Api-Usage']);
+  });
+
+  it('各种写法都归一化成目录名', () => {
+    for (const raw of ['third-party/Api-Usage', 'third-party\\Api-Usage', '/third-party/Api-Usage/', 'Api-Usage', '  Api-Usage  ']) {
+      expect(extensionFolderName(raw)).toBe('Api-Usage');
+    }
+    expect(extensionFolderName('')).toBe('');
+    expect(extensionFolderName(null)).toBe('');
+    expect(extensionFolderName('third-party/')).toBe('');
   });
 
   it('按 discover 的 type 判定安装位置，本地与全局不混用', () => {
     // TauriTavern：本地扩展 = data/default-user/extensions/<folder>，全局 = data/extensions/third-party/<folder>
     // global 传错一边，服务端只会回 “Extension not found at <另一个目录>”
     expect(extensionScopeFromList([{ name: 'third-party/Api-Usage', type: 'local' }]))
-      .toEqual({ name: 'third-party/Api-Usage', global: false });
+      .toEqual({ name: 'Api-Usage', global: false });
     expect(extensionScopeFromList([{ name: 'third-party/Api-Usage', type: 'global' }]))
-      .toEqual({ name: 'third-party/Api-Usage', global: true });
+      .toEqual({ name: 'Api-Usage', global: true });
     expect(extensionScopeFromList([{ name: 'Api-Usage', type: 'global' }]))
       .toEqual({ name: 'Api-Usage', global: true });
     expect(extensionScopeFromList([{ name: 'regex', type: 'system' }, { name: 'third-party/Other', type: 'local' }])).toBe(null);
@@ -118,11 +127,33 @@ describe('扩展安装位置探测', () => {
     expect(extensionScopeFromList({})).toBe(null);
   });
 
-  it('读取不到清单时按 third-party/ 前缀再退到裸名', () => {
+  it('discover 给出位置时只探那一处，不再拿另一边去换一条假报错', () => {
+    // 真机：全局装、git 连不上 GitHub 时，先试 global（网络错）再试 local，
+    // 宿主就会补一条 “Extension not found at .../third-party/Api-Usage”
+    const plan = versionProbePlan({ name: 'third-party/Api-Usage', global: true }, false);
+    expect(plan).toEqual({ names: ['Api-Usage'], globals: [true] });
+    expect(versionProbePlan({ name: 'Api-Usage', global: false }, true))
+      .toEqual({ names: ['Api-Usage'], globals: [false] });
+  });
+
+  it('没有 discover 时才按 hint 盲试两边，名字优先用已确认过的', () => {
+    expect(versionProbePlan(null, true, ['third-party/Api-Usage']))
+      .toEqual({ names: ['Api-Usage'], globals: [true, false] });
+    expect(versionProbePlan(null, null).globals).toEqual([false, true]);
+  });
+
+  it('清单是字符串名单时也能取到目录名，位置未知交给 discover', () => {
+    setExtensions(['third-party/Api-Usage', 'third-party/Other']);
+    expect(extensionNameHint()).toBe('Api-Usage');
+    expect(extensionScopeHint()).toBe(null);
+    expect(extensionNameCandidates()).toEqual(['Api-Usage']);
+  });
+
+  it('读取不到清单时退到打包目录名', () => {
     (globalThis as any).SillyTavern = undefined;
     expect(extensionNameHint()).toBe(null);
-    expect(extensionNameCandidates()).toEqual(['third-party/Api-Usage', 'Api-Usage']);
+    expect(extensionNameCandidates()).toEqual(['Api-Usage']);
     (globalThis as any).SillyTavern = { getContext: () => { throw new Error('boom'); } };
-    expect(extensionNameCandidates()).toEqual(['third-party/Api-Usage', 'Api-Usage']);
+    expect(extensionNameCandidates()).toEqual(['Api-Usage']);
   });
 });

@@ -1,8 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
+  REQUEST_TYPE_KEYS,
   interruptKindOf,
   isEstimatedEntry,
   isInterruptedEntry,
+  isConversationEntry,
+  matchesRequestType,
+  requestTypeKeysOf,
   isReliableCacheSample,
   isReliableForecastSample,
   isReliablePerformanceSample,
@@ -37,5 +41,41 @@ describe('统计样本质量', () => {
     expect(isReliableForecastSample({ duration: 0 })).toBe(true);
     expect(isReliableForecastSample({ usageSource: 'estimated' })).toBe(false);
     expect(isReliableForecastSample({ interrupted: 'upstream' })).toBe(false);
+  });
+
+  it('只有对话本身发起的请求才算序列样本', () => {
+    const origin = (kind: string) => ({ requestOrigin: { kind, id: null, label: '' } as any });
+    expect(isConversationEntry(origin('tavern'))).toBe(true);
+    expect(isConversationEntry(origin('unknown'))).toBe(true);
+    expect(isConversationEntry(origin('extension'))).toBe(false);
+    expect(isConversationEntry(origin('script'))).toBe(false);
+    // 旧记录没有来源字段，不能因为升级就被丢掉
+    expect(isConversationEntry({ requestOrigin: null })).toBe(true);
+    expect(isConversationEntry({})).toBe(true);
+    expect(isConversationEntry(null)).toBe(false);
+  });
+
+  it('请求类型同时记录来源轴与状态轴', () => {
+    const entry = (patch: any) => ({ ...patch }) as any;
+    expect(requestTypeKeysOf({})).toEqual(['conversation']);
+    expect(requestTypeKeysOf(entry({ requestOrigin: { kind: 'extension' } }))).toEqual(['extension']);
+    expect(requestTypeKeysOf(entry({ requestOrigin: { kind: 'script' } }))).toEqual(['script']);
+    // 来源与状态并存：一条被中断的扩展请求同时命中两个类型
+    expect(requestTypeKeysOf(entry({ requestOrigin: { kind: 'extension' }, interrupted: 'upstream' })))
+      .toEqual(['extension', 'interrupted']);
+    expect(requestTypeKeysOf(entry({ usageSource: 'estimated', origin: 'agent' })))
+      .toEqual(['conversation', 'estimated', 'agent']);
+    expect(requestTypeKeysOf(null)).toEqual([]);
+    expect(REQUEST_TYPE_KEYS).toEqual(['conversation', 'extension', 'script', 'interrupted', 'estimated', 'agent']);
+  });
+
+  it('请求类型匹配用包含语义', () => {
+    const mixed: any = { requestOrigin: { kind: 'extension' }, interrupted: 'user', usageSource: 'estimated' };
+    expect(matchesRequestType(mixed, 'extension')).toBe(true);
+    expect(matchesRequestType(mixed, 'interrupted')).toBe(true);
+    expect(matchesRequestType(mixed, 'estimated')).toBe(true);
+    expect(matchesRequestType(mixed, 'conversation')).toBe(false);
+    expect(matchesRequestType(mixed, 'agent')).toBe(false);
+    expect(matchesRequestType(mixed, '')).toBe(true);
   });
 });
