@@ -418,6 +418,21 @@ function isReliableForecastSample(entry) {
 	if (isEstimatedEntry(entry)) return false;
 	return true;
 }
+/**
+* 是否「对话本身」发起的请求。
+*
+* 趋势预测看的是同一串上下文怎么长、每轮花多少：只有酒馆主流程的对话请求共享这条上下文。
+* 扩展 / 脚本直连的请求（摘要、向量、翻译、脚本调用……）各自独立、随时并发，
+* 塞进序列会把上下文增长曲线、压缩点和每轮成本全算歪，所以一律不进趋势统计。
+*
+* 旧记录没有 requestOrigin（null / undefined / kind:'unknown'）按对话放行——
+* 否则升级后历史数据会凭空消失。
+*/
+function isConversationEntry(entry) {
+	if (!entry) return false;
+	const kind = entry?.requestOrigin?.kind;
+	return kind !== "extension" && kind !== "script";
+}
 function clamp01$1(value) {
 	if (!Number.isFinite(value)) return 0;
 	return Math.max(0, Math.min(1, value));
@@ -460,6 +475,7 @@ function medianAbsoluteDeviation(values) {
 * 数据准备：按时间升序、过滤空 prompt 与不可信样本、计算命中率与截断标记。
 * 中断记录（耗时/输出被截断）与估算记录（token 是本地推的、命中量不可区分）
 * 一律不进入序列：否则压缩识别、增长拟合与成本模拟都会被带偏。
+* 扩展 / 脚本直连的请求同样剔除（见 isConversationEntry）：它们不属于这串上下文。
 * 无缓存字段时 hit=0、miss=prompt，仅用于堆叠图展示，不伪造命中率。
 */
 function prepareEntries(history) {
@@ -467,6 +483,7 @@ function prepareEntries(history) {
 	const prepared = [];
 	for (const entry of sorted) {
 		if (!isReliableForecastSample(entry)) continue;
+		if (!isConversationEntry(entry)) continue;
 		const rawHit = Math.max(0, Number(entry?.cache_hit_tokens) || 0);
 		const rawMiss = Math.max(0, Number(entry?.cache_miss_tokens) || 0);
 		const cacheSamples = rawHit + rawMiss;
@@ -8446,6 +8463,7 @@ async function renderForecastView() {
 		fullHist = state$2.history || [];
 	}
 	if (token !== renderToken$1) return;
+	fullHist = (fullHist || []).filter(isConversationEntry);
 	lastFullHistory = fullHist;
 	bindGlobalClose();
 	const effective = getEffectiveHist(fullHist);

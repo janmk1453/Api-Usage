@@ -9,7 +9,7 @@
  * - 成本、余额轮数、上下文轮数共用同一套逐轮投影，保证图表与数据块口径一致。
  */
 import { isTruncatedOf } from '../utils/finish';
-import { isReliableForecastSample } from '../data/sample-quality';
+import { isConversationEntry, isReliableForecastSample } from '../data/sample-quality';
 
 export type PriceTrio = { hit: number; miss: number; output: number };
 
@@ -27,6 +27,8 @@ export type ForecastInputEntry = {
   finishReason?: string | null;
   isTruncated?: boolean;
   chatId?: string | null;
+  /** 请求来源：只有对话本身发起的请求进序列，扩展/脚本直连的剔除 */
+  requestOrigin?: { kind?: string | null; id?: string | null; label?: string | null } | null;
   /** 样本标记：中断/估算记录不参与序列拟合 */
   usageSource?: string | null;
   interrupted?: 'user' | 'upstream' | null;
@@ -261,6 +263,7 @@ function medianAbsoluteDeviation(values: number[]): number {
  * 数据准备：按时间升序、过滤空 prompt 与不可信样本、计算命中率与截断标记。
  * 中断记录（耗时/输出被截断）与估算记录（token 是本地推的、命中量不可区分）
  * 一律不进入序列：否则压缩识别、增长拟合与成本模拟都会被带偏。
+ * 扩展 / 脚本直连的请求同样剔除（见 isConversationEntry）：它们不属于这串上下文。
  * 无缓存字段时 hit=0、miss=prompt，仅用于堆叠图展示，不伪造命中率。
  */
 export function prepareEntries(history: ForecastInputEntry[]): PreparedEntry[] {
@@ -268,6 +271,7 @@ export function prepareEntries(history: ForecastInputEntry[]): PreparedEntry[] {
   const prepared: PreparedEntry[] = [];
   for (const entry of sorted) {
     if (!isReliableForecastSample(entry as any)) continue;
+    if (!isConversationEntry(entry as any)) continue;
     const rawHit = Math.max(0, Number(entry?.cache_hit_tokens) || 0);
     const rawMiss = Math.max(0, Number(entry?.cache_miss_tokens) || 0);
     const cacheSamples = rawHit + rawMiss;

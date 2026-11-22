@@ -52,3 +52,19 @@ export function isReliableForecastSample(entry: AnyEntry): boolean {
   if (isEstimatedEntry(entry)) return false;
   return true;
 }
+
+/**
+ * 是否「对话本身」发起的请求。
+ *
+ * 趋势预测看的是同一串上下文怎么长、每轮花多少：只有酒馆主流程的对话请求共享这条上下文。
+ * 扩展 / 脚本直连的请求（摘要、向量、翻译、脚本调用……）各自独立、随时并发，
+ * 塞进序列会把上下文增长曲线、压缩点和每轮成本全算歪，所以一律不进趋势统计。
+ *
+ * 旧记录没有 requestOrigin（null / undefined / kind:'unknown'）按对话放行——
+ * 否则升级后历史数据会凭空消失。
+ */
+export function isConversationEntry(entry: AnyEntry): boolean {
+  if (!entry) return false;
+  const kind = (entry as any)?.requestOrigin?.kind;
+  return kind !== 'extension' && kind !== 'script';
+}

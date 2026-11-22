@@ -3,6 +3,7 @@ import {
   interruptKindOf,
   isEstimatedEntry,
   isInterruptedEntry,
+  isConversationEntry,
   isReliableCacheSample,
   isReliableForecastSample,
   isReliablePerformanceSample,
@@ -37,5 +38,17 @@ describe('统计样本质量', () => {
     expect(isReliableForecastSample({ duration: 0 })).toBe(true);
     expect(isReliableForecastSample({ usageSource: 'estimated' })).toBe(false);
     expect(isReliableForecastSample({ interrupted: 'upstream' })).toBe(false);
+  });
+
+  it('只有对话本身发起的请求才算序列样本', () => {
+    const origin = (kind: string) => ({ requestOrigin: { kind, id: null, label: '' } as any });
+    expect(isConversationEntry(origin('tavern'))).toBe(true);
+    expect(isConversationEntry(origin('unknown'))).toBe(true);
+    expect(isConversationEntry(origin('extension'))).toBe(false);
+    expect(isConversationEntry(origin('script'))).toBe(false);
+    // 旧记录没有来源字段，不能因为升级就被丢掉
+    expect(isConversationEntry({ requestOrigin: null })).toBe(true);
+    expect(isConversationEntry({})).toBe(true);
+    expect(isConversationEntry(null)).toBe(false);
   });
 });

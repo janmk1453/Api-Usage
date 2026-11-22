@@ -21,6 +21,7 @@ import { getPricing, isPeakHour, isWalletPeakHour } from '../services/pricing';
 import { afterNextPaint, closeDropdownInstant } from './dropdown-close';
 import { formatMoney, getDisplayCurrency, getWalletExchangeRate } from '../services/currency';
 import { findWalletForHistory, findWalletModel, walletBalanceToCny } from '../data/wallets';
+import { isConversationEntry } from '../data/sample-quality';
 import { esc } from '../utils/date';
 import { icon } from './icons';
 import { disposeForecastCharts, renderForecastCharts } from './forecast-chart';
@@ -965,6 +966,10 @@ export async function renderForecastView(): Promise<void> {
     fullHist = (state as any).history || [];
   }
   if (token !== renderToken) return;
+  // 趋势统计只认对话本身发起的请求：扩展 / 脚本直连的请求是另一串上下文，
+  // 混进来会把上下文增长曲线、压缩点、每轮成本与命中率回退全算歪。
+  // 旧记录没有来源字段，isConversationEntry 一律放行。
+  fullHist = (fullHist || []).filter(isConversationEntry);
   lastFullHistory = fullHist;
   bindGlobalClose();
 

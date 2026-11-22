@@ -75,6 +75,20 @@ describe('预测序列数据准备', () => {
     expect(prepared.map((item) => item.round)).toEqual([1, 2]);
   });
 
+  it('扩展与脚本直连的请求不进序列（趋势只看这串对话上下文）', () => {
+    const origin = (kind: string) => ({ kind, id: null, label: '' });
+    const prepared = prepareEntries([
+      entry(0, 100),
+      entry(1, 20_000, { requestOrigin: origin('extension') }),
+      entry(2, 30_000, { requestOrigin: origin('script') }),
+      entry(3, 120),
+      entry(4, 140, { requestOrigin: origin('unknown') }),
+      entry(5, 160, { requestOrigin: null }),
+    ]);
+    expect(prepared.map((item) => item.prompt)).toEqual([100, 120, 140, 160]);
+    expect(prepared.map((item) => item.round)).toEqual([1, 2, 3, 4]);
+  });
+
   it('识别压缩点并记录本次压缩前的轮数', () => {
     const prepared = prepareEntries(seriesEntries([20_000, 22_000, 24_000, 26_000, 28_000, 30_000, 5_000, 7_000, 9_000]));
     const compactions = detectCompactions(prepared);

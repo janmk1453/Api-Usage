@@ -74,7 +74,8 @@
 - **工具栏**：对话胶囊（当前对话 / 全部 / 各对话，默认 `__current__`）、计价模型胶囊（多模型时显示，默认最近）、视界胶囊（5/10/20/50/100，默认 10）、压缩情景开关；偏好存 `localStorage[aus_forecast_prefs_v1]`（不进 `settings`、不参与导出）。选「全部」时禁用逐轮预测并提示，模型效率表仍可用。
 - **窄屏例外规则**：`@media (max-width:760px)` 里 `[data-view="forecast"] [id^="aus-forecast-"]{width:100% !important}` 会误伤工具栏按钮，因此紧跟 `#aus-forecast-chat-manage-btn{width:auto !important;max-width:100% !important;flex:0 0 auto !important}`；**给趋势页新增任何胶囊类按钮都要照此放行**。
 - **内容**：8 块 KPI（下一轮输入 / 输出 / 成本、命中率、Δ、余额可撑、上下文可撑、未来 N 轮总成本）+ 主趋势图（全部历史命中 / 未命中堆叠 + 输出 + 成本双轴、未来虚线、95% 置信带、压缩标记、上限线）+ 命中率图 + 累计成本图；三图由 `ui/forecast-chart.ts` 统一管实例 / 主题 / resize / dispose。
-- **预测核心**（`stats/forecast-series.ts`）：排序清洗（`isReliableForecastSample` 先剔除中断与估算）→ 压缩识别（环比回落 ≥20% 且绝对降幅 ≥1500 tok）→ 末段稳健回归（近期加权 / 离群剔除 / `linear` 与 `recent-mean` 择优）→ 命中率测算（有缓存样本时最近 10 条 token 加权，无数据才回退全站 / 同模型 / 手动）→ 输出中位数、成本与余额逐轮模拟；`stats/forecast.ts` 保留旧 API 兼容 `energyScore` 与旧测试。
+- **数据范围**：本页所有统计（逐轮序列、压缩检测、命中率回退、模型效率、Top 对话、对话胶囊）只含**对话来源**的记录——`renderForecastView` 一进来就用 `isConversationEntry` 过滤全量历史，扩展 / 脚本直连的请求不计入，所以这里的「全部历史 N 条」会小于历史页条数，属预期。
+- **预测核心**（`stats/forecast-series.ts`）：排序清洗（`isReliableForecastSample` 先剔除中断与估算，`isConversationEntry` 再剔除扩展与脚本）→ 压缩识别（环比回落 ≥20% 且绝对降幅 ≥1500 tok）→ 末段稳健回归（近期加权 / 离群剔除 / `linear` 与 `recent-mean` 择优）→ 命中率测算（有缓存样本时最近 10 条 token 加权，无数据才回退全站 / 同模型 / 手动）→ 输出中位数、成本与余额逐轮模拟；`stats/forecast.ts` 保留旧 API 兼容 `energyScore` 与旧测试。
 - **压缩预测**：检测到一次压缩即以「最近一次压缩前的段长度」为周期，结合保留比例与压缩后首轮命中率做锯齿投影；卡片展示周期、保留比例、当前段已持续、预计下次压缩轮次；压缩点用橙色虚线标出。
 - **模型效率**（`stats/model-efficiency.ts`）：按模型聚合输入输出比、每 1k 输出成本、命中率、缓存节省、平均每轮成本，按每 1k 输出成本升序（无价最后）；范围可切全部历史 / 当前对话，点行切计价模型。
 - **能耗评分**（`stats/energyScore.ts`）：6 指标加权（Δ 25% / out 20% / 效率 20% / 命中 15% / 截断 10% / 思维链占比 10%）→ A–G，冷启动用绝对阈值表、随后按历史分位；「对话健康」卡展示色带与指标，最耗对话 Top 默认折叠。
