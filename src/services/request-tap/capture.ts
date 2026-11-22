@@ -222,6 +222,9 @@ type Reader = () => Promise<{ usage: TapUsage | null; ttft: number }>;
 function finalize(ctx: Ctx, status: number | null, reader?: Reader, error: string | null = null): void {
   const endedAt = Date.now();
   const rec = toRecord(ctx, endedAt, status, error);
+  // 有 reader 说明响应体还要继续读：此刻的 durationMs 只是首字节耗时，
+  // 对账必须等它变 true（见 index.ts#reconcilePending），否则流式请求会被判成 too-short。
+  rec.bodyDone = !reader;
   upsertTapRecord(rec);
   if (!reader) return;
   reader()
@@ -235,6 +238,7 @@ function finalize(ctx: Ctx, status: number | null, reader?: Reader, error: strin
         usage: r.usage,
         usageMissing: !r.usage,
         ttftMs: r.ttft,
+        bodyDone: true,
       };
       // usage 迟到：先前按「没用量」判成孤儿的，usage 到手后重新排队，让对账再判一次
       if (r.usage) {
@@ -249,7 +253,7 @@ function finalize(ctx: Ctx, status: number | null, reader?: Reader, error: strin
       }
       patchTapRecord(rec.id, patch);
     })
-    .catch(() => { patchTapRecord(rec.id, { usageMissing: true }); });
+    .catch(() => { patchTapRecord(rec.id, { usageMissing: true, bodyDone: true }); });
 }
 
 /** 读 fetch 响应 clone：顺带量首字延迟；只读，不消费原响应 */

@@ -42,6 +42,8 @@ type TurnContext = {
   modelFallback: boolean;
   status: number;
   streamError: string | null;
+  /** 请求体字符数（消息 content 累计），诊断用：核对「抓到的 prompt 是不是这一轮的」 */
+  promptChars: number;
   /** 实测输出字符（正文 + 思维链） */
   outputChars: number;
   reasoningChars: number;
@@ -243,7 +245,7 @@ export function pickEndedTurn(model: string | null, includeSettled = true): Turn
 export function registerTurnForTest(patch: Partial<TurnContext>): TurnContext {
   const base: TurnContext = {
     startTime: Date.now(), requestId: null, model: null, modelFallback: false, status: 0,
-    streamError: null, outputChars: 0, reasoningChars: 0, fullResponse: null, fullRequest: null,
+    streamError: null, promptChars: 0, outputChars: 0, reasoningChars: 0, fullResponse: null, fullRequest: null,
     messages: [], promptMessages: [], connection: null, ttft: 0, thinkTime: 0, streamed: null,
     endedAt: 0, settled: false, settledBy: null, usage: null, finishReason: null,
     requestOrigin: null,
@@ -269,14 +271,41 @@ function metaForTurn(turn: TurnContext | null): EntryMeta | null {
   const interrupted = stopPending() ? 'user' : turn?.streamError ? 'upstream' : null;
   const modelFallback = turn?.modelFallback === true;
   const requestOrigin = turn?.requestOrigin || null;
+  // 字符数纯诊断用（核对「抓到的 prompt / 输出是不是这一轮的」），取不到就不写，不落一堆 0
+  const promptChars = Number(turn?.promptChars) || 0;
+  const outputChars = Number(turn?.outputChars) || 0;
   // 来源也要能单独把 meta 带出来：常规轮次没有中断标记，但来源照样要落库
-  if (!interrupted && !modelFallback && !requestOrigin) return null;
+  if (!interrupted && !modelFallback && !requestOrigin && !promptChars && !outputChars) return null;
   const meta: EntryMeta = { usageSource: 'upstream' };
   if (requestOrigin) meta.requestOrigin = requestOrigin;
   meta.interrupted = interrupted;
   if (interrupted) meta.interruptReason = interrupted === 'user' ? 'user-stop' : String(turn?.streamError || 'stream-error').slice(0, 200);
   if (modelFallback) meta.modelFallback = true;
+  if (promptChars > 0) meta.promptChars = promptChars;
+  if (outputChars > 0) meta.outputChars = outputChars;
   return meta;
+}
+
+/**
+ * 请求体字符数：消息 content 累计（数组形态取 text 段），文本补全取 prompt。
+ * 只用于诊断字段，不参与任何计价或估算口径。
+ */
+function countRequestChars(body: any): number {
+  try {
+    if (Array.isArray(body?.messages)) {
+      let total = 0;
+      for (const message of body.messages) {
+        const content = message?.content;
+        if (typeof content === 'string') total += content.length;
+        else if (Array.isArray(content)) {
+          for (const part of content) if (typeof part?.text === 'string') total += part.text.length;
+        }
+      }
+      return total;
+    }
+    if (typeof body?.prompt === 'string') return body.prompt.length;
+  } catch {}
+  return 0;
 }
 
 function turnMetaFor(startTime: number): EntryMeta | null {
@@ -488,6 +517,7 @@ function installFetchCapture(): boolean {
           modelFallback: !(typeof requestModel === 'string' && requestModel),
           status: 0,
           streamError: null,
+          promptChars: countRequestChars(reqBody),
           outputChars: 0,
           reasoningChars: 0,
           fullResponse: null,

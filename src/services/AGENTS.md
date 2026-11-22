@@ -14,6 +14,9 @@
 - **本地估算**（`services/token-estimate.ts`）：按 `tavern-token-count`（`extra.token_count`）→ `tavern-tokenizer` → `char-heuristic-v1`（`ceil(cjk*0.6 + other/3.5)`）三级降级；估算时 `usageSource='estimated'`、`estimateCacheUnknown=true`、`costEstimated=true`，命中量按 0、未命中按 prompt。
 - **请求来源**（`services/request-origin.ts`，纯逻辑可直接单测）：只认调用栈，**禁止用请求体特征反推发起方**（扩展改一行模板就漂移，方案阶段已否掉）。判据以「酒馆发送脚本帧」为锚点——`SEND_SCRIPTS = ['/scripts/openai.js', '/scripts/textgen-settings.js']`（聊天/文本补全的唯一两个真 fetch 处，文件级判断，改名压缩不影响），排在它**外面**的 third-party 帧才是发起者，排在它**里面**的只是包装 fetch（酒馆助手/预设脚本的常规操作，判酒馆）；栈里没有发送帧时任何 third-party 帧即扩展直连（此时 `/script.js` 帧只是触发它的 UI 事件）。三个必须守住的点：① 必须跳过自身帧（`SELF_MARKERS` 默认 `api-usage`，入口 `registerRequestOriginSelf(import.meta.url)` 补真实目录名）——自身帧漏排会把内层包装器反判成更外层发起者，实测踩过；② `detectRequestOrigin()` 只能在 fetch 包装的同步段调用，任何 `await` 之后栈就断了；③ 认不出返回 `null`、界面不标角标、绝不编一个来源。来源随 `TurnContext` 落地，**并发一律按 `requestId` 配对**（`turnByRequestId`；`startTime` 是 `Date.now()`，同毫秒连发会撞），查不到 `requestId` 才退回 `startTime`，都没有就返回空。
 - **探针**（`services/request-tap/`）：采集 / 判定 / 匹配 / 账本各自单文件，为历史页健康提示提供「请求是否真的没记进历史」的证据，**不要让探针逻辑渗进拦截主链**。
+  - **来源口径必须与历史同源**：`classify.ts#actorFromStack` 直接调 `request-origin.ts#originFromStack` 再映射（extension→`plugin`、script→`script`、tavern→`tavern`），**禁止再写第二套扫栈规则**。旧实现「取第一个 third-party 帧」会把包装 fetch 的扩展（yuzuki-Memory 一类）认成主对话的发起者，同一条请求在探针页显示「扩展」、在历史页显示「对话」。
+  - **流式对账要等响应体读完**：`capture.ts#finalize` 拿到响应头就先落一条 pending（此时 `durationMs` 只是首字节），必须写 `bodyDone: false`，reader 完成后再 patch 成 true；`index.ts#reconcilePending` 见 `stream === true && bodyDone !== true` 就跳过，超过 `STREAM_BODY_WAIT_MS`（10 分钟）才按现有信息兜底对账。否则长输出的流式请求会被 `MIN_TAP_DURATION_MS`（500ms）判成 too-short，孤儿数虚高。
+- **诊断字段**：`promptChars` / `outputChars` 在正常路径（`interception.ts#metaForTurn`）与估算路径都要写，且只写 >0 的值；`feedback-pack.ts#entryDigest` 必须带 `requestOrigin`（`{ kind, id, label }`，无来源为 `null`）——否则上传的日志无法核对「这条被判成扩展 / 脚本 / 对话」。
 
 ## 聊天消息头元信息（`services/message-cost/`）
 

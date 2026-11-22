@@ -12,8 +12,14 @@ export type TapEndpointKind = 'chat' | 'text' | 'other';
 /** 请求发起方判定等级：A=上下文+栈，B=仅栈，C=仅结构特征 */
 export type TapAttribution = 'A' | 'B' | 'C';
 
-/** 发起方 */
-export type TapActorKind = 'plugin' | 'tavern' | 'unknown';
+/**
+ * 发起方。
+ * - plugin：第三方扩展目录里的脚本
+ * - tavern：酒馆自己的发送脚本（openai.js / textgen-settings.js）
+ * - script：酒馆助手把用户脚本塞进 srcdoc / blob iframe 里跑，只留得下这类帧
+ * - unknown：认不出
+ */
+export type TapActorKind = 'plugin' | 'tavern' | 'script' | 'unknown';
 
 /** 从响应里解析出的用量 */
 export interface TapUsage {
@@ -89,6 +95,11 @@ export interface TapRecord {
   /** 响应里没带 usage，token 不可知 */
   usageMissing: boolean;
   durationMs: number;
+  /**
+   * 响应体是否已经读完。流式请求在「响应头到达」时先落一条占位记录，
+   * 那时的 durationMs 只是首字节耗时，不能拿来判 too-short（对账时会等它变 true）。
+   */
+  bodyDone?: boolean;
   ttftMs: number;
   status: number | null;
   error: string | null;

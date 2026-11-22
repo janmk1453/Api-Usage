@@ -16,6 +16,8 @@ export const RECONCILE_DELAY_MS = 12000;
 /** 账本上限：只对账近期请求，更早的入账记录不再参与 */
 const SETTLEMENT_MAX = 800;
 const RECONCILE_INTERVAL_MS = 3000;
+/** 流式响应的最长等待：超过这个时间还没读完，就按现有信息对账，不让 pending 永久占位 */
+const STREAM_BODY_WAIT_MS = 10 * 60 * 1000;
 
 let settlements: Settlement[] = [];
 const used = new Set<string>();
@@ -68,6 +70,9 @@ export function reconcilePending(now = Date.now()): void {
   for (const rec of all) {
     if (rec.state !== 'pending') continue;
     if (now - (rec.endedAt || rec.at) < RECONCILE_DELAY_MS) continue;
+    // 流式请求在「响应头到达」时就先落了一条 pending，那时的 durationMs 只是首字节耗时。
+    // 必须等响应体读完（bodyDone）再对账，否则长输出的流式请求会被 500ms 门槛判成 too-short。
+    if (rec.stream === true && rec.bodyDone !== true && now - (rec.at || now) < STREAM_BODY_WAIT_MS) continue;
     let hit: { settlement: Settlement; by: string } | null = null;
     const probe = probeKeyOf({ model: rec.model, usage: rec.usage, at: rec.at, endedAt: rec.endedAt });
     if (rec.usage) {

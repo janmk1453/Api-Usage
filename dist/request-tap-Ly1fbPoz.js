@@ -1,6 +1,16 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
+import { n as originFromStack } from "./request-origin-C9kLQ_0W.js";
 //#region src/services/request-tap/classify.ts
+/**
+* 请求探针 —— 发起方与用途归类（纯逻辑，无 DOM、无副作用，可直接单测）
+*
+* 判定思路（与设计文档一致）：
+* 1) 发起方优先看「执行上下文」——补丁所在 window 的 frameElement / location；
+* 2) 上下文拿不到（跨源）或只是主窗时，退回调用栈里的 third-party 路径；
+* 3) 用途不用「猜是不是对话」，只按结构化特征 + prompt 片段做聚类，
+*    是不是对话完全交给对账结果（见 match.ts）判定。
+*/
 var THIRD_PARTY = "/scripts/extensions/third-party/";
 /** 从一段路径里取出扩展名：.../third-party/<name>/... → <name> */
 function pluginNameFromPath(path) {
@@ -38,20 +48,35 @@ function actorFromLocation(input) {
 		label: id.split("/").filter(Boolean).pop() || "未知来源"
 	};
 }
-/** 从调用栈里找扩展路径（比上下文更细：能定位到具体插件，即使补丁装在主窗上） */
+/**
+* 从调用栈判定发起方（探针侧的唯一口径）。
+*
+* 这里不再自己扫栈，直接复用历史记录用的 services/request-origin.ts#originFromStack：
+* 探针页和历史页对「同一条请求是谁发的」必须给出同一个答案，否则一次主对话会在
+* 探针里显示成「扩展 yuzuki-Memory」、在历史里显示成「对话」，互相打脸。
+*
+* 旧实现在这里「取第一个 third-party 帧」，而酒馆助手 / 预设脚本常把 fetch 包一层
+* （包装帧在发送帧内层），于是主对话的扩展包装器被误认成发起者——这就是两套规则的时代。
+*/
 function actorFromStack(stack) {
 	if (!stack) return null;
-	for (const raw of stack.split("\n")) {
-		const line = raw.trim();
-		if (!line) continue;
-		if (line.indexOf("request-tap") !== -1) continue;
-		const plugin = pluginNameFromPath(line);
-		if (plugin) return {
-			kind: "plugin",
-			id: line,
-			label: plugin
-		};
-	}
+	const origin = originFromStack(stack);
+	if (!origin) return null;
+	if (origin.kind === "extension") return {
+		kind: "plugin",
+		id: origin.id,
+		label: origin.label
+	};
+	if (origin.kind === "script") return {
+		kind: "script",
+		id: origin.id,
+		label: origin.label
+	};
+	if (origin.kind === "tavern") return {
+		kind: "tavern",
+		id: "tavern",
+		label: "酒馆主窗"
+	};
 	return null;
 }
 /** 调用栈里第一条有意义的帧（去掉探针自身与浏览器内部帧） */
@@ -448,6 +473,7 @@ function toRecord(ctx, endedAt, status, error) {
 }
 function finalize(ctx, status, reader, error = null) {
 	const rec = toRecord(ctx, Date.now(), status, error);
+	rec.bodyDone = !reader;
 	upsertTapRecord(rec);
 	if (!reader) return;
 	reader().then((r) => {
@@ -457,7 +483,8 @@ function finalize(ctx, status, reader, error = null) {
 			durationMs: Math.max(0, settledAt - ctx.at),
 			usage: r.usage,
 			usageMissing: !r.usage,
-			ttftMs: r.ttft
+			ttftMs: r.ttft,
+			bodyDone: true
 		};
 		if (r.usage) try {
 			const cur = listTapRecords().find((x) => x.id === rec.id);
@@ -469,7 +496,10 @@ function finalize(ctx, status, reader, error = null) {
 		} catch {}
 		patchTapRecord(rec.id, patch);
 	}).catch(() => {
-		patchTapRecord(rec.id, { usageMissing: true });
+		patchTapRecord(rec.id, {
+			usageMissing: true,
+			bodyDone: true
+		});
 	});
 }
 /** 读 fetch 响应 clone：顺带量首字延迟；只读，不消费原响应 */
@@ -910,6 +940,8 @@ var RECONCILE_DELAY_MS = 12e3;
 /** 账本上限：只对账近期请求，更早的入账记录不再参与 */
 var SETTLEMENT_MAX = 800;
 var RECONCILE_INTERVAL_MS = 3e3;
+/** 流式响应的最长等待：超过这个时间还没读完，就按现有信息对账，不让 pending 永久占位 */
+var STREAM_BODY_WAIT_MS = 6e5;
 var settlements = [];
 var used = /* @__PURE__ */ new Set();
 var reconcileTimer = null;
@@ -958,6 +990,7 @@ function reconcilePending(now = Date.now()) {
 	for (const rec of all) {
 		if (rec.state !== "pending") continue;
 		if (now - (rec.endedAt || rec.at) < 12e3) continue;
+		if (rec.stream === true && rec.bodyDone !== true && now - (rec.at || now) < STREAM_BODY_WAIT_MS) continue;
 		let hit = null;
 		const probe = probeKeyOf({
 			model: rec.model,
