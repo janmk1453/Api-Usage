@@ -1,6 +1,26 @@
+import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
 import { t as esc } from "./date-Dsu8hrMO.js";
 //#region src/services/update.ts
+var update_exports = /* @__PURE__ */ __exportAll({
+	checkUpdate: () => checkUpdate,
+	extensionFolderName: () => extensionFolderName,
+	extensionNameCandidates: () => extensionNameCandidates,
+	extensionNameHint: () => extensionNameHint,
+	extensionScopeFromList: () => extensionScopeFromList,
+	extensionScopeHint: () => extensionScopeHint,
+	getUpdateBranch: () => getUpdateBranch,
+	maybeAutoCheck: () => maybeAutoCheck,
+	normalizePolicy: () => normalizePolicy,
+	probeForcedUpdateAtStartup: () => probeForcedUpdateAtStartup,
+	remoteSources: () => remoteSources,
+	scheduleReloadForUpdate: () => scheduleReloadForUpdate,
+	setUpdateBranch: () => setUpdateBranch,
+	shouldForceUpdate: () => shouldForceUpdate,
+	syncUpdateIndicators: () => syncUpdateIndicators,
+	updateSelf: () => updateSelf,
+	versionProbePlan: () => versionProbePlan
+});
 var CURRENT_VERSION = "3.2.3";
 var REPO = "janmk1453/Api-Usage";
 var EXTENSION_FOLDER = "Api-Usage";
@@ -1035,4 +1055,4 @@ function maybeAutoCheck() {
 	} catch {}
 }
 //#endregion
-export { checkUpdate, getUpdateBranch, maybeAutoCheck, probeForcedUpdateAtStartup, setUpdateBranch, syncUpdateIndicators, updateSelf };
+export { update_exports as n, remoteSources as t };

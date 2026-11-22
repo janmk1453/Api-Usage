@@ -2330,7 +2330,11 @@ export function openPanel() {
   // （全新安装不弹；已弹过的版本不再重复，判定见 changelog-dialog.ts）
   try {
     setTimeout(() => {
-      try { maybeShowChangelogDialog({ onOpenAll: () => switchView('about') }); } catch {}
+      let changelogShown = false;
+      try { changelogShown = maybeShowChangelogDialog({ onOpenAll: () => switchView('about') }); } catch {}
+      // 更新弹窗这一轮已经出来就不再叠公告，留到下次打开（判定见 announcement-dialog.ts）
+      if (changelogShown) return;
+      try { import('./announcement-dialog').then(m => m.maybeShowAnnouncementDialog()).catch(() => {}); } catch {}
     }, 320);
   } catch {}
 }

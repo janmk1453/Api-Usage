@@ -55,3 +55,12 @@ TauriTavern 的 Agent 模式把「一次 Run 的多次模型调用」交给宿�
 - 源顺序与 URL 形状由 `services/update-sources.test.ts` 锁定，改源必须同步该测试。
 - 跨分支更新先 `/api/extensions/switch` 再 `/api/extensions/update`，成功后刷新；自动检查 10 分钟节流。
 - **扩展名只发目录名**（`update.ts#extensionFolderName`）：宿主所有 `/api/extensions/*` 端点都是「`sanitize(extensionName)` + `path.join(basePath, name)`」，而 `basePath` 本身已是用户扩展目录或全局 `third-party` 目录，所以只认单段目录名 `Api-Usage`。清单与 `/discover` 给的是逻辑名 `third-party/Api-Usage`，原样回传会被 sanitize 成 `third-partyApi-Usage` → 404「Directory does not exist at …」。`extensionNameHint` / `extensionNameCandidates` / `extensionScopeFromList` / `versionProbePlan` 必须全部过这个归一化，`update-sources.test.ts` 锁定该行为。
+
+## 公告（`announcement.json`）
+
+- **发布方式**：仓库根的 `announcement.json`（与 `update-policy.json` 同一思路，**独立于版本与构建号**），客户端固定读 `main` 分支——改完提交即生效，不动版本号、不重新打包，可随时加一条或撤回。`dev` 用户也读 `main`，避免公告只对测试分支可见。
+- **文件形状**：`{ "schema": 1, "items": [ { id, date, level, title, body: ["段1","段2"], minVersion, maxVersion, until, linkText, linkUrl } ] }`。`id` 必填且全局唯一（`[A-Za-z0-9._:-]{1,64}`），`title`/`body` 必填，`level` 只认 `info`/`warning`/`critical`，`until` 为 `YYYY-MM-DD`（当天仍有效），`linkUrl` 只认 `http(s)` 与 `/` 开头。清洗在 `services/announcement.ts#normalizeAnnouncementItem`：坏条目直接丢，不让弹窗炸。
+- **已读按条目 id**（`localStorage[aus_announcement_seen_v1]`，只留最近 200 条），不是按版本/构建号：同一条改文案不会重弹，新发的照常弹。`aus_announcement_cache_v1` 存上次成功拉到的列表，断网也能弹未读。
+- **拉取**：打开面板才检查，`ANNOUNCEMENT_MIN_INTERVAL_MS = 30 分钟` 节流（`aus_announcement_check_v1`）；源复用 `remoteSources(path, 'main')` 两梯队（实时源 3.5s 超时，全灭再退 CDN）；任何失败（超时、被墙、JSON 坏）**一律静默**返回 null，不影响面板与任何统计。
+- **与更新弹窗互斥**：`ui/panel.ts#openPanel` 先试 `maybeShowChangelogDialog`，那一轮弹了更新就不再弹公告（留到下次），避免一次打开糊两个弹窗。
+- **隐私**：只 GET 静态 JSON，不带任何本地数据；`ui/help-view.ts` 隐私声明里已写明。

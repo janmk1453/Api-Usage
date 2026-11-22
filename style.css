@@ -3032,6 +3032,65 @@
   .aus-cl-btn { flex: 1 1 0; text-align: center; }
 }
 
+/* ==================== 公告弹窗（外壳沿用更新弹窗，正文换成多条公告） ==================== */
+#aus-panel .aus-an,
+.aus-cl-mask.is-page .aus-an { width: min(520px, 100%); margin: auto; }
+
+.aus-an-list { display: grid; gap: 12px; }
+
+.aus-an-item {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-card);
+  background: var(--ds-card);
+}
+
+.aus-an-item[data-level="warning"] { border-color: var(--ds-orange); }
+.aus-an-item[data-level="critical"] { border-color: var(--ds-red); background: var(--ds-red-bg); }
+
+.aus-an-item-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.aus-an-item-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ds-text);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.aus-an-item-date {
+  flex-shrink: 0;
+  font-size: var(--aus-fs-sm);
+  color: var(--ds-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.aus-an-p {
+  margin: 0;
+  font-size: var(--aus-fs-sm);
+  line-height: 1.7;
+  color: var(--ds-text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.aus-an-link {
+  justify-self: start;
+  font-size: var(--aus-fs-sm);
+  font-weight: 600;
+  color: var(--ds-blue);
+  text-decoration: none;
+}
+
+.aus-an-link:hover { text-decoration: underline; }
+
 /* 历史记录卡片 Token 占比条图例色块（三段配色见 --aus-token-*） */
 .aus-token-dot {
   display: inline-block;
