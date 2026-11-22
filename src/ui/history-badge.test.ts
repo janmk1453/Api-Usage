@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { historyBadgeOf } from './history-badge';
+import { historyBadgeOf, shouldShowStateBadge } from './history-badge';
 
 describe('历史记录状态徽标', () => {
-  it('普通记录显示常规', () => {
+  it('普通记录显示对话', () => {
     const badge = historyBadgeOf({});
     expect(badge.kind).toBe('normal');
-    expect(badge.text).toBe('常规');
+    expect(badge.text).toBe('对话');
   });
 
   it('Agent 记录显示 Agent', () => {
@@ -42,5 +42,21 @@ describe('历史记录状态徽标', () => {
   it('正常上游用量不显示估算', () => {
     expect(historyBadgeOf({ usageSource: 'upstream' }).kind).toBe('normal');
     expect(historyBadgeOf({ interrupted: null, usageSource: null }).kind).toBe('normal');
+  });
+});
+
+describe('状态角标是否显示（与来源角标互斥）', () => {
+  it('有来源角标时不再显示「对话」', () => {
+    expect(shouldShowStateBadge(historyBadgeOf({}), true)).toBe(false);
+  });
+
+  it('没有来源角标时照常显示「对话」', () => {
+    expect(shouldShowStateBadge(historyBadgeOf({}), false)).toBe(true);
+  });
+
+  it('中断 / 估算 / Agent 即使有来源角标也照常显示', () => {
+    expect(shouldShowStateBadge(historyBadgeOf({ interrupted: 'user' }), true)).toBe(true);
+    expect(shouldShowStateBadge(historyBadgeOf({ usageSource: 'estimated' }), true)).toBe(true);
+    expect(shouldShowStateBadge(historyBadgeOf({ origin: 'agent' }), true)).toBe(true);
   });
 });

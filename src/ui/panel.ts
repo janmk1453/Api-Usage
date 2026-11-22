@@ -29,7 +29,7 @@ import { initChatManageView, renderChatManageView } from './chat-manage';
 import { initTapView, renderTapView } from './tap-view';
 import { initLogView, renderLogView } from './log-view';
 import { renderHistoryHealthBar } from './history-health-bar';
-import { historyBadgeOf } from './history-badge';
+import { historyBadgeOf, shouldShowStateBadge } from './history-badge';
 import { sourceBadgeOf, originTextOf } from './source-badge';
 import { rateText, rateTitle, rateBadgeText } from './rate-text';
 import { isEstimatedEntry } from '../data/sample-quality';
@@ -603,7 +603,9 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
     const sourceBadgeHTML = sourceBadge
       ? `<span class="aus-source-badge" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:${sourceBadge.background};color:${sourceBadge.color};" title="${esc(sourceBadge.title)}">${esc(sourceBadge.text)}</span>`
       : '';
-    const originBadge = `<span class="aus-origin-badge" title="${esc(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:${badge.background};color:${badge.color};">${esc(badge.text)}</span>`;
+    const stateBadgeHTML = shouldShowStateBadge(badge, !!sourceBadge)
+      ? `<span class="aus-origin-badge" title="${esc(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:${badge.background};color:${badge.color};">${esc(badge.text)}</span>`
+      : '';
     const recordDate = new Date(h.timestamp);
     const recordDateText = recordDate.toLocaleDateString('zh-CN');
     const recordTimeText = recordDate.toLocaleTimeString('zh-CN', { hour12: false });
@@ -611,7 +613,7 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
     <div style="padding:10px 12px;background:var(--ds-card);border-radius:10px;margin-bottom:8px;font-size:var(--aus-fs-base);">
       <div class="aus-history-card-head" style="display:flex;justify-content:space-between;align-items:center;">
         <div class="aus-history-card-main" style="min-width:0;flex:1;">
-          <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${sourceBadgeHTML}${originBadge}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(h.model)} · ${esc(localTimeHM(h.timestamp))}</span></div>
+          <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${sourceBadgeHTML}${stateBadgeHTML}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(h.model)} · ${esc(localTimeHM(h.timestamp))}</span></div>
           <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · <span title="${esc(rateTitle(h))}">${rateText(h)}</span></div>
         </div>
         <div class="aus-history-card-actions" style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">

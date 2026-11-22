@@ -45,7 +45,7 @@
 - **两枚二级入口**：「其他请求」`#aus-history-tap-btn`（`switchView('tap')`，父级为历史）、「请求日志」`#aus-history-log-btn`（`openRequestLog('history')`）；后者与设置页「问题反馈 / 请求日志」是同一页（`data-view="log"`）。`panel.ts#logOrigin` 记来源，`viewSourceOf(view)` 同时供 `paintNavState` 高亮与 `handleBottomTabTap` 的「重复点当前 tab」判定。**以后再加没有独立导航项的二级页，必须同时接好这三件套（origin / viewSourceOf / returnFromChild）**，只改 `returnFromChild` 会让底栏高亮跟错。
 - 列表按 `timestamp` 倒序；卡片含模型 / 时间 / `in/out/rate` / 费用 / 旧·新·详情；**卡片不外显毫秒耗时**，耗时只在详情窗口按秒展示。
 - **请求来源角标**单一来源 `ui/source-badge.ts#sourceBadgeOf`，**与记录状态角标是两条正交线**（状态讲这条记录准不准，来源讲是谁打出去的），同一条记录可以两枚并挂：来源在左、状态在右。只有 `extension` / `script` 出角标（蓝「扩展」/ 紫「脚本」），`tavern` / `unknown` 一律不标——主界面是默认情况，标出来只是噪音。
-- **记录状态角标**单一来源 `ui/history-badge.ts#historyBadgeOf`，优先级：用户中断（黄「中断」）→ 上游中断（红「中断」）→ 估算（黄「估算」）→ Agent（绿）→ 常规（灰）；面板只渲染 `badge.background/color/text` 并按 `kind` 给 title，**不许在面板里重新分支**。**详情里的「记录状态」与 Token「估算」小标必须用 `isEstimatedEntry(entry)`（读 `usageSource`）**——中断又靠估算补记时角标是「中断」，按角标判断会把本地推算值当成上游真实用量。
+- **记录状态角标**单一来源 `ui/history-badge.ts#historyBadgeOf`，优先级：用户中断（黄「中断」）→ 上游中断（红「中断」）→ 估算（黄「估算」）→ Agent（绿）→ 对话（灰，默认态）；面板只渲染 `badge.background/color/text` 并按 `kind` 给 title，**不许在面板里重新分支**。**默认态那枚由 `shouldShowStateBadge(badge, !!sourceBadge)` 决定是否渲染**——已有来源角标（扩展 / 脚本）时不再并排一枚「对话」（一条记录只留一枚描述性角标），中断 / 估算 / Agent 照常显示。**详情里的「记录状态」与 Token「估算」小标必须用 `isEstimatedEntry(entry)`（读 `usageSource`）**——中断又靠估算补记时角标是「中断」，按角标判断会把本地推算值当成上游真实用量。
 
 ### 历史详情窗口
 

@@ -12494,7 +12494,7 @@ function renderHistoryHealthBar(host, input) {
 //#region src/ui/history-badge.ts
 var NORMAL = {
 	kind: "normal",
-	text: "常规",
+	text: "对话",
 	background: "var(--ds-card-inner)",
 	color: "var(--ds-text-3)"
 };
@@ -12525,6 +12525,17 @@ function historyBadgeOf(entry) {
 		color: "var(--ds-green)"
 	};
 	return { ...NORMAL };
+}
+/**
+* 状态角标是否要渲染。
+*
+* 「对话」是默认态，本身不传递信息；一旦这一条已经用来源角标说明了「是扩展 / 脚本发出的」，
+* 再并排一枚「对话」只会占位。中断 / 估算 / Agent 这类带信息量的照常显示。
+*/
+function shouldShowStateBadge(badge, hasSourceBadge) {
+	if (!badge) return false;
+	if (hasSourceBadge && badge.kind === "normal") return false;
+	return true;
 }
 //#endregion
 //#region src/ui/source-badge.ts
@@ -14205,7 +14216,7 @@ function renderHistoryInner(doc, fullHist) {
 		const recordStateText = badge.kind === "interrupted-user" ? isEstimated ? "用户中断（token 为本地估算）" : "用户中断（已记录输出）" : badge.kind === "interrupted-upstream" ? isEstimated ? "上游中断（token 为本地估算）" : "上游中断（已记录输出）" : isEstimated ? "本地估算（上游未返回用量）" : "正常（上游用量）";
 		const sourceBadge = sourceBadgeOf(h);
 		const sourceBadgeHTML = sourceBadge ? `<span class="aus-source-badge" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:${sourceBadge.background};color:${sourceBadge.color};" title="${esc$3(sourceBadge.title)}">${esc$3(sourceBadge.text)}</span>` : "";
-		const originBadge = `<span class="aus-origin-badge" title="${esc$3(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:${badge.background};color:${badge.color};">${esc$3(badge.text)}</span>`;
+		const stateBadgeHTML = shouldShowStateBadge(badge, !!sourceBadge) ? `<span class="aus-origin-badge" title="${esc$3(originTitle)}" style="flex-shrink:0;display:inline-block;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;line-height:16px;background:${badge.background};color:${badge.color};">${esc$3(badge.text)}</span>` : "";
 		const recordDate = new Date(h.timestamp);
 		const recordDateText = recordDate.toLocaleDateString("zh-CN");
 		const recordTimeText = recordDate.toLocaleTimeString("zh-CN", { hour12: false });
@@ -14213,7 +14224,7 @@ function renderHistoryInner(doc, fullHist) {
     <div style="padding:10px 12px;background:var(--ds-card);border-radius:10px;margin-bottom:8px;font-size:var(--aus-fs-base);">
       <div class="aus-history-card-head" style="display:flex;justify-content:space-between;align-items:center;">
         <div class="aus-history-card-main" style="min-width:0;flex:1;">
-          <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${sourceBadgeHTML}${originBadge}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$3(h.model)} · ${esc$3(localTimeHM(h.timestamp))}</span></div>
+          <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${sourceBadgeHTML}${stateBadgeHTML}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$3(h.model)} · ${esc$3(localTimeHM(h.timestamp))}</span></div>
           <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · <span title="${esc$3(rateTitle(h))}">${rateText(h)}</span></div>
         </div>
         <div class="aus-history-card-actions" style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
