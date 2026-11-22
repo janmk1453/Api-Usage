@@ -3036,6 +3036,13 @@
 #aus-panel .aus-an,
 .aus-cl-mask.is-page .aus-an { width: min(520px, 100%); margin: auto; }
 
+/* 窄屏：与更新弹窗同一条底部上滑卡片。这里的 margin:auto 是给桌面端「内容超高时不被裁顶」用的，
+   flex 里 auto 外边距的优先级高于 align-items，不归零会把弹窗顶到屏幕正中、且丢掉底部直边。 */
+@media (max-width: 760px) {
+  #aus-panel .aus-an,
+  .aus-cl-mask.is-page .aus-an { margin: 0; }
+}
+
 .aus-an-list { display: grid; gap: 12px; }
 
 .aus-an-item {

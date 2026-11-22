@@ -13301,6 +13301,9 @@ function openChangelogDialog(options = {}) {
 		try {
 			mask.remove();
 		} catch {}
+		if (typeof options.onClose === "function") try {
+			options.onClose();
+		} catch {}
 	};
 	mask.addEventListener("click", (ev) => {
 		const target = ev.target;
@@ -13339,6 +13342,7 @@ function maybeShowChangelogDialog(options = {}) {
 		entry,
 		currentVersion: APP_VERSION,
 		onOpenAll: options.onOpenAll,
+		onClose: options.onClose,
 		markSeen: true
 	});
 }
@@ -15814,6 +15818,12 @@ function resetPanelState() {
 		releaseBackGuard();
 	} catch {}
 }
+/** 打开面板时试弹未读公告（异步、失败静默；判定见 announcement-dialog.ts） */
+function maybeShowAnnouncements() {
+	try {
+		import("./announcement-dialog-DHXwVCqp.js").then((m) => m.maybeShowAnnouncementDialog()).catch(() => {});
+	} catch {}
+}
 function openPanel() {
 	const doc = getDoc$1();
 	panelOpenStartTs = nowTs();
@@ -15863,12 +15873,13 @@ function openPanel() {
 		setTimeout(() => {
 			let changelogShown = false;
 			try {
-				changelogShown = maybeShowChangelogDialog({ onOpenAll: () => switchView("about") });
+				changelogShown = maybeShowChangelogDialog({
+					onOpenAll: () => switchView("about"),
+					onClose: () => setTimeout(maybeShowAnnouncements, 300)
+				});
 			} catch {}
 			if (changelogShown) return;
-			try {
-				import("./announcement-dialog-D6sHJOsM.js").then((m) => m.maybeShowAnnouncementDialog()).catch(() => {});
-			} catch {}
+			maybeShowAnnouncements();
 		}, 320);
 	} catch {}
 }

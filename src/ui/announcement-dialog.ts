@@ -5,8 +5,9 @@
  * 只是正文换成多条公告：一次列出全部未读条目，竖排、可滚动，底部一颗「我知道了」。
  * 关闭（含点遮罩、点右上角 ×）即把本次展示的 id 全部记为已读——同一条公告不会再弹第二次。
  *
- * 与更新弹窗的先后：Panel 打开时先试更新弹窗，那一轮弹了更新就不再弹公告（公告留到下次），
- * 避免一次打开糊两个弹窗。
+ * 与更新弹窗的先后：Panel 打开时先试更新弹窗；那一轮弹了更新就等它关掉之后再试公告
+ * （changelog-dialog 的 onClose 回调），保证一次只出一个弹窗、但两个都会送到。
+ * 公告只挂在面板里：面板已关（拉取公告要几秒，期间用户可能关掉面板）就放弃，留到下次打开。
  */
 import type { AnnouncementItem } from '../services/announcement';
 import {
@@ -56,13 +57,22 @@ export function announcementDialogHTML(items: AnnouncementItem[], options: { now
     + '</div>';
 }
 
-/** 打开弹窗；条目为空返回 false。关闭时把这批 id 记为已读。 */
+/** 面板还在吗：公告只挂在面板里，面板关着（display:none）或还没建好都不弹。 */
+function panelHost(): HTMLElement | null {
+  const doc: Document = (window.parent as any)?.document ?? document;
+  const panel = doc.getElementById('aus-panel') as HTMLElement | null;
+  if (!panel) return null;
+  if (panel.style.display === 'none') return null;
+  return panel;
+}
+
+/** 打开弹窗；条目为空或面板已关返回 false。关闭时把这批 id 记为已读。 */
 export function openAnnouncementDialog(items: AnnouncementItem[]): boolean {
   if (typeof document === 'undefined') return false;
   const list = (Array.isArray(items) ? items : []).filter(item => item && item.id);
   if (!list.length) return false;
   const doc: Document = (window.parent as any)?.document ?? document;
-  const host = (doc.getElementById('aus-panel') as HTMLElement | null) || doc.body;
+  const host = panelHost();
   if (!host) return false;
   try { doc.getElementById(MASK_ID)?.remove(); } catch { /* 已移除 */ }
 
@@ -102,6 +112,8 @@ export async function maybeShowAnnouncementDialog(options: { force?: boolean } =
     fresh = result.items;
   } catch { fresh = null; }
   if (!fresh) return false;
+  // 拉取要几秒，期间用户可能已经关掉面板：这时不弹，留到下次打开（openAnnouncementDialog 也会再校验一次）
+  if (!panelHost()) return false;
   const unread = unreadAnnouncementsFor(fresh, ctx);
   return unread.length ? openAnnouncementDialog(unread) : false;
 }

@@ -2289,6 +2289,11 @@ export function resetPanelState() {
   try { releaseBackGuard(); } catch {}
 }
 
+/** 打开面板时试弹未读公告（异步、失败静默；判定见 announcement-dialog.ts） */
+function maybeShowAnnouncements(): void {
+  try { import('./announcement-dialog').then(m => m.maybeShowAnnouncementDialog()).catch(() => {}); } catch {}
+}
+
 export function openPanel() {
   const doc = getDoc();
   panelOpenStartTs = nowTs();
@@ -2331,10 +2336,16 @@ export function openPanel() {
   try {
     setTimeout(() => {
       let changelogShown = false;
-      try { changelogShown = maybeShowChangelogDialog({ onOpenAll: () => switchView('about') }); } catch {}
-      // 更新弹窗这一轮已经出来就不再叠公告，留到下次打开（判定见 announcement-dialog.ts）
+      try {
+        changelogShown = maybeShowChangelogDialog({
+          onOpenAll: () => switchView('about'),
+          // 更新弹窗关掉之后接着看公告：一次只出一个弹窗，但两个都不漏
+          onClose: () => setTimeout(maybeShowAnnouncements, 300),
+        });
+      } catch {}
+      // 更新弹窗这一轮已经出来就先不叠公告，等它关掉（上面的 onClose 会再试）
       if (changelogShown) return;
-      try { import('./announcement-dialog').then(m => m.maybeShowAnnouncementDialog()).catch(() => {}); } catch {}
+      maybeShowAnnouncements();
     }, 320);
   } catch {}
 }

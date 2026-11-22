@@ -6,7 +6,10 @@
 ## 入口与面板
 
 - 酒馆左下角魔法棒 `#extensionsMenu → #aus_wand_entry` → `togglePanel()` 打开 `#aus-overlay + #aus-panel`（`position:absolute` 视口计算，监听 `scroll/resize`；**不用 `fixed`**，否则会被带 `transform` 的祖先把窄屏拽偏）。8 个视图经 `data-view` 切换、只重绘目标视图；桌面与窄屏都播 `aus-view-in`（220ms，`prefers-reduced-motion` 下 0ms，先起动画再建 DOM/ECharts）；图表宽度兜底用下一帧 `requestAnimationFrame`，不用定时器。
-- **公告弹窗**（`ui/announcement-dialog.ts`）：与「更新了什么」共用 `.aus-cl-mask` / `.aus-cl` 外壳（`style.css`「更新弹窗」段），正文换成多条公告，`.aus-an-*` 只负责内容排版（`[data-level]` 决定橙边 / 红底）。一次列出全部未读、关闭即 `markAnnouncementsRead` 把那批 id 记已读；`openPanel` 先试更新弹窗，那一轮弹了更新就不再叠公告。`.aus-an` 额外写 `margin:auto`：公告可能很长，`align-items:center` 在内容超高时会把顶部裁掉。
+- **公告弹窗**（`ui/announcement-dialog.ts`）：与「更新了什么」共用 `.aus-cl-mask` / `.aus-cl` 外壳（`style.css`「更新弹窗」段），正文换成多条公告，`.aus-an-*` 只负责内容排版（`[data-level]` 决定橙边 / 红底）。一次列出全部未读、关闭即 `markAnnouncementsRead` 把那批 id 记已读。
+  - **串行不叠**：`openPanel` 先试更新弹窗；弹出来了就等它的 `onClose`（`openChangelogDialog` 的选项）再过 300ms 试公告，所以一次只出一个弹窗、但两个都会送到。
+  - **只在面板里**：面板关着（`display:none`）或还没建好就放弃——拉公告要几秒，期间用户可能已经关掉面板，不能把弹窗甩到酒馆页面上；下次打开再试。
+  - **`.aus-an` 的 `margin:auto`** 只给桌面端用（公告可能很长，`align-items:center` 在内容超高时会把顶部裁掉）；**窄屏必须归零**，flex 的 auto 外边距优先级高于 `align-items:flex-end`，不归零会把弹窗顶到屏幕正中、还丢掉「上圆下方」的底部卡片形状。
 
 ## 安卓返回键（一次返回直接关面板）
 

@@ -384,13 +384,20 @@ function announcementDialogHTML(items, options = {}) {
 	}).join("");
 	return "<div class=\"aus-cl aus-an\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"aus-an-title\"><div class=\"aus-cl-head\"><div class=\"aus-cl-heading\"><span class=\"aus-cl-title\" id=\"aus-an-title\">公告</span><span class=\"aus-cl-version\">" + esc(count) + "</span></div><button type=\"button\" class=\"aus-cl-close\" data-an=\"close\" aria-label=\"关闭\">" + icon("close", 16) + "</button></div><div class=\"aus-cl-body\"><div class=\"aus-an-list\">" + body + "</div></div><div class=\"aus-cl-foot\"><button type=\"button\" class=\"aus-cl-btn is-primary\" data-an=\"ok\">我知道了</button></div></div>";
 }
-/** 打开弹窗；条目为空返回 false。关闭时把这批 id 记为已读。 */
+/** 面板还在吗：公告只挂在面板里，面板关着（display:none）或还没建好都不弹。 */
+function panelHost() {
+	const panel = (window.parent?.document ?? document).getElementById("aus-panel");
+	if (!panel) return null;
+	if (panel.style.display === "none") return null;
+	return panel;
+}
+/** 打开弹窗；条目为空或面板已关返回 false。关闭时把这批 id 记为已读。 */
 function openAnnouncementDialog(items) {
 	if (typeof document === "undefined") return false;
 	const list = (Array.isArray(items) ? items : []).filter((item) => item && item.id);
 	if (!list.length) return false;
 	const doc = window.parent?.document ?? document;
-	const host = doc.getElementById("aus-panel") || doc.body;
+	const host = panelHost();
 	if (!host) return false;
 	try {
 		doc.getElementById(MASK_ID)?.remove();
@@ -435,6 +442,7 @@ async function maybeShowAnnouncementDialog(options = {}) {
 		fresh = null;
 	}
 	if (!fresh) return false;
+	if (!panelHost()) return false;
 	const unread = unreadAnnouncementsFor(fresh, ctx);
 	return unread.length ? openAnnouncementDialog(unread) : false;
 }

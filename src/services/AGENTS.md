@@ -62,5 +62,5 @@ TauriTavern 的 Agent 模式把「一次 Run 的多次模型调用」交给宿�
 - **文件形状**：`{ "schema": 1, "items": [ { id, date, level, title, body: ["段1","段2"], minVersion, maxVersion, until, linkText, linkUrl } ] }`。`id` 必填且全局唯一（`[A-Za-z0-9._:-]{1,64}`），`title`/`body` 必填，`level` 只认 `info`/`warning`/`critical`，`until` 为 `YYYY-MM-DD`（当天仍有效），`linkUrl` 只认 `http(s)` 与 `/` 开头。清洗在 `services/announcement.ts#normalizeAnnouncementItem`：坏条目直接丢，不让弹窗炸。
 - **已读按条目 id**（`localStorage[aus_announcement_seen_v1]`，只留最近 200 条），不是按版本/构建号：同一条改文案不会重弹，新发的照常弹。`aus_announcement_cache_v1` 存上次成功拉到的列表，断网也能弹未读。
 - **拉取**：打开面板才检查，`ANNOUNCEMENT_MIN_INTERVAL_MS = 30 分钟` 节流（`aus_announcement_check_v1`）；源复用 `remoteSources(path, 'announce')` 两梯队（实时源 3.5s 超时，全灭再退 CDN）；任何失败（超时、被墙、JSON 坏）**一律静默**返回 null，不影响面板与任何统计。
-- **与更新弹窗互斥**：`ui/panel.ts#openPanel` 先试 `maybeShowChangelogDialog`，那一轮弹了更新就不再弹公告（留到下次），避免一次打开糊两个弹窗。
+- **与更新弹窗串行**：`ui/panel.ts#openPanel` 先试 `maybeShowChangelogDialog`；那一次弹了更新，就等它的 `onClose` 回调再过 300ms 试公告——一次只出一个弹窗，但两个都会送到（不靠「下次打开面板」补）。公告只在面板内弹：`announcement-dialog.ts#panelHost` 在打开前与网络返回后各校验一次面板可见性，面板已关就直接放弃，留到下次打开。
 - **隐私**：只 GET 静态 JSON，不带任何本地数据；`ui/help-view.ts` 隐私声明里已写明。
