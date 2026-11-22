@@ -3,17 +3,17 @@ import { i as state$2, n as getHistoryForDisplay, r as getSelectedSave, s as mob
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as pricingSourceLabel, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-eS-MjD7E.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as pricingSourceLabel, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-BTkiTZ1e.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc$3, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { a as getDisplayCurrency, i as formatMoney, o as getWalletExchangeRate, t as cnyToDisplay$1 } from "./currency-Dr655frw.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
-import { a as captureDigest, c as clearRequestLog, d as summarizeRequestLog, i as registerRequestOriginSelf, l as readRecentTurns, o as listCaptureStages, s as LOG_VALUE_LIMIT, t as installInterception, u as readRequestLog } from "./interception-BqS9ffYf.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-Drm3DFZg.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-COz7ZLxE.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-BK0W7fvi.js";
+import { a as captureDigest, c as clearRequestLog, d as summarizeRequestLog, i as registerRequestOriginSelf, l as readRecentTurns, o as listCaptureStages, s as LOG_VALUE_LIMIT, t as installInterception, u as readRequestLog } from "./interception-DwJ2kGGX.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-4Vm-ReTn.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, h as icon, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-BOSmIQOU.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-BqDgbeJS.js";
 import { a as listTapRecords, i as clearTapRecords, n as tapDiagnostics, o as subscribeTap, r as stripModelTag } from "./request-tap-DqE8LPaj.js";
 //#region src/constants/version.ts
-var APP_VERSION = String("3.2.4");
+var APP_VERSION = String("3.2.3");
 /**
 * 构建号：manifest.json#build_no → __BUILD_NO__。
 *
@@ -24,7 +24,7 @@ var APP_VERSION = String("3.2.4");
 * 规则（与 AGENTS.md 同步）：未经用户当轮明确要求不得改动；确需改动时在现有值上 +1，
 * 同一次发布内不要重复递增。
 */
-var BUILD_NO = String("3");
+var BUILD_NO = String("4");
 /** 更新弹窗的已读键：版本号 + 构建号；拿不到构建号时退回纯版本号 */
 var APP_BUILD_TAG = BUILD_NO ? `${APP_VERSION}|${BUILD_NO}` : APP_VERSION;
 //#endregion
@@ -71,7 +71,7 @@ async function exportHistory() {
 		path: "",
 		proxy: ""
 	};
-	const _appVer = "3.2.4";
+	const _appVer = "3.2.3";
 	let fullHist = [];
 	try {
 		fullHist = await repository.getAllHistory();
@@ -9649,7 +9649,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-Drm3DFZg.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-4Vm-ReTn.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -13162,28 +13162,13 @@ function stripGuardState(state) {
 /** 更新日志（最新在前） */
 var CHANGELOG = [
 	{
-		version: "r3.2.4",
-		buildNo: 3,
+		version: "r3.2.3",
+		buildNo: 4,
 		date: "2026-11-22",
-		sections: [
-			{
-				kind: "feature",
-				items: [
-					"消息顶部展示对话数据与费用",
-					"TT酒馆：在 酒馆-用户设置 中，提供额外的消息费用选择框，基于TT原有逻辑，在消息顶部额外展示对话费用",
-					"ST酒馆：TT在ST的基础上在 酒馆-用户设置 中增加了 首字延迟、生成速度、缓存命中率 的勾选显示，对此我们迁移了相关能力并额外提供了 对话费用 展示",
-					"记录现在支持定位区分不同扩展/脚本的请求"
-				]
-			},
-			{
-				kind: "improve",
-				items: ["趋势预测只统计对话类请求"]
-			},
-			{
-				kind: "fix",
-				items: ["同一供应商被扩展请求拆成两个钱包"]
-			}
-		]
+		sections: [{
+			kind: "fix",
+			items: ["ST酒馆中自更新失效，极端条件下历史数据错位"]
+		}]
 	},
 	{
 		version: "r3.2.3fix",
@@ -15798,7 +15783,7 @@ function createPanel() {
 	doc.body.appendChild(overlay);
 	doc.body.appendChild(panel);
 	try {
-		import("./update-Dv0tao3B.js").then((mod) => mod.syncUpdateIndicators?.());
+		import("./update-Dqmv4xu9.js").then((mod) => mod.syncUpdateIndicators?.());
 	} catch {}
 	try {
 		applyTheme(theme);
@@ -15959,7 +15944,7 @@ function createPanel() {
 		initForecastView();
 	} catch {}
 	try {
-		import("./update-Dv0tao3B.js").then((m) => {
+		import("./update-Dqmv4xu9.js").then((m) => {
 			const branchBtn = doc.getElementById("aus-update-branch-btn");
 			const branchLabel = doc.getElementById("aus-update-branch-label");
 			const branchDrop = doc.getElementById("aus-update-branch-dropdown");
@@ -15998,7 +15983,7 @@ function createPanel() {
 		if (updBtn) updBtn.onclick = () => {
 			updBtn.textContent = "检查中…";
 			updBtn.setAttribute("disabled", "");
-			import("./update-Dv0tao3B.js").then((m) => m.checkUpdate(true).finally(() => {
+			import("./update-Dqmv4xu9.js").then((m) => m.checkUpdate(true).finally(() => {
 				updBtn.textContent = "检查更新";
 				updBtn.removeAttribute("disabled");
 			}));
@@ -16008,7 +15993,7 @@ function createPanel() {
 			if (runUpdBtn.hasAttribute("disabled")) return;
 			runUpdBtn.textContent = "更新中…";
 			runUpdBtn.setAttribute("disabled", "");
-			import("./update-Dv0tao3B.js").then((m) => m.updateSelf()).then((res) => {
+			import("./update-Dqmv4xu9.js").then((m) => m.updateSelf()).then((res) => {
 				if (res.ok && res.changed) {
 					const bannerEl = doc.getElementById("aus-update-banner");
 					if (bannerEl) {
@@ -16228,10 +16213,10 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-CQ7hXCUp.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-CQaqlyaO.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
-		import("./update-Dv0tao3B.js").then((m) => {
+		import("./update-Dqmv4xu9.js").then((m) => {
 			m.syncUpdateIndicators?.();
 			m.maybeAutoCheck();
 		});
@@ -16911,10 +16896,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-BqS9ffYf.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DwJ2kGGX.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-CQ7hXCUp.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CQaqlyaO.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-DqE8LPaj.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -16928,10 +16913,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-BqS9ffYf.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DwJ2kGGX.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-CQ7hXCUp.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CQaqlyaO.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-DqE8LPaj.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -17003,10 +16988,10 @@ async function teardownRuntime() {
 		uninstallMessageCost();
 	} catch {}
 	try {
-		import("./interception-BqS9ffYf.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-DwJ2kGGX.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-CQ7hXCUp.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-CQaqlyaO.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -17022,13 +17007,13 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-Drm3DFZg.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-4Vm-ReTn.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-Dr655frw.js").then((n) => n.n)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-BK0W7fvi.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-BqDgbeJS.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -17081,19 +17066,19 @@ function onEnable() {
 		installMessageCost();
 	} catch {}
 	try {
-		import("./interception-BqS9ffYf.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-DwJ2kGGX.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-CQ7hXCUp.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CQaqlyaO.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-Drm3DFZg.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-4Vm-ReTn.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-Dr655frw.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-BK0W7fvi.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-BqDgbeJS.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -17121,7 +17106,7 @@ async function init() {
 	ensureStyleScope();
 	try {
 		setTimeout(() => {
-			import("./update-Dv0tao3B.js").then((m) => m.probeForcedUpdateAtStartup()).catch(() => {});
+			import("./update-Dqmv4xu9.js").then((m) => m.probeForcedUpdateAtStartup()).catch(() => {});
 		}, 3e3);
 	} catch {}
 	try {
@@ -17136,19 +17121,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-Drm3DFZg.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-4Vm-ReTn.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-Dr655frw.js").then((n) => n.n)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-BK0W7fvi.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-BqDgbeJS.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-CQ7hXCUp.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CQaqlyaO.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -17173,7 +17158,7 @@ async function init() {
 			installMessageCost();
 		} catch {}
 		try {
-			import("./pricing-sync-BK0W7fvi.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-BqDgbeJS.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();
