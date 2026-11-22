@@ -551,7 +551,7 @@ function bindPicker() {
     tBtn.onclick = () => {
       typePickerOpen = !typePickerOpen;
       closeFilterDropdowns('type');
-      tDropdown.style.display = typePickerOpen ? 'flex' : 'none';
+      tDropdown.style.display = typePickerOpen ? 'block' : 'none';
       if (typePickerOpen) {
         renderTypePicker();
         positionFilterDropdown(tBtn as HTMLElement, tDropdown as HTMLElement);
