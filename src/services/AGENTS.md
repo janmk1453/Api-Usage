@@ -54,3 +54,4 @@ TauriTavern 的 Agent 模式把「一次 Run 的多次模型调用」交给宿�
 - compare 同样竞速：`api.github.com` 直连 + `gh-proxy.com` 包装；拿不到 compare 不放弃，改用远端 `manifest.json` 版本比 `isNewer`（`remoteKind = 'version'`，提示「发现 <分支> 分支新版本 vX（当前 vY），可在关于页更新」）。
 - 源顺序与 URL 形状由 `services/update-sources.test.ts` 锁定，改源必须同步该测试。
 - 跨分支更新先 `/api/extensions/switch` 再 `/api/extensions/update`，成功后刷新；自动检查 10 分钟节流。
+- **扩展名只发目录名**（`update.ts#extensionFolderName`）：宿主所有 `/api/extensions/*` 端点都是「`sanitize(extensionName)` + `path.join(basePath, name)`」，而 `basePath` 本身已是用户扩展目录或全局 `third-party` 目录，所以只认单段目录名 `Api-Usage`。清单与 `/discover` 给的是逻辑名 `third-party/Api-Usage`，原样回传会被 sanitize 成 `third-partyApi-Usage` → 404「Directory does not exist at …」。`extensionNameHint` / `extensionNameCandidates` / `extensionScopeFromList` / `versionProbePlan` 必须全部过这个归一化，`update-sources.test.ts` 锁定该行为。
