@@ -83,6 +83,29 @@ describe('连接身份', () => {
     });
   });
 
+  it('同一域名不因接入来源不同被拆成两个接入', () => {
+    const byCustom = buildEndpointContext({ chat_completion_source: 'custom', custom_url: 'https://tokenhub.tencentmaas.com/v1' });
+    const byOpenai = buildEndpointContext({ chat_completion_source: 'openai', custom_url: 'https://tokenhub.tencentmaas.com/v1' });
+    const byMissing = buildEndpointContext({ custom_url: 'https://tokenhub.tencentmaas.com/v1' });
+    const byBare = buildEndpointContext({ reverse_proxy: 'tokenhub.tencentmaas.com' });
+
+    expect(byCustom.endpointId).toBeTruthy();
+    expect(byOpenai.endpointId).toBe(byCustom.endpointId);
+    expect(byMissing.endpointId).toBe(byCustom.endpointId);
+    expect(byBare.endpointId).toBe(byCustom.endpointId);
+    expect(byOpenai.endpointLabel).toBe('tokenhub.tencentmaas.com');
+  });
+
+  it('没有地址的官方来源仍按来源区分，不与自定义接口混同', () => {
+    const openai = buildEndpointContext({ chat_completion_source: 'openai' });
+    const groq = buildEndpointContext({ chat_completion_source: 'groq' });
+    const deepseek = buildEndpointContext({ chat_completion_source: 'deepseek' });
+
+    expect(openai.endpointId).toBeTruthy();
+    expect(openai.endpointId).not.toBe(groq.endpointId);
+    expect(openai.endpointId).not.toBe(deepseek.endpointId);
+  });
+
   it('严格隐私模式忽略反向代理密码', () => {
     const rawSecret = 'sk-live-never-store';
     const context = buildConnectionContext({

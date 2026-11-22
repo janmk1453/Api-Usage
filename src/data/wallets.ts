@@ -69,17 +69,47 @@ export function isDeepSeekOfficialConnection(connection: HistoryConnection | nul
   return sourceType === 'deepseek' && !endpointId;
 }
 
+/** 从接入标签里取出可比对的主机名；「DeepSeek 官方」这类中文标签返回空串 */
+function hostOfEndpointLabel(value: string | null | undefined): string {
+  const text = cleanText(value).toLowerCase();
+  if (!text) return '';
+  const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`;
+  try {
+    const host = new URL(candidate).host.toLowerCase().replace(/\.$/, '');
+    return host.includes('.') ? host : '';
+  } catch {
+    return '';
+  }
+}
+
+export type WalletMatchKind = 'endpoint' | 'host' | 'source';
+
+/** 钱包与接入的匹配方式；endpoint 是地址身份严格相等，host 是同一域名兜底 */
+export function walletMatchKind(
+  wallet: WalletConfig,
+  connection: HistoryConnection | null | undefined,
+): WalletMatchKind | null {
+  if (!wallet || !connection) return null;
+  if (wallet.id === DEEPSEEK_WALLET_ID) return isDeepSeekOfficialConnection(connection) ? 'endpoint' : null;
+  if (wallet.endpointId && connection.endpointId) {
+    if (wallet.endpointId === connection.endpointId) return 'endpoint';
+    // 同一域名即同一接入：endpointId 的算法一旦变过（旧版本掺过 sourceType），
+    // 同一供应商就会算出两个 id；按域名兜底，别让同一家再被拆成两个钱包。
+    const walletHost = hostOfEndpointLabel(wallet.endpointLabel) || hostOfEndpointLabel(wallet.endpointDisplay);
+    const connectionHost = hostOfEndpointLabel(connection.endpointLabel);
+    return walletHost && connectionHost && walletHost === connectionHost ? 'host' : null;
+  }
+  if (wallet.sourceType && connection.sourceType) {
+    return wallet.sourceType === connection.sourceType && !wallet.endpointId && !connection.endpointId ? 'source' : null;
+  }
+  return null;
+}
+
 export function walletMatchesConnection(
   wallet: WalletConfig,
   connection: HistoryConnection | null | undefined,
 ): boolean {
-  if (!wallet || !connection) return false;
-  if (wallet.id === DEEPSEEK_WALLET_ID) return isDeepSeekOfficialConnection(connection);
-  if (wallet.endpointId && connection.endpointId) return wallet.endpointId === connection.endpointId;
-  if (wallet.sourceType && connection.sourceType) {
-    return wallet.sourceType === connection.sourceType && !wallet.endpointId && !connection.endpointId;
-  }
-  return false;
+  return walletMatchKind(wallet, connection) !== null;
 }
 
 export function findWalletForConnection(

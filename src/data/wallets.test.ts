@@ -12,6 +12,7 @@ import {
   observeCredential,
   observeModel,
   walletBalanceToCny,
+  walletMatchKind,
   walletModelMatches,
 } from './wallets';
 import { DEEPSEEK_WALLET_ID, defaultCatalogProvider, isFirstPartyCatalogProvider } from '../types/wallet';
@@ -95,6 +96,43 @@ describe('钱包数据', () => {
     }, defaultSettings(), 1000);
 
     expect(wallet?.id).toBe(DEEPSEEK_WALLET_ID);
+  });
+
+  it('同一域名即同一接入：地址身份不同也匹配同一个钱包', () => {
+    const wallet = createWalletFromConnection({
+      sourceType: 'custom',
+      endpointId: 'old-endpoint-hash',
+      endpointLabel: 'tokenhub.tencentmaas.com',
+      credentialId: null,
+      credentialLabel: null,
+    }, defaultSettings(), 1000)!;
+
+    // 地址身份一致：严格相等
+    expect(walletMatchKind(wallet, {
+      sourceType: 'custom',
+      endpointId: 'old-endpoint-hash',
+      endpointLabel: 'tokenhub.tencentmaas.com',
+      credentialId: null,
+      credentialLabel: null,
+    })).toBe('endpoint');
+
+    // 旧算法按不同的 chat_completion_source 算出了另一个 id：同域名兜底
+    expect(walletMatchKind(wallet, {
+      sourceType: 'openai',
+      endpointId: 'new-endpoint-hash',
+      endpointLabel: 'tokenhub.tencentmaas.com',
+      credentialId: null,
+      credentialLabel: null,
+    })).toBe('host');
+
+    // 不同域名绝不能误配
+    expect(walletMatchKind(wallet, {
+      sourceType: 'openai',
+      endpointId: 'another-hash',
+      endpointLabel: 'other.example.com',
+      credentialId: null,
+      credentialLabel: null,
+    })).toBeNull();
   });
 
   it('价格来源只保留第一方模型厂商', () => {

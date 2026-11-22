@@ -177,11 +177,14 @@ function buildEndpointIdentity(
   const sourceIsOfficial = String(sourceType || '').trim().toLowerCase() === 'deepseek' && !endpoint;
   const endpointIsOfficial = isDeepSeekOfficialEndpoint(endpoint?.canonical) || isDeepSeekOfficialEndpoint(endpoint?.label);
   const isOfficial = sourceIsOfficial || endpointIsOfficial;
+  // 接入身份只由「接入地址」决定：同一域名永远算同一个接入，不掺 sourceType。
+  // 掺进去会给同一供应商凭空造出第二个接入（进而第二个钱包、费用按 0 记）——
+  // 扩展/脚本自己拼请求体时最容易触发：它可能不填 chat_completion_source，也可能填别的值。
   const endpointId = isOfficial
     ? officialEndpointId('deepseek')
-    : ((sourceType || endpoint)
-      ? shortHash(`${sourceType || 'unknown'}|${endpoint?.canonical || 'official:' + (sourceType || 'unknown')}`)
-      : null);
+    : endpoint
+      ? shortHash(`endpoint|${endpoint.canonical}`)
+      : (sourceType ? officialEndpointId(sourceType) : null);
   const endpointLabel = isOfficial
     ? 'DeepSeek 官方'
     : (endpoint?.label || (sourceType ? OFFICIAL_LABELS[sourceType] || `${sourceType} 接口` : null));

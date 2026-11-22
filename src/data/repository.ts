@@ -440,7 +440,9 @@ function ensureWalletForConnection(
     wallet = created;
     changed = true;
   }
-  if (connection.endpointId && wallet.endpointId !== connection.endpointId && wallet.id !== DEEPSEEK_WALLET_ID) {
+  // 只在钱包还没登记地址时补写：同一域名兜底匹配到的老钱包不能改写，
+  // 否则同一个钱包的 endpointId 会随请求体在旧/新算法之间来回抖动，历史记录就对不上了。
+  if (connection.endpointId && !wallet.endpointId && wallet.id !== DEEPSEEK_WALLET_ID) {
     wallet.endpointId = connection.endpointId;
     wallet.updatedAt = now;
     changed = true;
@@ -612,26 +614,15 @@ function migrateWalletEndpoints(ignored: Set<string>, now = Date.now()): boolean
   return changed;
 }
 
-function migrateWallets(hot: any, cold: any[] = []): boolean {
-  const now = Date.now();
-  const normalized = normalizeWallets(state.wallets, state.settings, now);
-  let changed = normalized !== state.wallets;
-  state.wallets = normalized;
-  state.walletIgnored = Array.isArray(state.walletIgnored)
-    ? Array.from(new Set(state.walletIgnored.map((id) => String(id || '').trim()).filter(Boolean)))
-    : [];
-  const ignored = new Set(state.walletIgnored);
-  const official = state.wallets.find((wallet) => wallet.id === DEEPSEEK_WALLET_ID)
-    || createDeepSeekWallet(state.settings, now);
-  if (!state.wallets.some((wallet) => wallet.id === official.id)) state.wallets.unshift(official);
-  changed = migrateLegacyPricing(official, state.settings.customModels || []) || changed;
-  changed = migrateLegacyBalance(official) || changed;
-  changed = refreshBuiltinWalletModels(official, now) || changed;
-  migrateLegacyWalletApiKey(official.id);
-  changed = migrateWalletEndpoints(ignored, now) || changed;
-  const allHistory = [...(cold || []), ...(state.history || [])];
-  changed = migrateHistoryModels(allHistory) || changed;
-  for (const entry of allHistory) {
+/**
+ * 把历史条目的接入身份与钱包归属归一：
+ * - endpointId / endpointLabel 按当前算法重算（旧版本掺过 sourceType，同一域名会有两个 id）；
+ * - 找不到钱包时按接入自动补一个，条目钱包 id 跟着钱包走。
+ * 幂等：已是目标状态时逐条不动。hydrate 的接入身份迁移与 migrateWallets 共用这一份。
+ */
+function migrateHistoryWalletLinks(allHistory: any[], ignored: Set<string>, now = Date.now()): boolean {
+  let changed = false;
+  for (const entry of allHistory || []) {
     const connection = historyConnection(entry);
     if (!connection) continue;
     if (entry.endpointId !== connection.endpointId || entry.endpointLabel !== connection.endpointLabel) {
@@ -674,6 +665,29 @@ function migrateWallets(hot: any, cold: any[] = []): boolean {
       changed = true;
     }
   }
+  return changed;
+}
+
+function migrateWallets(hot: any, cold: any[] = []): boolean {
+  const now = Date.now();
+  const normalized = normalizeWallets(state.wallets, state.settings, now);
+  let changed = normalized !== state.wallets;
+  state.wallets = normalized;
+  state.walletIgnored = Array.isArray(state.walletIgnored)
+    ? Array.from(new Set(state.walletIgnored.map((id) => String(id || '').trim()).filter(Boolean)))
+    : [];
+  const ignored = new Set(state.walletIgnored);
+  const official = state.wallets.find((wallet) => wallet.id === DEEPSEEK_WALLET_ID)
+    || createDeepSeekWallet(state.settings, now);
+  if (!state.wallets.some((wallet) => wallet.id === official.id)) state.wallets.unshift(official);
+  changed = migrateLegacyPricing(official, state.settings.customModels || []) || changed;
+  changed = migrateLegacyBalance(official) || changed;
+  changed = refreshBuiltinWalletModels(official, now) || changed;
+  migrateLegacyWalletApiKey(official.id);
+  changed = migrateWalletEndpoints(ignored, now) || changed;
+  const allHistory = [...(cold || []), ...(state.history || [])];
+  changed = migrateHistoryModels(allHistory) || changed;
+  changed = migrateHistoryWalletLinks(allHistory, ignored, now) || changed;
   const backfillDone = Number(hot?._walletPricingBackfillVersion || 0) >= WALLET_PRICING_BACKFILL_VERSION;
   if (!backfillDone) {
     changed = backfillLegacyExactPricing(allHistory) || changed;
@@ -688,6 +702,15 @@ function migrateWallets(hot: any, cold: any[] = []): boolean {
 }
 
 const WALLET_PRICING_BACKFILL_VERSION = 1;
+
+/**
+ * 接入身份算法版本：1 = 旧算法（endpointId 掺了 sourceType），2 = 只由接入地址决定。
+ * 旧数据里同一个供应商会因 chat_completion_source 不同被拆成两个接入、两个钱包，
+ * 扩展/脚本自己拼请求体触发的那次还会落到没配价的新钱包上，费用记 0。
+ * 升级时借这个版本号强制走一次完整迁移（钱包合并 + 历史归位 + 整库重算），跑完落版本号。
+ */
+const ENDPOINT_IDENTITY_VERSION = 2;
+const ENDPOINT_IDENTITY_KEY = '_endpointIdentityVersion';
 
 /**
  * Agent 模式条目的重算：一次 Run 可能跨多个钱包、多个时段，
@@ -1323,6 +1346,15 @@ export const repository = {
         wallet.lastUsedAt = nowTs;
       }
     } catch {}
+    // 记录跟着钱包走：域名兜底匹配到的老钱包可能还留着旧算法的 endpointId，
+    // 这里以钱包登记的地址为准，免得同一供应商在统计里又冒出第二条「接入」。
+    if (wallet && connection && wallet.endpointId && connection.endpointId && wallet.endpointId !== connection.endpointId) {
+      connection = {
+        ...connection,
+        endpointId: wallet.endpointId,
+        endpointLabel: wallet.endpointLabel || connection.endpointLabel,
+      };
+    }
     // 同一请求的 fetch 与 GENERATION_ENDED 双路径去重；无请求标识时不去重，避免误删合法重复请求。
     try {
       const now = Date.now();
@@ -2034,7 +2066,10 @@ export const repository = {
     // 老记录的金额依然有效，整段清洗/迁移/重算都可以跳过；不一致（首次升级、改价、改峰谷、
     // 指纹缺失）才走完整流程。日常只是历史变多不再触发整库重算与整份重写。
     const storedFingerprint = hot && typeof hot[CALC_FINGERPRINT_KEY] === 'string' ? String(hot[CALC_FINGERPRINT_KEY]) : '';
-    const needFullRecalc = storedFingerprint !== computeCalcFingerprint();
+    // 接入身份换代（见 ENDPOINT_IDENTITY_VERSION）必须走一次完整迁移：钱包按新算法去重合并、
+    // 历史条目改挂到合并后的钱包，再整库重算——不然只重发产物的同版本升级永远修不好 0 元记录。
+    const identityDone = Number((hot as any)?.[ENDPOINT_IDENTITY_KEY] || 0) >= ENDPOINT_IDENTITY_VERSION;
+    const needFullRecalc = storedFingerprint !== computeCalcFingerprint() || !identityDone;
     let coldDirty = false;
     if (needFullRecalc) {
       // 迁移：旧历史补 finishReason 并重算 isTruncated（兼容 sensitive/content_filter 等非正常结束）
@@ -2073,6 +2108,13 @@ export const repository = {
       try { this.pruneZeroEntries(); } catch {}
       // 对历史成本按归一化模型重算，修复 [masa]/[OR] 前缀导致的 0 费用
       try { if (await this.recalcAll(cold)) coldDirty = true; } catch {}
+      // 迁移全部跑完才落身份版本号：中途抛错下次启动还会再试一遍
+      if (!identityDone) {
+        try {
+          saveHot({ [ENDPOINT_IDENTITY_KEY]: ENDPOINT_IDENTITY_VERSION } as any);
+          if (hot && typeof hot === 'object') hot[ENDPOINT_IDENTITY_KEY] = ENDPOINT_IDENTITY_VERSION;
+        } catch {}
+      }
     }
     // 迁移：清掉「一次请求被多层包装各写一遍」留下的同轮重复条目（先备份再删，幂等）
     try {
