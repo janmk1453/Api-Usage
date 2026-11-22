@@ -8,7 +8,7 @@ import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday
 import { a as getDisplayCurrency, i as formatMoney, o as getWalletExchangeRate, t as cnyToDisplay$1 } from "./currency-Dr655frw.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
 import { a as captureDigest, c as clearRequestLog, d as summarizeRequestLog, i as registerRequestOriginSelf, l as readRecentTurns, o as listCaptureStages, s as LOG_VALUE_LIMIT, t as installInterception, u as readRequestLog } from "./interception-CxiTj_Mm.js";
-import { a as CHANGELOG, c as BUILD_NO, i as renderChangelogCard, n as changelogSectionsHTML, o as APP_BUILD_TAG, r as formatChangelogDate, s as APP_VERSION, t as bindChangelog } from "./changelog-e06A3fQu.js";
+import { a as CHANGELOG, c as BUILD_NO, i as renderChangelogCard, n as changelogSectionsHTML, o as APP_BUILD_TAG, r as formatChangelogDate, s as APP_VERSION, t as bindChangelog } from "./changelog-i35gZh7M.js";
 import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-CbjtRaqE.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
 import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-CVPrlskR.js";
@@ -15821,7 +15821,7 @@ function resetPanelState() {
 /** 打开面板时试弹未读公告（异步、失败静默；判定见 announcement-dialog.ts） */
 function maybeShowAnnouncements() {
 	try {
-		import("./announcement-dialog-DHXwVCqp.js").then((m) => m.maybeShowAnnouncementDialog()).catch(() => {});
+		import("./announcement-dialog-BNzOSnhk.js").then((m) => m.maybeShowAnnouncementDialog()).catch(() => {});
 	} catch {}
 }
 function openPanel() {

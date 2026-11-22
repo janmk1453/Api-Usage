@@ -1,5 +1,5 @@
 import { t as esc } from "./date-Dsu8hrMO.js";
-import { r as formatChangelogDate, s as APP_VERSION } from "./changelog-e06A3fQu.js";
+import { r as formatChangelogDate, s as APP_VERSION } from "./changelog-i35gZh7M.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
 import { t as remoteSources } from "./update-BsrR54Lw.js";
 //#region src/services/announcement.ts
