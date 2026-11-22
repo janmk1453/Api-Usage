@@ -1,5 +1,5 @@
 /**
- * 统计页 / 历史记录页筛选状态的持久化（时间维度、模型、对话、接入类型、API 密钥）。
+ * 统计页 / 历史记录页筛选状态的持久化（时间维度、请求类型、模型、对话、接入类型、API 密钥）。
  *
  * 为什么放 localStorage 而不是 settings：与 `chart-prefs.ts`、`aus_forecast_prefs_v1`
  * 同一定位——纯展示偏好，不进导出、不参与 WebDAV 同步、不污染 `extensionSettings`。
@@ -9,6 +9,8 @@
  * 只做「整段读、按分片合并写」：stats 与 history 各自一片，
  * 这样改统计页筛选不会覆盖历史页已保存的筛选。
  */
+import { REQUEST_TYPE_KEYS } from '../data/sample-quality';
+
 export const FILTER_PREFS_KEY = 'aus_filter_prefs_v1';
 
 export type StatsRangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom' | 'all';
@@ -32,12 +34,15 @@ export type StatsFilterPrefs = {
   customEnd: string;
   /** 选中的模型列表，空数组表示全部 */
   models: string[];
+  /** 请求类型：conversation / extension / script / interrupted / estimated / agent，缺省表示全部 */
+  requestType: string;
   chat: string;
   endpoint: string;
   credential: string;
 };
 
 export type HistoryFilterPrefs = {
+  requestType: string;
   model: string;
   chat: string;
   endpoint: string;
@@ -55,7 +60,9 @@ export type FilterPrefsPatch = {
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const HISTORY_KEYS = ['model', 'chat', 'endpoint', 'credential'] as const;
+const HISTORY_KEYS = ['requestType', 'model', 'chat', 'endpoint', 'credential'] as const;
+/** 与 data/computed.ts#STATS_FILTER_ALL 同一哨兵值；「全部」是默认态，不必落盘 */
+const FILTER_ALL = '__all__';
 
 function isPlainObject(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -88,6 +95,12 @@ function normalizeText(value: unknown): string | undefined {
   return typeof value === 'string' && value ? value : undefined;
 }
 
+/** 请求类型白名单校验：脏值直接丢弃，回落到「全部」 */
+export function normalizeRequestType(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value || value === FILTER_ALL) return undefined;
+  return (REQUEST_TYPE_KEYS as readonly string[]).includes(value) ? value : undefined;
+}
+
 function normalizeModels(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const out: string[] = [];
@@ -115,6 +128,8 @@ export function normalizeStatsPrefs(value: unknown): Partial<StatsFilterPrefs> {
   if (endpoint) out.endpoint = endpoint;
   const credential = normalizeText(value.credential);
   if (credential) out.credential = credential;
+  const requestType = normalizeRequestType(value.requestType);
+  if (requestType) out.requestType = requestType;
   return out;
 }
 

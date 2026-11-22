@@ -433,6 +433,40 @@ function isConversationEntry(entry) {
 	const kind = entry?.requestOrigin?.kind;
 	return kind !== "extension" && kind !== "script";
 }
+var REQUEST_TYPE_KEYS = [
+	"conversation",
+	"extension",
+	"script",
+	"interrupted",
+	"estimated",
+	"agent"
+];
+/**
+* 一条记录命中的请求类型。
+*
+* 这里并存两条正交的轴：
+* - 来源轴：对话（酒馆主流程或未识别）/ 扩展 / 脚本；
+* - 状态轴：中断 / 估算 / Agent。
+* 所以一条记录可能同时命中多个键——筛选时用「包含」而非互斥，
+* 选「扩展」也能看到那几条被中断的扩展请求，选「中断」也能看到中断的对话请求。
+*/
+function requestTypeKeysOf(entry) {
+	if (!entry) return [];
+	const keys = [];
+	const kind = String(entry?.requestOrigin?.kind || "");
+	if (kind === "extension") keys.push("extension");
+	else if (kind === "script") keys.push("script");
+	else keys.push("conversation");
+	if (isInterruptedEntry(entry)) keys.push("interrupted");
+	if (isEstimatedEntry(entry)) keys.push("estimated");
+	if (String(entry?.origin || "") === "agent") keys.push("agent");
+	return keys;
+}
+/** 是否属于某个请求类型（调用方负责先把「全部」这种哨兵值排除掉） */
+function matchesRequestType(entry, type) {
+	if (!type) return true;
+	return requestTypeKeysOf(entry).includes(type);
+}
 function clamp01$1(value) {
 	if (!Number.isFinite(value)) return 0;
 	return Math.max(0, Math.min(1, value));
@@ -1192,6 +1226,9 @@ function filterStatsHistory(entries, filter = {}) {
 			if (filter.endpoint === "__unknown__") {
 				if (entry.endpointId) return false;
 			} else if (entry.endpointId !== filter.endpoint) return false;
+		}
+		if (filter.requestType && filter.requestType !== "__all__") {
+			if (!matchesRequestType(entry, filter.requestType)) return false;
 		}
 		if (filter.credential && filter.credential !== "__all__") {
 			if (filter.credential === "__unknown__") {
@@ -5043,7 +5080,7 @@ function renderXDrop(id) {
 //#endregion
 //#region src/ui/filter-prefs.ts
 /**
-* 统计页 / 历史记录页筛选状态的持久化（时间维度、模型、对话、接入类型、API 密钥）。
+* 统计页 / 历史记录页筛选状态的持久化（时间维度、请求类型、模型、对话、接入类型、API 密钥）。
 *
 * 为什么放 localStorage 而不是 settings：与 `chart-prefs.ts`、`aus_forecast_prefs_v1`
 * 同一定位——纯展示偏好，不进导出、不参与 WebDAV 同步、不污染 `extensionSettings`。
@@ -5066,11 +5103,14 @@ var STATS_RANGE_KEYS = [
 ];
 var DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 var HISTORY_KEYS = [
+	"requestType",
 	"model",
 	"chat",
 	"endpoint",
 	"credential"
 ];
+/** 与 data/computed.ts#STATS_FILTER_ALL 同一哨兵值；「全部」是默认态，不必落盘 */
+var FILTER_ALL = "__all__";
 function isPlainObject(value) {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -5094,6 +5134,11 @@ function normalizeDate(value) {
 }
 function normalizeText(value) {
 	return typeof value === "string" && value ? value : void 0;
+}
+/** 请求类型白名单校验：脏值直接丢弃，回落到「全部」 */
+function normalizeRequestType(value) {
+	if (typeof value !== "string" || !value || value === FILTER_ALL) return void 0;
+	return REQUEST_TYPE_KEYS.includes(value) ? value : void 0;
 }
 function normalizeModels(value) {
 	if (!Array.isArray(value)) return void 0;
@@ -5121,6 +5166,8 @@ function normalizeStatsPrefs(value) {
 	if (endpoint) out.endpoint = endpoint;
 	const credential = normalizeText(value.credential);
 	if (credential) out.credential = credential;
+	const requestType = normalizeRequestType(value.requestType);
+	if (requestType) out.requestType = requestType;
 	return out;
 }
 function normalizeHistoryPrefs(value) {
@@ -5173,6 +5220,49 @@ function writeFilterPrefs(patch) {
 	} catch {}
 }
 //#endregion
+//#region src/ui/request-type-filter.ts
+var REQUEST_TYPE_OPTIONS = [
+	{
+		id: "conversation",
+		label: "对话",
+		title: "酒馆主流程或未识别来源发起的请求（含其中的中断与估算）"
+	},
+	{
+		id: "extension",
+		label: "扩展",
+		title: "第三方扩展自己直连生成的请求"
+	},
+	{
+		id: "script",
+		label: "脚本",
+		title: "酒馆助手等 iframe 脚本发起的请求"
+	},
+	{
+		id: "interrupted",
+		label: "中断",
+		title: "生成被中断（用户停止或上游断开）的记录"
+	},
+	{
+		id: "estimated",
+		label: "估算",
+		title: "用量由本地估算补记的记录"
+	},
+	{
+		id: "agent",
+		label: "Agent",
+		title: "TauriTavern 的 Agent 运行发起的记录"
+	}
+];
+var BY_ID = new Map(REQUEST_TYPE_OPTIONS.map((option) => [option.id, option]));
+function requestTypeLabel(id) {
+	if (!id || id === "__all__") return "全部";
+	return BY_ID.get(id)?.label || "全部";
+}
+function requestTypeTitle(id) {
+	if (!id || id === "__all__") return "按请求类型筛选";
+	return BY_ID.get(id)?.title || "按请求类型筛选";
+}
+//#endregion
 //#region src/ui/stats-view.ts
 var DEFAULT_RANGE = "30d";
 var currentRange = DEFAULT_RANGE;
@@ -5187,6 +5277,8 @@ var selectedEndpoint = STATS_FILTER_ALL;
 var endpointPickerOpen = false;
 var selectedCredential = STATS_FILTER_ALL;
 var credentialPickerOpen = false;
+var selectedRequestType = STATS_FILTER_ALL;
+var typePickerOpen = false;
 var lastStatsHistory = [];
 var restoredStatsPrefs = readFilterPrefs().stats;
 if (restoredStatsPrefs.range) currentRange = restoredStatsPrefs.range;
@@ -5196,6 +5288,7 @@ if (restoredStatsPrefs.models) selectedModels = restoredStatsPrefs.models.slice(
 if (restoredStatsPrefs.chat) selectedChat = restoredStatsPrefs.chat;
 if (restoredStatsPrefs.endpoint) selectedEndpoint = restoredStatsPrefs.endpoint;
 if (restoredStatsPrefs.credential) selectedCredential = restoredStatsPrefs.credential;
+if (restoredStatsPrefs.requestType) selectedRequestType = restoredStatsPrefs.requestType;
 function persistStatsFilters() {
 	writeFilterPrefs({ stats: {
 		range: currentRange,
@@ -5204,7 +5297,8 @@ function persistStatsFilters() {
 		models: selectedModels.slice(),
 		chat: selectedChat,
 		endpoint: selectedEndpoint,
-		credential: selectedCredential
+		credential: selectedCredential,
+		requestType: selectedRequestType
 	} });
 }
 function resetStatsFilters() {
@@ -5216,17 +5310,20 @@ function resetStatsFilters() {
 	selectedChat = STATS_FILTER_ALL;
 	selectedEndpoint = STATS_FILTER_ALL;
 	selectedCredential = STATS_FILTER_ALL;
+	selectedRequestType = STATS_FILTER_ALL;
 	pickerOpen = false;
 	modelPickerOpen = false;
 	chatPickerOpen = false;
 	endpointPickerOpen = false;
 	credentialPickerOpen = false;
+	typePickerOpen = false;
 	[
 		"aus-range-dropdown",
 		"aus-model-dropdown",
 		"aus-chat-dropdown",
 		"aus-endpoint-dropdown",
-		"aus-credential-dropdown"
+		"aus-credential-dropdown",
+		"aus-type-dropdown"
 	].forEach((id) => {
 		const el = doc.getElementById(id);
 		if (el) el.style.display = "none";
@@ -5363,7 +5460,8 @@ function currentStatsFilter() {
 		model: selectedModels.length ? selectedModels : STATS_FILTER_ALL,
 		chat: selectedChat,
 		endpoint: selectedEndpoint,
-		credential: selectedCredential
+		credential: selectedCredential,
+		requestType: selectedRequestType
 	};
 }
 function updateRangeHighlight() {
@@ -5550,6 +5648,28 @@ function renderCredentialPicker$1(history, endpoint = selectedEndpoint) {
 		};
 	});
 }
+function renderTypePicker() {
+	const doc = getDoc$7();
+	const dropdown = doc.getElementById("aus-type-dropdown");
+	const label = doc.getElementById("aus-type-label");
+	if (!dropdown || !label) return;
+	label.textContent = requestTypeLabel(selectedRequestType);
+	label.title = requestTypeTitle(selectedRequestType);
+	const optionHtml = (id, text, title) => {
+		const active = id === selectedRequestType ? "background:var(--ds-card);font-weight:600;" : "";
+		return `<div data-request-type="${esc$3(id)}" title="${esc$3(title)}" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}">${esc$3(text)}</div>`;
+	};
+	let html = optionHtml(STATS_FILTER_ALL, "全部", "按请求类型筛选");
+	for (const option of REQUEST_TYPE_OPTIONS) html += optionHtml(option.id, option.label, option.title);
+	dropdown.innerHTML = html;
+	dropdown.querySelectorAll("[data-request-type]").forEach((el) => {
+		el.onclick = () => {
+			selectedRequestType = el.getAttribute("data-request-type") || "__all__";
+			typePickerOpen = false;
+			closeDropdownThenPaint(dropdown, () => renderStatsView());
+		};
+	});
+}
 function positionFilterDropdown(btn, dropdown) {
 	try {
 		const panel = getDoc$7().getElementById("aus-panel");
@@ -5591,6 +5711,11 @@ function closeFilterDropdowns(except) {
 	if (except !== "credential") {
 		credentialPickerOpen = false;
 		const el = doc.getElementById("aus-credential-dropdown");
+		if (el) el.style.display = "none";
+	}
+	if (except !== "type") {
+		typePickerOpen = false;
+		const el = doc.getElementById("aus-type-dropdown");
 		if (el) el.style.display = "none";
 	}
 }
@@ -5670,6 +5795,17 @@ function bindPicker() {
 			positionFilterDropdown(kBtn, kDropdown);
 		}
 	};
+	const tBtn = doc.getElementById("aus-type-btn");
+	const tDropdown = doc.getElementById("aus-type-dropdown");
+	if (tBtn && tDropdown) tBtn.onclick = () => {
+		typePickerOpen = !typePickerOpen;
+		closeFilterDropdowns("type");
+		tDropdown.style.display = typePickerOpen ? "flex" : "none";
+		if (typePickerOpen) {
+			renderTypePicker();
+			positionFilterDropdown(tBtn, tDropdown);
+		}
+	};
 	const statsResetBtn = doc.getElementById("aus-stats-filter-reset");
 	if (statsResetBtn) statsResetBtn.onclick = () => {
 		resetStatsFilters();
@@ -5699,6 +5835,11 @@ function bindPicker() {
 		if (credentialPickerOpen && !t.closest("#aus-credential-dropdown") && !t.closest("#aus-credential-btn")) {
 			credentialPickerOpen = false;
 			const d = doc.getElementById("aus-credential-dropdown");
+			if (d) d.style.display = "none";
+		}
+		if (typePickerOpen && !t.closest("#aus-type-dropdown") && !t.closest("#aus-type-btn")) {
+			typePickerOpen = false;
+			const d = doc.getElementById("aus-type-dropdown");
 			if (d) d.style.display = "none";
 		}
 	});
@@ -6404,6 +6545,7 @@ async function renderStatsView() {
 	renderChatPicker(allHistory);
 	renderEndpointPicker(allHistory);
 	renderCredentialPicker$1(allHistory);
+	renderTypePicker();
 	renderChartSelectors();
 	const statsViewEl = doc.querySelector("[data-view=\"stats\"]");
 	if (!(statsViewEl ? statsViewEl.style.display === "none" || statsViewEl.offsetParent === null : false)) {
@@ -13880,6 +14022,7 @@ var invalidateHistoryCache = () => {
 	historyPage = 1;
 };
 var historyFilters = {
+	requestType: STATS_FILTER_ALL,
 	model: STATS_FILTER_ALL,
 	chat: STATS_FILTER_ALL,
 	endpoint: STATS_FILTER_ALL,
@@ -13890,12 +14033,22 @@ if (restoredHistoryPrefs.model) historyFilters.model = restoredHistoryPrefs.mode
 if (restoredHistoryPrefs.chat) historyFilters.chat = restoredHistoryPrefs.chat;
 if (restoredHistoryPrefs.endpoint) historyFilters.endpoint = restoredHistoryPrefs.endpoint;
 if (restoredHistoryPrefs.credential) historyFilters.credential = restoredHistoryPrefs.credential;
+if (restoredHistoryPrefs.requestType) historyFilters.requestType = restoredHistoryPrefs.requestType;
 var historyFilterBase = [];
 try {
 	on(DataEvents.HISTORY_ADDED, invalidateHistoryCache);
 	on(DataEvents.UPDATED, invalidateHistoryCache);
 } catch {}
+var HISTORY_FILTER_ID = {
+	requestType: "type",
+	model: "model",
+	chat: "chat",
+	endpoint: "endpoint",
+	credential: "credential"
+};
+var historyFilterId = (kind, part) => `aus-history-${HISTORY_FILTER_ID[kind]}-${part}`;
 function resetHistoryFilters() {
+	historyFilters.requestType = STATS_FILTER_ALL;
 	historyFilters.model = STATS_FILTER_ALL;
 	historyFilters.chat = STATS_FILTER_ALL;
 	historyFilters.endpoint = STATS_FILTER_ALL;
@@ -13934,27 +14087,29 @@ function getHistoryChatOptions(history) {
 function closeHistoryFilterDropdowns() {
 	const doc = getDoc$1();
 	for (const kind of [
+		"requestType",
 		"model",
 		"chat",
 		"endpoint",
 		"credential"
 	]) {
-		const dropdown = doc.getElementById(`aus-history-${kind}-dropdown`);
+		const dropdown = doc.getElementById(historyFilterId(kind, "dropdown"));
 		if (dropdown) dropdown.style.display = "none";
 	}
 }
-/** 选中某一项后要重建列表时用：先把四个浮层瞬时收掉，重绘留到下一帧。 */
+/** 选中某一项后要重建列表时用：先把五个浮层瞬时收掉，重绘留到下一帧。 */
 function closeHistoryFilterDropdownsInstant() {
 	const doc = getDoc$1();
 	for (const kind of [
+		"requestType",
 		"model",
 		"chat",
 		"endpoint",
 		"credential"
-	]) closeDropdownInstant(doc.getElementById(`aus-history-${kind}-dropdown`));
+	]) closeDropdownInstant(doc.getElementById(historyFilterId(kind, "dropdown")));
 }
 function renderHistoryFilterDropdown(kind, selected, options, emptyText, onSelect, leading = []) {
-	const dropdown = getDoc$1().getElementById(`aus-history-${kind}-dropdown`);
+	const dropdown = getDoc$1().getElementById(historyFilterId(kind, "dropdown"));
 	if (!dropdown) return;
 	const item = (id, label, title = label) => {
 		const active = id === selected ? "background:var(--ds-card);font-weight:600;" : "";
@@ -13989,23 +14144,31 @@ function renderHistoryFilters(history) {
 	const credentials = getCredentialFilterOptions(historyFilterBase, historyFilters.endpoint);
 	if (historyFilters.credential !== "__all__" && !credentials.some((option) => option.id === historyFilters.credential)) historyFilters.credential = STATS_FILTER_ALL;
 	const labelMap = {
+		requestType: requestTypeLabel(historyFilters.requestType),
 		model: historyFilters.model === "__all__" ? "全部" : historyFilters.model,
 		chat: historyFilters.chat === "__all__" ? "全部" : historyFilters.chat === "__current_chat__" ? "当前对话" : chatOptions.find((option) => option.id === historyFilters.chat)?.label || historyFilters.chat,
 		endpoint: historyFilters.endpoint === "__all__" ? "全部" : historyFilters.endpoint === "__unknown__" ? "未记录接入" : endpoints.find((option) => option.id === historyFilters.endpoint)?.label || historyFilters.endpoint,
 		credential: historyFilters.credential === "__all__" ? "全部" : historyFilters.credential === "__unknown__" ? "未识别密钥" : credentials.find((option) => option.id === historyFilters.credential)?.label || historyFilters.credential
 	};
 	for (const kind of [
+		"requestType",
 		"model",
 		"chat",
 		"endpoint",
 		"credential"
 	]) {
-		const label = doc.getElementById(`aus-history-${kind}-label`);
+		const label = doc.getElementById(historyFilterId(kind, "label"));
 		if (label) {
 			label.textContent = labelMap[kind];
 			label.title = labelMap[kind];
 		}
 	}
+	renderHistoryFilterDropdown("requestType", historyFilters.requestType, REQUEST_TYPE_OPTIONS, "暂无记录", (value) => {
+		historyFilters.requestType = value;
+		historyPage = 1;
+		closeHistoryFilterDropdownsInstant();
+		afterNextPaint(() => renderHistory(doc, getSelectedSave()));
+	});
 	renderHistoryFilterDropdown("model", historyFilters.model, models, "暂无模型", (value) => {
 		historyFilters.model = value;
 		historyPage = 1;
@@ -14036,6 +14199,7 @@ function renderHistoryFilters(history) {
 		afterNextPaint(() => renderHistory(doc, getSelectedSave()));
 	});
 	writeFilterPrefs({ history: {
+		requestType: historyFilters.requestType,
 		model: historyFilters.model,
 		chat: historyFilters.chat,
 		endpoint: historyFilters.endpoint,
@@ -14044,6 +14208,7 @@ function renderHistoryFilters(history) {
 }
 function filteredHistoryForDisplay(history) {
 	return filterStatsHistory(history, {
+		requestType: historyFilters.requestType,
 		model: historyFilters.model,
 		chat: historyFilters.chat,
 		endpoint: historyFilters.endpoint,
@@ -14052,13 +14217,14 @@ function filteredHistoryForDisplay(history) {
 }
 function bindHistoryFilters(doc) {
 	for (const [kind, selector] of [
+		["requestType", "#aus-history-type-btn"],
 		["model", "#aus-history-model-btn"],
 		["chat", "#aus-history-chat-btn"],
 		["endpoint", "#aus-history-endpoint-btn"],
 		["credential", "#aus-history-credential-btn"]
 	]) {
 		const button = doc.querySelector(selector);
-		const dropdown = doc.getElementById(`aus-history-${kind}-dropdown`);
+		const dropdown = doc.getElementById(historyFilterId(kind, "dropdown"));
 		if (!button || !dropdown) continue;
 		button.onclick = () => {
 			const willOpen = dropdown.style.display !== "block";
@@ -15279,6 +15445,10 @@ function createPanel() {
                 </div>
               </div>
               <div class="aus-stats-filter">
+                <div id="aus-type-btn" class="aus-pill"><span style="color:var(--ds-text-2);">请求类型</span><span id="aus-type-label" style="font-weight:600;color:var(--ds-text);">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-type-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:150px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
+              <div class="aus-stats-filter">
                 <div id="aus-model-btn" class="aus-pill"><span style="color:var(--ds-text-2);">模型</span><span id="aus-model-label" style="font-weight:600;color:var(--ds-text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-model-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
@@ -15524,6 +15694,10 @@ function createPanel() {
           <div data-view="history" style="display:none;">
             <div id="aus-history-health" style="display:none;"></div>
             <div id="aus-history-filter-host" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
+              <div class="aus-stats-filter">
+                <div id="aus-history-type-btn" class="aus-pill"><span style="color:var(--ds-text-2);">请求类型</span><span id="aus-history-type-label" style="font-weight:600;color:var(--ds-text);">全部</span>${icon("chevron-down", 14)}</div>
+                <div id="aus-history-type-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:150px;max-height:260px;overflow:auto;padding:8px;"></div>
+              </div>
               <div class="aus-stats-filter">
                 <div id="aus-history-model-btn" class="aus-pill"><span style="color:var(--ds-text-2);">模型</span><span id="aus-history-model-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon("chevron-down", 14)}</div>
                 <div id="aus-history-model-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:180px;max-height:260px;overflow:auto;padding:8px;"></div>

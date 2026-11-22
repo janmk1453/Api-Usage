@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  STATS_FILTER_ALL,
   STATS_FILTER_CURRENT_CHAT,
   STATS_FILTER_UNKNOWN,
   computeChatStats,
@@ -299,6 +300,27 @@ describe('统计聚合', () => {
     } finally {
       g.SillyTavern = prev;
     }
+  });
+
+  it('请求类型筛选按来源与状态两条轴分别命中', () => {
+    const history = [
+      { timestamp: 1, model: 'm' },
+      { timestamp: 2, model: 'm', requestOrigin: { kind: 'extension', label: 'ST-BaiBai-Image' } },
+      { timestamp: 3, model: 'm', requestOrigin: { kind: 'script', label: '' } },
+      { timestamp: 4, model: 'm', interrupted: 'user' },
+      { timestamp: 5, model: 'm', usageSource: 'estimated' },
+      { timestamp: 6, model: 'm', origin: 'agent' },
+      { timestamp: 7, model: 'm', requestOrigin: { kind: 'extension' }, interrupted: 'upstream' },
+    ];
+    const pick = (requestType: string) => filterStatsHistory(history, { requestType }).map((e: any) => e.timestamp);
+    expect(pick(STATS_FILTER_ALL)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(pick('extension')).toEqual([2, 7]);
+    expect(pick('script')).toEqual([3]);
+    expect(pick('conversation')).toEqual([1, 4, 5, 6]);
+    // 状态轴与来源轴并存：被中断的扩展请求同时属于「扩展」和「中断」
+    expect(pick('interrupted')).toEqual([4, 7]);
+    expect(pick('estimated')).toEqual([5]);
+    expect(pick('agent')).toEqual([6]);
   });
 
   it('旧记录可通过未记录和未识别哨兵筛选', () => {

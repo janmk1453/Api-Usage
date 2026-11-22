@@ -9,7 +9,7 @@ import { isTruncatedOf } from '../utils/finish';
 import type { OverviewView, StatsView, TimeRange } from './types';
 import { formatMoney, getDisplayCurrency, getWalletExchangeRate } from '../services/currency';
 import { findWalletForHistory, walletBalanceToCny } from './wallets';
-import { isReliableCacheSample, isReliablePerformanceSample } from './sample-quality';
+import { isReliableCacheSample, isReliablePerformanceSample, matchesRequestType } from './sample-quality';
 import {
   computeGlobalHitRate as globalHitRate,
   computeModelHitRate as modelHitRate,
@@ -34,6 +34,8 @@ export type StatsHistoryFilter = {
   chat?: string;
   endpoint?: string;
   credential?: string;
+  /** 请求类型：conversation / extension / script / interrupted / estimated / agent */
+  requestType?: string;
 };
 
 export type StatsConnectionOption = {
@@ -83,6 +85,9 @@ export function filterStatsHistory(entries: any[], filter: StatsHistoryFilter = 
       } else if (entry.endpointId !== filter.endpoint) {
         return false;
       }
+    }
+    if (filter.requestType && filter.requestType !== STATS_FILTER_ALL) {
+      if (!matchesRequestType(entry, filter.requestType)) return false;
     }
     if (filter.credential && filter.credential !== STATS_FILTER_ALL) {
       if (filter.credential === STATS_FILTER_UNKNOWN) {

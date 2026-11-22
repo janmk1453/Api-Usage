@@ -32,16 +32,17 @@
 
 ### 用量统计（`ui/stats-view.ts`）
 
-- **五维度**：时间（全部 / 今天 / 昨天 / 近 7 天 / 近 30 天 / 本月 / 上月 / 自定义，自定义为直输日期两框、`max` 限今日、自动纠正起止倒置；「全部」= `2020-01-01~今日`）、模型、对话、接入类型、API 密钥；筛选为 `time ∩ model ∩ chat ∩ endpoint ∩ credential`，五胶囊互斥关闭、点外关闭。接入类型优先联动密钥（切换接入后密钥重置为全部）；对话与密钥选项按 `lastSeen` 倒序。
+- **六维度**：时间（全部 / 今天 / 昨天 / 近 7 天 / 近 30 天 / 本月 / 上月 / 自定义，自定义为直输日期两框、`max` 限今日、自动纠正起止倒置；「全部」= `2020-01-01~今日`）、**请求类型**、模型、对话、接入类型、API 密钥；筛选为 `time ∩ requestType ∩ model ∩ chat ∩ endpoint ∩ credential`，六胶囊互斥关闭、点外关闭。
+- **请求类型胶囊**（`#aus-type-btn` / `#aus-type-dropdown`，选项文案与 title 来自 `ui/request-type-filter.ts`）：全部 + 对话 / 扩展 / 脚本 / 中断 / 估算 / Agent，判定口径只由 `data/sample-quality.ts#requestTypeKeysOf` 提供（来源轴与状态轴并存、按「包含」命中）。选项是固定 6 项，不按记录联动、也不参与失效剔除；历史页同一份选项（`#aus-history-type-btn`）。接入类型优先联动密钥（切换接入后密钥重置为全部）；对话与密钥选项按 `lastSeen` 倒序。
 - **「当前对话」动态项**：对话胶囊在「全部」下方固定一枚，哨兵 `STATS_FILTER_CURRENT_CHAT = '__current_chat__'`（`src/data/computed.ts`）——过滤时现场解析 `getCurrentChatIdForStore()`、不缓存 chatId；不参与隐藏管理、不要求当前对话已有记录。历史页同一口径。
-- **重置筛选**：`#aus-stats-filter-reset` → `resetStatsFilters()`（五维回 `DEFAULT_RANGE` = 近 30 天 + 全部、关闭下拉、渲染后落盘）；历史页 `#aus-history-filter-reset`。两枚按钮 inline `background:transparent`，故其 hover/active 规则必须带 `!important`。
-- **三块 + 四小块**：消费金额 / API 请求次数 / Tokens；四小块 `repeat(4,1fr)`（竖屏 2×2）由 `computeStatsFour` 单源、随五维过滤、选项与概览共用 `FOUR_OPTIONS`。
+- **重置筛选**：`#aus-stats-filter-reset` → `resetStatsFilters()`（六维回 `DEFAULT_RANGE` = 近 30 天 + 全部、关闭下拉、渲染后落盘）；历史页 `#aus-history-filter-reset`。两枚按钮 inline `background:transparent`，故其 hover/active 规则必须带 `!important`。
+- **三块 + 四小块**：消费金额 / API 请求次数 / Tokens；四小块 `repeat(4,1fr)`（竖屏 2×2）由 `computeStatsFour` 单源、随六维过滤、选项与概览共用 `FOUR_OPTIONS`。
 - **模型汇总表**：10 列（模型 / 调用 / 命中 / 未命中 / 输出 / 总 / 总成本 / 平均成本 / 平均耗时 / 平均速率），横向滚动；全站唯一保留描边的块（见样式规范）。
 - **图表**：首图 `图表`（`Y` 多选 + `X` 双胶囊，Y 下拉底部切「自动 / 柱状 / 曲线 / 面积」；默认 `DEFAULT_Y_KEYS = ['input_hit_token','input_miss_token','output_token','total_cost','hit_rate']`、`X = 'round'`，常量在 `ui/chart-config.ts`）；下方 6 图（Token 三段堆叠、费用曲线、命中 100% 面积、请求数柱、耗时/速率双轴、模型环——窄屏 <560px 只画前 5、宽屏前 8，其余合并「其他 N 个模型」并进悬浮窗，legend 单行滚动）。`API请求数 趋势` 的 X 走 `X_OPTIONS_WITHOUT_ROUND`（无轮次、默认每日）。**所有图表配置（Y 多选 / X / 展示方式 / 轴标签 / 占比口径）必须经 `ui/chart-prefs.ts` 落 localStorage 并在初始化时恢复**，重开面板不得回默认；图表 `display:none` 时跳过初始化、切到统计页下一帧再建，避免 `clientWidth 0` 误报。
 
 ### 历史记录（`ui/panel.ts`）
 
-- **四维度**：模型 / 对话 / 接入类型 / API 密钥按交集过滤，先作用热+冷全量历史再按 `30/页` 分页（筛选无结果显示清除按钮）；接入类型优先联动密钥；「当前对话」同统计页哨兵，`renderHistoryFilterDropdown` 用 `leading` 参数插入。
+- **五维度**：请求类型 / 模型 / 对话 / 接入类型 / API 密钥按交集过滤，先作用热+冷全量历史再按 `30/页` 分页（筛选无结果显示清除按钮）；接入类型优先联动密钥；「当前对话」同统计页哨兵，`renderHistoryFilterDropdown` 用 `leading` 参数插入。请求类型选项固定 6 项、不参与失效剔除；元素 id 的中间段由 `HISTORY_FILTER_ID`（`requestType` → `type`）决定，新增维度必须同时登记这张表、模板与 `controls` 绑定，否则 `ui/pill.ts` 配不到 `-btn` / `-dropdown` 这一对。
 - **两枚二级入口**：「其他请求」`#aus-history-tap-btn`（`switchView('tap')`，父级为历史）、「请求日志」`#aus-history-log-btn`（`openRequestLog('history')`）；后者与设置页「问题反馈 / 请求日志」是同一页（`data-view="log"`）。`panel.ts#logOrigin` 记来源，`viewSourceOf(view)` 同时供 `paintNavState` 高亮与 `handleBottomTabTap` 的「重复点当前 tab」判定。**以后再加没有独立导航项的二级页，必须同时接好这三件套（origin / viewSourceOf / returnFromChild）**，只改 `returnFromChild` 会让底栏高亮跟错。
 - 列表按 `timestamp` 倒序；卡片含模型 / 时间 / `in/out/rate` / 费用 / 旧·新·详情；**卡片不外显毫秒耗时**，耗时只在详情窗口按秒展示。
 - **请求来源角标**单一来源 `ui/source-badge.ts#sourceBadgeOf`，**与记录状态角标是两条正交线**（状态讲这条记录准不准，来源讲是谁打出去的），同一条记录可以两枚并挂：来源在左、状态在右。只有 `extension` / `script` 出角标（蓝「扩展」/ 紫「脚本」），`tavern` / `unknown` 一律不标——主界面是默认情况，标出来只是噪音。

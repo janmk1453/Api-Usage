@@ -68,3 +68,43 @@ export function isConversationEntry(entry: AnyEntry): boolean {
   const kind = (entry as any)?.requestOrigin?.kind;
   return kind !== 'extension' && kind !== 'script';
 }
+
+/** 请求类型筛选的值域（历史页与统计页共用） */
+export type RequestTypeKey = 'conversation' | 'extension' | 'script' | 'interrupted' | 'estimated' | 'agent';
+
+export const REQUEST_TYPE_KEYS: readonly RequestTypeKey[] = [
+  'conversation',
+  'extension',
+  'script',
+  'interrupted',
+  'estimated',
+  'agent',
+];
+
+/**
+ * 一条记录命中的请求类型。
+ *
+ * 这里并存两条正交的轴：
+ * - 来源轴：对话（酒馆主流程或未识别）/ 扩展 / 脚本；
+ * - 状态轴：中断 / 估算 / Agent。
+ * 所以一条记录可能同时命中多个键——筛选时用「包含」而非互斥，
+ * 选「扩展」也能看到那几条被中断的扩展请求，选「中断」也能看到中断的对话请求。
+ */
+export function requestTypeKeysOf(entry: AnyEntry): RequestTypeKey[] {
+  if (!entry) return [];
+  const keys: RequestTypeKey[] = [];
+  const kind = String((entry as any)?.requestOrigin?.kind || '');
+  if (kind === 'extension') keys.push('extension');
+  else if (kind === 'script') keys.push('script');
+  else keys.push('conversation');
+  if (isInterruptedEntry(entry)) keys.push('interrupted');
+  if (isEstimatedEntry(entry)) keys.push('estimated');
+  if (String((entry as any)?.origin || '') === 'agent') keys.push('agent');
+  return keys;
+}
+
+/** 是否属于某个请求类型（调用方负责先把「全部」这种哨兵值排除掉） */
+export function matchesRequestType(entry: AnyEntry, type: string | null | undefined): boolean {
+  if (!type) return true;
+  return requestTypeKeysOf(entry).includes(type as RequestTypeKey);
+}

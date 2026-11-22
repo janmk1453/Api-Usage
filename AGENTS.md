@@ -73,7 +73,7 @@ Api-Usage/
 | `stats/` | `forecast-series`（预测核心）、`forecast`（旧 API 兼容）、`model-efficiency`、`energyScore` |
 | `ui/`（页面） | `panel`（骨架 / 视图切换 / 历史与详情 / 底栏）、`overview`、`stats-view`、`forecast-view`、`wallet-view`、`settings`、`help-view`、`log-view`、`tap-view`、`chat-manage` |
 | `ui/`（图表） | `chart-config`、`chart-picker`（卡片骨架）、`chart-prefs`、`chart-time`、`chart-bar`、`chart-tooltip`、`extra-charts`、`model-trends`、`forecast-chart`、`heatmap`、`range-zoom` |
-| `ui/`（交互） | `pill`、`source-badge`、`dropdown-placement`、`dropdown-close`、`switch`、`icons`、`nav-model`、`sort-header`、`filter-prefs`、`chat-visibility`、`back-guard`、`history-badge`、`history-health-bar`、`log-upload-dialog`、`storage-usage-card`、`wallet-plan`、`wallet-sync-preview`、`peak-dot`、`compare`、`changelog`、`changelog-dialog`、`rate-text`、`vendor-icons`、`back-debug`（临时工具） |
+| `ui/`（交互） | `pill`、`source-badge`、`dropdown-placement`、`dropdown-close`、`switch`、`icons`、`nav-model`、`sort-header`、`filter-prefs`、`request-type-filter`、`chat-visibility`、`back-guard`、`history-badge`、`history-health-bar`、`log-upload-dialog`、`storage-usage-card`、`wallet-plan`、`wallet-sync-preview`、`peak-dot`、`compare`、`changelog`、`changelog-dialog`、`rate-text`、`vendor-icons`、`back-debug`（临时工具） |
 | `utils/` | `device`（设备判定单一来源）、`date`、`crypto`（XOR）、`history-key`、`finish`、`logger` |
 
 `cloudflare/`：`worker.js`（路由 + cron 清理 + Cache API）、`api.js`、`boot.js`、`summary.js`、`payload.js`、`log-payload.js`、`dashboard.html`、`schema.sql`、`schema-request-log.sql`、9 个 `migrate-*.sql`（`device-totals` / `hourly` / `st-version` / `device-metrics` / `theme-mode` / `backfill-device-totals` / `legacy-dur-to-run` / `run-ms` / `tt-version`）、`vendor/echarts.min.js`（自托管 full 构建）、`scripts/build-preview.mjs`、`wrangler.toml`、`README.md`、`*.test.js`。
