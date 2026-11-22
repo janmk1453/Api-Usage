@@ -95,6 +95,8 @@ npm run verify:ci   # 版本单源、清单路径、引用链、孤立产物
 - **入口、面板与安卓返回键**：魔法棒入口、8 视图切换、`aus-view-in` 动画与「一次返回关面板」的硬约束见 `src/ui/AGENTS.md`。
 - **CI 与 Pages 工作流**：触发条件、作业顺序与预览边界见 `.github/AGENTS.md`。
 - **本地自检不连网**：`npm run verify:ci` 已覆盖版本单源、`manifest` 的 `js/css/i18n` 路径、从入口出发的 import 引用链、孤立产物。
+- **测试分层（写用例前先定位层次）**：① 纯逻辑行为测试——`src/data/`、`src/utils/`、`src/stats/` 与 `services/*` 里的纯函数直接调、断言返回值；② 外部世界替身流程测试——`services/update-flow.test.ts`、`services/request-tap/store.test.ts`、`store/index.test.ts`：只替身 fetch / localStorage / fake document / `fake-indexeddb`，配合 `vi.resetModules()` + `vi.stubGlobal()` 隔离模块级状态，断言用户能看到的结果（提示文案、发出的请求体、落盘键、徽标与横幅）；③ 源码契约守护——`*-wiring.test.ts` 用 `?raw` 字符串断言，只守「难复现又必须成立的结构」（fetch 包装必须最外层、代际自愈、退避），不得用来代替行为测试。
+- **测试禁忌**：只断言 mock 被调用过、断言私有实现细节（内部变量名 / 私有函数）、把 `toBeTruthy()` / `toBeDefined()` 当主断言（弱断言只能作为「后续要取用这个值」的过渡）。断言前先核对实现语义——`listTapRecords()` 返回的是浅拷贝、`shouldForceUpdate` 的 minVersion 是「远端达到才强制」的下限、`checkUpdate` 的版本兜底只在宿主不返回 `isUpToDate` 时才可达，都曾按直觉写错。
 
 ## 铁律
 

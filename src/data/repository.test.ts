@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { backfillEntryDuration, dropDuplicateTurns, normalizeSettings, repository } from './repository';
 import { state } from '../store/index';
 import { defaultSettings } from '../types/settings';
+import { MAX_HISTORY } from '../constants/pricing';
 import { createDeepSeekWallet, createWalletFromConnection, observeModel } from './wallets';
 import { DEEPSEEK_WALLET_ID } from '../types/wallet';
 import {
@@ -64,6 +65,36 @@ describe('仓库全量处理', () => {
 
     expect(await loadHistoryCold()).toEqual([]);
     expect(state.history).toHaveLength(1);
+  });
+
+  it('历史超过上限时，最旧的自动搬到冷库', async () => {
+    const all = Array.from({ length: MAX_HISTORY + 1 }, (_, i) => entry(i + 1, 1, 0));
+    await repository.replaceAll({ history: all }, { clearCold: true });
+
+    expect(state.history).toHaveLength(MAX_HISTORY);
+    const cold = await loadHistoryCold();
+    expect(cold).toHaveLength(1);
+    // 末尾那条是最旧的，必须进冷库而不是凭��消失
+    expect((cold[0] as any).timestamp).toBe(MAX_HISTORY + 1);
+  });
+
+  it('再导入只追加新溢出的部分，不清掉已有冷历史', async () => {
+    await repository.replaceAll(
+      { history: Array.from({ length: MAX_HISTORY + 1 }, (_, i) => entry(i + 1, 1, 0)) },
+      { clearCold: true },
+    );
+    await repository.replaceAll(
+      { history: Array.from({ length: MAX_HISTORY + 2 }, (_, i) => entry(i + 1, 1, 0)) },
+      { clearCold: false },
+    );
+
+    const cold = await loadHistoryCold();
+    const stamps = cold.map((c: any) => c.timestamp).sort((a: number, b: number) => a - b);
+    // 追加而不是覆盖：上一次溢出的那条必须还在
+    expect(cold.length).toBeGreaterThanOrEqual(2);
+    expect(stamps).toContain(MAX_HISTORY + 1);
+    expect(stamps).toContain(MAX_HISTORY + 2);
+    expect(state.history).toHaveLength(MAX_HISTORY);
   });
 
   it('累计值从热冷全量重建', async () => {
