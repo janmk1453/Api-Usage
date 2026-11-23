@@ -3843,6 +3843,16 @@
   #aus-panel .aus-back-btn:hover{border-color:var(--ds-text-3);}
 }
 #aus-panel .aus-back-btn:active{background:var(--ds-nav-active-bg);}
+/* 窄屏底栏布局下不显示页内返回：顶栏左上角已有同功能箭头（#aus-mobile-back 由 paintNavState 显隐），
+   两处入口重复，而且五枚胶囊在 400px 级宽度放不下一行，会折出「返回」孤零零占一行（真机反馈）。
+   只限定 data-mobile-nav="bottom"：窄屏但关掉「移动端兼容 UI」时没有顶栏箭头，这枚必须留着；
+   宽屏（>760px）不受影响，桌面仍按统一规格贴右。两套断点同步：@container 为主，@media 兜底。 */
+@media (max-width:760px){
+  #aus-panel[data-mobile-nav="bottom"] .aus-back-btn{display:none;}
+}
+@container ausbody (max-width:760px){
+  #aus-panel[data-mobile-nav="bottom"] .aus-back-btn{display:none;}
+}
 /* ===== 请求日志（设置 → 请求日志）：最近一轮对话请求的标头 / 正文 / 响应元数据 ===== */
 #aus-panel .aus-log-top{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
 #aus-panel .aus-log-desc{flex:1 1 260px;min-width:0;font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;}

@@ -68,6 +68,14 @@ describe('back-button：样式表只有一套规格', () => {
     expect(cssSrc).not.toContain('.aus-log-back');
   });
 
+  it('窄屏底栏布局隐藏页内返回（顶栏箭头同功能），侧栏模式仍保留', () => {
+    // 真机反馈：五枚胶囊在 400px 级宽度放不下一行，「返回」会孤零零折到下一行
+    expect(cssSrc).toMatch(/@media \(max-width:760px\)\{\s*#aus-panel\[data-mobile-nav="bottom"\] \.aus-back-btn\{display:none;/);
+    expect(cssSrc).toMatch(/@container ausbody \(max-width:760px\)\{\s*#aus-panel\[data-mobile-nav="bottom"\] \.aus-back-btn\{display:none;/);
+    // 不能无条件隐藏：窄屏关掉「移动端兼容 UI」时没有顶栏箭头，页内这枚是唯一返回入口
+    expect(cssSrc).not.toMatch(/#aus-panel \.aus-back-btn\{display:none/);
+  });
+
   it('请求日志动作组可收缩到容器宽、窄屏独占一行折行靠右（不再顶出视口）', () => {
     // 真机反馈：只写 flex:0 0 auto 时宽度由内容撑开，五枚按钮会超出屏幕右缘
     expect(cssSrc).toMatch(/#aus-panel \.aus-log-actions\{[^}]*flex:0 1 auto/);

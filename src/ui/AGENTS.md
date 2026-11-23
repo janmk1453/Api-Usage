@@ -134,9 +134,9 @@
 ### 二级页返回按钮（`ui/back-button.ts`）
 
 - **唯一来源**：`backButtonHTML({ id?, title?, data? })` 产出 `<button class="aus-back-btn" data-aus-back="1" aria-label="返回上一页">chevron-left 14 + 「返回」</button>`；样式只有一套 `#aus-panel .aus-back-btn`（`5px 12px`、`--aus-fs-sm`、`font-weight:600`、`border-radius:999px`、`margin-left:auto`）。三页（对话展示管理 / 请求日志 / 其他请求）必须都调它，禁止再复用 `.aus-pill`、`.aus-log-link`、`.aus-chat-manage-btn`——那三类被同排动作按钮共用，改一处会连带改别人。
-- **位置统一贴右**：靠 `margin-left:auto` 落在所在工具行的最右；所在行必须 `flex-wrap`，**动作组自身也必须可收缩并限宽**（`max-width:100%`，窄屏 `flex:1 1 100%`）——只给父级 `flex-wrap` 不够：`flex:0 0 auto` 让动作组宽度由内容撑开，五枚按钮会顶出视口右缘（真机反馈过，`.aus-log-actions` 已修）。请求日志页把它放在 `.aus-log-actions` 末位（上传反馈 / 其他请求 / 刷新 / 清空 / 返回），`≤760px` 时 `.aus-log-desc` 独占第一行、动作组独占第二行并在行内折行靠右。
+- **位置统一贴右**：靠 `margin-left:auto` 落在所在工具行的最右；所在行必须 `flex-wrap`，**动作组自身也必须可收缩并限宽**（`max-width:100%`，窄屏 `flex:1 1 100%`）——只给父级 `flex-wrap` 不够：`flex:0 0 auto` 让动作组宽度由内容撑开，五枚按钮会顶出视口右缘（真机反馈过，`.aus-log-actions` 已修）。请求日志页把它放在 `.aus-log-actions` 末位（上传反馈 / 其他请求 / 刷新 / 清空 / 返回），`≤760px` 时 `.aus-log-desc` 独占第一行、动作组独占第二行并在行内折行靠右（窄屏底栏布局下这枚不显示，见下条）。
 - **文案不写目标页名**：目标由 `panel.ts#returnFromChild()` 算（`chatManageOrigin` / `logOrigin` / `tapOrigin` / `childParentOf`），按钮只写「返回」。
-- **窄屏双入口（方案 A）**：`#aus-mobile-back` 顶栏箭头照旧保留，页内返回也贴右，两个都可退；不要把页内返回改成窄屏隐藏，那需要 `paintNavState` 同步 `isChildView`，且会破坏「按钮位置统一」的诉求。
+- **窄屏只留一个返回**：`≤760px` 且 `#aus-panel[data-mobile-nav="bottom"]`（底栏布局）时 `.aus-back-btn` 直接 `display:none`，返回只走顶栏箭头 `#aus-mobile-back`——五枚胶囊在 400px 级宽度放不下一行，「返回」会孤零零折到下一行（真机反馈过）。**必须限定 `data-mobile-nav="bottom"`**：窄屏但关掉「移动端兼容 UI」时属性是 `sidebar`、顶栏箭头不显示（`paintNavState` 只在 `bottom && isChildView` 时给 `#aus-mobile-back` 写 `display:flex`），页内这枚就是唯一入口，不能一起隐藏；宽屏桌面照旧贴右。规则写在 `style.css`「二级页返回按钮」段末尾，`@media (max-width:760px)` 与 `@container ausbody (max-width:760px)` 两套断点同步写。
 - 钱包 / 使用说明 / 关于三页**不补**页内返回（桌面靠侧栏、窄屏靠顶栏箭头），这是用户明确要求。
 
 ### 导航与移动端
