@@ -424,23 +424,6 @@
   #aus-stats-three > .ds-card { min-width: 0; }
   #aus-stats-three > .ds-card:first-child { grid-column: 1 / -1; }
   #aus-extra-charts, #aus-model-trends { grid-template-columns: 1fr !important; }
-  .aus-wallet-summary { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: clamp(4px, 1.4cqi, 10px) !important; }
-  .aus-wallet-summary > div { min-width: 0; }
-  .aus-wallet-summary > div > div:first-child { font-size:var(--aus-fs-sm) !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .aus-wallet-summary > div > div:nth-child(2) { font-size: clamp(15px, 3.4cqi, 20px) !important; }
-  .aus-wallet-summary > div > div:nth-child(3) { font-size:var(--aus-fs-xs) !important; line-height: 1.35; }
-  /* 窄屏钱包卡紧凑化：标识缩小、余额/模型两项与图标操作并排、内外间距收紧，尽量压低纵向占用 */
-  .aus-wallet-avatar { width: 36px !important; height: 36px !important; border-radius: 10px !important; font-size: 15px !important; }
-  .aus-wallet-header { gap: 8px 10px !important; }
-  .aus-wallet-identity { gap: 2px !important; }
-  #aus-wallet [data-wallet-card] [data-wallet-name] { font-size:var(--aus-fs-base) !important; }
-  .aus-wallet-metrics { grid-template-columns: repeat(2, max-content) !important; justify-content: start !important; flex: 1 1 auto !important; }
-  .aus-wallet-actions { justify-content: flex-end !important; flex: 0 0 auto !important; }
-  #aus-wallet [data-wallet-card] { padding: 8px 10px !important; gap: 8px !important; }
-  #aus-wallet > div { gap: 8px !important; }
-  /* 窄屏隐藏冗余的类型徽标（副标题已含类型与来源），避免名称行折行拉高卡片 */
-  #aus-wallet .aus-wallet-badge-relay { display: none !important; }
-  .aus-wallet-two-col { grid-template-columns: 1fr !important; }
 }
 @container ausbody (min-width: 761px) {
   #aus-mobile-header { display: none !important; }
@@ -585,6 +568,380 @@
   justify-content: flex-end;
   gap: 6px;
   flex-wrap: wrap;
+}
+/* ===== 钱包页（重做）：三段式 —— 余额与校准 / 模型与价格 / 套餐额度，峰谷规则折到末尾一行 =====
+   设计约束：卡内不再有嵌套白块，段与段之间只用 1px 分隔线；尺寸只在这里定义，模板里只留动态值。 */
+#aus-panel .aus-wallet-list { display: grid; gap: 12px; }
+#aus-panel .aus-wallet-card { display: grid; gap: 12px; }
+#aus-panel .aus-wallet-body { display: grid; gap: 0; }
+
+/* —— 分区 —— */
+#aus-panel .aus-wallet-sec { display: grid; gap: 8px; padding: 14px 0; border-top: 1px solid var(--ds-border); }
+#aus-panel .aus-wallet-sec:first-child { padding-top: 0; border-top: 0; }
+#aus-panel .aus-wallet-sec:last-child { padding-bottom: 0; }
+#aus-panel .aus-wallet-sec-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+#aus-panel .aus-wallet-sec-title { margin: 0; font-size: var(--aus-fs-sm); font-weight: 600; color: var(--ds-text-2); line-height: 1.5; }
+#aus-panel .aus-wallet-sec-note { margin-left: 8px; font-size: var(--aus-fs-xs); font-weight: 400; color: var(--ds-text-3); }
+#aus-panel .aus-wallet-sec-actions { display: flex; align-items: flex-start; justify-content: flex-end; gap: 6px; flex-wrap: wrap; margin-left: auto; min-width: 0; }
+#aus-panel .aus-wallet-hint { font-size: var(--aus-fs-xs); color: var(--ds-text-3); line-height: 1.6; word-break: break-word; }
+#aus-panel .aus-wallet-empty { padding: 14px; text-align: center; font-size: var(--aus-fs-sm); color: var(--ds-text-3); }
+
+/* —— 第三段：套餐额度（内容来自 wallet-plan.ts，去掉原来的嵌套白块） —— */
+#aus-panel .aus-wallet-plan { display: grid; gap: 10px; }
+#aus-panel .aus-wallet-plan-rows { display: grid; gap: 10px; }
+#aus-panel .aus-wallet-plan-rows + .aus-wallet-plan-rows { padding-top: 10px; border-top: 1px dashed var(--ds-border); }
+
+/* —— 通用控件 —— */
+#aus-panel .aus-field {
+  box-sizing: border-box;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid var(--ds-border) !important;
+  border-radius: 8px;
+  background: var(--ds-card-inner) !important;
+  color: var(--ds-text) !important;
+  font-family: inherit;
+  font-size: var(--aus-fs-sm) !important;
+  line-height: 1.4;
+}
+#aus-panel .aus-field:focus { outline: none; border-color: var(--ds-border-strong) !important; }
+#aus-panel .aus-field-num { font-variant-numeric: tabular-nums; text-align: right; }
+#aus-panel .aus-field-grow { flex: 1 1 auto; min-width: 0; }
+#aus-panel .aus-btn-primary {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border: 1px solid var(--ds-black);
+  border-radius: 999px;
+  background: var(--ds-black);
+  color: var(--ds-black-text);
+  font-family: inherit;
+  font-size: var(--aus-fs-sm);
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  white-space: nowrap;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+#aus-panel .aus-btn-ghost {
+  flex: 0 0 auto;
+  padding: 5px 11px;
+  border: 1px solid var(--ds-border);
+  border-radius: 999px;
+  background: var(--ds-card-inner);
+  color: var(--ds-text);
+  font-family: inherit;
+  font-size: var(--aus-fs-sm);
+  line-height: 1.4;
+  cursor: pointer;
+  white-space: nowrap;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (hover: hover) {
+  #aus-panel .aus-btn-ghost:hover { border-color: var(--ds-text-3); }
+}
+#aus-panel .aus-wallet-linkbtn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ds-text-2);
+  font-family: inherit;
+  font-size: var(--aus-fs-sm);
+  line-height: 1.6;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+#aus-panel .aus-wallet-switch-row { display: inline-flex; align-items: center; gap: 7px; font-size: var(--aus-fs-sm); color: var(--ds-text-2); cursor: pointer; }
+
+/* —— 货币 / 适配器 / 价格来源胶囊 —— */
+#aus-panel .aus-wallet-rel { position: relative; }
+#aus-panel .aus-wallet-inline { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; min-width: 0; }
+#aus-panel .aus-wallet-pill { flex: 0 0 auto; min-width: 0; max-width: 100%; gap: 6px; }
+#aus-panel .aus-wallet-pill-label { flex: 0 0 auto; color: var(--ds-text-3); }
+#aus-panel .aus-wallet-pill-value { min-width: 0; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+#aus-panel .aus-wallet-pill-icon { flex: 0 0 auto; display: inline-flex; color: var(--ds-text-2); }
+#aus-panel .aus-wallet-catalog-picker { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: 0 1 auto; min-width: 0; }
+#aus-panel .aus-wallet-pill-note { max-width: 190px; font-size: var(--aus-fs-xs); color: var(--ds-text-3); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#aus-panel .aus-wallet-pill-note.is-warn { color: var(--ds-red); }
+#aus-panel .aus-wallet-adapter-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+#aus-panel .aus-wallet-adapter-id { width: 150px; flex: 0 1 150px; }
+
+/* —— 浮层 —— */
+#aus-wallet .aus-wallet-drop {
+  position: absolute;
+  top: calc(100% + 6px);
+  z-index: 120;
+  min-width: 160px;
+  max-width: 320px;
+  max-height: 280px;
+  overflow: auto;
+  padding: 6px;
+  background: var(--ds-card-inner);
+  border: 1px solid var(--ds-border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+#aus-wallet .aus-wallet-drop.is-left { left: 0; }
+#aus-wallet .aus-wallet-drop.is-right { right: 0; }
+#aus-wallet .aus-wallet-drop.is-wide { min-width: 220px; }
+#aus-wallet .aus-wallet-drop-opt { padding: 7px 9px; border-radius: 7px; font-size: var(--aus-fs-sm); color: var(--ds-text); cursor: pointer; }
+@media (hover: hover) {
+  #aus-wallet .aus-wallet-drop-opt:hover { background: var(--ds-card); }
+}
+#aus-wallet .aus-wallet-drop-opt.is-active { background: var(--ds-card); font-weight: 600; }
+#aus-wallet .aus-wallet-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--ds-text);
+  font-family: inherit;
+  font-size: var(--aus-fs-sm);
+  line-height: 1.5;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  #aus-wallet .aus-wallet-menu-item:hover { background: var(--ds-card); }
+}
+#aus-wallet .aus-wallet-menu-item.is-danger { color: var(--ds-red); }
+#aus-wallet .aus-wallet-menu-note { padding: 6px 9px; font-size: var(--aus-fs-xs); color: var(--ds-text-3); }
+
+/* —— 第一段：余额与校准 —— */
+#aus-panel .aus-wallet-balance-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#aus-panel .aus-wallet-balance-val { font-size: 20px; font-weight: 700; line-height: 1.2; color: var(--ds-text); font-variant-numeric: tabular-nums; }
+#aus-panel .aus-wallet-balance-input { width: 120px; flex: 0 1 120px; }
+#aus-panel .aus-wallet-calib-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+#aus-panel .aus-wallet-key-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+
+/* —— 第二段：模型与价格 —— */
+#aus-panel .aus-wallet-table-head {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) 96px;
+  gap: 10px;
+  padding: 0 4px 2px;
+  font-size: var(--aus-fs-xs);
+  color: var(--ds-text-3);
+}
+#aus-panel .aus-wallet-rows { display: grid; }
+#aus-panel .aus-wallet-mrow {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) 96px;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 4px;
+  border-top: 1px solid var(--ds-border);
+}
+#aus-panel .aus-wallet-mrow[data-hidden='1'] { opacity: 0.6; }
+#aus-panel .aus-wallet-mname { display: grid; gap: 4px; min-width: 0; }
+#aus-panel .aus-wallet-model-name { width: 100%; font-weight: 600; }
+#aus-panel .aus-wallet-mmeta { font-size: var(--aus-fs-xs); color: var(--ds-text-3); word-break: break-word; line-height: 1.5; }
+#aus-panel .aus-wallet-mctx { display: inline-flex; align-items: center; gap: 5px; font-size: var(--aus-fs-xs); color: var(--ds-text-3); }
+#aus-panel .aus-wallet-ctx { width: 88px; min-height: 26px; padding: 3px 6px; }
+#aus-panel .aus-wallet-mtier { display: grid; gap: 4px; min-width: 0; }
+#aus-panel .aus-wallet-mtier[data-off='1'] { opacity: 0.5; }
+#aus-panel .aus-wallet-mtier-label { font-size: var(--aus-fs-xs); color: var(--ds-text-3); white-space: nowrap; }
+#aus-panel .aus-wallet-mtier-off { color: var(--ds-text-3); }
+#aus-panel .aus-wallet-pricegrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+#aus-panel .aus-wallet-pf { display: grid; gap: 2px; min-width: 0; }
+#aus-panel .aus-wallet-pf > span { display: none; font-size: var(--aus-fs-xs); color: var(--ds-text-3); }
+#aus-panel .aus-wallet-price { width: 100%; min-width: 0; }
+#aus-panel .aus-wallet-price.is-pending { border-color: var(--ds-red-border) !important; }
+#aus-panel .aus-wallet-mops { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+#aus-panel .aus-wallet-src { padding: 2px 7px; border-radius: 999px; background: var(--ds-card-inner); color: var(--ds-text-2); font-size: var(--aus-fs-xs); white-space: nowrap; }
+#aus-panel .aus-wallet-src.is-pending { background: var(--ds-red-bg); color: var(--ds-red); }
+#aus-panel .aus-wallet-src.is-sync { background: var(--ds-green-bg); color: var(--ds-green); }
+#aus-panel .aus-wallet-more-btn {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--ds-border);
+  border-radius: 8px;
+  background: var(--ds-card-inner);
+  color: var(--ds-text-2);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+@media (hover: hover) {
+  #aus-panel .aus-wallet-more-btn:hover { color: var(--ds-text); border-color: var(--ds-text-3); }
+}
+
+/* —— 第三段：峰谷规则（默认折叠） —— */
+#aus-panel .aus-wallet-sec-billing { gap: 10px; }
+#aus-panel .aus-wallet-billing-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ds-text-2);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+#aus-panel .aus-wallet-billing-summary { margin-left: auto; font-size: var(--aus-fs-xs); color: var(--ds-text-3); }
+#aus-panel .aus-wallet-billing-body { display: grid; gap: 10px; }
+#aus-panel .aus-wallet-peaks { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+#aus-panel .aus-wallet-peak-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px 3px 8px; border: 1px solid var(--ds-border); border-radius: 999px; background: var(--ds-card-inner); }
+#aus-panel .aus-wallet-peak-time { width: 88px; min-height: 24px; padding: 2px 4px; border: 0 !important; background: transparent !important; font-size: var(--aus-fs-xs) !important; }
+#aus-panel .aus-wallet-peak-dash { font-size: var(--aus-fs-xs); color: var(--ds-text-3); }
+#aus-panel .aus-wallet-chip-x { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 999px; background: none; color: var(--ds-text-3); cursor: pointer; }
+#aus-panel .aus-wallet-chip-add { padding: 4px 10px; border: 1px dashed var(--ds-border); border-radius: 999px; background: none; color: var(--ds-text-2); font-family: inherit; font-size: var(--aus-fs-xs); cursor: pointer; }
+
+/* —— 顶部：汇总与工具栏 —— */
+#aus-panel .aus-wallet-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+#aus-panel .aus-wallet-summary-item { min-width: 0; }
+#aus-panel .aus-wallet-summary-label { font-size: var(--aus-fs-sm); color: var(--ds-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#aus-panel .aus-wallet-summary-value { margin-top: 4px; font-size: 20px; font-weight: 700; color: var(--ds-text); font-variant-numeric: tabular-nums; }
+#aus-panel .aus-wallet-summary-value.is-warn { color: var(--ds-red); }
+#aus-panel .aus-wallet-summary-value.is-ok { color: var(--ds-green); }
+#aus-panel .aus-wallet-summary-note { margin-top: 2px; font-size: var(--aus-fs-xs); color: var(--ds-text-3); line-height: 1.35; }
+#aus-panel .aus-wallet-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+#aus-panel .aus-wallet-search { flex: 1 1 180px; min-width: 0; border-radius: 999px !important; padding: 6px 12px; }
+#aus-panel .aus-wallet-filters { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+#aus-panel .aus-wallet-filter {
+  flex: 0 0 auto;
+  padding: 6px 11px;
+  border: 1px solid var(--ds-border);
+  border-radius: 999px;
+  background: var(--ds-card-inner);
+  color: var(--ds-text);
+  font-family: inherit;
+  font-size: var(--aus-fs-sm);
+  line-height: 1.4;
+  cursor: pointer;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+#aus-panel .aus-wallet-filter > span { margin-left: 3px; color: var(--ds-text-3); }
+#aus-panel .aus-wallet-filter.is-active { border-color: var(--ds-black); background: var(--ds-black); color: var(--ds-black-text); }
+#aus-panel .aus-wallet-filter.is-active > span { color: var(--ds-black-text); opacity: 0.75; }
+
+/* —— 已忽略接入 —— */
+#aus-panel .aus-wallet-ignored { display: grid; gap: 2px; }
+#aus-panel .aus-wallet-ignored-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-top: 1px solid var(--ds-border); }
+#aus-panel .aus-wallet-ignored-main { min-width: 0; }
+#aus-panel .aus-wallet-ignored-name { font-size: var(--aus-fs-sm); font-weight: 600; color: var(--ds-text); }
+
+/* —— 徽标 —— */
+#aus-panel .aus-wallet-badge { padding: 2px 8px; border-radius: 999px; background: var(--ds-card-inner); color: var(--ds-text-2); font-size: var(--aus-fs-xs); white-space: nowrap; }
+#aus-panel .aus-wallet-badge.aus-wallet-badge-official { background: var(--ds-green-bg); color: var(--ds-green); }
+#aus-panel .aus-wallet-badge.is-warn { background: var(--ds-red-bg); color: var(--ds-red); }
+#aus-panel .aus-wallet-avatar { background: var(--aus-wallet-avatar-bg, var(--ds-black)); }
+#aus-panel .aus-wallet-avatar[data-has-icon='1'] { padding: 0; }
+#aus-panel .aus-wallet-avatar[data-mark='multi'] { font-size: 12px; }
+
+/* —— 窄屏：模型行改成一张张卡片，价格标签就近显示 —— */
+@media (max-width: 760px) {
+  #aus-panel .aus-wallet-list { gap: 10px; }
+  #aus-panel .aus-wallet-card { padding: 10px; gap: 10px; }
+  #aus-panel .aus-wallet-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  #aus-panel .aus-wallet-summary-value { font-size: 18px; }
+  #aus-panel .aus-wallet-table-head { display: none; }
+  #aus-panel .aus-wallet-mrow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--ds-border);
+    border-radius: 10px;
+    margin-top: 8px;
+  }
+  #aus-panel .aus-wallet-mtier { grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 6px; }
+  #aus-panel .aus-wallet-pf > span { display: inline; }
+  #aus-panel .aus-wallet-mops { justify-content: flex-start; }
+  #aus-panel .aus-wallet-avatar { width: 36px; height: 36px; border-radius: 10px; font-size: 15px; grid-column: 1; grid-row: 1; }
+  /* 窄屏隐藏冗余徽标：副标题已含类型与来源，避免名称行折行把操作按钮挤下去 */
+  #aus-panel .aus-wallet-badge-relay { display: none; }
+  #aus-panel .aus-wallet-badge-official { display: none; }
+  /* 头部四区网格：标识 / 名称+副标题 / 余额 / 操作按钮，避免长域名或待定价徽标把按钮挤到左下角 */
+  #aus-panel .aus-wallet-header { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto auto; align-items: center; gap: 6px 10px; }
+  #aus-panel .aus-wallet-identity { grid-column: 2; grid-row: 1; min-width: 0; gap: 2px; }
+  #aus-panel .aus-wallet-metrics { grid-column: 3; grid-row: 1; grid-template-columns: max-content; gap: 8px 10px; justify-items: end; justify-content: end; flex: 0 0 auto; }
+  #aus-panel .aus-wallet-actions { grid-column: 4; grid-row: 1; flex-wrap: nowrap; justify-content: flex-end; flex: 0 0 auto; }
+  #aus-wallet [data-wallet-card] [data-wallet-name] { font-size: var(--aus-fs-base) !important; }
+  #aus-wallet .aus-wallet-name-row { flex-wrap: nowrap; min-width: 0; }
+  #aus-wallet .aus-wallet-name-row [data-wallet-name] { flex: 1 1 auto; width: 0; min-width: 0 !important; max-width: 100% !important; field-sizing: fixed !important; text-overflow: ellipsis; }
+  #aus-wallet .aus-wallet-name-row > span { flex: 0 1 auto; max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #aus-wallet .aus-wallet-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #aus-panel .aus-wallet-balance-input { width: 110px; flex: 0 1 110px; }
+  #aus-panel .aus-field { min-height: 32px; }
+  #aus-panel .aus-wallet-search { flex: 1 1 120px; }
+}
+@container ausbody (max-width: 760px) {
+  #aus-panel .aus-wallet-list { gap: 10px; }
+  #aus-panel .aus-wallet-card { padding: 10px; gap: 10px; }
+  #aus-panel .aus-wallet-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  #aus-panel .aus-wallet-summary-value { font-size: 18px; }
+  #aus-panel .aus-wallet-table-head { display: none; }
+  #aus-panel .aus-wallet-mrow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--ds-border);
+    border-radius: 10px;
+    margin-top: 8px;
+  }
+  #aus-panel .aus-wallet-mtier { grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 6px; }
+  #aus-panel .aus-wallet-pf > span { display: inline; }
+  #aus-panel .aus-wallet-mops { justify-content: flex-start; }
+  #aus-panel .aus-wallet-avatar { width: 36px; height: 36px; border-radius: 10px; font-size: 15px; grid-column: 1; grid-row: 1; }
+  /* 窄屏隐藏冗余徽标：副标题已含类型与来源，避免名称行折行把操作按钮挤下去 */
+  #aus-panel .aus-wallet-badge-relay { display: none; }
+  #aus-panel .aus-wallet-badge-official { display: none; }
+  /* 头部四区网格：标识 / 名称+副标题 / 余额 / 操作按钮，避免长域名或待定价徽标把按钮挤到左下角 */
+  #aus-panel .aus-wallet-header { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto auto; align-items: center; gap: 6px 10px; }
+  #aus-panel .aus-wallet-identity { grid-column: 2; grid-row: 1; min-width: 0; gap: 2px; }
+  #aus-panel .aus-wallet-metrics { grid-column: 3; grid-row: 1; grid-template-columns: max-content; gap: 8px 10px; justify-items: end; justify-content: end; flex: 0 0 auto; }
+  #aus-panel .aus-wallet-actions { grid-column: 4; grid-row: 1; flex-wrap: nowrap; justify-content: flex-end; flex: 0 0 auto; }
+  #aus-wallet [data-wallet-card] [data-wallet-name] { font-size: var(--aus-fs-base) !important; }
+  #aus-wallet .aus-wallet-name-row { flex-wrap: nowrap; min-width: 0; }
+  #aus-wallet .aus-wallet-name-row [data-wallet-name] { flex: 1 1 auto; width: 0; min-width: 0 !important; max-width: 100% !important; field-sizing: fixed !important; text-overflow: ellipsis; }
+  #aus-wallet .aus-wallet-name-row > span { flex: 0 1 auto; max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #aus-wallet .aus-wallet-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #aus-panel .aus-wallet-balance-input { width: 110px; flex: 0 1 110px; }
+  #aus-panel .aus-field { min-height: 32px; }
+  #aus-panel .aus-wallet-search { flex: 1 1 120px; }
+}
+
+/* 超窄屏（≤ 400px）：余额移到第二行，名称与操作按钮保持第一行 */
+@media (max-width: 400px) {
+  #aus-panel .aus-wallet-header {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'avatar identity actions'
+      'metrics metrics metrics';
+    row-gap: 4px;
+  }
+  #aus-panel .aus-wallet-avatar { grid-area: avatar; }
+  #aus-panel .aus-wallet-identity { grid-area: identity; }
+  #aus-panel .aus-wallet-actions { grid-area: actions; }
+  #aus-panel .aus-wallet-metrics { grid-area: metrics; justify-content: start; justify-items: start; }
+}
+@container ausbody (max-width: 400px) {
+  #aus-panel .aus-wallet-header {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'avatar identity actions'
+      'metrics metrics metrics';
+    row-gap: 4px;
+  }
+  #aus-panel .aus-wallet-avatar { grid-area: avatar; }
+  #aus-panel .aus-wallet-identity { grid-area: identity; }
+  #aus-panel .aus-wallet-actions { grid-area: actions; }
+  #aus-panel .aus-wallet-metrics { grid-area: metrics; justify-content: start; justify-items: start; }
 }
 .aus-overview-balance-card {
   overflow: visible !important;
@@ -731,17 +1088,6 @@
   #aus-panel[data-mobile-nav="bottom"] #aus-main {
     padding-bottom: calc(var(--aus-bottomnav-h) + 12px + env(safe-area-inset-bottom)) !important;
   }
-  /* 窄屏钱包卡紧凑化：标识缩小、余额/模型两项与图标操作并排、内外间距收紧，尽量压低纵向占用 */
-  .aus-wallet-avatar { width: 36px !important; height: 36px !important; border-radius: 10px !important; font-size: 15px !important; }
-  .aus-wallet-header { gap: 8px 10px !important; }
-  .aus-wallet-identity { gap: 2px !important; }
-  #aus-wallet [data-wallet-card] [data-wallet-name] { font-size:var(--aus-fs-base) !important; }
-  .aus-wallet-metrics { grid-template-columns: repeat(2, max-content) !important; justify-content: start !important; flex: 1 1 auto !important; }
-  .aus-wallet-actions { justify-content: flex-end !important; flex: 0 0 auto !important; }
-  #aus-wallet [data-wallet-card] { padding: 8px 10px !important; gap: 8px !important; }
-  #aus-wallet > div { gap: 8px !important; }
-  /* 窄屏隐藏冗余的类型徽标（副标题已含类型与来源），避免名称行折行拉高卡片 */
-  #aus-wallet .aus-wallet-badge-relay { display: none !important; }
   #aus-main { padding: 12px !important; overflow-x: hidden !important; }
   #aus-main > div { max-width: 1100px !important; width: 100% !important; margin: 0 auto !important; box-sizing: border-box !important; min-width: 0 !important; }
   /* 视图容器不裁剪下拉：原 overflow-x:hidden 会把胶囊下拉裁进 UI 底下；需配合 min-width:0 防止 720px 表撑开整个视图导致块超出屏幕 */
@@ -1955,73 +2301,6 @@
   }
 }
 
-/* 窄屏钱包卡：固定四区网格（标识 / 名称+副标题 / 余额·模型 / 操作按钮），
-   避免长域名或待定价徽标把右侧指标和按钮挤到独立行，导致按钮跑到左下角 */
-@container ausbody (max-width: 760px) {
-  #aus-wallet .aus-wallet-header {
-    display: grid !important;
-    grid-template-columns: 36px minmax(0, 1fr) auto auto;
-    align-items: center;
-    gap: 6px 10px !important;
-  }
-  #aus-wallet .aus-wallet-avatar { grid-column: 1; grid-row: 1; }
-  #aus-wallet .aus-wallet-identity { grid-column: 2; grid-row: 1; min-width: 0; }
-  #aus-wallet .aus-wallet-metrics {
-    grid-column: 3;
-    grid-row: 1;
-    gap: 8px 10px !important;
-    justify-content: end !important;
-  }
-  #aus-wallet .aus-wallet-actions {
-    grid-column: 4;
-    grid-row: 1;
-    flex-wrap: nowrap !important;
-  }
-  /* 窄屏名称行只保留名称与待定价徽标：官方/中转徽标已由副标题表达，避免挤压导致错位 */
-  #aus-wallet .aus-wallet-badge-official { display: none !important; }
-  #aus-wallet .aus-wallet-name-row {
-    flex-wrap: nowrap !important;
-    min-width: 0;
-  }
-  #aus-wallet .aus-wallet-name-row [data-wallet-name] {
-    flex: 1 1 auto;
-    width: 0;
-    min-width: 0 !important;
-    max-width: 100% !important;
-    field-sizing: fixed !important;
-    text-overflow: ellipsis;
-  }
-  #aus-wallet .aus-wallet-name-row > span {
-    flex: 0 1 auto;
-    max-width: 46%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  #aus-wallet .aus-wallet-metrics { grid-template-columns: max-content !important; }
-  #aus-wallet .aus-wallet-sub {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-}
-/* 超窄容器（≤ 400px）：余额/模型移到第二行，名称与按钮保持第一行 */
-@container ausbody (max-width: 400px) {
-  #aus-wallet .aus-wallet-header {
-    grid-template-columns: 36px minmax(0, 1fr) auto;
-    grid-template-areas:
-      "avatar identity actions"
-      "metrics metrics metrics";
-    row-gap: 4px !important;
-  }
-  #aus-wallet .aus-wallet-avatar { grid-area: avatar; }
-  #aus-wallet .aus-wallet-identity { grid-area: identity; }
-  #aus-wallet .aus-wallet-actions { grid-area: actions; }
-  #aus-wallet .aus-wallet-metrics {
-    grid-area: metrics;
-    justify-content: start !important;
-  }
-}
 
 
 /* 「新版本」指示：侧栏「关于」行徽标 + 设置页「关于」入口行徽标（同一个 data-update-badge，

@@ -14,6 +14,8 @@ export interface SwitchOptions {
   disabled?: boolean;
   ariaLabel?: string;
   className?: string;
+  /** 额外透传到原生 input 的属性（如 data-wallet-auto-balance="1"）；值已由本函数转义。 */
+  data?: Record<string, string>;
 }
 
 function escAttr(value: string): string {
@@ -29,9 +31,12 @@ export function switchHTML(id: string, opts: SwitchOptions = {}): string {
   const checked = opts.checked ? ' checked' : '';
   const disabled = opts.disabled ? ' disabled' : '';
   const aria = opts.ariaLabel ? ` aria-label="${escAttr(opts.ariaLabel)}"` : '';
+  const data = opts.data
+    ? Object.keys(opts.data).map((key) => ` ${escAttr(key)}="${escAttr(String(opts.data![key]))}"`).join('')
+    : '';
   return (
     `<label class="${cls}">` +
-    `<input type="checkbox" id="${escAttr(id)}" role="switch"${checked}${disabled}${aria} />` +
+    `<input type="checkbox" id="${escAttr(id)}" role="switch"${checked}${disabled}${aria}${data} />` +
     '<span class="aus-switch-track" aria-hidden="true"></span>' +
     '<span class="aus-switch-thumb" aria-hidden="true"></span>' +
     '</label>'
