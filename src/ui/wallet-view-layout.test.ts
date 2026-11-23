@@ -65,13 +65,19 @@ describe('钱包页：卡片结构', () => {
     expect((css.match(/#aus-panel \.aus-wallet-balance-grid \{ grid-template-columns: minmax\(0, 1fr\); gap: 10px; \}/g) || []).length).toBe(2);
   });
 
-  test('模型名下只剩来源与上下文，峰谷勾选框已移进 ⋯ 菜单', () => {
+  test('模型行只剩模型名与来源，上下文也跟着两个开关进了 ⋯ 菜单', () => {
     const footStart = renderSrc.indexOf('aus-wallet-mname-foot');
-    const footSrc = renderSrc.slice(footStart, footStart + 900);
-    expect(footSrc).toContain('aus-wallet-mctx');
-    // 行内不再有任何勾选框：两个开关都进菜单，模型行少一行
+    const footEnd = renderSrc.indexOf('matchLine,', footStart);
+    const footSrc = renderSrc.slice(footStart, footEnd);
+    // 偶尔改一次的设置项都收进菜单，模型行不再多出输入框与勾选框
+    expect(footSrc).not.toContain('aus-wallet-mctx');
+    expect(footSrc).not.toContain('data-wallet-context-limit');
     expect(footSrc).not.toContain('aus-wallet-peak-toggle');
     expect(renderSrc).not.toContain('class="aus-checkbox" data-wallet-model-peak');
+    // 菜单里三行：峰谷计价 / 锁定价格 / 上下文上限，输入框沿用同一个 data 钩子
+    expect(renderSrc).toContain('<span class="aus-wallet-menu-label">上下文上限</span>');
+    expect(renderSrc).toContain('data-wallet-context-limit="1"');
+    expect(css).toContain('#aus-wallet .aus-wallet-menu-row .aus-wallet-ctx {');
     expect(css).toContain('#aus-panel .aus-wallet-mname-foot { display: flex; align-items: center; gap: 4px 10px;');
   });
 
@@ -218,8 +224,9 @@ describe('钱包页：样式口径', () => {
     expect(css).not.toContain('.aus-wallet-mtier-off');
   });
 
-  test('价格来源灰字只说胶囊写不下的信息', () => {
-    expect(renderSrc).toContain("status.pending ? status.pending + ' 个待匹配' : status.synced ? '已同步 ' + status.synced + ' 个' : ''");
+  test('价格来源灰字只报还差多少个，不再写已同步个数', () => {
+    expect(renderSrc).toContain("const noteText = status.pending ? status.pending + ' 个待匹配' : '';");
+    expect(renderSrc).not.toContain('已同步');
     expect(renderSrc).toContain('(noteText');
     expect(renderSrc).not.toContain("esc(status.label) + (status.pending ?");
   });
@@ -228,5 +235,32 @@ describe('钱包页：样式口径', () => {
     expect(planSrc).toContain('class="aus-wallet-plan"');
     expect(planSrc).not.toContain('background:var(--ds-card-inner);border-radius:10px');
     expect(css).toContain('#aus-panel .aus-wallet-plan {');
+  });
+
+  test('窄屏「模型与价格」段的动作整行贴左成组', () => {
+    // 模板里只有这一段带 is-actions，余额段的 head 仍是标题 + 开关一行
+    expect(renderSrc).toContain('class="aus-wallet-sec-head is-actions"');
+    expect((renderSrc.match(/aus-wallet-sec-head is-actions/g) || []).length).toBe(1);
+    const narrow = css.match(/#aus-panel \.aus-wallet-sec-head\.is-actions \{[^}]*display: grid;/g) || [];
+    expect(narrow.length).toBe(2);
+    expect((css.match(/#aus-panel \.aus-wallet-sec-head\.is-actions \.aus-wallet-sec-actions \{ margin-left: 0; justify-content: flex-start;/g) || []).length).toBe(2);
+  });
+
+  test('忽略钱包要点两次，第一次只把按钮切成确认态', () => {
+    expect(src).toContain('const IGNORE_CONFIRM_MS = 5000;');
+    expect(src).toContain('function paintIgnoreConfirm(button: any, confirming: boolean): void {');
+    expect(src).toContain("button.innerHTML = icon('close', 14) + '<span>确认</span>';");
+    expect(src).toContain("toast('info', '再点一次确认忽略该钱包');");
+    // 只有「已是待确认态」这一支才落库；第一次点击走的是下面的设 pending 分支
+    const ignoreStart = src.indexOf("doc.querySelectorAll('[data-wallet-ignore]')");
+    const ignoreSrc = src.slice(ignoreStart, ignoreStart + 1400);
+    const confirmBranch = ignoreSrc.slice(
+      ignoreSrc.indexOf('if (pendingIgnoreId === walletId) {'),
+      ignoreSrc.indexOf('pendingIgnoreId = walletId;'),
+    );
+    expect(confirmBranch).toContain('repository.setWalletIgnored(walletId, true);');
+    expect(confirmBranch).not.toContain('paintIgnoreConfirm(button, true);');
+    expect(ignoreSrc).toContain('paintIgnoreConfirm(button, true);');
+    expect(css).toContain('.aus-wallet-icon-btn.is-confirming {');
   });
 });

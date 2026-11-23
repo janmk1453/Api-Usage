@@ -547,6 +547,18 @@
   background: var(--ds-red-bg);
   color: var(--ds-red);
 }
+/* 忽略钱包的二次确认态：按钮临时变宽长出「确认」两个字，形状一变就不容易连点误触 */
+.aus-wallet-icon-btn.is-confirming {
+  width: auto;
+  padding: 0 10px;
+  gap: 4px;
+  border-color: var(--ds-red);
+  background: var(--ds-red-bg);
+  color: var(--ds-red);
+  font-size: var(--aus-fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
 .aus-wallet-metric { min-width: 0; text-align: left; }
 .aus-wallet-metric-label {
   font-size:var(--aus-fs-sm);
@@ -722,6 +734,8 @@
 #aus-wallet .aus-wallet-menu-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 9px; border-radius: 7px; font-size: var(--aus-fs-sm); color: var(--ds-text); }
 #aus-wallet .aus-wallet-menu-row .aus-switch { flex: 0 0 auto; }
 #aus-wallet .aus-wallet-menu-label { white-space: nowrap; }
+/* 菜单里的数字输入（上下文上限）：贴着右边，宽度只够 6 位数 */
+#aus-wallet .aus-wallet-menu-row .aus-wallet-ctx { flex: 0 0 auto; width: 96px; min-height: 26px; padding: 2px 6px; text-align: right; }
 #aus-wallet .aus-wallet-menu-sep { margin: 4px 9px; border-top: 1px solid var(--ds-border); }
 
 /* —— 第一段：余额与校准 —— */
@@ -895,6 +909,12 @@
   #aus-panel .aus-wallet-balance-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   #aus-panel .aus-field { min-height: 32px; }
   #aus-panel .aus-wallet-search { flex: 1 1 120px; }
+  /* 「模型与价格」段：标题一行，动作整行贴左成组。原来宽胶囊先把行占满，同步价格与添加模型
+     被挤到第二、第三行右对齐，看着像三根散落的胶囊 */
+  #aus-panel .aus-wallet-sec-head.is-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: start; }
+  #aus-panel .aus-wallet-sec-head.is-actions .aus-wallet-sec-actions { margin-left: 0; justify-content: flex-start; gap: 6px; }
+  #aus-panel .aus-wallet-sec-head.is-actions .aus-wallet-catalog-picker { align-items: flex-start; }
+  #aus-panel .aus-wallet-sec-head.is-actions .aus-wallet-pill-note { text-align: left; }
 }
 @container ausbody (max-width: 760px) {
   #aus-panel .aus-wallet-list { gap: 10px; }
@@ -930,6 +950,12 @@
   #aus-panel .aus-wallet-balance-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   #aus-panel .aus-field { min-height: 32px; }
   #aus-panel .aus-wallet-search { flex: 1 1 120px; }
+  /* 「模型与价格」段：标题一行，动作整行贴左成组。原来宽胶囊先把行占满，同步价格与添加模型
+     被挤到第二、第三行右对齐，看着像三根散落的胶囊 */
+  #aus-panel .aus-wallet-sec-head.is-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: start; }
+  #aus-panel .aus-wallet-sec-head.is-actions .aus-wallet-sec-actions { margin-left: 0; justify-content: flex-start; gap: 6px; }
+  #aus-panel .aus-wallet-sec-head.is-actions .aus-wallet-catalog-picker { align-items: flex-start; }
+  #aus-panel .aus-wallet-sec-head.is-actions .aus-wallet-pill-note { text-align: left; }
 }
 
 /* 超窄屏（≤ 400px）：余额移到第二行，名称与操作按钮保持第一行 */

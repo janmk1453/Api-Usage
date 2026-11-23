@@ -169,6 +169,35 @@ function reopenModelMenu(doc: Document, modelId: string | null): void {
   if (dropdown) dropdown.style.display = 'block';
 }
 
+/** 忽略钱包的二次确认窗口：第一次点只切确认态，超时自动还原。 */
+const IGNORE_CONFIRM_MS = 5000;
+let pendingIgnoreId: string | null = null;
+let pendingIgnoreTimer: any = null;
+
+function resetIgnoreConfirm(): void {
+  pendingIgnoreId = null;
+  if (pendingIgnoreTimer) {
+    clearTimeout(pendingIgnoreTimer);
+    pendingIgnoreTimer = null;
+  }
+}
+
+/** 红色 ✕ 一次误触就会把钱包从视图里抹掉，故先换成「确认」再点一次才执行。 */
+function paintIgnoreConfirm(button: any, confirming: boolean): void {
+  if (!button) return;
+  if (confirming) {
+    button.classList.add('is-confirming');
+    button.innerHTML = icon('close', 14) + '<span>确认</span>';
+    button.title = '再点一次确认忽略该钱包';
+    button.setAttribute('aria-label', '再点一次确认忽略该钱包');
+  } else {
+    button.classList.remove('is-confirming');
+    button.innerHTML = icon('close', 16);
+    button.title = '忽略该钱包（历史与统计保留）';
+    button.setAttribute('aria-label', '忽略钱包');
+  }
+}
+
 function modelRowHTML(wallet: WalletConfig, model: WalletModel): string {
   const pending = !model.price.priceConfigured;
   const canDelete = model.source !== 'builtin';
@@ -211,6 +240,10 @@ function modelRowHTML(wallet: WalletConfig, model: WalletModel): string {
       ariaLabel: '锁定价格',
       data: { 'data-wallet-model-lock': '1', 'data-wallet-id': wallet.id, 'data-model-id': model.id },
     }))
+    // 上下文上限也是偶尔改一次的设置项，跟两个开关一起收进菜单，模型行只留模型名与价格
+    + '<label class="aus-wallet-menu-row"><span class="aus-wallet-menu-label">上下文上限</span>'
+    + '<input type="number" min="1" step="1000" class="aus-field aus-field-num aus-wallet-ctx" data-wallet-context-limit="1" data-wallet-id="' + esc(wallet.id)
+    + '" data-model-id="' + esc(model.id) + '" value="' + (model.contextLimit ?? '') + '" placeholder="未知" aria-label="上下文上限" /></label>'
     + '<div class="aus-wallet-menu-sep"></div>'
     + (canDelete
       ? '<button type="button" class="aus-wallet-menu-item is-danger" data-wallet-model-delete="1" data-wallet-id="' + esc(wallet.id)
@@ -225,10 +258,6 @@ function modelRowHTML(wallet: WalletConfig, model: WalletModel): string {
       + '" data-model-id="' + esc(model.id) + '" value="' + esc(model.model) + '" aria-label="模型名" />',
     '    <div class="aus-wallet-mname-foot">',
     '      <div class="aus-wallet-mmeta">' + meta + '</div>',
-    '      <label class="aus-wallet-mctx">上下文',
-    '        <input type="number" min="1" step="1000" class="aus-field aus-field-num aus-wallet-ctx" data-wallet-context-limit="1" data-wallet-id="' + esc(wallet.id)
-      + '" data-model-id="' + esc(model.id) + '" value="' + (model.contextLimit ?? '') + '" placeholder="未知" aria-label="上下文上限" />',
-    '      </label>',
     '    </div>',
     matchLine,
     '  </div>',
@@ -279,8 +308,8 @@ function renderCatalogPicker(wallet: WalletConfig): string {
   const providerVendor = vendorById(wallet.catalogProvider);
   const providerIcon = providerVendor ? vendorIconSvg(providerVendor.id, 14) : '';
   const status = walletSyncStatus(wallet);
-  // 供应商名已经写在胶囊里，灰字只承载「待匹配 / 已同步」这类胶囊写不下的信息
-  const noteText = status.pending ? status.pending + ' 个待匹配' : status.synced ? '已同步 ' + status.synced + ' 个' : '';
+  // 供应商名已经写在胶囊里；灰字只报「还差多少个没配上价格」——配好多少没必要说，胶囊本身就是结论
+  const noteText = status.pending ? status.pending + ' 个待匹配' : '';
   return '<div class="aus-wallet-rel aus-wallet-catalog-picker">'
     + '<button type="button" data-wallet-catalog-btn="1" data-wallet-id="' + esc(wallet.id) + '" title="选择价格来源" class="aus-pill aus-pill-sm aus-wallet-pill aus-wallet-catalog-btn">'
     + '<span class="aus-wallet-pill-label">价格来源</span>'
@@ -443,7 +472,7 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
   ].join('\n');
   const modelSection = [
     '<section class="aus-wallet-sec">',
-    '  <div class="aus-wallet-sec-head">',
+    '  <div class="aus-wallet-sec-head is-actions">',
     '    <h4 class="aus-wallet-sec-title">模型与价格<span class="aus-wallet-sec-note">单位 ' + esc(currencyCode) + '/百万 tokens</span></h4>',
     '    <div class="aus-wallet-sec-actions">',
     renderCatalogPicker(wallet),
@@ -703,11 +732,28 @@ function bindWalletView(doc: Document): void {
   });
 
   doc.querySelectorAll('[data-wallet-ignore]').forEach((button: any) => {
+    const walletId = button.getAttribute('data-wallet-id');
+    if (walletId && pendingIgnoreId === walletId) paintIgnoreConfirm(button, true);
     button.onclick = () => {
-      const walletId = button.getAttribute('data-wallet-id');
       if (!walletId) return;
-      repository.setWalletIgnored(walletId, true);
-      renderWalletView();
+      if (pendingIgnoreId === walletId) {
+        resetIgnoreConfirm();
+        repository.setWalletIgnored(walletId, true);
+        renderWalletView();
+        return;
+      }
+      pendingIgnoreId = walletId;
+      if (pendingIgnoreTimer) clearTimeout(pendingIgnoreTimer);
+      pendingIgnoreTimer = setTimeout(() => {
+        const targetId = pendingIgnoreId;
+        resetIgnoreConfirm();
+        const again = targetId
+          ? doc.querySelector('[data-wallet-ignore="1"][data-wallet-id="' + targetId + '"]')
+          : null;
+        paintIgnoreConfirm(again, false);
+      }, IGNORE_CONFIRM_MS);
+      paintIgnoreConfirm(button, true);
+      toast('info', '再点一次确认忽略该钱包');
     };
   });
 
@@ -829,7 +875,9 @@ function bindWalletView(doc: Document): void {
           model.contextLimitManual = contextLimit != null;
         }
       });
-      renderWalletView();
+      // 输入框在菜单里，重画后要把同一个菜单重新打开，否则改完就「消失」了
+      const docOf = (input.ownerDocument || doc) as Document;
+      void renderWalletView().then(() => reopenModelMenu(docOf, modelId)).catch(() => {});
     };
   });
 
