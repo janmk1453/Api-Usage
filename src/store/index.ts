@@ -49,7 +49,8 @@ export const state: State = {
   messageCount: 0,
 };
 
-// 兼容旧调用：统一返回单一聚合（始终基于全部历史，不受 historyScope 影响）
+// 兼容旧调用：聚合字段（total_*）始终基于全部历史，不受 historyScope 影响；
+// 但 evidence 里的 history 只是热区镜像（最近 MAX_HISTORY 条），全量必须走 repository.getAllHistory()
 // 概览页除余额外均应基于全部历史，此处不按对话过滤
 export function getSelectedSave(): any {
   return {

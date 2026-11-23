@@ -1,20 +1,20 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { i as state$2, n as getHistoryForDisplay, r as getSelectedSave, s as mobileDeviceHint, t as getCurrentChatIdForStore } from "./store-CVamS-ER.js";
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
-import { _ as saveHot, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
+import { _ as saveHot, v as historyRecordKey } from "./persistence-BKzvk-Ru.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as pricingSourceLabel, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-D_82rA38.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as pricingSourceLabel, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-ClrFIMhe.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc$3, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
-import { a as getDisplayCurrency, i as formatMoney, o as getWalletExchangeRate, t as cnyToDisplay$1 } from "./currency-Dr655frw.js";
+import { a as getDisplayCurrency, i as formatMoney, o as getWalletExchangeRate, t as cnyToDisplay$1 } from "./currency-CeyRWZ-f.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
-import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-ChwyLW2r.js";
+import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-ysrJmDOg.js";
 import { r as registerRequestOriginSelf } from "./request-origin-C9kLQ_0W.js";
 import { a as CHANGELOG, c as BUILD_NO, i as renderChangelogCard, n as changelogSectionsHTML, o as APP_BUILD_TAG, r as formatChangelogDate, s as APP_VERSION, t as bindChangelog } from "./changelog-i35gZh7M.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-X8wtGWPD.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-SMfStmcg.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-DQorOs5b.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-C7ShL0IX.js";
-import { a as listTapRecords, i as clearTapRecords, n as tapDiagnostics, o as subscribeTap, r as stripModelTag } from "./request-tap-Ly1fbPoz.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-8s1u5P0g.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-3z_EQeHq.js";
+import { a as listTapRecords, i as clearTapRecords, n as tapDiagnostics, o as subscribeTap, r as stripModelTag } from "./request-tap-ntrMPA2A.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -2663,7 +2663,7 @@ function renderChatSummaryOverview(fullHistory) {
 	if (fullHistory) return;
 	(async () => {
 		try {
-			const mod = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
+			const mod = await import("./persistence-BKzvk-Ru.js").then((n) => n.m);
 			if (!mod.getAllHistory) return;
 			const all = await mod.getAllHistory();
 			if (!all || all.length <= (state$2.history?.length || 0)) return;
@@ -6451,7 +6451,7 @@ async function getHistoryForStats() {
 	if (allHistoryPromise) return allHistoryPromise;
 	allHistoryPromise = (async () => {
 		try {
-			const mod = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
+			const mod = await import("./persistence-BKzvk-Ru.js").then((n) => n.m);
 			if (mod.getAllHistory) {
 				const result = await mod.getAllHistory() || hot;
 				cachedAllHistory = result;
@@ -9636,7 +9636,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-X8wtGWPD.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-SMfStmcg.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -10274,7 +10274,7 @@ function bindShell(doc) {
 	});
 }
 /**
-* 渲染管理页：先用热数据（最近 50 条）立即出图，再异步用冷存储全量补全，
+* 渲染管理页：先用热数据（热区最近 2000 条）立即出图，再异步用冷存储全量补全，
 * 避免打开页面时空白等待 IndexedDB（与概览「按对话统计」同一套补全思路）。
 */
 async function renderChatManageView() {
@@ -14324,7 +14324,7 @@ function renderHistory(doc, s) {
 	historyLoading = true;
 	(async () => {
 		try {
-			const mod = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
+			const mod = await import("./persistence-BKzvk-Ru.js").then((n) => n.m);
 			if (!mod.getAllHistory) return;
 			const all = await mod.getAllHistory();
 			if (!all || !all.length) return;
@@ -15916,7 +15916,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-CFWe6ZgG.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-CLeAK-k4.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-BsrR54Lw.js").then((n) => n.n).then((m) => {
@@ -16391,7 +16391,7 @@ function pickNearest(entries, ref) {
 /**
 * 消息费用 / 首字延迟 / 生成速度 / 缓存命中率：面板外的一层展示
 *
-* 数据全部取自 Api-Usage 自己的历史记录（state.history，热 50 + 冷库分页），
+* 数据全部取自 Api-Usage 自己的历史记录（state.history，即热区最近 2000 条，不读冷库），
 * 这里只做「消息 ↔ 记录」配对与 DOM 绘制，不改采集链路，也不写聊天数据。
 */
 var REFRESH_DEBOUNCE_MS = 250;
@@ -16557,7 +16557,7 @@ function onEscapeKey(e) {
 }
 function onPageHide() {
 	try {
-		import("./persistence-DeIFgZp8.js").then((n) => n.m).then((m) => m.flushSaveHot()).catch(() => {});
+		import("./persistence-BKzvk-Ru.js").then((n) => n.m).then((m) => m.flushSaveHot()).catch(() => {});
 	} catch {}
 }
 function cleanupRuntimeBindings() {
@@ -16605,13 +16605,13 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-ChwyLW2r.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-ysrJmDOg.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-CFWe6ZgG.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CLeAK-k4.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./request-tap-Ly1fbPoz.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
+		import("./request-tap-ntrMPA2A.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
 	} catch {}
 	try {
 		installMessageCost();
@@ -16622,13 +16622,13 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-ChwyLW2r.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-ysrJmDOg.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-CFWe6ZgG.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CLeAK-k4.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./request-tap-Ly1fbPoz.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
+		import("./request-tap-ntrMPA2A.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
 	} catch {}
 	try {
 		installMessageCost();
@@ -16697,10 +16697,10 @@ async function teardownRuntime() {
 		uninstallMessageCost();
 	} catch {}
 	try {
-		import("./interception-ChwyLW2r.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-ysrJmDOg.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-CFWe6ZgG.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-CLeAK-k4.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -16716,20 +16716,20 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-X8wtGWPD.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-SMfStmcg.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-Dr655frw.js").then((n) => n.n)).stopRateTimer?.();
+		(await import("./currency-CeyRWZ-f.js").then((n) => n.n)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-C7ShL0IX.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-3z_EQeHq.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
 async function onInstall() {
 	log.debug("installed");
 	try {
-		const { loadHot } = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
+		const { loadHot } = await import("./persistence-BKzvk-Ru.js").then((n) => n.m);
 		await loadHot();
 	} catch {}
 }
@@ -16739,7 +16739,7 @@ async function onUpdate() {
 async function onDelete() {
 	log.debug("deleted");
 	try {
-		const { flushSaveHot } = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
+		const { flushSaveHot } = await import("./persistence-BKzvk-Ru.js").then((n) => n.m);
 		flushSaveHot();
 	} catch {}
 	await teardownRuntime();
@@ -16757,12 +16757,12 @@ async function onDelete() {
 async function onClean() {
 	log.debug("cleaning");
 	try {
-		const { flushSaveHot } = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
+		const { flushSaveHot } = await import("./persistence-BKzvk-Ru.js").then((n) => n.m);
 		flushSaveHot();
 	} catch {}
 	await teardownRuntime();
 	try {
-		const { wipeAllExtensionData } = await import("./wipe-data-CUS4ikCP.js");
+		const { wipeAllExtensionData } = await import("./wipe-data-CQWk1L5m.js");
 		const report = await wipeAllExtensionData();
 		log.debug("cleaned", report);
 	} catch (err) {
@@ -16775,25 +16775,25 @@ function onEnable() {
 		installMessageCost();
 	} catch {}
 	try {
-		import("./interception-ChwyLW2r.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-ysrJmDOg.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-CFWe6ZgG.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CLeAK-k4.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-X8wtGWPD.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-SMfStmcg.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
-		import("./currency-Dr655frw.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
+		import("./currency-CeyRWZ-f.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-C7ShL0IX.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-3z_EQeHq.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
 	log.debug("disabled");
 	try {
-		const { flushSaveHot } = await import("./persistence-DeIFgZp8.js").then((n) => n.m);
+		const { flushSaveHot } = await import("./persistence-BKzvk-Ru.js").then((n) => n.m);
 		flushSaveHot();
 	} catch {}
 	await teardownRuntime();
@@ -16830,19 +16830,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-X8wtGWPD.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-SMfStmcg.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-Dr655frw.js").then((n) => n.n)).restartRateTimer?.();
+		(await import("./currency-CeyRWZ-f.js").then((n) => n.n)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-C7ShL0IX.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-3z_EQeHq.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-CFWe6ZgG.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CLeAK-k4.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -16867,7 +16867,7 @@ async function init() {
 			installMessageCost();
 		} catch {}
 		try {
-			import("./pricing-sync-C7ShL0IX.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-3z_EQeHq.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

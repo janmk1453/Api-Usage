@@ -1,4 +1,4 @@
-import { c as flushSaveHot, i as blockPersistentWrites, n as MODULE_NAME, o as closeDB, t as DB_NAME } from "./persistence-DeIFgZp8.js";
+import { c as flushSaveHot, i as blockPersistentWrites, n as MODULE_NAME, o as closeDB, t as DB_NAME } from "./persistence-BKzvk-Ru.js";
 //#region src/services/wipe-data.ts
 /**
 * 清除本扩展留下的全部数据。
@@ -9,13 +9,13 @@ import { c as flushSaveHot, i as blockPersistentWrites, n as MODULE_NAME, o as c
 *
 * 清理面（只动本扩展自己的东西）：
 *  1) settings.json 的 extensionSettings[api_usage_stat]：钱包配置与价格规则、
-*     加密的钱包校准密钥 walletSecrets、匿名统计标识 telemetry、热记录 50 条；
+*     加密的钱包校准密钥 walletSecrets、匿名统计标识 telemetry、热记录（最近 2000 条）；
 *  2) IndexedDB api_usage_stat_db：冷历史、旧版迁移备份、写入失败时的降级副本；
 *  3) localStorage：全部 aus_ 前缀偏好键，以及旧版遗留的 ds_ 前缀行为开关。
 *
 * 硬约束：
 *  - 禁止 localStorage.clear()、禁止无差别删库，只按白名单与前缀判断；
-*  - 清理前先 flush 再关写闸门，避免 300ms 节流保存把设置写回去；
+*  - 清理前先 flush 再关写闸门，避免 300ms 延迟保存（防抖）把设置写回去；
 *  - 删库前先关连接并处理 onblocked（另一个标签页开着酒馆时会挡住删除），
 *    酒馆给钩子的超时是 5s，这里最多等 2.5s，超时按失败返回但继续清其它面。
 */

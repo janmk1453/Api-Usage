@@ -2033,8 +2033,8 @@
 
         <h3 id="privacy-storage">八、数据存储、留存与删除</h3>
         <ul>
-          <li><strong>热数据：</strong>最近 50 条记录与全部设置存于酒馆扩展设置（随酒馆保存于用户本地服务端）；</li>
-          <li><strong>冷数据：</strong>超出热区的历史记录（上限 2000 条，含去重）存于浏览器 IndexedDB；</li>
+          <li><strong>热数据：</strong>最近 2000 条记录与全部设置存于酒馆扩展设置（随酒馆保存于用户本地服务端）；</li>
+          <li><strong>冷数据：</strong>超出热区的更早历史存于浏览器 IndexedDB（冷库不设条数上限，整份读写）；</li>
           <li><strong>明细：</strong>消息与响应快照仅对最近 5 条记录保留，其余自动剥离，且永不导出；</li>
           <li><strong>调试日志：</strong>仅存于本地 localStorage，可随时清除，不含聊天正文；</li>
           <li><strong>请求日志：</strong>最近一轮对话请求的标头、正文与响应只存于本地 localStorage（键 <span class="code">aus_last_request_v1</span>，正文上限 200,000 字符、敏感标头打码），每次请求整体覆盖；另有一份最近三轮对话摘要（键 <span class="code">aus_recent_turns_v1</span>，只存角色、每条前 400 字与字符数，整体上限 8 KB，随新对话滚动覆盖），用于反馈时定位上下文。两者都可在「设置 → 问题反馈 / 请求日志」随时清空，<strong>不进入历史记录、统计、导出与云同步</strong>。正文按原文保存，其中含有该轮的聊天与提示词；</li>

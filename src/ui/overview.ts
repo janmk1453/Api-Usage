@@ -371,7 +371,7 @@ function renderChatSummaryOverview(fullHistory?: any[]) {
   const hotRows = computeChatStats(fullHistory);
   renderChatSummaryTable(doc, hotRows);
   if (fullHistory) return;
-  // 若存在冷存储全量（IndexedDB），异步补全以确保按对话统计完整（hot 仅 50 条）
+  // 若存在冷存储全量（IndexedDB），异步补全以确保按对话统计完整（hot 为最近 2000 条，可能仍不含更早的冷库记录）
   (async () => {
     try {
       const mod: any = await import('../store/persistence');

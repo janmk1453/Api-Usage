@@ -2,7 +2,7 @@
  * 存储占用统计：统计本扩展在各类存储中占用的空间。
  *
  * 本扩展的数据实际分布在四个地方（见 store/persistence.ts）：
- *  1. SillyTavern 设置（extensionSettings.api_usage_stat）—— 热数据：最近 50 条历史 + 设置 + 汇总
+ *  1. SillyTavern 设置（extensionSettings.api_usage_stat）—— 热数据：最近 2000 条历史 + 设置 + 汇总
  *     注：由酒馆统一序列化进其 settings.json，浏览器端拿不到落盘字节数，只能按 UTF-8 估算
  *  2. IndexedDB `api_usage_stat_db` / `kv` —— 冷历史、旧版迁移备份
  *  3. localStorage —— 零星小项（WebDAV 密码密文、峰值圆点位置、调试开关、更新检查时间、预测页偏好）

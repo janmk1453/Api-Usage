@@ -828,7 +828,7 @@ function renderHistory(doc: Document, s: any) {
   try { if (!curChatId) curChatId = (globalThis as any).SillyTavern?.getContext?.().getCurrentChatId?.() || null; } catch {}
   const scopeKey = scope === 'current' ? `current:${curChatId||''}` : 'all';
   if (historyCacheScope !== scopeKey) { historyPage = 1; historyCacheScope = scopeKey; historyFullCache = null; }
-  // 同步先渲染：若已有全量缓存则直接用缓存分页，否则用热数据分页（30条），避免一次渲染2000条
+  // 同步先渲染：若已有全量缓存就直接按 30 条/页切缓存，否则先用热区（最近 2000 条）顶上，避免一次渲染上万条
   let fullForRender: any[] = hist;
   if (historyFullCache && historyFullCache.length > hist.length) fullForRender = historyFullCache;
   renderHistoryFilters(fullForRender);

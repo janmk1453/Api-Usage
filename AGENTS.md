@@ -35,7 +35,7 @@ SillyTavern 原生扩展 `API用量统计`（清单 `api-usage-stat`），由酒
 - **语言**：TypeScript 5，`strict`；`tsconfig.include = ["src", "global.d.ts"]`。
 - **图表**：ECharts 6 按需引入（`echarts/core` + Bar/Line + Grid/Tooltip/Legend/CanvasRenderer），动态分包随 `dist/` 提交。`Y` 17 项（Token / 费用 / 请求与性能 / 比率四组）×`X` 5 维度（轮次 / 每小时 / 每日 / 每周 / 每月），渲染按 `Y.kind` 分流：`token` 堆叠柱、`cost/duration/rate/percent` 曲线（右侧独立轴，百分比 0–100）、`count` 柱；费用轴按币种换算。
 - **样式**：无框架。`[data-extension="api-usage-stat"][data-ds-theme="light|dark"]` 隔离宿主 `SmartTheme`；`style.css` 是**手写样式源**（非产物，留在根目录，`manifest.css` 指向它，Vite 不产 CSS）——四套同名变量 + `services/theme.ts` 切换 + 设置页胶囊下拉；默认 `light`。
-- **存储**：`extensionSettings[api_usage_stat]` 热 `50` 条 + IndexedDB `api_usage_stat_db` 冷分页（`MAX_HISTORY = 2000`，超出自动回冷库）；钱包配置 / 忽略列表 / `overviewWalletId` / `overviewWalletManuallySet` 随热设置持久化；**钱包校准密钥**单独存 `extensionSettings.walletSecrets`（XOR 混淆，不参与导出 / WebDAV）；**匿名统计**的匿名标识与待发数据单独存 `extensionSettings.telemetry`（不进 `state.settings`，因而不参与导出、导入与同步）。
+- **存储**：`extensionSettings[api_usage_stat]` 热区最近 `MAX_HISTORY = 2000` 条 + IndexedDB `api_usage_stat_db` 冷库（单键 `cold_history` 存整份 JSON，读取时全量合并，**没有分页**；热区超出 2000 条自动回冷库）；钱包配置 / 忽略列表 / `overviewWalletId` / `overviewWalletManuallySet` 随热设置持久化；**钱包校准密钥**单独存 `extensionSettings.walletSecrets`（XOR 混淆，不参与导出 / WebDAV）；**匿名统计**的匿名标识与待发数据单独存 `extensionSettings.telemetry`（不进 `state.settings`，因而不参与导出、导入与同步）。
 - **最低版本**：`manifest.minimum_client_version 1.11.0`；hooks 机制要 1.17.0、`clean` 钩子要 1.18.0；API 密钥条目编号要 `>= 1.14.0`（更早版本归入「未识别密钥」）。
 
 ## 目录
@@ -64,7 +64,7 @@ Api-Usage/
 | `constants/` | `pricing.ts`（`PRICING`/`DEFAULT_PEAK_HOURS`/`MAX_HISTORY`/`DETAIL_KEEP`/`STORAGE_KEYS`/`PRICE_HISTORY`/`FLASH_PRICE_CUTOFF`）、`holidays.ts`、`changelog.ts`（用户手动维护）、`version.ts` |
 | `types/` | `save.ts`（`HistoryEntry`）、`settings.ts`、`wallet.ts`、`agent.ts` |
 | `data/` | ★ 唯一数据通路：`repository`（写）、`computed`（算）、`wallets`（钱包纯逻辑）、`fingerprint`、`sample-quality`（统计口径）、`token-rate`、`events`、`types` |
-| `store/` | `index.ts` + `persistence.ts`：单一历史聚合、热 50 + 冷库、`DB_NAME`、迁移备份 |
+| `store/` | `index.ts` + `persistence.ts`：单一历史聚合、热区最近 2000 条 + 冷库单键整份 JSON、`DB_NAME`、迁移备份 |
 | `services/` | 采集与业务：`interception`、`request-origin`、`think-timing`、`turn-outcome`、`token-estimate`、`connection-identity`、`pricing`/`pricing-sync`、`model-match`、`currency`、`balance`、`wallet-secrets`、`plan-quota`、`import-export`、`sync`、`update`/`update-policy`、`telemetry`、`storage-usage`、`wipe-data`/`wipe-hooks`、`theme`、`debug`、`logger`、`announcement`（公告：拉取 / 已读 / 版本与有效期过滤；公告文件在远端 `announce` 分支） |
 | `services/request-tap/` | 请求探针账本：`capture`/`match`/`classify`/`store`/`types`/`index` |
 | `services/message-cost/` | 聊天消息头元信息：`match`（消息↔记录配对）/`render`/`settings-row`（注入宿主设置页）/`index` |

@@ -116,7 +116,7 @@
 - **按范围删除**（`#aus-delete-*`，`bindHistoryDelete`）：开始 / 结束日期、模型（完全匹配）、对话（`chatId` 或 `chatName` 完全匹配），留空不限；先「统计匹配记录」预览再二次确认；底层 `repository.deleteHistoryByFilter`（热 + 冷 + `recalcAll` + `rebuildAggregates`），日期用 `localDay` 比较、口径与 `filterStatsHistory` 一致。
 - **卸载与清数据（clean 钩子）**：`manifest.json#hooks.clean = onClean`（hook 机制要酒馆 1.17.0、`clean` 要 1.18.0；`minimum_client_version` 是 1.11.0，老版本没有该勾选项）。
   - `src/index.ts#onDelete` **只拆界面与运行时**（`teardownRuntime()`：卸拦截、卸 Agent 采集、删面板 DOM、`resetPanelState`、停峰值圆点与定时器、`cleanupRuntimeBindings`），**不碰数据**——卸载后重装仍能看到历史与钱包；清数据只走 `onClean`。
-  - `services/wipe-data.ts#wipeAllExtensionData()` 四步：① `flushSaveHot()` 后 `blockPersistentWrites()` 关写盘闸门（否则 300ms 节流保存会把刚删的设置写回）；② `await closeDB()` 再 `deleteDatabase(DB_NAME, 2500)`（**删库前必须断开连接**，否则被 `blocked`）；③ localStorage 先收集键名再逐个 `removeItem`（`WIPE_LOCAL_KEYS` + `aus_` 前缀，**禁止 `clear()`**）；④ 删 `extensionSettings[api_usage_stat]` + `saveSettingsDebounced()`；全程 try/catch，失败写 `WipeReport.errors`。
+  - `services/wipe-data.ts#wipeAllExtensionData()` 四步：① `flushSaveHot()` 后 `blockPersistentWrites()` 关写盘闸门（否则 300ms 延迟保存（防抖）会把刚删的设置写回）；② `await closeDB()` 再 `deleteDatabase(DB_NAME, 2500)`（**删库前必须断开连接**，否则被 `blocked`）；③ localStorage 先收集键名再逐个 `removeItem`（`WIPE_LOCAL_KEYS` + `aus_` 前缀，**禁止 `clear()`**）；④ 删 `extensionSettings[api_usage_stat]` + `saveSettingsDebounced()`；全程 try/catch，失败写 `WipeReport.errors`。
   - **硬边界**：只删 `api_usage_stat_db`；删库超时 2.5s（钩子预算 5s）；`onblocked` 只记 `databaseBlocked`（此时库未删）；只在「管理扩展程序」里删除时触发，手动删目录不会跑；每浏览器一份，无法跨设备清理。
   - 测试 `wipe-data.test.ts`（9 用例）与 `wipe-hooks.test.ts`（4 用例，**读源码文本断言** manifest 接线、`onDelete` 不碰数据、清理面齐全、无 `clear()`）——改 `src/index.ts` / `wipe-data.ts` / `manifest.json` 必须同步。
 

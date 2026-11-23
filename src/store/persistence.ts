@@ -1,5 +1,6 @@
 /**
- * 分页存储：extensionSettings(热) + IndexedDB + 旧 LS/TavernHelper 迁移
+ * 两层存储：extensionSettings(热，最近 MAX_HISTORY 条) + IndexedDB 单键 cold_history(冷，整份 JSON)
+ * + 旧 LS/TavernHelper 迁移
  * 已废弃多存档，迁移时将所有旧 saves 合并为单一历史
  */
 import { STORAGE_KEYS } from '../constants/pricing';
@@ -210,7 +211,7 @@ function loadLegacy(key: string): string | null {
 }
 
 /**
- * 写盘闸门：数据已被清除时置位，避免节流保存把设置又写回 settings.json。
+ * 写盘闸门：数据已被清除时置位，避免 300ms 延迟保存（防抖）把设置又写回 settings.json。
  * 只在卸载清理（onClean 钩子）里打开，正常使用期间始终为 false。
  */
 let writesBlocked = false;

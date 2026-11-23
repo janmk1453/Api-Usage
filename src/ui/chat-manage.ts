@@ -264,7 +264,7 @@ function bindShell(doc: Document): void {
 }
 
 /**
- * 渲染管理页：先用热数据（最近 50 条）立即出图，再异步用冷存储全量补全，
+ * 渲染管理页：先用热数据（热区最近 2000 条）立即出图，再异步用冷存储全量补全，
  * 避免打开页面时空白等待 IndexedDB（与概览「按对话统计」同一套补全思路）。
  */
 export async function renderChatManageView(): Promise<void> {

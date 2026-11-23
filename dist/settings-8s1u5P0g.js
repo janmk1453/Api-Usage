@@ -1,15 +1,15 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { i as state } from "./store-CVamS-ER.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS } from "./pricing-Bc-qEvy8.js";
-import { _ as saveHot, d as isMigrationBackupKey, h as saveExtensionSettings, s as deleteMigrationBackups, u as getExtensionSettings, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
+import { _ as saveHot, d as isMigrationBackupKey, h as saveExtensionSettings, s as deleteMigrationBackups, u as getExtensionSettings, v as historyRecordKey } from "./persistence-BKzvk-Ru.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as mergeWalletCollections, a as decryptKey, f as getPricing$1, o as encryptKey, p as isDeepSeekOfficialModel, t as repository, u as calcCost } from "./repository-D_82rA38.js";
+import { C as mergeWalletCollections, a as decryptKey, f as getPricing$1, o as encryptKey, p as isDeepSeekOfficialModel, t as repository, u as calcCost } from "./repository-ClrFIMhe.js";
 import { a as isUnsafeKey, o as isValidDayKey, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
-import { a as getDisplayCurrency, r as fetchLiveRate } from "./currency-Dr655frw.js";
-import { r as recalcAllCosts } from "./interception-ChwyLW2r.js";
-import { i as saveApiKey } from "./balance-X8wtGWPD.js";
+import { a as getDisplayCurrency, r as fetchLiveRate } from "./currency-CeyRWZ-f.js";
+import { r as recalcAllCosts } from "./interception-ysrJmDOg.js";
+import { i as saveApiKey } from "./balance-SMfStmcg.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
-import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-C7ShL0IX.js";
+import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-3z_EQeHq.js";
 //#region src/ui/switch.ts
 function escAttr(value) {
 	return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -456,7 +456,7 @@ function syncThemeWatcher() {
 * 存储占用统计：统计本扩展在各类存储中占用的空间。
 *
 * 本扩展的数据实际分布在四个地方（见 store/persistence.ts）：
-*  1. SillyTavern 设置（extensionSettings.api_usage_stat）—— 热数据：最近 50 条历史 + 设置 + 汇总
+*  1. SillyTavern 设置（extensionSettings.api_usage_stat）—— 热数据：最近 2000 条历史 + 设置 + 汇总
 *     注：由酒馆统一序列化进其 settings.json，浏览器端拿不到落盘字节数，只能按 UTF-8 估算
 *  2. IndexedDB `api_usage_stat_db` / `kv` —— 冷历史、旧版迁移备份
 *  3. localStorage —— 零星小项（WebDAV 密码密文、峰值圆点位置、调试开关、更新检查时间、预测页偏好）
@@ -858,7 +858,7 @@ function bodyHtml(r) {
     </div>`);
 	}
 	parts.push(`<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:9px;line-height:1.6;">
-    历史记录按最近 50 条保存在酒馆设置中，更早的进入浏览器 IndexedDB；设置为 UTF-8 估算体积，与实际落盘大小可能略有差异。旧版迁移备份是升级前的一次性快照，现有数据已迁移完成，确认无误后可点「清理」删除（不影响历史、设置与钱包）。
+    历史记录按最近 2000 条保存在酒馆设置中，更早的进入浏览器 IndexedDB；设置为 UTF-8 估算体积，与实际落盘大小可能略有差异。旧版迁移备份是升级前的一次性快照，现有数据已迁移完成，确认无误后可点「清理」删除（不影响历史、设置与钱包）。
   </div>`);
 	return parts.join("");
 }
@@ -2335,7 +2335,7 @@ function renderSettings(doc) {
 		state.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state.settings });
 		try {
-			import("./balance-X8wtGWPD.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-SMfStmcg.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2379,7 +2379,7 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-D_82rA38.js").then((n) => n.n);
+				const { repository } = await import("./repository-ClrFIMhe.js").then((n) => n.n);
 				const { state: st } = await import("./store-CVamS-ER.js").then((n) => n.a);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
@@ -2526,8 +2526,8 @@ function renderSettings(doc) {
 					closeDropdownInstant(intervalDrop);
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-C7ShL0IX.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
-						import("./currency-Dr655frw.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
+						import("./pricing-sync-3z_EQeHq.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./currency-CeyRWZ-f.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};
 			});
@@ -2556,7 +2556,7 @@ function renderSettings(doc) {
 			state.settings.pricingSync.useLiveRate = liveEl.checked;
 			saveHot({ settings: state.settings });
 			try {
-				import("./currency-Dr655frw.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
+				import("./currency-CeyRWZ-f.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 			} catch {}
 		};
 		const fetchBtn = doc.getElementById("aus-fetch-rate");
