@@ -1,4 +1,4 @@
-import { c as flushSaveHot, i as blockPersistentWrites, n as MODULE_NAME, o as closeDB, t as DB_NAME } from "./persistence-BKzvk-Ru.js";
+import { i as blockPersistentWrites, l as flushSaveHot, n as MODULE_NAME, s as closeDB, t as DB_NAME } from "./persistence-BmzJp2Zz.js";
 //#region src/services/wipe-data.ts
 /**
 * 清除本扩展留下的全部数据。

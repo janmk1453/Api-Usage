@@ -1,20 +1,20 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { i as state$2, n as getHistoryForDisplay, r as getSelectedSave, s as mobileDeviceHint, t as getCurrentChatIdForStore } from "./store-CVamS-ER.js";
-import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
-import { _ as saveHot, v as historyRecordKey } from "./persistence-BKzvk-Ru.js";
+import { s as MAX_HISTORY, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
+import { a as clearColdReadFailure, b as historyRecordKey, d as getColdReadFailure, y as saveHot } from "./persistence-BmzJp2Zz.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as pricingSourceLabel, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-ClrFIMhe.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as pricingSourceLabel, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-BftO__z8.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc$3, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
-import { a as getDisplayCurrency, i as formatMoney, o as getWalletExchangeRate, t as cnyToDisplay$1 } from "./currency-CeyRWZ-f.js";
+import { a as getDisplayCurrency, i as formatMoney, o as getWalletExchangeRate, t as cnyToDisplay$1 } from "./currency-U-Rv2qTn.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
-import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-ysrJmDOg.js";
+import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-DY8caLnF.js";
 import { r as registerRequestOriginSelf } from "./request-origin-C9kLQ_0W.js";
 import { a as readSeenAnnouncementIds, c as bindChangelog, d as renderChangelogCard, f as CHANGELOG, h as BUILD_NO, i as readCachedAnnouncements, l as changelogSectionsHTML, m as APP_VERSION, n as isAnnouncementActive, o as sortAnnouncements, p as APP_BUILD_TAG, t as fetchAnnouncements, u as formatChangelogDate } from "./announcement-CWQaFtlb.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-SMfStmcg.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-B7vPxZBa.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-8s1u5P0g.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-3z_EQeHq.js";
-import { a as listTapRecords, i as clearTapRecords, n as tapDiagnostics, o as subscribeTap, r as stripModelTag } from "./request-tap-ntrMPA2A.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-BB7cLMQp.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-CoAG8B7J.js";
+import { a as listTapRecords, i as clearTapRecords, n as tapDiagnostics, o as subscribeTap, r as stripModelTag } from "./request-tap-k4SyDMQg.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
 	return k === "__proto__" || k === "constructor" || k === "prototype";
@@ -2663,9 +2663,7 @@ function renderChatSummaryOverview(fullHistory) {
 	if (fullHistory) return;
 	(async () => {
 		try {
-			const mod = await import("./persistence-BKzvk-Ru.js").then((n) => n.m);
-			if (!mod.getAllHistory) return;
-			const all = await mod.getAllHistory();
+			const all = await repository.getAllHistory();
 			if (!all || all.length <= (state$2.history?.length || 0)) return;
 			const fullRows = computeChatStats(all);
 			if (fullRows.length !== hotRows.length || fullRows.some((r, i) => r.total !== hotRows[i]?.total)) renderChatSummaryTable(doc, fullRows);
@@ -6451,7 +6449,6 @@ function renderModelSummary(filtered) {
 }
 var cachedAllHistory = null;
 var allHistoryPromise = null;
-var statsHistoryWarningShown = false;
 function invalidateStatsCache() {
 	cachedAllHistory = null;
 	lastStatsHistory = [];
@@ -6472,19 +6469,10 @@ async function getHistoryForStats() {
 	if (allHistoryPromise) return allHistoryPromise;
 	allHistoryPromise = (async () => {
 		try {
-			const mod = await import("./persistence-BKzvk-Ru.js").then((n) => n.m);
-			if (mod.getAllHistory) {
-				const result = await mod.getAllHistory() || hot;
-				cachedAllHistory = result;
-				return result;
-			}
-		} catch (error) {
-			if (!statsHistoryWarningShown) {
-				statsHistoryWarningShown = true;
-				toast("warning", "冷历史读取失败，当前统计可能只包含近期记录");
-			}
-			console.error("[Api-Usage] 全量历史读取失败", error);
-		} finally {
+			const result = await repository.getAllHistory() || hot;
+			cachedAllHistory = result;
+			return result;
+		} catch {} finally {
 			allHistoryPromise = null;
 		}
 		cachedAllHistory = hot;
@@ -9657,7 +9645,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-SMfStmcg.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-B7vPxZBa.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -12760,6 +12748,29 @@ function renderHistoryHealthBar(host, input) {
 	}
 }
 //#endregion
+//#region src/ui/cold-read-warn.ts
+/**
+* 历史记录页顶部的「冷库读取失败」告警条
+*
+* 更早的记录只存在 IndexedDB 的单键 cold_history 里；这条读不出来时，
+* 历史页 / 统计 / 导出的全量合并会退化成热区那 MAX_HISTORY 条，用户看到的
+* 是「记录凭空少了一截」。所以失败必须说出来，并给一个能自证的重试入口，
+* 绝不能在 catch 里静默吞掉。
+*/
+var COLD_WARN_HOST_ID = "aus-history-cold";
+var COLD_WARN_RETRY_ID = "aus-history-cold-retry";
+/**
+* 告警条 HTML（纯函数，便于单测）
+* @param failure 读取失败信息；为空表示当前没有失败，返回空串
+* @param maxHistory 热区上限，用来说明「现在只剩多少条」
+*/
+function coldReadWarnHTML(failure, maxHistory) {
+	if (!failure) return "";
+	const limit = Number.isFinite(maxHistory) && maxHistory > 0 ? Math.floor(maxHistory) : 0;
+	const detail = String(failure.message ?? "").trim();
+	return `<div class="aus-cold-warn" role="alert"><div class="aus-cold-warn-text"><span class="aus-cold-warn-title">更早的历史记录没能读出来</span><span class="aus-cold-warn-desc">浏览器存储（IndexedDB）读取失败，${limit > 0 ? `这里只显示最近 ${limit} 条` : "这里只显示热区的部分记录"}；更早的记录没有被删除，重试即可再读。</span>` + (detail ? `<span class="aus-cold-warn-detail" title="${esc$3(detail)}">失败原因：${esc$3(detail)}</span>` : "") + `</div><button type="button" class="aus-cold-warn-retry" id="${COLD_WARN_RETRY_ID}">${icon("refresh", 14)}<span>重试</span></button></div>`;
+}
+//#endregion
 //#region src/ui/history-badge.ts
 var NORMAL = {
 	kind: "normal",
@@ -14437,7 +14448,33 @@ function renderHistoryInner(doc, fullHist) {
 		if (panel && btn) openHistoryDetail(doc, panel, btn);
 	}
 }
+/**
+* 冷库读取失败告警条（#aus-history-cold 是独立容器，不受运行健康提示条的总开关影响）。
+* 读不出来时列表与统计都只剩热区那 MAX_HISTORY 条，必须说明白并给重试入口。
+*/
+function renderColdReadWarn(doc) {
+	const host = doc.getElementById(COLD_WARN_HOST_ID);
+	if (!host) return;
+	const failure = getColdReadFailure();
+	if (!failure) {
+		host.innerHTML = "";
+		host.style.display = "none";
+		return;
+	}
+	host.style.display = "block";
+	host.innerHTML = coldReadWarnHTML(failure, MAX_HISTORY);
+	const retry = doc.getElementById(COLD_WARN_RETRY_ID);
+	if (retry) retry.onclick = () => {
+		clearColdReadFailure();
+		invalidateHistoryCache();
+		historyLoading = false;
+		try {
+			refreshUI();
+		} catch {}
+	};
+}
 function renderHistory(doc, s) {
+	renderColdReadWarn(doc);
 	const host = doc.getElementById("aus-history");
 	if (!host) return;
 	try {
@@ -14489,9 +14526,7 @@ function renderHistory(doc, s) {
 	historyLoading = true;
 	(async () => {
 		try {
-			const mod = await import("./persistence-BKzvk-Ru.js").then((n) => n.m);
-			if (!mod.getAllHistory) return;
-			const all = await mod.getAllHistory();
+			const all = await repository.getAllHistory();
 			if (!all || !all.length) return;
 			let full = all;
 			try {
@@ -14503,7 +14538,11 @@ function renderHistory(doc, s) {
 				renderHistoryFilters(full);
 				renderHistoryInner(doc, filteredHistoryForDisplay(full));
 			});
-		} catch {} finally {
+		} catch {
+			try {
+				renderColdReadWarn(doc);
+			} catch {}
+		} finally {
 			historyLoading = false;
 		}
 	})();
@@ -15550,6 +15589,7 @@ function createPanel() {
             <div id="aus-wallet"></div>
           </div>
           <div data-view="history" style="display:none;">
+            <div id="${COLD_WARN_HOST_ID}" style="display:none;"></div>
             <div id="aus-history-health" style="display:none;"></div>
             <div id="aus-history-filter-host" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div class="aus-stats-filter">
@@ -16095,7 +16135,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-CLeAK-k4.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-CyspJyae.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-BsrR54Lw.js").then((n) => n.n).then((m) => {
@@ -16736,7 +16776,7 @@ function onEscapeKey(e) {
 }
 function onPageHide() {
 	try {
-		import("./persistence-BKzvk-Ru.js").then((n) => n.m).then((m) => m.flushSaveHot()).catch(() => {});
+		import("./persistence-BmzJp2Zz.js").then((n) => n.g).then((m) => m.flushSaveHot()).catch(() => {});
 	} catch {}
 }
 function cleanupRuntimeBindings() {
@@ -16784,13 +16824,13 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-ysrJmDOg.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DY8caLnF.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-CLeAK-k4.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CyspJyae.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./request-tap-ntrMPA2A.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
+		import("./request-tap-k4SyDMQg.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
 	} catch {}
 	try {
 		installMessageCost();
@@ -16801,13 +16841,13 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-ysrJmDOg.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DY8caLnF.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-CLeAK-k4.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CyspJyae.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./request-tap-ntrMPA2A.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
+		import("./request-tap-k4SyDMQg.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
 	} catch {}
 	try {
 		installMessageCost();
@@ -16876,10 +16916,10 @@ async function teardownRuntime() {
 		uninstallMessageCost();
 	} catch {}
 	try {
-		import("./interception-ysrJmDOg.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-DY8caLnF.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-CLeAK-k4.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-CyspJyae.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -16895,20 +16935,20 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-SMfStmcg.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-B7vPxZBa.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-CeyRWZ-f.js").then((n) => n.n)).stopRateTimer?.();
+		(await import("./currency-U-Rv2qTn.js").then((n) => n.n)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-3z_EQeHq.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-CoAG8B7J.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
 async function onInstall() {
 	log.debug("installed");
 	try {
-		const { loadHot } = await import("./persistence-BKzvk-Ru.js").then((n) => n.m);
+		const { loadHot } = await import("./persistence-BmzJp2Zz.js").then((n) => n.g);
 		await loadHot();
 	} catch {}
 }
@@ -16918,7 +16958,7 @@ async function onUpdate() {
 async function onDelete() {
 	log.debug("deleted");
 	try {
-		const { flushSaveHot } = await import("./persistence-BKzvk-Ru.js").then((n) => n.m);
+		const { flushSaveHot } = await import("./persistence-BmzJp2Zz.js").then((n) => n.g);
 		flushSaveHot();
 	} catch {}
 	await teardownRuntime();
@@ -16936,12 +16976,12 @@ async function onDelete() {
 async function onClean() {
 	log.debug("cleaning");
 	try {
-		const { flushSaveHot } = await import("./persistence-BKzvk-Ru.js").then((n) => n.m);
+		const { flushSaveHot } = await import("./persistence-BmzJp2Zz.js").then((n) => n.g);
 		flushSaveHot();
 	} catch {}
 	await teardownRuntime();
 	try {
-		const { wipeAllExtensionData } = await import("./wipe-data-CQWk1L5m.js");
+		const { wipeAllExtensionData } = await import("./wipe-data-D_XIOLTZ.js");
 		const report = await wipeAllExtensionData();
 		log.debug("cleaned", report);
 	} catch (err) {
@@ -16954,25 +16994,25 @@ function onEnable() {
 		installMessageCost();
 	} catch {}
 	try {
-		import("./interception-ysrJmDOg.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-DY8caLnF.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-CLeAK-k4.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CyspJyae.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-SMfStmcg.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-B7vPxZBa.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
-		import("./currency-CeyRWZ-f.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
+		import("./currency-U-Rv2qTn.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-3z_EQeHq.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-CoAG8B7J.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
 	log.debug("disabled");
 	try {
-		const { flushSaveHot } = await import("./persistence-BKzvk-Ru.js").then((n) => n.m);
+		const { flushSaveHot } = await import("./persistence-BmzJp2Zz.js").then((n) => n.g);
 		flushSaveHot();
 	} catch {}
 	await teardownRuntime();
@@ -17009,19 +17049,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-SMfStmcg.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-B7vPxZBa.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-CeyRWZ-f.js").then((n) => n.n)).restartRateTimer?.();
+		(await import("./currency-U-Rv2qTn.js").then((n) => n.n)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-3z_EQeHq.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-CoAG8B7J.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-CLeAK-k4.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CyspJyae.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -17046,7 +17086,7 @@ async function init() {
 			installMessageCost();
 		} catch {}
 		try {
-			import("./pricing-sync-3z_EQeHq.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-CoAG8B7J.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

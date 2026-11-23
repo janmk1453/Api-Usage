@@ -21,7 +21,7 @@ import {
 } from '../data/computed';
 import { FOUR_OPTIONS, getFourDisplay } from './overview';
 import { historyRecordKey } from '../utils/history-key';
-import { toast } from '../utils/logger';
+import { repository } from '../data/repository';
 import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
 import { filterPickerRows } from './chat-visibility';
 import { closeDropdownInstant, closeDropdownThenPaint } from './dropdown-close';
@@ -1000,7 +1000,6 @@ function renderModelSummary(filtered: any[]) {
 
 let cachedAllHistory: any[] | null = null;
 let allHistoryPromise: Promise<any[]> | null = null;
-let statsHistoryWarningShown = false;
 
 export function invalidateStatsCache() {
   cachedAllHistory = null;
@@ -1024,19 +1023,12 @@ async function getHistoryForStats(): Promise<any[]> {
   if (allHistoryPromise) return allHistoryPromise;
   allHistoryPromise = (async () => {
     try {
-      const mod: any = await import('../store/persistence');
-      if (mod.getAllHistory) {
-        const all = await mod.getAllHistory();
-        const result = all || hot;
-        cachedAllHistory = result;
-        return result;
-      }
-    } catch (error) {
-      if (!statsHistoryWarningShown) {
-        statsHistoryWarningShown = true;
-        toast('warning', '冷历史读取失败，当前统计可能只包含近期记录');
-      }
-      console.error('[Api-Usage] 全量历史读取失败', error);
+      const all = await repository.getAllHistory();
+      const result = all || hot;
+      cachedAllHistory = result;
+      return result;
+    } catch {
+      // 冷库读不出来时仓库层已提示一次（历史页另有常驻告警与重试入口），这里退回热区保证页面能画
     } finally {
       allHistoryPromise = null;
     }

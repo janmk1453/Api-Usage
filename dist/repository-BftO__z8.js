@@ -1,10 +1,10 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { i as state, o as defaultSettings, r as getSelectedSave, s as mobileDeviceHint } from "./store-CVamS-ER.js";
 import { a as HIDDEN_PRICING_MODELS, c as PRICE_HISTORY, l as PRICING, r as DEFAULT_PEAK_HOURS, s as MAX_HISTORY, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
-import { _ as saveHot, a as clearHistoryCold, f as loadHistoryCold, g as saveHistoryCold, h as saveExtensionSettings, l as getAllHistory, p as loadHot, r as appendHistoryCold, u as getExtensionSettings, v as historyRecordKey } from "./persistence-BKzvk-Ru.js";
+import { _ as saveExtensionSettings, b as historyRecordKey, f as getExtensionSettings, h as loadHot, m as loadHistoryCold, o as clearHistoryCold, r as appendHistoryCold, u as getAllHistory, v as saveHistoryCold, y as saveHot } from "./persistence-BmzJp2Zz.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
 import { a as isUnsafeKey, c as localDay, i as isPeakHour$1, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay } from "./date-Dsu8hrMO.js";
-import { o as getWalletExchangeRate } from "./currency-CeyRWZ-f.js";
+import { o as getWalletExchangeRate } from "./currency-U-Rv2qTn.js";
 import { n as emit, t as DataEvents } from "./events-BD2MbRMW.js";
 //#region src/types/wallet.ts
 var DEEPSEEK_WALLET_ID = "wallet:deepseek-official";
@@ -1799,6 +1799,21 @@ function notifyStorageFailure(error) {
 	storageFailureNotified = true;
 	toast("warning", "冷历史写入失败，统计可能不完整；请检查浏览器存储空间");
 }
+/** 冷库读取失败的提示节流：一次故障会被多个页面同时触发，别刷屏 */
+var COLD_READ_NOTIFY_INTERVAL_MS = 6e5;
+var coldReadNotifiedAt = 0;
+/**
+* 冷库（IndexedDB）读不出来时的兜底提示。
+* 失败会被上层 catch（概览 / 统计 / 导出各自有 fallback），所以这里先主动说一句，
+* 否则用户只会看到「更早的记录不见了」却没有任何解释；历史页另有常驻告警条与重试入口。
+*/
+function notifyColdReadFailure(error) {
+	log.error("全量历史读取失败（含冷库）", error);
+	const now = Date.now();
+	if (coldReadNotifiedAt && now - coldReadNotifiedAt < COLD_READ_NOTIFY_INTERVAL_MS) return;
+	coldReadNotifiedAt = now;
+	toast("warning", `更早的历史记录没能读出来：列表与统计只含最近 ${MAX_HISTORY} 条，可在历史记录页重试`);
+}
 function numericPrice(value, fallback) {
 	const n = typeof value === "number" ? value : parseFloat(String(value));
 	return Number.isFinite(n) ? n : fallback;
@@ -2569,7 +2584,12 @@ var repository = {
 		return loadHistoryCold();
 	},
 	async getAllHistory() {
-		return getAllHistory();
+		try {
+			return await getAllHistory();
+		} catch (error) {
+			notifyColdReadFailure(error);
+			throw error;
+		}
 	},
 	async deleteHistoryByFilter(filter = {}) {
 		const start = filter.start && isValidDayKey(filter.start) ? filter.start : "";
@@ -2710,7 +2730,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && !!wallet.catalogProvider) try {
-						import("./pricing-sync-3z_EQeHq.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-CoAG8B7J.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;

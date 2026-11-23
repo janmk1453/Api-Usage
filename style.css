@@ -4338,6 +4338,85 @@
 }
 
 
+/* ---- 历史记录页：冷库（IndexedDB）读取失败告警条（红色，带重试；不受健康提示条总开关影响） ---- */
+#aus-panel .aus-cold-warn {
+  margin: 0 0 12px;
+  padding: 11px 13px 12px;
+  border: 1px solid var(--ds-red);
+  border-radius: var(--ds-radius-card, 14px);
+  background: var(--ds-red-bg);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+#aus-panel .aus-cold-warn-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+#aus-panel .aus-cold-warn-title {
+  font-size: var(--aus-fs-base);
+  font-weight: 600;
+  color: var(--ds-text);
+  line-height: 1.4;
+}
+#aus-panel .aus-cold-warn-desc {
+  font-size: var(--aus-fs-sm);
+  color: var(--ds-text-2);
+  line-height: 1.65;
+}
+#aus-panel .aus-cold-warn-detail {
+  font-size: var(--aus-fs-xs);
+  color: var(--ds-text-3);
+  line-height: 1.6;
+  word-break: break-word;
+}
+#aus-panel .aus-cold-warn-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 5px 12px;
+  border: 1px solid var(--ds-border);
+  border-radius: 999px;
+  background: var(--ds-card);
+  color: var(--ds-text);
+  font-family: inherit;
+  font-size: var(--aus-fs-sm);
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+#aus-panel .aus-cold-warn-retry:hover {
+  border-color: var(--ds-text-3);
+}
+@media (max-width: 760px) {
+  #aus-panel .aus-cold-warn {
+    padding: 10px 11px;
+    gap: 8px;
+  }
+  #aus-panel .aus-cold-warn-retry {
+    /* 窄屏别把重试挤到右缘外：动作换行后靠左，和说明对齐 */
+    margin-left: 0;
+  }
+}
+@container ausbody (max-width: 760px) {
+  #aus-panel .aus-cold-warn {
+    padding: 10px 11px;
+    gap: 8px;
+  }
+  #aus-panel .aus-cold-warn-retry {
+    margin-left: 0;
+  }
+}
+
 /* ---- 历史记录页：运行健康提示条（用量为 0 / 没取到用量 / 速率离谱 / 扩展报错） ---- */
 #aus-panel .aus-health {
   margin: 0 0 12px;

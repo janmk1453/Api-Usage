@@ -384,14 +384,46 @@ export async function loadHot(): Promise<any> {
   return getExtensionSettings();
 }
 
+/** 最近一次冷历史读取失败的信息 */
+export interface ColdReadFailure {
+  /** 失败原因（IndexedDB 错误或 JSON 解析错误） */
+  message: string;
+  /** 失败时间戳（毫秒） */
+  at: number;
+}
+
+/**
+ * 冷库（IndexedDB 单键 cold_history）是 MAX_HISTORY 之外记录的唯一来源。
+ * 读取失败时历史页 / 统计 / 导出会悄悄退化成只剩热区，所以这里把失败原因留在模块里，
+ * 供 UI 解释「列表为什么变短」并给重试入口——失败不能只写一条日志就被调用方吞掉。
+ * 读取成功（含「键不存在」）时自动清空，重试成功后告警条会自己消失。
+ */
+let coldReadFailure: ColdReadFailure | null = null;
+
+export function getColdReadFailure(): ColdReadFailure | null {
+  return coldReadFailure ? { ...coldReadFailure } : null;
+}
+
+export function clearColdReadFailure(): void {
+  coldReadFailure = null;
+}
+
+function describeReadError(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  const text = String(error ?? '');
+  return text && text !== '[object Object]' ? text : '未知错误';
+}
+
 async function readHistoryColdRaw(): Promise<any[]> {
   try {
     const raw = await dbGet('cold_history');
-    if (!raw) return [];
+    if (!raw) { coldReadFailure = null; return []; }
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) throw new Error('冷历史格式无效');
+    coldReadFailure = null;
     return parsed;
   } catch (error) {
+    coldReadFailure = { message: describeReadError(error), at: Date.now() };
     log.error('冷历史读取失败', error);
     throw error;
   }

@@ -1,8 +1,9 @@
 import { APP_VERSION, BUILD_NO } from '../constants/version';
+import { MAX_HISTORY } from '../constants/pricing';
 import { state, getSelectedSave, getHistoryForDisplay, getCurrentChatIdForStore } from '../store/index';
 import { esc, localDay, localTimeHM } from '../utils/date';
 import { isTruncatedOf } from '../utils/finish';
-import { saveHot } from '../store/persistence';
+import { saveHot, getColdReadFailure, clearColdReadFailure } from '../store/persistence';
 import { queryBalance } from '../services/balance';
 import { bindImportExport } from '../services/import-export';
 import { renderSettings } from './settings';
@@ -29,6 +30,7 @@ import { initChatManageView, renderChatManageView } from './chat-manage';
 import { initTapView, renderTapView } from './tap-view';
 import { initLogView, renderLogView } from './log-view';
 import { renderHistoryHealthBar } from './history-health-bar';
+import { coldReadWarnHTML, COLD_WARN_HOST_ID, COLD_WARN_RETRY_ID } from './cold-read-warn';
 import { historyBadgeOf, shouldShowStateBadge } from './history-badge';
 import { sourceBadgeOf, originTextOf } from './source-badge';
 import { REQUEST_TYPE_OPTIONS, requestTypeLabel } from './request-type-filter';
@@ -790,7 +792,35 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
   }
 }
 
+/**
+ * 冷库读取失败告警条（#aus-history-cold 是独立容器，不受运行健康提示条的总开关影响）。
+ * 读不出来时列表与统计都只剩热区那 MAX_HISTORY 条，必须说明白并给重试入口。
+ */
+function renderColdReadWarn(doc: Document): void {
+  const host = doc.getElementById(COLD_WARN_HOST_ID);
+  if (!host) return;
+  const failure = getColdReadFailure();
+  if (!failure) {
+    host.innerHTML = '';
+    host.style.display = 'none';
+    return;
+  }
+  host.style.display = 'block';
+  host.innerHTML = coldReadWarnHTML(failure, MAX_HISTORY);
+  const retry = doc.getElementById(COLD_WARN_RETRY_ID) as HTMLButtonElement | null;
+  if (retry) {
+    retry.onclick = () => {
+      // 先清失败标记再重载：读取成功会自己把状态清空，仍失败则告警条重新亮起
+      clearColdReadFailure();
+      invalidateHistoryCache();
+      historyLoading = false;
+      try { refreshUI(); } catch {}
+    };
+  }
+}
+
 function renderHistory(doc: Document, s: any) {
+  renderColdReadWarn(doc);
   const host = doc.getElementById('aus-history');
   if (!host) return;
   // 顶部健康提示：最近有「用量为 0 / 没取到用量 / 速率离谱 / 扩展报错」才显示
@@ -841,9 +871,8 @@ function renderHistory(doc: Document, s: any) {
   historyLoading = true;
   (async () => {
     try {
-      const mod: any = await import('../store/persistence');
-      if (!mod.getAllHistory) return;
-      const all: any[] = await mod.getAllHistory();
+      // 走 repository 而非直接读 persistence：仓库层会在失败时记录原因并提示一次
+      const all: any[] = await repository.getAllHistory();
       if (!all || !all.length) return;
       let full = all;
       try {
@@ -858,7 +887,10 @@ function renderHistory(doc: Document, s: any) {
         renderHistoryFilters(full);
         renderHistoryInner(doc, filteredHistoryForDisplay(full));
       });
-    } catch {} finally { historyLoading = false; }
+    } catch {
+      // 冷库读不出来：仓库层已提示一次，这里补一条常驻告警（带重试），别让列表静默变短
+      try { renderColdReadWarn(doc); } catch {}
+    } finally { historyLoading = false; }
   })();
 }
 
@@ -1797,6 +1829,7 @@ export function createPanel() {
             <div id="aus-wallet"></div>
           </div>
           <div data-view="history" style="display:none;">
+            <div id="${COLD_WARN_HOST_ID}" style="display:none;"></div>
             <div id="aus-history-health" style="display:none;"></div>
             <div id="aus-history-filter-host" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div class="aus-stats-filter">

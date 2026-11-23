@@ -374,9 +374,7 @@ function renderChatSummaryOverview(fullHistory?: any[]) {
   // 若存在冷存储全量（IndexedDB），异步补全以确保按对话统计完整（hot 为最近 2000 条，可能仍不含更早的冷库记录）
   (async () => {
     try {
-      const mod: any = await import('../store/persistence');
-      if (!mod.getAllHistory) return;
-      const all: any[] = await mod.getAllHistory();
+      const all: any[] = await repository.getAllHistory();
       if (!all || all.length <= (state.history?.length || 0)) return;
       const fullRows = computeChatStats(all);
       // 避免无变化时重复渲染

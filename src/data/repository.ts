@@ -336,6 +336,23 @@ function notifyStorageFailure(error: unknown): void {
   toast('warning', '冷历史写入失败，统计可能不完整；请检查浏览器存储空间');
 }
 
+/** 冷库读取失败的提示节流：一次故障会被多个页面同时触发，别刷屏 */
+const COLD_READ_NOTIFY_INTERVAL_MS = 10 * 60 * 1000;
+let coldReadNotifiedAt = 0;
+
+/**
+ * 冷库（IndexedDB）读不出来时的兜底提示。
+ * 失败会被上层 catch（概览 / 统计 / 导出各自有 fallback），所以这里先主动说一句，
+ * 否则用户只会看到「更早的记录不见了」却没有任何解释；历史页另有常驻告警条与重试入口。
+ */
+function notifyColdReadFailure(error: unknown): void {
+  log.error('全量历史读取失败（含冷库）', error);
+  const now = Date.now();
+  if (coldReadNotifiedAt && now - coldReadNotifiedAt < COLD_READ_NOTIFY_INTERVAL_MS) return;
+  coldReadNotifiedAt = now;
+  toast('warning', `更早的历史记录没能读出来：列表与统计只含最近 ${MAX_HISTORY} 条，可在历史记录页重试`);
+}
+
 function numericPrice(value: unknown, fallback: number): number {
   const n = typeof value === 'number' ? value : parseFloat(String(value));
   return Number.isFinite(n) ? n : fallback;
@@ -1158,7 +1175,14 @@ export const repository = {
 
   async getColdHistory() { return loadHistoryCold(); },
 
-  async getAllHistory() { return getAllHistory(); },
+  async getAllHistory() {
+    try {
+      return await getAllHistory();
+    } catch (error) {
+      notifyColdReadFailure(error);
+      throw error;
+    }
+  },
 
   async deleteHistoryByFilter(filter: HistoryDeleteFilter = {}): Promise<number> {
     const start = filter.start && isValidDayKey(filter.start) ? filter.start : '';
