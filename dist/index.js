@@ -13733,8 +13733,6 @@ function prettyFullResponse(resp) {
 var panelCreated = false;
 var panelOpen = false;
 var currentView = "overview";
-/** 「设置」下最近打开的二级页（窄屏点回「设置」tab 时恢复到上次位置） */
-var settingsChildView = null;
 /** 「对话展示管理」的来源页：进入前记录的视图，页内「返回」与顶栏返回箭头都回到这里 */
 var chatManageOrigin = "overview";
 /** 「问题反馈 / 请求日志」的来源页：设置页与历史记录页两个入口共用，返回时各回各家 */
@@ -14859,7 +14857,7 @@ function paintNavState(doc, bottom, animate) {
 /**
 * 底栏 tab 点击语义：
 * - 桌面端（底栏不显示）直接切页；
-* - 窄屏换 tab → 切页（回到「设置」时恢复上次的二级页）；
+* - 窄屏换 tab → 切到该 tab 的**根页**（不记忆上次停留的二级页）；
 * - 窄屏重复点当前 tab → 二级页回根页，已在根页则回到顶部。
 */
 function handleBottomTabTap(target) {
@@ -14871,7 +14869,7 @@ function handleBottomTabTap(target) {
 	const currentTab = parentTabOf(viewSourceOf(currentView));
 	const action = resolveTabTap(target, currentView, isChildView(currentView), currentTab);
 	if (action === "switch") {
-		switchView(target === "settings" && settingsChildView ? settingsChildView : target);
+		switchView(target);
 		return;
 	}
 	if (action === "pop-root") {
@@ -14961,8 +14959,6 @@ function switchView(view, opts) {
 	} catch {}
 	const prevView = currentView;
 	currentView = view;
-	if (isSettingsChild(view)) settingsChildView = view;
-	else if (view === "settings") settingsChildView = null;
 	if (prevView === "wallet" && view !== "wallet") try {
 		repository.collapseAllWallets();
 	} catch {}

@@ -37,6 +37,19 @@ describe('底栏点按：滑动期间也能稳定响应', () => {
   });
 });
 
+describe('底栏换标签：设置下的二级页不记忆', () => {
+  it('换 tab 一律进入该 tab 的根页，不恢复上次停留的二级页', () => {
+    // 曾经用 settingsChildView 记住「设置」下最后打开的二级页：在「关于」点去「历史」再点「设置」，
+    // 会直接落回关于页，人以为设置列表进不去。这套记忆已整体删除，这里守住它别回来。
+    expect(panelCode).not.toContain('settingsChildView');
+    expect(panelCode).toContain("if (action === 'switch') { switchView(target); return; }");
+  });
+
+  it('二级页重复点当前 tab 仍然回父级根页', () => {
+    expect(panelCode).toContain("if (action === 'pop-root') { switchView(returnFromChild()); return; }");
+  });
+});
+
 describe('底栏模式下顶栏左侧文字与内容区对齐', () => {
   it('去掉汉堡按钮遗留的 12px 缩进，二级页恢复间距', () => {
     expect(cssSrc).toContain('#aus-panel[data-mobile-nav="bottom"] #aus-mobile-header { padding: 0 12px !important; }');

@@ -127,8 +127,6 @@ function prettyFullResponse(resp: any): string {
 let panelCreated = false;
 let panelOpen = false;
 let currentView: AppView = 'overview';
-/** 「设置」下最近打开的二级页（窄屏点回「设置」tab 时恢复到上次位置） */
-let settingsChildView: AppView | null = null;
 /** 「对话展示管理」的来源页：进入前记录的视图，页内「返回」与顶栏返回箭头都回到这里 */
 let chatManageOrigin: AppView = 'overview';
 /** 「问题反馈 / 请求日志」的来源页：设置页与历史记录页两个入口共用，返回时各回各家 */
@@ -1269,7 +1267,7 @@ function paintNavState(doc: Document, bottom: boolean, animate: boolean): void {
 /**
  * 底栏 tab 点击语义：
  * - 桌面端（底栏不显示）直接切页；
- * - 窄屏换 tab → 切页（回到「设置」时恢复上次的二级页）；
+ * - 窄屏换 tab → 切到该 tab 的**根页**（不记忆上次停留的二级页）；
  * - 窄屏重复点当前 tab → 二级页回根页，已在根页则回到顶部。
  */
 function handleBottomTabTap(target: AppView): void {
@@ -1280,11 +1278,9 @@ function handleBottomTabTap(target: AppView): void {
   // 与 paintNavState 的底栏高亮保持同一口径；否则点「概览」会被误判成重复点当前 tab，只回上一页。
   const currentTab = parentTabOf(viewSourceOf(currentView));
   const action = resolveTabTap(target, currentView, isChildView(currentView), currentTab);
-  if (action === 'switch') {
-    const to = target === 'settings' && settingsChildView ? settingsChildView : target;
-    switchView(to);
-    return;
-  }
+  // 换 tab 一律进入该 tab 的根页：设置下的二级页（钱包 / 使用说明 / 关于）只能从设置主页的入口进，
+  // 不按「上次停在哪个二级页」恢复 —— 否则「关于 → 历史 → 设置」会直接落回关于页，用户以为设置列表进不去。
+  if (action === 'switch') { switchView(target); return; }
   // 二级页重复点当前 tab：回到自己的父级根页（设置二级页 → 设置、对话展示管理 → 概览）
   if (action === 'pop-root') { switchView(returnFromChild()); return; }
   try {
@@ -1368,9 +1364,6 @@ function switchView(view: AppView, opts?: { track?: boolean; back?: boolean }) {
   try { hideAllChartTooltips(); } catch {}
   const prevView = currentView;
   currentView = view;
-  // 「设置」下的二级页记忆：点回设置 tab 时恢复到上次位置；主动切回设置根页（重复点 tab / 返回箭头）则清空
-  if (isSettingsChild(view)) settingsChildView = view;
-  else if (view === 'settings') settingsChildView = null;
   // 离开钱包页时收起所有已展开的钱包，下次进入保持默认收起
   if (prevView === 'wallet' && view !== 'wallet') {
     try { repository.collapseAllWallets(); } catch {}
