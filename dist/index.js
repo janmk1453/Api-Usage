@@ -5431,17 +5431,11 @@ var DEFAULT_RANGE = "30d";
 var currentRange = DEFAULT_RANGE;
 var customStart = "";
 var customEnd = "";
-var pickerOpen = false;
 var selectedModels = [];
-var modelPickerOpen = false;
 var selectedChat = STATS_FILTER_ALL;
-var chatPickerOpen = false;
 var selectedEndpoint = STATS_FILTER_ALL;
-var endpointPickerOpen = false;
 var selectedCredential = STATS_FILTER_ALL;
-var credentialPickerOpen = false;
 var selectedRequestType = STATS_FILTER_ALL;
-var typePickerOpen = false;
 var lastStatsHistory = [];
 var restoredStatsPrefs = readFilterPrefs().stats;
 if (restoredStatsPrefs.range) currentRange = restoredStatsPrefs.range;
@@ -5474,12 +5468,6 @@ function resetStatsFilters() {
 	selectedEndpoint = STATS_FILTER_ALL;
 	selectedCredential = STATS_FILTER_ALL;
 	selectedRequestType = STATS_FILTER_ALL;
-	pickerOpen = false;
-	modelPickerOpen = false;
-	chatPickerOpen = false;
-	endpointPickerOpen = false;
-	credentialPickerOpen = false;
-	typePickerOpen = false;
 	[
 		"aus-range-dropdown",
 		"aus-model-dropdown",
@@ -5711,11 +5699,16 @@ function renderModelPicker(modelsHist) {
 		html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${checked ? "background:var(--ds-card);font-weight:600;" : ""}"><input type="checkbox" data-model="${esc$3(m)}" ${checked ? "checked" : ""} class="aus-checkbox" /><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$3(m)}</span></label>`;
 	}
 	if (!visibleModels.length) html += "<div style=\"padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">" + (models.length ? "模型已全部隐藏（可在「模型展示管理」中恢复）" : "暂无模型") + "</div>";
+	const dropdownScrollTop = dropdown.scrollTop;
 	dropdown.innerHTML = html;
+	dropdown.scrollTop = dropdownScrollTop;
 	const allInput = dropdown.querySelector("[data-model-all]");
 	if (allInput) allInput.onchange = () => {
 		selectedModels = [];
-		closeDropdownThenPaint(dropdown, () => renderStatsView());
+		renderModelPicker(lastStatsHistory);
+		afterNextPaint(() => {
+			renderStatsView();
+		});
 	};
 	dropdown.querySelectorAll("input[data-model]").forEach((el) => {
 		el.onchange = () => {
@@ -5724,7 +5717,10 @@ function renderModelPicker(modelsHist) {
 			if (el.checked) {
 				if (!selectedModels.includes(model)) selectedModels.push(model);
 			} else selectedModels = selectedModels.filter((item) => item !== model);
-			closeDropdownThenPaint(dropdown, () => renderStatsView());
+			renderModelPicker(lastStatsHistory);
+			afterNextPaint(() => {
+				renderStatsView();
+			});
 		};
 	});
 }
@@ -5753,7 +5749,6 @@ function renderChatPicker(chatHist) {
 	dropdown.querySelectorAll("[data-chat]").forEach((el) => {
 		el.onclick = () => {
 			selectedChat = el.getAttribute("data-chat") || "__all__";
-			chatPickerOpen = false;
 			closeDropdownThenPaint(dropdown, () => {
 				renderChatPicker(chatHist);
 				renderStatsView();
@@ -5782,7 +5777,6 @@ function renderEndpointPicker(history) {
 		el.onclick = () => {
 			selectedEndpoint = el.getAttribute("data-endpoint") || "__all__";
 			selectedCredential = STATS_FILTER_ALL;
-			endpointPickerOpen = false;
 			closeDropdownThenPaint(dropdown, () => renderStatsView());
 		};
 	});
@@ -5807,7 +5801,6 @@ function renderCredentialPicker$1(history, endpoint = selectedEndpoint) {
 	dropdown.querySelectorAll("[data-credential]").forEach((el) => {
 		el.onclick = () => {
 			selectedCredential = el.getAttribute("data-credential") || "__all__";
-			credentialPickerOpen = false;
 			closeDropdownThenPaint(dropdown, () => renderStatsView());
 		};
 	});
@@ -5829,7 +5822,6 @@ function renderTypePicker() {
 	dropdown.querySelectorAll("[data-request-type]").forEach((el) => {
 		el.onclick = () => {
 			selectedRequestType = el.getAttribute("data-request-type") || "__all__";
-			typePickerOpen = false;
 			closeDropdownThenPaint(dropdown, () => renderStatsView());
 		};
 	});
@@ -5850,35 +5842,35 @@ function positionFilterDropdown(btn, dropdown) {
 		dropdown.style.right = "auto";
 	} catch {}
 }
+/** 下拉是否展开：只认 DOM 的 inline display（range 用 flex，其余用 block），不另存模块变量。 */
+function isDropOpen(drop) {
+	if (!drop) return false;
+	const display = drop.style.display;
+	return display === "block" || display === "flex";
+}
 function closeFilterDropdowns(except) {
 	const doc = getDoc$8();
 	if (except !== "range") {
-		pickerOpen = false;
 		const el = doc.getElementById("aus-range-dropdown");
 		if (el) el.style.display = "none";
 	}
 	if (except !== "model") {
-		modelPickerOpen = false;
 		const el = doc.getElementById("aus-model-dropdown");
 		if (el) el.style.display = "none";
 	}
 	if (except !== "chat") {
-		chatPickerOpen = false;
 		const el = doc.getElementById("aus-chat-dropdown");
 		if (el) el.style.display = "none";
 	}
 	if (except !== "endpoint") {
-		endpointPickerOpen = false;
 		const el = doc.getElementById("aus-endpoint-dropdown");
 		if (el) el.style.display = "none";
 	}
 	if (except !== "credential") {
-		credentialPickerOpen = false;
 		const el = doc.getElementById("aus-credential-dropdown");
 		if (el) el.style.display = "none";
 	}
 	if (except !== "type") {
-		typePickerOpen = false;
 		const el = doc.getElementById("aus-type-dropdown");
 		if (el) el.style.display = "none";
 	}
@@ -5889,10 +5881,10 @@ function bindPicker() {
 	const dropdown = doc.getElementById("aus-range-dropdown");
 	if (btn && dropdown) {
 		btn.onclick = () => {
-			pickerOpen = !pickerOpen;
+			const willOpen = !isDropOpen(dropdown);
 			closeFilterDropdowns("range");
-			dropdown.style.display = pickerOpen ? "flex" : "none";
-			if (pickerOpen) {
+			dropdown.style.display = willOpen ? "flex" : "none";
+			if (willOpen) {
 				renderCalendar();
 				positionFilterDropdown(btn, dropdown);
 			}
@@ -5905,7 +5897,6 @@ function bindPicker() {
 					customStart = "";
 					customEnd = "";
 				}
-				pickerOpen = false;
 				updatePickerLabel();
 				closeDropdownThenPaint(dropdown, () => renderStatsView());
 			};
@@ -5914,10 +5905,10 @@ function bindPicker() {
 	const mBtn = doc.getElementById("aus-model-btn");
 	const mDropdown = doc.getElementById("aus-model-dropdown");
 	if (mBtn && mDropdown) mBtn.onclick = () => {
-		modelPickerOpen = !modelPickerOpen;
+		const willOpen = !isDropOpen(mDropdown);
 		closeFilterDropdowns("model");
-		mDropdown.style.display = modelPickerOpen ? "block" : "none";
-		if (modelPickerOpen) {
+		mDropdown.style.display = willOpen ? "block" : "none";
+		if (willOpen) {
 			renderModelPicker(lastStatsHistory);
 			positionFilterDropdown(mBtn, mDropdown);
 		}
@@ -5925,10 +5916,10 @@ function bindPicker() {
 	const cBtn = doc.getElementById("aus-chat-btn");
 	const cDropdown = doc.getElementById("aus-chat-dropdown");
 	if (cBtn && cDropdown) cBtn.onclick = () => {
-		chatPickerOpen = !chatPickerOpen;
+		const willOpen = !isDropOpen(cDropdown);
 		closeFilterDropdowns("chat");
-		cDropdown.style.display = chatPickerOpen ? "block" : "none";
-		if (chatPickerOpen) (async () => {
+		cDropdown.style.display = willOpen ? "block" : "none";
+		if (willOpen) (async () => {
 			try {
 				renderChatPicker(await getHistoryForStats());
 			} catch {
@@ -5940,10 +5931,10 @@ function bindPicker() {
 	const eBtn = doc.getElementById("aus-endpoint-btn");
 	const eDropdown = doc.getElementById("aus-endpoint-dropdown");
 	if (eBtn && eDropdown) eBtn.onclick = () => {
-		endpointPickerOpen = !endpointPickerOpen;
+		const willOpen = !isDropOpen(eDropdown);
 		closeFilterDropdowns("endpoint");
-		eDropdown.style.display = endpointPickerOpen ? "block" : "none";
-		if (endpointPickerOpen) {
+		eDropdown.style.display = willOpen ? "block" : "none";
+		if (willOpen) {
 			renderEndpointPicker(lastStatsHistory);
 			positionFilterDropdown(eBtn, eDropdown);
 		}
@@ -5951,10 +5942,10 @@ function bindPicker() {
 	const kBtn = doc.getElementById("aus-credential-btn");
 	const kDropdown = doc.getElementById("aus-credential-dropdown");
 	if (kBtn && kDropdown) kBtn.onclick = () => {
-		credentialPickerOpen = !credentialPickerOpen;
+		const willOpen = !isDropOpen(kDropdown);
 		closeFilterDropdowns("credential");
-		kDropdown.style.display = credentialPickerOpen ? "block" : "none";
-		if (credentialPickerOpen) {
+		kDropdown.style.display = willOpen ? "block" : "none";
+		if (willOpen) {
 			renderCredentialPicker$1(lastStatsHistory);
 			positionFilterDropdown(kBtn, kDropdown);
 		}
@@ -5962,10 +5953,10 @@ function bindPicker() {
 	const tBtn = doc.getElementById("aus-type-btn");
 	const tDropdown = doc.getElementById("aus-type-dropdown");
 	if (tBtn && tDropdown) tBtn.onclick = () => {
-		typePickerOpen = !typePickerOpen;
+		const willOpen = !isDropOpen(tDropdown);
 		closeFilterDropdowns("type");
-		tDropdown.style.display = typePickerOpen ? "block" : "none";
-		if (typePickerOpen) {
+		tDropdown.style.display = willOpen ? "block" : "none";
+		if (willOpen) {
 			renderTypePicker();
 			positionFilterDropdown(tBtn, tDropdown);
 		}
@@ -5974,42 +5965,24 @@ function bindPicker() {
 	if (statsResetBtn) statsResetBtn.onclick = () => {
 		resetStatsFilters();
 	};
+	const dropPairs = [
+		["aus-range-dropdown", "aus-range-btn"],
+		["aus-model-dropdown", "aus-model-btn"],
+		["aus-chat-dropdown", "aus-chat-btn"],
+		["aus-endpoint-dropdown", "aus-endpoint-btn"],
+		["aus-credential-dropdown", "aus-credential-btn"],
+		["aus-type-dropdown", "aus-type-btn"]
+	];
 	doc.addEventListener("click", (e) => {
 		const t = e.target;
-		if (pickerOpen && !t.closest("#aus-range-dropdown") && !t.closest("#aus-range-btn")) {
-			pickerOpen = false;
-			const d = doc.getElementById("aus-range-dropdown");
-			if (d) d.style.display = "none";
-		}
-		if (modelPickerOpen && !t.closest("#aus-model-dropdown") && !t.closest("#aus-model-btn")) {
-			modelPickerOpen = false;
-			const d = doc.getElementById("aus-model-dropdown");
-			if (d) d.style.display = "none";
-		}
-		if (chatPickerOpen && !t.closest("#aus-chat-dropdown") && !t.closest("#aus-chat-btn")) {
-			chatPickerOpen = false;
-			const d = doc.getElementById("aus-chat-dropdown");
-			if (d) d.style.display = "none";
-		}
-		if (endpointPickerOpen && !t.closest("#aus-endpoint-dropdown") && !t.closest("#aus-endpoint-btn")) {
-			endpointPickerOpen = false;
-			const d = doc.getElementById("aus-endpoint-dropdown");
-			if (d) d.style.display = "none";
-		}
-		if (credentialPickerOpen && !t.closest("#aus-credential-dropdown") && !t.closest("#aus-credential-btn")) {
-			credentialPickerOpen = false;
-			const d = doc.getElementById("aus-credential-dropdown");
-			if (d) d.style.display = "none";
-		}
-		if (typePickerOpen && !t.closest("#aus-type-dropdown") && !t.closest("#aus-type-btn")) {
-			typePickerOpen = false;
-			const d = doc.getElementById("aus-type-dropdown");
-			if (d) d.style.display = "none";
+		for (const [dropId, btnId] of dropPairs) {
+			const d = doc.getElementById(dropId);
+			if (!isDropOpen(d)) continue;
+			if (t.closest("#" + dropId) || t.closest("#" + btnId)) continue;
+			d.style.display = "none";
 		}
 	});
 }
-var chartYOpen = false;
-var chartXOpen = false;
 function renderChartSelectors() {
 	const doc = getDoc$8();
 	const yBtn = doc.getElementById("aus-chart-y-btn");
@@ -6069,12 +6042,20 @@ function renderChartSelectors() {
 	];
 	yHtml += `<div style="padding:2px 8px 2px;font-size:var(--aus-fs-xs);color:var(--ds-text-3);font-weight:600;">轴标签</div>`;
 	yHtml += `<div style="display:flex;gap:4px;flex-wrap:wrap;padding:2px 6px 8px;align-items:center;"><span style="font-size:var(--aus-fs-xs);color:var(--ds-text-3);">左右轴合计 &gt; 2 时默认隐藏叠加</span>${axisOpts.map((a) => `<div data-axis-label="${a.v}" style="padding:4px 9px;border-radius:999px;border:1px solid var(--ds-border);font-size:var(--aus-fs-sm);cursor:pointer;${axisSel === a.v ? "background:var(--ds-card);font-weight:600;" : ""}">${a.l}</div>`).join("")}</div>`;
+	const yScrollTop = yDrop.scrollTop;
 	yDrop.innerHTML = yHtml;
+	yDrop.scrollTop = yScrollTop;
 	yDrop.querySelectorAll("input[data-ykey]").forEach((el) => {
 		el.onchange = () => {
-			toggleY(el.getAttribute("data-ykey"));
-			closeDropdownThenPaint(yDrop, () => {
-				renderChartSelectors();
+			const key = el.getAttribute("data-ykey");
+			toggleY(key);
+			const on = getYSelected().includes(key);
+			el.checked = on;
+			const row = el.closest("label");
+			if (row) row.style.background = on ? "var(--ds-card)" : "";
+			const count = getYSelected().length;
+			if (yLabel) yLabel.textContent = count ? count + " 项" : "选择";
+			afterNextPaint(() => {
 				renderStatsView();
 			});
 		};
@@ -6115,7 +6096,6 @@ function renderChartSelectors() {
 	xDrop.querySelectorAll("[data-xkey]").forEach((el) => {
 		el.onclick = () => {
 			setXSelected(el.getAttribute("data-xkey"));
-			chartXOpen = false;
 			closeDropdownThenPaint(xDrop, () => {
 				renderChartSelectors();
 				renderStatsView();
@@ -6130,41 +6110,29 @@ function bindChartSelectors() {
 	const xBtn = doc.getElementById("aus-chart-x-btn");
 	const xDrop = doc.getElementById("aus-chart-x-dropdown");
 	if (yBtn && yDrop) yBtn.onclick = () => {
-		chartYOpen = !chartYOpen;
-		yDrop.style.display = chartYOpen ? "block" : "none";
-		if (chartYOpen) {
+		const willOpen = !isDropOpen(yDrop);
+		yDrop.style.display = willOpen ? "block" : "none";
+		if (willOpen) {
 			const xD = doc.getElementById("aus-chart-x-dropdown");
-			if (xD) {
-				xD.style.display = "none";
-				chartXOpen = false;
-			}
+			if (xD) xD.style.display = "none";
 			renderChartSelectors();
 		}
 	};
 	if (xBtn && xDrop) xBtn.onclick = () => {
-		chartXOpen = !chartXOpen;
-		xDrop.style.display = chartXOpen ? "block" : "none";
-		if (chartXOpen) {
+		const willOpen = !isDropOpen(xDrop);
+		xDrop.style.display = willOpen ? "block" : "none";
+		if (willOpen) {
 			const yD = doc.getElementById("aus-chart-y-dropdown");
-			if (yD) {
-				yD.style.display = "none";
-				chartYOpen = false;
-			}
+			if (yD) yD.style.display = "none";
 			renderChartSelectors();
 		}
 	};
 	doc.addEventListener("click", (e) => {
 		const t = e.target;
-		if (chartYOpen && !t.closest("#aus-chart-y-dropdown") && !t.closest("#aus-chart-y-btn")) {
-			chartYOpen = false;
-			const d = doc.getElementById("aus-chart-y-dropdown");
-			if (d) d.style.display = "none";
-		}
-		if (chartXOpen && !t.closest("#aus-chart-x-dropdown") && !t.closest("#aus-chart-x-btn")) {
-			chartXOpen = false;
-			const d = doc.getElementById("aus-chart-x-dropdown");
-			if (d) d.style.display = "none";
-		}
+		const yD = doc.getElementById("aus-chart-y-dropdown");
+		if (isDropOpen(yD) && !t.closest("#aus-chart-y-dropdown") && !t.closest("#aus-chart-y-btn")) yD.style.display = "none";
+		const xD = doc.getElementById("aus-chart-x-dropdown");
+		if (isDropOpen(xD) && !t.closest("#aus-chart-x-dropdown") && !t.closest("#aus-chart-x-btn")) xD.style.display = "none";
 	});
 	renderChartSelectors();
 }
