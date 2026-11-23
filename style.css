@@ -3276,13 +3276,28 @@
   transition-duration: 0ms;
 }
 
-/* 筛选工具栏「重置筛选」：与胶囊同尺寸的次级按钮，只用底色区分（不描边、无阴影）
+/* 筛选工具栏「重置筛选」：与同排筛选胶囊（.aus-pill）同高同字的次级按钮，只用底色区分。
+   尺寸口径必须写在样式表里、与 .aus-pill 一致（桌面 6px 11px / min-height 32px / 14px 字号，
+   ≤760px 6px 10px / 30px / 12px）：模板里若写内联 padding 与 font-size，窄屏就不跟着收，
+   会和旁边的胶囊、请求日志按钮大小不一（2026-11-23 用户截图报过）。
    按钮底色写在 inline style 上，因此 hover/active 必须带 !important 才能生效 */
 #aus-panel #aus-stats-filter-reset,
 #aus-panel #aus-history-filter-reset {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   transition: background-color 120ms ease, color 120ms ease;
+  box-sizing: border-box;
+  min-height: 32px;
+  padding: 6px 11px;
+  font-size: var(--aus-fs-base);
+}
+@media (max-width: 760px) {
+  #aus-panel #aus-stats-filter-reset,
+  #aus-panel #aus-history-filter-reset {
+    min-height: 30px;
+    padding: 6px 10px;
+    font-size: var(--aus-fs-sm);
+  }
 }
 @media (hover: hover) {
   #aus-panel #aus-stats-filter-reset:hover,
