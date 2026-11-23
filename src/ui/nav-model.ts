@@ -24,7 +24,7 @@ export type AppView =
   | 'about'
   /** 对话展示管理：概览「按对话统计」表格的显隐设置页 */
   | 'chat-manage'
-  /** 其他请求：历史记录页的「非常规对话请求」技术验证页（数据隔离，不进统计） */
+  /** 其他请求：请求日志页里的「非常规对话请求」技术验证页（数据隔离，不进统计） */
   | 'tap'
   /** 请求日志：设置页进入，只展示最近一轮对话请求的标头、正文与响应元数据 */
   | 'log';
@@ -74,7 +74,12 @@ export const SETTINGS_ENTRIES: readonly { view: AppView; label: string; desc: st
 /** 挂在「设置」下的二级视图 */
 export const SETTINGS_CHILD_VIEWS: readonly AppView[] = ['wallet', 'help', 'about'];
 
-/** 所有二级视图 → 父级根视图（用于底栏高亮、返回箭头、重复点 tab 回根页） */
+/**
+ * 所有二级视图 → 父级根视图（用于底栏高亮、返回箭头、重复点 tab 回根页）。
+ * `tap`（其他请求）的入口是请求日志页，真实归属按「来源链」解析（`tabOfView` + `panel.ts#viewSourceOf`）；
+ * 这里写 'history' 只是兜底值。值必须是根 tab 本身（`parentTabOf(父值) === 父值`），
+ * 写成 'log' 会让底栏高亮停在中间页、并破坏 `parentTabOf` 的不变式。
+ */
 export const CHILD_PARENT: Readonly<Partial<Record<AppView, AppView>>> = {
   wallet: 'settings',
   help: 'settings',
@@ -107,6 +112,23 @@ export function childParentOf(view: AppView): AppView | null {
  */
 export function parentTabOf(view: AppView): AppView {
   return CHILD_PARENT[view] ?? view;
+}
+
+/**
+ * 视图最终归属的底栏 tab：沿「进入来源」链一路解析到根 tab。
+ * 其他请求（tap）← 请求日志（log）← 历史 / 设置 是两级嵌套：只看 `parentTabOf(view)`
+ * 会停在中间的 log 上（进而恒算成设置 tab），必须继续回溯到 log 的来源页。
+ * `sourceOf` 由调用方注入（`panel.ts#viewSourceOf`）；来源等于自身说明已到静态父级，取它的父级 tab 即可。
+ */
+export function tabOfView(view: AppView, sourceOf: (v: AppView) => AppView): AppView {
+  let cur = view;
+  for (let i = 0; i < 4; i++) {
+    const src = sourceOf(cur);
+    const parent = parentTabOf(src);
+    if (parent === src || src === cur) return parent;
+    cur = src;
+  }
+  return parentTabOf(sourceOf(cur));
 }
 
 /** 页面标题（全称）：桌面顶栏与窄屏 header 共用 */

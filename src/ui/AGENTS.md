@@ -48,7 +48,7 @@
 ### 历史记录（`ui/panel.ts`）
 
 - **五维度**：请求类型 / 模型 / 对话 / 接入类型 / API 密钥按交集过滤，先作用热+冷全量历史再按 `30/页` 分页（筛选无结果显示清除按钮）；接入类型优先联动密钥；「当前对话」同统计页哨兵，`renderHistoryFilterDropdown` 用 `leading` 参数插入。请求类型选项固定 6 项、不参与失效剔除；元素 id 的中间段由 `HISTORY_FILTER_ID`（`requestType` → `type`）决定，新增维度必须同时登记这张表、模板与 `controls` 绑定，否则 `ui/pill.ts` 配不到 `-btn` / `-dropdown` 这一对。
-- **两枚二级入口**：「其他请求」`#aus-history-tap-btn`（`switchView('tap')`，父级为历史）、「请求日志」`#aus-history-log-btn`（`openRequestLog('history')`）；后者与设置页「问题反馈 / 请求日志」是同一页（`data-view="log"`）。`panel.ts#logOrigin` 记来源，`viewSourceOf(view)` 同时供 `paintNavState` 高亮与 `handleBottomTabTap` 的「重复点当前 tab」判定。**以后再加没有独立导航项的二级页，必须同时接好这三件套（origin / viewSourceOf / returnFromChild）**，只改 `returnFromChild` 会让底栏高亮跟错。
+- **二级入口**：历史记录页工具栏只剩「请求日志」`#aus-history-log-btn`（`openRequestLog('history')`），它与设置页「问题反馈 / 请求日志」是同一页（`data-view="log"`）；「其他请求」（`data-view="tap"`）的入口挪到了请求日志页工具栏（`data-log-action="tap"` → `openTap('log')`）。`panel.ts#logOrigin` / `#tapOrigin` 记来源，`viewSourceOf(view)` 同时供 `returnFromChild`、`paintNavState` 高亮与 `handleBottomTabTap` 的「重复点当前 tab」判定，后两者统一走 `tabOf()` = `nav-model.ts#tabOfView(view, viewSourceOf)`——它会把「其他请求 ← 请求日志 ← 历史/设置」这条两级来源链解析到底，别退回 `parentTabOf(viewSourceOf(view))`（会停在中间的日志页、恒算成「设置」）。**以后再加没有独立导航项的二级页，必须同时接好这三件套（origin / viewSourceOf / returnFromChild）**，只改 `returnFromChild` 会让底栏高亮跟错。
 - 列表按 `timestamp` 倒序；卡片含模型 / 时间 / `in/out/rate` / 费用 / 旧·新·详情；**卡片不外显毫秒耗时**，耗时只在详情窗口按秒展示。
 - **请求来源角标**单一来源 `ui/source-badge.ts#sourceBadgeOf`，**与记录状态角标是两条正交线**（状态讲这条记录准不准，来源讲是谁打出去的），同一条记录可以两枚并挂：来源在左、状态在右。只有 `extension` / `script` 出角标（蓝「扩展」/ 紫「脚本」），`tavern` / `unknown` 一律不标——主界面是默认情况，标出来只是噪音。
 - **记录状态角标**单一来源 `ui/history-badge.ts#historyBadgeOf`，优先级：用户中断（黄「中断」）→ 上游中断（红「中断」）→ 估算（黄「估算」）→ Agent（绿）→ 对话（灰，默认态）；面板只渲染 `badge.background/color/text` 并按 `kind` 给 title，**不许在面板里重新分支**。**默认态那枚由 `shouldShowStateBadge(badge, !!sourceBadge)` 决定是否渲染**——已有来源角标（扩展 / 脚本）时不再并排一枚「对话」（一条记录只留一枚描述性角标），中断 / 估算 / Agent 照常显示。**详情里的「记录状态」与 Token「估算」小标必须用 `isEstimatedEntry(entry)`（读 `usageSource`）**——中断又靠估算补记时角标是「中断」，按角标判断会把本地推算值当成上游真实用量。
@@ -128,8 +128,8 @@
 
 ### 请求日志 / 其他请求（`ui/log-view.ts`、`ui/tap-view.ts`）
 
-- 「问题反馈 / 请求日志」页（`data-view="log"`）：两处入口（设置页 `#aus-settings-request-log`、历史页工具栏），来源由 `logOrigin` 记录；页内「上传反馈」= `scope='recent'`，「复制诊断信息」走 `request-log.ts` 组包。
-- 「其他请求」页（`data-view="tap"`，父级为历史）：展示探针账本（`services/request-tap/`），按用途聚簇，可查 `pending` / `orphan` / `settled` / `too-short` / `legacy` 状态；**这里只是验证页，不参与统计口径**。
+- 「问题反馈 / 请求日志」页（`data-view="log"`）：两处入口（设置页 `#aus-settings-request-log`、历史页工具栏），来源由 `logOrigin` 记录；页内「上传反馈」= `scope='recent'`，「复制诊断信息」走 `request-log.ts` 组包。顶部工具条由纯函数 `logTopHTML(summary)` 生成（便于单测），四枚动作按钮都是 `data-log-action` 委托：`upload` / `tap` / `refresh` / `clear`。
+- 「其他请求」页（`data-view="tap"`，入口在请求日志页工具条，返回回日志页）：展示探针账本（`services/request-tap/`），按用途聚簇，可查 `pending` / `orphan` / `settled` / `too-short` / `legacy` 状态；**这里只是验证页，不参与统计口径**。
 
 ### 导航与移动端
 

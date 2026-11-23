@@ -15,8 +15,8 @@ import {
   childParentOf,
   isChildView,
   isSettingsChild,
-  parentTabOf,
   resolveTabTap,
+  tabOfView,
   viewTitle,
 } from './nav-model';
 import type { AppView } from './nav-model';
@@ -131,6 +131,8 @@ let currentView: AppView = 'overview';
 let chatManageOrigin: AppView = 'overview';
 /** 「问题反馈 / 请求日志」的来源页：设置页与历史记录页两个入口共用，返回时各回各家 */
 let logOrigin: AppView = 'settings';
+/** 「其他请求」的来源页：只从请求日志页进入，返回时回到日志页（再回它自己的来源） */
+let tapOrigin: AppView = 'log';
 /** 当前导航高亮键：窄屏二级页归到「设置」，桌面为视图本身 */
 let currentNavKey: AppView = 'overview';
 let collapsed = false;
@@ -1252,7 +1254,9 @@ function paintNavState(doc: Document, bottom: boolean, animate: boolean): void {
   // 「对话展示管理」与「请求日志」没有自己的导航项：底栏高亮跟着进入前的来源页走
   // （对话展示管理从设置进入就高亮「设置」，请求日志从历史进入就高亮「历史」）
   const navSource = viewSourceOf(currentView);
-  currentNavKey = bottom || !isSettingsChild(currentView) ? parentTabOf(navSource) : navSource;
+  // 二级页按「进入来源链」解析到真正的根 tab：其他请求 ← 请求日志 ← 历史 / 设置。
+  // 只取 parentTabOf(viewSourceOf(view)) 会在两级嵌套时停在中间的日志页上（进而恒算成「设置」）。
+  currentNavKey = bottom || !isSettingsChild(currentView) ? tabOf(currentView) : navSource;
   try {
     doc.querySelectorAll('#aus-sidebar [data-nav]').forEach((el: any) => {
       const v = el.getAttribute('data-nav');
@@ -1274,9 +1278,10 @@ function handleBottomTabTap(target: AppView): void {
   const doc = getDoc();
   // 底栏不显示（桌面 / 移动端兼容 UI 关闭）时它就是普通切页
   if (!bottomNavActive(doc)) { switchView(target); return; }
-  // 「对话展示管理」「请求日志」没有自己的 tab：归属要按进入前的来源页算（从趋势进 → 趋势、从设置进 → 设置），
-  // 与 paintNavState 的底栏高亮保持同一口径；否则点「概览」会被误判成重复点当前 tab，只回上一页。
-  const currentTab = parentTabOf(viewSourceOf(currentView));
+  // 「对话展示管理」「请求日志」「其他请求」没有自己的 tab：归属要按进入前的来源页算
+  // （从趋势进 → 趋势、从设置进 → 设置、其他请求 → 请求日志的来源页），
+  // 与 paintNavState 的底栏高亮共用 tabOf，否则点「概览」会被误判成重复点当前 tab，只回上一页。
+  const currentTab = tabOf(currentView);
   const action = resolveTabTap(target, currentView, isChildView(currentView), currentTab);
   // 换 tab 一律进入该 tab 的根页：设置下的二级页（钱包 / 使用说明 / 关于）只能从设置主页的入口进，
   // 不按「上次停在哪个二级页」恢复 —— 否则「关于 → 历史 → 设置」会直接落回关于页，用户以为设置列表进不去。
@@ -1332,18 +1337,26 @@ function syncMobileSidebar(doc: Document): void {
 
 /**
  * 视图的真实归属页：没有自己导航项的二级页按进入前的来源页算。
- * 「对话展示管理」（概览/趋势/设置三处入口）与「请求日志」（设置/历史两处入口）都走这里。
+ * 「对话展示管理」（概览/趋势/设置三处入口）、「请求日志」（设置/历史两处入口）与
+ * 「其他请求」（请求日志页一处入口）都走这里；后者的来源是日志页，故归属要再回溯一层（见 tabOf）。
  */
 function viewSourceOf(view: AppView): AppView {
   if (view === 'chat-manage') return chatManageOrigin;
   if (view === 'log') return logOrigin;
+  if (view === 'tap') return tapOrigin;
   return view;
 }
 
-/** 二级页「返回」目标：对话展示管理与请求日志回到进入前的来源页，其余回到自己的父级根页 */
+/** 视图最终归属的底栏 tab：按「进入来源链」解析到底（其他请求 ← 请求日志 ← 历史 / 设置） */
+function tabOf(view: AppView): AppView {
+  return tabOfView(view, viewSourceOf);
+}
+
+/** 二级页「返回」目标：对话展示管理 / 请求日志 / 其他请求回到进入前的来源页，其余回到自己的父级根页 */
 function returnFromChild(): AppView {
   if (currentView === 'chat-manage') return chatManageOrigin;
   if (currentView === 'log') return logOrigin;
+  if (currentView === 'tap') return tapOrigin;
   return childParentOf(currentView) ?? 'settings';
 }
 
@@ -1357,6 +1370,12 @@ function openChatManage(from: AppView): void {
 function openRequestLog(from: AppView): void {
   logOrigin = from;
   switchView('log');
+}
+
+/** 进入「其他请求」页并记住来源（请求日志页工具栏唯一入口，返回时回到日志页） */
+function openTap(from: AppView): void {
+  tapOrigin = from;
+  switchView('tap');
 }
 
 function switchView(view: AppView, opts?: { track?: boolean; back?: boolean }) {
@@ -1801,7 +1820,6 @@ export function createPanel() {
                 <div id="aus-history-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div id="aus-history-filter-reset" class="aus-filter-reset" title="重置筛选" aria-label="重置筛选" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);font-size:var(--aus-fs-base);cursor:pointer;margin-left:auto;">${icon('refresh', 14)}<span>重置筛选</span></div>
-              <button id="aus-history-tap-btn" type="button" class="aus-pill aus-pill-sm" title="查看探针采到的非常规对话请求（技术验证，数据隔离、不进统计）">其他请求</button>
               <button id="aus-history-log-btn" type="button" class="aus-pill aus-pill-sm" title="查看最近一轮请求的标头、正文与响应元数据（与设置页「问题反馈 / 请求日志」是同一页）">请求日志</button>
             </div>
             <div id="aus-diff" class="ds-card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">缓存断点</span><button id="aus-diff-fullscreen" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">全屏</button></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">在历史中各选一条 旧/新 对比，橙/绿高亮即发散点</div></div>
@@ -1941,12 +1959,11 @@ export function createPanel() {
   });
   // 页内「返回」按钮：回到进入前的来源页
   initChatManageView({ go: () => switchView(chatManageOrigin) });
-  // 历史记录工具栏「其他请求」：进技术验证页（挂在历史下，返回箭头与底栏高亮都按子页处理）
-  doc.getElementById('aus-history-tap-btn')?.addEventListener('click', () => switchView('tap'));
   // 历史记录工具栏「请求日志」：与设置页「问题反馈 / 请求日志」同一个页面，返回时回到历史记录页
   doc.getElementById('aus-history-log-btn')?.addEventListener('click', () => openRequestLog('history'));
-  initTapView({ go: () => switchView('history') });
-  initLogView({ go: () => switchView(returnFromChild()) });
+  // 「其他请求」的入口在请求日志页工具栏：页内返回 / 顶栏返回箭头 / 底栏 pop-root 统一回日志页
+  initTapView({ go: () => switchView(returnFromChild()) });
+  initLogView({ go: () => switchView(returnFromChild()), goTap: () => openTap('log') });
   const applyCollapsed = (v: boolean) => {
     collapsed = v;
     const sb = doc.getElementById('aus-sidebar') as HTMLElement | null;

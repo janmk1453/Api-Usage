@@ -12,8 +12,10 @@ import {
   isSettingsChild,
   parentTabOf,
   resolveTabTap,
+  tabOfView,
   viewTitle,
 } from './nav-model';
+import type { AppView } from './nav-model';
 
 describe('nav-model', () => {
   it('底栏固定 5 个 tab，顺序为 概览/统计/历史/趋势/设置', () => {
@@ -120,5 +122,21 @@ describe('nav-model', () => {
   it('resolveTabTap：已在根页重复点则回到顶部', () => {
     expect(resolveTabTap('settings', 'settings', false)).toBe('scroll-top');
     expect(resolveTabTap('overview', 'overview', false)).toBe('scroll-top');
+  });
+
+  it('tabOfView：按进入来源链解析到根 tab，两级嵌套不留在中间页', () => {
+    // 根页：来源就是自己
+    expect(tabOfView('history', (v) => v)).toBe('history');
+    // 静态二级页：只有一层
+    expect(tabOfView('wallet', () => 'settings')).toBe('settings');
+    expect(tabOfView('chat-manage', () => 'forecast')).toBe('forecast');
+    // 两级嵌套：其他请求 ← 请求日志 ← 历史 / 设置
+    const sources: Partial<Record<AppView, AppView>> = { tap: 'log', log: 'history' };
+    const sourceOf = (v: AppView): AppView => sources[v] ?? v;
+    expect(tabOfView('tap', sourceOf)).toBe('history');
+    sources.log = 'settings';
+    expect(tabOfView('tap', sourceOf)).toBe('settings');
+    // 回归点：只看 parentTabOf('log') 会恒得「设置」，把从历史进来的链路算错
+    expect(parentTabOf('log')).toBe('settings');
   });
 });

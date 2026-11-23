@@ -2729,7 +2729,12 @@ var SETTINGS_CHILD_VIEWS = [
 	"help",
 	"about"
 ];
-/** 所有二级视图 → 父级根视图（用于底栏高亮、返回箭头、重复点 tab 回根页） */
+/**
+* 所有二级视图 → 父级根视图（用于底栏高亮、返回箭头、重复点 tab 回根页）。
+* `tap`（其他请求）的入口是请求日志页，真实归属按「来源链」解析（`tabOfView` + `panel.ts#viewSourceOf`）；
+* 这里写 'history' 只是兜底值。值必须是根 tab 本身（`parentTabOf(父值) === 父值`），
+* 写成 'log' 会让底栏高亮停在中间页、并破坏 `parentTabOf` 的不变式。
+*/
 var CHILD_PARENT = {
 	wallet: "settings",
 	help: "settings",
@@ -2764,6 +2769,22 @@ function childParentOf(view) {
 */
 function parentTabOf(view) {
 	return CHILD_PARENT[view] ?? view;
+}
+/**
+* 视图最终归属的底栏 tab：沿「进入来源」链一路解析到根 tab。
+* 其他请求（tap）← 请求日志（log）← 历史 / 设置 是两级嵌套：只看 `parentTabOf(view)`
+* 会停在中间的 log 上（进而恒算成设置 tab），必须继续回溯到 log 的来源页。
+* `sourceOf` 由调用方注入（`panel.ts#viewSourceOf`）；来源等于自身说明已到静态父级，取它的父级 tab 即可。
+*/
+function tabOfView(view, sourceOf) {
+	let cur = view;
+	for (let i = 0; i < 4; i++) {
+		const src = sourceOf(cur);
+		const parent = parentTabOf(src);
+		if (parent === src || src === cur) return parent;
+		cur = src;
+	}
+	return parentTabOf(sourceOf(cur));
 }
 /** 页面标题（全称）：桌面顶栏与窄屏 header 共用 */
 var VIEW_TITLES = {
@@ -10313,7 +10334,7 @@ async function renderChatManageView() {
 * 定位：只把探针采到的请求「摆出来给人看」，回答一个问题 ——
 * 酒馆里那些不走常规对话链路的请求长什么样、来自谁、和对账结果是否一致。
 * 这里读的数据全部来自 localStorage['aus_tap_log_v1']，不参与概览/统计/历史/趋势的任何计算，
-* 也不写回 state.history。页面本身不进底栏 tab，挂在「历史记录」下，从历史页工具栏进入。
+* 也不写回 state.history。页面本身不进底栏 tab，入口在「问题反馈 / 请求日志」页工具栏，从那里进入、返回也回那里。
 */
 var filter = "orphan";
 var pendingClear = false;
@@ -10397,7 +10418,7 @@ function tapViewHTML(input) {
 	})).sort((a, b) => b.list.length - a.list.length || a.key.localeCompare(b.key));
 	const block = (label, value, sub) => "<div class=\"aus-tap-block\"><div class=\"aus-tap-block-label\">" + esc$3(label) + "</div><div class=\"aus-tap-block-value\">" + esc$3(value) + "</div>" + (sub ? "<div class=\"aus-tap-block-sub\">" + esc$3(sub) + "</div>" : "") + "</div>";
 	const pill = (key, text) => "<button type=\"button\" class=\"aus-pill aus-pill-sm\" data-tap-filter=\"" + key + "\"" + (input.filter === key ? " data-on=\"1\"" : "") + ">" + esc$3(text) + "</button>";
-	return "<div class=\"aus-tap-note\">技术验证页：这里只做原理验证 —— 旁路记录酒馆发出的后端请求，再用「现有逻辑有没有为它写过一条历史记录」判断哪些属于非常规对话请求。<b>数据只存在本机 localStorage（<code>" + esc$3("aus_tap_log_v1") + "</code>），完全不进入概览、统计、历史、趋势的任何计算</b>，可随时一键清空。上限 500 条；已采集 " + all.length + " 条，账本 " + diag.settlements + " 条。</div><div class=\"aus-tap-sum\">" + block("采集到的后端请求", String(all.length), "端点命中 /api/backends/*/generate") + block("未入账（疑似非常规）", String(orphans.length), "现有逻辑没写过记录") + block("已入账（常规对话）", String(settled.length), "与历史记录一一对上") + block("待对账 / 无用量", pending.length + " / " + noUsage, "结束后 12 秒判定") + "</div><div class=\"aus-tap-tools\">" + pill("orphan", "未入账 " + orphans.length) + pill("settled", "已入账 " + settled.length) + pill("all", "全部 " + all.length) + "<span class=\"aus-tap-tools-gap\"></span><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-export\">导出 JSON</button><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-clear\"" + (input.pendingClear ? " data-danger=\"1\"" : "") + ">" + (input.pendingClear ? "确认清空？" : "清空") + "</button><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-back\">返回历史记录</button></div>" + (ordered.length ? "<div class=\"aus-tap-groups\">" + ordered.map((g) => cardOf(g.key, g.list)).join("") + "</div>" : "<div class=\"ds-card aus-tap-empty\">还没有符合条件的记录 —— 触发几次插件请求（比如 MVU 变量更新、填表）再回来看。</div>");
+	return "<div class=\"aus-tap-note\">技术验证页：这里只做原理验证 —— 旁路记录酒馆发出的后端请求，再用「现有逻辑有没有为它写过一条历史记录」判断哪些属于非常规对话请求。<b>数据只存在本机 localStorage（<code>" + esc$3("aus_tap_log_v1") + "</code>），完全不进入概览、统计、历史、趋势的任何计算</b>，可随时一键清空。上限 500 条；已采集 " + all.length + " 条，账本 " + diag.settlements + " 条。</div><div class=\"aus-tap-sum\">" + block("采集到的后端请求", String(all.length), "端点命中 /api/backends/*/generate") + block("未入账（疑似非常规）", String(orphans.length), "现有逻辑没写过记录") + block("已入账（常规对话）", String(settled.length), "与历史记录一一对上") + block("待对账 / 无用量", pending.length + " / " + noUsage, "结束后 12 秒判定") + "</div><div class=\"aus-tap-tools\">" + pill("orphan", "未入账 " + orphans.length) + pill("settled", "已入账 " + settled.length) + pill("all", "全部 " + all.length) + "<span class=\"aus-tap-tools-gap\"></span><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-export\">导出 JSON</button><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-clear\"" + (input.pendingClear ? " data-danger=\"1\"" : "") + ">" + (input.pendingClear ? "确认清空？" : "清空") + "</button><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-back\">返回请求日志</button></div>" + (ordered.length ? "<div class=\"aus-tap-groups\">" + ordered.map((g) => cardOf(g.key, g.list)).join("") + "</div>" : "<div class=\"ds-card aus-tap-empty\">还没有符合条件的记录 —— 触发几次插件请求（比如 MVU 变量更新、填表）再回来看。</div>");
 }
 function renderTapView() {
 	const root = document.getElementById("aus-tap-root");
@@ -10441,7 +10462,7 @@ function bindOnce(root) {
 			return;
 		}
 		if (t.closest("#aus-tap-back")) try {
-			go?.("history");
+			go?.();
 		} catch {}
 	});
 }
@@ -11770,7 +11791,8 @@ function clearIgnoredHealthKeys() {
 * 问题反馈 / 请求日志页（设置 → 问题反馈 / 请求日志）
 *
 * 展示最近一轮对话请求的标头、正文与响应元数据，并提供「上传反馈」入口；
-* 同时是历史记录页问题提示的开关所在（总开关 + 恢复已忽略的问题）。
+* 同时是历史记录页问题提示的开关所在（总开关 + 恢复已忽略的问题），
+* 也是「其他请求」探针验证页的入口（原在历史记录页工具栏）。
 *
 * 只读展示：数据由 services/request-log.ts 在 fetch 捕获层旁路写入，
 * 与本页无关——本页只负责渲染，绝不参与统计口径。
@@ -11901,13 +11923,21 @@ function healthPrefsHTML() {
 	}) + "</div>" + foot + "</div>";
 }
 var goBack = null;
+var goTap = null;
+/**
+* 顶部工具条（纯函数，便于单测）：返回 / 说明 / 上传反馈 / 其他请求 / 刷新 / 清空。
+* 「其他请求」是探针账本的技术验证页，原先挂在历史记录页工具栏，现在并到这一页 ——
+* 两者都是「出了问题当场看的现场证据」，放一起比散在两个页面里好找。
+*/
+function logTopHTML(summary) {
+	return "<div class=\"aus-log-top\"><button type=\"button\" class=\"aus-log-link aus-log-back\" data-log-action=\"back\" aria-label=\"返回上一页\">" + icon("chevron-left", 14) + "返回</button><div class=\"aus-log-desc\">只保留最近一轮对话请求，默认只在当前浏览器本地保存。密钥已打码。<span class=\"aus-log-desc-state\" id=\"aus-log-state\">" + esc$1(summary) + "</span></div><div class=\"aus-log-actions\"><button type=\"button\" class=\"aus-log-link is-upload\" data-log-action=\"upload\">" + icon("menu", 14) + "上传反馈</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"tap\" title=\"查看探针采到的非常规对话请求（技术验证，数据隔离、不进统计）\">" + icon("chevron-right", 14) + "其他请求</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"refresh\">" + icon("refresh", 14) + "刷新</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"clear\">" + icon("close", 14) + "清空</button></div></div>";
+}
 function renderLogView() {
 	if (typeof document === "undefined") return;
 	const host = document.getElementById("aus-log-body");
 	if (!host) return;
 	const record = readRequestLog();
-	const summary = summarizeRequestLog(record);
-	host.innerHTML = "<div class=\"aus-log-top\"><button type=\"button\" class=\"aus-log-link aus-log-back\" data-log-action=\"back\" aria-label=\"返回设置\">" + icon("chevron-left", 14) + "返回</button><div class=\"aus-log-desc\">只保留最近一轮对话请求，默认只在当前浏览器本地保存。密钥已打码。<span class=\"aus-log-desc-state\" id=\"aus-log-state\">" + esc$1(summary) + "</span></div><div class=\"aus-log-actions\"><button type=\"button\" class=\"aus-log-link is-upload\" data-log-action=\"upload\">" + icon("menu", 14) + "上传反馈</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"refresh\">" + icon("refresh", 14) + "刷新</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"clear\">" + icon("close", 14) + "清空</button></div></div><div class=\"aus-log-advice\">遇到对话没被记录、token 或费用明显不对时，建议在问题刚复现、还没进行下一轮对话时就点「上传反馈」——日志只保留最近一轮请求，继续聊下去会把出问题的那一轮覆盖掉。</div>" + healthPrefsHTML() + "<div id=\"aus-log-content\">" + logBodyHTML(record) + "</div>";
+	host.innerHTML = logTopHTML(summarizeRequestLog(record)) + "<div class=\"aus-log-advice\">遇到对话没被记录、token 或费用明显不对时，建议在问题刚复现、还没进行下一轮对话时就点「上传反馈」——日志只保留最近一轮请求，继续聊下去会把出问题的那一轮覆盖掉。</div>" + healthPrefsHTML() + "<div id=\"aus-log-content\">" + logBodyHTML(record) + "</div>";
 	bind$1(host);
 }
 var clearArmed = false;
@@ -11934,6 +11964,11 @@ function bind$1(host) {
 		if (action === "back") {
 			resetClear();
 			if (goBack) goBack();
+			return;
+		}
+		if (action === "tap") {
+			resetClear();
+			if (goTap) goTap();
 			return;
 		}
 		if (action === "upload") {
@@ -11990,6 +12025,7 @@ function bind$1(host) {
 }
 function initLogView(options) {
 	if (options?.go) goBack = options.go;
+	if (options?.goTap) goTap = options.goTap;
 }
 //#endregion
 //#region src/services/error-classify.ts
@@ -13737,6 +13773,8 @@ var currentView = "overview";
 var chatManageOrigin = "overview";
 /** 「问题反馈 / 请求日志」的来源页：设置页与历史记录页两个入口共用，返回时各回各家 */
 var logOrigin = "settings";
+/** 「其他请求」的来源页：只从请求日志页进入，返回时回到日志页（再回它自己的来源） */
+var tapOrigin = "log";
 /** 当前导航高亮键：窄屏二级页归到「设置」，桌面为视图本身 */
 var currentNavKey = "overview";
 var collapsed = false;
@@ -14843,7 +14881,7 @@ function syncBottomNav(doc, animate) {
 */
 function paintNavState(doc, bottom, animate) {
 	const navSource = viewSourceOf(currentView);
-	currentNavKey = bottom || !isSettingsChild(currentView) ? parentTabOf(navSource) : navSource;
+	currentNavKey = bottom || !isSettingsChild(currentView) ? tabOf(currentView) : navSource;
 	try {
 		doc.querySelectorAll("#aus-sidebar [data-nav]").forEach((el) => {
 			const v = el.getAttribute("data-nav");
@@ -14866,7 +14904,7 @@ function handleBottomTabTap(target) {
 		switchView(target);
 		return;
 	}
-	const currentTab = parentTabOf(viewSourceOf(currentView));
+	const currentTab = tabOf(currentView);
 	const action = resolveTabTap(target, currentView, isChildView(currentView), currentTab);
 	if (action === "switch") {
 		switchView(target);
@@ -14930,17 +14968,24 @@ function syncMobileSidebar(doc) {
 }
 /**
 * 视图的真实归属页：没有自己导航项的二级页按进入前的来源页算。
-* 「对话展示管理」（概览/趋势/设置三处入口）与「请求日志」（设置/历史两处入口）都走这里。
+* 「对话展示管理」（概览/趋势/设置三处入口）、「请求日志」（设置/历史两处入口）与
+* 「其他请求」（请求日志页一处入口）都走这里；后者的来源是日志页，故归属要再回溯一层（见 tabOf）。
 */
 function viewSourceOf(view) {
 	if (view === "chat-manage") return chatManageOrigin;
 	if (view === "log") return logOrigin;
+	if (view === "tap") return tapOrigin;
 	return view;
 }
-/** 二级页「返回」目标：对话展示管理与请求日志回到进入前的来源页，其余回到自己的父级根页 */
+/** 视图最终归属的底栏 tab：按「进入来源链」解析到底（其他请求 ← 请求日志 ← 历史 / 设置） */
+function tabOf(view) {
+	return tabOfView(view, viewSourceOf);
+}
+/** 二级页「返回」目标：对话展示管理 / 请求日志 / 其他请求回到进入前的来源页，其余回到自己的父级根页 */
 function returnFromChild() {
 	if (currentView === "chat-manage") return chatManageOrigin;
 	if (currentView === "log") return logOrigin;
+	if (currentView === "tap") return tapOrigin;
 	return childParentOf(currentView) ?? "settings";
 }
 /** 进入对话展示管理页并记住来源（概览 / 趋势预测 / 设置三处入口共用） */
@@ -14952,6 +14997,11 @@ function openChatManage(from) {
 function openRequestLog(from) {
 	logOrigin = from;
 	switchView("log");
+}
+/** 进入「其他请求」页并记住来源（请求日志页工具栏唯一入口，返回时回到日志页） */
+function openTap(from) {
+	tapOrigin = from;
+	switchView("tap");
 }
 function switchView(view, opts) {
 	try {
@@ -15492,7 +15542,6 @@ function createPanel() {
                 <div id="aus-history-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div id="aus-history-filter-reset" class="aus-filter-reset" title="重置筛选" aria-label="重置筛选" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);font-size:var(--aus-fs-base);cursor:pointer;margin-left:auto;">${icon("refresh", 14)}<span>重置筛选</span></div>
-              <button id="aus-history-tap-btn" type="button" class="aus-pill aus-pill-sm" title="查看探针采到的非常规对话请求（技术验证，数据隔离、不进统计）">其他请求</button>
               <button id="aus-history-log-btn" type="button" class="aus-pill aus-pill-sm" title="查看最近一轮请求的标头、正文与响应元数据（与设置页「问题反馈 / 请求日志」是同一页）">请求日志</button>
             </div>
             <div id="aus-diff" class="ds-card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">缓存断点</span><button id="aus-diff-fullscreen" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">全屏</button></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">在历史中各选一条 旧/新 对比，橙/绿高亮即发散点</div></div>
@@ -15625,10 +15674,12 @@ function createPanel() {
 		if (target?.closest?.("#aus-settings-request-log")) openRequestLog("settings");
 	});
 	initChatManageView({ go: () => switchView(chatManageOrigin) });
-	doc.getElementById("aus-history-tap-btn")?.addEventListener("click", () => switchView("tap"));
 	doc.getElementById("aus-history-log-btn")?.addEventListener("click", () => openRequestLog("history"));
-	initTapView({ go: () => switchView("history") });
-	initLogView({ go: () => switchView(returnFromChild()) });
+	initTapView({ go: () => switchView(returnFromChild()) });
+	initLogView({
+		go: () => switchView(returnFromChild()),
+		goTap: () => openTap("log")
+	});
 	const applyCollapsed = (v) => {
 		collapsed = v;
 		const sb = doc.getElementById("aus-sidebar");

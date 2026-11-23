@@ -4,10 +4,9 @@
  * 定位：只把探针采到的请求「摆出来给人看」，回答一个问题 ——
  * 酒馆里那些不走常规对话链路的请求长什么样、来自谁、和对账结果是否一致。
  * 这里读的数据全部来自 localStorage['aus_tap_log_v1']，不参与概览/统计/历史/趋势的任何计算，
- * 也不写回 state.history。页面本身不进底栏 tab，挂在「历史记录」下，从历史页工具栏进入。
+ * 也不写回 state.history。页面本身不进底栏 tab，入口在「问题反馈 / 请求日志」页工具栏，从那里进入、返回也回那里。
  */
 import { esc, localDay, localTimeHM } from '../utils/date';
-import type { AppView } from './nav-model';
 import { tapDiagnostics } from '../services/request-tap';
 import { clearTapRecords, listTapRecords, subscribeTap, TAP_MAX_RECORDS } from '../services/request-tap/store';
 import type { TapRecord } from '../services/request-tap/types';
@@ -17,12 +16,12 @@ type TapFilter = 'all' | 'orphan' | 'settled';
 let filter: TapFilter = 'orphan';
 let pendingClear = false;
 let bound = false;
-let go: ((view: AppView) => void) | null = null;
+let go: (() => void) | null = null;
 let subscribing = false;
 let renderQueued = false;
 
 /** 面板初始化时注入切页函数（与 chat-manage 的 init 同款） */
-export function initTapView(deps: { go: (view: AppView) => void }): void {
+export function initTapView(deps: { go: () => void }): void {
   go = deps.go;
   if (subscribing) return;
   subscribing = true;
@@ -161,7 +160,7 @@ export function tapViewHTML(input: TapViewInput): string {
       '<button type="button" class="aus-pill aus-pill-sm" id="aus-tap-export">导出 JSON</button>' +
       '<button type="button" class="aus-pill aus-pill-sm" id="aus-tap-clear"' +
         (input.pendingClear ? ' data-danger="1"' : '') + '>' + (input.pendingClear ? '确认清空？' : '清空') + '</button>' +
-      '<button type="button" class="aus-pill aus-pill-sm" id="aus-tap-back">返回历史记录</button>' +
+      '<button type="button" class="aus-pill aus-pill-sm" id="aus-tap-back">返回请求日志</button>' +
     '</div>' +
     (ordered.length
       ? '<div class="aus-tap-groups">' + ordered.map((g) => cardOf(g.key, g.list)).join('') + '</div>'
@@ -198,7 +197,8 @@ function bindOnce(root: HTMLElement): void {
       return;
     }
     if (t.closest('#aus-tap-back')) {
-      try { go?.('history'); } catch {}
+      // 回到进入前的页面（现在是请求日志页）：目标由 panel 注入的回调决定，不在这里写死
+      try { go?.(); } catch {}
     }
   });
 }
