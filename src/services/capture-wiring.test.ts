@@ -57,6 +57,35 @@ describe('采集包装：单实例 + 旧代退役', () => {
   });
 });
 
+/**
+ * 上游错误被宿主包装成 200 的拒绝链（3.2.x 线上故障）。
+ *
+ * 重现条件在真机的上游 500（TT 的 Rust 后端把错误当 SSE 正文回 200），单测无法复现 fetch 链，
+ * 所以用源码断言钉住三处接线：解析时记载荷、结算时传载荷、入库前先看载荷。
+ */
+describe('上游错误被包装成 200：拒绝入库而不是按输出估算', () => {
+  it('响应解析阶段记下错误载荷', () => {
+    expect(interceptionSrc).toContain("from './api-error-payload';");
+    expect(interceptionSrc).toContain('detectApiErrorPayload');
+    expect(interceptionSrc).toContain('function detectTurnErrorPayload(');
+    expect(interceptionSrc).toContain('const errorTag = detectTurnErrorPayload(text, rawText);');
+    expect(interceptionSrc).toContain('if (errorTag) turn.errorPayload = errorTag;');
+  });
+
+  it('无用量结算与正常入库两条路都先看载荷', () => {
+    expect(interceptionSrc).toContain('const errorPayload = turn?.errorPayload || detectTurnErrorPayload(rawResponse, rawResponse);');
+    expect(interceptionSrc).toContain('streamError: turn?.streamError || null,\n    errorPayload,');
+    expect(interceptionSrc).toContain('if (errTurn && errTag) {');
+  });
+
+  it('拒绝的轮次留诊断快照，且不混进「对话未写入历史」', () => {
+    expect(interceptionSrc).toContain("noteCaptureStage('entry-rejected'");
+    expect(interceptionSrc).toContain("reason: 'api-error-payload:'");
+    expect(interceptionSrc).toContain("turn.settledBy = 'rejected';");
+    expect(interceptionSrc).not.toContain("noteCaptureStage('event-drop', { model, requestId: requestId || '', reason: 'api-error-payload'");
+  });
+});
+
 describe('探针包装：按代际令牌判退役', () => {
   it('XHR 探针：安全读文本 + 首字节 + 中止也收尾', () => {
     // responseType 非 text 时读 responseText 会抛 InvalidStateError，老代码等于永远拿不到 usage

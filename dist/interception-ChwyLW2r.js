@@ -1,6 +1,6 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { D as initConnectionIdentity, O as resolveRuntimeConnectionContext, t as repository } from "./repository-tMJliVhr.js";
+import { D as initConnectionIdentity, O as resolveRuntimeConnectionContext, t as repository } from "./repository-D_82rA38.js";
 import { t as detectRequestOrigin } from "./request-origin-C9kLQ_0W.js";
 //#region src/services/include-usage.ts
 /**
@@ -1124,6 +1124,7 @@ var CAPTURE_STAGE_SET = /* @__PURE__ */ new Set([
 	"turn-estimated",
 	"turn-interrupted",
 	"turn-unmatched",
+	"entry-rejected",
 	"install-failed"
 ]);
 var USAGE_KEYS = [
@@ -1268,6 +1269,11 @@ function decideTurnOutcome(signals) {
 	const hasOutput = signals.hasOutput === true;
 	const pendingStop = signals.pendingStop === true;
 	const streamError = signals.streamError ? String(signals.streamError) : null;
+	if (signals.errorPayload ? String(signals.errorPayload) : null) return {
+		kind: "drop",
+		interrupted: null,
+		reason: "api-error-payload"
+	};
 	if (usable) {
 		const interrupted = pendingStop ? "user" : streamError ? "upstream" : null;
 		return {
@@ -1296,6 +1302,42 @@ function decideTurnOutcome(signals) {
 		interrupted: null,
 		reason: hasUsage ? "usage-all-zero-with-output" : "no-usage-with-output"
 	};
+}
+/**
+* 顺序即优先级：TT 模板最稳定，界面文案随语言变，上游 JSON 只在整段透传时出现。
+* 三条都锚在行首，句中引用一律不认；模板前的 provider 名只允许 ASCII 字母数字与常见分隔符
+* （"Custom OpenAI"、"Google AI Studio" 这类），中文句子开头因此不会误命中。
+*/
+var MARKERS = [
+	{
+		id: "tauritavern-endpoint-status",
+		test: /^[A-Za-z0-9 ._\-()]{0,80}?endpoint failed with status\s+\d{3}\b/i
+	},
+	{
+		id: "tavern-api-error-title",
+		test: /^\[API\s*(?:错误|Error|錯誤)\]/i
+	},
+	{
+		id: "upstream-error-json",
+		test: /^\{\s*"error"\s*:\s*\{[^}]*"message"/i
+	}
+];
+/**
+* 这段文本是不是「上游错误提示被当成模型输出」。
+* 命中返回锚点与长度，不命中返回 null（空文本、超长文本一律不认）。
+*/
+function detectApiErrorPayload(text) {
+	const t = String(text ?? "").trim();
+	if (!t || t.length > 1200) return null;
+	for (const marker of MARKERS) if (marker.test.test(t)) return {
+		marker: marker.id,
+		chars: t.length
+	};
+	return null;
+}
+/** 判定结果的稳定串（写进 capture 快照的 reason，供诊断包按锚点统计） */
+function apiErrorPayloadTag(match) {
+	return match ? match.marker + ":" + match.chars : null;
 }
 //#endregion
 //#region src/services/token-estimate.ts
@@ -1628,6 +1670,30 @@ function collectOutputText(raw) {
 	}
 	return out.slice(0, 2e5);
 }
+/**
+* 本轮输出是不是「上游错误提示被宿主包装成 200 正文」。
+*
+* 两个候选都试：投影后的正文（模型 content 的位置），以及上游原始响应
+* （错误 JSON / 带错误文案的 SSE 原文）。命中返回稳定串（锚点:字符数），供判定层与诊断快照共用。
+*/
+function detectTurnErrorPayload(text, raw) {
+	try {
+		const bodyLen = String(text || "").length;
+		const rawLen = String(raw || "").length;
+		if (bodyLen > 1200 && rawLen > 1200) return null;
+		if (bodyLen <= 1200) {
+			const fromBody = detectApiErrorPayload(collectOutputText(text || ""));
+			if (fromBody) return apiErrorPayloadTag(fromBody);
+		}
+		if (rawLen > 0 && rawLen <= 1200) {
+			const fromRaw = detectApiErrorPayload(raw || "");
+			if (fromRaw) return apiErrorPayloadTag(fromRaw);
+		}
+		return null;
+	} catch {
+		return null;
+	}
+}
 function recentStreamTiming(maxAge = 6e4) {
 	try {
 		const st = lastStreamTiming;
@@ -1806,6 +1872,7 @@ function installFetchCapture() {
 					thinkTime: 0,
 					streamed: null,
 					endedAt: 0,
+					errorPayload: null,
 					settled: false,
 					settledBy: null,
 					usage: null,
@@ -1920,6 +1987,8 @@ function installFetchCapture() {
 								}
 								if (!turn.fullResponse) turn.fullResponse = rawText ?? text;
 								if (!turn.endedAt) turn.endedAt = Date.now();
+								const errorTag = detectTurnErrorPayload(text, rawText);
+								if (errorTag) turn.errorPayload = errorTag;
 							} catch {}
 							try {
 								const parsedUsage = data?.usage || null;
@@ -2586,14 +2655,39 @@ async function settleTurnWithoutUsage(source, opts = {}) {
 	const requestId = turn?.requestId || null;
 	const rawResponse = turn?.fullResponse || "";
 	const outputText = collectOutputText(rawResponse);
+	const hasOutput = !!outputText.trim() || !!turn && (turn.outputChars > 0 || turn.reasoningChars > 0);
+	const errorPayload = turn?.errorPayload || detectTurnErrorPayload(rawResponse, rawResponse);
 	const outcome = decideTurnOutcome({
 		hasUsage: false,
 		usageUsable: false,
-		hasOutput: !!outputText.trim() || !!turn && (turn.outputChars > 0 || turn.reasoningChars > 0),
+		hasOutput,
 		pendingStop: stopPending(),
-		streamError: turn?.streamError || null
+		streamError: turn?.streamError || null,
+		errorPayload
 	});
 	if (outcome.kind === "drop") {
+		if (outcome.reason === "api-error-payload") {
+			log.debug("本轮输出是上游错误提示，拒绝入库", {
+				source,
+				errorPayload,
+				status: turn?.status ?? null
+			});
+			try {
+				noteCaptureStage("entry-rejected", {
+					model,
+					requestId: requestId || "",
+					streamed: turn?.streamed ?? null,
+					usageFound: false,
+					usageZero: false,
+					reason: "api-error-payload:" + String(errorPayload || "unknown") + ":status=" + String(turn?.status ?? "")
+				});
+			} catch {}
+			if (turn) {
+				turn.settled = true;
+				turn.settledBy = "rejected";
+			}
+			return;
+		}
 		log.debug("本轮无输出，静默不记录", {
 			source,
 			reason: outcome.reason
@@ -2697,6 +2791,32 @@ async function settleTurnWithoutUsage(source, opts = {}) {
 	refresh();
 }
 function processUsage(usage, model, messages, startTime, fullRequest = null, fullResponse = null, ttft = 0, thinkTime = 0, finishReason = null, connection = null, requestId = null, streamed = null, meta = null) {
+	try {
+		const errTurn = turnByRequestId(requestId) || currentTurn(startTime);
+		const errTag = errTurn ? errTurn.errorPayload || detectTurnErrorPayload(errTurn.fullResponse || "", null) : null;
+		if (errTurn && errTag) {
+			errTurn.settled = true;
+			errTurn.settledBy = "rejected";
+			log.debug("本轮输出是上游错误提示，拒绝入库", {
+				requestId,
+				errorPayload: errTag,
+				status: errTurn.status
+			});
+			try {
+				noteCaptureStage("entry-rejected", {
+					model,
+					requestId: requestId || "",
+					streamed,
+					usageFound: !!usage,
+					usageZero: isZeroUsage(usage),
+					usage: usageNumbers(usage),
+					finishReason,
+					reason: "api-error-payload:" + errTag + ":status=" + String(errTurn.status ?? "")
+				});
+			} catch {}
+			return;
+		}
+	} catch {}
 	try {
 		const fp = lastFetchUsage;
 		const sameTurn = !fp?.requestId || !requestId || fp.requestId === requestId;

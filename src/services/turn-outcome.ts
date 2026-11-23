@@ -9,7 +9,11 @@
  * - record：usage 可用，正常入库（若同时被手动停止/断流，只加中断标记）；
  * - estimate：没有可用 usage 但有输出，按本地估算入库；
  * - interrupted：没有可用 usage、有输出，且能判定是手动停止或上游断开；
- * - drop：既没有可用 usage 也没有任何输出，静默不记录（由健康信号单独提示）。
+ * - drop：没有可统计的内容，静默不记录（由健康信号 / 诊断快照单独提示）。
+ *
+ * 还有第三种失真：TauriTavern 把上游非 2xx 包装成 HTTP 200 + 正文，错误提示被当成
+ * 「有输出」→ 走 estimate 入库并按全价计费（3.2.x 实测）。因此增加 errorPayload 信号，
+ * 命中即代表这一整段输出不是模型内容，优先于任何 usage / 输出判断直接 drop。
  */
 
 export type TurnOutcomeKind = 'record' | 'estimate' | 'interrupted' | 'drop';
@@ -27,6 +31,13 @@ export interface TurnSignals {
   pendingStop: boolean;
   /** 流式读取过程中的错误文案（上游断开、网络中断、AbortError 等） */
   streamError: string | null;
+  /**
+   * 本轮「输出」其实是上游错误提示（识别结果串，例如 endpoint-status:128）。
+   *
+   * 宿主把非 2xx 的失败包成 200 时，响应正文里只有客户端拼的错误文案，没有任何模型内容；
+   * 它既不能算输出、也不能计费，哪怕上游顺手回了 usage（更像伪造的假记录）。
+   */
+  errorPayload?: string | null;
 }
 
 export interface TurnOutcome {
@@ -43,7 +54,13 @@ export function decideTurnOutcome(signals: TurnSignals): TurnOutcome {
   const hasOutput = signals.hasOutput === true;
   const pendingStop = signals.pendingStop === true;
   const streamError = signals.streamError ? String(signals.streamError) : null;
+  const errorPayload = signals.errorPayload ? String(signals.errorPayload) : null;
 
+  // 最先判定：整段输出是上游错误提示时，这一轮根本没有模型内容。
+  // 放在 usage 判断之前，是因为「错误响应带 usage」的假记录更隐蔽（4.1 节的第二种组合）。
+  if (errorPayload) {
+    return { kind: 'drop', interrupted: null, reason: 'api-error-payload' };
+  }
   if (usable) {
     const interrupted: TurnInterrupt | null = pendingStop ? 'user' : streamError ? 'upstream' : null;
     return {

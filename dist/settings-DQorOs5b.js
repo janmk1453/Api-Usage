@@ -3,13 +3,13 @@ import { i as state } from "./store-CVamS-ER.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, d as isMigrationBackupKey, h as saveExtensionSettings, s as deleteMigrationBackups, u as getExtensionSettings, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as mergeWalletCollections, a as decryptKey, f as getPricing$1, o as encryptKey, p as isDeepSeekOfficialModel, t as repository, u as calcCost } from "./repository-tMJliVhr.js";
+import { C as mergeWalletCollections, a as decryptKey, f as getPricing$1, o as encryptKey, p as isDeepSeekOfficialModel, t as repository, u as calcCost } from "./repository-D_82rA38.js";
 import { a as isUnsafeKey, o as isValidDayKey, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { a as getDisplayCurrency, r as fetchLiveRate } from "./currency-Dr655frw.js";
-import { r as recalcAllCosts } from "./interception-CfY9c61v.js";
-import { i as saveApiKey } from "./balance-BPyPMQb0.js";
+import { r as recalcAllCosts } from "./interception-ChwyLW2r.js";
+import { i as saveApiKey } from "./balance-X8wtGWPD.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
-import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-DfQBO8my.js";
+import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-C7ShL0IX.js";
 //#region src/ui/switch.ts
 function escAttr(value) {
 	return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -2335,7 +2335,7 @@ function renderSettings(doc) {
 		state.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state.settings });
 		try {
-			import("./balance-BPyPMQb0.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-X8wtGWPD.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2379,7 +2379,7 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-tMJliVhr.js").then((n) => n.n);
+				const { repository } = await import("./repository-D_82rA38.js").then((n) => n.n);
 				const { state: st } = await import("./store-CVamS-ER.js").then((n) => n.a);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
@@ -2526,7 +2526,7 @@ function renderSettings(doc) {
 					closeDropdownInstant(intervalDrop);
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-DfQBO8my.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./pricing-sync-C7ShL0IX.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 						import("./currency-Dr655frw.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};

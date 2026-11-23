@@ -8,6 +8,7 @@ import { createFrameNormalizer } from './frame-normalizer';
 import { saveRequestStart, patchRequestLog, noteRecentTurns } from './request-log';
 import { noteCaptureStage, isZeroUsage, usageNumbers } from './capture-digest';
 import { decideTurnOutcome } from './turn-outcome';
+import { API_ERROR_MAX_CHARS, detectApiErrorPayload, apiErrorPayloadTag } from './api-error-payload';
 import { ESTIMATE_VERSION, estimatePromptTokens, estimateTextTokens } from './token-estimate';
 import type { EntryMeta } from '../types/save';
 import { detectRequestOrigin, type RequestOrigin } from './request-origin';
@@ -60,10 +61,17 @@ type TurnContext = {
   streamed: boolean | null;
   /** 响应读完的时刻；一个字节都没读到时保持 0。判定「刚结束的那一轮」用它 */
   endedAt: number;
+  /**
+   * 本轮「输出」其实是上游错误提示的识别结果（见 services/api-error-payload.ts）。
+   *
+   * 宿主把上游非 2xx 包装成 HTTP 200 + 正文时，响应里只有错误文案、没有任何模型内容；
+   * 有值就说明这一轮既不该按输出估算，也不该计费。
+   */
+  errorPayload: string | null;
   /** 本轮是否已经落库（正常路径或估算路径都算） */
   settled: boolean;
-  /** 落库来源：真实 usage 还是本地估算，决定结束事件还要不要覆盖 */
-  settledBy: 'usage' | 'estimated' | null;
+  /** 落库来源：真实 usage / 本地估算 / 明确拒绝（上游错误载荷），决定结束事件还要不要覆盖 */
+  settledBy: 'usage' | 'estimated' | 'rejected' | null;
   /**
    * 本轮自己在响应当里解析到的用量与结束原因。
    *
@@ -247,7 +255,7 @@ export function registerTurnForTest(patch: Partial<TurnContext>): TurnContext {
     startTime: Date.now(), requestId: null, model: null, modelFallback: false, status: 0,
     streamError: null, promptChars: 0, outputChars: 0, reasoningChars: 0, fullResponse: null, fullRequest: null,
     messages: [], promptMessages: [], connection: null, ttft: 0, thinkTime: 0, streamed: null,
-    endedAt: 0, settled: false, settledBy: null, usage: null, finishReason: null,
+    endedAt: 0, errorPayload: null, settled: false, settledBy: null, usage: null, finishReason: null,
     requestOrigin: null,
   };
   return registerTurn({ ...base, ...patch });
@@ -336,6 +344,34 @@ function collectOutputText(raw: string): string {
     try { push(JSON.parse(payload)); } catch {}
   }
   return out.slice(0, 200_000);
+}
+
+/**
+ * 本轮输出是不是「上游错误提示被宿主包装成 200 正文」。
+ *
+ * 两个候选都试：投影后的正文（模型 content 的位置），以及上游原始响应
+ * （错误 JSON / 带错误文案的 SSE 原文）。命中返回稳定串（锚点:字符数），供判定层与诊断快照共用。
+ */
+function detectTurnErrorPayload(text: string, raw: string | null): string | null {
+  try {
+    // 便宜预筛：错误正文只有几十到几百字符。超长的那一侧直接不解析——
+    // 否则正常长回复每轮都要多跑一次 collectOutputText（长上下文下是几十万字符的 JSON 遍历）。
+    const bodyLen = String(text || '').length;
+    const rawLen = String(raw || '').length;
+    if (bodyLen > API_ERROR_MAX_CHARS && rawLen > API_ERROR_MAX_CHARS) return null;
+    if (bodyLen <= API_ERROR_MAX_CHARS) {
+      const fromBody = detectApiErrorPayload(collectOutputText(text || ''));
+      if (fromBody) return apiErrorPayloadTag(fromBody);
+    }
+    if (rawLen > 0 && rawLen <= API_ERROR_MAX_CHARS) {
+      // 上游直接回 {"error":{...}}：整段原始响应就是错误体
+      const fromRaw = detectApiErrorPayload(raw || '');
+      if (fromRaw) return apiErrorPayloadTag(fromRaw);
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function recentStreamTiming(maxAge = 60000): typeof lastStreamTiming {
@@ -529,6 +565,7 @@ function installFetchCapture(): boolean {
           thinkTime: 0,
           streamed: null,
           endedAt: 0,
+          errorPayload: null,
           settled: false,
           settledBy: null,
           usage: null,
@@ -622,6 +659,9 @@ function installFetchCapture(): boolean {
               if (typeof resModel === 'string' && resModel) { turn.model = resModel; turn.modelFallback = false; }
               if (!turn.fullResponse) turn.fullResponse = rawText ?? text;
               if (!turn.endedAt) turn.endedAt = Date.now();
+              // 上游错误被包装成 200：正文里只有客户端拼的错误文案，记下来供判定层直接丢弃
+              const errorTag = detectTurnErrorPayload(text, rawText);
+              if (errorTag) turn.errorPayload = errorTag;
             } catch {}
             // 采集链路快照：响应解析完成，是否解析到用量、用量是否全 0
             try {
@@ -1265,14 +1305,39 @@ async function settleTurnWithoutUsage(source: 'generation-ended' | 'stop', opts:
   const rawResponse = turn?.fullResponse || '';
   const outputText = collectOutputText(rawResponse);
   const hasOutput = !!outputText.trim() || !!turn && (turn.outputChars > 0 || turn.reasoningChars > 0);
+  // 有输出也要先看「这输出是不是模型写的」：TT 把上游 500 包成 200，正文就是错误提示。
+  // turn 上抓到的优先（fetch 解析时就判过），抓不到再按响应原文补判一次。
+  const errorPayload = turn?.errorPayload || detectTurnErrorPayload(rawResponse, rawResponse);
   const outcome = decideTurnOutcome({
     hasUsage: false,
     usageUsable: false,
     hasOutput,
     pendingStop: stopPending(),
     streamError: turn?.streamError || null,
+    errorPayload,
   });
   if (outcome.kind === 'drop') {
+    // 上游错误被宿主包装成 200：这一轮没有任何模型内容，既不能按输出估算，也不能计费。
+    // 用独立阶段 entry-rejected 记一条（不混进 event-drop「对话未写入历史」的统计口径），
+    // 历史保持干净，而「撞了多少次上游错误、命中哪个锚点、状态码多少」在诊断包里仍查得到。
+    if (outcome.reason === 'api-error-payload') {
+      log.debug('本轮输出是上游错误提示，拒绝入库', { source, errorPayload, status: turn?.status ?? null });
+      try {
+        noteCaptureStage('entry-rejected', {
+          model,
+          requestId: requestId || '',
+          streamed: turn?.streamed ?? null,
+          usageFound: false,
+          usageZero: false,
+          reason: 'api-error-payload:' + String(errorPayload || 'unknown') + ':status=' + String(turn?.status ?? ''),
+        });
+      } catch {}
+      if (turn) {
+        turn.settled = true;
+        turn.settledBy = 'rejected';
+      }
+      return;
+    }
     log.debug('本轮无输出，静默不记录', { source, reason: outcome.reason });
     // 用户自己点了停止、而模型还没吐出任何内容：这不是采集故障，也不是上游异常，
     // 只是这一轮本来就没有可统计的东西。用独立原因标记，健康提示里跳过它，
@@ -1357,6 +1422,32 @@ async function settleTurnWithoutUsage(source: 'generation-ended' | 'stop', opts:
 }
 
 export function processUsage(usage: any, model: string, messages: any[], startTime: number, fullRequest: any = null, fullResponse: any = null, ttft = 0, thinkTime = 0, finishReason: string | null = null, connection: HistoryConnection | null = null, requestId: string | null = null, streamed: boolean | null = null, meta: EntryMeta | null = null) {
+  // 上游错误被宿主包装成 200：正文只有错误提示，这一轮没有任何模型内容。
+  // 哪怕响应里带了 usage（比 4.1 节的组合更隐蔽）也拒绝入库，只留一条诊断快照。
+  try {
+    const errTurn = turnByRequestId(requestId) || currentTurn(startTime);
+    // 兜底：事件路径先于 fetch 解析到达时 turn.errorPayload 还没写上，用原始响应再判一次
+    // （超长响应在 detectTurnErrorPayload 的预筛里就直接返回 null，不产生遍历开销）
+    const errTag = errTurn ? errTurn.errorPayload || detectTurnErrorPayload(errTurn.fullResponse || '', null) : null;
+    if (errTurn && errTag) {
+      errTurn.settled = true;
+      errTurn.settledBy = 'rejected';
+      log.debug('本轮输出是上游错误提示，拒绝入库', { requestId, errorPayload: errTag, status: errTurn.status });
+      try {
+        noteCaptureStage('entry-rejected', {
+          model,
+          requestId: requestId || '',
+          streamed,
+          usageFound: !!usage,
+          usageZero: isZeroUsage(usage),
+          usage: usageNumbers(usage),
+          finishReason,
+          reason: 'api-error-payload:' + errTag + ':status=' + String(errTurn.status ?? ''),
+        });
+      } catch {}
+      return;
+    }
+  } catch {}
   // 主路径 usage 多来自 ST，可能缺 reasoning_tokens；从最近 fetch 的估算值补上
   try {
     const fp: any = lastFetchUsage;

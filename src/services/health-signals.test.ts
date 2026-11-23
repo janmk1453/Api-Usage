@@ -124,6 +124,22 @@ describe('历史记录页健康信号', () => {
     expect(signals[0].detail).toContain('连续 2 轮');
   });
 
+  it('上游把 500 包成 200 而拒绝入库的轮次：连续出现时提示「上游返回错误」', () => {
+    // 这类轮次刻意不写历史（那一轮确实没有模型内容），但要和「采集故障」区分开：
+    // 偶发单次不打扰，同类（模型 + 状态码）在窗口内重复才提示，且按 api-error 归因。
+    noteCaptureStage('entry-rejected', { model: 'deepseek-v3', reason: 'api-error-payload:tauritavern-endpoint-status:128:status=500', at: 1794719200000 });
+    expect(scanCaptureHealth()).toHaveLength(0);
+    noteCaptureStage('entry-rejected', { model: 'deepseek-v3', reason: 'api-error-payload:tauritavern-endpoint-status:128:status=500', at: 1794719202000 });
+    const signals = scanCaptureHealth();
+    expect(signals).toHaveLength(1);
+    expect(signals[0].kind).toBe('missing-usage');
+    expect(signals[0].reason).toBe('api-error');
+    expect(signals[0].signature).toBe('http-500');
+    expect(signals[0].detail).toContain('上游返回错误');
+    expect(signals[0].detail).toContain('HTTP 500');
+    expect(signals[0].detail).toContain('未计入历史');
+  });
+
   it('采集安装反复失败要报「功能报错」（整段静默，历史里看不出来）', () => {
     noteCaptureStage('install-failed', { model: '', reason: 'depth-limit:7', at: 1794719000000 });
     noteCaptureStage('install-failed', { model: '', reason: 'depth-limit:7', at: 1794719004000 });

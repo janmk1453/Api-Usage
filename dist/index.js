@@ -3,17 +3,17 @@ import { i as state$2, n as getHistoryForDisplay, r as getSelectedSave, s as mob
 import { t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { _ as saveHot, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as pricingSourceLabel, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-tMJliVhr.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as pricingSourceLabel, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-D_82rA38.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc$3, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { a as getDisplayCurrency, i as formatMoney, o as getWalletExchangeRate, t as cnyToDisplay$1 } from "./currency-Dr655frw.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
-import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-CfY9c61v.js";
+import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-ChwyLW2r.js";
 import { r as registerRequestOriginSelf } from "./request-origin-C9kLQ_0W.js";
 import { a as CHANGELOG, c as BUILD_NO, i as renderChangelogCard, n as changelogSectionsHTML, o as APP_BUILD_TAG, r as formatChangelogDate, s as APP_VERSION, t as bindChangelog } from "./changelog-i35gZh7M.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-BPyPMQb0.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-X8wtGWPD.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-Du9z9NQd.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-DfQBO8my.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-DQorOs5b.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-C7ShL0IX.js";
 import { a as listTapRecords, i as clearTapRecords, n as tapDiagnostics, o as subscribeTap, r as stripModelTag } from "./request-tap-Ly1fbPoz.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
@@ -9636,7 +9636,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-BPyPMQb0.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-X8wtGWPD.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -12126,7 +12126,8 @@ function classifyErrorText(input) {
 * 只在「用户能明显感觉到不对」的情况下给出信号：
 * - zero-usage      记下来的用量全 0（费用必然错）
 * - estimated-usage 上游没给用量，已按本地估算补记（黄色轻提示，不是故障）
-* - missing-usage   常规对话的用量没取到、这一轮没进历史（同类连续出现或探针聚簇才提示）
+* - missing-usage   常规对话的用量没取到、这一轮没进历史（同类连续出现或探针聚簇才提示；
+*                   上游错误被宿主包装成 200 而拒绝入库的轮次也归在这里，但原因写成 api-error）
 * - rate-anomaly    速率离谱（极高 / 极低），多半是耗时或流式判定出错
 * - meta-missing    模型名或耗时缺失，只能用兜底值
 * - plugin-error    本扩展自身功能报错（网络/汇率/更新等无关报错不算）
@@ -12275,9 +12276,32 @@ function dropReasonOf(rec) {
 	return String(rec?.reason || "missing").split(":")[0] || "missing";
 }
 /**
+* 滑动窗口聚簇：同一条原因在 MISSING_CLUSTER_MS 内出现 MISSING_CLUSTER_MIN 次才算「多次」。
+* 偶发一次不打扰用户，返回第一个达标窗口的末条记录。
+*/
+function firstCluster(list) {
+	const sorted = list.slice().sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
+	let clusterStart = 0;
+	for (let i = 0; i < sorted.length; i += 1) {
+		while (i - clusterStart + 1 > 2 && (Number(sorted[i].at) || 0) - (Number(sorted[clusterStart].at) || 0) > 18e5) clusterStart += 1;
+		if (i - clusterStart + 1 === 2) return { latest: sorted[i] };
+	}
+	return null;
+}
+/** entry-rejected 的 reason 形如 api-error-payload:<锚点>:<字符数>:status=<状态码> */
+function rejectedPartsOf(rec) {
+	const reason = String(rec?.reason || "");
+	return {
+		marker: reason.split(":")[1] || "unknown",
+		status: (reason.match(/status=(\d+)/) || [])[1] || ""
+	};
+}
+/**
 * 扫采集链路快照：
 * - 事件层丢弃：同类（模型 + 原因）在窗口内出现至少 MISSING_CLUSTER_MIN 次才算「多次未计入」，
 *   偶发单次不打扰用户；
+* - 上游错误被宿主包装成 200：历史刻意不留记录（那一轮没有模型内容），但同类连续出现
+*   要按「上游返回错误」提示，避免用户误以为是扩展把数据弄丢了；
 * - 入库失败：功能报错，带错误签名用于「忽略同类」。
 * （fetch-parse 的全 0、turn-estimated / turn-interrupted 都会在历史里体现，这里不重复报。）
 */
@@ -12291,9 +12315,18 @@ function scanCaptureHealth(stages = listCaptureStages()) {
 		if (id) settledRequests.add(id);
 	}
 	const drops = /* @__PURE__ */ new Map();
+	const rejects = /* @__PURE__ */ new Map();
 	for (const rec of stages) {
 		if (!rec) continue;
-		if (rec.stage === "event-drop") {
+		if (rec.stage === "entry-rejected") {
+			const reqId = String(rec.requestId || "");
+			if (reqId && settledRequests.has(reqId)) continue;
+			const { marker, status } = rejectedPartsOf(rec);
+			const key = (rec.model || "") + "|" + status + "|" + marker;
+			const list = rejects.get(key) || [];
+			list.push(rec);
+			rejects.set(key, list);
+		} else if (rec.stage === "event-drop") {
 			if (dropReasonOf(rec) === "user-stop-no-output") continue;
 			const reqId = String(rec.requestId || "");
 			if (reqId && settledRequests.has(reqId)) continue;
@@ -12329,26 +12362,32 @@ function scanCaptureHealth(stages = listCaptureStages()) {
 		});
 	}
 	for (const [key, list] of drops) {
+		const hit = firstCluster(list);
+		if (!hit) continue;
 		const [model, reason] = key.split("|");
-		const sorted = list.slice().sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
-		let clusterStart = 0;
-		for (let i = 0; i < sorted.length; i += 1) {
-			while (i - clusterStart + 1 > 2 && (Number(sorted[i].at) || 0) - (Number(sorted[clusterStart].at) || 0) > 18e5) clusterStart += 1;
-			if (i - clusterStart + 1 === 2) {
-				const count = i - clusterStart + 1;
-				const latest = sorted[i];
-				out.push({
-					kind: "missing-usage",
-					at: Number(latest.at) || 0,
-					model,
-					reason: "missing",
-					signature: reason,
-					severity: "warn",
-					detail: clipText((model || "未知模型") + " 连续 " + count + " 轮没有取到用量，这些对话未写入历史")
-				});
-				break;
-			}
-		}
+		out.push({
+			kind: "missing-usage",
+			at: Number(hit.latest.at) || 0,
+			model,
+			reason: "missing",
+			signature: reason,
+			severity: "warn",
+			detail: clipText((model || "未知模型") + " 连续 2 轮没有取到用量，这些对话未写入历史")
+		});
+	}
+	for (const [key, list] of rejects) {
+		const hit = firstCluster(list);
+		if (!hit) continue;
+		const [model, status, marker] = key.split("|");
+		out.push({
+			kind: "missing-usage",
+			at: Number(hit.latest.at) || 0,
+			model,
+			reason: "api-error",
+			signature: status ? "http-" + status : marker,
+			severity: "warn",
+			detail: clipText((model || "未知模型") + " 连续 2 轮上游返回错误" + (status ? "（HTTP " + status + "）" : "") + "，这些轮次没有模型内容、未计入历史")
+		});
 	}
 	return out;
 }
@@ -15877,7 +15916,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-Dx-KFhaH.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-CFWe6ZgG.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-BsrR54Lw.js").then((n) => n.n).then((m) => {
@@ -16566,10 +16605,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-CfY9c61v.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-ChwyLW2r.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-Dx-KFhaH.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CFWe6ZgG.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-Ly1fbPoz.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -16583,10 +16622,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-CfY9c61v.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-ChwyLW2r.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-Dx-KFhaH.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CFWe6ZgG.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-Ly1fbPoz.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -16658,10 +16697,10 @@ async function teardownRuntime() {
 		uninstallMessageCost();
 	} catch {}
 	try {
-		import("./interception-CfY9c61v.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-ChwyLW2r.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-Dx-KFhaH.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-CFWe6ZgG.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -16677,13 +16716,13 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-BPyPMQb0.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-X8wtGWPD.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-Dr655frw.js").then((n) => n.n)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DfQBO8my.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-C7ShL0IX.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -16736,19 +16775,19 @@ function onEnable() {
 		installMessageCost();
 	} catch {}
 	try {
-		import("./interception-CfY9c61v.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-ChwyLW2r.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-Dx-KFhaH.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CFWe6ZgG.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-BPyPMQb0.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-X8wtGWPD.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-Dr655frw.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-DfQBO8my.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-C7ShL0IX.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -16791,19 +16830,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-BPyPMQb0.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-X8wtGWPD.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-Dr655frw.js").then((n) => n.n)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-DfQBO8my.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-C7ShL0IX.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-Dx-KFhaH.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CFWe6ZgG.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -16828,7 +16867,7 @@ async function init() {
 			installMessageCost();
 		} catch {}
 		try {
-			import("./pricing-sync-DfQBO8my.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-C7ShL0IX.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

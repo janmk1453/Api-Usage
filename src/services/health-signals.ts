@@ -4,7 +4,8 @@
  * 只在「用户能明显感觉到不对」的情况下给出信号：
  * - zero-usage      记下来的用量全 0（费用必然错）
  * - estimated-usage 上游没给用量，已按本地估算补记（黄色轻提示，不是故障）
- * - missing-usage   常规对话的用量没取到、这一轮没进历史（同类连续出现或探针聚簇才提示）
+ * - missing-usage   常规对话的用量没取到、这一轮没进历史（同类连续出现或探针聚簇才提示；
+ *                   上游错误被宿主包装成 200 而拒绝入库的轮次也归在这里，但原因写成 api-error）
  * - rate-anomaly    速率离谱（极高 / 极低），多半是耗时或流式判定出错
  * - meta-missing    模型名或耗时缺失，只能用兜底值
  * - plugin-error    本扩展自身功能报错（网络/汇率/更新等无关报错不算）
@@ -236,9 +237,36 @@ function dropReasonOf(rec: any): string {
 }
 
 /**
+ * 滑动窗口聚簇：同一条原因在 MISSING_CLUSTER_MS 内出现 MISSING_CLUSTER_MIN 次才算「多次」。
+ * 偶发一次不打扰用户，返回第一个达标窗口的末条记录。
+ */
+function firstCluster(list: any[]): { latest: any } | null {
+  const sorted = list.slice().sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
+  let clusterStart = 0;
+  for (let i = 0; i < sorted.length; i += 1) {
+    while (i - clusterStart + 1 > MISSING_CLUSTER_MIN && (Number(sorted[i].at) || 0) - (Number(sorted[clusterStart].at) || 0) > MISSING_CLUSTER_MS) {
+      clusterStart += 1;
+    }
+    if (i - clusterStart + 1 === MISSING_CLUSTER_MIN) return { latest: sorted[i] };
+  }
+  return null;
+}
+
+/** entry-rejected 的 reason 形如 api-error-payload:<锚点>:<字符数>:status=<状态码> */
+function rejectedPartsOf(rec: any): { marker: string; status: string } {
+  const reason = String(rec?.reason || '');
+  return {
+    marker: reason.split(':')[1] || 'unknown',
+    status: (reason.match(/status=(\d+)/) || [])[1] || '',
+  };
+}
+
+/**
  * 扫采集链路快照：
  * - 事件层丢弃：同类（模型 + 原因）在窗口内出现至少 MISSING_CLUSTER_MIN 次才算「多次未计入」，
  *   偶发单次不打扰用户；
+ * - 上游错误被宿主包装成 200：历史刻意不留记录（那一轮没有模型内容），但同类连续出现
+ *   要按「上游返回错误」提示，避免用户误以为是扩展把数据弄丢了；
  * - 入库失败：功能报错，带错误签名用于「忽略同类」。
  * （fetch-parse 的全 0、turn-estimated / turn-interrupted 都会在历史里体现，这里不重复报。）
  */
@@ -256,9 +284,21 @@ export function scanCaptureHealth(stages = listCaptureStages()): HealthSignal[] 
     if (id) settledRequests.add(id);
   }
   const drops = new Map<string, any[]>();
+  // 上游错误被包装成 200 而拒绝入库的轮次：历史里刻意不留记录（正确，那一轮确实没有模型内容），
+  // 但用户需要知道「这是上游报错」而不是扩展丢数据，所以单独聚簇提示。
+  const rejects = new Map<string, any[]>();
   for (const rec of stages) {
     if (!rec) continue;
-    if (rec.stage === 'event-drop') {
+    if (rec.stage === 'entry-rejected') {
+      // 同一请求后来又正常入库（宿主重试成功）就不该再提示上游报错
+      const reqId = String(rec.requestId || '');
+      if (reqId && settledRequests.has(reqId)) continue;
+      const { marker, status } = rejectedPartsOf(rec);
+      const key = (rec.model || '') + '|' + status + '|' + marker;
+      const list = rejects.get(key) || [];
+      list.push(rec);
+      rejects.set(key, list);
+    } else if (rec.stage === 'event-drop') {
       // 用户主动停止造成的空轮次不是故障（与历史记录层「用户中断不产生健康提示」同一口径），
       // 这类丢弃连估算都无从下手，本来就不该写历史，更不该弹告警
       if (dropReasonOf(rec) === 'user-stop-no-output') continue;
@@ -299,29 +339,36 @@ export function scanCaptureHealth(stages = listCaptureStages()): HealthSignal[] 
     });
   }
   for (const [key, list] of drops) {
+    const hit = firstCluster(list);
+    if (!hit) continue;
     const [model, reason] = key.split('|');
-    const sorted = list.slice().sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
-    // 滑动窗口聚簇：窗口内达到阈值才报一条
-    let clusterStart = 0;
-    for (let i = 0; i < sorted.length; i += 1) {
-      while (i - clusterStart + 1 > MISSING_CLUSTER_MIN && (Number(sorted[i].at) || 0) - (Number(sorted[clusterStart].at) || 0) > MISSING_CLUSTER_MS) {
-        clusterStart += 1;
-      }
-      if (i - clusterStart + 1 === MISSING_CLUSTER_MIN) {
-        const count = i - clusterStart + 1;
-        const latest = sorted[i];
-        out.push({
-          kind: 'missing-usage',
-          at: Number(latest.at) || 0,
-          model,
-          reason: 'missing',
-          signature: reason,
-          severity: 'warn',
-          detail: clipText((model || '未知模型') + ' 连续 ' + count + ' 轮没有取到用量，这些对话未写入历史'),
-        });
-        break;
-      }
-    }
+    out.push({
+      kind: 'missing-usage',
+      at: Number(hit.latest.at) || 0,
+      model,
+      reason: 'missing',
+      signature: reason,
+      severity: 'warn',
+      detail: clipText((model || '未知模型') + ' 连续 ' + MISSING_CLUSTER_MIN + ' 轮没有取到用量，这些对话未写入历史'),
+    });
+  }
+  for (const [key, list] of rejects) {
+    const hit = firstCluster(list);
+    if (!hit) continue;
+    const [model, status, marker] = key.split('|');
+    out.push({
+      kind: 'missing-usage',
+      at: Number(hit.latest.at) || 0,
+      model,
+      reason: 'api-error',
+      signature: status ? 'http-' + status : marker,
+      severity: 'warn',
+      detail: clipText(
+        (model || '未知模型') + ' 连续 ' + MISSING_CLUSTER_MIN + ' 轮上游返回错误'
+        + (status ? '（HTTP ' + status + '）' : '')
+        + '，这些轮次没有模型内容、未计入历史',
+      ),
+    });
   }
   return out;
 }
