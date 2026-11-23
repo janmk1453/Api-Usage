@@ -1,9 +1,11 @@
 /**
  * 面板文本默认不可选中：按钮、胶囊、下拉项、表格数字一拖就是蓝色选区，会与「选中项」的浅底混淆。
- * 这些用例守三件事：整棵面板禁选；输入控件与长正文（pre/code）仍可复制；聊天区消息头不被拖选。
+ * 这些用例守四件事：整棵面板禁选；输入控件与长正文（pre/code）仍可复制；关于页「更新日志」卡整块可复制；
+ * 聊天区消息头不被拖选。
  */
 import { describe, it, expect } from 'vitest';
 import cssSrc from '../../style.css?raw';
+import changelogSrc from './changelog.ts?raw';
 
 const START = '/* ===== 面板文本可选性（默认不可选中）=====';
 const END = '/* ===== 胶囊触发器统一样式（.aus-pill）=====';
@@ -49,6 +51,16 @@ describe('面板文本可选性', () => {
     const allow = block('#aus-panel input,');
     expect(allow).toContain('user-select: text');
     expect(allow).toContain('-webkit-user-select: text');
+  });
+
+  it('关于页「更新日志」卡整块可复制（条目正文 / 版本号 / 页脚说明）', () => {
+    const scope = region();
+    // 选择器本身写在放行块的选择器列表里（block() 只取 {} 内的声明，故查整段）
+    expect(scope).toContain('#aus-panel #aus-changelog,');
+    expect(scope).toContain('#aus-panel #aus-changelog *,');
+    expect(block('#aus-panel input,')).toContain('user-select: text');
+    // 选择器锚在卡根容器上：容器 id 必须与渲染处一致，否则这条放行会落空
+    expect(changelogSrc).toContain('id="aus-changelog"');
   });
 
   it('弹窗挂 body 时（is-page）正文同样可复制，不被禁选带走', () => {

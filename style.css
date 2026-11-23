@@ -2086,7 +2086,7 @@
    面板里几乎全是只读展示与可点控件：按钮、胶囊、下拉项、表格数字、历史卡片，一按下拖动就会
    拉出一片蓝色文本选区，还会跟「选中项」的浅灰底叠在一起（下拉里「全部」被选成蓝底，用户截图
    报过）。所以 #aus-panel 整棵默认 user-select:none，只有需要复制的地方显式放行：输入控件、
-   pre / code 正文（请求日志、历史详情的请求与响应、Raw 用量）、弹窗正文（更新日志 / 公告）、
+   pre / code 正文（请求日志、历史详情的请求与响应、Raw 用量）、关于页「更新日志」卡、弹窗正文（更新日志 / 公告）、
    以及任何标了 .aus-selectable 的块。
    ★ 放行规则必须带 #aus-panel 前缀（或至少比 `#aus-panel *` 高一档特异性），否则压不过禁选。
    ★ 宿主聊天区的消息头不在这里，见文件末尾「聊天消息头」段。 */
@@ -2101,6 +2101,9 @@
 #aus-panel pre,
 #aus-panel code,
 #aus-panel .aus-selectable,
+/* 关于页「更新日志」卡整块可复制（条目正文、版本号、页脚说明） */
+#aus-panel #aus-changelog,
+#aus-panel #aus-changelog *,
 #aus-panel .aus-cl-body,
 #aus-panel .aus-cl-body * {
   -webkit-user-select: text;
