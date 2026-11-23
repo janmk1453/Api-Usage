@@ -3832,13 +3832,23 @@
 }
 
 
+
+/* ===== 二级页返回按钮（对话展示管理 / 请求日志 / 其他请求共用） =====
+   唯一来源 ui/back-button.ts#backButtonHTML：三页必须是同一副样子 —— 同字号、
+   同内距、同边框与字色，并一律贴工具行最右端（margin-left:auto）。
+   **不要复用** .aus-pill / .aus-log-link / .aus-chat-manage-btn：它们都被同排
+   其它动作按钮共用，改观感会连带改一片；返回按钮只挂 .aus-back-btn 一个类。 */
+#aus-panel .aus-back-btn{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;margin-left:auto;padding:5px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-family:inherit;font-size:var(--aus-fs-sm);font-weight:600;line-height:1.4;white-space:nowrap;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+@media (hover: hover) {
+  #aus-panel .aus-back-btn:hover{border-color:var(--ds-text-3);}
+}
+#aus-panel .aus-back-btn:active{background:var(--ds-nav-active-bg);}
 /* ===== 请求日志（设置 → 请求日志）：最近一轮对话请求的标头 / 正文 / 响应元数据 ===== */
 #aus-panel .aus-log-top{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
 #aus-panel .aus-log-desc{flex:1 1 260px;min-width:0;font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;}
 #aus-panel .aus-log-desc-state{margin-left:8px;color:var(--ds-text);font-weight:600;white-space:nowrap;}
 #aus-panel [data-view="log"] #aus-log-body{max-width:1080px;}
-#aus-panel .aus-log-actions{display:flex;gap:8px;flex:0 0 auto;margin-left:auto;}
-#aus-panel .aus-log-back{flex:0 0 auto;align-self:flex-start;}
+#aus-panel .aus-log-actions{display:flex;gap:8px;flex:0 0 auto;margin-left:auto;flex-wrap:wrap;justify-content:flex-end;}
 #aus-panel .aus-log-advice{margin-bottom:10px;padding:8px 12px;border-radius:var(--ds-radius-card,14px);background:var(--ds-orange-bg);color:var(--ds-text-2);font-size:var(--aus-fs-sm);line-height:1.6;}
 #aus-panel .aus-log-link{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--ds-border);background:var(--ds-card-inner);color:var(--ds-text-2);border-radius:999px;padding:4px 10px;font-size:var(--aus-fs-xs);font-weight:600;line-height:1.6;cursor:pointer;font-family:inherit;}
 #aus-panel .aus-log-link:hover{color:var(--ds-text);background:var(--ds-card);}
@@ -3885,10 +3895,9 @@
 #aus-panel .aus-log-empty-line{font-size:var(--aus-fs-xs);color:var(--ds-text-3);padding:3px 0;}
 @media (max-width:760px){
   #aus-panel .aus-log-kv-row{grid-template-columns:minmax(72px,max-content) minmax(0,1fr);column-gap:12px;}
-  /* 窄屏：返回靠左、操作靠右同一行，描述整行落到下面 */
-  #aus-panel .aus-log-actions{margin-left:auto;flex:0 0 auto;order:2;}
-  #aus-panel .aus-log-back{order:1;}
-  #aus-panel .aus-log-desc{flex:1 1 100%;order:3;}
+  /* 窄屏：说明独占一行（order 1），动作组折行后整体靠右（order 2，返回在组内最右） */
+  #aus-panel .aus-log-actions{margin-left:auto;flex:0 0 auto;order:2;justify-content:flex-end;}
+  #aus-panel .aus-log-desc{flex:1 1 100%;order:1;}
   #aus-panel .aus-log-desc-state{display:block;margin-left:0;margin-top:2px;white-space:normal;}
   #aus-panel .aus-log-summary-time{margin-left:0;}
 }

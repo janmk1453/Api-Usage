@@ -44,8 +44,9 @@ describe('「其他请求」入口从历史记录页挪到请求日志页', () =
     expect(panelCode).toContain("if (view === 'tap') return tapOrigin;");
   });
 
-  it('其他请求页的返回按钮回日志页，不再写死回历史', () => {
-    expect(tapCode).toContain('返回请求日志');
+  it('其他请求页的返回按钮走统一组件，回日志页且不再写死目标页名', () => {
+    expect(tapCode).toContain("backButtonHTML({ id: 'aus-tap-back' })");
+    expect(tapCode).not.toContain('返回请求日志');
     expect(tapCode).not.toContain("go?.('history')");
   });
 

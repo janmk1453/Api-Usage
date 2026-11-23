@@ -10052,6 +10052,30 @@ function bindWalletView(doc) {
 	}
 }
 //#endregion
+//#region src/ui/back-button.ts
+/**
+* 二级页「返回」按钮的唯一来源。
+*
+* 对话展示管理 / 请求日志 / 其他请求三页各有一处返回按钮，回到哪一页统一由
+* `panel.ts#returnFromChild()` 决定 —— 按钮本身不写目标页名，否则来源一变文案
+* 就说错话（例如从设置进日志、再从日志进其他请求，实际是回日志页）。
+*
+* 外观与位置统一交给 style.css 的 `.aus-back-btn`：三页同一副样子，且一律
+* `margin-left:auto` 贴工具行最右端。**不要复用** `.aus-pill` / `.aus-log-link` /
+* `.aus-chat-manage-btn`：它们都被同排其它动作按钮共用，改观感会连带改一片。
+*/
+function backButtonHTML(opts = {}) {
+	const attrs = [];
+	if (opts.id) attrs.push("id=\"" + esc$3(opts.id) + "\"");
+	attrs.push("type=\"button\"");
+	attrs.push("class=\"aus-back-btn\"");
+	attrs.push("data-aus-back=\"1\"");
+	attrs.push("aria-label=\"返回上一页\"");
+	attrs.push("title=\"" + esc$3(opts.title || "返回上一页") + "\"");
+	for (const [key, value] of Object.entries(opts.data || {})) attrs.push(esc$3(key) + "=\"" + esc$3(value) + "\"");
+	return "<button " + attrs.join(" ") + ">" + icon("chevron-left", 14) + "返回</button>";
+}
+//#endregion
 //#region src/ui/chat-manage.ts
 /**
 * 对话展示管理页（`data-view="chat-manage"`）。
@@ -10109,7 +10133,10 @@ function shellHTML() {
 		"<input id=\"aus-chat-manage-search\" type=\"text\" placeholder=\"搜索对话\" value=\"" + esc$3(keyword) + "\" />",
 		"<button id=\"aus-chat-manage-reset\" type=\"button\" class=\"aus-chat-manage-btn\">全部显示</button>",
 		"<button id=\"aus-chat-manage-hide-all\" type=\"button\" class=\"aus-chat-manage-btn\">全部隐藏</button>",
-		"<button id=\"aus-chat-manage-back\" type=\"button\" class=\"aus-chat-manage-btn\" title=\"回到进入本页之前的页面\">" + icon("chevron-left", 14) + "返回</button>",
+		backButtonHTML({
+			id: "aus-chat-manage-back",
+			title: "回到进入本页之前的页面"
+		}),
 		"</div>",
 		"</div>",
 		"<div id=\"aus-chat-manage-modes\" data-mode=\"" + mode + "\" role=\"tablist\" aria-label=\"管理模式\">",
@@ -10418,7 +10445,7 @@ function tapViewHTML(input) {
 	})).sort((a, b) => b.list.length - a.list.length || a.key.localeCompare(b.key));
 	const block = (label, value, sub) => "<div class=\"aus-tap-block\"><div class=\"aus-tap-block-label\">" + esc$3(label) + "</div><div class=\"aus-tap-block-value\">" + esc$3(value) + "</div>" + (sub ? "<div class=\"aus-tap-block-sub\">" + esc$3(sub) + "</div>" : "") + "</div>";
 	const pill = (key, text) => "<button type=\"button\" class=\"aus-pill aus-pill-sm\" data-tap-filter=\"" + key + "\"" + (input.filter === key ? " data-on=\"1\"" : "") + ">" + esc$3(text) + "</button>";
-	return "<div class=\"aus-tap-note\">技术验证页：这里只做原理验证 —— 旁路记录酒馆发出的后端请求，再用「现有逻辑有没有为它写过一条历史记录」判断哪些属于非常规对话请求。<b>数据只存在本机 localStorage（<code>" + esc$3("aus_tap_log_v1") + "</code>），完全不进入概览、统计、历史、趋势的任何计算</b>，可随时一键清空。上限 500 条；已采集 " + all.length + " 条，账本 " + diag.settlements + " 条。</div><div class=\"aus-tap-sum\">" + block("采集到的后端请求", String(all.length), "端点命中 /api/backends/*/generate") + block("未入账（疑似非常规）", String(orphans.length), "现有逻辑没写过记录") + block("已入账（常规对话）", String(settled.length), "与历史记录一一对上") + block("待对账 / 无用量", pending.length + " / " + noUsage, "结束后 12 秒判定") + "</div><div class=\"aus-tap-tools\">" + pill("orphan", "未入账 " + orphans.length) + pill("settled", "已入账 " + settled.length) + pill("all", "全部 " + all.length) + "<span class=\"aus-tap-tools-gap\"></span><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-export\">导出 JSON</button><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-clear\"" + (input.pendingClear ? " data-danger=\"1\"" : "") + ">" + (input.pendingClear ? "确认清空？" : "清空") + "</button><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-back\">返回请求日志</button></div>" + (ordered.length ? "<div class=\"aus-tap-groups\">" + ordered.map((g) => cardOf(g.key, g.list)).join("") + "</div>" : "<div class=\"ds-card aus-tap-empty\">还没有符合条件的记录 —— 触发几次插件请求（比如 MVU 变量更新、填表）再回来看。</div>");
+	return "<div class=\"aus-tap-note\">技术验证页：这里只做原理验证 —— 旁路记录酒馆发出的后端请求，再用「现有逻辑有没有为它写过一条历史记录」判断哪些属于非常规对话请求。<b>数据只存在本机 localStorage（<code>" + esc$3("aus_tap_log_v1") + "</code>），完全不进入概览、统计、历史、趋势的任何计算</b>，可随时一键清空。上限 500 条；已采集 " + all.length + " 条，账本 " + diag.settlements + " 条。</div><div class=\"aus-tap-sum\">" + block("采集到的后端请求", String(all.length), "端点命中 /api/backends/*/generate") + block("未入账（疑似非常规）", String(orphans.length), "现有逻辑没写过记录") + block("已入账（常规对话）", String(settled.length), "与历史记录一一对上") + block("待对账 / 无用量", pending.length + " / " + noUsage, "结束后 12 秒判定") + "</div><div class=\"aus-tap-tools\">" + pill("orphan", "未入账 " + orphans.length) + pill("settled", "已入账 " + settled.length) + pill("all", "全部 " + all.length) + "<span class=\"aus-tap-tools-gap\"></span><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-export\">导出 JSON</button><button type=\"button\" class=\"aus-pill aus-pill-sm\" id=\"aus-tap-clear\"" + (input.pendingClear ? " data-danger=\"1\"" : "") + ">" + (input.pendingClear ? "确认清空？" : "清空") + "</button>" + backButtonHTML({ id: "aus-tap-back" }) + "</div>" + (ordered.length ? "<div class=\"aus-tap-groups\">" + ordered.map((g) => cardOf(g.key, g.list)).join("") + "</div>" : "<div class=\"ds-card aus-tap-empty\">还没有符合条件的记录 —— 触发几次插件请求（比如 MVU 变量更新、填表）再回来看。</div>");
 }
 function renderTapView() {
 	const root = document.getElementById("aus-tap-root");
@@ -11925,12 +11952,16 @@ function healthPrefsHTML() {
 var goBack = null;
 var goTap = null;
 /**
-* 顶部工具条（纯函数，便于单测）：返回 / 说明 / 上传反馈 / 其他请求 / 刷新 / 清空。
+* 顶部工具条（纯函数，便于单测）：说明 / 上传反馈 / 其他请求 / 刷新 / 清空 / 返回。
 * 「其他请求」是探针账本的技术验证页，原先挂在历史记录页工具栏，现在并到这一页 ——
 * 两者都是「出了问题当场看的现场证据」，放一起比散在两个页面里好找。
+* 返回按钮与另外两个二级页同一来源（`backButtonHTML`）、同一位置（组内最右）。
 */
 function logTopHTML(summary) {
-	return "<div class=\"aus-log-top\"><button type=\"button\" class=\"aus-log-link aus-log-back\" data-log-action=\"back\" aria-label=\"返回上一页\">" + icon("chevron-left", 14) + "返回</button><div class=\"aus-log-desc\">只保留最近一轮对话请求，默认只在当前浏览器本地保存。密钥已打码。<span class=\"aus-log-desc-state\" id=\"aus-log-state\">" + esc$1(summary) + "</span></div><div class=\"aus-log-actions\"><button type=\"button\" class=\"aus-log-link is-upload\" data-log-action=\"upload\">" + icon("menu", 14) + "上传反馈</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"tap\" title=\"查看探针采到的非常规对话请求（技术验证，数据隔离、不进统计）\">" + icon("chevron-right", 14) + "其他请求</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"refresh\">" + icon("refresh", 14) + "刷新</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"clear\">" + icon("close", 14) + "清空</button></div></div>";
+	return "<div class=\"aus-log-top\"><div class=\"aus-log-desc\">只保留最近一轮对话请求，默认只在当前浏览器本地保存。密钥已打码。<span class=\"aus-log-desc-state\" id=\"aus-log-state\">" + esc$1(summary) + "</span></div><div class=\"aus-log-actions\"><button type=\"button\" class=\"aus-log-link is-upload\" data-log-action=\"upload\">" + icon("menu", 14) + "上传反馈</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"tap\" title=\"查看探针采到的非常规对话请求（技术验证，数据隔离、不进统计）\">" + icon("chevron-right", 14) + "其他请求</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"refresh\">" + icon("refresh", 14) + "刷新</button><button type=\"button\" class=\"aus-log-link\" data-log-action=\"clear\">" + icon("close", 14) + "清空</button>" + backButtonHTML({
+		id: "aus-log-back",
+		data: { "data-log-action": "back" }
+	}) + "</div></div>";
 }
 function renderLogView() {
 	if (typeof document === "undefined") return;

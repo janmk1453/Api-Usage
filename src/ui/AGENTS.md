@@ -33,7 +33,7 @@
 - **三处入口进同一页并记住来源**：概览表标题右侧 `#aus-chat-manage-btn`（带隐藏计数 `#aus-chat-manage-count`）、趋势预测工具栏 `#aus-forecast-chat-manage-btn`、设置页 `#aus-settings-chat-manage`，共用 class `.aus-manage-chat-btn`。`panel.ts#chatManageOrigin` 记来源，`openChatManage(from)` 打开，`returnFromChild()` 让页内返回 / 顶栏返回 / 底栏 pop-root 统一回来源页，`paintNavState` 的 `navSource` 让底栏高亮跟随来源。
 - **双模式分段滑块**「表格展示 / 下拉选项」分别管理两套集合：`localStorage[aus_chat_visibility_v1]` = `{hidden, hiddenPickers}`（`ui/chat-visibility.ts`）——`hidden` 管概览表格、`hiddenPickers` 管统计 / 历史 / 趋势的「对话」胶囊，互不影响；无 `chatId` 归 `__null__`（与 `computeChatStats` 聚合键一致）；旧版只有 `hidden` 的数据照常读。
 - **只改展示、不删数据**：表格在渲染路径过滤（`filterVisibleRows`，入参保持全量），胶囊在选项渲染处过滤（`filterPickerRows`，选中项与 label 仍按全量取名，全被隐藏时提示「对话已全部隐藏（可在「对话展示管理」中恢复）」）。不得因此改变任何页面口径。
-- 布局全写在 `style.css`（模板不写内联宽度）：行 `grid-template-columns: minmax(0,1fr) auto auto` + `.aus-chat-manage-main{min-width:0;overflow:hidden}`；`≤760px` 头部纵向堆叠（两套断点同步），`≤380px` 状态胶囊再收一档，保证「全部显示 / 全部隐藏 / 返回」始终在视口内；「返回」带 `icon('chevron-left',14)` 前导图标、`font-weight:600`、描边提到 `--ds-text-3`（悬停 `--ds-text`），比同排两颗更显眼。
+- 布局全写在 `style.css`（模板不写内联宽度）：行 `grid-template-columns: minmax(0,1fr) auto auto` + `.aus-chat-manage-main{min-width:0;overflow:hidden}`；`≤760px` 头部纵向堆叠（两套断点同步），`≤380px` 状态胶囊再收一档，保证「全部显示 / 全部隐藏 / 返回」始终在视口内。「返回」不再是手写按钮：走 `ui/back-button.ts#backButtonHTML({ id: 'aus-chat-manage-back' })`，与请求日志、其他请求两页同一副样子（见「二级页返回按钮」）。
 
 ### 用量统计（`ui/stats-view.ts`）
 
@@ -128,8 +128,16 @@
 
 ### 请求日志 / 其他请求（`ui/log-view.ts`、`ui/tap-view.ts`）
 
-- 「问题反馈 / 请求日志」页（`data-view="log"`）：两处入口（设置页 `#aus-settings-request-log`、历史页工具栏），来源由 `logOrigin` 记录；页内「上传反馈」= `scope='recent'`，「复制诊断信息」走 `request-log.ts` 组包。顶部工具条由纯函数 `logTopHTML(summary)` 生成（便于单测），四枚动作按钮都是 `data-log-action` 委托：`upload` / `tap` / `refresh` / `clear`。
-- 「其他请求」页（`data-view="tap"`，入口在请求日志页工具条，返回回日志页）：展示探针账本（`services/request-tap/`），按用途聚簇，可查 `pending` / `orphan` / `settled` / `too-short` / `legacy` 状态；**这里只是验证页，不参与统计口径**。
+- 「问题反馈 / 请求日志」页（`data-view="log"`）：两处入口（设置页 `#aus-settings-request-log`、历史页工具栏），来源由 `logOrigin` 记录；页内「上传反馈」= `scope='recent'`，「复制诊断信息」走 `request-log.ts` 组包。顶部工具条由纯函数 `logTopHTML(summary)` 生成（便于单测），五枚动作按钮都是 `data-log-action` 委托：`upload` / `tap` / `refresh` / `clear` / `back`（`back` 那枚即统一返回按钮 `backButtonHTML`，固定在动作组最右）。
+- 「其他请求」页（`data-view="tap"`，入口在请求日志页工具条，返回回日志页，返回按钮同款 `backButtonHTML({ id: 'aus-tap-back' })` 挂在 `.aus-tap-tools` 末位）：展示探针账本（`services/request-tap/`），按用途聚簇，可查 `pending` / `orphan` / `settled` / `too-short` / `legacy` 状态；**这里只是验证页，不参与统计口径**。
+
+### 二级页返回按钮（`ui/back-button.ts`）
+
+- **唯一来源**：`backButtonHTML({ id?, title?, data? })` 产出 `<button class="aus-back-btn" data-aus-back="1" aria-label="返回上一页">chevron-left 14 + 「返回」</button>`；样式只有一套 `#aus-panel .aus-back-btn`（`5px 12px`、`--aus-fs-sm`、`font-weight:600`、`border-radius:999px`、`margin-left:auto`）。三页（对话展示管理 / 请求日志 / 其他请求）必须都调它，禁止再复用 `.aus-pill`、`.aus-log-link`、`.aus-chat-manage-btn`——那三类被同排动作按钮共用，改一处会连带改别人。
+- **位置统一贴右**：靠 `margin-left:auto` 落在所在工具行的最右；所在行必须 `flex-wrap`，否则窄屏会把整行挤破。请求日志页把它放在 `.aus-log-actions` 末位（上传反馈 / 其他请求 / 刷新 / 清空 / 返回），`≤760px` 时 `.aus-log-desc` 独占第一行、动作组折行整体靠右。
+- **文案不写目标页名**：目标由 `panel.ts#returnFromChild()` 算（`chatManageOrigin` / `logOrigin` / `tapOrigin` / `childParentOf`），按钮只写「返回」。
+- **窄屏双入口（方案 A）**：`#aus-mobile-back` 顶栏箭头照旧保留，页内返回也贴右，两个都可退；不要把页内返回改成窄屏隐藏，那需要 `paintNavState` 同步 `isChildView`，且会破坏「按钮位置统一」的诉求。
+- 钱包 / 使用说明 / 关于三页**不补**页内返回（桌面靠侧栏、窄屏靠顶栏箭头），这是用户明确要求。
 
 ### 导航与移动端
 

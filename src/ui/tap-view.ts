@@ -10,6 +10,7 @@ import { esc, localDay, localTimeHM } from '../utils/date';
 import { tapDiagnostics } from '../services/request-tap';
 import { clearTapRecords, listTapRecords, subscribeTap, TAP_MAX_RECORDS } from '../services/request-tap/store';
 import type { TapRecord } from '../services/request-tap/types';
+import { backButtonHTML } from './back-button';
 
 type TapFilter = 'all' | 'orphan' | 'settled';
 
@@ -160,7 +161,7 @@ export function tapViewHTML(input: TapViewInput): string {
       '<button type="button" class="aus-pill aus-pill-sm" id="aus-tap-export">导出 JSON</button>' +
       '<button type="button" class="aus-pill aus-pill-sm" id="aus-tap-clear"' +
         (input.pendingClear ? ' data-danger="1"' : '') + '>' + (input.pendingClear ? '确认清空？' : '清空') + '</button>' +
-      '<button type="button" class="aus-pill aus-pill-sm" id="aus-tap-back">返回请求日志</button>' +
+      backButtonHTML({ id: 'aus-tap-back' }) +
     '</div>' +
     (ordered.length
       ? '<div class="aus-tap-groups">' + ordered.map((g) => cardOf(g.key, g.list)).join('') + '</div>'

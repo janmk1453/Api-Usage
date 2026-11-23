@@ -18,7 +18,7 @@ import { computeChatStats, type ChatSummaryRow } from '../data/computed';
 import { esc } from '../utils/date';
 import { formatMoney } from '../services/currency';
 import { switchHTML } from './switch';
-import { icon } from './icons';
+import { backButtonHTML } from './back-button';
 import {
   chatVisibilityKey,
   clearHiddenFor,
@@ -80,7 +80,7 @@ function shellHTML(): string {
     '<input id="aus-chat-manage-search" type="text" placeholder="搜索对话" value="' + esc(keyword) + '" />',
     '<button id="aus-chat-manage-reset" type="button" class="aus-chat-manage-btn">全部显示</button>',
     '<button id="aus-chat-manage-hide-all" type="button" class="aus-chat-manage-btn">全部隐藏</button>',
-    '<button id="aus-chat-manage-back" type="button" class="aus-chat-manage-btn" title="回到进入本页之前的页面">' + icon('chevron-left', 14) + '返回</button>',
+    backButtonHTML({ id: 'aus-chat-manage-back', title: '回到进入本页之前的页面' }),
     '</div>',
     '</div>',
     '<div id="aus-chat-manage-modes" data-mode="' + mode + '" role="tablist" aria-label="管理模式">',

@@ -82,6 +82,18 @@ describe('log-view：顶部工具条', () => {
     expect(html).toContain('200 · 1832ms');
   });
 
+  it('返回按钮在动作组内、排在「清空」之后（三页统一贴最右）', () => {
+    const html = logTopHTML('200 · 1832ms');
+    const actionsStart = html.indexOf('aus-log-actions');
+    const clearIdx = html.indexOf('data-log-action="clear"');
+    const backIdx = html.indexOf('data-aus-back="1"');
+    expect(actionsStart).toBeGreaterThan(-1);
+    expect(clearIdx).toBeGreaterThan(actionsStart);
+    expect(backIdx).toBeGreaterThan(clearIdx);
+    expect(html).toContain('id="aus-log-back"');
+    expect(html).toContain('data-log-action="back"');
+  });
+
   it('摘要文案做 HTML 转义', () => {
     expect(logTopHTML('<script>x</script>')).not.toContain('<script>x</script>');
     expect(logTopHTML('<b>x</b>')).toContain('&lt;b&gt;x&lt;/b&gt;');
