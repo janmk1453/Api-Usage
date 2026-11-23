@@ -418,6 +418,16 @@ function filteredHistoryForDisplay(history: any[]): any[] {
   });
 }
 
+/**
+ * 历史页「重置筛选 / 清除筛选」的唯一实现：五维回全部、关掉下拉、按新条件重画（顺带落盘偏好）。
+ * 工具栏与空态两枚按钮都调这里，避免两份逻辑漂移。
+ */
+function applyHistoryFilterReset(doc: Document): void {
+  resetHistoryFilters();
+  closeHistoryFilterDropdowns();
+  renderHistory(doc, getSelectedSave());
+}
+
 function bindHistoryFilters(doc: Document) {
   const controls: Array<[HistoryFilterKind, string]> = [
     ['requestType', '#aus-history-type-btn'],
@@ -439,15 +449,11 @@ function bindHistoryFilters(doc: Document) {
       positionFilterDropdown(button, dropdown);
     };
   }
-  // 顶部筛选「重置筛选」：五维恢复为全部、分页回第一页，并随 renderHistoryFilters 落盘
-  const historyResetBtn = doc.getElementById('aus-history-filter-reset');
-  if (historyResetBtn) {
-    historyResetBtn.onclick = () => {
-      resetHistoryFilters();
-      closeHistoryFilterDropdowns();
-      renderHistory(doc, getSelectedSave());
-    };
-  }
+  // 顶部筛选「重置筛选」：五维恢复为全部、分页回第一页，并随 renderHistoryFilters 落盘。
+  // 查询必须限定在工具栏内：空态那枚「清除筛选」曾经共用同一个 id，而它在文档里更靠后，
+  // 全局 getElementById 永远命中工具栏这枚，空态按钮拿不到任何点击处理（点了没反应）。
+  const historyResetBtn = doc.querySelector('#aus-history-filter-host #aus-history-filter-reset') as HTMLElement | null;
+  if (historyResetBtn) historyResetBtn.onclick = () => applyHistoryFilterReset(doc);
   doc.addEventListener('click', (event: any) => {
     const target = event.target as HTMLElement;
     if (!target.closest('#aus-history-filter-host')) closeHistoryFilterDropdowns();
@@ -565,13 +571,11 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
   resetHistoryDetailState(doc, true);
   const total = fullHist.length;
   if (!total) {
-    host.innerHTML = `<div style="text-align:center;padding:24px;color:var(--ds-text-3);font-size:var(--aus-fs-base);line-height:1.8;">当前筛选无记录<br/><button id="aus-history-filter-reset" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">清除筛选</button></div>`;
-    const reset = doc.getElementById('aus-history-filter-reset') as HTMLButtonElement | null;
-    if (reset) reset.onclick = () => {
-      resetHistoryFilters();
-      closeHistoryFilterDropdowns();
-      renderHistory(doc, getSelectedSave());
-    };
+    // 空态的「清除筛选」用独立 id 并在 host 内局部查找：与工具栏「重置筛选」撞 id 时，
+    // 全局 getElementById 会命中文档里更靠前的工具栏那枚，这枚按钮就永远没有点击处理。
+    host.innerHTML = `<div style="text-align:center;padding:24px;color:var(--ds-text-3);font-size:var(--aus-fs-base);line-height:1.8;">当前筛选无记录<br/><button id="aus-history-empty-reset" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">清除筛选</button></div>`;
+    const reset = host.querySelector('#aus-history-empty-reset') as HTMLButtonElement | null;
+    if (reset) reset.onclick = () => applyHistoryFilterReset(doc);
     return;
   }
   const totalPages = Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE));

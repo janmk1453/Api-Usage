@@ -14074,6 +14074,15 @@ function filteredHistoryForDisplay(history) {
 		credential: historyFilters.credential
 	});
 }
+/**
+* 历史页「重置筛选 / 清除筛选」的唯一实现：五维回全部、关掉下拉、按新条件重画（顺带落盘偏好）。
+* 工具栏与空态两枚按钮都调这里，避免两份逻辑漂移。
+*/
+function applyHistoryFilterReset(doc) {
+	resetHistoryFilters();
+	closeHistoryFilterDropdowns();
+	renderHistory(doc, getSelectedSave());
+}
 function bindHistoryFilters(doc) {
 	for (const [kind, selector] of [
 		["requestType", "#aus-history-type-btn"],
@@ -14094,12 +14103,8 @@ function bindHistoryFilters(doc) {
 			positionFilterDropdown(button, dropdown);
 		};
 	}
-	const historyResetBtn = doc.getElementById("aus-history-filter-reset");
-	if (historyResetBtn) historyResetBtn.onclick = () => {
-		resetHistoryFilters();
-		closeHistoryFilterDropdowns();
-		renderHistory(doc, getSelectedSave());
-	};
+	const historyResetBtn = doc.querySelector("#aus-history-filter-host #aus-history-filter-reset");
+	if (historyResetBtn) historyResetBtn.onclick = () => applyHistoryFilterReset(doc);
 	doc.addEventListener("click", (event) => {
 		if (!event.target.closest("#aus-history-filter-host")) closeHistoryFilterDropdowns();
 	});
@@ -14220,13 +14225,9 @@ function renderHistoryInner(doc, fullHist) {
 	resetHistoryDetailState(doc, true);
 	const total = fullHist.length;
 	if (!total) {
-		host.innerHTML = `<div style="text-align:center;padding:24px;color:var(--ds-text-3);font-size:var(--aus-fs-base);line-height:1.8;">当前筛选无记录<br/><button id="aus-history-filter-reset" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">清除筛选</button></div>`;
-		const reset = doc.getElementById("aus-history-filter-reset");
-		if (reset) reset.onclick = () => {
-			resetHistoryFilters();
-			closeHistoryFilterDropdowns();
-			renderHistory(doc, getSelectedSave());
-		};
+		host.innerHTML = `<div style="text-align:center;padding:24px;color:var(--ds-text-3);font-size:var(--aus-fs-base);line-height:1.8;">当前筛选无记录<br/><button id="aus-history-empty-reset" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">清除筛选</button></div>`;
+		const reset = host.querySelector("#aus-history-empty-reset");
+		if (reset) reset.onclick = () => applyHistoryFilterReset(doc);
 		return;
 	}
 	const totalPages = Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE));
