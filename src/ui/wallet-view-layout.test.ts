@@ -23,14 +23,29 @@ describe('钱包页：卡片结构', () => {
     expect(renderSrc).not.toContain('aus-wallet-two-col');
   });
 
-  test('头部是四区网格：标识 / 名称 / 余额 / 操作，操作只有展开、同步、忽略', () => {
+  test('头部是四区网格：标识 / 名称 / 余额 / 操作，操作只剩展开与忽略', () => {
     expect(renderSrc).toContain('class="aus-wallet-header"');
     expect(renderSrc).toContain('class="aus-wallet-identity"');
     expect(renderSrc).toContain('class="aus-wallet-metrics"');
     expect(renderSrc).toContain('class="aus-wallet-actions"');
     expect(renderSrc).toContain('data-wallet-toggle="1"');
-    expect(renderSrc).toContain('data-wallet-sync="1"');
     expect(renderSrc).toContain('data-wallet-ignore="1"');
+    // 价格同步不摆在钱包外面：头部片段里不许出现同步按钮
+    const headerSrc = renderSrc.slice(renderSrc.indexOf('const header = ['), renderSrc.indexOf('const keyRow'));
+    expect(headerSrc).not.toContain('data-wallet-sync');
+  });
+
+  test('价格同步按钮在「模型与价格」段的动作区里', () => {
+    const modelSrc = renderSrc.slice(renderSrc.indexOf('const modelSection = ['));
+    expect(modelSrc).toContain('data-wallet-sync="1"');
+    expect(modelSrc).toContain('同步价格');
+    expect(modelSrc).toContain('icon(\'refresh\', 14)');
+  });
+
+  test('余额不再重复两遍：头部数字 + 段内手工输入', () => {
+    expect(renderSrc).toContain('class="aus-wallet-balance-label"');
+    expect(renderSrc).not.toContain('aus-wallet-balance-val');
+    expect(css).toContain('#aus-panel .aus-wallet-balance-label {');
   });
 
   test('渲染区不写字面尺寸，只允许动态 display 与头像主题色变量', () => {
@@ -63,32 +78,43 @@ describe('钱包页：峰谷规则默认折叠', () => {
 });
 
 describe('钱包页：模型与价格', () => {
-  test('峰谷关闭只淡化峰谷列，绝不删掉那三个价格输入（否则保存会把历史峰谷价写成 0）', () => {
+  test('未启用峰谷的模型不展示高峰价，但那三个输入仍留在 DOM 里', () => {
     expect(renderSrc).toContain("tierHTML('offpeak')");
     expect(renderSrc).toContain("tierHTML('peak')");
-    expect(renderSrc).toContain("const off = tier === 'peak' && peakOff;");
-    expect(renderSrc).toContain('data-off="1"');
-    // 每组仍是 命中 / 未命中 / 输出 三个输入，且都挂 data-wallet-price
+    // 只隐藏、不删：readModelPrices 按 input 读值，缺一格就会把历史高峰价清成 0
+    expect(renderSrc).toContain("const hidden = tier === 'peak' && !peakOn;");
+    expect(renderSrc).toContain('data-peak-hidden="1"');
+    expect(css).toContain("#aus-panel .aus-wallet-mtier[data-peak-hidden='1'] { display: none; }");
+    expect(renderSrc).not.toContain('data-off="1"');
     expect(renderSrc).toContain("(['hit', 'miss', 'output'] as WalletPriceKey[])");
     expect(renderSrc).toContain('data-wallet-price="1"');
     expect(renderSrc).toContain("querySelectorAll('input[data-wallet-price]')");
   });
 
-  test('行尾 ⋯ 菜单收着峰谷开关、锁定与删除', () => {
-    expect(renderSrc).toContain('data-wallet-more-btn="1"');
-    expect(renderSrc).toContain('data-wallet-model-peak="1"');
-    expect(renderSrc).toContain('data-wallet-model-lock="1"');
-    expect(renderSrc).toContain('data-wallet-model-delete="1"');
-    expect(renderSrc).toContain('class="aus-wallet-menu-item"');
-    // 内置模型不可删除时要给一句话，而不是空白菜单
-    expect(renderSrc).toContain('class="aus-wallet-menu-note"');
+  test('启用峰谷才并排两组价格，组标签随开关换文案', () => {
+    expect(renderSrc).toContain("'  <div class=\"aus-wallet-prices' + (peakOn ? ' is-split' : '') + '\">',");
+    expect(renderSrc).toContain("(peakOn ? TIER_LABEL[tier] : '价格')");
+    expect(css).toContain('#aus-panel .aus-wallet-prices.is-split { grid-template-columns: repeat(2, minmax(0, 1fr));');
+    expect(css).toContain('#aus-panel .aus-wallet-prices:not(.is-split) .aus-wallet-pricegrid { grid-template-columns: repeat(3, minmax(0, 180px)); }');
+    // 窄屏两组叠成一列（两套断点都要）
+    expect((css.match(/#aus-panel \.aus-wallet-prices\.is-split \{ grid-template-columns: minmax\(0, 1fr\); gap: 10px; \}/g) || []).length).toBe(2);
   });
 
-  test('价格输入旁的「命中 / 未命中 / 输出」标签就近显示（窄屏才露出）', () => {
+  test('峰谷开关摆在模型行上（不再藏进 ⋯ 菜单），菜单只留锁定与删除', () => {
+    expect(renderSrc).toContain('class="aus-wallet-peak-toggle"');
+    expect(renderSrc.indexOf('data-wallet-model-peak="1"')).toBeLessThan(renderSrc.indexOf('class="aus-wallet-mops"'));
+    const menuSrc = renderSrc.slice(renderSrc.indexOf('const menu =')).split('\n').slice(0, 9).join('\n');
+    expect(menuSrc).not.toContain('data-wallet-model-peak');
+    expect(menuSrc).toContain('data-wallet-model-lock="1"');
+    expect(menuSrc).toContain('data-wallet-model-delete="1"');
+    expect(renderSrc).toContain('class="aus-wallet-more-btn"');
+  });
+
+  test('价格标签就在输入框上，不再有重复的表头', () => {
     expect(renderSrc).toContain('class="aus-wallet-pf"');
     expect(renderSrc).toContain("PRICE_KEY_LABEL[key]");
-    expect(css).toContain('#aus-panel .aus-wallet-pf > span { display: none;');
-    expect((css.match(/#aus-panel \.aus-wallet-pf > span \{ display: inline; \}/g) || []).length).toBe(2);
+    expect(css).toContain('#aus-panel .aus-wallet-pf > span { font-size: var(--aus-fs-xs);');
+    expect(css).not.toContain('.aus-wallet-table-head');
   });
 });
 
@@ -115,9 +141,11 @@ describe('钱包页：余额与校准', () => {
 });
 
 describe('钱包页：样式口径', () => {
-  test('模型行宽屏四列、窄屏变卡片，两套断点同步', () => {
+  test('模型行宽屏三列（名称 / 价格 / 操作），窄屏变卡片，两套断点同步', () => {
     expect(css).toMatch(/\.aus-wallet-mrow \{/);
-    expect(css).toContain('grid-template-columns: minmax(180px, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) 96px;');
+    // 模型名列给上限，余量留给价格；价格组内部再决定一组还是两组
+    expect(css).toContain('grid-template-columns: minmax(200px, 320px) minmax(0, 1fr) 96px;');
+    expect((css.match(/grid-template-columns: minmax\(200px, 320px\) minmax\(0, 1fr\) 96px;/g) || []).length).toBe(1);
     const narrow = css.match(/#aus-panel \.aus-wallet-mrow \{[^}]*grid-template-columns: minmax\(0, 1fr\)/g) || [];
     expect(narrow.length).toBe(2);
     // 两套断点都要有，缺一套部分机型不生效
@@ -132,6 +160,21 @@ describe('钱包页：样式口径', () => {
     expect(css).toContain('#aus-panel .aus-btn-primary {');
     expect(css).toContain('#aus-panel .aus-field {');
     expect(css).not.toContain('.aus-wallet-two-col');
+  });
+
+  test('组标签在两套断点里都显示，不再靠宽屏表头', () => {
+    expect(css).toContain('#aus-panel .aus-wallet-mtier-label { font-size: var(--aus-fs-xs);');
+    expect(css).not.toContain('#aus-panel .aus-wallet-mtier-label { display: none;');
+    // 峰谷关闭改成行上的开关，旧的行内「已关闭」提示与灰字段已删干净
+    expect(renderSrc).not.toContain('aus-wallet-meta-off');
+    expect(css).not.toContain('.aus-wallet-meta-off');
+    expect(css).not.toContain('.aus-wallet-mtier-off');
+  });
+
+  test('价格来源灰字只说胶囊写不下的信息', () => {
+    expect(renderSrc).toContain("status.pending ? status.pending + ' 个待匹配' : status.synced ? '已同步 ' + status.synced + ' 个' : ''");
+    expect(renderSrc).toContain('(noteText');
+    expect(renderSrc).not.toContain("esc(status.label) + (status.pending ?");
   });
 
   test('套餐块不再套一层白底卡片', () => {

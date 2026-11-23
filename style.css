@@ -625,6 +625,9 @@
 }
 #aus-panel .aus-btn-ghost {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 5px 11px;
   border: 1px solid var(--ds-border);
   border-radius: 999px;
@@ -716,42 +719,41 @@
 
 /* —— 第一段：余额与校准 —— */
 #aus-panel .aus-wallet-balance-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-#aus-panel .aus-wallet-balance-val { font-size: 20px; font-weight: 700; line-height: 1.2; color: var(--ds-text); font-variant-numeric: tabular-nums; }
+#aus-panel .aus-wallet-balance-label { font-size: var(--aus-fs-sm); color: var(--ds-text-2); white-space: nowrap; }
 #aus-panel .aus-wallet-balance-input { width: 120px; flex: 0 1 120px; }
 #aus-panel .aus-wallet-calib-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
 #aus-panel .aus-wallet-key-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
 
 /* —— 第二段：模型与价格 —— */
-#aus-panel .aus-wallet-table-head {
-  display: grid;
-  grid-template-columns: minmax(180px, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) 96px;
-  gap: 10px;
-  padding: 0 4px 2px;
-  font-size: var(--aus-fs-xs);
-  color: var(--ds-text-3);
-}
 #aus-panel .aus-wallet-rows { display: grid; }
 #aus-panel .aus-wallet-mrow {
   display: grid;
-  grid-template-columns: minmax(180px, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) 96px;
-  gap: 10px;
+  grid-template-columns: minmax(200px, 320px) minmax(0, 1fr) 96px;
+  gap: 16px;
   align-items: start;
-  padding: 10px 4px;
+  padding: 12px 4px;
   border-top: 1px solid var(--ds-border);
 }
 #aus-panel .aus-wallet-mrow[data-hidden='1'] { opacity: 0.6; }
-#aus-panel .aus-wallet-mname { display: grid; gap: 4px; min-width: 0; }
+#aus-panel .aus-wallet-mname { display: grid; gap: 5px; min-width: 0; }
 #aus-panel .aus-wallet-model-name { width: 100%; font-weight: 600; }
-#aus-panel .aus-wallet-mmeta { font-size: var(--aus-fs-xs); color: var(--ds-text-3); word-break: break-word; line-height: 1.5; }
+#aus-panel .aus-wallet-mname-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+#aus-panel .aus-wallet-mmeta { min-width: 0; font-size: var(--aus-fs-xs); color: var(--ds-text-3); word-break: break-word; line-height: 1.5; }
+#aus-panel .aus-wallet-peak-toggle { display: inline-flex; align-items: center; gap: 5px; font-size: var(--aus-fs-xs); color: var(--ds-text-2); white-space: nowrap; cursor: pointer; }
 #aus-panel .aus-wallet-mctx { display: inline-flex; align-items: center; gap: 5px; font-size: var(--aus-fs-xs); color: var(--ds-text-3); }
 #aus-panel .aus-wallet-ctx { width: 88px; min-height: 26px; padding: 3px 6px; }
+/* 价格组：只有启用峰谷的模型并排两组，否则一组铺满整列 */
+#aus-panel .aus-wallet-prices { display: grid; gap: 10px; min-width: 0; }
+#aus-panel .aus-wallet-prices.is-split { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+/* 只有一组价格时别把三格拉成整列宽，宽度跟两组时保持接近 */
+#aus-panel .aus-wallet-prices:not(.is-split) .aus-wallet-pricegrid { grid-template-columns: repeat(3, minmax(0, 180px)); }
 #aus-panel .aus-wallet-mtier { display: grid; gap: 4px; min-width: 0; }
-#aus-panel .aus-wallet-mtier[data-off='1'] { opacity: 0.5; }
+/* 未启用峰谷时高峰三格仍留在 DOM 里（保存价格按输入框读全量），只是不展示 */
+#aus-panel .aus-wallet-mtier[data-peak-hidden='1'] { display: none; }
 #aus-panel .aus-wallet-mtier-label { font-size: var(--aus-fs-xs); color: var(--ds-text-3); white-space: nowrap; }
-#aus-panel .aus-wallet-mtier-off { color: var(--ds-text-3); }
-#aus-panel .aus-wallet-pricegrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+#aus-panel .aus-wallet-pricegrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 #aus-panel .aus-wallet-pf { display: grid; gap: 2px; min-width: 0; }
-#aus-panel .aus-wallet-pf > span { display: none; font-size: var(--aus-fs-xs); color: var(--ds-text-3); }
+#aus-panel .aus-wallet-pf > span { font-size: var(--aus-fs-xs); color: var(--ds-text-3); }
 #aus-panel .aus-wallet-price { width: 100%; min-width: 0; }
 #aus-panel .aus-wallet-price.is-pending { border-color: var(--ds-red-border) !important; }
 #aus-panel .aus-wallet-mops { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
@@ -850,7 +852,6 @@
   #aus-panel .aus-wallet-card { padding: 10px; gap: 10px; }
   #aus-panel .aus-wallet-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   #aus-panel .aus-wallet-summary-value { font-size: 18px; }
-  #aus-panel .aus-wallet-table-head { display: none; }
   #aus-panel .aus-wallet-mrow {
     grid-template-columns: minmax(0, 1fr);
     gap: 8px;
@@ -860,7 +861,8 @@
     margin-top: 8px;
   }
   #aus-panel .aus-wallet-mtier { grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 6px; }
-  #aus-panel .aus-wallet-pf > span { display: inline; }
+  #aus-panel .aus-wallet-prices.is-split { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  #aus-panel .aus-wallet-peak-toggle { font-size: var(--aus-fs-base); }
   #aus-panel .aus-wallet-mops { justify-content: flex-start; }
   #aus-panel .aus-wallet-avatar { width: 36px; height: 36px; border-radius: 10px; font-size: 15px; grid-column: 1; grid-row: 1; }
   /* 窄屏隐藏冗余徽标：副标题已含类型与来源，避免名称行折行把操作按钮挤下去 */
@@ -885,7 +887,6 @@
   #aus-panel .aus-wallet-card { padding: 10px; gap: 10px; }
   #aus-panel .aus-wallet-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   #aus-panel .aus-wallet-summary-value { font-size: 18px; }
-  #aus-panel .aus-wallet-table-head { display: none; }
   #aus-panel .aus-wallet-mrow {
     grid-template-columns: minmax(0, 1fr);
     gap: 8px;
@@ -895,7 +896,8 @@
     margin-top: 8px;
   }
   #aus-panel .aus-wallet-mtier { grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 6px; }
-  #aus-panel .aus-wallet-pf > span { display: inline; }
+  #aus-panel .aus-wallet-prices.is-split { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  #aus-panel .aus-wallet-peak-toggle { font-size: var(--aus-fs-base); }
   #aus-panel .aus-wallet-mops { justify-content: flex-start; }
   #aus-panel .aus-wallet-avatar { width: 36px; height: 36px; border-radius: 10px; font-size: 15px; grid-column: 1; grid-row: 1; }
   /* 窄屏隐藏冗余徽标：副标题已含类型与来源，避免名称行折行把操作按钮挤下去 */

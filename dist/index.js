@@ -9541,7 +9541,7 @@ function peaksHTML(wallet) {
 function modelRowHTML(wallet, model) {
 	const pending = !model.price.priceConfigured;
 	const canDelete = model.source !== "builtin";
-	const peakOff = !model.price.usePeakPricing;
+	const peakOn = model.price.usePeakPricing;
 	const meta = esc$3(model.sourceModel) + (model.aliases.length ? " · 别名 " + esc$3(model.aliases.join("、")) : "") + (model.hidden === true ? " · 已隐藏" : "");
 	const matchLine = model.priceMatch ? "<div class=\"aus-wallet-mmeta\" title=\"来源：" + esc$3(model.priceMatch.provider + " / " + model.priceMatch.catalogModel) + "\">↳ " + esc$3(model.priceMatch.catalogModel) + " · " + Math.round(model.priceMatch.score * 100) + "%</div>" : "";
 	const tierHTML = (tier) => {
@@ -9550,27 +9550,32 @@ function modelRowHTML(wallet, model) {
 			"miss",
 			"output"
 		].map((key) => "<label class=\"aus-wallet-pf\"><span>" + PRICE_KEY_LABEL[key] + "</span>" + priceField(wallet.id, model.id, tier, key, model.price[tier][key], pending) + "</label>");
-		const off = tier === "peak" && peakOff;
+		const hidden = tier === "peak" && !peakOn;
 		return [
-			"<div class=\"aus-wallet-mtier\" data-tier=\"" + tier + "\"" + (off ? " data-off=\"1\"" : "") + ">",
-			"  <div class=\"aus-wallet-mtier-label\">" + TIER_LABEL[tier] + (off ? " <span class=\"aus-wallet-mtier-off\">已关闭</span>" : "") + "</div>",
+			"<div class=\"aus-wallet-mtier\" data-tier=\"" + tier + "\"" + (hidden ? " data-peak-hidden=\"1\"" : "") + ">",
+			"  <div class=\"aus-wallet-mtier-label\">" + (peakOn ? TIER_LABEL[tier] : "价格") + "</div>",
 			"  <div class=\"aus-wallet-pricegrid\">" + parts.join("") + "</div>",
 			"</div>"
 		].join("");
 	};
-	const menu = "<div id=\"aus-wallet-model-drop-" + esc$3(model.id) + "\" data-wallet-dropdown=\"1\" class=\"aus-wallet-drop is-right\" style=\"display:none;\"><label class=\"aus-wallet-menu-item\"><input type=\"checkbox\" class=\"aus-checkbox\" data-wallet-model-peak=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" data-model-id=\"" + esc$3(model.id) + "\"" + (model.price.usePeakPricing ? " checked" : "") + " /> 峰谷计价</label><label class=\"aus-wallet-menu-item\"><input type=\"checkbox\" class=\"aus-checkbox\" data-wallet-model-lock=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" data-model-id=\"" + esc$3(model.id) + "\"" + (model.locked ? " checked" : "") + " /> 锁定价格</label>" + (canDelete ? "<button type=\"button\" class=\"aus-wallet-menu-item is-danger\" data-wallet-model-delete=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" data-model-id=\"" + esc$3(model.id) + "\">删除模型</button>" : "<div class=\"aus-wallet-menu-note\">内置模型不可删除</div>") + "</div>";
+	const menu = "<div id=\"aus-wallet-model-drop-" + esc$3(model.id) + "\" data-wallet-dropdown=\"1\" class=\"aus-wallet-drop is-right\" style=\"display:none;\"><label class=\"aus-wallet-menu-item\"><input type=\"checkbox\" class=\"aus-checkbox\" data-wallet-model-lock=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" data-model-id=\"" + esc$3(model.id) + "\"" + (model.locked ? " checked" : "") + " /> 锁定价格</label>" + (canDelete ? "<button type=\"button\" class=\"aus-wallet-menu-item is-danger\" data-wallet-model-delete=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" data-model-id=\"" + esc$3(model.id) + "\">删除模型</button>" : "<div class=\"aus-wallet-menu-note\">内置模型不可删除</div>") + "</div>";
 	return [
 		"<div class=\"aus-wallet-mrow\" data-wallet-model-row=\"" + esc$3(model.id) + "\"" + (model.hidden === true ? " data-hidden=\"1\"" : "") + (pending ? " data-pending=\"1\"" : "") + ">",
 		"  <div class=\"aus-wallet-mname\">",
 		"    <input class=\"aus-field aus-wallet-model-name\" data-wallet-model-name=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" data-model-id=\"" + esc$3(model.id) + "\" value=\"" + esc$3(model.model) + "\" aria-label=\"模型名\" />",
-		"    <div class=\"aus-wallet-mmeta\">" + meta + "</div>",
+		"    <div class=\"aus-wallet-mname-foot\">",
+		"      <div class=\"aus-wallet-mmeta\">" + meta + "</div>",
+		"      <label class=\"aus-wallet-peak-toggle\" title=\"按高峰 / 非高峰时段分别定价\"><input type=\"checkbox\" class=\"aus-checkbox\" data-wallet-model-peak=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" data-model-id=\"" + esc$3(model.id) + "\"" + (peakOn ? " checked" : "") + " /> 峰谷计价</label>",
+		"    </div>",
 		matchLine,
 		"    <label class=\"aus-wallet-mctx\">上下文",
 		"      <input type=\"number\" min=\"1\" step=\"1000\" class=\"aus-field aus-field-num aus-wallet-ctx\" data-wallet-context-limit=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" data-model-id=\"" + esc$3(model.id) + "\" value=\"" + (model.contextLimit ?? "") + "\" placeholder=\"未知\" aria-label=\"上下文上限\" />",
 		"    </label>",
 		"  </div>",
+		"  <div class=\"aus-wallet-prices" + (peakOn ? " is-split" : "") + "\">",
 		tierHTML("offpeak"),
 		tierHTML("peak"),
+		"  </div>",
 		"  <div class=\"aus-wallet-mops\">",
 		"    <span class=\"aus-wallet-src" + (pending ? " is-pending" : model.source === "sync" ? " is-sync" : "") + "\">" + sourceLabel(model) + "</span>",
 		"    <button type=\"button\" class=\"aus-wallet-more-btn\" data-wallet-more-btn=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" data-model-id=\"" + esc$3(model.id) + "\" aria-label=\"更多操作\" aria-haspopup=\"true\">" + icon("menu", 16) + "</button>",
@@ -9603,7 +9608,8 @@ function renderCatalogPicker(wallet) {
 	const providerVendor = vendorById(wallet.catalogProvider);
 	const providerIcon = providerVendor ? vendorIconSvg(providerVendor.id, 14) : "";
 	const status = walletSyncStatus(wallet);
-	return "<div class=\"aus-wallet-rel aus-wallet-catalog-picker\"><button type=\"button\" data-wallet-catalog-btn=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" title=\"选择价格来源\" class=\"aus-pill aus-pill-sm aus-wallet-pill aus-wallet-catalog-btn\"><span class=\"aus-wallet-pill-label\">价格来源</span>" + (providerIcon ? "<span class=\"aus-wallet-pill-icon\">" + providerIcon + "</span>" : "") + "<span class=\"aus-wallet-pill-value\">" + esc$3(current?.label || "不自动同步") + "</span>" + icon("chevron-down", 14) + "</button><div class=\"aus-wallet-pill-note" + (status.pending ? " is-warn" : "") + "\" title=\"" + esc$3(status.label) + "\">" + esc$3(status.label) + (status.pending ? " · " + status.pending + " 个待匹配" : "") + "</div>" + dropPanelHTML("aus-wallet-catalog-drop-" + wallet.id, dropdownHtml(wallet.id, "catalog", [{
+	const noteText = status.pending ? status.pending + " 个待匹配" : status.synced ? "已同步 " + status.synced + " 个" : "";
+	return "<div class=\"aus-wallet-rel aus-wallet-catalog-picker\"><button type=\"button\" data-wallet-catalog-btn=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" title=\"选择价格来源\" class=\"aus-pill aus-pill-sm aus-wallet-pill aus-wallet-catalog-btn\"><span class=\"aus-wallet-pill-label\">价格来源</span>" + (providerIcon ? "<span class=\"aus-wallet-pill-icon\">" + providerIcon + "</span>" : "") + "<span class=\"aus-wallet-pill-value\">" + esc$3(current?.label || "不自动同步") + "</span>" + icon("chevron-down", 14) + "</button>" + (noteText ? "<div class=\"aus-wallet-pill-note" + (status.pending ? " is-warn" : "") + "\" title=\"" + esc$3(status.label) + "\">" + esc$3(noteText) + "</div>" : "") + dropPanelHTML("aus-wallet-catalog-drop-" + wallet.id, dropdownHtml(wallet.id, "catalog", [{
 		id: "",
 		label: "不自动同步",
 		active: !wallet.catalogProvider
@@ -9694,7 +9700,6 @@ function renderWalletCard(wallet, history) {
 		"  <div class=\"aus-wallet-metrics\"><div class=\"aus-wallet-metric\" title=\"" + esc$3(walletBalanceText(wallet)) + "\"><div class=\"aus-wallet-metric-label\">余额</div><div class=\"aus-wallet-metric-value\">" + esc$3(walletBalanceText(wallet)) + "</div></div></div>",
 		"  <div class=\"aus-wallet-actions\">",
 		"    <button type=\"button\" class=\"aus-wallet-icon-btn\" data-wallet-toggle=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" title=\"" + (collapsed ? "展开钱包详情" : "收起钱包详情") + "\" aria-label=\"" + (collapsed ? "展开钱包详情" : "收起钱包详情") + "\">" + (collapsed ? icon("chevron-down", 16) : icon("chevron-up", 16)) + "</button>",
-		"    <button type=\"button\" class=\"aus-wallet-icon-btn\" data-wallet-sync=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" title=\"" + (wallet.catalogProvider ? "预览并应用价格同步（按已识别模型模糊匹配）" : "先选择价格来源，再同步价格") + "\" aria-label=\"预览价格同步\">" + icon("refresh", 16) + "</button>",
 		isOfficial ? "" : "    <button type=\"button\" class=\"aus-wallet-icon-btn is-danger\" data-wallet-ignore=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" title=\"忽略该钱包（历史与统计保留）\" aria-label=\"忽略钱包\">" + icon("close", 16) + "</button>",
 		"  </div>",
 		"</div>"
@@ -9716,7 +9721,7 @@ function renderWalletCard(wallet, history) {
 		"    <label class=\"aus-wallet-switch-row\" title=\"按设置页的校准间隔自动查询余额\">自动校准" + autoSwitch + "</label>",
 		"  </div>",
 		"  <div class=\"aus-wallet-balance-row\">",
-		"    <div class=\"aus-wallet-balance-val\">" + esc$3(walletBalanceText(wallet)) + "</div>",
+		"    <span class=\"aus-wallet-balance-label\">手工余额</span>",
 		"    <input data-wallet-balance-amount=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" class=\"aus-field aus-field-num aus-wallet-balance-input\" value=\"" + esc$3(wallet.balance.amount ?? "") + "\" placeholder=\"手工余额\" aria-label=\"手工余额\" />",
 		currencyPicker,
 		"  </div>",
@@ -9727,15 +9732,16 @@ function renderWalletCard(wallet, history) {
 	const modelSection = [
 		"<section class=\"aus-wallet-sec\">",
 		"  <div class=\"aus-wallet-sec-head\">",
-		"    <h4 class=\"aus-wallet-sec-title\">模型与价格<span class=\"aus-wallet-sec-note\">单位 " + esc$3(currencyCode) + "/百万 tokens；改名会保留旧名别名</span></h4>",
+		"    <h4 class=\"aus-wallet-sec-title\">模型与价格<span class=\"aus-wallet-sec-note\">单位 " + esc$3(currencyCode) + "/百万 tokens</span></h4>",
 		"    <div class=\"aus-wallet-sec-actions\">",
 		renderCatalogPicker(wallet),
+		"      <button type=\"button\" class=\"aus-btn-ghost\" data-wallet-sync=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" title=\"" + (wallet.catalogProvider ? "按价格来源匹配并写入价格（先预览再确认）" : "先选择价格来源，再同步价格") + "\">" + icon("refresh", 14) + "同步价格</button>",
 		"      <button type=\"button\" class=\"aus-btn-ghost\" data-wallet-toggle-hidden=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" style=\"display:" + (hiddenCount ? "inline-flex" : "none") + ";\">" + (showHidden ? "隐藏" : "显示") + " " + hiddenCount + " 个隐藏条目</button>",
 		"      <button type=\"button\" class=\"aus-btn-ghost\" data-wallet-add-model=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\">+ 添加模型</button>",
 		"    </div>",
 		"  </div>",
-		"  <div class=\"aus-wallet-table-head\"><span>模型</span><span>非峰 命中 / 未命中 / 输出</span><span>高峰 命中 / 未命中 / 输出</span><span></span></div>",
 		"  <div class=\"aus-wallet-rows\">" + renderModelRows(wallet, showHidden) + "</div>",
+		"  <div class=\"aus-wallet-hint\">勾选「峰谷计价」的模型会多出一组高峰价；关掉后高峰价保留在本地，只是不再展示。</div>",
 		"</section>"
 	].join("\n");
 	const billingSection = [
