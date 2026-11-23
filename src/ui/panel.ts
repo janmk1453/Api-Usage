@@ -27,6 +27,7 @@ import { renderForecastView, initForecastView } from './forecast-view';
 import { disposeForecastCharts } from './forecast-chart';
 import { renderWalletView } from './wallet-view';
 import { initChatManageView, renderChatManageView } from './chat-manage';
+import { initModelManageView, renderModelManageView } from './model-manage';
 import { initTapView, renderTapView } from './tap-view';
 import { initLogView, renderLogView } from './log-view';
 import { renderHistoryHealthBar } from './history-health-bar';
@@ -41,6 +42,7 @@ import { helpViewHTML } from './help-view';
 import { chartCardHTML } from './chart-picker';
 import { hideAllChartTooltips } from './chart-tooltip';
 import { filterPickerRows } from './chat-visibility';
+import { filterModelPickerRows } from './model-visibility';
 import { backDebug } from './back-debug';
 import { afterNextPaint, closeDropdownInstant } from './dropdown-close';
 import { BACK_GUARD_DEPTH, nextGuardState, readGuardDepth, stripGuardState } from './back-guard';
@@ -135,6 +137,8 @@ let chatManageOrigin: AppView = 'overview';
 let logOrigin: AppView = 'settings';
 /** 「其他请求」的来源页：只从请求日志页进入，返回时回到日志页（再回它自己的来源） */
 let tapOrigin: AppView = 'log';
+/** 「模型展示管理」的来源页：统计页「模型汇总」与设置页两处入口共用，返回时各回各家 */
+let modelManageOrigin: AppView = 'stats';
 /** 当前导航高亮键：窄屏二级页归到「设置」，桌面为视图本身 */
 let currentNavKey: AppView = 'overview';
 let collapsed = false;
@@ -307,12 +311,14 @@ function renderHistoryFilterDropdown(
 function renderHistoryFilters(history: any[]) {
   historyFilterBase = history || [];
   const doc = getDoc();
+  // 全量模型选项用于取值校验与标签回显；下拉里只列未被隐藏的（「模型展示管理」的「下拉选项」集合）
   const models = Array.from(new Set(historyFilterBase.map((entry) => String(entry?.model || '').trim()).filter(Boolean)))
     .sort((a, b) => a.localeCompare(b, 'zh-CN'))
     .map((id) => ({ id, label: id }));
   if (historyFilters.model !== STATS_FILTER_ALL && !models.some((option) => option.id === historyFilters.model)) {
     historyFilters.model = STATS_FILTER_ALL;
   }
+  const visibleModels = filterModelPickerRows(models, (option) => option.id);
   // 全量对话选项用于取值校验与名称回显；下拉里只列未被隐藏的（「对话展示管理」的「下拉选项」集合）
   const chatOptions = getHistoryChatOptions(historyFilterBase);
   // 「当前对话」是动态项，不要求出现在已记录对话列表里
@@ -367,7 +373,7 @@ function renderHistoryFilters(history: any[]) {
     closeHistoryFilterDropdownsInstant();
     afterNextPaint(() => renderHistory(doc, getSelectedSave()));
   });
-  renderHistoryFilterDropdown('model', historyFilters.model, models, '暂无模型', (value) => {
+  renderHistoryFilterDropdown('model', historyFilters.model, visibleModels, models.length ? '模型已全部隐藏（可在「模型展示管理」中恢复）' : '暂无模型', (value) => {
     historyFilters.model = value;
     historyPage = 1;
     closeHistoryFilterDropdownsInstant();
@@ -1378,6 +1384,7 @@ function syncMobileSidebar(doc: Document): void {
  */
 function viewSourceOf(view: AppView): AppView {
   if (view === 'chat-manage') return chatManageOrigin;
+  if (view === 'model-manage') return modelManageOrigin;
   if (view === 'log') return logOrigin;
   if (view === 'tap') return tapOrigin;
   return view;
@@ -1391,6 +1398,7 @@ function tabOf(view: AppView): AppView {
 /** 二级页「返回」目标：对话展示管理 / 请求日志 / 其他请求回到进入前的来源页，其余回到自己的父级根页 */
 function returnFromChild(): AppView {
   if (currentView === 'chat-manage') return chatManageOrigin;
+  if (currentView === 'model-manage') return modelManageOrigin;
   if (currentView === 'log') return logOrigin;
   if (currentView === 'tap') return tapOrigin;
   return childParentOf(currentView) ?? 'settings';
@@ -1406,6 +1414,12 @@ function openChatManage(from: AppView): void {
 function openRequestLog(from: AppView): void {
   logOrigin = from;
   switchView('log');
+}
+
+/** 进入「模型展示管理」页并记住来源（统计页「模型汇总」标题右侧与设置页两处入口共用） */
+function openModelManage(from: AppView): void {
+  modelManageOrigin = from;
+  switchView('model-manage');
 }
 
 /** 进入「其他请求」页并记住来源（请求日志页工具栏唯一入口，返回时回到日志页） */
@@ -1470,6 +1484,7 @@ function switchView(view: AppView, opts?: { track?: boolean; back?: boolean }) {
       else if (view === 'wallet') Promise.resolve(renderWalletView()).catch(() => {});
       else if (view === 'history') { const s = getSelectedSave(); if (s) renderHistory(doc, s); }
       else if (view === 'chat-manage') Promise.resolve(renderChatManageView()).catch(() => {});
+      else if (view === 'model-manage') Promise.resolve(renderModelManageView()).catch(() => {});
       else if (view === 'tap') renderTapView();
       else if (view === 'log') renderLogView();
       else if (view === 'about') Promise.resolve(refreshAnnouncementCard(doc)).catch(() => {});
@@ -1650,6 +1665,9 @@ export function createPanel() {
            <div data-view="chat-manage" style="display:none;">
              <div id="aus-chat-manage-body"></div>
            </div>
+           <div data-view="model-manage" style="display:none;">
+             <div id="aus-model-manage-body"></div>
+           </div>
            <div data-view="tap" style="display:none;">
              <div id="aus-tap-root"></div>
            </div>
@@ -1703,7 +1721,13 @@ export function createPanel() {
             </div>
             <div id="aus-stats-four" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px;"></div>
             <div id="aus-model-summary" class="ds-card" style="margin-top:12px;overflow:auto;">
-              <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:8px;">模型汇总</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+                <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">模型汇总</div>
+                <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                  <span id="aus-model-manage-count" style="display:none;font-size:var(--aus-fs-xs);color:var(--ds-text-3);white-space:nowrap;"></span>
+                  <button id="aus-model-manage-btn" type="button" class="aus-manage-chat-btn" title="设置哪些模型出现在模型汇总表与各页「模型」下拉中（不影响数据统计）">${icon('menu', 14)}管理模型</button>
+                </div>
+              </div>
               <table style="width:100%;border-collapse:collapse;font-size:var(--aus-fs-sm);white-space:nowrap;">
                 <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">模型</th><th data-sort-key="count" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">调用次数<span class="aus-sort-ind"></span></th><th data-sort-key="hit" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输入(命中)<span class="aus-sort-ind"></span></th><th data-sort-key="miss" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输入(未命中)<span class="aus-sort-ind"></span></th><th data-sort-key="out" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输出<span class="aus-sort-ind"></span></th><th data-sort-key="total" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总 Tokens<span class="aus-sort-ind"></span></th><th data-sort-key="cost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总成本<span class="aus-sort-ind"></span></th><th data-sort-key="avgCost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均成本<span class="aus-sort-ind"></span></th><th data-sort-key="avgDur" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均耗时<span class="aus-sort-ind"></span></th><th data-sort-key="avgRate" title="点击排序 · 含非流式/首字缺失记录的估算值" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均速率<span class="aus-sort-ind"></span></th></tr></thead>
                 <tbody id="aus-summary-tbody"><tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
@@ -1992,10 +2016,14 @@ export function createPanel() {
   doc.getElementById('aus-panel')?.addEventListener('click', (e: any) => {
     const target = e.target as HTMLElement | null;
     if (target?.closest?.('#aus-settings-chat-manage')) openChatManage('settings');
+    if (target?.closest?.('#aus-settings-model-manage')) openModelManage('settings');
     if (target?.closest?.('#aus-settings-request-log')) openRequestLog('settings');
   });
   // 页内「返回」按钮：回到进入前的来源页
   initChatManageView({ go: () => switchView(chatManageOrigin) });
+  // 两处入口都进同一个「模型展示管理」页：统计页「模型汇总」标题右侧与设置页「模型展示」设置项
+  doc.getElementById('aus-model-manage-btn')?.addEventListener('click', () => openModelManage('stats'));
+  initModelManageView({ go: () => switchView(modelManageOrigin) });
   // 历史记录工具栏「请求日志」：与设置页「问题反馈 / 请求日志」同一个页面，返回时回到历史记录页
   doc.getElementById('aus-history-log-btn')?.addEventListener('click', () => openRequestLog('history'));
   // 「其他请求」的入口在请求日志页工具栏：页内返回 / 顶栏返回箭头 / 底栏 pop-root 统一回日志页

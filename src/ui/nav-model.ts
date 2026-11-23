@@ -4,8 +4,9 @@
  * 视图树本身不改：所有页面仍是 `#aus-main` 下的扁平同级 `data-view`。
  * 这里只负责「底栏 5 个 tab ↔ 各视图」的映射与点击语义：
  * - 钱包 / 使用说明 / 关于 挂在「设置」tab 下作为二级页；
- * - 对话展示管理（chat-manage，从概览「按对话统计」表格进入）挂在「概览」tab 下，
- *   桌面侧栏没有它的条目，因此桌面端高亮也归到父级（见 panel.ts#paintNavState）；
+ * - 对话展示管理（chat-manage，从概览「按对话统计」表格进入）挂在「概览」tab 下、
+ *   模型展示管理（model-manage，从统计页「模型汇总」或设置页进入）挂在「统计」tab 下，
+ *   桌面侧栏都没有它们的条目，因此桌面端高亮也归到父级（见 panel.ts#paintNavState）；
  * - 二级页时底栏保持父级 tab 高亮，顶栏显示返回箭头（回到父级根页）；
  * - 重复点当前 tab：二级页回到父级根页，已在根页则回到顶部；
  * - 换 tab 一律进入该 tab 的根视图，**不记忆**上次停留的二级页（否则「关于 → 历史 → 设置」
@@ -24,6 +25,8 @@ export type AppView =
   | 'about'
   /** 对话展示管理：概览「按对话统计」表格的显隐设置页 */
   | 'chat-manage'
+  /** 模型展示管理：统计页「模型汇总」右上角与设置页进入的模型显隐设置页 */
+  | 'model-manage'
   /** 其他请求：请求日志页里的「非常规对话请求」技术验证页（数据隔离，不进统计） */
   | 'tap'
   /** 请求日志：设置页进入，只展示最近一轮对话请求的标头、正文与响应元数据 */
@@ -39,6 +42,7 @@ export const APP_VIEWS: readonly AppView[] = [
   'help',
   'about',
   'chat-manage',
+  'model-manage',
   'tap',
   'log',
 ];
@@ -85,12 +89,13 @@ export const CHILD_PARENT: Readonly<Partial<Record<AppView, AppView>>> = {
   help: 'settings',
   about: 'settings',
   'chat-manage': 'overview',
+  'model-manage': 'stats',
   tap: 'history',
   log: 'settings',
 };
 
 /** 二级视图清单（顺序即声明顺序） */
-export const CHILD_VIEWS: readonly AppView[] = ['wallet', 'help', 'about', 'chat-manage', 'tap', 'log'];
+export const CHILD_VIEWS: readonly AppView[] = ['wallet', 'help', 'about', 'chat-manage', 'model-manage', 'tap', 'log'];
 
 export function isSettingsChild(view: AppView): boolean {
   return SETTINGS_CHILD_VIEWS.includes(view);
@@ -142,6 +147,7 @@ const VIEW_TITLES: Record<AppView, string> = {
   help: '使用说明',
   about: '关于',
   'chat-manage': '对话展示管理',
+  'model-manage': '模型展示管理',
   tap: '其他请求',
   log: '问题反馈 / 请求日志',
 };

@@ -24,6 +24,7 @@ import { historyRecordKey } from '../utils/history-key';
 import { repository } from '../data/repository';
 import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
 import { filterPickerRows } from './chat-visibility';
+import { filterModelPickerRows, filterVisibleModelRows, hiddenModelCountFor } from './model-visibility';
 import { closeDropdownInstant, closeDropdownThenPaint } from './dropdown-close';
 import { REQUEST_TYPE_OPTIONS, requestTypeLabel, requestTypeTitle } from './request-type-filter';
 
@@ -244,18 +245,25 @@ function renderModelPicker(modelsHist?: any[]) {
   const label = doc.getElementById('aus-model-label');
   if (!dropdown || !label) return;
   const models = getRecordedModels(modelsHist);
+  // 全量模型用于校验已选项；下拉只列出未被隐藏的（「模型展示管理」的「下拉选项」集合），
+  // 已选中的模型即使被隐藏也照旧参与统计。
   const validModels = new Set(models);
   selectedModels = selectedModels.filter((model) => validModels.has(model));
+  const visibleModels = filterModelPickerRows(models);
   const allSelected = selectedModels.length === 0;
   label.textContent = allSelected ? '全部' : selectedModels.length === 1 ? selectedModels[0] : `已选 ${selectedModels.length} 项`;
   label.title = allSelected ? '全部模型' : selectedModels.join('、');
   let html = `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${allSelected?'background:var(--ds-card);font-weight:600;':''}"><input type="checkbox" data-model-all ${allSelected?'checked':''} class="aus-checkbox" /><span>全部模型</span></label>`;
-  for (const m of models) {
+  for (const m of visibleModels) {
     const checked = selectedModels.includes(m);
     const active = checked ? 'background:var(--ds-card);font-weight:600;' : '';
     html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}"><input type="checkbox" data-model="${esc(m)}" ${checked?'checked':''} class="aus-checkbox" /><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m)}</span></label>`;
   }
-  if (!models.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);">暂无模型</div>';
+  if (!visibleModels.length) {
+    html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);">'
+      + (models.length ? '模型已全部隐藏（可在「模型展示管理」中恢复）' : '暂无模型')
+      + '</div>';
+  }
   dropdown.innerHTML = html;
   const allInput = dropdown.querySelector('[data-model-all]') as HTMLInputElement | null;
   if (allInput) {
@@ -966,6 +974,18 @@ function renderModelSummary(filtered: any[]) {
     const avgRateStr = e.rateCnt ? Math.round(e.rate / e.rateCnt) + ' t/s' : '—';
     return { m, count: e.count, hit: e.hit, miss: e.miss, out: e.out, total: e.total, cost: e.cost, avgCost, avgDurVal, avgRateVal, avgDurStr, avgRateStr };
   });
+  // 只列出未被隐藏的模型（「模型展示管理」的「表格展示」集合）：隐藏只影响这张表，
+  // 统计合计、图表与历史记录仍按全量历史计算。
+  const totalModels = list.length;
+  list = filterVisibleModelRows(list, (row) => row.m);
+  try {
+    const badge = doc.getElementById('aus-model-manage-count');
+    if (badge) {
+      const hiddenCount = hiddenModelCountFor('table');
+      badge.textContent = hiddenCount ? '已隐藏 ' + hiddenCount + ' 个' : '';
+      badge.style.display = hiddenCount ? '' : 'none';
+    }
+  } catch {}
   const sortKey = summarySort.key;
   if (sortKey) {
     const dir = summarySort.dir === 'asc' ? 1 : -1;
@@ -990,6 +1010,12 @@ function renderModelSummary(filtered: any[]) {
     });
   } else {
     list.sort((a, b) => a.m.localeCompare(b.m));
+  }
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">'
+      + (totalModels ? '全部模型都已隐藏 · 点击右上角「管理模型」恢复显示' : '暂无数据')
+      + '</td></tr>';
+    return;
   }
   const fmtC = (v:number)=>{ try{  return formatMoney(v||0,4);} catch{ return '¥'+(v||0).toFixed(4)+' CNY'; } };
   const rows = list.map(r => {

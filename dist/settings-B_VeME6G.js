@@ -3,13 +3,13 @@ import { i as state } from "./store-CVamS-ER.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS } from "./pricing-Bc-qEvy8.js";
 import { _ as saveExtensionSettings, b as historyRecordKey, c as deleteMigrationBackups, f as getExtensionSettings, p as isMigrationBackupKey, y as saveHot } from "./persistence-BmzJp2Zz.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as mergeWalletCollections, a as decryptKey, f as getPricing$1, o as encryptKey, p as isDeepSeekOfficialModel, t as repository, u as calcCost } from "./repository-BftO__z8.js";
+import { C as mergeWalletCollections, a as decryptKey, f as getPricing$1, o as encryptKey, p as isDeepSeekOfficialModel, t as repository, u as calcCost } from "./repository-D0LPBfgR.js";
 import { a as isUnsafeKey, o as isValidDayKey, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { a as getDisplayCurrency, r as fetchLiveRate } from "./currency-U-Rv2qTn.js";
-import { r as recalcAllCosts } from "./interception-DY8caLnF.js";
-import { i as saveApiKey } from "./balance-B7vPxZBa.js";
+import { r as recalcAllCosts } from "./interception-QOVZd9If.js";
+import { i as saveApiKey } from "./balance-CaxgR7uD.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
-import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-CoAG8B7J.js";
+import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-CxDcbBeM.js";
 //#region src/ui/switch.ts
 function escAttr(value) {
 	return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -2051,6 +2051,12 @@ function renderSettings(doc) {
         <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">管理哪些对话出现在概览列表与「对话」下拉胶囊中；只影响显示隐藏，不影响数据统计</div>
       </div>
 
+      <!-- 模型展示：控制模型汇总表与各页「模型」下拉胶囊里展示哪些模型（只影响显示） -->
+      <div class="ds-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">模型展示</span><button id="aus-settings-model-manage" type="button" class="aus-manage-chat-btn" title="管理模型在汇总表与下拉胶囊中的显示">${icon("menu", 14)}管理模型</button></div>
+        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">管理哪些模型出现在「模型汇总」表与「模型」下拉胶囊中；只影响显示隐藏，不影响数据统计与预测</div>
+      </div>
+
       <!-- 请求日志：最近一轮对话请求的标头 / 正文 / 响应元数据（只在本机保存） -->
       <div class="ds-card">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">问题反馈 / 请求日志</span><button id="aus-settings-request-log" type="button" class="aus-manage-chat-btn" title="查看最近一轮对话请求的标头、正文与响应元数据">${icon("menu", 14)}查看</button></div>
@@ -2335,7 +2341,7 @@ function renderSettings(doc) {
 		state.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state.settings });
 		try {
-			import("./balance-B7vPxZBa.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-CaxgR7uD.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2379,7 +2385,7 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-BftO__z8.js").then((n) => n.n);
+				const { repository } = await import("./repository-D0LPBfgR.js").then((n) => n.n);
 				const { state: st } = await import("./store-CVamS-ER.js").then((n) => n.a);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
@@ -2526,7 +2532,7 @@ function renderSettings(doc) {
 					closeDropdownInstant(intervalDrop);
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-CoAG8B7J.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./pricing-sync-CxDcbBeM.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 						import("./currency-U-Rv2qTn.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};

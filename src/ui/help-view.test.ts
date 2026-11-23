@@ -32,7 +32,7 @@ describe('使用说明页', () => {
     expect(HELP_PRIVACY_URL.endsWith('#privacy')).toBe(true);
   });
 
-  it('说明卡按页面分门别类，共 8 张且每张都有编号步骤', () => {
+  it('说明卡按页面分门别类，共 9 张且每张都有编号步骤', () => {
     const titles = [...html.matchAll(/<span class="aus-help-card-title">([^<]+)<\/span>/g)].map((m) => m[1]);
     expect(titles).toEqual([
       '开始使用',
@@ -43,9 +43,10 @@ describe('使用说明页', () => {
       '钱包',
       '设置与数据',
       '对话展示管理',
+      '模型展示管理',
     ]);
     const cards = html.split('class="ds-card aus-help-card"').slice(1);
-    expect(cards.length).toBe(8);
+    expect(cards.length).toBe(9);
     for (const card of cards) {
       const steps = [...card.matchAll(/<li>([\s\S]*?)<\/li>/g)].map((m) => m[1].trim());
       expect(steps.length).toBeGreaterThanOrEqual(2);

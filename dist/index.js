@@ -3,17 +3,17 @@ import { i as state$2, n as getHistoryForDisplay, r as getSelectedSave, s as mob
 import { s as MAX_HISTORY, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { a as clearColdReadFailure, b as historyRecordKey, d as getColdReadFailure, y as saveHot } from "./persistence-BmzJp2Zz.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as pricingSourceLabel, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-BftO__z8.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as pricingSourceLabel, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-D0LPBfgR.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc$3, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { a as getDisplayCurrency, i as formatMoney, o as getWalletExchangeRate, t as cnyToDisplay$1 } from "./currency-U-Rv2qTn.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
-import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-DY8caLnF.js";
+import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-QOVZd9If.js";
 import { r as registerRequestOriginSelf } from "./request-origin-C9kLQ_0W.js";
 import { a as readSeenAnnouncementIds, c as bindChangelog, d as renderChangelogCard, f as CHANGELOG, h as BUILD_NO, i as readCachedAnnouncements, l as changelogSectionsHTML, m as APP_VERSION, n as isAnnouncementActive, o as sortAnnouncements, p as APP_BUILD_TAG, t as fetchAnnouncements, u as formatChangelogDate } from "./announcement-CWQaFtlb.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-B7vPxZBa.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-CaxgR7uD.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-BB7cLMQp.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-CoAG8B7J.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-B_VeME6G.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-CxDcbBeM.js";
 import { a as listTapRecords, i as clearTapRecords, n as tapDiagnostics, o as subscribeTap, r as stripModelTag } from "./request-tap-k4SyDMQg.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
@@ -324,7 +324,7 @@ function rateBadgeText(entry) {
 //#region src/ui/compare.ts
 var selOld = null;
 var selNew = null;
-function getDoc$12() {
+function getDoc$13() {
 	return window.parent?.document ?? document;
 }
 function diffMessages(oldMsgs, newMsgs) {
@@ -338,7 +338,7 @@ function diffMessages(oldMsgs, newMsgs) {
 	return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">旧：${esc$3(a.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-red-bg);color:var(--ds-red);padding:0 2px;border-radius:3px;\">" + esc$3(a.slice(i, i + 200)) + "</span>" + esc$3(a.slice(i + 200, i + 280))}</div><div style="background:var(--ds-card-inner);border-radius:10px;padding:10px;font-size:var(--aus-fs-sm);white-space:pre-wrap;word-break:break-all;color:var(--ds-text);">新：${esc$3(b.slice(Math.max(0, i - ctx), i)) + "<span style=\"background:var(--ds-green-bg);color:var(--ds-green);padding:0 2px;border-radius:3px;\">" + esc$3(b.slice(i, i + 200)) + "</span>" + esc$3(b.slice(i + 200, i + 280))}</div></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:8px;">差异起点即缓存发散位置，前 ${i} 字符一致为命中段</div>`;
 }
 function bindHistoryCompare() {
-	const doc = getDoc$12();
+	const doc = getDoc$13();
 	doc.addEventListener("click", (e) => {
 		const t = e.target;
 		if (!t) return;
@@ -355,7 +355,7 @@ function bindHistoryCompare() {
 	});
 }
 function renderDiff() {
-	const host = getDoc$12().getElementById("aus-diff");
+	const host = getDoc$13().getElementById("aus-diff");
 	if (!host) return;
 	if (selOld == null || selNew == null) {
 		host.innerHTML = "<div style=\"text-align:center;padding:16px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">已选 " + (selOld != null ? "旧 " : "") + (selNew != null ? "新 " : "") + "，请在历史中各选一条 旧/新 进行对比</div>";
@@ -1819,7 +1819,7 @@ function normalizePrefs(value) {
 		hiddenPickers: normalizeHiddenKeys(raw.hiddenPickers)
 	};
 }
-function storage$4() {
+function storage$5() {
 	try {
 		const store = globalThis.localStorage;
 		if (!store || typeof store.getItem !== "function" || typeof store.setItem !== "function") return null;
@@ -1830,11 +1830,11 @@ function storage$4() {
 	}
 }
 /** 内存态兜底（localStorage 不可用时本次会话仍可切换） */
-var memoryPrefs = null;
+var memoryPrefs$1 = null;
 /** 读取整份偏好（每次返回新对象，调用方可安全修改） */
 function readPrefs() {
-	const store = storage$4();
-	if (!store) return normalizePrefs(memoryPrefs ?? {});
+	const store = storage$5();
+	if (!store) return normalizePrefs(memoryPrefs$1 ?? {});
 	try {
 		const raw = store.getItem(CHAT_VISIBILITY_KEY);
 		if (!raw) return {
@@ -1851,17 +1851,17 @@ function readPrefs() {
 }
 function writePrefs(prefs) {
 	const clean = normalizePrefs(prefs);
-	memoryPrefs = clean;
-	const store = storage$4();
+	memoryPrefs$1 = clean;
+	const store = storage$5();
 	if (!store) return;
 	try {
 		store.setItem(CHAT_VISIBILITY_KEY, JSON.stringify(clean));
 	} catch {}
 }
-function listOf(prefs, target) {
+function listOf$1(prefs, target) {
 	return target === "picker" ? prefs.hiddenPickers : prefs.hidden;
 }
-function writeList(target, keys) {
+function writeList$1(target, keys) {
 	const prefs = readPrefs();
 	if (target === "picker") prefs.hiddenPickers = normalizeHiddenKeys(keys);
 	else prefs.hidden = normalizeHiddenKeys(keys);
@@ -1869,7 +1869,7 @@ function writeList(target, keys) {
 }
 /** 读取某个展示位置的隐藏键列表（只读副本） */
 function readHiddenFor(target) {
-	return listOf(readPrefs(), target).slice();
+	return listOf$1(readPrefs(), target).slice();
 }
 /** 「按对话统计」表格的隐藏键列表 */
 function readHiddenKeys() {
@@ -1877,14 +1877,14 @@ function readHiddenKeys() {
 }
 /** 该对话在该位置是否被隐藏（入参是存储键） */
 function isHiddenFor(target, key) {
-	return listOf(readPrefs(), target).includes(key);
+	return listOf$1(readPrefs(), target).includes(key);
 }
 /** 设置某个对话键在某位置的显隐 */
 function setHiddenFor(target, key, hidden) {
 	if (!key) return;
 	const current = readHiddenFor(target);
 	if (hidden === current.includes(key)) return;
-	writeList(target, hidden ? current.concat(key) : current.filter((k) => k !== key));
+	writeList$1(target, hidden ? current.concat(key) : current.filter((k) => k !== key));
 }
 /** 一次写入多个键的显隐（「全部隐藏 / 全部显示」用，避免逐条读写存储） */
 function setAllHiddenFor(target, keys, hidden) {
@@ -1893,17 +1893,17 @@ function setAllHiddenFor(target, keys, hidden) {
 	if (hidden) {
 		const merged = current.slice();
 		for (const key of clean) if (!merged.includes(key)) merged.push(key);
-		writeList(target, merged);
+		writeList$1(target, merged);
 	} else {
 		const drop = new Set(clean);
-		writeList(target, current.filter((key) => !drop.has(key)));
+		writeList$1(target, current.filter((key) => !drop.has(key)));
 	}
 }
 /** 清空某个展示位置的隐藏项（全部恢复显示） */
 function clearHiddenFor(target) {
-	writeList(target, []);
+	writeList$1(target, []);
 }
-function filterByHidden(rows, hidden, keyOf) {
+function filterByHidden$1(rows, hidden, keyOf) {
 	if (!hidden.length) return rows.slice();
 	const set = new Set(hidden);
 	return rows.filter((row) => !set.has(keyOf(row)));
@@ -1913,14 +1913,14 @@ function filterByHidden(rows, hidden, keyOf) {
 * 传 keyOf 便于测试与复用；默认按 ChatSummaryRow.chatId 取键。
 */
 function filterVisibleRows(rows, keyOf = (row) => chatVisibilityKey(row?.chatId ?? null)) {
-	return filterByHidden(rows, readHiddenFor("table"), keyOf);
+	return filterByHidden$1(rows, readHiddenFor("table"), keyOf);
 }
 /**
 * 过滤出应当出现在「对话」下拉胶囊里的选项（纯函数，按入参顺序）。
 * 默认按选项的 chatId 取键；历史页的选项自己带 `id`（已是对话键），传 keyOf 取它。
 */
 function filterPickerRows(rows, keyOf = (row) => chatVisibilityKey(row?.chatId ?? null)) {
-	return filterByHidden(rows, readHiddenFor("picker"), keyOf);
+	return filterByHidden$1(rows, readHiddenFor("picker"), keyOf);
 }
 //#endregion
 //#region src/ui/chat-summary-table.ts
@@ -2007,18 +2007,18 @@ function renderChatSummaryTable(doc, rows) {
 }
 //#endregion
 //#region src/ui/heatmap.ts
-function getDoc$11() {
+function getDoc$12() {
 	return window.parent?.document ?? document;
 }
 function themeIsDark() {
 	try {
-		return getDoc$11().getElementById("aus-panel")?.getAttribute("data-ds-theme") === "dark";
+		return getDoc$12().getElementById("aus-panel")?.getAttribute("data-ds-theme") === "dark";
 	} catch {
 		return false;
 	}
 }
 function renderHeatmap(filtered) {
-	const doc = getDoc$11();
+	const doc = getDoc$12();
 	const container = doc.getElementById("aus-heatmap-container-overview") || doc.getElementById("aus-heatmap-container");
 	const legendEl = doc.getElementById("aus-heatmap-legend-overview") || doc.getElementById("aus-heatmap-legend");
 	const labelsEl = doc.getElementById("aus-heatmap-labels-overview") || doc.getElementById("aus-heatmap-labels");
@@ -2203,7 +2203,7 @@ function placeDropdownRelativeToHost(input) {
 }
 //#endregion
 //#region src/ui/overview.ts
-function getDoc$10() {
+function getDoc$11() {
 	return window.parent?.document ?? document;
 }
 function fmt(n) {
@@ -2438,7 +2438,7 @@ var overviewWalletBound = false;
 var overviewWalletViewportBound = false;
 var overviewAsyncToken = 0;
 function closeOverviewWalletDropdown() {
-	const dropdown = getDoc$10().getElementById("aus-overview-wallet-dropdown");
+	const dropdown = getDoc$11().getElementById("aus-overview-wallet-dropdown");
 	if (dropdown) dropdown.style.display = "none";
 }
 function bindOverviewWalletViewport() {
@@ -2451,12 +2451,12 @@ function bindOverviewWalletViewport() {
 		window.addEventListener("resize", closeOverviewWalletDropdown, { passive: true });
 	} catch {}
 	try {
-		getDoc$10().getElementById("aus-main")?.addEventListener("scroll", closeOverviewWalletDropdown, { passive: true });
+		getDoc$11().getElementById("aus-main")?.addEventListener("scroll", closeOverviewWalletDropdown, { passive: true });
 	} catch {}
 }
 function positionOverviewWalletDropdown(btn, dropdown) {
 	try {
-		const doc = getDoc$10();
+		const doc = getDoc$11();
 		const hostEl = btn.closest(".aus-overview-balance-card") || btn.parentElement;
 		if (!hostEl) return;
 		try {
@@ -2738,6 +2738,7 @@ var CHILD_PARENT = {
 	help: "settings",
 	about: "settings",
 	"chat-manage": "overview",
+	"model-manage": "stats",
 	tap: "history",
 	log: "settings"
 };
@@ -2747,6 +2748,7 @@ var CHILD_VIEWS = [
 	"help",
 	"about",
 	"chat-manage",
+	"model-manage",
 	"tap",
 	"log"
 ];
@@ -2795,6 +2797,7 @@ var VIEW_TITLES = {
 	help: "使用说明",
 	about: "关于",
 	"chat-manage": "对话展示管理",
+	"model-manage": "模型展示管理",
 	tap: "其他请求",
 	log: "问题反馈 / 请求日志"
 };
@@ -2943,7 +2946,7 @@ var CHART_PREFS_KEY = "aus_stats_chart_prefs_v1";
 function isPlainObject$1(value) {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function storage$3() {
+function storage$4() {
 	try {
 		const store = globalThis.localStorage;
 		return store && typeof store.getItem === "function" && typeof store.setItem === "function" ? store : null;
@@ -2959,7 +2962,7 @@ function normalizeExtra(value) {
 }
 /** 读取全部图表配置；损坏数据或不可用存储统一回退为空对象（调用方按默认值处理） */
 function readChartPrefs() {
-	const store = storage$3();
+	const store = storage$4();
 	if (store) try {
 		const raw = store.getItem(CHART_PREFS_KEY);
 		if (raw) {
@@ -2979,7 +2982,7 @@ function readChartPrefs() {
 }
 /** 按块合并写入（只覆盖 patch 里出现的字段与图表，其余保持不变） */
 function writeChartPrefs(patch) {
-	const store = storage$3();
+	const store = storage$4();
 	if (!store) return;
 	try {
 		const current = readChartPrefs();
@@ -4037,12 +4040,12 @@ function persistExtraPrefs(id) {
 		x: state$1[id].x
 	} } });
 }
-function getDoc$9() {
+function getDoc$10() {
 	return window.parent?.document ?? document;
 }
 function themeColor$3(name, fallback) {
 	try {
-		const doc = getDoc$9();
+		const doc = getDoc$10();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -4151,7 +4154,7 @@ function shortModelName(name, max = 16) {
 }
 async function renderOne$1(id, filtered) {
 	try {
-		const doc = getDoc$9();
+		const doc = getDoc$10();
 		const el = doc.getElementById(`aus-chart-${id}`);
 		if (!el) return;
 		if (id === "req" && state$1[id].x === "round") state$1[id].x = "day";
@@ -4371,7 +4374,7 @@ async function renderOne$1(id, filtered) {
 	} catch (e) {
 		dropChart(id);
 		try {
-			const el2 = getDoc$9().getElementById(`aus-chart-${id}`);
+			const el2 = getDoc$10().getElementById(`aus-chart-${id}`);
 			if (el2) el2.innerHTML = "<div style=\"text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);\">图表加载失败: " + (e?.message || e) + "</div>";
 		} catch {}
 		try {
@@ -4606,7 +4609,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 		}
 		c.setOption(opts, true);
 		attachChartZoom({
-			doc: getDoc$9(),
+			doc: getDoc$10(),
 			chart: c,
 			container: el,
 			left: 40,
@@ -4631,7 +4634,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 	}
 }
 function initExtraCharts() {
-	const doc = getDoc$9();
+	const doc = getDoc$10();
 	for (const id of Object.keys(CHART_DEFS)) {
 		if (!CHART_DEFS[id].hasX) continue;
 		renderExtraY(id);
@@ -4688,7 +4691,7 @@ function initExtraCharts() {
 	});
 }
 function renderExtraY(id) {
-	const doc = getDoc$9();
+	const doc = getDoc$10();
 	const drop = doc.getElementById(`aus-extra-y-drop-${id}`);
 	const label = doc.getElementById(`aus-extra-y-label-${id}`);
 	if (!drop) return;
@@ -4712,7 +4715,7 @@ function renderExtraY(id) {
 	});
 }
 function renderExtraX(id) {
-	const doc = getDoc$9();
+	const doc = getDoc$10();
 	const drop = doc.getElementById(`aus-extra-x-drop-${id}`);
 	const label = doc.getElementById(`aus-extra-x-label-${id}`);
 	if (!drop) return;
@@ -4759,12 +4762,12 @@ var state = {
 	token: { x: "day" },
 	req: { x: "day" }
 };
-function getDoc$8() {
+function getDoc$9() {
 	return window.parent?.document ?? document;
 }
 function themeColor$2(name, fallback) {
 	try {
-		const doc = getDoc$8();
+		const doc = getDoc$9();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -4817,7 +4820,7 @@ function renderModelTrends(filtered) {
 }
 async function renderOne(id, filtered) {
 	try {
-		const doc = getDoc$8();
+		const doc = getDoc$9();
 		const el = doc.getElementById(`aus-chart-model-${id}`);
 		if (!el) return;
 		const xKey = state[id].x;
@@ -5034,7 +5037,7 @@ async function renderOne(id, filtered) {
 			charts[id] = null;
 		}
 		try {
-			const el2 = getDoc$8().getElementById(`aus-chart-model-${id}`);
+			const el2 = getDoc$9().getElementById(`aus-chart-model-${id}`);
 			if (el2) el2.innerHTML = "<div style=\"text-align:center;padding:20px;color:#DC2626;font-size:var(--aus-fs-sm);\">图表加载失败</div>";
 		} catch {}
 		try {
@@ -5043,7 +5046,7 @@ async function renderOne(id, filtered) {
 	}
 }
 function initModelTrends() {
-	const doc = getDoc$8();
+	const doc = getDoc$9();
 	for (const id of ["token", "req"]) {
 		const btn = doc.getElementById(`aus-modeltrends-x-btn-${id}`);
 		const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
@@ -5062,7 +5065,7 @@ function initModelTrends() {
 	});
 }
 function renderXDrop(id) {
-	const doc = getDoc$8();
+	const doc = getDoc$9();
 	const drop = doc.getElementById(`aus-modeltrends-x-drop-${id}`);
 	const label = doc.getElementById(`aus-modeltrends-x-label-${id}`);
 	if (!drop) return;
@@ -5120,7 +5123,7 @@ var FILTER_ALL = "__all__";
 function isPlainObject(value) {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function storage$2() {
+function storage$3() {
 	try {
 		const store = globalThis.localStorage;
 		return store && typeof store.getItem === "function" && typeof store.setItem === "function" ? store : null;
@@ -5187,7 +5190,7 @@ function normalizeHistoryPrefs(value) {
 }
 /** 读取全部筛选偏好；损坏数据或不可用存储统一回退为空对象（调用方按默认值处理） */
 function readFilterPrefs() {
-	const store = storage$2();
+	const store = storage$3();
 	if (store) try {
 		const raw = store.getItem(FILTER_PREFS_KEY);
 		if (raw) {
@@ -5205,7 +5208,7 @@ function readFilterPrefs() {
 }
 /** 按分片合并写入（只覆盖 patch 里出现的字段与分片，其余保持不变；内容无变化时跳过写入） */
 function writeFilterPrefs(patch) {
-	const store = storage$2();
+	const store = storage$3();
 	if (!store) return;
 	try {
 		const raw = store.getItem(FILTER_PREFS_KEY);
@@ -5224,6 +5227,160 @@ function writeFilterPrefs(patch) {
 		if (raw === serialized) return;
 		store.setItem(FILTER_PREFS_KEY, serialized);
 	} catch {}
+}
+//#endregion
+//#region src/ui/model-visibility.ts
+/*!
+* 模型显隐偏好（纯展示偏好，localStorage）。
+*
+* 与 `chat-visibility.ts` 同构：不进 `settings`、不参与导出与 WebDAV 同步，也不改变任何
+* 统计口径——隐藏只是让某个模型不出现在某个展示位置，历史记录、统计合计、趋势预测、
+* 能耗评分仍按全量历史计算。
+*
+* 两个互相独立的隐藏集合：
+* - `hidden`：统计页「模型汇总」表格里不列出该模型；
+* - `hiddenPickers`：统计页 / 历史页 / 趋势预测页的「模型」下拉里不列出该模型
+*   （胶囊只是少一个可选项，已选中的模型仍照旧参与计算）。
+*
+* 存储形态：`{ hidden: string[], hiddenPickers: string[] }`，元素是「模型键」——
+* `modelVisibilityKey` 对模型名做 trim，空值统一落 `UNKNOWN_MODEL_KEY`，与统计页模型
+* 汇总里 `model || 'unknown'` 的分组口径一致，这样没有模型名的旧记录也能被单独隐藏。
+* 旧版只有 `{ hidden }` 的数据照常读取，缺的集合视为空。
+*
+* 读写全部包 try/catch：宿主禁用存储或隐私模式下静默退化为内存态
+* （本次会话有效，刷新后回到全部显示），不影响功能可用性。
+*/
+var MODEL_VISIBILITY_KEY = "aus_model_visibility_v1";
+/** 模型名 → 存储键：trim 后为空统一落到 UNKNOWN_MODEL_KEY */
+function modelVisibilityKey(model) {
+	return (typeof model === "string" ? model.trim() : String(model ?? "").trim()) || "unknown";
+}
+/** 校验并去重：只保留非空字符串，非法输入一律丢弃 */
+function normalizeHiddenModels(value) {
+	if (!Array.isArray(value)) return [];
+	const out = [];
+	for (const item of value) {
+		if (typeof item !== "string") continue;
+		const key = item.trim();
+		if (!key) continue;
+		if (!out.includes(key)) out.push(key);
+	}
+	return out;
+}
+/** 校验整份偏好：缺字段、脏字段一律回落为空数组（兼容旧版只有 hidden 的数据） */
+function normalizeModelPrefs(value) {
+	const raw = value ?? {};
+	return {
+		hidden: normalizeHiddenModels(raw.hidden),
+		hiddenPickers: normalizeHiddenModels(raw.hiddenPickers)
+	};
+}
+function storage$2() {
+	try {
+		const store = globalThis.localStorage;
+		if (!store || typeof store.getItem !== "function" || typeof store.setItem !== "function") return null;
+		store.getItem(MODEL_VISIBILITY_KEY);
+		return store;
+	} catch {
+		return null;
+	}
+}
+/** 内存态兜底（localStorage 不可用时本次会话仍可切换） */
+var memoryPrefs = null;
+/** 读取整份偏好（每次返回新对象，调用方可安全修改） */
+function readModelPrefs() {
+	const store = storage$2();
+	if (!store) return normalizeModelPrefs(memoryPrefs ?? {});
+	try {
+		const raw = store.getItem(MODEL_VISIBILITY_KEY);
+		if (!raw) return {
+			hidden: [],
+			hiddenPickers: []
+		};
+		return normalizeModelPrefs(JSON.parse(raw));
+	} catch {
+		return {
+			hidden: [],
+			hiddenPickers: []
+		};
+	}
+}
+function writeModelPrefs(prefs) {
+	const clean = normalizeModelPrefs(prefs);
+	memoryPrefs = clean;
+	const store = storage$2();
+	if (!store) return;
+	try {
+		store.setItem(MODEL_VISIBILITY_KEY, JSON.stringify(clean));
+	} catch {}
+}
+function listOf(prefs, target) {
+	return target === "picker" ? prefs.hiddenPickers : prefs.hidden;
+}
+function writeList(target, keys) {
+	const prefs = readModelPrefs();
+	if (target === "picker") prefs.hiddenPickers = normalizeHiddenModels(keys);
+	else prefs.hidden = normalizeHiddenModels(keys);
+	writeModelPrefs(prefs);
+}
+/** 读取某个展示位置的隐藏键列表（只读副本） */
+function readHiddenModelsFor(target) {
+	return listOf(readModelPrefs(), target).slice();
+}
+/** 该模型在该位置是否被隐藏（入参是存储键） */
+function isModelHiddenFor(target, key) {
+	return listOf(readModelPrefs(), target).includes(key);
+}
+/** 设置某个模型键在某位置的显隐 */
+function setModelHiddenFor(target, key, hidden) {
+	if (!key) return;
+	const current = readHiddenModelsFor(target);
+	if (hidden === current.includes(key)) return;
+	writeList(target, hidden ? current.concat(key) : current.filter((k) => k !== key));
+}
+/** 一次写入多个键的显隐（「全部隐藏 / 全部显示」用，避免逐条读写存储） */
+function setAllModelsHiddenFor(target, keys, hidden) {
+	const clean = normalizeHiddenModels(keys);
+	const current = readHiddenModelsFor(target);
+	if (hidden) {
+		const merged = current.slice();
+		for (const key of clean) if (!merged.includes(key)) merged.push(key);
+		writeList(target, merged);
+	} else {
+		const drop = new Set(clean);
+		writeList(target, current.filter((key) => !drop.has(key)));
+	}
+}
+/** 清空某个展示位置的隐藏项（全部恢复显示） */
+function clearHiddenModelsFor(target) {
+	writeList(target, []);
+}
+/** 某个展示位置的隐藏条目数（可能包含已不存在的模型键，故仅用于徽标提示） */
+function hiddenModelCountFor(target) {
+	return readHiddenModelsFor(target).length;
+}
+function filterByHidden(rows, hidden, keyOf) {
+	if (!hidden.length) return rows.slice();
+	const set = new Set(hidden);
+	return rows.filter((row) => !set.has(keyOf(row)));
+}
+/** 行 → 模型键的默认取值：认 `model` 字段，字符串行直接当模型名 */
+function defaultModelKey(row) {
+	return modelVisibilityKey(row && typeof row === "object" && "model" in row ? row.model : row);
+}
+/**
+* 过滤出应当出现在统计页「模型汇总」表里的行（纯函数，按入参顺序、不改变排序）。
+* 传 keyOf 便于测试与复用；默认按行的 `model` 字段取键（汇总行是 `m`，调用方自行传）。
+*/
+function filterVisibleModelRows(rows, keyOf = defaultModelKey) {
+	return filterByHidden(rows, readHiddenModelsFor("table"), keyOf);
+}
+/**
+* 过滤出应当出现在各页「模型」下拉里的选项（纯函数，按入参顺序）。
+* 默认按选项的 `model` 字段取键；统计页下拉传的是字符串数组，历史页选项传 `(o) => o.id`。
+*/
+function filterModelPickerRows(rows, keyOf = defaultModelKey) {
+	return filterByHidden(rows, readHiddenModelsFor("picker"), keyOf);
 }
 //#endregion
 //#region src/ui/request-type-filter.ts
@@ -5308,7 +5465,7 @@ function persistStatsFilters() {
 	} });
 }
 function resetStatsFilters() {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	currentRange = DEFAULT_RANGE;
 	customStart = "";
 	customEnd = "";
@@ -5343,19 +5500,19 @@ var summarySort = {
 };
 var lastSummaryFiltered = null;
 function updateSummarySortHeader() {
-	paintSortHeader(getDoc$7(), "aus-model-summary", summarySort);
+	paintSortHeader(getDoc$8(), "aus-model-summary", summarySort);
 }
 function bindSummarySort() {
-	bindSortableHeaders(getDoc$7(), "aus-model-summary", summarySort, () => {
+	bindSortableHeaders(getDoc$8(), "aus-model-summary", summarySort, () => {
 		if (lastSummaryFiltered) renderModelSummary(lastSummaryFiltered);
 	});
 }
-function getDoc$7() {
+function getDoc$8() {
 	return window.parent?.document ?? document;
 }
 function themeColor$1(name, fallback) {
 	try {
-		const doc = getDoc$7();
+		const doc = getDoc$8();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -5471,7 +5628,7 @@ function currentStatsFilter() {
 	};
 }
 function updateRangeHighlight() {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	doc.querySelectorAll("[data-range]").forEach((el) => {
 		if (el.getAttribute("data-range") === currentRange) {
 			el.style.background = "var(--ds-card)";
@@ -5485,7 +5642,7 @@ function updateRangeHighlight() {
 	if (calWrap) calWrap.style.display = currentRange === "custom" ? "block" : "none";
 }
 function renderCalendar() {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	const cal = doc.getElementById("aus-date-calendar");
 	if (!cal) return;
 	updateRangeHighlight();
@@ -5520,7 +5677,7 @@ function renderCalendar() {
 	if (applyBtn) applyBtn.onclick = apply;
 }
 function updatePickerLabel() {
-	const label = getDoc$7().getElementById("aus-range-label");
+	const label = getDoc$8().getElementById("aus-range-label");
 	if (!label) return;
 	const map = {
 		all: "全部",
@@ -5537,22 +5694,23 @@ function updatePickerLabel() {
 	updateRangeHighlight();
 }
 function renderModelPicker(modelsHist) {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	const dropdown = doc.getElementById("aus-model-dropdown");
 	const label = doc.getElementById("aus-model-label");
 	if (!dropdown || !label) return;
 	const models = getRecordedModels(modelsHist);
 	const validModels = new Set(models);
 	selectedModels = selectedModels.filter((model) => validModels.has(model));
+	const visibleModels = filterModelPickerRows(models);
 	const allSelected = selectedModels.length === 0;
 	label.textContent = allSelected ? "全部" : selectedModels.length === 1 ? selectedModels[0] : `已选 ${selectedModels.length} 项`;
 	label.title = allSelected ? "全部模型" : selectedModels.join("、");
 	let html = `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${allSelected ? "background:var(--ds-card);font-weight:600;" : ""}"><input type="checkbox" data-model-all ${allSelected ? "checked" : ""} class="aus-checkbox" /><span>全部模型</span></label>`;
-	for (const m of models) {
+	for (const m of visibleModels) {
 		const checked = selectedModels.includes(m);
 		html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${checked ? "background:var(--ds-card);font-weight:600;" : ""}"><input type="checkbox" data-model="${esc$3(m)}" ${checked ? "checked" : ""} class="aus-checkbox" /><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$3(m)}</span></label>`;
 	}
-	if (!models.length) html += "<div style=\"padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">暂无模型</div>";
+	if (!visibleModels.length) html += "<div style=\"padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);\">" + (models.length ? "模型已全部隐藏（可在「模型展示管理」中恢复）" : "暂无模型") + "</div>";
 	dropdown.innerHTML = html;
 	const allInput = dropdown.querySelector("[data-model-all]");
 	if (allInput) allInput.onchange = () => {
@@ -5571,7 +5729,7 @@ function renderModelPicker(modelsHist) {
 	});
 }
 function renderChatPicker(chatHist) {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	const dropdown = doc.getElementById("aus-chat-dropdown");
 	const label = doc.getElementById("aus-chat-label");
 	if (!dropdown || !label) return;
@@ -5604,7 +5762,7 @@ function renderChatPicker(chatHist) {
 	});
 }
 function renderEndpointPicker(history) {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	const dropdown = doc.getElementById("aus-endpoint-dropdown");
 	const label = doc.getElementById("aus-endpoint-label");
 	if (!dropdown || !label) return;
@@ -5630,7 +5788,7 @@ function renderEndpointPicker(history) {
 	});
 }
 function renderCredentialPicker$1(history, endpoint = selectedEndpoint) {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	const dropdown = doc.getElementById("aus-credential-dropdown");
 	const label = doc.getElementById("aus-credential-label");
 	if (!dropdown || !label) return;
@@ -5655,7 +5813,7 @@ function renderCredentialPicker$1(history, endpoint = selectedEndpoint) {
 	});
 }
 function renderTypePicker() {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	const dropdown = doc.getElementById("aus-type-dropdown");
 	const label = doc.getElementById("aus-type-label");
 	if (!dropdown || !label) return;
@@ -5678,7 +5836,7 @@ function renderTypePicker() {
 }
 function positionFilterDropdown(btn, dropdown) {
 	try {
-		const panel = getDoc$7().getElementById("aus-panel");
+		const panel = getDoc$8().getElementById("aus-panel");
 		if (!panel) return;
 		const panelRect = panel.getBoundingClientRect();
 		const btnRect = btn.getBoundingClientRect();
@@ -5693,7 +5851,7 @@ function positionFilterDropdown(btn, dropdown) {
 	} catch {}
 }
 function closeFilterDropdowns(except) {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	if (except !== "range") {
 		pickerOpen = false;
 		const el = doc.getElementById("aus-range-dropdown");
@@ -5726,7 +5884,7 @@ function closeFilterDropdowns(except) {
 	}
 }
 function bindPicker() {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	const btn = doc.getElementById("aus-range-btn");
 	const dropdown = doc.getElementById("aus-range-dropdown");
 	if (btn && dropdown) {
@@ -5853,7 +6011,7 @@ function bindPicker() {
 var chartYOpen = false;
 var chartXOpen = false;
 function renderChartSelectors() {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	const yBtn = doc.getElementById("aus-chart-y-btn");
 	const xBtn = doc.getElementById("aus-chart-x-btn");
 	const yDrop = doc.getElementById("aus-chart-y-dropdown");
@@ -5966,7 +6124,7 @@ function renderChartSelectors() {
 	});
 }
 function bindChartSelectors() {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	const yBtn = doc.getElementById("aus-chart-y-btn");
 	const yDrop = doc.getElementById("aus-chart-y-dropdown");
 	const xBtn = doc.getElementById("aus-chart-x-btn");
@@ -6013,7 +6171,7 @@ function bindChartSelectors() {
 var chart = null;
 var rangeZoom = null;
 async function renderChart(filteredRaw) {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	const el = doc.getElementById("aus-stats-chart");
 	if (!el) return;
 	const { labels, series, tips } = aggregateForChart(filteredRaw, getYSelected(), getXSelected());
@@ -6351,7 +6509,8 @@ async function renderChart(filteredRaw) {
 	}, 60);
 }
 function renderModelSummary(filtered) {
-	const tbody = getDoc$7().getElementById("aus-summary-tbody");
+	const doc = getDoc$8();
+	const tbody = doc.getElementById("aus-summary-tbody");
 	if (!tbody) return;
 	lastSummaryFiltered = filtered;
 	try {
@@ -6413,6 +6572,16 @@ function renderModelSummary(filtered) {
 			avgRateStr
 		};
 	});
+	const totalModels = list.length;
+	list = filterVisibleModelRows(list, (row) => row.m);
+	try {
+		const badge = doc.getElementById("aus-model-manage-count");
+		if (badge) {
+			const hiddenCount = hiddenModelCountFor("table");
+			badge.textContent = hiddenCount ? "已隐藏 " + hiddenCount + " 个" : "";
+			badge.style.display = hiddenCount ? "" : "none";
+		}
+	} catch {}
 	const sortKey = summarySort.key;
 	if (sortKey) {
 		const dir = summarySort.dir === "asc" ? 1 : -1;
@@ -6436,6 +6605,10 @@ function renderModelSummary(filtered) {
 			return (av - bv) * dir;
 		});
 	} else list.sort((a, b) => a.m.localeCompare(b.m));
+	if (!list.length) {
+		tbody.innerHTML = "<tr><td colspan=\"10\" style=\"text-align:center;padding:16px;color:var(--ds-text-3);\">" + (totalModels ? "全部模型都已隐藏 · 点击右上角「管理模型」恢复显示" : "暂无数据") + "</td></tr>";
+		return;
+	}
 	const fmtC = (v) => {
 		try {
 			return formatMoney(v || 0, 4);
@@ -6502,7 +6675,7 @@ function currentZoomSignature() {
 	].join("|");
 }
 async function renderStatsView() {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	if (!getSelectedSave()) return;
 	const allHistory = await getHistoryForStats();
 	lastStatsHistory = allHistory;
@@ -6577,7 +6750,7 @@ var statsFourBound = false;
 function bindStatsFour() {
 	if (statsFourBound) return;
 	statsFourBound = true;
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	doc.addEventListener("click", (e) => {
 		const t = e.target;
 		for (let i = 0; i < 4; i++) {
@@ -6588,7 +6761,7 @@ function bindStatsFour() {
 	});
 }
 function openStatsFourDrop(idx, v) {
-	const drop = getDoc$7().getElementById(`aus-stats-four-drop-${idx}`);
+	const drop = getDoc$8().getElementById(`aus-stats-four-drop-${idx}`);
 	if (!drop) return;
 	const cur = ensureStatsFour()[idx];
 	drop.innerHTML = FOUR_OPTIONS.map((o) => {
@@ -6611,7 +6784,7 @@ function openStatsFourDrop(idx, v) {
 	drop.style.display = drop.style.display === "block" ? "none" : "block";
 }
 function renderStatsFour(filtered) {
-	const doc = getDoc$7();
+	const doc = getDoc$8();
 	const host = doc.getElementById("aus-stats-four");
 	if (!host) return;
 	const v = computeStatsFour(filtered || []);
@@ -7000,12 +7173,12 @@ var instances = {};
 var echartsPromise = null;
 var resizeObserver = null;
 var resizeBound = false;
-function getDoc$6() {
+function getDoc$7() {
 	return window.parent?.document ?? document;
 }
 function themeColor(name, fallback) {
 	try {
-		const doc = getDoc$6();
+		const doc = getDoc$7();
 		const el = doc.getElementById("aus-panel") || doc.documentElement;
 		return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
 	} catch {
@@ -7050,7 +7223,7 @@ function axisMoney(currency, cnyValue) {
 	return currency.symbol + n.toFixed(4);
 }
 async function initChart(id, echarts) {
-	const el = getDoc$6().getElementById(id);
+	const el = getDoc$7().getElementById(id);
 	if (!el) return null;
 	if (!el.clientWidth || !el.clientHeight) return null;
 	if (instances[id]) {
@@ -7071,7 +7244,7 @@ async function initChart(id, echarts) {
 }
 function ensureResizeObserver() {
 	if (resizeObserver || typeof ResizeObserver === "undefined") return;
-	const doc = getDoc$6();
+	const doc = getDoc$7();
 	const targets = [
 		"aus-forecast-main-chart",
 		"aus-forecast-hit-chart",
@@ -7825,7 +7998,7 @@ var compactionEnabled = true;
 var efficiencyScope = "all";
 var showTop = false;
 var openDropdown = null;
-var renderToken$1 = 0;
+var renderToken$2 = 0;
 var globalCloseBound = false;
 var hitRefreshTimer = null;
 var lastFullHistory = [];
@@ -7833,7 +8006,7 @@ var lastEffectiveHistory = [];
 var lastEfficiencyHistory = [];
 var lastEfficiencyLabel = "全部历史";
 var efficiencySort = null;
-function getDoc$5() {
+function getDoc$6() {
 	return window.parent?.document ?? document;
 }
 function currentChatId() {
@@ -8033,7 +8206,7 @@ function hitSourceText(series) {
 	}
 }
 function closeAllDropdowns() {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	for (const name of [
 		"chat",
 		"model",
@@ -8048,7 +8221,7 @@ function closeAllDropdowns() {
 }
 /** 选中某一项后要整页重绘时用：先把五个浮层全部瞬时关掉，重绘留到下一帧。 */
 function closeAllDropdownsInstant() {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	for (const name of [
 		"chat",
 		"model",
@@ -8059,7 +8232,7 @@ function closeAllDropdownsInstant() {
 	openDropdown = null;
 }
 function toggleDropdown(name) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	if (openDropdown === name) {
 		closeAllDropdowns();
 		return;
@@ -8074,7 +8247,7 @@ function bindGlobalClose() {
 	if (globalCloseBound) return;
 	globalCloseBound = true;
 	try {
-		getDoc$5().addEventListener("click", () => closeAllDropdowns());
+		getDoc$6().addEventListener("click", () => closeAllDropdowns());
 	} catch {}
 }
 function dropdownItem(attr, value, label, active, meta = "") {
@@ -8084,7 +8257,7 @@ function dropdownItem(attr, value, label, active, meta = "") {
   </div>`;
 }
 function renderChatDropdown(fullHist) {
-	const dropdown = getDoc$5().getElementById("aus-forecast-chat-dropdown");
+	const dropdown = getDoc$6().getElementById("aus-forecast-chat-dropdown");
 	if (!dropdown) return;
 	const allChats = getRecordedChatsForForecast(fullHist);
 	const chats = filterPickerRows(allChats);
@@ -8107,9 +8280,12 @@ function renderChatDropdown(fullHist) {
 	});
 }
 function renderModelDropdown(options) {
-	const dropdown = getDoc$5().getElementById("aus-forecast-model-dropdown");
+	const dropdown = getDoc$6().getElementById("aus-forecast-model-dropdown");
 	if (!dropdown) return;
-	dropdown.innerHTML = options.map((option) => dropdownItem("data-fmodel", option.model, option.model, selectedForecastModel === option.model, `${option.count} 轮`)).join("") || "<div class=\"aus-forecast-dropdown-empty\">暂无模型</div>";
+	const visible = filterModelPickerRows(options, (item) => item.model);
+	const shown = visible.length ? visible : options;
+	const hiddenNote = visible.length && visible.length < options.length ? "<div class=\"aus-forecast-dropdown-empty\">其余 " + (options.length - visible.length) + " 个模型已隐藏（可在「模型展示管理」中恢复）</div>" : "";
+	dropdown.innerHTML = (shown.map((item) => dropdownItem("data-fmodel", item.model, item.model, selectedForecastModel === item.model, `${item.count} 轮`)).join("") || "<div class=\"aus-forecast-dropdown-empty\">暂无模型</div>") + hiddenNote;
 	dropdown.querySelectorAll("[data-fmodel]").forEach((el) => {
 		el.onclick = (event) => {
 			event.stopPropagation();
@@ -8120,7 +8296,7 @@ function renderModelDropdown(options) {
 	});
 }
 function renderHorizonDropdown() {
-	const dropdown = getDoc$5().getElementById("aus-forecast-horizon-dropdown");
+	const dropdown = getDoc$6().getElementById("aus-forecast-horizon-dropdown");
 	if (!dropdown) return;
 	dropdown.innerHTML = HORIZONS.map((value) => dropdownItem("data-fhorizon", String(value), `${value} 轮`, horizon === value, value === 10 ? "默认" : "")).join("");
 	dropdown.querySelectorAll("[data-fhorizon]").forEach((el) => {
@@ -8140,7 +8316,7 @@ function hitModeLabel(mode, globalRate, modelRate) {
 	return globalRate == null ? "全站平均 —" : `全站平均 ${pct(globalRate)}`;
 }
 function renderHitControl(fullHist, model, series, globalRate, modelRate) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const host = doc.getElementById("aus-forecast-hit-control");
 	if (!host) return;
 	if (selectedForecastKey === "__all__" || !model) {
@@ -8205,7 +8381,7 @@ function renderHitControl(fullHist, model, series, globalRate, modelRate) {
 	}
 }
 function renderToolbar(fullHist, effective, modelOptions, model, priceContext, series, globalRate, modelRate) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	bindGlobalClose();
 	const chatLabel = doc.getElementById("aus-forecast-chat-label");
 	if (chatLabel) chatLabel.textContent = getForecastLabel(fullHist);
@@ -8269,7 +8445,7 @@ function kpiCard(label, value, sub, tone = "default", title = "") {
   </div>`;
 }
 function renderKpis(series, priceContext, ctxLimit, options, balance) {
-	const host = getDoc$5().getElementById("aus-forecast-kpis");
+	const host = getDoc$6().getElementById("aus-forecast-kpis");
 	if (!host) return;
 	const remaining = balance != null ? simulateRemainingRounds(balance, series, options) : null;
 	const ctxRounds = contextRoundsFor(series, ctxLimit, options.compaction);
@@ -8296,7 +8472,7 @@ function renderKpis(series, priceContext, ctxLimit, options, balance) {
 	].join("");
 }
 function renderHealth(history, model) {
-	const host = getDoc$5().getElementById("aus-forecast-health");
+	const host = getDoc$6().getElementById("aus-forecast-health");
 	if (!host) return;
 	if (!history.length) {
 		host.innerHTML = "<div class=\"aus-forecast-empty\">暂无数据</div>";
@@ -8342,7 +8518,7 @@ function renderHealth(history, model) {
   `;
 }
 function renderCompaction(series, options) {
-	const host = getDoc$5().getElementById("aus-forecast-compaction");
+	const host = getDoc$6().getElementById("aus-forecast-compaction");
 	if (!host) return;
 	const forecast = series.compactionForecast;
 	if (!forecast.detected) {
@@ -8391,7 +8567,7 @@ function sortEfficiencyRows(rows) {
 	});
 }
 function renderEfficiency(history, scopeLabel) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const host = doc.getElementById("aus-forecast-efficiency");
 	const sub = doc.getElementById("aus-forecast-efficiency-sub");
 	const scopeButton = doc.getElementById("aus-forecast-scope-btn");
@@ -8503,7 +8679,7 @@ function chatDisplayNameMap(fullHist) {
 	return map;
 }
 function renderTop(fullHist) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const host = doc.getElementById("aus-forecast-top");
 	const toggle = doc.getElementById("aus-forecast-top-toggle");
 	if (!host || !toggle) return;
@@ -8548,7 +8724,7 @@ function renderTop(fullHist) {
 }
 function clearCharts(message) {
 	disposeForecastCharts();
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	for (const id of [
 		"aus-forecast-main-chart",
 		"aus-forecast-hit-chart",
@@ -8559,7 +8735,7 @@ function clearCharts(message) {
 	}
 }
 function renderNoticeCards(message) {
-	const doc = getDoc$5();
+	const doc = getDoc$6();
 	const kpis = doc.getElementById("aus-forecast-kpis");
 	if (kpis) kpis.innerHTML = `<div class="ds-card aus-forecast-notice">${esc$3(message)}</div>`;
 	const health = doc.getElementById("aus-forecast-health");
@@ -8570,17 +8746,17 @@ function renderNoticeCards(message) {
 function renderAllNotice() {
 	renderNoticeCards("当前选择“全部”历史。逐轮预测、压缩与健康度需要单个对话的时间序列；请从上方对话胶囊选择具体对话。下方模型效率对比仍可查看。");
 	clearCharts("请选择单个对话以查看逐轮预测");
-	const mainSub = getDoc$5().getElementById("aus-forecast-main-sub");
+	const mainSub = getDoc$6().getElementById("aus-forecast-main-sub");
 	if (mainSub) mainSub.textContent = "逐轮预测需要指定单个对话";
 }
 function renderNoSeries(message) {
 	renderNoticeCards(message);
 	clearCharts(message);
-	const mainSub = getDoc$5().getElementById("aus-forecast-main-sub");
+	const mainSub = getDoc$6().getElementById("aus-forecast-main-sub");
 	if (mainSub) mainSub.textContent = message;
 }
 function renderMainSub(series, ctxLimit) {
-	const mainSub = getDoc$5().getElementById("aus-forecast-main-sub");
+	const mainSub = getDoc$6().getElementById("aus-forecast-main-sub");
 	if (!mainSub) return;
 	const future = series.future.length;
 	const parts = [
@@ -8593,14 +8769,14 @@ function renderMainSub(series, ctxLimit) {
 	mainSub.textContent = parts.join(" · ");
 }
 async function renderForecastView() {
-	const token = ++renderToken$1;
+	const token = ++renderToken$2;
 	let fullHist = [];
 	try {
 		fullHist = await repository.getAllHistory();
 	} catch {
 		fullHist = state$2.history || [];
 	}
-	if (token !== renderToken$1) return;
+	if (token !== renderToken$2) return;
 	fullHist = (fullHist || []).filter(isConversationEntry);
 	lastFullHistory = fullHist;
 	bindGlobalClose();
@@ -8715,7 +8891,7 @@ var MODE_LABELS = [
 		label: "全部覆盖"
 	}
 ];
-function getDoc$4() {
+function getDoc$5() {
 	return window.parent?.document ?? document;
 }
 function money$1(value) {
@@ -8750,7 +8926,7 @@ function tierText(row) {
 	return "<span style=\"color:var(--ds-text-3);text-decoration:line-through;\">" + before + "</span> → <b>" + after + "</b>";
 }
 async function openWalletSyncPreview(options = {}) {
-	const doc = getDoc$4();
+	const doc = getDoc$5();
 	const existing = doc.getElementById(OVERLAY_ID);
 	if (existing) existing.remove();
 	const overlay = doc.createElement("div");
@@ -9191,7 +9367,7 @@ function bindPlanBlock(doc, walletId, onChange) {
 }
 //#endregion
 //#region src/ui/wallet-view.ts
-function getDoc$3() {
+function getDoc$4() {
 	return window.parent?.document ?? document;
 }
 function money(cny, digits = 4) {
@@ -9220,18 +9396,18 @@ function cnyToDisplay(value) {
 	return String(Math.round(result * 1e6) / 1e6);
 }
 function closeDropdowns() {
-	getDoc$3().querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
+	getDoc$4().querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
 		el.style.display = "none";
 	});
 }
 /** 选中某一项后要重建钱包页时用：先瞬时收掉全部浮层，重绘留到下一帧。 */
 function closeDropdownsInstant() {
-	getDoc$3().querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
+	getDoc$4().querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
 		closeDropdownInstant(el);
 	});
 }
 function closeOtherDropdowns(id) {
-	getDoc$3().querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
+	getDoc$4().querySelectorAll("[data-wallet-dropdown]").forEach((el) => {
 		if (el.id !== id) el.style.display = "none";
 	});
 }
@@ -9507,7 +9683,7 @@ function renderIgnoredWallets(ignored, wallets) {
 }
 var walletRenderToken = 0;
 async function renderWalletView() {
-	const doc = getDoc$3();
+	const doc = getDoc$4();
 	const host = doc.getElementById("aus-wallet");
 	if (!host) return;
 	const token = ++walletRenderToken;
@@ -9645,7 +9821,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-B7vPxZBa.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-CaxgR7uD.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -10079,23 +10255,23 @@ function backButtonHTML(opts = {}) {
 * 两者都只改展示，不删数据、不参与任何统计口径——热力图、统计、历史、趋势预测、
 * 能耗评分依旧按全量历史计算，与用户要求「不影响数据统计展示」一致。
 */
-var navigator = null;
+var navigator$1 = null;
 /** 切页导航回调由 panel.ts 注册（避免 chat-manage 反向 import panel 造成循环依赖） */
 function initChatManageView(opts) {
-	navigator = opts;
+	navigator$1 = opts;
 }
-function getDoc$2() {
+function getDoc$3() {
 	return window.parent?.document ?? document;
 }
 /** 搜索关键词（只在本页内过滤显示，不进存储） */
-var keyword = "";
+var keyword$1 = "";
 /** 最近一次聚合结果，供搜索、模式切换与重绘复用 */
-var rows = [];
+var rows$1 = [];
 /** 当前管理模式：表格展示 / 下拉选项（只在本次会话内记忆） */
-var mode = "table";
+var mode$1 = "table";
 /** 渲染令牌：热数据先画、冷数据补全，快速切页时丢弃过期结果 */
-var renderToken = 0;
-var MODES = [{
+var renderToken$1 = 0;
+var MODES$1 = [{
 	key: "table",
 	label: "表格展示",
 	title: "控制哪些对话出现在概览「按对话统计」表格",
@@ -10106,11 +10282,11 @@ var MODES = [{
 	title: "控制哪些对话出现在各页「对话」下拉胶囊",
 	desc: "只控制统计页、历史页与趋势预测页的「对话」下拉胶囊里是否列出该对话：隐藏不会删除任何数据，各页统计口径不变。"
 }];
-function modeInfo() {
-	return MODES.find((m) => m.key === mode) || MODES[0];
+function modeInfo$1() {
+	return MODES$1.find((m) => m.key === mode$1) || MODES$1[0];
 }
-function shellHTML() {
-	const info = modeInfo();
+function shellHTML$1() {
+	const info = modeInfo$1();
 	return [
 		"<div id=\"aus-chat-manage-head\">",
 		"<div class=\"aus-chat-manage-lead\">",
@@ -10118,7 +10294,7 @@ function shellHTML() {
 		"<div class=\"aus-chat-manage-desc\" id=\"aus-chat-manage-desc\">" + esc$3(info.desc) + "</div>",
 		"</div>",
 		"<div id=\"aus-chat-manage-tools\">",
-		"<input id=\"aus-chat-manage-search\" type=\"text\" placeholder=\"搜索对话\" value=\"" + esc$3(keyword) + "\" />",
+		"<input id=\"aus-chat-manage-search\" type=\"text\" placeholder=\"搜索对话\" value=\"" + esc$3(keyword$1) + "\" />",
 		"<button id=\"aus-chat-manage-reset\" type=\"button\" class=\"aus-chat-manage-btn\">全部显示</button>",
 		"<button id=\"aus-chat-manage-hide-all\" type=\"button\" class=\"aus-chat-manage-btn\">全部隐藏</button>",
 		backButtonHTML({
@@ -10127,9 +10303,9 @@ function shellHTML() {
 		}),
 		"</div>",
 		"</div>",
-		"<div id=\"aus-chat-manage-modes\" data-mode=\"" + mode + "\" role=\"tablist\" aria-label=\"管理模式\">",
+		"<div id=\"aus-chat-manage-modes\" data-mode=\"" + mode$1 + "\" role=\"tablist\" aria-label=\"管理模式\">",
 		"<span class=\"aus-chat-manage-mode-thumb\" aria-hidden=\"true\"></span>",
-		MODES.map((m) => "<button type=\"button\" class=\"aus-chat-manage-mode\" role=\"tab\" data-manage-mode=\"" + m.key + "\" data-active=\"" + (m.key === mode ? "1" : "0") + "\" aria-selected=\"" + (m.key === mode ? "true" : "false") + "\" title=\"" + esc$3(m.title) + "\">" + esc$3(m.label) + "</button>").join(""),
+		MODES$1.map((m) => "<button type=\"button\" class=\"aus-chat-manage-mode\" role=\"tab\" data-manage-mode=\"" + m.key + "\" data-active=\"" + (m.key === mode$1 ? "1" : "0") + "\" aria-selected=\"" + (m.key === mode$1 ? "true" : "false") + "\" title=\"" + esc$3(m.title) + "\">" + esc$3(m.label) + "</button>").join(""),
 		"</div>",
 		"<div class=\"ds-card aus-chat-manage-card\">",
 		"<div id=\"aus-chat-manage-list\"></div>",
@@ -10137,15 +10313,15 @@ function shellHTML() {
 		"<div id=\"aus-chat-manage-foot\"></div>"
 	].join("");
 }
-function rowHTML(row, index) {
+function rowHTML$1(row, index) {
 	const key = chatVisibilityKey(row.chatId);
-	const hidden = isHiddenFor(mode, key);
+	const hidden = isHiddenFor(mode$1, key);
 	let costTxt = "¥" + row.cost.toFixed(4);
 	try {
 		costTxt = formatMoney(row.cost, 4);
 	} catch {}
 	const meta = row.count + " 轮 · " + row.total.toLocaleString("zh-CN") + " tokens · " + costTxt;
-	const aria = row.displayName + "：" + (mode === "picker" ? "在「对话」下拉胶囊中展示" : "在按对话统计中展示");
+	const aria = row.displayName + "：" + (mode$1 === "picker" ? "在「对话」下拉胶囊中展示" : "在按对话统计中展示");
 	return [
 		"<div class=\"aus-chat-manage-row\" data-chat-row=\"" + esc$3(key) + "\" data-chat-name=\"" + esc$3(row.displayName.toLowerCase()) + "\" data-hidden=\"" + (hidden ? "1" : "0") + "\">",
 		"<div class=\"aus-chat-manage-main\">",
@@ -10160,35 +10336,35 @@ function rowHTML(row, index) {
 		"</div>"
 	].join("");
 }
-function applyKeywordFilter(doc) {
+function applyKeywordFilter$1(doc) {
 	const list = doc.getElementById("aus-chat-manage-list");
 	if (!list) return;
-	const kw = keyword.trim().toLowerCase();
+	const kw = keyword$1.trim().toLowerCase();
 	list.querySelectorAll("[data-chat-row]").forEach((el) => {
 		const name = el.getAttribute("data-chat-name") || "";
 		el.style.display = !kw || name.includes(kw) ? "" : "none";
 	});
 }
-function paintFoot(doc) {
+function paintFoot$1(doc) {
 	const foot = doc.getElementById("aus-chat-manage-foot");
 	if (!foot) return;
-	const total = rows.length;
-	const hidden = rows.filter((r) => isHiddenFor(mode, chatVisibilityKey(r.chatId))).length;
-	const where = mode === "picker" ? "「对话」下拉胶囊" : "「按对话统计」表";
+	const total = rows$1.length;
+	const hidden = rows$1.filter((r) => isHiddenFor(mode$1, chatVisibilityKey(r.chatId))).length;
+	const where = mode$1 === "picker" ? "「对话」下拉胶囊" : "「按对话统计」表";
 	foot.textContent = total ? "共 " + total + " 个对话 · 已隐藏 " + hidden + " 个" + (hidden ? "（隐藏项不会出现在" + where + "中）" : "") : "暂无对话数据";
 }
 /** 重画列表（数据、模式或显隐变更后调用） */
-function paintList(doc) {
+function paintList$1(doc) {
 	const list = doc.getElementById("aus-chat-manage-list");
 	if (!list) return;
-	if (!rows.length) {
+	if (!rows$1.length) {
 		list.innerHTML = "<div style=\"padding:20px 16px;text-align:center;color:var(--ds-text-3);font-size:var(--aus-fs-sm);\">暂无可管理的对话，产生用量记录后即可在此设置</div>";
-		paintFoot(doc);
+		paintFoot$1(doc);
 		return;
 	}
-	list.innerHTML = rows.map((row, i) => rowHTML(row, i)).join("");
-	applyKeywordFilter(doc);
-	paintFoot(doc);
+	list.innerHTML = rows$1.map((row, i) => rowHTML$1(row, i)).join("");
+	applyKeywordFilter$1(doc);
+	paintFoot$1(doc);
 	try {
 		paintChatManageBadge(doc);
 	} catch {}
@@ -10197,10 +10373,10 @@ function paintList(doc) {
 * 滑块定位：按当前选中按钮的实测几何写入 position/size（与底栏指示胶囊同一套思路）。
 * 不假设两项等宽、也不写死 50%，改文案、换字号、改内距都不会错位；首次定位关过渡，避免从左侧飞过来。
 */
-function paintModeThumb(doc) {
+function paintModeThumb$1(doc) {
 	const wrap = doc.getElementById("aus-chat-manage-modes");
 	if (!wrap) return;
-	const btn = wrap.querySelector("[data-manage-mode=\"" + mode + "\"]");
+	const btn = wrap.querySelector("[data-manage-mode=\"" + mode$1 + "\"]");
 	const thumb = wrap.querySelector(".aus-chat-manage-mode-thumb");
 	if (!btn || !thumb) return;
 	const wr = wrap.getBoundingClientRect();
@@ -10223,36 +10399,36 @@ function paintModeThumb(doc) {
 	} else thumb.style.transform = next;
 }
 /** 窗口尺寸变化（含窄屏断点切换内距）后重新贴合；同一容器只绑一次 */
-function bindModeThumbResize(doc) {
+function bindModeThumbResize$1(doc) {
 	const wrap = doc.getElementById("aus-chat-manage-modes");
 	if (!wrap || wrap.getAttribute("data-thumb-resize") === "1") return;
 	wrap.setAttribute("data-thumb-resize", "1");
 	try {
 		doc.defaultView?.addEventListener("resize", () => {
 			try {
-				paintModeThumb(doc);
+				paintModeThumb$1(doc);
 			} catch {}
 		});
 	} catch {}
 }
 /** 切换管理模式：重画描述、滑块与其选中态，再重画整张列表 */
-function paintMode(doc) {
+function paintMode$1(doc) {
 	const desc = doc.getElementById("aus-chat-manage-desc");
-	if (desc) desc.textContent = modeInfo().desc;
+	if (desc) desc.textContent = modeInfo$1().desc;
 	const wrap = doc.getElementById("aus-chat-manage-modes");
-	if (wrap) wrap.setAttribute("data-mode", mode);
+	if (wrap) wrap.setAttribute("data-mode", mode$1);
 	doc.querySelectorAll("[data-manage-mode]").forEach((el) => {
-		const on = el.getAttribute("data-manage-mode") === mode;
+		const on = el.getAttribute("data-manage-mode") === mode$1;
 		el.setAttribute("data-active", on ? "1" : "0");
 		el.setAttribute("aria-selected", on ? "true" : "false");
 	});
 	try {
-		paintModeThumb(doc);
+		paintModeThumb$1(doc);
 	} catch {}
-	paintList(doc);
+	paintList$1(doc);
 }
 /** 绑定 shell 内的按钮与列表事件（幂等：只在首次构建 shell 时绑定一次） */
-function bindShell(doc) {
+function bindShell$1(doc) {
 	const list = doc.getElementById("aus-chat-manage-list");
 	list?.addEventListener("change", (e) => {
 		const input = e.target;
@@ -10260,13 +10436,13 @@ function bindShell(doc) {
 		const rowEl = input.closest("[data-chat-row]");
 		const key = rowEl?.getAttribute("data-chat-row") || "";
 		if (!key) return;
-		setHiddenFor(mode, key, !input.checked);
+		setHiddenFor(mode$1, key, !input.checked);
 		if (rowEl) {
 			rowEl.setAttribute("data-hidden", input.checked ? "0" : "1");
 			const stateEl = rowEl.querySelector("[data-state]");
 			if (stateEl) stateEl.textContent = input.checked ? "展示中" : "已隐藏";
 		}
-		paintFoot(doc);
+		paintFoot$1(doc);
 		try {
 			paintChatManageBadge(doc);
 		} catch {}
@@ -10283,23 +10459,319 @@ function bindShell(doc) {
 	});
 	const search = doc.getElementById("aus-chat-manage-search");
 	search?.addEventListener("input", () => {
+		keyword$1 = search.value || "";
+		applyKeywordFilter$1(doc);
+	});
+	doc.getElementById("aus-chat-manage-reset")?.addEventListener("click", () => {
+		clearHiddenFor(mode$1);
+		paintList$1(doc);
+	});
+	doc.getElementById("aus-chat-manage-hide-all")?.addEventListener("click", () => {
+		setAllHiddenFor(mode$1, rows$1.map((row) => chatVisibilityKey(row.chatId)), true);
+		paintList$1(doc);
+	});
+	doc.getElementById("aus-chat-manage-back")?.addEventListener("click", () => {
+		try {
+			navigator$1?.go();
+		} catch {}
+	});
+	doc.querySelectorAll("[data-manage-mode]").forEach((el) => {
+		el.addEventListener("click", () => {
+			const next = el.getAttribute("data-manage-mode");
+			if (next !== "table" && next !== "picker") return;
+			if (next === mode$1) return;
+			mode$1 = next;
+			paintMode$1(doc);
+		});
+	});
+}
+/**
+* 渲染管理页：先用热数据（热区最近 2000 条）立即出图，再异步用冷存储全量补全，
+* 避免打开页面时空白等待 IndexedDB（与概览「按对话统计」同一套补全思路）。
+*/
+async function renderChatManageView() {
+	const doc = getDoc$3();
+	const host = doc.getElementById("aus-chat-manage-body");
+	if (!host) return;
+	if (!host.firstChild) {
+		host.innerHTML = shellHTML$1();
+		try {
+			bindShell$1(doc);
+		} catch {}
+		try {
+			bindModeThumbResize$1(doc);
+		} catch {}
+		try {
+			paintModeThumb$1(doc);
+		} catch {}
+	} else paintMode$1(doc);
+	const token = ++renderToken$1;
+	const hot = state$2.history || [];
+	rows$1 = computeChatStats(hot);
+	paintList$1(doc);
+	try {
+		const all = await repository.getAllHistory();
+		if (token !== renderToken$1) return;
+		if (!all || !all.length || all.length <= hot.length) return;
+		rows$1 = computeChatStats(all);
+		paintList$1(doc);
+	} catch {}
+}
+//#endregion
+//#region src/ui/model-manage.ts
+/**
+* 模型展示管理页（`data-view="model-manage"`）。
+*
+* 入口两处，都进同一个页面：统计页「模型汇总」标题右侧、设置页「模型展示」设置项。
+* 页面本身是扁平同级视图，底栏布局下由 `nav-model.ts#CHILD_PARENT` 归到「统计」tab
+* （`panel.ts` 记录进入前的来源页并注入 `initModelManageView`，页内返回 / 顶栏返回箭头
+* / 底栏 pop-root 都回到来源页）。
+*
+* 页面管两件事，两套独立的隐藏集合（`model-visibility.ts`）：
+* - 「表格展示」：该模型是否出现在统计页「模型汇总」表里；
+* - 「下拉选项」：该模型是否出现在统计页 / 历史页 / 趋势预测页的「模型」下拉里。
+* 两者都只改展示，不删数据、不参与任何统计口径——历史记录、统计合计、预测与能耗评分
+* 依旧按全量历史计算。
+*/
+var navigator = null;
+/** 切页导航回调由 panel.ts 注册（避免 model-manage 反向 import panel 造成循环依赖） */
+function initModelManageView(opts) {
+	navigator = opts;
+}
+function getDoc$2() {
+	return window.parent?.document ?? document;
+}
+/**
+* 汇总历史里的模型用量（纯函数，便于单测）。只统计出现过的模型，按轮次倒序、同轮次按名字排序；
+* 空模型名归到 `unknown` 一行，与统计页「模型汇总」的分组口径一致，这样那一行也能单独隐藏。
+*/
+function modelUsageRows(history) {
+	const map = /* @__PURE__ */ new Map();
+	for (const entry of history || []) {
+		const key = modelVisibilityKey(entry?.model);
+		const row = map.get(key);
+		const total = Number(entry?.total_tokens) || 0;
+		const cost = Number(entry?.cost) || 0;
+		if (row) {
+			row.count += 1;
+			row.total += total;
+			row.cost += cost;
+		} else map.set(key, {
+			model: key,
+			count: 1,
+			total,
+			cost
+		});
+	}
+	return Array.from(map.values()).sort((a, b) => b.count - a.count || a.model.localeCompare(b.model, "zh-CN"));
+}
+/** 搜索关键词（只在本页内过滤显示，不进存储） */
+var keyword = "";
+/** 最近一次聚合结果，供搜索、模式切换与重绘复用 */
+var rows = [];
+/** 当前管理模式：表格展示 / 下拉选项（只在本次会话内记忆） */
+var mode = "table";
+/** 渲染令牌：热数据先画、冷数据补全，快速切页时丢弃过期结果 */
+var renderToken = 0;
+var MODES = [{
+	key: "table",
+	label: "表格展示",
+	title: "控制哪些模型出现在统计页「模型汇总」表格",
+	desc: "只控制「模型汇总」表格里是否列出该模型：隐藏不会删除任何数据，概览、统计合计、历史记录与趋势预测仍按全部历史计算。"
+}, {
+	key: "picker",
+	label: "下拉选项",
+	title: "控制哪些模型出现在各页「模型」下拉",
+	desc: "只控制统计页、历史页与趋势预测页的「模型」下拉里是否列出该模型：隐藏不会删除任何数据，已选中的模型仍照旧参与计算。"
+}];
+function modeInfo() {
+	return MODES.find((m) => m.key === mode) || MODES[0];
+}
+function shellHTML() {
+	const info = modeInfo();
+	return [
+		"<div id=\"aus-model-manage-head\">",
+		"<div class=\"aus-model-manage-lead\">",
+		"<div class=\"aus-model-manage-title\">模型展示管理</div>",
+		"<div class=\"aus-model-manage-desc\" id=\"aus-model-manage-desc\">" + esc$3(info.desc) + "</div>",
+		"</div>",
+		"<div id=\"aus-model-manage-tools\">",
+		"<input id=\"aus-model-manage-search\" type=\"text\" placeholder=\"搜索模型\" value=\"" + esc$3(keyword) + "\" />",
+		"<button id=\"aus-model-manage-reset\" type=\"button\" class=\"aus-model-manage-btn\">全部显示</button>",
+		"<button id=\"aus-model-manage-hide-all\" type=\"button\" class=\"aus-model-manage-btn\">全部隐藏</button>",
+		backButtonHTML({
+			id: "aus-model-manage-back",
+			title: "回到进入本页之前的页面"
+		}),
+		"</div>",
+		"</div>",
+		"<div id=\"aus-model-manage-modes\" data-mode=\"" + mode + "\" role=\"tablist\" aria-label=\"管理模式\">",
+		"<span class=\"aus-model-manage-mode-thumb\" aria-hidden=\"true\"></span>",
+		MODES.map((m) => "<button type=\"button\" class=\"aus-model-manage-mode\" role=\"tab\" data-manage-mode=\"" + m.key + "\" data-active=\"" + (m.key === mode ? "1" : "0") + "\" aria-selected=\"" + (m.key === mode ? "true" : "false") + "\" title=\"" + esc$3(m.title) + "\">" + esc$3(m.label) + "</button>").join(""),
+		"</div>",
+		"<div class=\"ds-card aus-model-manage-card\">",
+		"<div id=\"aus-model-manage-list\"></div>",
+		"</div>",
+		"<div id=\"aus-model-manage-foot\"></div>"
+	].join("");
+}
+function rowHTML(row, index) {
+	const key = modelVisibilityKey(row.model);
+	const hidden = isModelHiddenFor(mode, key);
+	let costTxt = "¥" + row.cost.toFixed(4);
+	try {
+		costTxt = formatMoney(row.cost, 4);
+	} catch {}
+	const meta = row.count + " 轮 · " + row.total.toLocaleString("zh-CN") + " tokens · " + costTxt;
+	const aria = row.model + "：" + (mode === "picker" ? "在「模型」下拉中展示" : "在模型汇总中展示");
+	return [
+		"<div class=\"aus-model-manage-row\" data-model-row=\"" + esc$3(key) + "\" data-model-name=\"" + esc$3(row.model.toLowerCase()) + "\" data-hidden=\"" + (hidden ? "1" : "0") + "\">",
+		"<div class=\"aus-model-manage-main\">",
+		"<div class=\"aus-model-manage-name\" title=\"" + esc$3(row.model) + "\">" + esc$3(row.model) + "</div>",
+		"<div class=\"aus-model-manage-meta\">" + meta + "</div>",
+		"</div>",
+		"<span class=\"aus-model-manage-state\" data-state>" + (hidden ? "已隐藏" : "展示中") + "</span>",
+		switchHTML("aus-model-sw-" + index, {
+			checked: !hidden,
+			ariaLabel: aria
+		}),
+		"</div>"
+	].join("");
+}
+function applyKeywordFilter(doc) {
+	const list = doc.getElementById("aus-model-manage-list");
+	if (!list) return;
+	const kw = keyword.trim().toLowerCase();
+	list.querySelectorAll("[data-model-row]").forEach((el) => {
+		const name = el.getAttribute("data-model-name") || "";
+		el.style.display = !kw || name.includes(kw) ? "" : "none";
+	});
+}
+function paintFoot(doc) {
+	const foot = doc.getElementById("aus-model-manage-foot");
+	if (!foot) return;
+	const total = rows.length;
+	const hidden = rows.filter((r) => isModelHiddenFor(mode, modelVisibilityKey(r.model))).length;
+	const where = mode === "picker" ? "「模型」下拉" : "「模型汇总」表";
+	foot.textContent = total ? "共 " + total + " 个模型 · 已隐藏 " + hidden + " 个" + (hidden ? "（隐藏项不会出现在" + where + "中）" : "") : "暂无模型数据";
+}
+/** 重画列表（数据、模式或显隐变更后调用） */
+function paintList(doc) {
+	const list = doc.getElementById("aus-model-manage-list");
+	if (!list) return;
+	if (!rows.length) {
+		list.innerHTML = "<div style=\"padding:20px 16px;text-align:center;color:var(--ds-text-3);font-size:var(--aus-fs-sm);\">暂无可管理的模型，产生用量记录后即可在此设置</div>";
+		paintFoot(doc);
+		return;
+	}
+	list.innerHTML = rows.map((row, i) => rowHTML(row, i)).join("");
+	applyKeywordFilter(doc);
+	paintFoot(doc);
+}
+/**
+* 滑块定位：按当前选中按钮的实测几何写入 position/size（与底栏指示胶囊同一套思路）。
+* 不假设两项等宽、也不写死 50%，改文案、换字号、改内距都不会错位；首次定位关过渡，避免从左侧飞过来。
+*/
+function paintModeThumb(doc) {
+	const wrap = doc.getElementById("aus-model-manage-modes");
+	if (!wrap) return;
+	const btn = wrap.querySelector("[data-manage-mode=\"" + mode + "\"]");
+	const thumb = wrap.querySelector(".aus-model-manage-mode-thumb");
+	if (!btn || !thumb) return;
+	const wr = wrap.getBoundingClientRect();
+	const br = btn.getBoundingClientRect();
+	if (!wr.width || !br.width) {
+		thumb.style.opacity = "0";
+		return;
+	}
+	thumb.style.opacity = "1";
+	thumb.style.width = Math.round(br.width) + "px";
+	thumb.style.height = Math.round(br.height) + "px";
+	const next = "translate3d(" + Math.round(br.left - wr.left) + "px," + Math.round(br.top - wr.top) + "px,0)";
+	if (wrap.getAttribute("data-ready") !== "1") {
+		const prev = thumb.style.transition;
+		thumb.style.transition = "none";
+		thumb.style.transform = next;
+		thumb.offsetWidth;
+		thumb.style.transition = prev;
+		wrap.setAttribute("data-ready", "1");
+	} else thumb.style.transform = next;
+}
+/** 窗口尺寸变化（含窄屏断点切换内距）后重新贴合；同一容器只绑一次 */
+function bindModeThumbResize(doc) {
+	const wrap = doc.getElementById("aus-model-manage-modes");
+	if (!wrap || wrap.getAttribute("data-thumb-resize") === "1") return;
+	wrap.setAttribute("data-thumb-resize", "1");
+	try {
+		doc.defaultView?.addEventListener("resize", () => {
+			try {
+				paintModeThumb(doc);
+			} catch {}
+		});
+	} catch {}
+}
+/** 切换管理模式：重画描述、滑块与其选中态，再重画整张列表 */
+function paintMode(doc) {
+	const desc = doc.getElementById("aus-model-manage-desc");
+	if (desc) desc.textContent = modeInfo().desc;
+	const wrap = doc.getElementById("aus-model-manage-modes");
+	if (wrap) wrap.setAttribute("data-mode", mode);
+	wrap?.querySelectorAll("[data-manage-mode]").forEach((el) => {
+		const on = el.getAttribute("data-manage-mode") === mode;
+		el.setAttribute("data-active", on ? "1" : "0");
+		el.setAttribute("aria-selected", on ? "true" : "false");
+	});
+	try {
+		paintModeThumb(doc);
+	} catch {}
+	paintList(doc);
+}
+/** 绑定 shell 内的按钮与列表事件（幂等：只在首次构建 shell 时绑定一次） */
+function bindShell(doc) {
+	const list = doc.getElementById("aus-model-manage-list");
+	list?.addEventListener("change", (e) => {
+		const input = e.target;
+		if (!input || input.type !== "checkbox") return;
+		const rowEl = input.closest("[data-model-row]");
+		const key = rowEl?.getAttribute("data-model-row") || "";
+		if (!key) return;
+		setModelHiddenFor(mode, key, !input.checked);
+		if (rowEl) {
+			rowEl.setAttribute("data-hidden", input.checked ? "0" : "1");
+			const stateEl = rowEl.querySelector("[data-state]");
+			if (stateEl) stateEl.textContent = input.checked ? "展示中" : "已隐藏";
+		}
+		paintFoot(doc);
+	});
+	list?.addEventListener("click", (e) => {
+		const target = e.target;
+		if (!target || target.closest("label.aus-switch")) return;
+		const rowEl = target.closest("[data-model-row]");
+		if (!rowEl) return;
+		const input = rowEl.querySelector("input[type=\"checkbox\"]");
+		if (!input) return;
+		input.checked = !input.checked;
+		input.dispatchEvent(new doc.defaultView.Event("change", { bubbles: true }));
+	});
+	const search = doc.getElementById("aus-model-manage-search");
+	search?.addEventListener("input", () => {
 		keyword = search.value || "";
 		applyKeywordFilter(doc);
 	});
-	doc.getElementById("aus-chat-manage-reset")?.addEventListener("click", () => {
-		clearHiddenFor(mode);
+	doc.getElementById("aus-model-manage-reset")?.addEventListener("click", () => {
+		clearHiddenModelsFor(mode);
 		paintList(doc);
 	});
-	doc.getElementById("aus-chat-manage-hide-all")?.addEventListener("click", () => {
-		setAllHiddenFor(mode, rows.map((row) => chatVisibilityKey(row.chatId)), true);
+	doc.getElementById("aus-model-manage-hide-all")?.addEventListener("click", () => {
+		setAllModelsHiddenFor(mode, rows.map((row) => modelVisibilityKey(row.model)), true);
 		paintList(doc);
 	});
-	doc.getElementById("aus-chat-manage-back")?.addEventListener("click", () => {
+	doc.getElementById("aus-model-manage-back")?.addEventListener("click", () => {
 		try {
 			navigator?.go();
 		} catch {}
 	});
-	doc.querySelectorAll("[data-manage-mode]").forEach((el) => {
+	doc.getElementById("aus-model-manage-modes")?.querySelectorAll("[data-manage-mode]").forEach((el) => {
 		el.addEventListener("click", () => {
 			const next = el.getAttribute("data-manage-mode");
 			if (next !== "table" && next !== "picker") return;
@@ -10311,11 +10783,11 @@ function bindShell(doc) {
 }
 /**
 * 渲染管理页：先用热数据（热区最近 2000 条）立即出图，再异步用冷存储全量补全，
-* 避免打开页面时空白等待 IndexedDB（与概览「按对话统计」同一套补全思路）。
+* 避免打开页面时空白等待 IndexedDB（与对话展示管理同一套补全思路）。
 */
-async function renderChatManageView() {
+async function renderModelManageView() {
 	const doc = getDoc$2();
-	const host = doc.getElementById("aus-chat-manage-body");
+	const host = doc.getElementById("aus-model-manage-body");
 	if (!host) return;
 	if (!host.firstChild) {
 		host.innerHTML = shellHTML();
@@ -10331,13 +10803,13 @@ async function renderChatManageView() {
 	} else paintMode(doc);
 	const token = ++renderToken;
 	const hot = state$2.history || [];
-	rows = computeChatStats(hot);
+	rows = modelUsageRows(hot);
 	paintList(doc);
 	try {
 		const all = await repository.getAllHistory();
 		if (token !== renderToken) return;
 		if (!all || !all.length || all.length <= hot.length) return;
-		rows = computeChatStats(all);
+		rows = modelUsageRows(all);
 		paintList(doc);
 	} catch {}
 }
@@ -12942,7 +13414,7 @@ var GUIDES = [
 		"设置与数据",
 		[
 			"颜色模式、移动端兼容 UI、历史显示范围与匿名统计都在设置页顶部。",
-			"「对话展示」管理对话显示，「按范围删除记录」可按日期、模型、对话删除。",
+			"「对话展示」「模型展示」分别管理对话与模型的显示；「按范围删除记录」可按日期、模型、对话删除。",
 			"WebDAV 云同步可跨设备同步记录与钱包；「存储占用」里能清理旧版迁移备份。",
 			"峰谷规则与「额外空闲日期」决定费用计算，默认按 DeepSeek 官方规则。"
 		]
@@ -12955,6 +13427,16 @@ var GUIDES = [
 			"「表格展示」模式管概览统计表里显示哪些对话。",
 			"「下拉选项」模式管统计页、历史页、趋势预测页「对话」下拉里的选项。",
 			"支持搜索、全部显示、全部隐藏；只影响显示，不删除任何数据。"
+		]
+	],
+	[
+		"stats",
+		"模型展示管理",
+		[
+			"从统计页「模型汇总」右上角或设置页「模型展示」进入，返回时回到进入前的页面。",
+			"「表格展示」模式管「模型汇总」表里显示哪些模型。",
+			"「下拉选项」模式管统计页、历史页、趋势预测页「模型」下拉里的选项。",
+			"支持搜索、全部显示、全部隐藏；只影响显示，不改变统计与预测口径。"
 		]
 	]
 ];
@@ -13818,6 +14300,8 @@ var chatManageOrigin = "overview";
 var logOrigin = "settings";
 /** 「其他请求」的来源页：只从请求日志页进入，返回时回到日志页（再回它自己的来源） */
 var tapOrigin = "log";
+/** 「模型展示管理」的来源页：统计页「模型汇总」与设置页两处入口共用，返回时各回各家 */
+var modelManageOrigin = "stats";
 /** 当前导航高亮键：窄屏二级页归到「设置」，桌面为视图本身 */
 var currentNavKey = "overview";
 var collapsed = false;
@@ -13991,6 +14475,7 @@ function renderHistoryFilters(history) {
 		label: id
 	}));
 	if (historyFilters.model !== "__all__" && !models.some((option) => option.id === historyFilters.model)) historyFilters.model = STATS_FILTER_ALL;
+	const visibleModels = filterModelPickerRows(models, (option) => option.id);
 	const chatOptions = getHistoryChatOptions(historyFilterBase);
 	if (historyFilters.chat !== "__all__" && historyFilters.chat !== "__current_chat__" && !chatOptions.some((option) => option.id === historyFilters.chat)) historyFilters.chat = STATS_FILTER_ALL;
 	const currentChatId = getCurrentChatIdForStore();
@@ -14028,7 +14513,7 @@ function renderHistoryFilters(history) {
 		closeHistoryFilterDropdownsInstant();
 		afterNextPaint(() => renderHistory(doc, getSelectedSave()));
 	});
-	renderHistoryFilterDropdown("model", historyFilters.model, models, "暂无模型", (value) => {
+	renderHistoryFilterDropdown("model", historyFilters.model, visibleModels, models.length ? "模型已全部隐藏（可在「模型展示管理」中恢复）" : "暂无模型", (value) => {
 		historyFilters.model = value;
 		historyPage = 1;
 		closeHistoryFilterDropdownsInstant();
@@ -15045,6 +15530,7 @@ function syncMobileSidebar(doc) {
 */
 function viewSourceOf(view) {
 	if (view === "chat-manage") return chatManageOrigin;
+	if (view === "model-manage") return modelManageOrigin;
 	if (view === "log") return logOrigin;
 	if (view === "tap") return tapOrigin;
 	return view;
@@ -15056,6 +15542,7 @@ function tabOf(view) {
 /** 二级页「返回」目标：对话展示管理 / 请求日志 / 其他请求回到进入前的来源页，其余回到自己的父级根页 */
 function returnFromChild() {
 	if (currentView === "chat-manage") return chatManageOrigin;
+	if (currentView === "model-manage") return modelManageOrigin;
 	if (currentView === "log") return logOrigin;
 	if (currentView === "tap") return tapOrigin;
 	return childParentOf(currentView) ?? "settings";
@@ -15069,6 +15556,11 @@ function openChatManage(from) {
 function openRequestLog(from) {
 	logOrigin = from;
 	switchView("log");
+}
+/** 进入「模型展示管理」页并记住来源（统计页「模型汇总」标题右侧与设置页两处入口共用） */
+function openModelManage(from) {
+	modelManageOrigin = from;
+	switchView("model-manage");
 }
 /** 进入「其他请求」页并记住来源（请求日志页工具栏唯一入口，返回时回到日志页） */
 function openTap(from) {
@@ -15125,6 +15617,7 @@ function switchView(view, opts) {
 				const s = getSelectedSave();
 				if (s) renderHistory(doc, s);
 			} else if (view === "chat-manage") Promise.resolve(renderChatManageView()).catch(() => {});
+			else if (view === "model-manage") Promise.resolve(renderModelManageView()).catch(() => {});
 			else if (view === "tap") renderTapView();
 			else if (view === "log") renderLogView();
 			else if (view === "about") Promise.resolve(refreshAnnouncementCard(doc)).catch(() => {});
@@ -15319,6 +15812,9 @@ function createPanel() {
            <div data-view="chat-manage" style="display:none;">
              <div id="aus-chat-manage-body"></div>
            </div>
+           <div data-view="model-manage" style="display:none;">
+             <div id="aus-model-manage-body"></div>
+           </div>
            <div data-view="tap" style="display:none;">
              <div id="aus-tap-root"></div>
            </div>
@@ -15372,7 +15868,13 @@ function createPanel() {
             </div>
             <div id="aus-stats-four" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px;"></div>
             <div id="aus-model-summary" class="ds-card" style="margin-top:12px;overflow:auto;">
-              <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:8px;">模型汇总</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+                <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">模型汇总</div>
+                <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                  <span id="aus-model-manage-count" style="display:none;font-size:var(--aus-fs-xs);color:var(--ds-text-3);white-space:nowrap;"></span>
+                  <button id="aus-model-manage-btn" type="button" class="aus-manage-chat-btn" title="设置哪些模型出现在模型汇总表与各页「模型」下拉中（不影响数据统计）">${icon("menu", 14)}管理模型</button>
+                </div>
+              </div>
               <table style="width:100%;border-collapse:collapse;font-size:var(--aus-fs-sm);white-space:nowrap;">
                 <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">模型</th><th data-sort-key="count" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">调用次数<span class="aus-sort-ind"></span></th><th data-sort-key="hit" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输入(命中)<span class="aus-sort-ind"></span></th><th data-sort-key="miss" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输入(未命中)<span class="aus-sort-ind"></span></th><th data-sort-key="out" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输出<span class="aus-sort-ind"></span></th><th data-sort-key="total" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总 Tokens<span class="aus-sort-ind"></span></th><th data-sort-key="cost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总成本<span class="aus-sort-ind"></span></th><th data-sort-key="avgCost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均成本<span class="aus-sort-ind"></span></th><th data-sort-key="avgDur" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均耗时<span class="aus-sort-ind"></span></th><th data-sort-key="avgRate" title="点击排序 · 含非流式/首字缺失记录的估算值" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均速率<span class="aus-sort-ind"></span></th></tr></thead>
                 <tbody id="aus-summary-tbody"><tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
@@ -15744,9 +16246,12 @@ function createPanel() {
 	doc.getElementById("aus-panel")?.addEventListener("click", (e) => {
 		const target = e.target;
 		if (target?.closest?.("#aus-settings-chat-manage")) openChatManage("settings");
+		if (target?.closest?.("#aus-settings-model-manage")) openModelManage("settings");
 		if (target?.closest?.("#aus-settings-request-log")) openRequestLog("settings");
 	});
 	initChatManageView({ go: () => switchView(chatManageOrigin) });
+	doc.getElementById("aus-model-manage-btn")?.addEventListener("click", () => openModelManage("stats"));
+	initModelManageView({ go: () => switchView(modelManageOrigin) });
 	doc.getElementById("aus-history-log-btn")?.addEventListener("click", () => openRequestLog("history"));
 	initTapView({ go: () => switchView(returnFromChild()) });
 	initLogView({
@@ -16137,7 +16642,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-CyspJyae.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-CnsBgH1r.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-BsrR54Lw.js").then((n) => n.n).then((m) => {
@@ -16826,10 +17331,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-DY8caLnF.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-QOVZd9If.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-CyspJyae.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CnsBgH1r.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-k4SyDMQg.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -16843,10 +17348,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-DY8caLnF.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-QOVZd9If.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-CyspJyae.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CnsBgH1r.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-k4SyDMQg.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -16918,10 +17423,10 @@ async function teardownRuntime() {
 		uninstallMessageCost();
 	} catch {}
 	try {
-		import("./interception-DY8caLnF.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-QOVZd9If.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-CyspJyae.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-CnsBgH1r.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -16937,13 +17442,13 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-B7vPxZBa.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-CaxgR7uD.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-U-Rv2qTn.js").then((n) => n.n)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CoAG8B7J.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-CxDcbBeM.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -16996,19 +17501,19 @@ function onEnable() {
 		installMessageCost();
 	} catch {}
 	try {
-		import("./interception-DY8caLnF.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-QOVZd9If.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-CyspJyae.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CnsBgH1r.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-B7vPxZBa.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-CaxgR7uD.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
 		import("./currency-U-Rv2qTn.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-CoAG8B7J.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-CxDcbBeM.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -17051,19 +17556,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-B7vPxZBa.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-CaxgR7uD.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
 		(await import("./currency-U-Rv2qTn.js").then((n) => n.n)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-CoAG8B7J.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-CxDcbBeM.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-CyspJyae.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-CnsBgH1r.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -17088,7 +17593,7 @@ async function init() {
 			installMessageCost();
 		} catch {}
 		try {
-			import("./pricing-sync-CoAG8B7J.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-CxDcbBeM.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

@@ -2643,6 +2643,241 @@
   #aus-panel .aus-chat-manage-state { padding: 1px 5px; }
 }
 
+/* ── 模型展示管理（统计页「模型汇总」右上角「管理模型」与设置页「模型展示」进入的页面） ──
+   与对话展示管理同构：一行一个模型（名称 + 用量摘要 + 状态胶囊 + .aus-switch），
+   顶部可在「表格展示 / 下拉选项」两个隐藏集合之间切换。数值与对话管理保持一排一致，
+   布局规则全部写在这里、模板不写内联宽度：窄屏头部纵向堆叠、行用 minmax(0,1fr) 的 grid
+   收缩文本列，长模型名只会省略号截断，绝不会把胶囊和开关顶出屏幕。 */
+#aus-panel #aus-model-manage-body { min-width: 0; max-width: 100%; }
+#aus-panel #aus-model-manage-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+#aus-panel .aus-model-manage-lead { flex: 1 1 auto; min-width: 0; max-width: 640px; }
+#aus-panel .aus-model-manage-title {
+  font-size: var(--aus-fs-base);
+  font-weight: 600;
+  color: var(--ds-text);
+  line-height: 1.4;
+}
+#aus-panel .aus-model-manage-desc {
+  margin-top: 4px;
+  font-size: var(--aus-fs-sm);
+  color: var(--ds-text-3);
+  line-height: 1.7;
+}
+#aus-panel #aus-model-manage-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+#aus-panel #aus-model-manage-search {
+  width: 150px;
+  min-width: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--ds-border);
+  border-radius: 999px;
+  background: var(--ds-card-inner);
+  color: var(--ds-text);
+  font-family: inherit;
+  font-size: var(--aus-fs-sm);
+  line-height: 1.4;
+  outline: none;
+}
+#aus-panel #aus-model-manage-search:focus { border-color: var(--ds-text-3); }
+#aus-panel .aus-model-manage-btn {
+  flex: 0 0 auto;
+  padding: 5px 12px;
+  border: 1px solid var(--ds-border);
+  border-radius: 999px;
+  background: var(--ds-card-inner);
+  color: var(--ds-text);
+  font-family: inherit;
+  font-size: var(--aus-fs-sm);
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (hover: hover) {
+  #aus-panel .aus-model-manage-btn:hover { border-color: var(--ds-text-3); }
+}
+#aus-panel .aus-model-manage-btn:active { background: var(--ds-nav-active-bg); }
+/* 返回按钮沿用 .aus-back-btn 的统一样式，只把描边提亮一档，和同排动作区分开 */
+#aus-panel #aus-model-manage-back { border-color: var(--ds-text-3); }
+@media (hover: hover) {
+  #aus-panel #aus-model-manage-back:hover { border-color: var(--ds-text); }
+}
+/* 列表块：灰面来自 .ds-card，行自己画分隔线，块内一律裁掉横向溢出 */
+#aus-panel .aus-model-manage-card {
+  padding: 0;
+  overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
+}
+#aus-panel .aus-model-manage-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ds-border);
+  cursor: pointer;
+  min-width: 0;
+  transition: background-color 120ms ease;
+}
+#aus-panel .aus-model-manage-row:last-child { border-bottom: 0; }
+@media (hover: hover) {
+  #aus-panel .aus-model-manage-row:hover { background: var(--ds-nav-active-bg); }
+}
+#aus-panel .aus-model-manage-row:active { background: var(--ds-nav-active-bg); }
+#aus-panel .aus-model-manage-main { min-width: 0; overflow: hidden; }
+#aus-panel .aus-model-manage-name {
+  font-size: var(--aus-fs-base);
+  font-weight: 600;
+  color: var(--ds-text);
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#aus-panel .aus-model-manage-meta {
+  margin-top: 2px;
+  font-size: var(--aus-fs-sm);
+  color: var(--ds-text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#aus-panel .aus-model-manage-state {
+  justify-self: end;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--ds-green-bg);
+  color: var(--ds-green);
+  font-size: var(--aus-fs-xs);
+  line-height: 1.6;
+  white-space: nowrap;
+}
+#aus-panel .aus-model-manage-row[data-hidden="1"] .aus-model-manage-name { color: var(--ds-text-3); }
+#aus-panel .aus-model-manage-row[data-hidden="1"] .aus-model-manage-state {
+  background: var(--ds-card-inner);
+  color: var(--ds-text-3);
+}
+#aus-panel #aus-model-manage-foot {
+  margin-top: 8px;
+  font-size: var(--aus-fs-sm);
+  color: var(--ds-text-3);
+  line-height: 1.6;
+}
+/* 统计页「模型汇总」标题右侧的隐藏计数（0 个时不显示，由 stats-view.ts 控制） */
+#aus-model-manage-count { font-variant-numeric: tabular-nums; }
+/* 统计页与设置页两枚「管理模型」入口与「管理对话」同尺寸（复用 .aus-manage-chat-btn），
+   设置页那枚要与同页其它入口同高。 */
+#aus-panel #aus-settings-model-manage { padding: 6px 12px; line-height: 17px; }
+/* 模式切换（表格展示 / 下拉选项）：与对话展示管理同一套分段滑块，几何由 model-manage.ts 写入 */
+#aus-panel #aus-model-manage-modes {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  padding: 3px;
+  margin-bottom: 12px;
+  border-radius: 999px;
+  background: var(--ds-card);
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+#aus-panel .aus-model-manage-mode-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  width: 0;
+  height: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--ds-border);
+  border-radius: 999px;
+  background: var(--ds-card-inner);
+  pointer-events: none;
+  opacity: 0;
+  transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1), width 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+#aus-panel .aus-model-manage-mode {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  min-width: 84px;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ds-text-2);
+  font-family: inherit;
+  font-size: var(--aus-fs-sm);
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 140ms ease;
+}
+@media (hover: hover) {
+  #aus-panel .aus-model-manage-mode:hover { color: var(--ds-text); }
+}
+#aus-panel .aus-model-manage-mode:active { color: var(--ds-text); }
+#aus-panel .aus-model-manage-mode[data-active="1"] {
+  color: var(--ds-text);
+  font-weight: 600;
+}
+#aus-panel .aus-model-manage-mode:focus-visible { outline: 2px solid var(--ds-orange); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) {
+  #aus-panel .aus-model-manage-mode-thumb,
+  #aus-panel .aus-model-manage-mode { transition: none !important; }
+}
+/* 窄屏：与对话展示管理同口径（两套断点必须同步） */
+@media (max-width: 760px) {
+  #aus-panel #aus-model-manage-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  #aus-panel .aus-model-manage-lead { max-width: none; }
+  #aus-panel #aus-model-manage-tools { gap: 6px; }
+  #aus-panel #aus-model-manage-search { flex: 1 1 120px; width: auto; }
+  #aus-panel .aus-model-manage-row { padding: 8px 10px; gap: 8px; }
+  #aus-panel .aus-model-manage-state { padding: 1px 6px; }
+  #aus-panel #aus-model-manage-modes { padding: 2px; margin-bottom: 10px; }
+  #aus-panel .aus-model-manage-mode { min-width: 74px; padding: 4px 10px; }
+}
+@container ausbody (max-width: 760px) {
+  #aus-panel #aus-model-manage-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  #aus-panel .aus-model-manage-lead { max-width: none; }
+  #aus-panel #aus-model-manage-tools { gap: 6px; }
+  #aus-panel #aus-model-manage-search { flex: 1 1 120px; width: auto; }
+  #aus-panel .aus-model-manage-row { padding: 8px 10px; gap: 8px; }
+  #aus-panel .aus-model-manage-state { padding: 1px 6px; }
+  #aus-panel #aus-model-manage-modes { padding: 2px; margin-bottom: 10px; }
+  #aus-panel .aus-model-manage-mode { min-width: 74px; padding: 4px 10px; }
+}
+#aus-panel .aus-model-manage-row > * { min-width: 0; }
+@container ausbody (max-width: 380px) {
+  #aus-panel .aus-model-manage-row { gap: 6px; }
+  #aus-panel .aus-model-manage-state { padding: 1px 5px; }
+}
+@media (max-width: 380px) {
+  #aus-panel .aus-model-manage-row { gap: 6px; }
+  #aus-panel .aus-model-manage-state { padding: 1px 5px; }
+}
+
 /* ── 使用说明页 ────────────────────────────────────────────────────────────
    区块顺序固定：完整使用文档入口（第一高位）→ 隐私声明 / 免责声明（第二高位）
    → 分门别类的操作说明 → 模型兼容与关于。布局全部写在这里，模板只给结构与文案，

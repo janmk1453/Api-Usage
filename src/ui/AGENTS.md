@@ -35,6 +35,13 @@
 - **只改展示、不删数据**：表格在渲染路径过滤（`filterVisibleRows`，入参保持全量），胶囊在选项渲染处过滤（`filterPickerRows`，选中项与 label 仍按全量取名，全被隐藏时提示「对话已全部隐藏（可在「对话展示管理」中恢复）」）。不得因此改变任何页面口径。
 - 布局全写在 `style.css`（模板不写内联宽度）：行 `grid-template-columns: minmax(0,1fr) auto auto` + `.aus-chat-manage-main{min-width:0;overflow:hidden}`；`≤760px` 头部纵向堆叠（两套断点同步），`≤380px` 状态胶囊再收一档，保证「全部显示 / 全部隐藏 / 返回」始终在视口内。「返回」不再是手写按钮：走 `ui/back-button.ts#backButtonHTML({ id: 'aus-chat-manage-back' })`，与请求日志、其他请求两页同一副样子（见「二级页返回按钮」）。
 
+### 模型展示管理（`ui/model-manage.ts`，`data-view="model-manage"`）
+
+- **两处入口进同一页并记住来源**：统计页「模型汇总」标题右侧 `#aus-model-manage-btn`（带隐藏计数 `#aus-model-manage-count`）、设置页 `#aus-settings-model-manage`，共用 class `.aus-manage-chat-btn`。`panel.ts#modelManageOrigin`（默认 `stats`）记来源，`openModelManage(from)` 打开，`returnFromChild()` / `viewSourceOf()` 让页内返回、顶栏返回箭头、底栏 pop-root 都回来源页，`tabOf()` 让底栏高亮归来源 tab（`CHILD_PARENT['model-manage'] = 'stats'` 只是兜底值，必须是根 tab）。
+- **双模式分段滑块**「表格展示 / 下拉选项」分别管理两套集合：`localStorage[aus_model_visibility_v1]` = `{hidden, hiddenPickers}`（`ui/model-visibility.ts`）——`hidden` 管统计页模型汇总表、`hiddenPickers` 管统计 / 历史 / 趋势三处「模型」下拉，互不影响；空模型名统一归 `unknown`（与汇总表 `model || 'unknown'` 同组）；旧版只有 `hidden` 的数据照常读。
+- **只改展示、不删数据**：汇总表在渲染路径过滤（`filterVisibleModelRows`，入参保持全量），下拉在选项渲染处过滤（`filterModelPickerRows`，选中值校验仍用全量，历史页全被隐藏时提示「模型已全部隐藏（可在「模型展示管理」中恢复）」）。**趋势预测页的「模型」下拉是功能选择器**（决定价格上下文与上下文上限），全部被隐藏时必须回退全量并追加一行「其余 N 个模型已隐藏」，不得让预测退化。
+- 布局全部复用对话展示管理那一套数值（行 `grid-template-columns: minmax(0,1fr) auto auto`、`≤760px` 头部纵向堆叠、`≤380px` 状态胶囊再收一档，两套断点同步），但类名独立为 `.aus-model-manage-*` / `#aus-model-manage-*`，**不改 `.aus-chat-manage-*`**（两个页面共用会串味）。模式按钮查询必须限定在 `#aus-model-manage-modes` 内——两页都用 `[data-manage-mode]`，全局 `querySelectorAll` 会误改另一页。
+
 ### 用量统计（`ui/stats-view.ts`）
 
 - **六维度**：时间（全部 / 今天 / 昨天 / 近 7 天 / 近 30 天 / 本月 / 上月 / 自定义，自定义为直输日期两框、`max` 限今日、自动纠正起止倒置；「全部」= `2020-01-01~今日`）、**请求类型**、模型、对话、接入类型、API 密钥；筛选为 `time ∩ requestType ∩ model ∩ chat ∩ endpoint ∩ credential`，六胶囊互斥关闭、点外关闭。
@@ -43,7 +50,7 @@
 - **重置筛选**：`#aus-stats-filter-reset` → `resetStatsFilters()`（六维回 `DEFAULT_RANGE` = 近 30 天 + 全部、关闭下拉、渲染后落盘）；历史页 `#aus-history-filter-reset`。两枚按钮 inline `background:transparent`，故其 hover/active 规则必须带 `!important`。 另：筛选行右侧的动作（重置筛选、历史页「请求日志」`#aus-history-log-btn`）与同排 5 枚筛选胶囊（`.aus-pill`）同一行，尺寸口径必须跟胶囊一致——桌面 `6px 11px` / `min-height 32px` / `--aus-fs-base`，≤760px `6px 10px` / `30px` / `--aus-fs-sm`。所以重置筛选的 padding 与字号只能写在 `style.css` 的 `.aus-filter-reset` 段（模板里写内联就不跟窄屏收），请求日志**不许**挂小号 `.aus-pill-sm`（曾是 `aus-pill aus-pill-sm`，被用户截图指出比其他按钮小一圈）；守门测试 `ui/panel-history-toolbar.test.ts`。
 - **历史页空态「清除筛选」**（`#aus-history-empty-reset`，渲染在 `#aus-history` 内）与工具栏「重置筛选」共用 `panel.ts#applyHistoryFilterReset()`，别各写一份。它曾经和工具栏撞 id，而 `getElementById` 只返回文档里第一个同名元素（工具栏在模板里更靠前），导致绑定落到工具栏那枚、空态按钮点了没反应——**空态按钮一律用独立 id 并在 `host` 内 `querySelector`**，模板静态 id 不许重复（`panel-history-empty-reset.test.ts` 守着）。
 - **三块 + 四小块**：消费金额 / API 请求次数 / Tokens；四小块 `repeat(4,1fr)`（竖屏 2×2）由 `computeStatsFour` 单源、随六维过滤、选项与概览共用 `FOUR_OPTIONS`。
-- **模型汇总表**：10 列（模型 / 调用 / 命中 / 未命中 / 输出 / 总 / 总成本 / 平均成本 / 平均耗时 / 平均速率），横向滚动；全站唯一保留描边的块（见样式规范）。
+- **模型汇总表**：10 列（模型 / 调用 / 命中 / 未命中 / 输出 / 总 / 总成本 / 平均成本 / 平均耗时 / 平均速率），横向滚动；全站唯一保留描边的块（见样式规范）。标题行右侧有「管理模型」入口 `#aus-model-manage-btn` 与隐藏计数 `#aus-model-manage-count`（`ui/model-manage.ts`），渲染时在排序前用 `filterVisibleModelRows(list, (row) => row.m)` 过滤，全被隐藏时表体提示「全部模型都已隐藏 · 点击右上角「管理模型」恢复显示」。
 - **图表**：首图 `图表`（`Y` 多选 + `X` 双胶囊，Y 下拉底部切「自动 / 柱状 / 曲线 / 面积」；默认 `DEFAULT_Y_KEYS = ['input_hit_token','input_miss_token','output_token','total_cost','hit_rate']`、`X = 'round'`，常量在 `ui/chart-config.ts`）；下方 6 图（Token 三段堆叠、费用曲线、命中 100% 面积、请求数柱、耗时/速率双轴、模型环——窄屏 <560px 只画前 5、宽屏前 8，其余合并「其他 N 个模型」并进悬浮窗，legend 单行滚动）。`API请求数 趋势` 的 X 走 `X_OPTIONS_WITHOUT_ROUND`（无轮次、默认每日）。**所有图表配置（Y 多选 / X / 展示方式 / 轴标签 / 占比口径）必须经 `ui/chart-prefs.ts` 落 localStorage 并在初始化时恢复**，重开面板不得回默认；图表 `display:none` 时跳过初始化、切到统计页下一帧再建，避免 `clientWidth 0` 误报。
 
 ### 历史记录（`ui/panel.ts`）
@@ -113,7 +120,7 @@
 - **保留的全局控制**：匿名使用统计（默认开启，可关闭并重置匿名标识，位于设置页顶部）、移动端兼容 UI（`settings.mobileCompatUi`）、颜色模式、历史显示范围、自动校准间隔（**总开关已移除**）、新钱包默认峰谷与额外空闲日期、汇率与价格同步参数（**无总开关**）、调试、峰值圆点、记录数据管理、WebDAV、存储占用。
 - **移动端兼容 UI**：默认值只按设备类型决定一次（`utils/device.ts#mobileDeviceHint()`：移动端默认开 = 窄屏底栏，桌面默认关），落盘后不再被后续版本覆盖。
 - **WebDAV 卡片默认收起**：`#aus-webdav-body` 初始 `display:none`，标题行 `#aus-webdav-header` 与胶囊 `#aus-webdav-toggle` 都可点开；折叠状态**刻意不落盘**，每次进设置页都从收起开始。
-- **「对话展示」入口**：`#aus-settings-chat-manage`（`.aus-manage-chat-btn`）由 `renderSettings` 生成，故 `panel.ts` 用 `#aus-panel` 点击委托捕获；设置页内要用`#aus-panel #aus-settings-chat-manage` 提高尺寸到与同页胶囊一致，别动通用类（概览与趋势页用紧凑尺寸）。
+- **「对话展示」/「模型展示」入口**：`#aus-settings-chat-manage` / `#aus-settings-model-manage`（`.aus-manage-chat-btn`）由 `renderSettings` 生成，故 `panel.ts` 用 `#aus-panel` 点击委托捕获；设置页内要用 `#aus-panel #aus-settings-*-manage` 提高尺寸到与同页胶囊一致，别动通用类（概览、统计与趋势页用紧凑尺寸）。
 - **版本胶囊**：`#aus-settings-entries .aus-settings-entry-version` 显示 `vX.Y.Z`，版本统一由 `panel.ts#appVersionText()` 读 `__APP_VERSION__`，**禁止各处自己拼**；桌面端版本在品牌区，此胶囊为窄屏补信息。
 - **存储占用**（`services/storage-usage.ts` + `ui/storage-usage-card.ts`）：列出酒馆设置 / IndexedDB / localStorage 占用；**只有 `migration_backup_<时间戳>` 的旧版迁移备份可清理**（两步确认 → `persistence.deleteMigrationBackups` 逐条删 + 清 `aus_migration_backup_*` 降级副本 + 删后复扫）；禁止 `clear()` / `deleteDatabase()`，禁止把在用数据标成可清理。
 - **按范围删除**（`#aus-delete-*`，`bindHistoryDelete`）：开始 / 结束日期、模型（完全匹配）、对话（`chatId` 或 `chatName` 完全匹配），留空不限；先「统计匹配记录」预览再二次确认；底层 `repository.deleteHistoryByFilter`（热 + 冷 + `recalcAll` + `rebuildAggregates`），日期用 `localDay` 比较、口径与 `filterStatsHistory` 一致。
@@ -126,7 +133,7 @@
 ### 使用说明（`ui/help-view.ts`）
 
 - 内容全部由 `helpViewHTML()` 生成，面板只留 `<div data-view="help" style="display:none;">${helpViewHTML()}</div>`；布局全在 `style.css`「使用说明页」段（模板不写内联尺寸）。
-- 区块顺序固定：**完整使用文档入口（第一高位）**（整块可点的黑底图标块 → `https://janmk1453.github.io/Api-Usage/`）→ **隐私与免责（第二高位）**（一行准入提示 + 灰面内两块白面 + 左侧语义色竖线（隐私 `--ds-red`、免责 `--ds-orange`），标题行 = 色点 + 标题 + 「完整版」链接到 `#privacy`，正文要点列表、关键词加粗）→ **8 张操作说明卡**（`#aus-help-guides` 两列、`≤760px` 单列：开始使用 / 用量概览 / 用量统计 / 历史记录 / 趋势预测 / 钱包 / 设置与数据 / 对话展示管理，每卡标题 + 2–4 条 counter 步骤）→ **模型兼容与关于**（`#aus-help-foot`）。隐私与免责必留；文案只讲「怎么用」不解释设计动机；增删功能时同步这 8 张卡与 `docs/index.html`。
+- 区块顺序固定：**完整使用文档入口（第一高位）**（整块可点的黑底图标块 → `https://janmk1453.github.io/Api-Usage/`）→ **隐私与免责（第二高位）**（一行准入提示 + 灰面内两块白面 + 左侧语义色竖线（隐私 `--ds-red`、免责 `--ds-orange`），标题行 = 色点 + 标题 + 「完整版」链接到 `#privacy`，正文要点列表、关键词加粗）→ **9 张操作说明卡**（`#aus-help-guides` 两列、`≤760px` 单列：开始使用 / 用量概览 / 用量统计 / 历史记录 / 趋势预测 / 钱包 / 设置与数据 / 对话展示管理 / 模型展示管理，每卡标题 + 2–4 条 counter 步骤）→ **模型兼容与关于**（`#aus-help-foot`）。隐私与免责必留；文案只讲「怎么用」不解释设计动机；增删功能时同步这 9 张卡与 `docs/index.html`。
 
 ### 请求日志 / 其他请求（`ui/log-view.ts`、`ui/tap-view.ts`）
 

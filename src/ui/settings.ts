@@ -185,6 +185,12 @@ export function renderSettings(doc: Document) {
         <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">管理哪些对话出现在概览列表与「对话」下拉胶囊中；只影响显示隐藏，不影响数据统计</div>
       </div>
 
+      <!-- 模型展示：控制模型汇总表与各页「模型」下拉胶囊里展示哪些模型（只影响显示） -->
+      <div class="ds-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">模型展示</span><button id="aus-settings-model-manage" type="button" class="aus-manage-chat-btn" title="管理模型在汇总表与下拉胶囊中的显示">${icon('menu', 14)}管理模型</button></div>
+        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">管理哪些模型出现在「模型汇总」表与「模型」下拉胶囊中；只影响显示隐藏，不影响数据统计与预测</div>
+      </div>
+
       <!-- 请求日志：最近一轮对话请求的标头 / 正文 / 响应元数据（只在本机保存） -->
       <div class="ds-card">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">问题反馈 / 请求日志</span><button id="aus-settings-request-log" type="button" class="aus-manage-chat-btn" title="查看最近一轮对话请求的标头、正文与响应元数据">${icon('menu', 14)}查看</button></div>

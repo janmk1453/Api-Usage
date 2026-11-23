@@ -26,6 +26,7 @@ import { esc } from '../utils/date';
 import { icon } from './icons';
 import { disposeForecastCharts, renderForecastCharts } from './forecast-chart';
 import { filterPickerRows } from './chat-visibility';
+import { filterModelPickerRows } from './model-visibility';
 
 type HitMode = 'global' | 'model' | 'manual';
 type EfficiencyScope = 'all' | 'chat';
@@ -378,13 +379,20 @@ function renderModelDropdown(options: ModelOption[]): void {
   const doc = getDoc();
   const dropdown = doc.getElementById('aus-forecast-model-dropdown') as HTMLElement | null;
   if (!dropdown) return;
-  dropdown.innerHTML = options.map((option) => dropdownItem(
+  // 只列出未被隐藏的模型（「模型展示管理」的「下拉选项」集合）。全部被隐藏时回退到全量：
+  // 这里的模型是「预测哪个模型」的功能选择器，全隐会让价格上下文与上下文上限变空、预测退化。
+  const visible = filterModelPickerRows(options, (item) => item.model);
+  const shown = visible.length ? visible : options;
+  const hiddenNote = visible.length && visible.length < options.length
+    ? '<div class="aus-forecast-dropdown-empty">其余 ' + (options.length - visible.length) + ' 个模型已隐藏（可在「模型展示管理」中恢复）</div>'
+    : '';
+  dropdown.innerHTML = (shown.map((item) => dropdownItem(
     'data-fmodel',
-    option.model,
-    option.model,
-    selectedForecastModel === option.model,
-    `${option.count} 轮`,
-  )).join('') || '<div class="aus-forecast-dropdown-empty">暂无模型</div>';
+    item.model,
+    item.model,
+    selectedForecastModel === item.model,
+    `${item.count} 轮`,
+  )).join('') || '<div class="aus-forecast-dropdown-empty">暂无模型</div>') + hiddenNote;
   dropdown.querySelectorAll('[data-fmodel]').forEach((el: any) => {
     el.onclick = (event: Event) => {
       event.stopPropagation();
