@@ -48,6 +48,31 @@ describe('钱包页：卡片结构', () => {
     expect(css).toContain('#aus-panel .aus-wallet-balance-label {');
   });
 
+  test('余额与校准段宽屏排成两栏，右侧不再是一大片空的', () => {
+    expect(renderSrc).toContain('class="aus-wallet-balance-grid"');
+    expect(renderSrc).toContain('class="aus-wallet-balance-col"');
+    expect(renderSrc).toContain('class="aus-wallet-calib-col"');
+    // 已识别密钥跟手工余额一起放左栏，校准控件整体进右栏
+    const balanceSrc = renderSrc.slice(renderSrc.indexOf('const balanceSection = ['), renderSrc.indexOf('const modelSection = ['));
+    expect(balanceSrc).toContain('class="aus-wallet-balance-col"');
+    expect(balanceSrc).toContain('已识别密钥');
+    expect(balanceSrc).toContain('aus-wallet-calib-col');
+    // 左栏别只剩一行：密钥摘要 + 上次校准都跟着手工余额
+    expect(balanceSrc).toContain('上次校准：');
+    expect(balanceSrc).toContain('wallet.balance.lastCalibrated');
+    expect(css).toContain('#aus-panel .aus-wallet-balance-grid { display: grid; grid-template-columns: minmax(240px, 360px) minmax(0, 1fr);');
+    // 窄屏两套断点各一条，回单栏
+    expect((css.match(/#aus-panel \.aus-wallet-balance-grid \{ grid-template-columns: minmax\(0, 1fr\); gap: 10px; \}/g) || []).length).toBe(2);
+  });
+
+  test('峰谷开关与上下文上限并排，第二行不再各占一行', () => {
+    const footStart = renderSrc.indexOf('aus-wallet-mname-foot');
+    const footSrc = renderSrc.slice(footStart, footStart + 900);
+    expect(footSrc).toContain('aus-wallet-peak-toggle');
+    expect(footSrc).toContain('aus-wallet-mctx');
+    expect(css).toContain('#aus-panel .aus-wallet-mname-foot { display: flex; align-items: center; gap: 4px 10px;');
+  });
+
   test('渲染区不写字面尺寸，只允许动态 display 与头像主题色变量', () => {
     const styles = [...renderSrc.matchAll(/style="([^"]*)"/g)].map((m) => m[1]);
     expect(styles.length).toBeGreaterThan(0);

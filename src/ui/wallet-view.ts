@@ -18,7 +18,7 @@ import { afterNextPaint, closeDropdownInstant } from './dropdown-close';
 import { switchHTML } from './switch';
 import { vendorIconSvg } from './vendor-icons';
 import { toast } from '../utils/logger';
-import { esc } from '../utils/date';
+import { esc, localDay, localTimeHM } from '../utils/date';
 import { CN_HOLIDAY_COVERAGE_LABEL } from '../constants/holidays';
 import {
   DEEPSEEK_WALLET_ID,
@@ -207,12 +207,12 @@ function modelRowHTML(wallet: WalletConfig, model: WalletModel): string {
     '      <label class="aus-wallet-peak-toggle" title="按高峰 / 非高峰时段分别定价">'
       + '<input type="checkbox" class="aus-checkbox" data-wallet-model-peak="1" data-wallet-id="' + esc(wallet.id)
       + '" data-model-id="' + esc(model.id) + '"' + (peakOn ? ' checked' : '') + ' /> 峰谷计价</label>',
+    '      <label class="aus-wallet-mctx">上下文',
+    '        <input type="number" min="1" step="1000" class="aus-field aus-field-num aus-wallet-ctx" data-wallet-context-limit="1" data-wallet-id="' + esc(wallet.id)
+      + '" data-model-id="' + esc(model.id) + '" value="' + (model.contextLimit ?? '') + '" placeholder="未知" aria-label="上下文上限" />',
+    '      </label>',
     '    </div>',
     matchLine,
-    '    <label class="aus-wallet-mctx">上下文',
-    '      <input type="number" min="1" step="1000" class="aus-field aus-field-num aus-wallet-ctx" data-wallet-context-limit="1" data-wallet-id="' + esc(wallet.id)
-      + '" data-model-id="' + esc(model.id) + '" value="' + (model.contextLimit ?? '') + '" placeholder="未知" aria-label="上下文上限" />',
-    '    </label>',
     '  </div>',
     '  <div class="aus-wallet-prices' + (peakOn ? ' is-split' : '') + '">',
     tierHTML('offpeak'),
@@ -404,14 +404,23 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
     '    <h4 class="aus-wallet-sec-title">余额与校准</h4>',
     '    <label class="aus-wallet-switch-row" title="按设置页的校准间隔自动查询余额">自动校准' + autoSwitch + '</label>',
     '  </div>',
-    '  <div class="aus-wallet-balance-row">',
-    '    <span class="aus-wallet-balance-label">手工余额</span>',
-    '    <input data-wallet-balance-amount="1" data-wallet-id="' + esc(wallet.id) + '" class="aus-field aus-field-num aus-wallet-balance-input" value="'
+    '  <div class="aus-wallet-balance-grid">',
+    '    <div class="aus-wallet-balance-col">',
+    '      <div class="aus-wallet-balance-row">',
+    '        <span class="aus-wallet-balance-label">手工余额</span>',
+    '        <input data-wallet-balance-amount="1" data-wallet-id="' + esc(wallet.id) + '" class="aus-field aus-field-num aus-wallet-balance-input" value="'
       + esc(wallet.balance.amount ?? '') + '" placeholder="手工余额" aria-label="手工余额" />',
     currencyPicker,
-    '  </div>',
+    '      </div>',
+    '      <div class="aus-wallet-hint">已识别密钥：' + esc(credentialSummary(wallet)) + '</div>',
+    '      <div class="aus-wallet-hint">' + (wallet.balance.lastCalibrated
+      ? '上次校准：' + esc(localDay(wallet.balance.lastCalibrated) + ' ' + localTimeHM(wallet.balance.lastCalibrated))
+      : '尚未校准过余额') + '</div>',
+    '    </div>',
+    '    <div class="aus-wallet-calib-col">',
     calib,
-    '  <div class="aus-wallet-hint">已识别密钥：' + esc(credentialSummary(wallet)) + '</div>',
+    '    </div>',
+    '  </div>',
     '</section>',
   ].join('\n');
   const modelSection = [
