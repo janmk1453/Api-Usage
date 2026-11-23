@@ -9,7 +9,7 @@
 - **公告弹窗**（`ui/announcement-dialog.ts`）：与「更新了什么」共用 `.aus-cl-mask` / `.aus-cl` 外壳（`style.css`「更新弹窗」段），正文换成多条公告，`.aus-an-*` 只负责内容排版（`[data-level]` 决定橙边 / 红底）。一次列出全部未读、关闭即 `markAnnouncementsRead` 把那批 id 记已读。
   - **串行不叠**：`openPanel` 先试更新弹窗；弹出来了就等它的 `onClose`（`openChangelogDialog` 的选项）再过 300ms 试公告，所以一次只出一个弹窗、但两个都会送到。
   - **只在面板里**：面板关着（`display:none`）或还没建好就放弃——拉公告要几秒，期间用户可能已经关掉面板，不能把弹窗甩到酒馆页面上；下次打开再试。
-  - **关于页还有一块「公告」**（`ui/announcement-card.ts`）：同一份 `announcement.json`，位置在「检查更新」卡之后、更新日志之前，列出**当前版本可用的全部公告**（含已读，未读挂一枚小标）、默认展开可收起（折叠状态只在本次会话内记住，不落盘）、正文限高 360px 内滚；进入关于页先用缓存画一次，再 `fetchAnnouncements()`（非 manual，走 30 分钟节流）重画。它**绝不写已读**——已读只由弹窗关闭时 `markAnnouncementsRead` 决定，否则用户还没看就被吃掉。
+  - **关于页还有一块「公告」**（`ui/announcement-card.ts`）：同一份 `announcement.json`，位置在「检查更新」卡之后、更新日志之前，列出**当前版本可用的全部公告**（含已读，未读挂一枚小标）、默认展开可收起（折叠状态只在本次会话内记住，不落盘）、正文限高 360px 内滚；进入关于页先用缓存画一次，再 `fetchAnnouncements({ manual: true })` 强制拉一次（**跳过节流**：每次进关于页都要看到最新公告，30 分钟节流是给常驻弹窗用的）重画；拉不到静默保留缓存，不弹错。它**绝不写已读**——已读只由弹窗关闭时 `markAnnouncementsRead` 决定，否则用户还没看就被吃掉。
   - **`.aus-an` 的 `margin:auto`** 只给桌面端用（公告可能很长，`align-items:center` 在内容超高时会把顶部裁掉）；**窄屏必须归零**，flex 的 auto 外边距优先级高于 `align-items:flex-end`，不归零会把弹窗顶到屏幕正中、还丢掉「上圆下方」的底部卡片形状。
 
 ## 安卓返回键（一次返回直接关面板）

@@ -6,7 +6,8 @@
  * 所以这里**绝不写已读**——已读只由弹窗关闭时 markAnnouncementsRead 决定，否则用户还没看就把未读吃掉了。
  *
  * 数据：readCachedAnnouncements() 经 isAnnouncementActive 过滤（版本区间 + until）+ sortAnnouncements 排序。
- * 进入关于页先用缓存画一次（断网也有内容），再 fetchAnnouncements()（非 manual，走 30 分钟节流）拿到新列表后重画。
+ * 进入关于页先用缓存画一次（断网也有内容），再强制拉一次（fetchAnnouncements({ manual: true })，
+ * 跳过节流——每次进关于页都要看到最新公告），拿到新列表后重画。
  * 折叠状态只在本次会话内记住（模块级变量、不落盘），与设置页 WebDAV 卡的「每次都从默认态开始」一致。
  */
 import type { AnnouncementItem } from '../services/announcement';
@@ -144,15 +145,16 @@ export function bindAnnouncementCard(doc: Document): void {
 }
 
 /**
- * 进入关于页时调用：先用缓存重画一次（顺手把上一轮拉到的写进页面），再拉一次远端。
- * 拉取失败或节流跳过都静默保留缓存内容——这块是展示，不该因为网络问题弹错。
+ * 进入关于页时调用：先用缓存重画一次（顺手把上一轮拉到的写进页面），再强制拉一次远端。
+ * manual 跳过节流：30 分钟内拉过也要再拉——进入关于页就该看到最新公告，节流是给常驻弹窗用的。
+ * 拉取失败静默保留缓存内容——这块是展示，不该因为网络问题弹错。
  */
 export async function refreshAnnouncementCard(doc?: Document): Promise<void> {
   const target: Document = doc || ((window.parent as any)?.document ?? document);
   if (!target) return;
   try { paint(target); } catch { /* 模板缺失：忽略 */ }
   let fresh: AnnouncementItem[] | null = null;
-  try { fresh = (await fetchAnnouncements()).items; } catch { fresh = null; }
+  try { fresh = (await fetchAnnouncements({ manual: true })).items; } catch { fresh = null; }
   if (!fresh) return;
   try { paint(target, activeAnnouncements(fresh, { version: APP_VERSION })); } catch { /* 面板已重建：忽略 */ }
 }

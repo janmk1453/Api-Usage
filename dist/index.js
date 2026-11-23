@@ -12867,7 +12867,7 @@ var PRIVACY_ITEMS = [
 	"查询由浏览器直连厂商接口，不经过第三方代理；未开放跨域（CORS）的厂商会直接失败并提示，扩展不会绕过该限制。",
 	"XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。",
 	"<strong>请求日志</strong>只存在本机浏览器：只保留最近一轮请求的标头、正文与响应，标头里的密钥会打码，正文里有这一轮的聊天与提示词，可随时在日志页清空，不进历史、统计、导出与云同步。",
-	"<strong>公告</strong>：打开面板时可能向 GitHub 拉取一份公告文本（静态 JSON，走与检查更新相同的多源镜像），只读取公告内容，不携带任何本地数据；拉不到就静默跳过，不影响其他功能。",
+	"<strong>公告</strong>：打开面板与进入「关于」页时可能向 GitHub 拉取一份公告文本（静态 JSON，走与检查更新相同的多源镜像），只读取公告内容，不携带任何本地数据；拉不到就静默跳过，不影响其他功能。",
 	"<strong>上传反馈</strong>只有你点「同意并上传」才发出：请求正文（含聊天与提示词）、最近报错、设置与环境摘要、对话名与角色名会发到弹窗里显示的地址（默认是本项目自建接收端，可改成你自己的），能识别的密钥会抹成 *** 但不能保证抹净，上传后由接收方保存、无法撤回。",
 	"本扩展完整代码开源，可自行审查。"
 ];
@@ -13358,8 +13358,9 @@ function bindAnnouncementCard(doc) {
 	});
 }
 /**
-* 进入关于页时调用：先用缓存重画一次（顺手把上一轮拉到的写进页面），再拉一次远端。
-* 拉取失败或节流跳过都静默保留缓存内容——这块是展示，不该因为网络问题弹错。
+* 进入关于页时调用：先用缓存重画一次（顺手把上一轮拉到的写进页面），再强制拉一次远端。
+* manual 跳过节流：30 分钟内拉过也要再拉——进入关于页就该看到最新公告，节流是给常驻弹窗用的。
+* 拉取失败静默保留缓存内容——这块是展示，不该因为网络问题弹错。
 */
 async function refreshAnnouncementCard(doc) {
 	const target = doc || (window.parent?.document ?? document);
@@ -13369,7 +13370,7 @@ async function refreshAnnouncementCard(doc) {
 	} catch {}
 	let fresh = null;
 	try {
-		fresh = (await fetchAnnouncements()).items;
+		fresh = (await fetchAnnouncements({ manual: true })).items;
 	} catch {
 		fresh = null;
 	}
