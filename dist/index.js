@@ -2202,19 +2202,128 @@ function placeDropdownRelativeToHost(input) {
 	};
 }
 //#endregion
+//#region src/ui/overview-breakdown.ts
+/** 金额差额的判定阈值：小于半分钱视为同额（避免浮点噪声多出一行「未分项 ¥0.0000」） */
+var COST_EPS = 5e-4;
+function num$3(value) {
+	const n = Number(value);
+	return Number.isFinite(n) ? n : 0;
+}
+function percentOf(value, total) {
+	if (!(total > 0) || !(value > 0)) return 0;
+	return Math.round(value / total * 1e3) / 10;
+}
+/**
+* 左卡四段：命中 / 未命中 / 输出，以及合计与三段之和不符时的「未分项」。
+* 分母取 max(total_tokens, 三段之和)：旧记录或中断轮次可能只写了总计、没有分项，
+* 反过来也可能只写了分项。这样占比条与合计行永远自洽。
+*/
+function tokenBreakdown(v) {
+	const hit = Math.max(0, num$3(v.hit));
+	const miss = Math.max(0, num$3(v.miss));
+	const output = Math.max(0, num$3(v.output));
+	const partsSum = hit + miss + output;
+	const total = Math.max(num$3(v.totalTokens), partsSum);
+	const parts = [
+		{
+			key: "hit",
+			label: "命中缓存",
+			value: hit,
+			percent: percentOf(hit, total)
+		},
+		{
+			key: "miss",
+			label: "未命中缓存",
+			value: miss,
+			percent: percentOf(miss, total)
+		},
+		{
+			key: "output",
+			label: "输出",
+			value: output,
+			percent: percentOf(output, total)
+		}
+	];
+	const rest = Math.max(0, Math.round((total - partsSum) * 100) / 100);
+	if (rest > 0) parts.push({
+		key: "rest",
+		label: "未分项",
+		value: rest,
+		percent: percentOf(rest, total)
+	});
+	return {
+		total,
+		parts
+	};
+}
+/** 右卡：输入支出 / 输出支出（金额），合计与两者不符时补「未分项」 */
+function costBreakdown(v) {
+	const inputCost = Math.max(0, num$3(v.inputCost));
+	const outputCost = Math.max(0, num$3(v.outputCost));
+	const partsSum = inputCost + outputCost;
+	const total = Math.max(num$3(v.totalCost), partsSum);
+	const parts = [{
+		key: "input",
+		label: "输入支出",
+		value: inputCost,
+		percent: percentOf(inputCost, total)
+	}, {
+		key: "output",
+		label: "输出支出",
+		value: outputCost,
+		percent: percentOf(outputCost, total)
+	}];
+	const rest = total - partsSum;
+	if (rest > COST_EPS) parts.push({
+		key: "rest",
+		label: "未分项",
+		value: Math.round(rest * 1e4) / 1e4,
+		percent: percentOf(rest, total)
+	});
+	return {
+		total,
+		parts
+	};
+}
+/** 缓存省下多少输入费用：节省 ÷（节省 + 实际输入支出），两者同币种同口径 */
+function savingSharePercent(v) {
+	const savings = Math.max(0, num$3(v.savings));
+	const inputCost = Math.max(0, num$3(v.inputCost));
+	if (savings + inputCost <= 0) return 0;
+	return Math.round(savings / (savings + inputCost) * 1e3) / 10;
+}
+function percentText(percent) {
+	const n = num$3(percent);
+	return (Number.isInteger(n) ? String(n) : n.toFixed(1)) + "%";
+}
+function barHTML(parts) {
+	const segs = parts.map((part) => "<span class=\"aus-ovm-seg is-" + part.key + "\" style=\"--aus-ovm-seg:" + part.percent + "\"></span>").join("");
+	return "<div class=\"aus-ovm-bar\" role=\"img\" aria-label=\"" + parts.map((part) => part.label + " " + percentText(part.percent)).join("，") + "\">" + segs + "</div>";
+}
+function rowHTML$2(part, valueHTML) {
+	return "<div class=\"aus-ovm-row is-" + part.key + "\"><span class=\"aus-ovm-key\"><i class=\"aus-ovm-dot\"></i>" + part.label + "</span><span class=\"aus-ovm-num\">" + valueHTML + "<small>" + percentText(part.percent) + "</small></span></div>";
+}
+/** 左卡：合计 tokens 大字 + 三段占比条 + 四行明细 + 缓存命中率附注 */
+function historyBreakdownHTML(v, text) {
+	const { total, parts } = tokenBreakdown(v);
+	const rows = parts.map((part) => rowHTML$2(part, text.fmt(part.value))).join("");
+	return "<div class=\"aus-ovm\"><div class=\"ds-card-title\">历史消耗</div><div class=\"aus-ovm-total ds-card-val\">" + text.fmt(total) + "<small>tokens</small></div>" + barHTML(parts) + "<div class=\"aus-ovm-rows\">" + rows + "</div><div class=\"aus-ovm-foot\"><span class=\"aus-ovm-key\">缓存命中率</span><span class=\"aus-ovm-num\">" + percentText(num$3(v.hitRate)) + "</span></div></div>";
+}
+/** 右卡：合计支出大字 + 成本占比条 + 明细行 + 预计节省附注 */
+function spendBreakdownHTML(v, text) {
+	const { total, parts } = costBreakdown(v);
+	const rows = parts.map((part) => rowHTML$2(part, text.money(part.value))).join("");
+	const share = savingSharePercent(v);
+	const sub = share > 0 ? "<small>省下输入 " + percentText(share) + "</small>" : "";
+	return "<div class=\"aus-ovm\"><div class=\"ds-card-title\">支出明细</div><div class=\"aus-ovm-total ds-card-val\">" + text.money(total) + "</div>" + barHTML(parts) + "<div class=\"aus-ovm-rows\">" + rows + "</div><div class=\"aus-ovm-foot\"><span class=\"aus-ovm-key\">预计节省</span><span class=\"aus-ovm-num is-save\">" + text.money(num$3(v.savings)) + sub + "</span></div></div>";
+}
+//#endregion
 //#region src/ui/overview.ts
 function getDoc$11() {
 	return window.parent?.document ?? document;
 }
 function fmt(n) {
 	return n.toLocaleString("zh-CN");
-}
-function CNY(n) {
-	try {
-		return formatMoney(n, 4);
-	} catch {
-		return "¥" + n.toFixed(4) + " CNY";
-	}
 }
 function moneyHtml(cny, digits = 4) {
 	try {
@@ -2601,25 +2710,25 @@ function renderOverview(fullHistory) {
 	}
 	const tokEl = doc.getElementById("aus-total-tokens");
 	if (tokEl) tokEl.textContent = fmt(v.totalTokens) + " tokens";
+	const breakdownInput = {
+		totalTokens: v.totalTokens,
+		hit: v.hit,
+		miss: v.miss,
+		output: v.output,
+		totalCost: v.totalCost,
+		inputCost: v.inputCost,
+		outputCost: v.outputCost,
+		savings: v.savings,
+		hitRate: v.hitRate
+	};
+	const breakdownText = {
+		fmt,
+		money: (value) => moneyHtml(value)
+	};
 	const histHost = doc.getElementById("aus-overview-history");
-	if (histHost) histHost.innerHTML = `
-      <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:8px;">历史消耗</div>
-      <div style="display:grid;gap:10px;font-size:var(--aus-fs-sm);">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">Token 历史消耗</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-text);">${fmt(v.totalTokens)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输入（命中缓存）</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-green);">${fmt(v.hit)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输入（未命中缓存）</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-red);">${fmt(v.miss)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输出</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--aus-token-output);">${fmt(v.output)} tokens</span></div>
-      </div>
-    `;
+	if (histHost) histHost.innerHTML = historyBreakdownHTML(breakdownInput, breakdownText);
 	const spendHost = doc.getElementById("aus-overview-spend");
-	if (spendHost) spendHost.innerHTML = `
-      <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:8px;">支出明细</div>
-      <div style="display:grid;gap:10px;font-size:var(--aus-fs-sm);">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:var(--ds-text-2);padding-top:3px;">预计节省</span><span style="text-align:right;"><div style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-green);">${CNY(v.savings)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:1px;">${fmt(v.hit)} tokens</div></span></div>
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:var(--ds-text-2);padding-top:3px;">支出在输入</span><span style="text-align:right;"><div style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-text);">${CNY(v.inputCost)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:1px;">${fmt(v.hit + v.miss)} tokens</div></span></div>
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:var(--ds-text-2);padding-top:3px;">支出在输出</span><span style="text-align:right;"><div style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-text);">${CNY(v.outputCost)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:1px;">${fmt(v.output)} tokens</div></span></div>
-      </div>
-    `;
+	if (spendHost) spendHost.innerHTML = spendBreakdownHTML(breakdownInput, breakdownText);
 	const fourHost = doc.getElementById("aus-overview-four");
 	if (fourHost) {
 		const keys = ensureFour();

@@ -23,7 +23,8 @@
  用量概览（`ui/overview.ts`）
 
 - **双余额卡**：充值余额（默认 DeepSeek 官方钱包，胶囊可切「全部钱包合计」或其他钱包；**只有它影响余额与剩余轮次预测**，其余指标仍按全量历史；旧 `all` 默认值一次性迁到官方钱包，用户手选后由 `overviewWalletManuallySet` 保护）+ 累计消费（显示币种由钱包驱动 `walletDrivenCurrency`，金额经 `formatMoney`/`getDisplayCurrency` 换算）+ `tokens`。余额汇总按 `CNY/USD` 换算、钱包扣费按钱包自身币种；余额卡按钮文案为「导出记录 / 导入记录」（绑 `#aus-btn-export` / `#aus-btn-import`）。
-- **双明细**：历史消耗（Token 历史 / 命中 / 未命中 / 输出）与支出明细（预计节省 / 支出输入 / 输出）并列；两块主数值统一 `var(--aus-fs-base)` + `font-weight:600` + `tabular-nums`，标签用 `var(--aus-fs-sm)`。
+- **双明细**（`ui/overview-breakdown.ts` 单源产出结构，样式只在 style.css「概览页：历史消耗 / 支出明细」段的 `.aus-ovm-*`）：历史消耗与支出明细并列，两卡同构四层——合计大字（复用 `.ds-card-val`，和结算卡同字号；单位 / 币种降级成 `<small>`）→ 6px 占比条（左卡 `--aus-token-hit/miss/output`，**合计与分项之和不符时补一段灰的「未分项」**）→ 明细行（标签左、数字右对齐 + `tabular-nums`，附注百分比 11px）→ 虚线分隔的对照附注（左卡「缓存命中率」、右卡「预计节省」+ 省下输入比例）。两卡在网格里等高，附注 `margin-top:auto` 压到卡底所以底边对齐；金额一律经 `moneyHtml()` 跟着显示币种走（**不再写死 CNY**）。窄屏两卡各占一行后明细行排 2×2，两套 760 断点必须同步。
+- **占比条的内联值只有 `--aus-ovm-seg`**：段宽由数据（百分比）驱动，故写在模板上；其余尺寸与颜色全部在 CSS。禁止把旧的「Token 历史消耗 / 支出在输入」内联排版加回来。
 - **8 小块**：默认 `repeat(4,1fr)`，`≤760px`/`≤480px` 保持 `repeat(2,1fr)`；指标表 `FOUR_OPTIONS` 共 18 项（含 `avg_ttft`），由 `computeOverview` 单源计算，费用类经 `moneyHtml()` 按币种。
 - **热力图**（`ui/heatmap.ts`）：GitHub 风格近 2 年按日聚合，5 级绿阶；卡片自身 `overflow:hidden` + `max-width:100%`，内部 `overflow-x:auto` 横滑，**禁止让块撑开页面**。
 - **按对话统计**（`ui/chat-summary-table.ts`）：按 `chatId` 聚合（`computeChatStats` 单源，按总 Token 倒序），冷库全量异步补全；除「对话」列外 `data-sort-key` 表头可排序（与模型汇总表共用 `ui/sort-header.ts`，单表只绑一次、相等值按名称兜底），未选列时保持默认顺序。

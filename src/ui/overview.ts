@@ -10,15 +10,13 @@ import { formatMoney, getDisplayCurrency } from '../services/currency';
 import { repository } from '../data/repository';
 import { closeDropdownThenPaint } from './dropdown-close';
 import { placeDropdownRelativeToHost } from './dropdown-placement';
+import { historyBreakdownHTML, spendBreakdownHTML } from './overview-breakdown';
 
 function getDoc(): Document {
   return (window.parent as any)?.document ?? document;
 }
 
 function fmt(n: number) { return n.toLocaleString('zh-CN'); }
-function CNY(n: number) {
-  try {  return formatMoney(n, 4); } catch { return '¥' + n.toFixed(4) + ' CNY'; }
-}
 function moneyHtml(cny: number, digits = 4): string {
   try {
     
@@ -300,30 +298,26 @@ export function renderOverview(fullHistory?: any[]) {
   const tokEl = doc.getElementById('aus-total-tokens');
   if (tokEl) tokEl.textContent = fmt(v.totalTokens) + ' tokens';
 
+  // 两块明细卡：结构、分项口径与文案统一由 ui/overview-breakdown.ts 产出，
+  // 排版与配色只在 style.css 的「概览页：历史消耗 / 支出明细」段（.aus-ovm-*）。
+  const breakdownInput = {
+    totalTokens: v.totalTokens,
+    hit: v.hit,
+    miss: v.miss,
+    output: v.output,
+    totalCost: v.totalCost,
+    inputCost: v.inputCost,
+    outputCost: v.outputCost,
+    savings: v.savings,
+    hitRate: v.hitRate,
+  };
+  const breakdownText = { fmt, money: (value: number) => moneyHtml(value) };
+
   const histHost = doc.getElementById('aus-overview-history');
-  if (histHost) {
-    histHost.innerHTML = `
-      <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:8px;">历史消耗</div>
-      <div style="display:grid;gap:10px;font-size:var(--aus-fs-sm);">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">Token 历史消耗</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-text);">${fmt(v.totalTokens)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输入（命中缓存）</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-green);">${fmt(v.hit)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输入（未命中缓存）</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-red);">${fmt(v.miss)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输出</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--aus-token-output);">${fmt(v.output)} tokens</span></div>
-      </div>
-    `;
-  }
+  if (histHost) histHost.innerHTML = historyBreakdownHTML(breakdownInput, breakdownText);
 
   const spendHost = doc.getElementById('aus-overview-spend');
-  if (spendHost) {
-    spendHost.innerHTML = `
-      <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:8px;">支出明细</div>
-      <div style="display:grid;gap:10px;font-size:var(--aus-fs-sm);">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:var(--ds-text-2);padding-top:3px;">预计节省</span><span style="text-align:right;"><div style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-green);">${CNY(v.savings)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:1px;">${fmt(v.hit)} tokens</div></span></div>
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:var(--ds-text-2);padding-top:3px;">支出在输入</span><span style="text-align:right;"><div style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-text);">${CNY(v.inputCost)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:1px;">${fmt(v.hit + v.miss)} tokens</div></span></div>
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:var(--ds-text-2);padding-top:3px;">支出在输出</span><span style="text-align:right;"><div style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-text);">${CNY(v.outputCost)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:1px;">${fmt(v.output)} tokens</div></span></div>
-      </div>
-    `;
-  }
+  if (spendHost) spendHost.innerHTML = spendBreakdownHTML(breakdownInput, breakdownText);
 
   const fourHost = doc.getElementById('aus-overview-four');
   if (fourHost) {

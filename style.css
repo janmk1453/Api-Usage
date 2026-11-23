@@ -2217,6 +2217,76 @@
   background: var(--ds-text-3);
 }
 
+/* ── 概览页：历史消耗 / 支出明细（两块并排的同构卡）──────────────────────────────
+   结构由 src/ui/overview-breakdown.ts 生成：合计大字（.ds-card-val）→ 三段占比条 →
+   明细行 → 虚线分隔的对照附注。两卡在网格里天然等高，附注靠 margin-top:auto 压到卡底，
+   所以两卡底边始终对齐；模板除数据驱动的 --aus-ovm-seg（每段占比）外不写任何内联尺寸。 */
+#aus-panel .aus-ovm { display: flex; flex-direction: column; height: 100%; min-width: 0; }
+#aus-panel .aus-ovm .ds-card-title { margin-bottom: 10px; }
+/* 合计行：与结算卡同款大字，单位与币种代码降级成小字（moneyHtml 的 span 默认是 12px） */
+#aus-panel .aus-ovm-total { display: flex; align-items: baseline; flex-wrap: wrap; word-break: normal !important; }
+#aus-panel .aus-ovm-total span { font-size: var(--aus-fs-base); }
+/* 占比条：段间不留缝，靠容器圆角裁出胶囊外形；每段宽度由 --aus-ovm-seg 驱动 */
+#aus-panel .aus-ovm-bar {
+  display: flex; height: 6px; min-height: 6px;
+  margin: 10px 0 12px; border-radius: 999px; overflow: hidden;
+  background: var(--ds-card-inner);
+}
+#aus-panel .aus-ovm-seg { flex: var(--aus-ovm-seg, 0) 1 0; min-width: 0; }
+#aus-panel .aus-ovm-seg.is-hit { background: var(--aus-token-hit); }
+#aus-panel .aus-ovm-seg.is-miss { background: var(--aus-token-miss); }
+#aus-panel .aus-ovm-seg.is-output { background: var(--aus-token-output); }
+#aus-panel .aus-ovm-seg.is-input { background: var(--aus-token-miss); }
+#aus-panel .aus-ovm-seg.is-rest { background: var(--ds-border); }
+/* 明细行：左标签右数值，数字统一右对齐 + 等宽数字，附注百分比降级成 11px 小字 */
+#aus-panel .aus-ovm-rows { display: grid; gap: 9px; margin-bottom: 12px; }
+#aus-panel .aus-ovm-row {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 10px; min-width: 0; font-size: var(--aus-fs-sm);
+}
+#aus-panel .aus-ovm-key {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-width: 0; color: var(--ds-text-2);
+}
+#aus-panel .aus-ovm-dot { width: 7px; height: 7px; border-radius: 999px; flex: 0 0 auto; background: var(--ds-text-3); }
+#aus-panel .is-hit .aus-ovm-dot { background: var(--aus-token-hit); }
+#aus-panel .is-miss .aus-ovm-dot, #aus-panel .is-input .aus-ovm-dot { background: var(--aus-token-miss); }
+#aus-panel .is-output .aus-ovm-dot { background: var(--aus-token-output); }
+#aus-panel .aus-ovm-num {
+  display: inline-flex; align-items: baseline; gap: 0;
+  flex: 0 0 auto; text-align: right; white-space: nowrap;
+  font-size: var(--aus-fs-base); font-weight: 600;
+  font-variant-numeric: tabular-nums; color: var(--ds-text);
+}
+#aus-panel .aus-ovm-num small {
+  margin-left: 5px; font-size: var(--aus-fs-xs); font-weight: 400; color: var(--ds-text-3);
+}
+#aus-panel .aus-ovm-num span { font-size: var(--aus-fs-xs); }
+#aus-panel .is-hit .aus-ovm-num { color: var(--ds-green); }
+#aus-panel .is-miss .aus-ovm-num { color: var(--ds-red); }
+#aus-panel .is-output .aus-ovm-num { color: var(--aus-token-output); }
+#aus-panel .is-rest .aus-ovm-num { color: var(--ds-text-3); }
+#aus-panel .aus-ovm-num.is-save { color: var(--ds-green); }
+/* 对照附注：虚线分隔并压到卡底，两卡等高时底边自然对齐 */
+#aus-panel .aus-ovm-foot {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  margin-top: auto; padding-top: 10px;
+  border-top: 1px dashed var(--ds-border);
+  font-size: var(--aus-fs-sm);
+}
+/* 窄屏两块卡各占一行后，明细行排成 2×2，避免四行纵向过长（两套断点必须同步） */
+@media (max-width: 760px) {
+  #aus-panel .aus-ovm-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; }
+  #aus-panel .aus-ovm-row { flex-direction: column; align-items: flex-start; gap: 2px; }
+  #aus-panel .aus-ovm-bar { margin: 8px 0 10px; }
+  #aus-panel .aus-ovm-foot { padding-top: 8px; }
+}
+@container ausbody (max-width: 760px) {
+  #aus-panel .aus-ovm-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; }
+  #aus-panel .aus-ovm-row { flex-direction: column; align-items: flex-start; gap: 2px; }
+  #aus-panel .aus-ovm-bar { margin: 8px 0 10px; }
+  #aus-panel .aus-ovm-foot { padding-top: 8px; }
+}
 /* ── 统一复选框外观：原生 input 只做语义与点击载体，勾形用内联 SVG 画（不依赖伪元素几何与 accent-color） ── */
 #aus-panel input[type="checkbox"].aus-checkbox {
   appearance: none;
