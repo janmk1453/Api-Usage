@@ -9,7 +9,7 @@ import { a as getDisplayCurrency, i as formatMoney, o as getWalletExchangeRate, 
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
 import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-ysrJmDOg.js";
 import { r as registerRequestOriginSelf } from "./request-origin-C9kLQ_0W.js";
-import { a as CHANGELOG, c as BUILD_NO, i as renderChangelogCard, n as changelogSectionsHTML, o as APP_BUILD_TAG, r as formatChangelogDate, s as APP_VERSION, t as bindChangelog } from "./changelog-i35gZh7M.js";
+import { a as readSeenAnnouncementIds, c as bindChangelog, d as renderChangelogCard, f as CHANGELOG, h as BUILD_NO, i as readCachedAnnouncements, l as changelogSectionsHTML, m as APP_VERSION, n as isAnnouncementActive, o as sortAnnouncements, p as APP_BUILD_TAG, t as fetchAnnouncements, u as formatChangelogDate } from "./announcement-CWQaFtlb.js";
 import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-SMfStmcg.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
 import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-8s1u5P0g.js";
@@ -13203,6 +13203,104 @@ function stripGuardState(state) {
 	return next;
 }
 //#endregion
+//#region src/ui/announcement-card.ts
+var ANNOUNCEMENT_CARD_ID = "aus-announcements";
+/** 折叠状态：本次会话内记住，不落盘（重开面板即回到展开） */
+var cardOpen = true;
+/** 当前版本此刻能收到的公告：按版本区间 / until 过滤后倒序 */
+function activeAnnouncements(items, ctx) {
+	return sortAnnouncements((Array.isArray(items) ? items : []).filter((item) => item && isAnnouncementActive(item, ctx)));
+}
+function countText(total, unread) {
+	if (!total) return "暂无公告";
+	return unread > 0 ? total + " 条 · " + unread + " 条未读" : total + " 条";
+}
+function itemHtml(item, unread, now) {
+	const date = item.date ? formatChangelogDate(item.date, now) : "";
+	const meta = (unread ? "<span class=\"aus-an-card-unread\">未读</span>" : "") + (date ? "<span class=\"aus-an-item-date\">" + esc$3(date) + "</span>" : "");
+	const link = item.linkUrl ? "<a class=\"aus-an-link\" href=\"" + esc$3(item.linkUrl) + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + esc$3(item.linkText || "查看详情") + "</a>" : "";
+	return "<section class=\"aus-an-item\" data-level=\"" + esc$3(item.level) + "\"><div class=\"aus-an-item-head\"><span class=\"aus-an-item-title\">" + esc$3(item.title) + "</span>" + (meta ? "<span class=\"aus-an-item-meta\">" + meta + "</span>" : "") + "</div>" + (Array.isArray(item.body) ? item.body : []).map((p) => "<p class=\"aus-an-p\">" + esc$3(p) + "</p>").join("") + link + "</section>";
+}
+/** 卡片 HTML（纯函数：只吃条目数组，不碰 DOM，测试可直接断言字符串） */
+function announcementCardHTML(items, options = {}) {
+	const list = sortAnnouncements((Array.isArray(items) ? items : []).filter(Boolean));
+	const open = options.open !== false;
+	const now = Number(options.now) || Date.now();
+	const seen = /* @__PURE__ */ new Set();
+	for (const id of options.seenIds || []) seen.add(String(id));
+	const unread = list.filter((item) => !seen.has(item.id)).length;
+	const body = list.length ? "<div class=\"aus-an-list\">" + list.map((item) => itemHtml(item, !seen.has(item.id), now)).join("") + "</div>" : "<div class=\"aus-an-card-empty\">当前版本没有可展示的公告</div>";
+	return "<div class=\"ds-card\" id=\"aus-announcements\"><button type=\"button\" class=\"aus-an-card-head\" data-an-card-toggle aria-expanded=\"" + (open ? "true" : "false") + "\" aria-controls=\"aus-announcements-body\"><span class=\"aus-an-card-title\">公告</span><span class=\"aus-an-card-count\">" + esc$3(countText(list.length, unread)) + "</span><span class=\"aus-an-card-caret\">" + icon(open ? "chevron-up" : "chevron-down", 16) + "</span></button><div class=\"aus-an-card-body\" id=\"aus-announcements-body\"" + (open ? "" : " style=\"display:none;\"") + ">" + body + "</div></div>";
+}
+/** 本地缓存里当前可用的公告 */
+function cachedItems() {
+	return activeAnnouncements(readCachedAnnouncements(), { version: APP_VERSION });
+}
+/** 用本地缓存渲染（关于页模板与刷新都走这里，页面一出现就有内容） */
+function renderAnnouncementCard() {
+	return announcementCardHTML(cachedItems(), {
+		open: cardOpen,
+		seenIds: readSeenAnnouncementIds()
+	});
+}
+/** 只换卡片内部，保留 #aus-announcements 本体（事件委托绑在它上面，不能整个替换） */
+function paint(doc, items) {
+	const root = doc.getElementById(ANNOUNCEMENT_CARD_ID);
+	if (!root) return;
+	const html = announcementCardHTML(items || cachedItems(), {
+		open: cardOpen,
+		seenIds: readSeenAnnouncementIds()
+	});
+	const holder = doc.createElement("div");
+	holder.innerHTML = html;
+	const fresh = holder.firstElementChild;
+	if (fresh) root.innerHTML = fresh.innerHTML;
+}
+function setOpen(root, open) {
+	cardOpen = open;
+	const head = root.querySelector("[data-an-card-toggle]");
+	const body = root.querySelector(".aus-an-card-body");
+	if (head) {
+		head.setAttribute("aria-expanded", open ? "true" : "false");
+		const caret = head.querySelector(".aus-an-card-caret");
+		if (caret) caret.innerHTML = icon(open ? "chevron-up" : "chevron-down", 16);
+	}
+	if (body) body.style.display = open ? "grid" : "none";
+}
+/** 绑定收起展开（事件委托，只绑一次；表头是原生 button，键盘回车 / 空格同样可用） */
+function bindAnnouncementCard(doc) {
+	const root = doc.getElementById(ANNOUNCEMENT_CARD_ID);
+	if (!root || root.getAttribute("data-bound") === "1") return;
+	root.setAttribute("data-bound", "1");
+	root.addEventListener("click", (ev) => {
+		const target = ev.target;
+		const head = target && target.closest ? target.closest("[data-an-card-toggle]") : null;
+		if (!head || !root.contains(head)) return;
+		setOpen(root, head.getAttribute("aria-expanded") !== "true");
+	});
+}
+/**
+* 进入关于页时调用：先用缓存重画一次（顺手把上一轮拉到的写进页面），再拉一次远端。
+* 拉取失败或节流跳过都静默保留缓存内容——这块是展示，不该因为网络问题弹错。
+*/
+async function refreshAnnouncementCard(doc) {
+	const target = doc || (window.parent?.document ?? document);
+	if (!target) return;
+	try {
+		paint(target);
+	} catch {}
+	let fresh = null;
+	try {
+		fresh = (await fetchAnnouncements()).items;
+	} catch {
+		fresh = null;
+	}
+	if (!fresh) return;
+	try {
+		paint(target, activeAnnouncements(fresh, { version: APP_VERSION }));
+	} catch {}
+}
+//#endregion
 //#region src/ui/changelog-dialog.ts
 /**
 * 「更新了什么」弹窗：版本升级后第一次打开面板时，把最新一版的更新日志弹出来。
@@ -14911,6 +15009,7 @@ function switchView(view, opts) {
 			} else if (view === "chat-manage") Promise.resolve(renderChatManageView()).catch(() => {});
 			else if (view === "tap") renderTapView();
 			else if (view === "log") renderLogView();
+			else if (view === "about") Promise.resolve(refreshAnnouncementCard(doc)).catch(() => {});
 		} catch {}
 	};
 	const animateIn = view !== prevView;
@@ -15444,6 +15543,7 @@ function createPanel() {
                 </div>
                 <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">可选择 main（稳定）或 dev（测试）分支获取更新，默认 main；更新完成后自动刷新网页。</div>
               </div>
+              ${renderAnnouncementCard()}
               ${renderChangelogCard()}
             </div>
           </div>
@@ -15628,6 +15728,7 @@ function createPanel() {
 	renderSettings(doc);
 	bindHistoryCompare();
 	bindChangelog(doc);
+	bindAnnouncementCard(doc);
 	bindAboutBrandTap(doc, () => {
 		openChangelogDialog({
 			currentVersion: APP_VERSION,
@@ -15876,7 +15977,7 @@ function resetPanelState() {
 /** 打开面板时试弹未读公告（异步、失败静默；判定见 announcement-dialog.ts） */
 function maybeShowAnnouncements() {
 	try {
-		import("./announcement-dialog-BNzOSnhk.js").then((m) => m.maybeShowAnnouncementDialog()).catch(() => {});
+		import("./announcement-dialog-DyVZGExt.js").then((m) => m.maybeShowAnnouncementDialog()).catch(() => {});
 	} catch {}
 }
 function openPanel() {

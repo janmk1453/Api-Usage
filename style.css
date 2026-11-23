@@ -3098,6 +3098,47 @@
 
 .aus-an-link:hover { text-decoration: underline; }
 
+/* ==================== 关于页「公告」块（复用 .aus-an-* 条目排版，外壳换成本地折叠卡） ==================== */
+#aus-announcements { display: grid; gap: 10px; }
+
+.aus-an-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.aus-an-card-head:focus-visible { outline: 2px solid var(--ds-orange); outline-offset: 2px; border-radius: 6px; }
+.aus-an-card-title { font-size: var(--aus-fs-base); font-weight: 600; color: var(--ds-text); }
+.aus-an-card-count { font-size: var(--aus-fs-sm); color: var(--ds-text-3); }
+.aus-an-card-caret { margin-left: auto; align-self: center; display: inline-flex; flex-shrink: 0; color: var(--ds-text-3); }
+.aus-an-card-head:hover .aus-an-card-caret { color: var(--ds-text-2); }
+
+/* 块内属二级面板：必须自带白底（卡片本身是灰面）；公告可能很长，限高后内部滚动 */
+#aus-announcements .aus-an-card-body {
+  display: grid;
+  gap: 8px;
+  max-height: 360px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+#aus-announcements .aus-an-list { gap: 8px; }
+#aus-announcements .aus-an-item { padding: 10px 12px; background: var(--ds-card-inner); }
+#aus-announcements .aus-an-item[data-level="critical"] { background: var(--ds-red-bg); }
+
+.aus-an-item-meta { display: flex; align-items: baseline; gap: 6px; flex-shrink: 0; }
+.aus-an-item-meta .aus-an-item-date { flex-shrink: 0; }
+.aus-an-card-unread { font-size: var(--aus-fs-xs); font-weight: 600; color: var(--ds-orange); }
+.aus-an-card-empty { font-size: var(--aus-fs-sm); line-height: 1.6; color: var(--ds-text-3); }
+
 /* 历史记录卡片 Token 占比条图例色块（三段配色见 --aus-token-*） */
 .aus-token-dot {
   display: inline-block;

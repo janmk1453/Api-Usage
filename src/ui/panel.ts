@@ -44,6 +44,7 @@ import { afterNextPaint, closeDropdownInstant } from './dropdown-close';
 import { BACK_GUARD_DEPTH, nextGuardState, readGuardDepth, stripGuardState } from './back-guard';
 import { mobileDeviceHint } from '../utils/device';
 import { bindChangelog, renderChangelogCard } from './changelog';
+import { bindAnnouncementCard, refreshAnnouncementCard, renderAnnouncementCard } from './announcement-card';
 import { bindAboutBrandTap, maybeShowChangelogDialog, openChangelogDialog } from './changelog-dialog';
 import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
 import { initPillState } from './pill';
@@ -1423,6 +1424,7 @@ function switchView(view: AppView, opts?: { track?: boolean; back?: boolean }) {
       else if (view === 'chat-manage') Promise.resolve(renderChatManageView()).catch(() => {});
       else if (view === 'tap') renderTapView();
       else if (view === 'log') renderLogView();
+      else if (view === 'about') Promise.resolve(refreshAnnouncementCard(doc)).catch(() => {});
     } catch {}
   };
   // 底栏布局下切到别的页时，先把指示胶囊送上轨道（原因见 renderAfterPillStart 注释）；
@@ -1854,6 +1856,7 @@ export function createPanel() {
                 </div>
                 <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">可选择 main（稳定）或 dev（测试）分支获取更新，默认 main；更新完成后自动刷新网页。</div>
               </div>
+              ${renderAnnouncementCard()}
               ${renderChangelogCard()}
             </div>
           </div>
@@ -2040,6 +2043,7 @@ export function createPanel() {
   renderSettings(doc);
   bindHistoryCompare();
   bindChangelog(doc);
+  bindAnnouncementCard(doc);
   // 开发者自测入口：关于页「API用量统计」标题连点十次唤出更新弹窗（不写已读版本）
   bindAboutBrandTap(doc, () => {
     openChangelogDialog({ currentVersion: APP_VERSION, onOpenAll: () => switchView('about'), markSeen: false });
