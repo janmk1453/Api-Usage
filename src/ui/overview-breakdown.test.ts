@@ -125,6 +125,12 @@ describe('overview-breakdown：接线契约', () => {
     expect(overviewSrc).not.toContain('function CNY(');
   });
 
+  it('style.css：桌面明细就是两行两列，窄屏同两列但行内改纵向', () => {
+    expect(cssSrc).toContain('#aus-panel .aus-ovm-rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 18px; margin-bottom: 12px; }');
+    const stacked = (cssSrc.match(/#aus-panel \.aus-ovm-row \{ flex-direction: column; align-items: flex-start; gap: 2px; \}/g) || []).length;
+    expect(stacked).toBe(2);
+  });
+
   it('style.css：占比条窄屏与桌面口径，两套断点同步', () => {
     expect(cssSrc).toContain('#aus-panel .aus-ovm-bar {');
     expect(cssSrc).toContain('#aus-panel .aus-ovm-seg { flex: var(--aus-ovm-seg, 0) 1 0; min-width: 0; }');

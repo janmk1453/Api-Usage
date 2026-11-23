@@ -2238,8 +2238,9 @@
 #aus-panel .aus-ovm-seg.is-output { background: var(--aus-token-output); }
 #aus-panel .aus-ovm-seg.is-input { background: var(--aus-token-miss); }
 #aus-panel .aus-ovm-seg.is-rest { background: var(--ds-border); }
-/* 明细行：左标签右数值，数字统一右对齐 + 等宽数字，附注百分比降级成 11px 小字 */
-#aus-panel .aus-ovm-rows { display: grid; gap: 9px; margin-bottom: 12px; }
+/* 明细行：左标签右数值，数字统一右对齐 + 等宽数字，附注百分比降级成 11px 小字。
+   桌面就是两行两列（四项挤一列太长，两列左右各一组更好扫）；窄屏同两列但行内改纵向，见文件末尾断点。 */
+#aus-panel .aus-ovm-rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 18px; margin-bottom: 12px; }
 #aus-panel .aus-ovm-row {
   display: flex; align-items: baseline; justify-content: space-between;
   gap: 10px; min-width: 0; font-size: var(--aus-fs-sm);
