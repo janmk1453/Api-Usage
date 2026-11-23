@@ -576,11 +576,13 @@
 #aus-panel .aus-wallet-body { display: grid; gap: 0; }
 
 /* —— 分区 —— */
-#aus-panel .aus-wallet-sec { display: grid; gap: 8px; padding: 14px 0; border-top: 1px solid var(--ds-border); }
+#aus-panel .aus-wallet-sec { display: grid; gap: 10px; padding: 18px 0; border-top: 1px solid var(--ds-border); }
 #aus-panel .aus-wallet-sec:first-child { padding-top: 0; border-top: 0; }
 #aus-panel .aus-wallet-sec:last-child { padding-bottom: 0; }
 #aus-panel .aus-wallet-sec-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-#aus-panel .aus-wallet-sec-title { margin: 0; font-size: var(--aus-fs-sm); font-weight: 600; color: var(--ds-text-2); line-height: 1.5; }
+#aus-panel .aus-wallet-sec-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: var(--aus-fs-base); font-weight: 600; color: var(--ds-text); line-height: 1.5; }
+/* 段标题前的短竖条：两段之间只靠一条淡线看不清，这里给每段一个起点 */
+#aus-panel .aus-wallet-sec-title::before { content: ''; width: 3px; height: 13px; flex: 0 0 auto; border-radius: 999px; background: var(--ds-border-strong); }
 #aus-panel .aus-wallet-sec-note { margin-left: 8px; font-size: var(--aus-fs-xs); font-weight: 400; color: var(--ds-text-3); }
 #aus-panel .aus-wallet-sec-actions { display: flex; align-items: flex-start; justify-content: flex-end; gap: 6px; flex-wrap: wrap; margin-left: auto; min-width: 0; }
 #aus-panel .aus-wallet-hint { font-size: var(--aus-fs-xs); color: var(--ds-text-3); line-height: 1.6; word-break: break-word; }
@@ -715,7 +717,12 @@
   #aus-wallet .aus-wallet-menu-item:hover { background: var(--ds-card); }
 }
 #aus-wallet .aus-wallet-menu-item.is-danger { color: var(--ds-red); }
-#aus-wallet .aus-wallet-menu-note { padding: 6px 9px; font-size: var(--aus-fs-xs); color: var(--ds-text-3); }
+#aus-wallet .aus-wallet-menu-note { padding: 6px 9px; font-size: var(--aus-fs-xs); color: var(--ds-text-3); line-height: 1.5; }
+/* 菜单里的开关行：文字在左、.aus-switch 在右，整行有内距，读到就知道可以点 */
+#aus-wallet .aus-wallet-menu-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 9px; border-radius: 7px; font-size: var(--aus-fs-sm); color: var(--ds-text); }
+#aus-wallet .aus-wallet-menu-row .aus-switch { flex: 0 0 auto; }
+#aus-wallet .aus-wallet-menu-label { white-space: nowrap; }
+#aus-wallet .aus-wallet-menu-sep { margin: 4px 9px; border-top: 1px solid var(--ds-border); }
 
 /* —— 第一段：余额与校准 —— */
 /* 宽屏左右两栏：左「手工余额 + 已识别密钥」，右「主密钥 / 立即校准 / 查询适配器」，把卡片横向空间用起来 */
@@ -735,15 +742,18 @@
   grid-template-columns: minmax(200px, 320px) minmax(0, 1fr) 96px;
   gap: 16px;
   align-items: start;
-  padding: 12px 4px;
+  padding: 14px 8px;
   border-top: 1px solid var(--ds-border);
+  border-radius: 8px;
+}
+@media (hover: hover) {
+  #aus-panel .aus-wallet-mrow:hover { background: var(--ds-card-inner); }
 }
 #aus-panel .aus-wallet-mrow[data-hidden='1'] { opacity: 0.6; }
 #aus-panel .aus-wallet-mname { display: grid; gap: 5px; min-width: 0; }
 #aus-panel .aus-wallet-model-name { width: 100%; font-weight: 600; }
 #aus-panel .aus-wallet-mname-foot { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; min-width: 0; }
 #aus-panel .aus-wallet-mmeta { min-width: 0; font-size: var(--aus-fs-xs); color: var(--ds-text-3); word-break: break-word; line-height: 1.5; }
-#aus-panel .aus-wallet-peak-toggle { display: inline-flex; align-items: center; gap: 5px; font-size: var(--aus-fs-xs); color: var(--ds-text-2); white-space: nowrap; cursor: pointer; }
 #aus-panel .aus-wallet-mctx { display: inline-flex; align-items: center; gap: 5px; font-size: var(--aus-fs-xs); color: var(--ds-text-3); }
 #aus-panel .aus-wallet-ctx { width: 88px; min-height: 26px; padding: 3px 6px; }
 /* 价格组：只有启用峰谷的模型并排两组，否则一组铺满整列 */
@@ -760,7 +770,7 @@
 #aus-panel .aus-wallet-pf > span { font-size: var(--aus-fs-xs); color: var(--ds-text-3); }
 #aus-panel .aus-wallet-price { width: 100%; min-width: 0; }
 #aus-panel .aus-wallet-price.is-pending { border-color: var(--ds-red-border) !important; }
-#aus-panel .aus-wallet-mops { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+#aus-panel .aus-wallet-mops { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
 #aus-panel .aus-wallet-src { padding: 2px 7px; border-radius: 999px; background: var(--ds-card-inner); color: var(--ds-text-2); font-size: var(--aus-fs-xs); white-space: nowrap; }
 #aus-panel .aus-wallet-src.is-pending { background: var(--ds-red-bg); color: var(--ds-red); }
 #aus-panel .aus-wallet-src.is-sync { background: var(--ds-green-bg); color: var(--ds-green); }
@@ -866,7 +876,6 @@
   }
   #aus-panel .aus-wallet-mtier { grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 6px; }
   #aus-panel .aus-wallet-prices.is-split { grid-template-columns: minmax(0, 1fr); gap: 10px; }
-  #aus-panel .aus-wallet-peak-toggle { font-size: var(--aus-fs-base); }
   #aus-panel .aus-wallet-mops { justify-content: flex-start; }
   #aus-panel .aus-wallet-avatar { width: 36px; height: 36px; border-radius: 10px; font-size: 15px; grid-column: 1; grid-row: 1; }
   /* 窄屏隐藏冗余徽标：副标题已含类型与来源，避免名称行折行把操作按钮挤下去 */
@@ -902,7 +911,6 @@
   }
   #aus-panel .aus-wallet-mtier { grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 6px; }
   #aus-panel .aus-wallet-prices.is-split { grid-template-columns: minmax(0, 1fr); gap: 10px; }
-  #aus-panel .aus-wallet-peak-toggle { font-size: var(--aus-fs-base); }
   #aus-panel .aus-wallet-mops { justify-content: flex-start; }
   #aus-panel .aus-wallet-avatar { width: 36px; height: 36px; border-radius: 10px; font-size: 15px; grid-column: 1; grid-row: 1; }
   /* 窄屏隐藏冗余徽标：副标题已含类型与来源，避免名称行折行把操作按钮挤下去 */

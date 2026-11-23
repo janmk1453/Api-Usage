@@ -9538,6 +9538,12 @@ function peaksHTML(wallet) {
 		"</div>"
 	].join("");
 }
+/** 整卡重画会把浮层重建为 display:none；从菜单里切换开关后按 modelId 再打开一次。 */
+function reopenModelMenu(doc, modelId) {
+	if (!modelId) return;
+	const dropdown = doc.getElementById("aus-wallet-model-drop-" + modelId);
+	if (dropdown) dropdown.style.display = "block";
+}
 function modelRowHTML(wallet, model) {
 	const pending = !model.price.priceConfigured;
 	const canDelete = model.source !== "builtin";
@@ -9558,14 +9564,30 @@ function modelRowHTML(wallet, model) {
 			"</div>"
 		].join("");
 	};
-	const menu = "<div id=\"aus-wallet-model-drop-" + esc$3(model.id) + "\" data-wallet-dropdown=\"1\" class=\"aus-wallet-drop is-right\" style=\"display:none;\"><label class=\"aus-wallet-menu-item\"><input type=\"checkbox\" class=\"aus-checkbox\" data-wallet-model-lock=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" data-model-id=\"" + esc$3(model.id) + "\"" + (model.locked ? " checked" : "") + " /> 锁定价格</label>" + (canDelete ? "<button type=\"button\" class=\"aus-wallet-menu-item is-danger\" data-wallet-model-delete=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" data-model-id=\"" + esc$3(model.id) + "\">删除模型</button>" : "<div class=\"aus-wallet-menu-note\">内置模型不可删除</div>") + "</div>";
+	const switchRow = (label, html) => "<div class=\"aus-wallet-menu-row\"><span class=\"aus-wallet-menu-label\">" + label + "</span>" + html + "</div>";
+	const menu = "<div id=\"aus-wallet-model-drop-" + esc$3(model.id) + "\" data-wallet-dropdown=\"1\" class=\"aus-wallet-drop is-right is-wide\" style=\"display:none;\">" + switchRow("峰谷计价", switchHTML("aus-wallet-peak-" + model.id, {
+		checked: peakOn,
+		ariaLabel: "峰谷计价",
+		data: {
+			"data-wallet-model-peak": "1",
+			"data-wallet-id": wallet.id,
+			"data-model-id": model.id
+		}
+	})) + "<div class=\"aus-wallet-menu-note\">打开后多出一组高峰价；关掉只是不显示，已填的高峰价仍留在本地。</div>" + switchRow("锁定价格", switchHTML("aus-wallet-lock-" + model.id, {
+		checked: model.locked === true,
+		ariaLabel: "锁定价格",
+		data: {
+			"data-wallet-model-lock": "1",
+			"data-wallet-id": wallet.id,
+			"data-model-id": model.id
+		}
+	})) + "<div class=\"aus-wallet-menu-sep\"></div>" + (canDelete ? "<button type=\"button\" class=\"aus-wallet-menu-item is-danger\" data-wallet-model-delete=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" data-model-id=\"" + esc$3(model.id) + "\">删除模型</button>" : "<div class=\"aus-wallet-menu-note\">内置模型不可删除</div>") + "</div>";
 	return [
 		"<div class=\"aus-wallet-mrow\" data-wallet-model-row=\"" + esc$3(model.id) + "\"" + (model.hidden === true ? " data-hidden=\"1\"" : "") + (pending ? " data-pending=\"1\"" : "") + ">",
 		"  <div class=\"aus-wallet-mname\">",
 		"    <input class=\"aus-field aus-wallet-model-name\" data-wallet-model-name=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" data-model-id=\"" + esc$3(model.id) + "\" value=\"" + esc$3(model.model) + "\" aria-label=\"模型名\" />",
 		"    <div class=\"aus-wallet-mname-foot\">",
 		"      <div class=\"aus-wallet-mmeta\">" + meta + "</div>",
-		"      <label class=\"aus-wallet-peak-toggle\" title=\"按高峰 / 非高峰时段分别定价\"><input type=\"checkbox\" class=\"aus-checkbox\" data-wallet-model-peak=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" data-model-id=\"" + esc$3(model.id) + "\"" + (peakOn ? " checked" : "") + " /> 峰谷计价</label>",
 		"      <label class=\"aus-wallet-mctx\">上下文",
 		"        <input type=\"number\" min=\"1\" step=\"1000\" class=\"aus-field aus-field-num aus-wallet-ctx\" data-wallet-context-limit=\"1\" data-wallet-id=\"" + esc$3(wallet.id) + "\" data-model-id=\"" + esc$3(model.id) + "\" value=\"" + (model.contextLimit ?? "") + "\" placeholder=\"未知\" aria-label=\"上下文上限\" />",
 		"      </label>",
@@ -9748,7 +9770,6 @@ function renderWalletCard(wallet, history) {
 		"    </div>",
 		"  </div>",
 		"  <div class=\"aus-wallet-rows\">" + renderModelRows(wallet, showHidden) + "</div>",
-		"  <div class=\"aus-wallet-hint\">勾选「峰谷计价」的模型会多出一组高峰价；关掉后高峰价保留在本地，只是不再展示。</div>",
 		"</section>"
 	].join("\n");
 	const billingSection = [
@@ -10164,7 +10185,8 @@ function bindWalletView(doc) {
 				model.updatedAt = Date.now();
 			});
 			repository.recalcWallet(walletId).catch(() => {});
-			renderWalletView();
+			const docOf = input.ownerDocument || doc;
+			renderWalletView().then(() => reopenModelMenu(docOf, modelId)).catch(() => {});
 		};
 	});
 	doc.querySelectorAll("[data-wallet-model-lock]").forEach((input) => {
@@ -10176,7 +10198,6 @@ function bindWalletView(doc) {
 				const model = wallet.models.find((item) => item.id === modelId);
 				if (model) model.locked = !!input.checked;
 			});
-			renderWalletView();
 		};
 	});
 	doc.querySelectorAll("[data-wallet-model-delete]").forEach((button) => {

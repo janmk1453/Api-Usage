@@ -162,6 +162,13 @@ function peaksHTML(wallet: WalletConfig): string {
   ].join('');
 }
 
+/** 整卡重画会把浮层重建为 display:none；从菜单里切换开关后按 modelId 再打开一次。 */
+function reopenModelMenu(doc: Document, modelId: string | null): void {
+  if (!modelId) return;
+  const dropdown = doc.getElementById('aus-wallet-model-drop-' + modelId) as HTMLElement | null;
+  if (dropdown) dropdown.style.display = 'block';
+}
+
 function modelRowHTML(wallet: WalletConfig, model: WalletModel): string {
   const pending = !model.price.priceConfigured;
   const canDelete = model.source !== 'builtin';
@@ -188,9 +195,23 @@ function modelRowHTML(wallet: WalletConfig, model: WalletModel): string {
       '</div>',
     ].join('');
   };
-  const menu = '<div id="aus-wallet-model-drop-' + esc(model.id) + '" data-wallet-dropdown="1" class="aus-wallet-drop is-right" style="display:none;">'
-    + '<label class="aus-wallet-menu-item"><input type="checkbox" class="aus-checkbox" data-wallet-model-lock="1" data-wallet-id="' + esc(wallet.id)
-    + '" data-model-id="' + esc(model.id) + '"' + (model.locked ? ' checked' : '') + ' /> 锁定价格</label>'
+  // 菜单里放两个开关（峰谷计价 / 锁定价格）：沿用 data-wallet-model-peak 与 data-wallet-model-lock 钩子，
+  // 绑定层按 data 属性找 input，结构换成 .aus-switch 不影响行为。
+  const switchRow = (label: string, html: string) =>
+    '<div class="aus-wallet-menu-row"><span class="aus-wallet-menu-label">' + label + '</span>' + html + '</div>';
+  const menu = '<div id="aus-wallet-model-drop-' + esc(model.id) + '" data-wallet-dropdown="1" class="aus-wallet-drop is-right is-wide" style="display:none;">'
+    + switchRow('峰谷计价', switchHTML('aus-wallet-peak-' + model.id, {
+      checked: peakOn,
+      ariaLabel: '峰谷计价',
+      data: { 'data-wallet-model-peak': '1', 'data-wallet-id': wallet.id, 'data-model-id': model.id },
+    }))
+    + '<div class="aus-wallet-menu-note">打开后多出一组高峰价；关掉只是不显示，已填的高峰价仍留在本地。</div>'
+    + switchRow('锁定价格', switchHTML('aus-wallet-lock-' + model.id, {
+      checked: model.locked === true,
+      ariaLabel: '锁定价格',
+      data: { 'data-wallet-model-lock': '1', 'data-wallet-id': wallet.id, 'data-model-id': model.id },
+    }))
+    + '<div class="aus-wallet-menu-sep"></div>'
     + (canDelete
       ? '<button type="button" class="aus-wallet-menu-item is-danger" data-wallet-model-delete="1" data-wallet-id="' + esc(wallet.id)
         + '" data-model-id="' + esc(model.id) + '">删除模型</button>'
@@ -204,9 +225,6 @@ function modelRowHTML(wallet: WalletConfig, model: WalletModel): string {
       + '" data-model-id="' + esc(model.id) + '" value="' + esc(model.model) + '" aria-label="模型名" />',
     '    <div class="aus-wallet-mname-foot">',
     '      <div class="aus-wallet-mmeta">' + meta + '</div>',
-    '      <label class="aus-wallet-peak-toggle" title="按高峰 / 非高峰时段分别定价">'
-      + '<input type="checkbox" class="aus-checkbox" data-wallet-model-peak="1" data-wallet-id="' + esc(wallet.id)
-      + '" data-model-id="' + esc(model.id) + '"' + (peakOn ? ' checked' : '') + ' /> 峰谷计价</label>',
     '      <label class="aus-wallet-mctx">上下文',
     '        <input type="number" min="1" step="1000" class="aus-field aus-field-num aus-wallet-ctx" data-wallet-context-limit="1" data-wallet-id="' + esc(wallet.id)
       + '" data-model-id="' + esc(model.id) + '" value="' + (model.contextLimit ?? '') + '" placeholder="未知" aria-label="上下文上限" />',
@@ -438,7 +456,6 @@ function renderWalletCard(wallet: WalletConfig, history: any[]): string {
     '    </div>',
     '  </div>',
     '  <div class="aus-wallet-rows">' + renderModelRows(wallet, showHidden) + '</div>',
-    '  <div class="aus-wallet-hint">勾选「峰谷计价」的模型会多出一组高峰价；关掉后高峰价保留在本地，只是不再展示。</div>',
     '</section>',
   ].join('\n');
   const billingSection = [
@@ -849,7 +866,9 @@ function bindWalletView(doc: Document): void {
         model.updatedAt = Date.now();
       });
       repository.recalcWallet(walletId).catch(() => {});
-      renderWalletView();
+      // 峰谷开关会改变价格组，必须重画；重画后把同一个菜单再打开，别让用户为关掉它再点一次 ⋯
+      const docOf = (input.ownerDocument || doc) as Document;
+      void renderWalletView().then(() => reopenModelMenu(docOf, modelId)).catch(() => {});
     };
   });
 
@@ -862,7 +881,7 @@ function bindWalletView(doc: Document): void {
         const model = wallet.models.find((item) => item.id === modelId);
         if (model) model.locked = !!input.checked;
       });
-      renderWalletView();
+      // 锁定只改一个标记，结构不变：不重画，菜单留在原地
     };
   });
 

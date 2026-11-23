@@ -65,11 +65,13 @@ describe('钱包页：卡片结构', () => {
     expect((css.match(/#aus-panel \.aus-wallet-balance-grid \{ grid-template-columns: minmax\(0, 1fr\); gap: 10px; \}/g) || []).length).toBe(2);
   });
 
-  test('峰谷开关与上下文上限并排，第二行不再各占一行', () => {
+  test('模型名下只剩来源与上下文，峰谷勾选框已移进 ⋯ 菜单', () => {
     const footStart = renderSrc.indexOf('aus-wallet-mname-foot');
     const footSrc = renderSrc.slice(footStart, footStart + 900);
-    expect(footSrc).toContain('aus-wallet-peak-toggle');
     expect(footSrc).toContain('aus-wallet-mctx');
+    // 行内不再有任何勾选框：两个开关都进菜单，模型行少一行
+    expect(footSrc).not.toContain('aus-wallet-peak-toggle');
+    expect(renderSrc).not.toContain('class="aus-checkbox" data-wallet-model-peak');
     expect(css).toContain('#aus-panel .aus-wallet-mname-foot { display: flex; align-items: center; gap: 4px 10px;');
   });
 
@@ -125,14 +127,34 @@ describe('钱包页：模型与价格', () => {
     expect((css.match(/#aus-panel \.aus-wallet-prices\.is-split \{ grid-template-columns: minmax\(0, 1fr\); gap: 10px; \}/g) || []).length).toBe(2);
   });
 
-  test('峰谷开关摆在模型行上（不再藏进 ⋯ 菜单），菜单只留锁定与删除', () => {
-    expect(renderSrc).toContain('class="aus-wallet-peak-toggle"');
-    expect(renderSrc.indexOf('data-wallet-model-peak="1"')).toBeLessThan(renderSrc.indexOf('class="aus-wallet-mops"'));
-    const menuSrc = renderSrc.slice(renderSrc.indexOf('const menu =')).split('\n').slice(0, 9).join('\n');
-    expect(menuSrc).not.toContain('data-wallet-model-peak');
-    expect(menuSrc).toContain('data-wallet-model-lock="1"');
+  test('峰谷计价与锁定价格都做成开关摆进 ⋯ 菜单，切换后菜单不消失', () => {
+    expect(renderSrc).not.toContain('aus-wallet-peak-toggle');
+    const menuStart = renderSrc.indexOf('const menu =');
+    const menuSrc = renderSrc.slice(menuStart, renderSrc.indexOf('\n  return [', menuStart));
+    expect(menuSrc).toContain("switchRow('峰谷计价'");
+    expect(menuSrc).toContain("switchRow('锁定价格'");
+    expect(menuSrc).toContain('switchHTML(');
+    expect(menuSrc).toContain("'data-wallet-model-peak': '1'");
+    expect(menuSrc).toContain("'data-wallet-model-lock': '1'");
     expect(menuSrc).toContain('data-wallet-model-delete="1"');
+    // 开关行：文字在左、.aus-switch 在右
+    expect(css).toContain('#aus-wallet .aus-wallet-menu-row { display: flex; align-items: center; justify-content: space-between;');
+    expect(css).toContain('#aus-wallet .aus-wallet-menu-row .aus-switch {');
+    // 峰谷切换要重画价格组，重画后按 modelId 把同一个菜单再打开；锁定不动结构，不重画
+    expect(renderSrc).toContain('function reopenModelMenu(doc: Document, modelId: string | null): void {');
+    expect(src).toContain('void renderWalletView().then(() => reopenModelMenu(docOf, modelId)).catch(() => {});');
+    const lockStart = src.indexOf("querySelectorAll('[data-wallet-model-lock]')");
+    const lockSrc = src.slice(lockStart, src.indexOf("querySelectorAll('[data-wallet-model-delete]')", lockStart));
+    expect(lockSrc).toContain('model.locked = !!input.checked;');
+    expect(lockSrc).not.toContain('renderWalletView()');
     expect(renderSrc).toContain('class="aus-wallet-more-btn"');
+  });
+
+  test('⋯ 菜单贴着按钮向下展开：行尾容器提供定位上下文', () => {
+    expect(css).toContain('#aus-panel .aus-wallet-mops { position: relative;');
+    const dropBlock = css.slice(css.indexOf('#aus-wallet .aus-wallet-drop {'));
+    expect(dropBlock.slice(0, 200)).toContain('position: absolute;');
+    expect(dropBlock.slice(0, 200)).toContain('z-index: 120;');
   });
 
   test('价格标签就在输入框上，不再有重复的表头', () => {
