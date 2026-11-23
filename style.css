@@ -3848,7 +3848,7 @@
 #aus-panel .aus-log-desc{flex:1 1 260px;min-width:0;font-size:var(--aus-fs-sm);color:var(--ds-text-2);line-height:1.6;}
 #aus-panel .aus-log-desc-state{margin-left:8px;color:var(--ds-text);font-weight:600;white-space:nowrap;}
 #aus-panel [data-view="log"] #aus-log-body{max-width:1080px;}
-#aus-panel .aus-log-actions{display:flex;gap:8px;flex:0 0 auto;margin-left:auto;flex-wrap:wrap;justify-content:flex-end;}
+#aus-panel .aus-log-actions{display:flex;gap:8px;flex:0 1 auto;min-width:0;max-width:100%;margin-left:auto;flex-wrap:wrap;justify-content:flex-end;}
 #aus-panel .aus-log-advice{margin-bottom:10px;padding:8px 12px;border-radius:var(--ds-radius-card,14px);background:var(--ds-orange-bg);color:var(--ds-text-2);font-size:var(--aus-fs-sm);line-height:1.6;}
 #aus-panel .aus-log-link{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--ds-border);background:var(--ds-card-inner);color:var(--ds-text-2);border-radius:999px;padding:4px 10px;font-size:var(--aus-fs-xs);font-weight:600;line-height:1.6;cursor:pointer;font-family:inherit;}
 #aus-panel .aus-log-link:hover{color:var(--ds-text);background:var(--ds-card);}
@@ -3895,8 +3895,9 @@
 #aus-panel .aus-log-empty-line{font-size:var(--aus-fs-xs);color:var(--ds-text-3);padding:3px 0;}
 @media (max-width:760px){
   #aus-panel .aus-log-kv-row{grid-template-columns:minmax(72px,max-content) minmax(0,1fr);column-gap:12px;}
-  /* 窄屏：说明独占一行（order 1），动作组折行后整体靠右（order 2，返回在组内最右） */
-  #aus-panel .aus-log-actions{margin-left:auto;flex:0 0 auto;order:2;justify-content:flex-end;}
+  /* 窄屏：说明独占一行（order 1），动作组同样独占一行（order 2）并在行内折行靠右。flex-basis 必须给 100%：
+     只写 flex:0 0 auto 时宽度由内容撑开，五枚按钮会顶出视口右缘（真机反馈过）。 */
+  #aus-panel .aus-log-actions{margin-left:auto;flex:1 1 100%;min-width:0;max-width:100%;gap:6px;order:2;justify-content:flex-end;}
   #aus-panel .aus-log-desc{flex:1 1 100%;order:1;}
   #aus-panel .aus-log-desc-state{display:block;margin-left:0;margin-top:2px;white-space:normal;}
   #aus-panel .aus-log-summary-time{margin-left:0;}

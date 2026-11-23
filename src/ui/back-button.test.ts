@@ -67,4 +67,12 @@ describe('back-button：样式表只有一套规格', () => {
   it('旧的 .aus-log-back 专属规则已删除（返回不再单独写样式/排位）', () => {
     expect(cssSrc).not.toContain('.aus-log-back');
   });
+
+  it('请求日志动作组可收缩到容器宽、窄屏独占一行折行靠右（不再顶出视口）', () => {
+    // 真机反馈：只写 flex:0 0 auto 时宽度由内容撑开，五枚按钮会超出屏幕右缘
+    expect(cssSrc).toMatch(/#aus-panel \.aus-log-actions\{[^}]*flex:0 1 auto/);
+    expect(cssSrc).toMatch(/#aus-panel \.aus-log-actions\{[^}]*max-width:100%/);
+    expect(cssSrc).toMatch(/@media \(max-width:760px\)\{[\s\S]*?#aus-panel \.aus-log-actions\{[^}]*flex:1 1 100%/);
+    expect(cssSrc).not.toMatch(/#aus-panel \.aus-log-actions\{[^}]*flex:0 0 auto/);
+  });
 });

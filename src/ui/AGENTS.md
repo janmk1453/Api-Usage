@@ -134,7 +134,7 @@
 ### 二级页返回按钮（`ui/back-button.ts`）
 
 - **唯一来源**：`backButtonHTML({ id?, title?, data? })` 产出 `<button class="aus-back-btn" data-aus-back="1" aria-label="返回上一页">chevron-left 14 + 「返回」</button>`；样式只有一套 `#aus-panel .aus-back-btn`（`5px 12px`、`--aus-fs-sm`、`font-weight:600`、`border-radius:999px`、`margin-left:auto`）。三页（对话展示管理 / 请求日志 / 其他请求）必须都调它，禁止再复用 `.aus-pill`、`.aus-log-link`、`.aus-chat-manage-btn`——那三类被同排动作按钮共用，改一处会连带改别人。
-- **位置统一贴右**：靠 `margin-left:auto` 落在所在工具行的最右；所在行必须 `flex-wrap`，否则窄屏会把整行挤破。请求日志页把它放在 `.aus-log-actions` 末位（上传反馈 / 其他请求 / 刷新 / 清空 / 返回），`≤760px` 时 `.aus-log-desc` 独占第一行、动作组折行整体靠右。
+- **位置统一贴右**：靠 `margin-left:auto` 落在所在工具行的最右；所在行必须 `flex-wrap`，**动作组自身也必须可收缩并限宽**（`max-width:100%`，窄屏 `flex:1 1 100%`）——只给父级 `flex-wrap` 不够：`flex:0 0 auto` 让动作组宽度由内容撑开，五枚按钮会顶出视口右缘（真机反馈过，`.aus-log-actions` 已修）。请求日志页把它放在 `.aus-log-actions` 末位（上传反馈 / 其他请求 / 刷新 / 清空 / 返回），`≤760px` 时 `.aus-log-desc` 独占第一行、动作组独占第二行并在行内折行靠右。
 - **文案不写目标页名**：目标由 `panel.ts#returnFromChild()` 算（`chatManageOrigin` / `logOrigin` / `tapOrigin` / `childParentOf`），按钮只写「返回」。
 - **窄屏双入口（方案 A）**：`#aus-mobile-back` 顶栏箭头照旧保留，页内返回也贴右，两个都可退；不要把页内返回改成窄屏隐藏，那需要 `paintNavState` 同步 `isChildView`，且会破坏「按钮位置统一」的诉求。
 - 钱包 / 使用说明 / 关于三页**不补**页内返回（桌面靠侧栏、窄屏靠顶栏箭头），这是用户明确要求。
