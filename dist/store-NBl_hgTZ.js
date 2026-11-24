@@ -69,6 +69,7 @@ var defaultSettings = () => ({
 		proxy: ""
 	},
 	historyScope: "all",
+	tokenUnitCompact: false,
 	overviewFour: [
 		"avg_cost",
 		"avg_tokens",

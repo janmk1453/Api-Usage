@@ -28,6 +28,7 @@ import {
   type ChatVisibilityTarget,
 } from './chat-visibility';
 import { paintChatManageBadge } from './chat-summary-table';
+import { formatToken, tokenUnitOf } from '../data/token-format';
 
 type Navigator = { go: () => void };
 
@@ -99,7 +100,7 @@ function rowHTML(row: ChatSummaryRow, index: number): string {
   const hidden = isHiddenFor(mode, key);
   let costTxt = '¥' + row.cost.toFixed(4);
   try { costTxt = formatMoney(row.cost, 4); } catch {}
-  const meta = row.count + ' 轮 · ' + row.total.toLocaleString('zh-CN') + ' tokens · ' + costTxt;
+  const meta = row.count + ' 轮 · ' + formatToken(row.total, tokenUnitOf(state.settings)) + ' tokens · ' + costTxt;
   const aria = row.displayName + '：' + (mode === 'picker' ? '在「对话」下拉胶囊中展示' : '在按对话统计中展示');
   return [
     '<div class="aus-chat-manage-row" data-chat-row="' + esc(key) + '" data-chat-name="' + esc(row.displayName.toLowerCase()) + '" data-hidden="' + (hidden ? '1' : '0') + '">',

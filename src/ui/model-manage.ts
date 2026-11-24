@@ -17,6 +17,7 @@ import { repository } from '../data/repository';
 import { esc } from '../utils/date';
 import { formatMoney } from '../services/currency';
 import { switchHTML } from './switch';
+import { formatToken, tokenUnitOf } from '../data/token-format';
 import { backButtonHTML } from './back-button';
 import {
   clearHiddenModelsFor,
@@ -131,7 +132,7 @@ function rowHTML(row: ModelUsageRow, index: number): string {
   const hidden = isModelHiddenFor(mode, key);
   let costTxt = '¥' + row.cost.toFixed(4);
   try { costTxt = formatMoney(row.cost, 4); } catch {}
-  const meta = row.count + ' 轮 · ' + row.total.toLocaleString('zh-CN') + ' tokens · ' + costTxt;
+  const meta = row.count + ' 轮 · ' + formatToken(row.total, tokenUnitOf(state.settings)) + ' tokens · ' + costTxt;
   const aria = row.model + '：' + (mode === 'picker' ? '在「模型」下拉中展示' : '在模型汇总中展示');
   return [
     '<div class="aus-model-manage-row" data-model-row="' + esc(key) + '" data-model-name="' + esc(row.model.toLowerCase()) + '" data-hidden="' + (hidden ? '1' : '0') + '">',

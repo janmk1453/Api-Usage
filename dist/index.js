@@ -1,20 +1,20 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { i as state$2, n as getHistoryForDisplay, r as getSelectedSave, s as mobileDeviceHint, t as getCurrentChatIdForStore } from "./store-DWjGdI6D.js";
+import { i as state$2, n as getHistoryForDisplay, r as getSelectedSave, s as mobileDeviceHint, t as getCurrentChatIdForStore } from "./store-NBl_hgTZ.js";
 import { s as MAX_HISTORY, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
 import { s as getDetail } from "./detail-store-CqNNEAWB.js";
 import { a as clearColdReadFailure, b as historyRecordKey, d as getColdReadFailure, y as saveHot } from "./persistence-BmzJp2Zz.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as pricingSourceLabel, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-C2aWlfKZ.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as pricingSourceLabel, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-Dg4mgJ76.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc$3, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
-import { a as getDisplayCurrency, i as formatMoney, o as getWalletExchangeRate, t as cnyToDisplay$1 } from "./currency-BYzMLQZM.js";
+import { a as getDisplayCurrency, i as formatMoney, o as getWalletExchangeRate, t as cnyToDisplay$1 } from "./currency-WNr8ECMS.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
-import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-B8o6uim9.js";
+import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-DdJqF_VV.js";
 import { r as registerRequestOriginSelf } from "./request-origin-C9kLQ_0W.js";
 import { a as readSeenAnnouncementIds, c as bindChangelog, d as renderChangelogCard, f as CHANGELOG, h as BUILD_NO, i as readCachedAnnouncements, l as changelogSectionsHTML, m as APP_VERSION, n as isAnnouncementActive, o as sortAnnouncements, p as APP_BUILD_TAG, t as fetchAnnouncements, u as formatChangelogDate } from "./announcement-CWQaFtlb.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-Cq7vqfxw.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-CVblGceL.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-rEYdHrKp.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-Z5ccYKrj.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-CC_1cRL3.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-DJf-XXlo.js";
 import { a as listTapRecords, i as clearTapRecords, n as tapDiagnostics, o as subscribeTap, r as stripModelTag } from "./request-tap-k4SyDMQg.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
@@ -322,6 +322,61 @@ function rateTitle(entry) {
 /** 历史详情里的小标签文本（估算时返回「估算」，否则空串） */
 function rateBadgeText(entry) {
 	return isEstimatedRate(entry) ? "估算" : "";
+}
+var STEPS = [
+	{
+		base: 1e3,
+		suffix: "K"
+	},
+	{
+		base: 1e6,
+		suffix: "M"
+	},
+	{
+		base: 1e9,
+		suffix: "B"
+	}
+];
+function toNumber(value) {
+	const n = Number(value);
+	return Number.isFinite(n) ? n : 0;
+}
+/** 完整千分位：999 → 999，1234567 → 1,234,567 */
+function formatTokenFull(value) {
+	return Math.round(toNumber(value)).toLocaleString("zh-CN");
+}
+function roundCompact(scaled) {
+	return scaled >= 100 ? Math.round(scaled) : Number(scaled.toFixed(1));
+}
+/** 强制缩写：一万以下原样千分位，一万起 K / M / B */
+function formatTokenCompact(value) {
+	const n = toNumber(value);
+	const abs = Math.abs(n);
+	if (abs < 1e4) return formatTokenFull(n);
+	const sign = n < 0 ? "-" : "";
+	let index = 0;
+	for (let i = 0; i < STEPS.length; i += 1) if (abs >= STEPS[i].base) index = i;
+	let rounded = roundCompact(abs / STEPS[index].base);
+	while (index < STEPS.length - 1 && rounded >= 1e3) {
+		index += 1;
+		rounded = roundCompact(abs / STEPS[index].base);
+	}
+	return sign + String(rounded) + STEPS[index].suffix;
+}
+/** 开关感知：unit 为 compact 时缩写，否则完整千分位 */
+function formatToken(value, unit = "full") {
+	return unit === "compact" ? formatTokenCompact(value) : formatTokenFull(value);
+}
+/** 从设置里取当前口径；字段缺失 / 非布尔一律按完整数字（老用户升级后行为不变） */
+function tokenUnitOf(settings) {
+	return settings && settings.tokenUnitCompact === true ? "compact" : "full";
+}
+/**
+* title 属性用的完整值：缩写态下让鼠标悬停仍能看到精确数字（缩写不可用于对账）。
+* 完整态不需要 title 时返回空串，调用方据此决定是否写属性。
+*/
+function tokenTitle(value, unit) {
+	return unit === "compact" ? formatTokenFull(value) : "";
 }
 //#endregion
 //#region src/ui/compare.ts
@@ -1986,7 +2041,14 @@ function renderChatSummaryTable(doc, rows) {
 		tbody.innerHTML = "<tr><td colspan=\"9\" style=\"text-align:center;padding:16px;color:var(--ds-text-3);\">全部对话都已隐藏 · 点击右上角「管理对话」恢复显示</td></tr>";
 		return;
 	}
-	tbody.innerHTML = sortRows(visible, sortState, pickChatSortValue, (row) => row.displayName).map((r) => {
+	const sorted = sortRows(visible, sortState, pickChatSortValue, (row) => row.displayName);
+	const unit = tokenUnitOf(state$2.settings);
+	const tokenCell = (value) => {
+		const text = formatToken(value, unit);
+		const full = tokenTitle(value, unit);
+		return full ? "<span title=\"" + full + " tokens\">" + text + "</span>" : text;
+	};
+	tbody.innerHTML = sorted.map((r) => {
 		const avgRate = r.avgHitRate > 0 ? r.avgHitRate.toFixed(1) + "%" : "—";
 		const colorRate = r.avgHitRate >= 50 ? "var(--ds-green)" : r.avgHitRate > 0 ? "var(--ds-text)" : "var(--ds-text-3)";
 		let costTxt = "¥" + r.cost.toFixed(4);
@@ -1997,12 +2059,12 @@ function renderChatSummaryTable(doc, rows) {
 			"<tr style=\"border-bottom:1px solid var(--ds-card);\">",
 			"<td style=\"padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;\" title=\"" + esc$3(r.chatId || "null") + "\">" + esc$3(r.displayName) + "</td>",
 			"<td style=\"padding:6px 8px;text-align:right;\">" + r.count + "</td>",
-			"<td style=\"padding:6px 8px;text-align:right;color:#0BA25E;\">" + r.hit.toLocaleString("zh-CN") + "</td>",
-			"<td style=\"padding:6px 8px;text-align:right;color:#DC2626;\">" + r.miss.toLocaleString("zh-CN") + "</td>",
-			"<td style=\"padding:6px 8px;text-align:right;color:var(--aus-token-output);\">" + r.out.toLocaleString("zh-CN") + "</td>",
-			"<td style=\"padding:6px 8px;text-align:right;font-weight:600;\">" + r.total.toLocaleString("zh-CN") + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;color:#0BA25E;\">" + tokenCell(r.hit) + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;color:#DC2626;\">" + tokenCell(r.miss) + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;color:var(--aus-token-output);\">" + tokenCell(r.out) + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;font-weight:600;\">" + tokenCell(r.total) + "</td>",
 			"<td style=\"padding:6px 8px;text-align:right;color:var(--ds-text);\">" + costTxt + "</td>",
-			"<td style=\"padding:6px 8px;text-align:right;\">" + Math.round(r.avgTokens).toLocaleString("zh-CN") + "</td>",
+			"<td style=\"padding:6px 8px;text-align:right;\">" + tokenCell(Math.round(r.avgTokens)) + "</td>",
 			"<td style=\"padding:6px 8px;text-align:right;color:" + colorRate + ";\">" + avgRate + "</td>",
 			"</tr>"
 		].join("");
@@ -2325,8 +2387,15 @@ function spendBreakdownHTML(v, text) {
 function getDoc$11() {
 	return window.parent?.document ?? document;
 }
-function fmt(n) {
-	return n.toLocaleString("zh-CN");
+function tokenUnit() {
+	return tokenUnitOf(state$2.settings);
+}
+function tokenText$1(n) {
+	return formatToken(n, tokenUnit());
+}
+function tokenHtml(n) {
+	const full = tokenTitle(n, tokenUnit());
+	return full ? `<span title="${full} tokens">${tokenText$1(n)}</span>` : tokenText$1(n);
 }
 function moneyHtml(cny, digits = 4) {
 	try {
@@ -2458,7 +2527,7 @@ function getFourDisplay(key, v) {
 		};
 		case "avg_tokens": return {
 			title,
-			html: `${Math.round(v.avgTokens || 0).toLocaleString("zh-CN")}`
+			html: tokenHtml(Math.round(v.avgTokens || 0))
 		};
 		case "avg_duration": return {
 			title,
@@ -2478,7 +2547,7 @@ function getFourDisplay(key, v) {
 		};
 		case "avg_input_tokens": return {
 			title,
-			html: `${Math.round(v.avgInputTokens || 0).toLocaleString("zh-CN")}`
+			html: tokenHtml(Math.round(v.avgInputTokens || 0))
 		};
 		case "avg_output_cost": return {
 			title,
@@ -2486,7 +2555,7 @@ function getFourDisplay(key, v) {
 		};
 		case "avg_output_tokens": return {
 			title,
-			html: `${Math.round(v.avgOutputTokens || 0).toLocaleString("zh-CN")}`
+			html: tokenHtml(Math.round(v.avgOutputTokens || 0))
 		};
 		case "avg_think_time": return {
 			title,
@@ -2494,7 +2563,7 @@ function getFourDisplay(key, v) {
 		};
 		case "avg_think_tokens": return {
 			title,
-			html: (v.avgThinkTokens || 0) > 0 ? `${Math.round(v.avgThinkTokens).toLocaleString("zh-CN")}` : `<span style="color:var(--ds-text-3);">—</span>`
+			html: (v.avgThinkTokens || 0) > 0 ? tokenHtml(Math.round(v.avgThinkTokens)) : `<span style="color:var(--ds-text-3);">—</span>`
 		};
 		case "avg_hit_rate": return {
 			title,
@@ -2513,15 +2582,15 @@ function getFourDisplay(key, v) {
 		}
 		case "max_output": return {
 			title,
-			html: `${(v.maxOutput || 0).toLocaleString("zh-CN")}`
+			html: tokenHtml(v.maxOutput || 0)
 		};
 		case "max_input": return {
 			title,
-			html: `${(v.maxInput || 0).toLocaleString("zh-CN")}`
+			html: tokenHtml(v.maxInput || 0)
 		};
 		case "max_total": return {
 			title,
-			html: `${(v.maxTotal || 0).toLocaleString("zh-CN")}`
+			html: tokenHtml(v.maxTotal || 0)
 		};
 		case "avg_think_ratio": {
 			const has = (v.avgThinkRatio || 0) > 0 || (v.rounds || 0) > 0;
@@ -2712,7 +2781,12 @@ function renderOverview(fullHistory) {
 		costEl.textContent = "¥" + v.totalCost.toFixed(4) + " CNY";
 	}
 	const tokEl = doc.getElementById("aus-total-tokens");
-	if (tokEl) tokEl.textContent = fmt(v.totalTokens) + " tokens";
+	if (tokEl) {
+		tokEl.textContent = tokenText$1(v.totalTokens) + " tokens";
+		const fullTokens = tokenTitle(v.totalTokens, tokenUnit());
+		if (fullTokens) tokEl.title = fullTokens + " tokens";
+		else tokEl.removeAttribute("title");
+	}
 	const breakdownInput = {
 		totalTokens: v.totalTokens,
 		hit: v.hit,
@@ -2725,7 +2799,7 @@ function renderOverview(fullHistory) {
 		hitRate: v.hitRate
 	};
 	const breakdownText = {
-		fmt,
+		fmt: (value) => tokenHtml(value),
 		money: (value) => moneyHtml(value)
 	};
 	const histHost = doc.getElementById("aus-overview-history");
@@ -4327,7 +4401,7 @@ async function renderOne$1(id, filtered) {
 					},
 					formatter: (p) => {
 						const range = rangeTip(filtered);
-						const val = mode === "token" ? Number(p.value).toLocaleString() + " tokens" : Number(p.value).toLocaleString() + " 次请求";
+						const val = mode === "token" ? formatToken(Number(p.value), tokenUnitOf(state$2.settings)) + " tokens" : Number(p.value).toLocaleString() + " 次请求";
 						const pct = Number(p.percent || 0).toFixed(1);
 						let html = `<div style="display:flex;align-items:center;gap:6px;font-weight:600;margin-bottom:4px;">${p.marker || ""}${p.name}</div>`;
 						html += `<div style="display:flex;gap:16px;"><span>用量</span><span style="margin-left:auto;font-weight:600;">${val}</span></div>`;
@@ -4560,7 +4634,7 @@ async function drawBarLine(el, id, labels, series, tips = []) {
 						else if (unit === "rate") disp = Math.round(v).toLocaleString() + " t/s";
 						else if (unit === "duration") disp = v.toFixed(2) + " s";
 						else if (unit === "count") disp = v.toLocaleString() + " 次";
-						else disp = v.toLocaleString() + " tokens";
+						else disp = formatToken(v, tokenUnitOf(state$2.settings)) + " tokens";
 						html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${disp}</span></div>`;
 					}
 					return `<div style="padding:4px 2px;min-width:170px;">${html}</div>`;
@@ -5047,10 +5121,10 @@ async function renderOne(id, filtered) {
 					const label = labels[idx];
 					let sum = 0;
 					for (const p of params) sum += Number(p.value || 0);
-					let html = `<div style="font-weight:600;margin-bottom:6px;">${esc$3(label)}<span style="margin-left:8px;color:var(--ds-text-2);font-weight:400;">合计 ${id === "token" ? sum.toLocaleString() + " tokens" : sum + " 次"}</span></div>`;
+					let html = `<div style="font-weight:600;margin-bottom:6px;">${esc$3(label)}<span style="margin-left:8px;color:var(--ds-text-2);font-weight:400;">合计 ${id === "token" ? formatToken(sum, tokenUnitOf(state$2.settings)) + " tokens" : sum + " 次"}</span></div>`;
 					for (const p of params) {
 						if (Number(p.value) === 0) continue;
-						html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${esc$3(p.seriesName)}<span style="margin-left:auto;font-weight:600;">${id === "token" ? Number(p.value).toLocaleString() + " tokens" : p.value + " 次"}</span></div>`;
+						html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${esc$3(p.seriesName)}<span style="margin-left:auto;font-weight:600;">${id === "token" ? formatToken(Number(p.value), tokenUnitOf(state$2.settings)) + " tokens" : p.value + " 次"}</span></div>`;
 					}
 					if (!params.some((p) => Number(p.value) > 0)) html += `<div style="color:var(--ds-text-3);font-size:var(--aus-fs-sm);">本${xKey === "day" ? "日" : xKey === "hour" ? "时段" : xKey === "week" ? "周" : xKey === "month" ? "月" : "轮次"}无数据</div>`;
 					return `<div style="padding:4px 2px;min-width:180px;max-width:280px;">${html}</div>`;
@@ -6530,7 +6604,7 @@ async function renderChart(filteredRaw) {
 					else if (kind === "duration") disp = Number(v).toFixed(2) + " s";
 					else if (kind === "rate") disp = Math.round(Number(v)) + " t/s";
 					else if (kind === "count") disp = Number(v).toLocaleString() + " 次";
-					else disp = Number(v).toLocaleString() + " " + (meta?.unit || "");
+					else disp = formatToken(Number(v), tokenUnitOf(state$2.settings)) + " " + (meta?.unit || "");
 					html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${esc$3(p.seriesName)}<span style="margin-left:auto;font-weight:600;">${disp}</span></div>`;
 				}
 				return `<div style="padding:4px 2px;min-width:180px;">${html}</div>`;
@@ -6696,8 +6770,13 @@ function renderModelSummary(filtered) {
 			return "¥" + (v || 0).toFixed(4) + " CNY";
 		}
 	};
+	const tokCell = (v) => {
+		const unit = tokenUnitOf(state$2.settings);
+		const full = tokenTitle(v, unit);
+		return full ? "<span title=\"" + full + " tokens\">" + formatToken(v, unit) + "</span>" : formatToken(v, unit);
+	};
 	tbody.innerHTML = list.map((r) => {
-		return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc$3(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--aus-token-output);">${r.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${fmtC(r.cost)}</td><td style="padding:6px 8px;text-align:right;">${fmtC(r.avgCost)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
+		return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc$3(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${tokCell(r.hit)}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${tokCell(r.miss)}</td><td style="padding:6px 8px;text-align:right;color:var(--aus-token-output);">${tokCell(r.out)}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${tokCell(r.total)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${fmtC(r.cost)}</td><td style="padding:6px 8px;text-align:right;">${fmtC(r.avgCost)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
 	}).join("");
 }
 var cachedAllHistory = null;
@@ -6787,7 +6866,13 @@ async function renderStatsView() {
 	const reqEl = doc.getElementById("aus-stats-req");
 	if (reqEl) reqEl.textContent = String(totalReq);
 	const tokEl = doc.getElementById("aus-stats-tok");
-	if (tokEl) tokEl.textContent = totalTok.toLocaleString("zh-CN");
+	if (tokEl) {
+		const tokUnit = tokenUnitOf(state$2.settings);
+		tokEl.textContent = formatToken(totalTok, tokUnit);
+		const fullTok = tokenTitle(totalTok, tokUnit);
+		if (fullTok) tokEl.title = fullTok + " tokens";
+		else tokEl.removeAttribute("title");
+	}
 	renderStatsFour(summaryFiltered);
 	renderModelSummary(summaryFiltered);
 	renderModelPicker(allHistory);
@@ -7434,7 +7519,8 @@ function baseAxisStyle(border, text3) {
 }
 function compactionTooltip(point) {
 	if (!point) return "";
-	return `<div style="font-size:11px;color:#9CA3AF;">压缩前 ${compactNumber(point.before)} → 后 ${compactNumber(point.after)}（降 ${Math.round(point.dropPct * 100)}%）</div>`;
+	const unit = tokenUnitOf(state$2.settings);
+	return `<div style="font-size:11px;color:#9CA3AF;">压缩前 ${formatToken(point.before, unit)} → 后 ${formatToken(point.after, unit)}（降 ${Math.round(point.dropPct * 100)}%）</div>`;
 }
 async function renderMainChart(echarts, options) {
 	const chart = await initChart("aus-forecast-main-chart", echarts);
@@ -7752,7 +7838,7 @@ async function renderMainChart(echarts, options) {
 					if (param.seriesName === "历史压缩" || param.seriesName === "预测压缩") continue;
 					const value = Array.isArray(param.value) ? param.value[1] : param.value;
 					if (value == null || !Number.isFinite(Number(value))) continue;
-					const display = param.seriesName.includes("成本") ? formatCost(Number(value), 4) : compactNumber(Number(value)) + " tok";
+					const display = param.seriesName.includes("成本") ? formatCost(Number(value), 4) : formatToken(Number(value), tokenUnitOf(state$2.settings)) + " tok";
 					html += `<div style="display:flex;align-items:center;gap:6px;line-height:1.7;"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${param.color};"></span><span>${param.seriesName}</span><span style="margin-left:auto;font-weight:600;">${display}</span></div>`;
 				}
 				const hitPoint = historyCompactions.find((point) => point.value[0] === label);
@@ -8263,7 +8349,7 @@ function formatCost(value, digits = 4) {
 	}
 }
 function compactTok(value) {
-	return Math.round(Number(value) || 0).toLocaleString("zh-CN");
+	return formatToken(Number(value) || 0, tokenUnitOf(state$2.settings));
 }
 function pct(value, digits = 1) {
 	return (Number(value) * 100).toFixed(digits) + "%";
@@ -9989,7 +10075,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-Cq7vqfxw.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-CVblGceL.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -10531,7 +10617,7 @@ function rowHTML$1(row, index) {
 	try {
 		costTxt = formatMoney(row.cost, 4);
 	} catch {}
-	const meta = row.count + " 轮 · " + row.total.toLocaleString("zh-CN") + " tokens · " + costTxt;
+	const meta = row.count + " 轮 · " + formatToken(row.total, tokenUnitOf(state$2.settings)) + " tokens · " + costTxt;
 	const aria = row.displayName + "：" + (mode$1 === "picker" ? "在「对话」下拉胶囊中展示" : "在按对话统计中展示");
 	return [
 		"<div class=\"aus-chat-manage-row\" data-chat-row=\"" + esc$3(key) + "\" data-chat-name=\"" + esc$3(row.displayName.toLowerCase()) + "\" data-hidden=\"" + (hidden ? "1" : "0") + "\">",
@@ -10833,7 +10919,7 @@ function rowHTML(row, index) {
 	try {
 		costTxt = formatMoney(row.cost, 4);
 	} catch {}
-	const meta = row.count + " 轮 · " + row.total.toLocaleString("zh-CN") + " tokens · " + costTxt;
+	const meta = row.count + " 轮 · " + formatToken(row.total, tokenUnitOf(state$2.settings)) + " tokens · " + costTxt;
 	const aria = row.model + "：" + (mode === "picker" ? "在「模型」下拉中展示" : "在模型汇总中展示");
 	return [
 		"<div class=\"aus-model-manage-row\" data-model-row=\"" + esc$3(key) + "\" data-model-name=\"" + esc$3(row.model.toLowerCase()) + "\" data-hidden=\"" + (hidden ? "1" : "0") + "\">",
@@ -11062,10 +11148,7 @@ function initTapView(deps) {
 	} catch {}
 }
 function num$1(n) {
-	const v = Number(n) || 0;
-	if (v >= 1e6) return (v / 1e6).toFixed(2) + "M";
-	if (v >= 1e3) return (v / 1e3).toFixed(1) + "k";
-	return String(v);
+	return formatToken(Number(n) || 0, tokenUnitOf(state$2.settings));
 }
 function tokensOf(records) {
 	let sum = 0;
@@ -13625,7 +13708,7 @@ var GUIDES = [
 		"settings",
 		"设置与数据",
 		[
-			"颜色模式、移动端兼容 UI、历史显示范围与匿名统计都在设置页顶部。",
+			"颜色模式、移动端兼容 UI、历史显示范围与匿名统计都在设置页顶部；「Token 单位缩写」默认关闭，打开后 Token 数按 K / M / B 显示，小于一万仍是完整数字，图表坐标轴不受影响。",
 			"「对话展示」「模型展示」分别管理对话与模型的显示；「按范围删除记录」可按日期、模型、对话删除。",
 			"WebDAV 云同步可跨设备同步记录与钱包；「存储占用」里能清理旧版迁移备份。",
 			"峰谷规则与「额外空闲日期」决定费用计算，默认按 DeepSeek 官方规则。"
@@ -14830,7 +14913,13 @@ function refreshUI() {
 			totalCostEl.textContent = "¥" + (s.total_cost || 0).toFixed(4) + " CNY";
 		}
 		const tokEl = doc.getElementById("aus-total-tokens");
-		if (tokEl) tokEl.textContent = (s.total_tokens || 0).toLocaleString("zh-CN") + " tokens";
+		if (tokEl) {
+			const headUnit = tokenUnitOf(state$2.settings);
+			tokEl.textContent = formatToken(s.total_tokens || 0, headUnit) + " tokens";
+			const headFull = tokenTitle(s.total_tokens || 0, headUnit);
+			if (headFull) tokEl.title = headFull + " tokens";
+			else tokEl.removeAttribute("title");
+		}
 		renderHistory(doc, s);
 		renderOverview();
 		renderStatsView();
@@ -15576,6 +15665,12 @@ function renderHistoryInner(doc, fullHist) {
 		const c6 = fmtMoney(h.cost || 0, 6);
 		const in6 = fmtMoney(h.input_cost || 0, 6);
 		const out6 = fmtMoney(h.output_cost || 0, 6);
+		const tokUnit = tokenUnitOf(state$2.settings);
+		const tok = (v) => formatToken(v, tokUnit);
+		const tokT = (v) => {
+			const full = tokenTitle(v, tokUnit);
+			return full ? `<span title="${full} tokens">${formatToken(v, tokUnit)}</span>` : formatToken(v, tokUnit);
+		};
 		const isAgentRecord = String(h.origin || "") === "agent";
 		const agentTurnCount = Number(h.agentModelTurns) || 0;
 		const agentStatusKey = String(h.agentStatus || "");
@@ -15605,7 +15700,7 @@ function renderHistoryInner(doc, fullHist) {
       <div class="aus-history-card-head" style="display:flex;justify-content:space-between;align-items:center;">
         <div class="aus-history-card-main" style="min-width:0;flex:1;">
           <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${sourceBadgeHTML}${stateBadgeHTML}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc$3(h.model)} · ${esc$3(localTimeHM(h.timestamp))}</span></div>
-          <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · <span title="${esc$3(rateTitle(h))}">${rateText(h)}</span></div>
+          <div style="color:var(--ds-text-2);margin-top:2px;">${tokT(h.prompt_tokens || 0)} in · ${tokT(h.completion_tokens || 0)} out · <span title="${esc$3(rateTitle(h))}">${rateText(h)}</span></div>
         </div>
         <div class="aus-history-card-actions" style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
           <div class="aus-history-card-cost">
@@ -15629,7 +15724,7 @@ function renderHistoryInner(doc, fullHist) {
           <span style="display:inline-flex;align-items:center;gap:4px;"><span class="aus-token-dot" style="background:var(--aus-token-miss);"></span><b style="color:var(--ds-text);font-weight:600;">${mps}%</b> 未命中</span>
           <span style="display:inline-flex;align-items:center;gap:4px;"><span class="aus-token-dot" style="background:var(--aus-token-output);"></span><b style="color:var(--ds-text);font-weight:600;">${ops}%</b> 输出</span>
         </div>
-        <span style="color:var(--ds-text-2);">${total.toLocaleString()}t</span>
+        <span style="color:var(--ds-text-2);">${tokT(total)}t</span>
       </div>
       <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;">
               <div class="aus-dt-row">
@@ -15671,11 +15766,11 @@ function renderHistoryInner(doc, fullHist) {
                     <div style="width:${op}%;background:var(--aus-token-output);"></div>
                   </div>
                   <div class="aus-dt-grid">
-                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-hit);"></span>缓存命中</span><span class="aus-dt-val">${(h.cache_hit_tokens || 0).toLocaleString()}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-miss);"></span>缓存未命中</span><span class="aus-dt-val">${(h.cache_miss_tokens || 0).toLocaleString()}${estTag}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-output);"></span>输出 Token</span><span class="aus-dt-val">${(h.completion_tokens || 0).toLocaleString()}${estTag}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label">总 Token</span><span class="aus-dt-val is-strong">${(h.total_tokens || 0).toLocaleString()}${estTag}</span></div>
-                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">思维链 Token</span><span class="aus-dt-val">${h.thinkTokens || 0}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-hit);"></span>缓存命中</span><span class="aus-dt-val">${tok(h.cache_hit_tokens || 0)}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-miss);"></span>缓存未命中</span><span class="aus-dt-val">${tok(h.cache_miss_tokens || 0)}${estTag}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-output);"></span>输出 Token</span><span class="aus-dt-val">${tok(h.completion_tokens || 0)}${estTag}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">总 Token</span><span class="aus-dt-val is-strong">${tok(h.total_tokens || 0)}${estTag}</span></div>
+                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">思维链 Token</span><span class="aus-dt-val">${tok(h.thinkTokens || 0)}</span></div>
                   </div>
                 </section>
                 <section class="aus-dt-block">
@@ -17471,7 +17566,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-CegFhl9P.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-DbYK9SO6.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-BsrR54Lw.js").then((n) => n.n).then((m) => {
@@ -18160,10 +18255,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-B8o6uim9.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DdJqF_VV.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-CegFhl9P.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-DbYK9SO6.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-k4SyDMQg.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -18177,10 +18272,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-B8o6uim9.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DdJqF_VV.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-CegFhl9P.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-DbYK9SO6.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-k4SyDMQg.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -18252,10 +18347,10 @@ async function teardownRuntime() {
 		uninstallMessageCost();
 	} catch {}
 	try {
-		import("./interception-B8o6uim9.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-DdJqF_VV.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-CegFhl9P.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-DbYK9SO6.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -18271,13 +18366,13 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-Cq7vqfxw.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-CVblGceL.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-BYzMLQZM.js").then((n) => n.n)).stopRateTimer?.();
+		(await import("./currency-WNr8ECMS.js").then((n) => n.n)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-Z5ccYKrj.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-DJf-XXlo.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -18330,19 +18425,19 @@ function onEnable() {
 		installMessageCost();
 	} catch {}
 	try {
-		import("./interception-B8o6uim9.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-DdJqF_VV.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-CegFhl9P.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-DbYK9SO6.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-Cq7vqfxw.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-CVblGceL.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
-		import("./currency-BYzMLQZM.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
+		import("./currency-WNr8ECMS.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-Z5ccYKrj.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-DJf-XXlo.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -18385,19 +18480,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-Cq7vqfxw.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-CVblGceL.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-BYzMLQZM.js").then((n) => n.n)).restartRateTimer?.();
+		(await import("./currency-WNr8ECMS.js").then((n) => n.n)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-Z5ccYKrj.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-DJf-XXlo.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-CegFhl9P.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-DbYK9SO6.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -18422,7 +18517,7 @@ async function init() {
 			installMessageCost();
 		} catch {}
 		try {
-			import("./pricing-sync-Z5ccYKrj.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-DJf-XXlo.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

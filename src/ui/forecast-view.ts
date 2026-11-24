@@ -27,6 +27,7 @@ import { icon } from './icons';
 import { disposeForecastCharts, renderForecastCharts } from './forecast-chart';
 import { filterPickerRows } from './chat-visibility';
 import { filterModelPickerRows } from './model-visibility';
+import { formatToken, tokenUnitOf } from '../data/token-format';
 
 type HitMode = 'global' | 'model' | 'manual';
 type EfficiencyScope = 'all' | 'chat';
@@ -272,8 +273,9 @@ function formatCost(value: number, digits = 4): string {
   }
 }
 
+// 取名 compactTok 沿用历史，实际格式由设置里的 Token 单位开关决定（关闭时为完整千分位）
 function compactTok(value: number): string {
-  return Math.round(Number(value) || 0).toLocaleString('zh-CN');
+  return formatToken(Number(value) || 0, tokenUnitOf(state.settings));
 }
 
 function pct(value: number, digits = 1): string {

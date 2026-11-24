@@ -1,16 +1,16 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { i as state } from "./store-DWjGdI6D.js";
+import { i as state } from "./store-NBl_hgTZ.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS } from "./pricing-Bc-qEvy8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
 import { o as detailStorageStats } from "./detail-store-CqNNEAWB.js";
 import { _ as saveExtensionSettings, b as historyRecordKey, c as deleteMigrationBackups, f as getExtensionSettings, p as isMigrationBackupKey, y as saveHot } from "./persistence-BmzJp2Zz.js";
-import { C as mergeWalletCollections, a as decryptKey, f as getPricing$1, o as encryptKey, p as isDeepSeekOfficialModel, t as repository, u as calcCost } from "./repository-C2aWlfKZ.js";
+import { C as mergeWalletCollections, a as decryptKey, f as getPricing$1, o as encryptKey, p as isDeepSeekOfficialModel, t as repository, u as calcCost } from "./repository-Dg4mgJ76.js";
 import { a as isUnsafeKey, o as isValidDayKey, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
-import { a as getDisplayCurrency, r as fetchLiveRate } from "./currency-BYzMLQZM.js";
-import { r as recalcAllCosts } from "./interception-B8o6uim9.js";
-import { i as saveApiKey } from "./balance-Cq7vqfxw.js";
+import { a as getDisplayCurrency, r as fetchLiveRate } from "./currency-WNr8ECMS.js";
+import { r as recalcAllCosts } from "./interception-DdJqF_VV.js";
+import { i as saveApiKey } from "./balance-CVblGceL.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
-import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-Z5ccYKrj.js";
+import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-DJf-XXlo.js";
 //#region src/ui/switch.ts
 function escAttr(value) {
 	return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -2085,6 +2085,15 @@ function renderSettings(doc) {
       <!-- 历史显示范围 -->
       <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">历史显示范围</span><div id="aus-history-scope-btn" class="aus-pill"><span style="color:var(--ds-text-2);">范围</span><span id="aus-history-scope-label" style="font-weight:600;color:var(--ds-text);">全部历史</span>${icon("chevron-down", 14)}</div></div><div id="aus-history-scope-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">调整历史记录页的默认展示范围</div></div>
 
+      <!-- Token 数字单位：只影响显示，不改数据、不进导出值 -->
+      <div class="ds-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">Token 单位缩写</span>${switchHTML("aus-token-unit", {
+		checked: s.tokenUnitCompact === true,
+		ariaLabel: "Token 单位缩写"
+	})}</div>
+        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">开启后概览、统计、历史记录与趋势预测里的 Token 数按 K / M / B 显示（如 12.3K、1.2M），小于一万不缩写；关闭时显示完整数字。图表坐标轴不受影响，历史详情里的原始数据始终是完整值</div>
+      </div>
+
       <!-- 对话展示：控制按对话统计表与各页「对话」下拉胶囊里展示哪些对话（只影响显示） -->
       <div class="ds-card">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">对话展示</span><button id="aus-settings-chat-manage" type="button" class="aus-manage-chat-btn" title="管理对话在表格与下拉胶囊中的显示">${icon("menu", 14)}管理对话</button></div>
@@ -2216,6 +2225,8 @@ function renderSettings(doc) {
 	if (telemetryCb) telemetryCb.checked = s.telemetryEnabled !== false;
 	const mobileUiCb = doc.getElementById("aus-mobile-compat-ui");
 	if (mobileUiCb) mobileUiCb.checked = s.mobileCompatUi !== false;
+	const tokenUnitCb = doc.getElementById("aus-token-unit");
+	if (tokenUnitCb) tokenUnitCb.checked = s.tokenUnitCompact === true;
 	renderTelemetryStatus(doc);
 	doc.getElementById("aus-peak-dot").checked = state.settings.peakDot !== false;
 	doc.getElementById("aus-balance-interval").value = String(s.balanceInterval ?? 10);
@@ -2381,7 +2392,7 @@ function renderSettings(doc) {
 		state.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state.settings });
 		try {
-			import("./balance-Cq7vqfxw.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-CVblGceL.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2425,8 +2436,8 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-C2aWlfKZ.js").then((n) => n.n);
-				const { state: st } = await import("./store-DWjGdI6D.js").then((n) => n.a);
+				const { repository } = await import("./repository-Dg4mgJ76.js").then((n) => n.n);
+				const { state: st } = await import("./store-NBl_hgTZ.js").then((n) => n.a);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
 				await repository.rebuildAggregates();
@@ -2474,6 +2485,14 @@ function renderSettings(doc) {
 		saveHot({ settings: state.settings });
 		try {
 			import("./index.js").then((n) => n.t).then((m) => m.applyMobileNavMode()).catch(() => {});
+		} catch {}
+	};
+	const tokenUnitToggle = doc.getElementById("aus-token-unit");
+	if (tokenUnitToggle) tokenUnitToggle.onchange = (e) => {
+		state.settings.tokenUnitCompact = !!e.target.checked;
+		saveHot({ settings: state.settings });
+		try {
+			import("./index.js").then((n) => n.t).then((m) => m.refreshUI()).catch(() => {});
 		} catch {}
 	};
 	const telemetryReset = doc.getElementById("aus-telemetry-reset");
@@ -2572,8 +2591,8 @@ function renderSettings(doc) {
 					closeDropdownInstant(intervalDrop);
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-Z5ccYKrj.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
-						import("./currency-BYzMLQZM.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
+						import("./pricing-sync-DJf-XXlo.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./currency-WNr8ECMS.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};
 			});
@@ -2602,7 +2621,7 @@ function renderSettings(doc) {
 			state.settings.pricingSync.useLiveRate = liveEl.checked;
 			saveHot({ settings: state.settings });
 			try {
-				import("./currency-BYzMLQZM.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
+				import("./currency-WNr8ECMS.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 			} catch {}
 		};
 		const fetchBtn = doc.getElementById("aus-fetch-rate");

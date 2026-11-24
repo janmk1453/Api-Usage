@@ -1031,6 +1031,8 @@ export function normalizeSettings(incoming: any): any {
     : def.extraOffDays;
   if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
   if (!merged.historyScope) merged.historyScope = def.historyScope;
+  // Token 缩写开关：老数据没有这个键，缺省与默认值一致（false = 完整千分位），非布尔也纠正
+  if (typeof merged.tokenUnitCompact !== 'boolean') merged.tokenUnitCompact = false;
   if (!merged.theme) merged.theme = def.theme;
   if (typeof merged.modelsPricingCollapsed !== 'boolean') merged.modelsPricingCollapsed = true;
   // 移动端兼容 UI：默认值只按设备类型决定一次（utils/device.ts）——移动端默认开启底栏，

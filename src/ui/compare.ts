@@ -1,8 +1,9 @@
-import { getSelectedSave } from '../store/index';
+import { getSelectedSave, state } from '../store/index';
 import { esc } from '../utils/date';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 import { icon } from './icons';
 import { rateText, rateTitle } from './rate-text';
+import { formatToken, tokenUnitOf } from '../data/token-format';
 
 let selOld: number | null = null;
 let selNew: number | null = null;
@@ -70,15 +71,17 @@ export function renderUsageDetail(ts: number) {
   }
   overlay.style.display = 'flex';
   const box = doc.getElementById('aus-usage-box')!;
+  // Token 数字跟随设置里的单位开关
+  const tok = (v: number) => formatToken(v, tokenUnitOf(state.settings));
   box.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><b style="font-size:14px;color:var(--ds-text);">使用详情</b><button onclick="document.getElementById('aus-usage-overlay').style.display='none'" title="关闭" style="border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);padding:6px 10px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;">${icon('close', 14)}</button></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
       <div style="background:var(--ds-card);border-radius:10px;padding:10px;"><div style="color:var(--ds-text-2);font-size:11px;">模型</div><div style="font-weight:600;color:var(--ds-text);">${esc(h.model)}</div></div>
       <div style="background:var(--ds-card);border-radius:10px;padding:10px;"><div style="color:var(--ds-text-2);font-size:11px;">费用</div><div style="font-weight:700;color:var(--ds-text);">${(()=>{ try{  return formatMoney(h.cost||0,4);} catch{ return '¥'+(h.cost||0).toFixed(4)+' CNY';}})()}</div></div>
-      <div style="background:var(--ds-card);border-radius:10px;padding:10px;"><div style="color:var(--ds-text-2);font-size:11px;">Tokens</div><div style="color:var(--ds-text);">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · ${h.total_tokens || 0} 总</div></div>
+      <div style="background:var(--ds-card);border-radius:10px;padding:10px;"><div style="color:var(--ds-text-2);font-size:11px;">Tokens</div><div style="color:var(--ds-text);">${tok(h.prompt_tokens || 0)} in · ${tok(h.completion_tokens || 0)} out · ${tok(h.total_tokens || 0)} 总</div></div>
       <div style="background:var(--ds-card);border-radius:10px;padding:10px;"><div style="color:var(--ds-text-2);font-size:11px;">命中率</div><div style="color:var(--ds-text);">${(h.cache_hit_rate || 0).toFixed(1)}%</div></div>
       <div style="background:var(--ds-card);border-radius:10px;padding:10px;"><div style="color:var(--ds-text-2);font-size:11px;">耗时/速率</div><div style="color:var(--ds-text);">${h.duration || 0}ms · <span title="${esc(rateTitle(h))}">${rateText(h)}</span> · 首延 ${(h.ttft||0)>0 ? h.ttft+'ms' : '—'}</div></div>
-      <div style="background:var(--ds-card);border-radius:10px;padding:10px;"><div style="color:var(--ds-text-2);font-size:11px;">思维链</div><div style="color:var(--ds-text);">${h.thinkTokens || 0} tk · ${h.thinkTime || 0}ms</div></div>
+      <div style="background:var(--ds-card);border-radius:10px;padding:10px;"><div style="color:var(--ds-text-2);font-size:11px;">思维链</div><div style="color:var(--ds-text);">${tok(h.thinkTokens || 0)} tk · ${h.thinkTime || 0}ms</div></div>
     </div>
   `;
   doc.addEventListener('click', (e: any) => {

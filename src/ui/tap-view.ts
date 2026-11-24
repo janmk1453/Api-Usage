@@ -11,6 +11,8 @@ import { tapDiagnostics } from '../services/request-tap';
 import { clearTapRecords, listTapRecords, subscribeTap, TAP_MAX_RECORDS } from '../services/request-tap/store';
 import type { TapRecord } from '../services/request-tap/types';
 import { backButtonHTML } from './back-button';
+import { state } from '../store/index';
+import { formatToken, tokenUnitOf } from '../data/token-format';
 
 type TapFilter = 'all' | 'orphan' | 'settled';
 
@@ -44,11 +46,9 @@ export function initTapView(deps: { go: () => void }): void {
   } catch {}
 }
 
+// Token 数字统一走 data/token-format（跟随设置里的单位开关）
 function num(n: number): string {
-  const v = Number(n) || 0;
-  if (v >= 1000000) return (v / 1000000).toFixed(2) + 'M';
-  if (v >= 1000) return (v / 1000).toFixed(1) + 'k';
-  return String(v);
+  return formatToken(Number(n) || 0, tokenUnitOf(state.settings));
 }
 
 function tokensOf(records: TapRecord[]): number {

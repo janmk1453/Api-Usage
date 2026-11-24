@@ -27,6 +27,7 @@ import { filterPickerRows } from './chat-visibility';
 import { filterModelPickerRows, filterVisibleModelRows, hiddenModelCountFor } from './model-visibility';
 import { afterNextPaint, closeDropdownInstant, closeDropdownThenPaint } from './dropdown-close';
 import { REQUEST_TYPE_OPTIONS, requestTypeLabel, requestTypeTitle } from './request-type-filter';
+import { formatToken, tokenTitle, tokenUnitOf } from '../data/token-format';
 
 type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom' | 'all';
 // 默认时间维度：工具栏「重置筛选」与首次进入共用同一口径
@@ -901,7 +902,8 @@ async function renderChart(filteredRaw: any[]) {
           else if (kind === 'duration') disp = Number(v).toFixed(2) + ' s';
           else if (kind === 'rate') disp = Math.round(Number(v)) + ' t/s';
           else if (kind === 'count') disp = Number(v).toLocaleString() + ' 次';
-          else disp = Number(v).toLocaleString() + ' ' + (meta?.unit || '');
+          // Token 类图例值跟随设置里的单位开关（Y 轴刻度不受影响）
+          else disp = formatToken(Number(v), tokenUnitOf(state.settings)) + ' ' + (meta?.unit || '');
           html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${esc(p.seriesName)}<span style="margin-left:auto;font-weight:600;">${disp}</span></div>`;
         }
         return `<div style="padding:4px 2px;min-width:180px;">${html}</div>`;
@@ -1002,8 +1004,10 @@ function renderModelSummary(filtered: any[]) {
     return;
   }
   const fmtC = (v:number)=>{ try{  return formatMoney(v||0,4);} catch{ return '¥'+(v||0).toFixed(4)+' CNY'; } };
+  // Token 列跟随单位开关，缩写态带 title 完整值
+  const tokCell = (v:number)=>{ const unit = tokenUnitOf(state.settings); const full = tokenTitle(v, unit); return full ? '<span title="'+full+' tokens">'+formatToken(v, unit)+'</span>' : formatToken(v, unit); };
   const rows = list.map(r => {
-     return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--aus-token-output);">${r.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${fmtC(r.cost)}</td><td style="padding:6px 8px;text-align:right;">${fmtC(r.avgCost)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
+     return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${tokCell(r.hit)}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${tokCell(r.miss)}</td><td style="padding:6px 8px;text-align:right;color:var(--aus-token-output);">${tokCell(r.out)}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${tokCell(r.total)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${fmtC(r.cost)}</td><td style="padding:6px 8px;text-align:right;">${fmtC(r.avgCost)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
   }).join('');
   tbody.innerHTML = rows;
 }
@@ -1098,7 +1102,13 @@ export async function renderStatsView() {
   const reqEl = doc.getElementById('aus-stats-req');
   if (reqEl) reqEl.textContent = String(totalReq);
   const tokEl = doc.getElementById('aus-stats-tok');
-  if (tokEl) tokEl.textContent = totalTok.toLocaleString('zh-CN');
+  if (tokEl) {
+    const tokUnit = tokenUnitOf(state.settings);
+    tokEl.textContent = formatToken(totalTok, tokUnit);
+    const fullTok = tokenTitle(totalTok, tokUnit);
+    if (fullTok) tokEl.title = fullTok + ' tokens';
+    else tokEl.removeAttribute('title');
+  }
   renderStatsFour(summaryFiltered);
   renderModelSummary(summaryFiltered);
   renderModelPicker(allHistory);

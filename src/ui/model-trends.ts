@@ -3,6 +3,9 @@ import { X_OPTIONS } from './chart-config';
 import { CHART_TOOLTIP_CONFIG, registerChartTooltipDismiss } from './chart-tooltip';
 import { attachChartZoom, detachChartZoom, getChartRange } from './range-zoom';
 import { closeDropdownThenPaint } from './dropdown-close';
+// 本文件内的 `state` 是各趋势图自己的 X 轴选择，应用状态需要别名
+import { state as appState } from '../store/index';
+import { formatToken, tokenUnitOf } from '../data/token-format';
 
 type XKey = 'round'|'hour'|'day'|'week'|'month';
 type TrendId = 'token'|'req';
@@ -163,10 +166,10 @@ async function renderOne(id:TrendId, filtered:any[]){
         const idx=params[0].dataIndex;
         const label=labels[idx];
         let sum=0; for(const p of params) sum+=Number(p.value||0);
-        let html=`<div style="font-weight:600;margin-bottom:6px;">${esc(label)}<span style="margin-left:8px;color:var(--ds-text-2);font-weight:400;">合计 ${id==='token'? sum.toLocaleString()+' tokens' : sum+' 次'}</span></div>`;
+        let html=`<div style="font-weight:600;margin-bottom:6px;">${esc(label)}<span style="margin-left:8px;color:var(--ds-text-2);font-weight:400;">合计 ${id==='token'? formatToken(sum, tokenUnitOf(appState.settings))+' tokens' : sum+' 次'}</span></div>`;
         for(const p of params){
           if (Number(p.value)===0) continue;
-          html+=`<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${esc(p.seriesName)}<span style="margin-left:auto;font-weight:600;">${id==='token' ? Number(p.value).toLocaleString()+' tokens' : p.value+' 次'}</span></div>`;
+          html+=`<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${esc(p.seriesName)}<span style="margin-left:auto;font-weight:600;">${id==='token' ? formatToken(Number(p.value), tokenUnitOf(appState.settings))+' tokens' : p.value+' 次'}</span></div>`;
         }
         if (!params.some((p:any)=>Number(p.value)>0)) html+=`<div style="color:var(--ds-text-3);font-size:var(--aus-fs-sm);">本${xKey==='day'?'日':xKey==='hour'?'时段':xKey==='week'?'周':xKey==='month'?'月':'轮次'}无数据</div>`;
         return `<div style="padding:4px 2px;min-width:180px;max-width:280px;">${html}</div>`;

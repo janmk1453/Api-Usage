@@ -56,6 +56,7 @@ import { applyTheme } from '../services/theme';
 import { DataEvents, on as onDataEvent } from '../data/events';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 import { repository } from '../data/repository';
+import { formatToken, tokenTitle, tokenUnitOf } from '../data/token-format';
 import { getDetail } from '../data/detail-store';
 import type { DetailBlob, DetailSide } from '../data/detail-store';
 import { createJsonTree, jsonParseSafe } from './json-tree';
@@ -163,7 +164,13 @@ export function refreshUI() {
       try {  totalCostEl.textContent = formatMoney(s.total_cost || 0, 4); } catch { totalCostEl.textContent = '¥' + (s.total_cost || 0).toFixed(4) + ' CNY'; }
     }
     const tokEl = doc.getElementById('aus-total-tokens');
-    if (tokEl) tokEl.textContent = (s.total_tokens || 0).toLocaleString('zh-CN') + ' tokens';
+    if (tokEl) {
+      const headUnit = tokenUnitOf(state.settings);
+      tokEl.textContent = formatToken(s.total_tokens || 0, headUnit) + ' tokens';
+      const headFull = tokenTitle(s.total_tokens || 0, headUnit);
+      if (headFull) tokEl.title = headFull + ' tokens';
+      else tokEl.removeAttribute('title');
+    }
     renderHistory(doc, s);
     renderOverview();
     renderStatsView();
@@ -931,6 +938,10 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
     const hps = hp.toFixed(1), mps = mp.toFixed(1), ops = op.toFixed(1);
     const fmtMoney = (v:number,d=4)=>{ try{  return formatMoney(v||0,d);} catch{ return '¥'+(v||0).toFixed(d)+' CNY'; } };
     const c4 = fmtMoney(h.cost||0,4); const c6 = fmtMoney(h.cost||0,6); const in6 = fmtMoney(h.input_cost||0,6); const out6 = fmtMoney(h.output_cost||0,6);
+    // Token 数字跟随设置里的单位开关；卡片头与列表末位带 title 完整值，详情块用纯文本
+    const tokUnit = tokenUnitOf(state.settings);
+    const tok = (v: number) => formatToken(v, tokUnit);
+    const tokT = (v: number) => { const full = tokenTitle(v, tokUnit); return full ? `<span title="${full} tokens">${formatToken(v, tokUnit)}</span>` : formatToken(v, tokUnit); };
     // 记录状态徽标：中断（黄/红）> 估算（黄）> Agent（绿）> 常规（灰）
     const isAgentRecord = String((h as any).origin || '') === 'agent';
     const agentTurnCount = Number((h as any).agentModelTurns) || 0;
@@ -975,7 +986,7 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
       <div class="aus-history-card-head" style="display:flex;justify-content:space-between;align-items:center;">
         <div class="aus-history-card-main" style="min-width:0;flex:1;">
           <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${sourceBadgeHTML}${stateBadgeHTML}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(h.model)} · ${esc(localTimeHM(h.timestamp))}</span></div>
-          <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · <span title="${esc(rateTitle(h))}">${rateText(h)}</span></div>
+          <div style="color:var(--ds-text-2);margin-top:2px;">${tokT(h.prompt_tokens || 0)} in · ${tokT(h.completion_tokens || 0)} out · <span title="${esc(rateTitle(h))}">${rateText(h)}</span></div>
         </div>
         <div class="aus-history-card-actions" style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
           <div class="aus-history-card-cost">
@@ -999,7 +1010,7 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
           <span style="display:inline-flex;align-items:center;gap:4px;"><span class="aus-token-dot" style="background:var(--aus-token-miss);"></span><b style="color:var(--ds-text);font-weight:600;">${mps}%</b> 未命中</span>
           <span style="display:inline-flex;align-items:center;gap:4px;"><span class="aus-token-dot" style="background:var(--aus-token-output);"></span><b style="color:var(--ds-text);font-weight:600;">${ops}%</b> 输出</span>
         </div>
-        <span style="color:var(--ds-text-2);">${total.toLocaleString()}t</span>
+        <span style="color:var(--ds-text-2);">${tokT(total)}t</span>
       </div>
       <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;">
               <div class="aus-dt-row">
@@ -1037,11 +1048,11 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
                     <div style="width:${op}%;background:var(--aus-token-output);"></div>
                   </div>
                   <div class="aus-dt-grid">
-                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-hit);"></span>缓存命中</span><span class="aus-dt-val">${(h.cache_hit_tokens||0).toLocaleString()}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-miss);"></span>缓存未命中</span><span class="aus-dt-val">${(h.cache_miss_tokens||0).toLocaleString()}${estTag}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-output);"></span>输出 Token</span><span class="aus-dt-val">${(h.completion_tokens||0).toLocaleString()}${estTag}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label">总 Token</span><span class="aus-dt-val is-strong">${(h.total_tokens||0).toLocaleString()}${estTag}</span></div>
-                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">思维链 Token</span><span class="aus-dt-val">${h.thinkTokens||0}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-hit);"></span>缓存命中</span><span class="aus-dt-val">${tok(h.cache_hit_tokens||0)}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-miss);"></span>缓存未命中</span><span class="aus-dt-val">${tok(h.cache_miss_tokens||0)}${estTag}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-output);"></span>输出 Token</span><span class="aus-dt-val">${tok(h.completion_tokens||0)}${estTag}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">总 Token</span><span class="aus-dt-val is-strong">${tok(h.total_tokens||0)}${estTag}</span></div>
+                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">思维链 Token</span><span class="aus-dt-val">${tok(h.thinkTokens||0)}</span></div>
                   </div>
                 </section>
                 <section class="aus-dt-block">

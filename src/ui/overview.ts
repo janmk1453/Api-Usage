@@ -11,12 +11,21 @@ import { repository } from '../data/repository';
 import { closeDropdownThenPaint } from './dropdown-close';
 import { placeDropdownRelativeToHost } from './dropdown-placement';
 import { historyBreakdownHTML, spendBreakdownHTML } from './overview-breakdown';
+import { formatToken, tokenTitle, tokenUnitOf } from '../data/token-format';
+import type { TokenUnit } from '../data/token-format';
 
 function getDoc(): Document {
   return (window.parent as any)?.document ?? document;
 }
 
-function fmt(n: number) { return n.toLocaleString('zh-CN'); }
+// Token 数字口径统一走 data/token-format：开关关闭时是完整千分位，开启时是 K/M/B 缩写。
+// 缩写态额外带 title（完整值），悬停可核对，避免把缩写当成精确数。
+function tokenUnit(): TokenUnit { return tokenUnitOf(state.settings); }
+function tokenText(n: number): string { return formatToken(n, tokenUnit()); }
+function tokenHtml(n: number): string {
+  const full = tokenTitle(n, tokenUnit());
+  return full ? `<span title="${full} tokens">${tokenText(n)}</span>` : tokenText(n);
+}
 function moneyHtml(cny: number, digits = 4): string {
   try {
     
@@ -77,7 +86,7 @@ export function getFourDisplay(key: OverviewFourKey, v: any): { title:string; ht
   const title = FOUR_LABEL_MAP.get(key) || key;
   switch (key) {
     case 'avg_cost': return { title, html: moneyHtml(v.avgCost||0, 4) };
-    case 'avg_tokens': return { title, html: `${Math.round(v.avgTokens||0).toLocaleString('zh-CN')}` };
+    case 'avg_tokens': return { title, html: tokenHtml(Math.round(v.avgTokens||0)) };
     case 'avg_duration': return { title, html: `${(v.avgDuration||0).toFixed(1)} <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);font-weight:400;">s</span>` };
     case 'avg_ttft': {
       const has = (v.avgTtft||0) > 0;
@@ -88,16 +97,16 @@ export function getFourDisplay(key: OverviewFourKey, v: any): { title:string; ht
       return { title, html: has ? `${Math.round(v.avgRate)} <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);font-weight:400;">t/s</span>` : `<span style="color:var(--ds-text-3);">—</span>` };
     }
     case 'avg_input_cost': return { title, html: moneyHtml(v.avgInputCost||0, 4) };
-    case 'avg_input_tokens': return { title, html: `${Math.round(v.avgInputTokens||0).toLocaleString('zh-CN')}` };
+    case 'avg_input_tokens': return { title, html: tokenHtml(Math.round(v.avgInputTokens||0)) };
     case 'avg_output_cost': return { title, html: moneyHtml(v.avgOutputCost||0, 4) };
-    case 'avg_output_tokens': return { title, html: `${Math.round(v.avgOutputTokens||0).toLocaleString('zh-CN')}` };
+    case 'avg_output_tokens': return { title, html: tokenHtml(Math.round(v.avgOutputTokens||0)) };
     case 'avg_think_time': {
       const has = (v.avgThinkTime||0) > 0;
       return { title, html: has ? `${(v.avgThinkTime).toFixed(1)} <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);font-weight:400;">s</span>` : `<span style="color:var(--ds-text-3);">—</span>` };
     }
     case 'avg_think_tokens': {
       const has = (v.avgThinkTokens||0) > 0;
-      return { title, html: has ? `${Math.round(v.avgThinkTokens).toLocaleString('zh-CN')}` : `<span style="color:var(--ds-text-3);">—</span>` };
+      return { title, html: has ? tokenHtml(Math.round(v.avgThinkTokens)) : `<span style="color:var(--ds-text-3);">—</span>` };
     }
     case 'avg_hit_rate': {
       const has = (v.avgHitRate||0) > 0;
@@ -108,9 +117,9 @@ export function getFourDisplay(key: OverviewFourKey, v: any): { title:string; ht
       if (val == null) return { title, html: `<span style="color:var(--ds-text-3);">—</span>` };
       return { title, html: `${val.toFixed(1)}<span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);font-weight:400;">%</span>` };
     }
-    case 'max_output': return { title, html: `${(v.maxOutput||0).toLocaleString('zh-CN')}` };
-    case 'max_input': return { title, html: `${(v.maxInput||0).toLocaleString('zh-CN')}` };
-    case 'max_total': return { title, html: `${(v.maxTotal||0).toLocaleString('zh-CN')}` };
+    case 'max_output': return { title, html: tokenHtml(v.maxOutput||0) };
+    case 'max_input': return { title, html: tokenHtml(v.maxInput||0) };
+    case 'max_total': return { title, html: tokenHtml(v.maxTotal||0) };
     case 'avg_think_ratio': {
       const has = (v.avgThinkRatio||0) > 0 || (v.rounds||0) > 0;
       const val = v.avgThinkRatio||0;
@@ -296,7 +305,12 @@ export function renderOverview(fullHistory?: any[]) {
     try {  costEl.textContent = formatMoney(v.totalCost, 4); } catch { costEl.textContent = '¥' + v.totalCost.toFixed(4) + ' CNY'; }
   }
   const tokEl = doc.getElementById('aus-total-tokens');
-  if (tokEl) tokEl.textContent = fmt(v.totalTokens) + ' tokens';
+  if (tokEl) {
+    tokEl.textContent = tokenText(v.totalTokens) + ' tokens';
+    const fullTokens = tokenTitle(v.totalTokens, tokenUnit());
+    if (fullTokens) tokEl.title = fullTokens + ' tokens';
+    else tokEl.removeAttribute('title');
+  }
 
   // 两块明细卡：结构、分项口径与文案统一由 ui/overview-breakdown.ts 产出，
   // 排版与配色只在 style.css 的「概览页：历史消耗 / 支出明细」段（.aus-ovm-*）。
@@ -311,7 +325,7 @@ export function renderOverview(fullHistory?: any[]) {
     savings: v.savings,
     hitRate: v.hitRate,
   };
-  const breakdownText = { fmt, money: (value: number) => moneyHtml(value) };
+  const breakdownText = { fmt: (value: number) => tokenHtml(value), money: (value: number) => moneyHtml(value) };
 
   const histHost = doc.getElementById('aus-overview-history');
   if (histHost) histHost.innerHTML = historyBreakdownHTML(breakdownInput, breakdownText);

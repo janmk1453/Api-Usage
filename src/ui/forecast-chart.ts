@@ -6,6 +6,8 @@ import type { ForecastSeries } from '../stats/forecast-series';
 import { chartDateTime } from './chart-time';
 import { CHART_TOOLTIP_CONFIG, registerChartTooltipDismiss } from './chart-tooltip';
 import { TOKEN_SERIES_COLORS } from './chart-config';
+import { state as appState } from '../store/index';
+import { formatToken, tokenUnitOf } from '../data/token-format';
 
 type CurrencyInfo = { code: string; symbol: string; rate: number };
 
@@ -213,7 +215,8 @@ function baseAxisStyle(border: string, text3: string) {
 
 function compactionTooltip(point: any): string {
   if (!point) return '';
-  return `<div style="font-size:11px;color:#9CA3AF;">压缩前 ${compactNumber(point.before)} → 后 ${compactNumber(point.after)}（降 ${Math.round(point.dropPct * 100)}%）</div>`;
+  const unit = tokenUnitOf(appState.settings);
+  return `<div style="font-size:11px;color:#9CA3AF;">压缩前 ${formatToken(point.before, unit)} → 后 ${formatToken(point.after, unit)}（降 ${Math.round(point.dropPct * 100)}%）</div>`;
 }
 
 async function renderMainChart(echarts: any, options: ForecastChartOptions): Promise<void> {
@@ -509,7 +512,7 @@ async function renderMainChart(echarts: any, options: ForecastChartOptions): Pro
           const isCost = param.seriesName.includes('成本');
           const display = isCost
             ? formatCost(Number(value), 4)
-            : compactNumber(Number(value)) + ' tok';
+            : formatToken(Number(value), tokenUnitOf(appState.settings)) + ' tok';
           html += `<div style="display:flex;align-items:center;gap:6px;line-height:1.7;"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${param.color};"></span><span>${param.seriesName}</span><span style="margin-left:auto;font-weight:600;">${display}</span></div>`;
         }
         const hitPoint = historyCompactions.find((point) => point.value[0] === label);

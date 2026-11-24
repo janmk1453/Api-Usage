@@ -7,6 +7,9 @@ import { formatMoney, getDisplayCurrency } from '../services/currency';
 import { attachChartZoom, detachChartZoom, getChartRange } from './range-zoom';
 import { readChartPrefs, writeChartPrefs } from './chart-prefs';
 import { afterNextPaint, closeDropdownThenPaint } from './dropdown-close';
+// 本文件内的 `state` 是各图表自己的选中态，应用状态需要别名
+import { state as appState } from '../store/index';
+import { formatToken, tokenUnitOf } from '../data/token-format';
 
 type ChartId = 'token'|'cost'|'hit'|'req'|'dur'|'pie';
 type XKey = 'round'|'hour'|'day'|'week'|'month';
@@ -176,7 +179,7 @@ async function renderOne(id:ChartId, filtered:any[]){
       tooltip:{ trigger:'item', ...CHART_TOOLTIP_CONFIG, backgroundColor:themeColor('--ds-card-inner','#FFFFFF'), borderColor:themeColor('--ds-border','#E5E7EB'), textStyle:{fontSize: 12, color:themeColor('--ds-text','#111827')},
         formatter: (p:any)=>{
           const range = rangeTip(filtered);
-          const val = mode==='token' ? Number(p.value).toLocaleString() + ' tokens' : Number(p.value).toLocaleString() + ' 次请求';
+          const val = mode==='token' ? formatToken(Number(p.value), tokenUnitOf(appState.settings)) + ' tokens' : Number(p.value).toLocaleString() + ' 次请求';
           const pct = Number(p.percent || 0).toFixed(1);
           let html = `<div style="display:flex;align-items:center;gap:6px;font-weight:600;margin-bottom:4px;">${p.marker||''}${p.name}</div>`;
           html += `<div style="display:flex;gap:16px;"><span>用量</span><span style="margin-left:auto;font-weight:600;">${val}</span></div>`;
@@ -341,7 +344,7 @@ async function drawBarLine(el:HTMLElement, id:ChartId, labels:string[], series:A
           else if (unit==='rate') disp = Math.round(v).toLocaleString() + ' t/s';
           else if (unit==='duration') disp = v.toFixed(2) + ' s';
           else if (unit==='count') disp = v.toLocaleString() + ' 次';
-          else disp = v.toLocaleString() + ' tokens';
+          else disp = formatToken(v, tokenUnitOf(appState.settings)) + ' tokens';
           html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${p.seriesName}<span style="margin-left:auto;font-weight:600;">${disp}</span></div>`;
         }
         return `<div style="padding:4px 2px;min-width:170px;">${html}</div>`;

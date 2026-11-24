@@ -179,6 +179,12 @@ export function renderSettings(doc: Document) {
       <!-- 历史显示范围 -->
       <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">历史显示范围</span><div id="aus-history-scope-btn" class="aus-pill"><span style="color:var(--ds-text-2);">范围</span><span id="aus-history-scope-label" style="font-weight:600;color:var(--ds-text);">全部历史</span>${icon('chevron-down', 14)}</div></div><div id="aus-history-scope-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">调整历史记录页的默认展示范围</div></div>
 
+      <!-- Token 数字单位：只影响显示，不改数据、不进导出值 -->
+      <div class="ds-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">Token 单位缩写</span>${switchHTML('aus-token-unit', { checked: s.tokenUnitCompact === true, ariaLabel: 'Token 单位缩写' })}</div>
+        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">开启后概览、统计、历史记录与趋势预测里的 Token 数按 K / M / B 显示（如 12.3K、1.2M），小于一万不缩写；关闭时显示完整数字。图表坐标轴不受影响，历史详情里的原始数据始终是完整值</div>
+      </div>
+
       <!-- 对话展示：控制按对话统计表与各页「对话」下拉胶囊里展示哪些对话（只影响显示） -->
       <div class="ds-card">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">对话展示</span><button id="aus-settings-chat-manage" type="button" class="aus-manage-chat-btn" title="管理对话在表格与下拉胶囊中的显示">${icon('menu', 14)}管理对话</button></div>
@@ -307,6 +313,9 @@ export function renderSettings(doc: Document) {
   // 移动端兼容 UI：开关状态回填
   const mobileUiCb = doc.getElementById('aus-mobile-compat-ui') as HTMLInputElement | null;
   if (mobileUiCb) mobileUiCb.checked = s.mobileCompatUi !== false;
+  // Token 单位缩写：开关状态回填（缺字段按关闭）
+  const tokenUnitCb = doc.getElementById('aus-token-unit') as HTMLInputElement | null;
+  if (tokenUnitCb) tokenUnitCb.checked = s.tokenUnitCompact === true;
   renderTelemetryStatus(doc);
   (doc.getElementById('aus-peak-dot') as HTMLInputElement | null)!.checked = state.settings.peakDot !== false;
 
@@ -513,6 +522,13 @@ export function renderSettings(doc: Document) {
     (state.settings as any).mobileCompatUi = enabled;
     saveHot({ settings: state.settings });
     try { import('./panel').then(m => m.applyMobileNavMode()).catch(() => {}); } catch {}
+  };
+  // Token 单位缩写：切换后立即重绘所有页面（refreshUI 会重画概览/统计/历史/预测）
+  const tokenUnitToggle = doc.getElementById('aus-token-unit') as HTMLInputElement | null;
+  if (tokenUnitToggle) tokenUnitToggle.onchange = (e: any) => {
+    (state.settings as any).tokenUnitCompact = !!e.target.checked;
+    saveHot({ settings: state.settings });
+    try { import('./panel').then(m => m.refreshUI()).catch(() => {}); } catch {}
   };
   const telemetryReset = doc.getElementById('aus-telemetry-reset') as HTMLButtonElement | null;
   if (telemetryReset) telemetryReset.onclick = () => {
