@@ -181,8 +181,8 @@ export function renderSettings(doc: Document) {
 
       <!-- Token 数字单位：只影响显示，不改数据、不进导出值 -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">Token 单位缩写</span>${switchHTML('aus-token-unit', { checked: s.tokenUnitCompact === true, ariaLabel: 'Token 单位缩写' })}</div>
-        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">开启后概览、统计、历史记录与趋势预测里的 Token 数按 K / M / B 显示（如 12.3K、1.2M），小于一万不缩写；关闭时显示完整数字。图表坐标轴不受影响，历史详情里的原始数据始终是完整值</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">数字单位缩写</span>${switchHTML('aus-token-unit', { checked: s.tokenUnitCompact === true, ariaLabel: '数字单位缩写' })}</div>
+        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">使用 K、M、B 为单位</div>
       </div>
 
       <!-- 对话展示：控制按对话统计表与各页「对话」下拉胶囊里展示哪些对话（只影响显示） -->
@@ -313,7 +313,7 @@ export function renderSettings(doc: Document) {
   // 移动端兼容 UI：开关状态回填
   const mobileUiCb = doc.getElementById('aus-mobile-compat-ui') as HTMLInputElement | null;
   if (mobileUiCb) mobileUiCb.checked = s.mobileCompatUi !== false;
-  // Token 单位缩写：开关状态回填（缺字段按关闭）
+  // 数字单位缩写：开关状态回填（缺字段按关闭）
   const tokenUnitCb = doc.getElementById('aus-token-unit') as HTMLInputElement | null;
   if (tokenUnitCb) tokenUnitCb.checked = s.tokenUnitCompact === true;
   renderTelemetryStatus(doc);
@@ -523,7 +523,7 @@ export function renderSettings(doc: Document) {
     saveHot({ settings: state.settings });
     try { import('./panel').then(m => m.applyMobileNavMode()).catch(() => {}); } catch {}
   };
-  // Token 单位缩写：切换后立即重绘所有页面（refreshUI 会重画概览/统计/历史/预测）
+  // 数字单位缩写：切换后立即重绘所有页面（refreshUI 会重画概览/统计/历史/预测）
   const tokenUnitToggle = doc.getElementById('aus-token-unit') as HTMLInputElement | null;
   if (tokenUnitToggle) tokenUnitToggle.onchange = (e: any) => {
     (state.settings as any).tokenUnitCompact = !!e.target.checked;

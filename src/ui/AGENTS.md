@@ -122,7 +122,7 @@
 
 ### 设置（`ui/settings.ts`）
 
-- **保留的全局控制**：匿名使用统计（默认开启，可关闭并重置匿名标识，位于设置页顶部）、移动端兼容 UI（`settings.mobileCompatUi`）、颜色模式、历史显示范围、Token 单位缩写（`settings.tokenUnitCompact`，默认关闭，格式化唯一来源 `src/data/token-format.ts`，图表坐标轴不受其影响）、自动校准间隔（**总开关已移除**）、新钱包默认峰谷与额外空闲日期、汇率与价格同步参数（**无总开关**）、调试、峰值圆点、记录数据管理、WebDAV、存储占用。
+- **保留的全局控制**：匿名使用统计（默认开启，可关闭并重置匿名标识，位于设置页顶部）、移动端兼容 UI（`settings.mobileCompatUi`）、颜色模式、历史显示范围、数字单位缩写（`settings.tokenUnitCompact`，默认关闭，格式化唯一来源 `src/data/token-format.ts`，图表坐标轴不受其影响）、自动校准间隔（**总开关已移除**）、新钱包默认峰谷与额外空闲日期、汇率与价格同步参数（**无总开关**）、调试、峰值圆点、记录数据管理、WebDAV、存储占用。
 - **移动端兼容 UI**：默认值只按设备类型决定一次（`utils/device.ts#mobileDeviceHint()`：移动端默认开 = 窄屏底栏，桌面默认关），落盘后不再被后续版本覆盖。
 - **WebDAV 卡片默认收起**：`#aus-webdav-body` 初始 `display:none`，标题行 `#aus-webdav-header` 与胶囊 `#aus-webdav-toggle` 都可点开；折叠状态**刻意不落盘**，每次进设置页都从收起开始。
 - **「对话展示」/「模型展示」入口**：`#aus-settings-chat-manage` / `#aus-settings-model-manage`（`.aus-manage-chat-btn`）由 `renderSettings` 生成，故 `panel.ts` 用 `#aus-panel` 点击委托捕获；设置页内要用 `#aus-panel #aus-settings-*-manage` 提高尺寸到与同页胶囊一致，别动通用类（概览、统计与趋势页用紧凑尺寸）。
