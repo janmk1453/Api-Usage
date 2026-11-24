@@ -1,16 +1,16 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { i as state } from "./store-gY-aC6s0.js";
+import { i as state } from "./store-DWjGdI6D.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS } from "./pricing-Bc-qEvy8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { o as detailStorageStats } from "./detail-store-6x06kQ_p.js";
+import { o as detailStorageStats } from "./detail-store-CqNNEAWB.js";
 import { _ as saveExtensionSettings, b as historyRecordKey, c as deleteMigrationBackups, f as getExtensionSettings, p as isMigrationBackupKey, y as saveHot } from "./persistence-BmzJp2Zz.js";
-import { C as mergeWalletCollections, a as decryptKey, f as getPricing$1, o as encryptKey, p as isDeepSeekOfficialModel, t as repository, u as calcCost } from "./repository-DlimuCOF.js";
+import { C as mergeWalletCollections, a as decryptKey, f as getPricing$1, o as encryptKey, p as isDeepSeekOfficialModel, t as repository, u as calcCost } from "./repository-DozKdTjS.js";
 import { a as isUnsafeKey, o as isValidDayKey, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
-import { a as getDisplayCurrency, r as fetchLiveRate } from "./currency--7Ad-xYJ.js";
-import { r as recalcAllCosts } from "./interception-DWhKeKTj.js";
-import { i as saveApiKey } from "./balance-DxcQ664V.js";
+import { a as getDisplayCurrency, r as fetchLiveRate } from "./currency-BYzMLQZM.js";
+import { r as recalcAllCosts } from "./interception-D03hEPDm.js";
+import { i as saveApiKey } from "./balance-GuZtMYCi.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
-import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-BfpZJHS6.js";
+import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-BLJNcDMj.js";
 //#region src/ui/switch.ts
 function escAttr(value) {
 	return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -2381,7 +2381,7 @@ function renderSettings(doc) {
 		state.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state.settings });
 		try {
-			import("./balance-DxcQ664V.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-GuZtMYCi.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2425,8 +2425,8 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-DlimuCOF.js").then((n) => n.n);
-				const { state: st } = await import("./store-gY-aC6s0.js").then((n) => n.a);
+				const { repository } = await import("./repository-DozKdTjS.js").then((n) => n.n);
+				const { state: st } = await import("./store-DWjGdI6D.js").then((n) => n.a);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
 				await repository.rebuildAggregates();
@@ -2572,8 +2572,8 @@ function renderSettings(doc) {
 					closeDropdownInstant(intervalDrop);
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-BfpZJHS6.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
-						import("./currency--7Ad-xYJ.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
+						import("./pricing-sync-BLJNcDMj.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./currency-BYzMLQZM.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};
 			});
@@ -2602,7 +2602,7 @@ function renderSettings(doc) {
 			state.settings.pricingSync.useLiveRate = liveEl.checked;
 			saveHot({ settings: state.settings });
 			try {
-				import("./currency--7Ad-xYJ.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
+				import("./currency-BYzMLQZM.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 			} catch {}
 		};
 		const fetchBtn = doc.getElementById("aus-fetch-rate");

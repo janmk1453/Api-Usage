@@ -1,11 +1,11 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { i as state, o as defaultSettings, r as getSelectedSave, s as mobileDeviceHint } from "./store-gY-aC6s0.js";
+import { i as state, o as defaultSettings, r as getSelectedSave, s as mobileDeviceHint } from "./store-DWjGdI6D.js";
 import { a as HIDDEN_PRICING_MODELS, c as PRICE_HISTORY, l as PRICING, r as DEFAULT_PEAK_HOURS, s as MAX_HISTORY, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { a as deleteDetail, r as clearDetailStore } from "./detail-store-6x06kQ_p.js";
+import { a as deleteDetail, r as clearDetailStore } from "./detail-store-CqNNEAWB.js";
 import { _ as saveExtensionSettings, b as historyRecordKey, f as getExtensionSettings, h as loadHot, m as loadHistoryCold, o as clearHistoryCold, r as appendHistoryCold, u as getAllHistory, v as saveHistoryCold, y as saveHot } from "./persistence-BmzJp2Zz.js";
 import { a as isUnsafeKey, c as localDay, i as isPeakHour$1, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay } from "./date-Dsu8hrMO.js";
-import { o as getWalletExchangeRate } from "./currency--7Ad-xYJ.js";
+import { o as getWalletExchangeRate } from "./currency-BYzMLQZM.js";
 import { n as emit, t as DataEvents } from "./events-BD2MbRMW.js";
 //#region src/types/wallet.ts
 var DEEPSEEK_WALLET_ID = "wallet:deepseek-official";
@@ -2756,7 +2756,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && !!wallet.catalogProvider) try {
-						import("./pricing-sync-BfpZJHS6.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-BLJNcDMj.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;

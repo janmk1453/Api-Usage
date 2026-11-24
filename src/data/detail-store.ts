@@ -18,6 +18,14 @@ const DETAIL_INDEX_TS = 'timestamp';
 export const DETAIL_MAX_CHARS = 8_000_000;
 /** 整个详情库的字符预算，超出从最旧开始淘汰 */
 export const DETAIL_TOTAL_CHARS = 40_000_000;
+/**
+ * 写入时按 DETAIL_KEEP + 这个缓冲淘汰，而不是严格 5 条。
+ *
+ * 原文库用「请求开始时刻」排序，历史记录用「写入时刻」，一次十分钟的长流式请求会让两边
+ * 的顺序错开；严格按 5 条淘汰时，缓冲外的这条虽然还在最近 5 条记录里，原文却已经被删掉。
+ * 真正掉出窗口的记录由 repository.pruneDetails 按记录的 key 精确删除。
+ */
+export const DETAIL_KEEP_SLACK = 4;
 
 export interface DetailSide {
   /** 原文（请求体 / 响应体 / 请求头 JSON 字符串） */
@@ -290,7 +298,7 @@ export function putDetailRequest(input: DetailRequestInput): Promise<string | nu
     if (input.model) blob.model = input.model;
     blob.timestamp = input.timestamp || blob.timestamp;
     await writeBlob(blob);
-    await pruneInner();
+    await pruneInner(DETAIL_KEEP + DETAIL_KEEP_SLACK);
     return key;
   }).catch((error) => {
     log.warn('详情原文写入失败（请求）', error);
@@ -311,7 +319,7 @@ export function putDetailResponse(input: DetailResponseInput): Promise<string | 
     if (input.model) blob.model = input.model;
     blob.timestamp = input.timestamp || blob.timestamp;
     await writeBlob(blob);
-    await pruneInner();
+    await pruneInner(DETAIL_KEEP + DETAIL_KEEP_SLACK);
     return key;
   }).catch((error) => {
     log.warn('详情原文写入失败（响应）', error);

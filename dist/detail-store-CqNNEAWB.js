@@ -211,7 +211,7 @@ function putDetailRequest(input) {
 		if (input.model) blob.model = input.model;
 		blob.timestamp = input.timestamp || blob.timestamp;
 		await writeBlob(blob);
-		await pruneInner();
+		await pruneInner(9);
 		return key;
 	}).catch((error) => {
 		log.warn("详情原文写入失败（请求）", error);
@@ -235,7 +235,7 @@ function putDetailResponse(input) {
 		if (input.model) blob.model = input.model;
 		blob.timestamp = input.timestamp || blob.timestamp;
 		await writeBlob(blob);
-		await pruneInner();
+		await pruneInner(9);
 		return key;
 	}).catch((error) => {
 		log.warn("详情原文写入失败（响应）", error);

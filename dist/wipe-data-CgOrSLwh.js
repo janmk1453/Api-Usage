@@ -1,4 +1,4 @@
-import { i as closeDetailDB, t as DETAIL_DB_NAME } from "./detail-store-6x06kQ_p.js";
+import { i as closeDetailDB, t as DETAIL_DB_NAME } from "./detail-store-CqNNEAWB.js";
 import { i as blockPersistentWrites, l as flushSaveHot, n as MODULE_NAME, s as closeDB, t as DB_NAME } from "./persistence-BmzJp2Zz.js";
 //#region src/services/wipe-data.ts
 /**

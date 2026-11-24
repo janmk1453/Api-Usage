@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  DETAIL_KEEP_SLACK,
   DETAIL_MAX_CHARS,
   clearDetailStore,
   closeDetailDB,
@@ -15,6 +16,7 @@ import {
   sanitizeDetailHeaders,
   sanitizeDetailRequestText,
 } from './detail-store';
+import { DETAIL_KEEP } from '../constants/pricing';
 
 const BODY = JSON.stringify({ model: 'deepseek-v4-flash', stream: true, messages: [{ role: 'user', content: '你好' }] });
 
@@ -48,14 +50,25 @@ describe('详情原文库', () => {
     expect((await getDetail('ts:1234'))?.request?.body).toBe(BODY);
   });
 
-  it('超过保留条数按时间从最旧淘汰', async () => {
-    for (let i = 1; i <= 7; i++) {
+  it('写入时按「保留条数 + 缓冲」粗筛，超缓冲才从最旧淘汰', async () => {
+    const cap = DETAIL_KEEP + DETAIL_KEEP_SLACK;
+    for (let i = 1; i <= cap; i++) {
+      await putDetailRequest({ requestId: 'req:' + i, timestamp: i * 1000, body: BODY });
+    }
+    // 缓冲内的都留着：原文库按请求开始时刻排序，记录按写入时刻排序，一次长流式请求会让两边错开，
+    // 严格按 5 条淘汰会把仍属于最近 5 条记录的原文删掉
+    expect(await listDetailIndex()).toHaveLength(cap);
+    for (let i = cap + 1; i <= cap + 3; i++) {
       await putDetailRequest({ requestId: 'req:' + i, timestamp: i * 1000, body: BODY });
     }
     const index = await listDetailIndex();
-    expect(index).toHaveLength(5);
-    expect(index.map((item) => item.key)).toEqual(['req:7', 'req:6', 'req:5', 'req:4', 'req:3']);
+    expect(index).toHaveLength(cap);
+    expect(index[0].key).toBe('req:' + (cap + 3));
     expect(await getDetail('req:1')).toBeNull();
+    // 掉出窗口的记录由记录层按 key 精确删除后，库内严格收敛到窗口条数
+    const tight = await pruneDetailStore();
+    expect(tight.kept).toBe(DETAIL_KEEP);
+    expect(await listDetailIndex()).toHaveLength(DETAIL_KEEP);
   });
 
   it('pruneDetailStore 支持显式条数并返回结果', async () => {
