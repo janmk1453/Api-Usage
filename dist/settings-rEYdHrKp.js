@@ -4,13 +4,13 @@ import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as D
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
 import { o as detailStorageStats } from "./detail-store-CqNNEAWB.js";
 import { _ as saveExtensionSettings, b as historyRecordKey, c as deleteMigrationBackups, f as getExtensionSettings, p as isMigrationBackupKey, y as saveHot } from "./persistence-BmzJp2Zz.js";
-import { C as mergeWalletCollections, a as decryptKey, f as getPricing$1, o as encryptKey, p as isDeepSeekOfficialModel, t as repository, u as calcCost } from "./repository-DozKdTjS.js";
+import { C as mergeWalletCollections, a as decryptKey, f as getPricing$1, o as encryptKey, p as isDeepSeekOfficialModel, t as repository, u as calcCost } from "./repository-C2aWlfKZ.js";
 import { a as isUnsafeKey, o as isValidDayKey, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
 import { a as getDisplayCurrency, r as fetchLiveRate } from "./currency-BYzMLQZM.js";
-import { r as recalcAllCosts } from "./interception-D03hEPDm.js";
-import { i as saveApiKey } from "./balance-GuZtMYCi.js";
+import { r as recalcAllCosts } from "./interception-B8o6uim9.js";
+import { i as saveApiKey } from "./balance-Cq7vqfxw.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
-import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-BLJNcDMj.js";
+import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-Z5ccYKrj.js";
 //#region src/ui/switch.ts
 function escAttr(value) {
 	return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -2099,7 +2099,7 @@ function renderSettings(doc) {
 
       <!-- 请求日志：最近一轮对话请求的标头 / 正文 / 响应元数据（只在本机保存） -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">问题反馈 / 请求日志</span><button id="aus-settings-request-log" type="button" class="aus-manage-chat-btn" title="查看最近一轮对话请求的标头、正文与响应元数据">${icon("menu", 14)}查看</button></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">问题反馈 / 请求日志</span><button id="aus-settings-request-log" type="button" class="aus-manage-chat-btn" title="打开问题反馈页：查看最近一轮对话请求的标头、正文与响应元数据">${icon("menu", 14)}问题反馈</button></div>
         <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">保留最近一轮对话请求发出的标头、正文与响应元数据，用于排查「这轮为什么没记录」；也是历史记录页问题提示的开关所在。只在本机保存，密钥已打码，可随时清空</div>
       </div>
 
@@ -2381,7 +2381,7 @@ function renderSettings(doc) {
 		state.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state.settings });
 		try {
-			import("./balance-GuZtMYCi.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-Cq7vqfxw.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2425,7 +2425,7 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-DozKdTjS.js").then((n) => n.n);
+				const { repository } = await import("./repository-C2aWlfKZ.js").then((n) => n.n);
 				const { state: st } = await import("./store-DWjGdI6D.js").then((n) => n.a);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
@@ -2572,7 +2572,7 @@ function renderSettings(doc) {
 					closeDropdownInstant(intervalDrop);
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-BLJNcDMj.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./pricing-sync-Z5ccYKrj.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 						import("./currency-BYzMLQZM.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};

@@ -2202,7 +2202,7 @@ export function createPanel() {
                 <div id="aus-history-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
               <div id="aus-history-filter-reset" class="aus-filter-reset" title="重置筛选" aria-label="重置筛选" style="display:flex;align-items:center;gap:6px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);cursor:pointer;margin-left:auto;">${icon('refresh', 14)}<span>重置筛选</span></div>
-              <button id="aus-history-log-btn" type="button" class="aus-pill" title="查看最近一轮请求的标头、正文与响应元数据（与设置页「问题反馈 / 请求日志」是同一页）">请求日志</button>
+              <button id="aus-history-log-btn" type="button" class="aus-pill" title="问题反馈：查看最近一轮请求的标头、正文与响应元数据（与设置页「问题反馈」是同一页）">反馈</button>
             </div>
             <div id="aus-diff" class="ds-card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">缓存断点</span><button id="aus-diff-fullscreen" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">全屏</button></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">在历史中各选一条 旧/新 对比，橙/绿高亮即发散点</div></div>
             <div id="aus-history"></div>
