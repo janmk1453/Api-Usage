@@ -1,19 +1,20 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { i as state$2, n as getHistoryForDisplay, r as getSelectedSave, s as mobileDeviceHint, t as getCurrentChatIdForStore } from "./store-CVamS-ER.js";
+import { i as state$2, n as getHistoryForDisplay, r as getSelectedSave, s as mobileDeviceHint, t as getCurrentChatIdForStore } from "./store-gY-aC6s0.js";
 import { s as MAX_HISTORY, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
-import { a as clearColdReadFailure, b as historyRecordKey, d as getColdReadFailure, y as saveHot } from "./persistence-BmzJp2Zz.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as pricingSourceLabel, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-Cez0rdrP.js";
+import { s as getDetail } from "./detail-store-6x06kQ_p.js";
+import { a as clearColdReadFailure, b as historyRecordKey, d as getColdReadFailure, y as saveHot } from "./persistence-BmzJp2Zz.js";
+import { A as WALLET_CATALOG_PROVIDERS, C as mergeWalletCollections, S as findWalletModel, T as walletPendingModelCount, _ as pricingSourceLabel, c as sanitizeHistoryTiming, d as calcSavings, f as getPricing, g as normalizeModel, h as isWalletPeakHour, i as saveWalletApiKey, k as DEEPSEEK_WALLET_ID, l as isTruncatedOf, m as isPeakHour, r as getWalletApiKey, s as measureTokenRate, t as repository, v as cloneWallet, w as walletBalanceToCny, x as findWalletForHistory, y as defaultContextLimitForModel } from "./repository-DlimuCOF.js";
 import { c as localDay, i as isPeakHour$1, l as localTimeHM, n as isChinaHoliday, r as isExtraOffDay, s as isWeekendDay, t as esc$3, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
-import { a as getDisplayCurrency, i as formatMoney, o as getWalletExchangeRate, t as cnyToDisplay$1 } from "./currency-U-Rv2qTn.js";
+import { a as getDisplayCurrency, i as formatMoney, o as getWalletExchangeRate, t as cnyToDisplay$1 } from "./currency--7Ad-xYJ.js";
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
-import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-D0WP6JqJ.js";
+import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-DWhKeKTj.js";
 import { r as registerRequestOriginSelf } from "./request-origin-C9kLQ_0W.js";
 import { a as readSeenAnnouncementIds, c as bindChangelog, d as renderChangelogCard, f as CHANGELOG, h as BUILD_NO, i as readCachedAnnouncements, l as changelogSectionsHTML, m as APP_VERSION, n as isAnnouncementActive, o as sortAnnouncements, p as APP_BUILD_TAG, t as fetchAnnouncements, u as formatChangelogDate } from "./announcement-CWQaFtlb.js";
-import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-Dxpd4pSD.js";
+import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-DxcQ664V.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
-import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-D3AHbRQi.js";
-import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-LzVQUEjt.js";
+import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-QqbhWPvZ.js";
+import { c as walletSyncStatus, n as buildSyncPlan, r as fetchModelsDevCatalog, t as applySyncPlan } from "./pricing-sync-BfpZJHS6.js";
 import { a as listTapRecords, i as clearTapRecords, n as tapDiagnostics, o as subscribeTap, r as stripModelTag } from "./request-tap-k4SyDMQg.js";
 //#region src/services/import-export.ts
 function isUnsafeKey(k) {
@@ -44,6 +45,7 @@ function stripHistory(history) {
 		delete c.messages;
 		delete c.fullRequest;
 		delete c.fullResponse;
+		delete c.detailKey;
 		return c;
 	});
 }
@@ -164,7 +166,8 @@ function normalizeImportData(raw) {
 			"messages",
 			"fullRequest",
 			"fullResponse",
-			"raw_usage"
+			"raw_usage",
+			"detailKey"
 		]);
 		for (const f of Object.keys(h)) {
 			if (isUnsafeKey(f) || SKIP_IMPORT.has(f)) continue;
@@ -9986,7 +9989,7 @@ function bindWalletView(doc) {
 				wallet.balance.mode = input.checked ? "auto" : "manual";
 			});
 			try {
-				import("./balance-Dxpd4pSD.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
+				import("./balance-DxcQ664V.js").then((n) => n.t).then((mod) => mod.restartBalanceTimer?.());
 			} catch {}
 			renderWalletView();
 		};
@@ -13547,6 +13550,7 @@ var PRIVACY_ITEMS = [
 	"查询由浏览器直连厂商接口，不经过第三方代理；未开放跨域（CORS）的厂商会直接失败并提示，扩展不会绕过该限制。",
 	"XOR 不是安全加密，请使用权限受限的密钥并自行评估风险。",
 	"<strong>请求日志</strong>只存在本机浏览器：只保留最近一轮请求的标头、正文与响应，标头里的密钥会打码，正文里有这一轮的聊天与提示词，可随时在日志页清空，不进历史、统计、导出与云同步。",
+	"<strong>详情原文</strong>也只存在本机浏览器：历史记录最近 5 条的完整请求体、打码后的请求头与响应原文，为展开查看而单独存在浏览器 IndexedDB 里，超出 5 条自动删除；不进导入导出、云同步与任何上传，卸载扩展会一并清除。",
 	"<strong>公告</strong>：打开面板与进入「关于」页时可能向 GitHub 拉取一份公告文本（静态 JSON，走与检查更新相同的多源镜像），只读取公告内容，不携带任何本地数据；拉不到就静默跳过，不影响其他功能。",
 	"<strong>上传反馈</strong>只有你点「同意并上传」才发出：请求正文（含聊天与提示词）、最近报错、设置与环境摘要、对话名与角色名会发到弹窗里显示的地址（默认是本项目自建接收端，可改成你自己的），能识别的密钥会抹成 *** 但不能保证抹净，上传后由接收方保存、无法撤回。",
 	"本扩展完整代码开源，可自行审查。"
@@ -13592,7 +13596,7 @@ var GUIDES = [
 		"历史记录",
 		[
 			"列表按时间倒序，每页 30 条，可按模型、对话、接入类型与 API 密钥筛选。",
-			"点「详情」查看单条数据：请求参数、完整响应、Raw 用量与消息内容。",
+			"点「详情」查看单条数据：请求参数、完整响应、Raw 用量与消息内容；最近 5 条是完整请求体与响应原文，按 JSON 树展开收起，抽屉窄可点右上「加宽」。",
 			"先对较早一条点「旧」、再对较晚一条点「新」，可对比两条消息的差异。",
 			"详情窗口在电脑端从右侧打开，手机端从屏幕下方弹出。"
 		]
@@ -14416,6 +14420,298 @@ function disposePillState() {
 	observer$1 = null;
 	observedPanel = null;
 }
+function jsonKindOf(v) {
+	if (v === null || v === void 0) return "null";
+	if (Array.isArray(v)) return "array";
+	const t = typeof v;
+	if (t === "object") return "object";
+	if (t === "boolean") return "boolean";
+	if (t === "number") return "number";
+	if (t === "string") return "string";
+	return "string";
+}
+function jsonEntryCount(v) {
+	if (Array.isArray(v)) return v.length;
+	if (v && typeof v === "object") return Object.keys(v).length;
+	return 0;
+}
+function jsonStringPreview(text, max = 400) {
+	const s = typeof text === "string" ? text : String(text ?? "");
+	if (s.length <= max) return s;
+	return s.slice(0, max) + "…";
+}
+/** 行内展示用的单行文本：容器给概览，原始值给文本 */
+function jsonPreviewText(v, max = 400) {
+	const kind = jsonKindOf(v);
+	if (kind === "array") return "[ " + jsonEntryCount(v) + " 项 ]";
+	if (kind === "object") return "{ " + jsonEntryCount(v) + " 项 }";
+	if (v === void 0) return "undefined";
+	if (kind === "string") {
+		const full = String(v);
+		const shown = jsonStringPreview(full, max);
+		return shown.length === full.length ? "\"" + full + "\"" : "\"" + shown + "\"（共 " + full.length + " 字）";
+	}
+	return String(v);
+}
+/** 安全解析：失败时把原因交回去，调用方负责退回原文展示 */
+function jsonParseSafe(text) {
+	const raw = typeof text === "string" ? text.trim() : "";
+	if (!raw) return {
+		ok: false,
+		error: "空内容"
+	};
+	try {
+		return {
+			ok: true,
+			value: JSON.parse(raw)
+		};
+	} catch (e) {
+		return {
+			ok: false,
+			error: String(e?.message || e)
+		};
+	}
+}
+function createJsonTree(doc, value, options = {}) {
+	const chunk = Math.max(1, Math.floor(options.chunk ?? 2e3));
+	const strMax = Math.max(20, Math.floor(options.stringPreview ?? 400));
+	const maxRows = Math.max(chunk, Math.floor(options.maxRows ?? 2e5));
+	let expandDepth = Math.max(0, Math.floor(options.expandDepth ?? 1));
+	const root = doc.createElement("div");
+	root.className = "aus-json";
+	const body = doc.createElement("div");
+	body.className = "aus-json-body";
+	body.setAttribute("role", "tree");
+	root.appendChild(body);
+	const frames = [];
+	let disposed = false;
+	const isContainer = (v) => {
+		const k = jsonKindOf(v);
+		return k === "object" || k === "array";
+	};
+	const keysOf = (v) => Array.isArray(v) ? null : Object.keys(v);
+	const childAt = (f, i) => Array.isArray(f.value) ? f.value[i] : f.value[f.keys[i]];
+	function makeNode(label, v, parent, expandNow) {
+		if (disposed || frames.length >= maxRows) return null;
+		const depth = parent ? parent.depth + 1 : 0;
+		const kind = jsonKindOf(v);
+		const container = isContainer(v);
+		const row = doc.createElement("div");
+		row.className = "aus-json-row";
+		row.setAttribute("data-kind", kind);
+		const idx = frames.length;
+		row.setAttribute("data-frame", String(idx));
+		let caret = null;
+		if (container) {
+			const caretBtn = doc.createElement("button");
+			caretBtn.type = "button";
+			caretBtn.className = "aus-json-caret";
+			caretBtn.setAttribute("data-json-act", "toggle");
+			caretBtn.setAttribute("data-frame", String(idx));
+			caretBtn.setAttribute("aria-expanded", "false");
+			caretBtn.setAttribute("aria-label", "展开或收起");
+			caretBtn.textContent = "▸";
+			caret = caretBtn;
+			row.appendChild(caretBtn);
+		} else {
+			const pad = doc.createElement("span");
+			pad.className = "aus-json-caret aus-json-pad";
+			row.appendChild(pad);
+		}
+		if (label !== null) {
+			const keyEl = doc.createElement("span");
+			keyEl.className = "aus-json-key";
+			keyEl.textContent = label;
+			row.appendChild(keyEl);
+			const sep = doc.createElement("span");
+			sep.className = "aus-json-sep";
+			sep.textContent = ":";
+			row.appendChild(sep);
+		}
+		const valEl = doc.createElement("span");
+		valEl.className = "aus-json-val";
+		const longStr = kind === "string" && (kind === "string" ? String(v) : "").length > strMax;
+		valEl.textContent = kind === "string" ? jsonPreviewText(v, strMax) : container ? kind === "array" ? "[" : "{" : jsonPreviewText(v, strMax);
+		if (longStr) {
+			valEl.setAttribute("data-json-act", "expand-string");
+			valEl.setAttribute("data-frame", String(idx));
+			valEl.setAttribute("title", "点击查看完整字符串");
+		}
+		row.appendChild(valEl);
+		const host = parent && parent.kids ? parent.kids : body;
+		host.appendChild(row);
+		const frame = {
+			row,
+			kids: null,
+			caret,
+			value: v,
+			keys: null,
+			parent,
+			depth,
+			index: idx,
+			expanded: false,
+			built: 0,
+			total: 0,
+			more: null
+		};
+		frames.push(frame);
+		if (container) {
+			frame.keys = keysOf(v);
+			frame.total = jsonEntryCount(v);
+			const kids = doc.createElement("div");
+			kids.className = "aus-json-children";
+			kids.setAttribute("hidden", "");
+			host.appendChild(kids);
+			frame.kids = kids;
+			if (frame.total === 0) {
+				valEl.textContent = kind === "array" ? "[]" : "{}";
+				if (caret) {
+					caret.setAttribute("disabled", "");
+					caret.textContent = "·";
+				}
+			} else if (expandNow) setExpanded(frame, true);
+			else valEl.textContent = jsonPreviewText(v, strMax);
+		}
+		return frame;
+	}
+	function updateMore(f) {
+		if (!f.kids) return;
+		const rest = f.total - f.built;
+		if (rest <= 0) {
+			if (f.more) {
+				f.more.remove();
+				f.more = null;
+			}
+			return;
+		}
+		if (!f.more) {
+			const btn = doc.createElement("button");
+			btn.type = "button";
+			btn.className = "aus-json-more";
+			btn.setAttribute("data-json-act", "more");
+			btn.setAttribute("data-frame", String(f.index));
+			f.kids.appendChild(btn);
+			f.more = btn;
+		}
+		f.more.textContent = "还有 " + rest + " 项，继续显示";
+	}
+	function fillMore(f) {
+		if (!f.kids || f.built >= f.total) {
+			updateMore(f);
+			return;
+		}
+		const limit = Math.min(f.total, f.built + chunk);
+		while (f.built < limit && frames.length < maxRows) {
+			const i = f.built;
+			if (!makeNode(f.keys ? f.keys[i] : String(i), childAt(f, i), f, f.depth + 1 < expandDepth)) break;
+			f.built += 1;
+		}
+		updateMore(f);
+	}
+	function setExpanded(f, on) {
+		if (!f.kids || f.total === 0) return;
+		const valEl = f.row.lastElementChild;
+		if (on) {
+			if (f.expanded) {
+				fillMore(f);
+				return;
+			}
+			f.expanded = true;
+			f.kids.removeAttribute("hidden");
+			if (f.caret) {
+				f.caret.textContent = "▾";
+				f.caret.setAttribute("aria-expanded", "true");
+			}
+			if (valEl && valEl.classList.contains("aus-json-val")) valEl.textContent = jsonKindOf(f.value) === "array" ? "[" : "{";
+			fillMore(f);
+		} else {
+			f.expanded = false;
+			f.kids.setAttribute("hidden", "");
+			if (f.caret) {
+				f.caret.textContent = "▸";
+				f.caret.setAttribute("aria-expanded", "false");
+			}
+			if (valEl && valEl.classList.contains("aus-json-val")) valEl.textContent = jsonPreviewText(f.value, strMax);
+		}
+	}
+	const onClick = (ev) => {
+		if (disposed) return;
+		const target = ev.target;
+		if (!target || typeof target.closest !== "function") return;
+		const actEl = target.closest("[data-json-act]");
+		if (!actEl) return;
+		const idx = Number(actEl.getAttribute("data-frame"));
+		const frame = Number.isFinite(idx) ? frames[idx] : null;
+		if (!frame) return;
+		const act = actEl.getAttribute("data-json-act");
+		if (act === "toggle" || act === "more") {
+			ev.preventDefault();
+			if (act === "more") fillMore(frame);
+			else setExpanded(frame, !frame.expanded);
+			return;
+		}
+		if (act === "expand-string") {
+			ev.preventDefault();
+			actEl.textContent = "\"" + String(frame.value) + "\"";
+			actEl.removeAttribute("data-json-act");
+			actEl.removeAttribute("title");
+			actEl.classList.add("aus-json-str-full");
+		}
+	};
+	body.addEventListener("click", onClick);
+	makeNode(null, value, null, expandDepth >= 1);
+	return {
+		element: root,
+		get rowCount() {
+			return frames.length;
+		},
+		expandAll() {
+			let budget = maxRows;
+			const stack = [frames[0]].filter(Boolean);
+			while (stack.length && budget > 0) {
+				const f = stack.pop();
+				if (!f.kids || f.total === 0) continue;
+				setExpanded(f, true);
+				while (f.built < f.total && budget > 0) {
+					const before = frames.length;
+					fillMore(f);
+					budget -= Math.max(1, frames.length - before);
+				}
+				for (let i = frames.length - 1; i >= 0; i -= 1) {
+					const child = frames[i];
+					if (child.parent === f && child.kids && child.total > 0 && !child.expanded) stack.push(child);
+				}
+			}
+		},
+		collapseAll() {
+			for (let i = frames.length - 1; i >= 0; i -= 1) setExpanded(frames[i], false);
+		},
+		setExpandDepth(depth) {
+			expandDepth = Math.max(0, Math.floor(depth));
+			for (let i = frames.length - 1; i >= 0; i -= 1) {
+				const f = frames[i];
+				if (f.kids && f.total > 0) setExpanded(f, f.depth < expandDepth);
+			}
+		},
+		rawText() {
+			try {
+				return JSON.stringify(value, null, 2) ?? String(value);
+			} catch {
+				return String(value);
+			}
+		},
+		destroy() {
+			disposed = true;
+			try {
+				body.removeEventListener("click", onClick);
+			} catch {}
+			frames.length = 0;
+			try {
+				while (root.firstChild) root.removeChild(root.firstChild);
+			} catch {}
+		}
+	};
+}
 //#endregion
 //#region src/ui/panel.ts
 var panel_exports = /* @__PURE__ */ __exportAll({
@@ -14885,11 +15181,333 @@ function openHistoryDetail(doc, panel, btn) {
 	drawer.style.display = "flex";
 	const content = doc.getElementById("aus-content-body");
 	if (content) content.classList.add("has-history-detail");
+	fillDetailTab(doc, panel, "req", ts);
 }
 /**
 * 在重绘列表期间保持 #aus-main 的滚动位置不变：翻页、异步补齐全量数据都只换内容，
 * 不允许把页面滚到别处（旧实现用 scrollIntoView 把列表拽回顶部）。
 */
+/** 详情原文缓存：键是详情库的 key，重绘历史列表时整体失效 */
+var detailBlobCache = /* @__PURE__ */ new Map();
+/** 已挂载的 JSON 树句柄：重绘时统一销毁，避免旧节点上的事件委托残留 */
+var detailTreeHandles = [];
+function releaseDetailTrees() {
+	for (const handle of detailTreeHandles) try {
+		handle.destroy();
+	} catch {}
+	detailTreeHandles = [];
+}
+/** 重绘历史列表前调用：DOM 会被整体替换，树句柄与原文缓存一起作废 */
+function clearDetailCache() {
+	releaseDetailTrees();
+	detailBlobCache.clear();
+}
+function detailHint(doc, text) {
+	const el = doc.createElement("div");
+	el.className = "aus-dt-hint";
+	el.textContent = text;
+	return el;
+}
+function detailEmpty(doc, text) {
+	const el = doc.createElement("div");
+	el.className = "aus-dt-empty";
+	el.textContent = text;
+	return el;
+}
+/** 一段原文的字数说明；归档时被上限截断的记录要显性说明，不能让人以为是完整数据 */
+function detailSideNote(side) {
+	if (!side) return "";
+	return (Number(side.chars) || (typeof side.body === "string" ? side.body.length : 0)).toLocaleString() + " 字符" + (side.truncated ? "（已达单条上限，尾部未保存）" : "");
+}
+/** 详情块：一行工具条（标题 + 说明 + 右侧操作）+ 内容区 */
+function makeDetailBlock(doc, parent, title, note) {
+	const wrap = doc.createElement("div");
+	wrap.className = "aus-dt-doc";
+	const bar = doc.createElement("div");
+	bar.className = "aus-dt-tools";
+	if (title) {
+		const t = doc.createElement("span");
+		t.className = "aus-dt-tools-title";
+		t.textContent = title;
+		bar.appendChild(t);
+	}
+	if (note) {
+		const n = doc.createElement("span");
+		n.className = "aus-dt-tools-note";
+		n.textContent = note;
+		bar.appendChild(n);
+	}
+	const gap = doc.createElement("span");
+	gap.className = "aus-dt-tools-gap";
+	bar.appendChild(gap);
+	wrap.appendChild(bar);
+	parent.appendChild(wrap);
+	return {
+		wrap,
+		bar
+	};
+}
+function addDetailTool(doc, bar, label, onClick) {
+	const btn = doc.createElement("button");
+	btn.type = "button";
+	btn.className = "aus-dt-tool";
+	btn.textContent = label;
+	btn.addEventListener("click", onClick);
+	bar.appendChild(btn);
+	return btn;
+}
+function addCopyTool(doc, bar, getText) {
+	const btn = addDetailTool(doc, bar, "复制", () => {
+		const text = getText();
+		const clip = globalThis.navigator?.clipboard;
+		if (!clip?.writeText) return;
+		clip.writeText(text).then(() => {
+			btn.textContent = "已复制";
+			setTimeout(() => {
+				btn.textContent = "复制";
+			}, 1500);
+		}).catch(() => {});
+	});
+}
+function addDownloadTool(doc, bar, getText, filename) {
+	addDetailTool(doc, bar, "下载", () => {
+		try {
+			const blob = new Blob([getText()], { type: "application/json" });
+			const url = URL.createObjectURL(blob);
+			const a = doc.createElement("a");
+			a.href = url;
+			a.download = filename;
+			doc.body.appendChild(a);
+			a.click();
+			a.remove();
+			setTimeout(() => {
+				try {
+					URL.revokeObjectURL(url);
+				} catch {}
+			}, 4e3);
+		} catch {}
+	});
+}
+/** 挂一棵可折叠 JSON 树，配展开 / 收起 / 复制 / 下载 */
+function mountDetailJson(doc, parent, value, options = {}) {
+	const { bar } = makeDetailBlock(doc, parent, options.title, options.note);
+	const ref = { handle: null };
+	addDetailTool(doc, bar, "展开全部", () => {
+		try {
+			ref.handle?.expandAll();
+		} catch {}
+	});
+	addDetailTool(doc, bar, "收起全部", () => {
+		try {
+			ref.handle?.collapseAll();
+		} catch {}
+	});
+	const textOf = () => {
+		if (ref.handle) try {
+			return ref.handle.rawText();
+		} catch {}
+		try {
+			return JSON.stringify(value, null, 2);
+		} catch {
+			return String(value);
+		}
+	};
+	addCopyTool(doc, bar, textOf);
+	if (options.filename) addDownloadTool(doc, bar, textOf, options.filename);
+	const handle = createJsonTree(doc, value, { expandDepth: 1 });
+	ref.handle = handle;
+	detailTreeHandles.push(handle);
+	parent.appendChild(handle.element);
+}
+/** 挂一段等宽纯文本（非 JSON 的原文走这里，复制 / 下载仍拿全量） */
+function mountDetailText(doc, parent, text, options = {}) {
+	const { wrap, bar } = makeDetailBlock(doc, parent, options.title, options.note);
+	addCopyTool(doc, bar, () => text);
+	if (options.filename) addDownloadTool(doc, bar, () => text, options.filename);
+	const pre = doc.createElement("pre");
+	pre.className = "aus-dt-pre";
+	pre.textContent = text;
+	wrap.appendChild(pre);
+}
+/** 默认收起的折叠块（details 原生折叠，展开时才真正铺开内容） */
+function mountDetailFold(doc, parent, title, note, fill) {
+	const fold = doc.createElement("details");
+	fold.className = "aus-dt-fold";
+	const sum = doc.createElement("summary");
+	sum.className = "aus-dt-fold-sum";
+	sum.textContent = note ? title + " · " + note : title;
+	fold.appendChild(sum);
+	parent.appendChild(fold);
+	const host = doc.createElement("div");
+	host.className = "aus-dt-fold-body";
+	fold.appendChild(host);
+	fill(host);
+}
+/** 把 SSE 原文逐帧拆成可折叠的 JSON 数组；不是 SSE 就返回 null */
+function parseSseFrames(raw) {
+	const frames = [];
+	let touched = false;
+	for (const line of String(raw || "").split("\n")) {
+		const t = line.trim();
+		if (!t.startsWith("data:")) continue;
+		touched = true;
+		const payload = t.slice(5).trim();
+		if (!payload || payload === "[DONE]") {
+			frames.push(payload || "[DONE]");
+			continue;
+		}
+		const parsed = jsonParseSafe(payload);
+		frames.push(parsed.ok ? parsed.value : payload);
+	}
+	return touched ? frames : null;
+}
+function renderRequestTab(doc, slot, entry, blob) {
+	const bodySide = blob?.request || null;
+	const headSide = blob?.requestHeaders || null;
+	const stamp = String(entry?.timestamp || "");
+	if (!bodySide && !headSide) {
+		slot.appendChild(detailHint(doc, "这条记录没有归档完整原文（早于本次更新，或已超出最近 5 条的保留窗口），下面是当时保存的摘要。"));
+		const legacy = entry?.fullRequest;
+		if (legacy) mountDetailJson(doc, slot, legacy, {
+			title: "请求参数摘要",
+			filename: "request-" + stamp + ".json"
+		});
+		else if (entry?.raw_usage) mountDetailJson(doc, slot, entry.raw_usage, {
+			title: "Raw 用量",
+			filename: "usage-" + stamp + ".json"
+		});
+		else slot.appendChild(detailEmpty(doc, "（原文已清理，仅保留统计）"));
+		return;
+	}
+	if (bodySide) {
+		const parsed = jsonParseSafe(bodySide.body);
+		if (parsed.ok) mountDetailJson(doc, slot, parsed.value, {
+			title: "请求体",
+			note: detailSideNote(bodySide),
+			filename: "request-" + stamp + ".json"
+		});
+		else mountDetailText(doc, slot, bodySide.body, {
+			title: "请求体（原文，非 JSON）",
+			note: detailSideNote(bodySide),
+			filename: "request-" + stamp + ".txt"
+		});
+	} else slot.appendChild(detailHint(doc, "这条记录只归档了请求头，没有请求体。"));
+	if (headSide) mountDetailFold(doc, slot, "请求头（密钥已打码）", detailSideNote(headSide), (host) => {
+		const parsed = jsonParseSafe(headSide.body);
+		if (parsed.ok) mountDetailJson(doc, host, parsed.value, { filename: "request-headers-" + stamp + ".json" });
+		else mountDetailText(doc, host, headSide.body, {});
+	});
+}
+function renderResponseTab(doc, slot, entry, blob) {
+	const side = blob?.response || null;
+	const summary = typeof entry?.fullResponse === "string" ? entry.fullResponse : entry?.fullResponse ? JSON.stringify(entry.fullResponse) : "";
+	const raw = side && side.body ? side.body : summary;
+	const stamp = String(entry?.timestamp || "");
+	if (!raw) {
+		slot.appendChild(detailEmpty(doc, "（原文已清理——仅最近 5 条保留，其余仅统计可用）"));
+		return;
+	}
+	if (!side) slot.appendChild(detailHint(doc, "这条记录只有当时保存的响应摘要（可能已截断），完整原文没有归档。"));
+	const chars = raw.length.toLocaleString() + " 字符";
+	mountDetailText(doc, slot, prettyFullResponse(raw), {
+		title: "合并后的响应",
+		note: chars,
+		filename: "response-merged-" + stamp + ".txt"
+	});
+	const frames = parseSseFrames(raw);
+	if (frames) mountDetailFold(doc, slot, "原始响应帧", frames.length + " 帧", (host) => {
+		mountDetailJson(doc, host, frames, {
+			note: "逐帧保留上游原字段",
+			filename: "response-frames-" + stamp + ".json"
+		});
+	});
+	mountDetailFold(doc, slot, "响应原文", chars, (host) => {
+		mountDetailText(doc, host, raw, { filename: "response-raw-" + stamp + ".txt" });
+	});
+}
+function renderUsageTab(doc, slot, entry, blob) {
+	const usage = blob && blob.usage !== null && blob.usage !== void 0 ? blob.usage : entry?.raw_usage ?? null;
+	if (usage === null || usage === void 0) {
+		slot.appendChild(detailEmpty(doc, "（这条记录没有可用的 Raw 用量）"));
+		return;
+	}
+	if (!blob?.usage) slot.appendChild(detailHint(doc, "这条记录没有归档用量原对象，下面是热区里保存的摘要。"));
+	mountDetailJson(doc, slot, usage, {
+		title: "Raw 用量（上游原对象）",
+		filename: "usage-" + String(entry?.timestamp || "") + ".json"
+	});
+}
+function renderMessagesTab(doc, slot, entry, blob) {
+	const stamp = String(entry?.timestamp || "");
+	let messages = null;
+	if (blob?.request?.body) {
+		const parsed = jsonParseSafe(blob.request.body);
+		if (parsed.ok) {
+			const list = parsed.value?.messages;
+			if (Array.isArray(list) && list.length) messages = list;
+		}
+	}
+	const fromArchive = messages !== null;
+	if (!fromArchive) messages = entry?.messages || null;
+	if (messages === null || messages === void 0) {
+		slot.appendChild(detailEmpty(doc, "（原文已清理——仅最近 5 条保留，其余仅统计可用）"));
+		return;
+	}
+	const count = Array.isArray(messages) ? messages.length : 0;
+	if (fromArchive) mountDetailJson(doc, slot, messages, {
+		title: "完整消息列表（来自归档请求体）",
+		note: count + " 条",
+		filename: "messages-" + stamp + ".json"
+	});
+	else {
+		slot.appendChild(detailHint(doc, "这条记录没有归档请求体，下面是当时保存的截断版本（每条正文最多 600 字）。"));
+		mountDetailJson(doc, slot, messages, {
+			title: "消息列表（截断摘要）",
+			note: count + " 条",
+			filename: "messages-" + stamp + ".json"
+		});
+	}
+}
+var DETAIL_TAB_RENDERERS = {
+	req: renderRequestTab,
+	res: renderResponseTab,
+	raw: renderUsageTab,
+	msg: renderMessagesTab
+};
+/** 按 Tab 惰性填充内容：同一个槽只填一次，重复切 Tab 直接复用已有 DOM */
+async function fillDetailTab(doc, root, tab, ts) {
+	const slot = root.querySelector("[data-content=\"" + tab + "-" + ts + "\"]");
+	if (!slot || slot.getAttribute("data-filled") === "1") return;
+	slot.setAttribute("data-filled", "1");
+	slot.innerHTML = "";
+	const loading = detailEmpty(doc, "正在读取完整原文…");
+	slot.appendChild(loading);
+	let entry = null;
+	let blob = null;
+	try {
+		entry = await repository.getHistoryEntry(ts);
+		const key = entry ? String(entry?.detailKey || "") : "";
+		if (key) {
+			if (detailBlobCache.has(key)) blob = detailBlobCache.get(key) || null;
+			else {
+				blob = await getDetail(key);
+				detailBlobCache.set(key, blob);
+			}
+		}
+	} catch {}
+	if (slot.isConnected === false) return;
+	if (!entry) {
+		loading.textContent = "这条记录已经不存在了（可能刚被删除或超出保留窗口）。";
+		return;
+	}
+	slot.innerHTML = "";
+	const render = DETAIL_TAB_RENDERERS[tab] || renderRequestTab;
+	try {
+		render(doc, slot, entry, blob);
+	} catch (error) {
+		slot.appendChild(detailEmpty(doc, "原文渲染失败：" + String(error?.message || error)));
+	}
+}
 function keepMainScrollPosition(doc, fn) {
 	const scroller = doc.getElementById("aus-main");
 	const top = scroller ? scroller.scrollTop : 0;
@@ -14916,6 +15534,7 @@ function renderHistoryInner(doc, fullHist) {
 	if (!host) return;
 	const reopenDetailTs = activeHistoryDetailTs;
 	resetHistoryDetailState(doc, true);
+	clearDetailCache();
 	const total = fullHist.length;
 	if (!total) {
 		host.innerHTML = `<div style="text-align:center;padding:24px;color:var(--ds-text-3);font-size:var(--aus-fs-base);line-height:1.8;">当前筛选无记录<br/><button id="aus-history-empty-reset" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">清除筛选</button></div>`;
@@ -15073,14 +15692,12 @@ function renderHistoryInner(doc, fullHist) {
                 <button class="aus-tab-btn" data-tab="res" data-ts="${h.timestamp}" role="tab">完整响应</button>
                 <button class="aus-tab-btn" data-tab="raw" data-ts="${h.timestamp}" role="tab">Raw 用量</button>
                 <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" role="tab">消息内容</button>
+                <button class="aus-dt-wide-btn" type="button" data-ts="${h.timestamp}" title="把详情抽屉加宽，方便看长 JSON">加宽</button>
               </div>
-              <pre class="aus-tab-content aus-dt-pre" data-content="req-${h.timestamp}" style="display:block;">${esc$3(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : "（原文已清理，仅保留统计）")}</pre>
-              <div class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;">
-                <pre class="aus-dt-pre">${esc$3(prettyFullResponse(h.fullResponse))}</pre>
-                ${h.fullResponse ? `<div class="aus-dt-rawbar"><button class="aus-res-raw-btn" data-ts="${h.timestamp}">查看原始完整数据</button></div><pre class="aus-res-raw aus-dt-pre aus-dt-pre-raw" data-ts="${h.timestamp}" style="display:none;">${esc$3(typeof h.fullResponse === "string" ? h.fullResponse : JSON.stringify(h.fullResponse, null, 2))}</pre>` : ""}
-              </div>
-              <pre class="aus-tab-content aus-dt-pre" data-content="raw-${h.timestamp}" style="display:none;">${esc$3(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
-              <pre class="aus-tab-content aus-dt-pre" data-content="msg-${h.timestamp}" style="display:none;">${esc$3(h.messages && h.messages.length ? JSON.stringify(h.messages, null, 2) : "（原文已清理——仅最近 5 条保留，其余仅统计可用）")}</pre>
+              <div class="aus-tab-content aus-dt-docs" data-content="req-${h.timestamp}" style="display:block;"></div>
+              <div class="aus-tab-content aus-dt-docs" data-content="res-${h.timestamp}" style="display:none;"></div>
+              <div class="aus-tab-content aus-dt-docs" data-content="raw-${h.timestamp}" style="display:none;"></div>
+              <div class="aus-tab-content aus-dt-docs" data-content="msg-${h.timestamp}" style="display:none;"></div>
       </div>
     </div>
   `;
@@ -15125,16 +15742,20 @@ function renderHistoryInner(doc, fullHist) {
 			});
 			const target = root.querySelector(`[data-content="${tab}-${ts}"]`);
 			if (target) target.style.display = "block";
+			fillDetailTab(doc, root, String(tab || "req"), String(ts || ""));
 		});
 	});
-	host.querySelectorAll(".aus-res-raw-btn").forEach((btn) => {
+	host.querySelectorAll(".aus-dt-wide-btn").forEach((btn) => {
 		btn.addEventListener("click", () => {
-			const ts = btn.getAttribute("data-ts");
-			const pre = btn.closest(".aus-detail-panel")?.querySelector(`.aus-res-raw[data-ts="${ts}"]`);
-			if (!pre) return;
-			const show = pre.style.display === "none";
-			pre.style.display = show ? "block" : "none";
-			btn.textContent = show ? "隐藏原始完整数据" : "查看原始完整数据";
+			const drawer = doc.getElementById("aus-history-detail");
+			if (!drawer) return;
+			if (drawer.getAttribute("data-wide") === "1") {
+				drawer.removeAttribute("data-wide");
+				btn.removeAttribute("data-active");
+			} else {
+				drawer.setAttribute("data-wide", "1");
+				btn.setAttribute("data-active", "1");
+			}
 		});
 	});
 	if (reopenDetailTs) {
@@ -16850,7 +17471,7 @@ function openPanel() {
 	} catch {}
 	refreshUI();
 	try {
-		import("./collector-DTwR01-F.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
+		import("./collector-AQ-INJ0A.js").then((m) => m.reconcileOnPanelOpen()).catch(() => {});
 	} catch {}
 	try {
 		import("./update-BsrR54Lw.js").then((n) => n.n).then((m) => {
@@ -17539,10 +18160,10 @@ function onAppReady() {
 		refreshUI();
 	} catch {}
 	try {
-		import("./interception-D0WP6JqJ.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DWhKeKTj.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-DTwR01-F.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-AQ-INJ0A.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-k4SyDMQg.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -17556,10 +18177,10 @@ function onAppInitialized() {
 		ensureWandEntry();
 	} catch {}
 	try {
-		import("./interception-D0WP6JqJ.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
+		import("./interception-DWhKeKTj.js").then((n) => n.n).then((m) => m.installInterception()).catch(() => {});
 	} catch {}
 	try {
-		import("./collector-DTwR01-F.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-AQ-INJ0A.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
 		import("./request-tap-k4SyDMQg.js").then((n) => n.t).then((m) => m.installRequestTap()).catch(() => {});
@@ -17631,10 +18252,10 @@ async function teardownRuntime() {
 		uninstallMessageCost();
 	} catch {}
 	try {
-		import("./interception-D0WP6JqJ.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
+		import("./interception-DWhKeKTj.js").then((n) => n.n).then((m) => m.uninstallInterception?.());
 	} catch {}
 	try {
-		import("./collector-DTwR01-F.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
+		import("./collector-AQ-INJ0A.js").then((m) => m.uninstallAgentUsage?.()).catch(() => {});
 	} catch {}
 	try {
 		const doc = getDoc();
@@ -17650,13 +18271,13 @@ async function teardownRuntime() {
 		stopPeakDot();
 	} catch {}
 	try {
-		(await import("./balance-Dxpd4pSD.js").then((n) => n.t)).stopBalanceTimer?.();
+		(await import("./balance-DxcQ664V.js").then((n) => n.t)).stopBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-U-Rv2qTn.js").then((n) => n.n)).stopRateTimer?.();
+		(await import("./currency--7Ad-xYJ.js").then((n) => n.n)).stopRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-LzVQUEjt.js").then((n) => n.a)).stopPricingSyncTimer?.();
+		(await import("./pricing-sync-BfpZJHS6.js").then((n) => n.a)).stopPricingSyncTimer?.();
 	} catch {}
 	cleanupRuntimeBindings();
 }
@@ -17696,7 +18317,7 @@ async function onClean() {
 	} catch {}
 	await teardownRuntime();
 	try {
-		const { wipeAllExtensionData } = await import("./wipe-data-D_XIOLTZ.js");
+		const { wipeAllExtensionData } = await import("./wipe-data-DyfMRPso.js");
 		const report = await wipeAllExtensionData();
 		log.debug("cleaned", report);
 	} catch (err) {
@@ -17709,19 +18330,19 @@ function onEnable() {
 		installMessageCost();
 	} catch {}
 	try {
-		import("./interception-D0WP6JqJ.js").then((n) => n.n).then((m) => m.installInterception());
+		import("./interception-DWhKeKTj.js").then((n) => n.n).then((m) => m.installInterception());
 	} catch {}
 	try {
-		import("./collector-DTwR01-F.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-AQ-INJ0A.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	try {
-		import("./balance-Dxpd4pSD.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+		import("./balance-DxcQ664V.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 	} catch {}
 	try {
-		import("./currency-U-Rv2qTn.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
+		import("./currency--7Ad-xYJ.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 	} catch {}
 	try {
-		import("./pricing-sync-LzVQUEjt.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+		import("./pricing-sync-BfpZJHS6.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
 	} catch {}
 }
 async function onDisable() {
@@ -17764,19 +18385,19 @@ async function init() {
 		initTelemetry();
 	} catch {}
 	try {
-		(await import("./balance-Dxpd4pSD.js").then((n) => n.t)).restartBalanceTimer?.();
+		(await import("./balance-DxcQ664V.js").then((n) => n.t)).restartBalanceTimer?.();
 	} catch {}
 	try {
-		(await import("./currency-U-Rv2qTn.js").then((n) => n.n)).restartRateTimer?.();
+		(await import("./currency--7Ad-xYJ.js").then((n) => n.n)).restartRateTimer?.();
 	} catch {}
 	try {
-		(await import("./pricing-sync-LzVQUEjt.js").then((n) => n.a)).restartPricingSyncTimer?.();
+		(await import("./pricing-sync-BfpZJHS6.js").then((n) => n.a)).restartPricingSyncTimer?.();
 	} catch {}
 	try {
 		installInterception();
 	} catch {}
 	try {
-		import("./collector-DTwR01-F.js").then((m) => m.initAgentUsage()).catch(() => {});
+		import("./collector-AQ-INJ0A.js").then((m) => m.initAgentUsage()).catch(() => {});
 	} catch {}
 	const mount = () => {
 		try {
@@ -17801,7 +18422,7 @@ async function init() {
 			installMessageCost();
 		} catch {}
 		try {
-			import("./pricing-sync-LzVQUEjt.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
+			import("./pricing-sync-BfpZJHS6.js").then((n) => n.a).then((m) => m.markLegacySyncedModels?.()).catch(() => {});
 		} catch {}
 	};
 	if (globalThis.SillyTavern?.getContext) mount();

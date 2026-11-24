@@ -14,6 +14,7 @@ import { isUnsafeKey, isValidDayKey, localDay } from '../utils/date';
 import { isTruncatedFinish, isTruncatedOf } from '../utils/finish';
 import { log, toast } from '../utils/logger';
 import { turnFingerprint, usageFingerprint, messageDigest } from './fingerprint';
+import { clearDetailStore, deleteDetail } from './detail-store';
 import { mobileDeviceHint } from '../utils/device';
 import { computeTokenRate, estimateTokenRate, measureTokenRate, normalizeTtft, sanitizeHistoryTiming, sanitizeRate, type RateEstimateSource } from './token-rate';
 import { normalizeConnectionEndpoint, type HistoryConnection } from '../services/connection-identity';
@@ -1097,6 +1098,11 @@ function pruneDetails() {
       delete e.messages;
       delete e.fullRequest;
       delete e.fullResponse;
+      // 原文库只服务最近 DETAIL_KEEP 条：掉出窗口就同步删，避免占用偷偷留在库里
+      if (e.detailKey) {
+        deleteDetail(e.detailKey).catch(() => {});
+        delete e.detailKey;
+      }
     } else {
       // 保留前 DETAIL_KEEP 条的完整响应/请求；fullRequest 裁剪 messages 防止大对象落盘
       if (e.fullRequest && typeof e.fullRequest === 'object' && Array.isArray(e.fullRequest.messages)) {
@@ -1175,6 +1181,24 @@ export const repository = {
 
   async getColdHistory() { return loadHistoryCold(); },
 
+  /**
+   * 按时间戳取单条记录（热区优先，没有再查冷库）。
+   * 详情抽屉用它回退展示旧摘要：列表模板里只放得下稀疏字段，完整原文在详情库里，需要先找到 detailKey。
+   */
+  async getHistoryEntry(timestamp: number | string): Promise<any | null> {
+    const ts = Number(timestamp);
+    if (!Number.isFinite(ts)) return null;
+    const hot = (state.history || []).find((entry: any) => Number(entry?.timestamp) === ts);
+    if (hot) return hot;
+    try {
+      const cold = await loadHistoryCold();
+      return (cold || []).find((entry: any) => Number(entry?.timestamp) === ts) || null;
+    } catch (error) {
+      notifyColdReadFailure(error);
+      return null;
+    }
+  },
+
   async getAllHistory() {
     try {
       return await getAllHistory();
@@ -1207,6 +1231,12 @@ export const repository = {
     });
     const removed = Math.max(0, (all || []).length - remains.length);
     if (!removed) return 0;
+    // 被删记录若还挂在原文库里，一起清掉（只删命中的 key，不碰别人的）
+    for (const entry of all || []) {
+      if (remains.indexOf(entry) !== -1) continue;
+      const key = (entry as any)?.detailKey;
+      if (key) deleteDetail(key).catch(() => {});
+    }
     await this.replaceAll({ history: remains } as any, { clearCold: true });
     await this.recalcAll();
     await rebuildAggregates();
@@ -1525,6 +1555,7 @@ export const repository = {
     const chatName = getCurrentChatName();
     (lu as any).chatId = chatId; (lu as any).chatName = chatName;
     lu.requestId = requestId;
+    (lu as any).detailKey = requestId ? String(requestId) : null;
     if (connection) {
       lu.sourceType = connection.sourceType;
       lu.endpointId = connection.endpointId;
@@ -1539,6 +1570,7 @@ export const repository = {
     const entry: any = {
       timestamp: lu.timestamp, model, rawModel: rawModel !== model ? rawModel : null, prompt_tokens: hit + miss, cache_hit_tokens: hit, cache_miss_tokens: miss,
       requestId,
+      detailKey: requestId ? String(requestId) : null,
       completion_tokens: comp, total_tokens: total, input_cost: lu.input_cost, output_cost: lu.output_cost,
       cost: lu.cost, cache_hit_rate: (hit + miss) > 0 ? (hit / (hit + miss) * 100) : 0, priceType: lu.priceType,
       raw_usage: usage, messages: (messages || []).map(clampMessage), duration, ttft: lu.ttft, thinkTime, thinkTokens, tokenRate: lu.tokenRate, rateEstimated: lu.rateEstimated ?? null, fullRequest, fullResponse: safeResponse,
@@ -1887,6 +1919,8 @@ export const repository = {
         if (options.clearCold) await clearHistoryCold();
         state.history = h as any;
       }
+      // 全量替换成空历史（清空 / 导入空包）时，原文库也一起清，别留孤儿数据
+      if (!h.length) clearDetailStore().catch(() => {});
     } else if (options.clearCold) {
       await clearHistoryCold();
     }

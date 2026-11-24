@@ -89,9 +89,12 @@ describe('卸载清理：整体清除', () => {
     g.indexedDB = idb;
     g.localStorage = fakeStorage({});
     const report = await wipeAllExtensionData({ timeoutMs: 200 });
-    expect(calls).toEqual(['api_usage_stat_db']);
+    // 冷历史库与详情原文库是两个库，卸载清理必须一起删掉，否则原文会留在浏览器里
+    expect(calls).toEqual(['api_usage_stat_db', 'api_usage_detail_db']);
     expect(report.databaseDeleted).toBe(true);
     expect(report.databaseBlocked).toBe(false);
+    expect(report.detailDatabaseDeleted).toBe(true);
+    expect(report.detailDatabaseBlocked).toBe(false);
     expect(report.errors).toEqual([]);
   });
 

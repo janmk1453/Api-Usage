@@ -56,6 +56,10 @@ import { applyTheme } from '../services/theme';
 import { DataEvents, on as onDataEvent } from '../data/events';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 import { repository } from '../data/repository';
+import { getDetail } from '../data/detail-store';
+import type { DetailBlob, DetailSide } from '../data/detail-store';
+import { createJsonTree, jsonParseSafe } from './json-tree';
+import type { JsonTreeHandle } from './json-tree';
 import { trackOpen, trackPage, trackRender, flushTelemetry } from '../services/telemetry';
 import {
   STATS_FILTER_ALL,
@@ -548,12 +552,328 @@ function openHistoryDetail(doc: Document, panel: HTMLElement, btn: HTMLElement) 
   drawer.style.display = 'flex';
   const content = doc.getElementById('aus-content-body') as HTMLElement | null;
   if (content) content.classList.add('has-history-detail');
+  // 打开时先填默认激活的「请求参数」；其余 Tab 等切过去再读
+  void fillDetailTab(doc, panel, 'req', ts);
 }
 
 /**
  * 在重绘列表期间保持 #aus-main 的滚动位置不变：翻页、异步补齐全量数据都只换内容，
  * 不允许把页面滚到别处（旧实现用 scrollIntoView 把列表拽回顶部）。
  */
+/* ── 详情抽屉：完整请求体 / 请求头 / 完整响应 / Raw 用量 ───────────────────────
+ * 这些原文单个就可能有数 MB，热区 JSON 里只放得下摘要；完整原文存在独立的详情库
+ * （src/data/detail-store.ts），只在打开详情或切换 Tab 时才按需读取。
+ * 读到的原文挂成可折叠 JSON 树：一棵树只建一次，重复切 Tab 不重建。
+ */
+
+/** 详情原文缓存：键是详情库的 key，重绘历史列表时整体失效 */
+const detailBlobCache = new Map<string, DetailBlob | null>();
+/** 已挂载的 JSON 树句柄：重绘时统一销毁，避免旧节点上的事件委托残留 */
+let detailTreeHandles: JsonTreeHandle[] = [];
+
+function releaseDetailTrees(): void {
+  for (const handle of detailTreeHandles) {
+    try { handle.destroy(); } catch {}
+  }
+  detailTreeHandles = [];
+}
+
+/** 重绘历史列表前调用：DOM 会被整体替换，树句柄与原文缓存一起作废 */
+function clearDetailCache(): void {
+  releaseDetailTrees();
+  detailBlobCache.clear();
+}
+
+function detailHint(doc: Document, text: string): HTMLElement {
+  const el = doc.createElement('div');
+  el.className = 'aus-dt-hint';
+  el.textContent = text;
+  return el;
+}
+
+function detailEmpty(doc: Document, text: string): HTMLElement {
+  const el = doc.createElement('div');
+  el.className = 'aus-dt-empty';
+  el.textContent = text;
+  return el;
+}
+
+/** 一段原文的字数说明；归档时被上限截断的记录要显性说明，不能让人以为是完整数据 */
+function detailSideNote(side: DetailSide | null | undefined): string {
+  if (!side) return '';
+  const chars = Number(side.chars) || (typeof side.body === 'string' ? side.body.length : 0);
+  return chars.toLocaleString() + ' 字符' + (side.truncated ? '（已达单条上限，尾部未保存）' : '');
+}
+
+interface DetailBlock {
+  wrap: HTMLElement;
+  bar: HTMLElement;
+}
+
+/** 详情块：一行工具条（标题 + 说明 + 右侧操作）+ 内容区 */
+function makeDetailBlock(doc: Document, parent: HTMLElement, title?: string, note?: string): DetailBlock {
+  const wrap = doc.createElement('div');
+  wrap.className = 'aus-dt-doc';
+  const bar = doc.createElement('div');
+  bar.className = 'aus-dt-tools';
+  if (title) {
+    const t = doc.createElement('span');
+    t.className = 'aus-dt-tools-title';
+    t.textContent = title;
+    bar.appendChild(t);
+  }
+  if (note) {
+    const n = doc.createElement('span');
+    n.className = 'aus-dt-tools-note';
+    n.textContent = note;
+    bar.appendChild(n);
+  }
+  const gap = doc.createElement('span');
+  gap.className = 'aus-dt-tools-gap';
+  bar.appendChild(gap);
+  wrap.appendChild(bar);
+  parent.appendChild(wrap);
+  return { wrap, bar };
+}
+
+function addDetailTool(doc: Document, bar: HTMLElement, label: string, onClick: () => void): HTMLElement {
+  const btn = doc.createElement('button');
+  btn.type = 'button';
+  btn.className = 'aus-dt-tool';
+  btn.textContent = label;
+  btn.addEventListener('click', onClick);
+  bar.appendChild(btn);
+  return btn;
+}
+
+function addCopyTool(doc: Document, bar: HTMLElement, getText: () => string): void {
+  const btn = addDetailTool(doc, bar, '复制', () => {
+    const text = getText();
+    const clip = (globalThis as any).navigator?.clipboard;
+    if (!clip?.writeText) return;
+    clip.writeText(text).then(() => {
+      btn.textContent = '已复制';
+      setTimeout(() => { btn.textContent = '复制'; }, 1500);
+    }).catch(() => {});
+  });
+}
+
+function addDownloadTool(doc: Document, bar: HTMLElement, getText: () => string, filename: string): void {
+  addDetailTool(doc, bar, '下载', () => {
+    try {
+      const blob = new Blob([getText()], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = doc.createElement('a');
+      a.href = url;
+      a.download = filename;
+      doc.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => { try { URL.revokeObjectURL(url); } catch {} }, 4000);
+    } catch {}
+  });
+}
+
+interface DetailMountOptions {
+  title?: string;
+  note?: string;
+  filename?: string;
+}
+
+/** 挂一棵可折叠 JSON 树，配展开 / 收起 / 复制 / 下载 */
+function mountDetailJson(doc: Document, parent: HTMLElement, value: unknown, options: DetailMountOptions = {}): void {
+  const { bar } = makeDetailBlock(doc, parent, options.title, options.note);
+  const ref: { handle: JsonTreeHandle | null } = { handle: null };
+  addDetailTool(doc, bar, '展开全部', () => { try { ref.handle?.expandAll(); } catch {} });
+  addDetailTool(doc, bar, '收起全部', () => { try { ref.handle?.collapseAll(); } catch {} });
+  const textOf = (): string => {
+    if (ref.handle) { try { return ref.handle.rawText(); } catch {} }
+    try { return JSON.stringify(value, null, 2); } catch { return String(value); }
+  };
+  addCopyTool(doc, bar, textOf);
+  if (options.filename) addDownloadTool(doc, bar, textOf, options.filename);
+  const handle = createJsonTree(doc, value, { expandDepth: 1 });
+  ref.handle = handle;
+  detailTreeHandles.push(handle);
+  parent.appendChild(handle.element);
+}
+
+/** 挂一段等宽纯文本（非 JSON 的原文走这里，复制 / 下载仍拿全量） */
+function mountDetailText(doc: Document, parent: HTMLElement, text: string, options: DetailMountOptions = {}): void {
+  const { wrap, bar } = makeDetailBlock(doc, parent, options.title, options.note);
+  addCopyTool(doc, bar, () => text);
+  if (options.filename) addDownloadTool(doc, bar, () => text, options.filename);
+  const pre = doc.createElement('pre');
+  pre.className = 'aus-dt-pre';
+  pre.textContent = text;
+  wrap.appendChild(pre);
+}
+
+/** 默认收起的折叠块（details 原生折叠，展开时才真正铺开内容） */
+function mountDetailFold(doc: Document, parent: HTMLElement, title: string, note: string, fill: (host: HTMLElement) => void): void {
+  const fold = doc.createElement('details');
+  fold.className = 'aus-dt-fold';
+  const sum = doc.createElement('summary');
+  sum.className = 'aus-dt-fold-sum';
+  sum.textContent = note ? title + ' · ' + note : title;
+  fold.appendChild(sum);
+  parent.appendChild(fold);
+  const host = doc.createElement('div');
+  host.className = 'aus-dt-fold-body';
+  fold.appendChild(host);
+  fill(host);
+}
+
+/** 把 SSE 原文逐帧拆成可折叠的 JSON 数组；不是 SSE 就返回 null */
+function parseSseFrames(raw: string): unknown[] | null {
+  const frames: unknown[] = [];
+  let touched = false;
+  for (const line of String(raw || '').split('\n')) {
+    const t = line.trim();
+    if (!t.startsWith('data:')) continue;
+    touched = true;
+    const payload = t.slice(5).trim();
+    if (!payload || payload === '[DONE]') { frames.push(payload || '[DONE]'); continue; }
+    const parsed = jsonParseSafe(payload);
+    frames.push(parsed.ok ? parsed.value : payload);
+  }
+  return touched ? frames : null;
+}
+
+function renderRequestTab(doc: Document, slot: HTMLElement, entry: any, blob: DetailBlob | null): void {
+  const bodySide = blob?.request || null;
+  const headSide = blob?.requestHeaders || null;
+  const stamp = String(entry?.timestamp || '');
+  if (!bodySide && !headSide) {
+    slot.appendChild(detailHint(doc, '这条记录没有归档完整原文（早于本次更新，或已超出最近 5 条的保留窗口），下面是当时保存的摘要。'));
+    const legacy = entry?.fullRequest;
+    if (legacy) mountDetailJson(doc, slot, legacy, { title: '请求参数摘要', filename: 'request-' + stamp + '.json' });
+    else if (entry?.raw_usage) mountDetailJson(doc, slot, entry.raw_usage, { title: 'Raw 用量', filename: 'usage-' + stamp + '.json' });
+    else slot.appendChild(detailEmpty(doc, '（原文已清理，仅保留统计）'));
+    return;
+  }
+  if (bodySide) {
+    const parsed = jsonParseSafe(bodySide.body);
+    if (parsed.ok) {
+      mountDetailJson(doc, slot, parsed.value, { title: '请求体', note: detailSideNote(bodySide), filename: 'request-' + stamp + '.json' });
+    } else {
+      mountDetailText(doc, slot, bodySide.body, { title: '请求体（原文，非 JSON）', note: detailSideNote(bodySide), filename: 'request-' + stamp + '.txt' });
+    }
+  } else {
+    slot.appendChild(detailHint(doc, '这条记录只归档了请求头，没有请求体。'));
+  }
+  if (headSide) {
+    mountDetailFold(doc, slot, '请求头（密钥已打码）', detailSideNote(headSide), (host) => {
+      const parsed = jsonParseSafe(headSide.body);
+      if (parsed.ok) mountDetailJson(doc, host, parsed.value, { filename: 'request-headers-' + stamp + '.json' });
+      else mountDetailText(doc, host, headSide.body, {});
+    });
+  }
+}
+
+function renderResponseTab(doc: Document, slot: HTMLElement, entry: any, blob: DetailBlob | null): void {
+  const side = blob?.response || null;
+  const summary = typeof entry?.fullResponse === 'string'
+    ? entry.fullResponse
+    : (entry?.fullResponse ? JSON.stringify(entry.fullResponse) : '');
+  const raw = (side && side.body) ? side.body : summary;
+  const stamp = String(entry?.timestamp || '');
+  if (!raw) {
+    slot.appendChild(detailEmpty(doc, '（原文已清理——仅最近 5 条保留，其余仅统计可用）'));
+    return;
+  }
+  if (!side) {
+    slot.appendChild(detailHint(doc, '这条记录只有当时保存的响应摘要（可能已截断），完整原文没有归档。'));
+  }
+  const chars = raw.length.toLocaleString() + ' 字符';
+  mountDetailText(doc, slot, prettyFullResponse(raw), {
+    title: '合并后的响应',
+    note: chars,
+    filename: 'response-merged-' + stamp + '.txt',
+  });
+  const frames = parseSseFrames(raw);
+  if (frames) {
+    mountDetailFold(doc, slot, '原始响应帧', frames.length + ' 帧', (host) => {
+      mountDetailJson(doc, host, frames, { note: '逐帧保留上游原字段', filename: 'response-frames-' + stamp + '.json' });
+    });
+  }
+  mountDetailFold(doc, slot, '响应原文', chars, (host) => {
+    mountDetailText(doc, host, raw, { filename: 'response-raw-' + stamp + '.txt' });
+  });
+}
+
+function renderUsageTab(doc: Document, slot: HTMLElement, entry: any, blob: DetailBlob | null): void {
+  const usage = (blob && blob.usage !== null && blob.usage !== undefined) ? blob.usage : (entry?.raw_usage ?? null);
+  if (usage === null || usage === undefined) {
+    slot.appendChild(detailEmpty(doc, '（这条记录没有可用的 Raw 用量）'));
+    return;
+  }
+  if (!blob?.usage) slot.appendChild(detailHint(doc, '这条记录没有归档用量原对象，下面是热区里保存的摘要。'));
+  mountDetailJson(doc, slot, usage, { title: 'Raw 用量（上游原对象）', filename: 'usage-' + String(entry?.timestamp || '') + '.json' });
+}
+
+function renderMessagesTab(doc: Document, slot: HTMLElement, entry: any, blob: DetailBlob | null): void {
+  const stamp = String(entry?.timestamp || '');
+  let messages: unknown = null;
+  if (blob?.request?.body) {
+    const parsed = jsonParseSafe(blob.request.body);
+    if (parsed.ok) {
+      const list = (parsed.value as any)?.messages;
+      if (Array.isArray(list) && list.length) messages = list;
+    }
+  }
+  const fromArchive = messages !== null;
+  if (!fromArchive) messages = entry?.messages || null;
+  if (messages === null || messages === undefined) {
+    slot.appendChild(detailEmpty(doc, '（原文已清理——仅最近 5 条保留，其余仅统计可用）'));
+    return;
+  }
+  const count = Array.isArray(messages) ? messages.length : 0;
+  if (fromArchive) {
+    mountDetailJson(doc, slot, messages, { title: '完整消息列表（来自归档请求体）', note: count + ' 条', filename: 'messages-' + stamp + '.json' });
+  } else {
+    slot.appendChild(detailHint(doc, '这条记录没有归档请求体，下面是当时保存的截断版本（每条正文最多 600 字）。'));
+    mountDetailJson(doc, slot, messages, { title: '消息列表（截断摘要）', note: count + ' 条', filename: 'messages-' + stamp + '.json' });
+  }
+}
+
+const DETAIL_TAB_RENDERERS: Record<string, (doc: Document, slot: HTMLElement, entry: any, blob: DetailBlob | null) => void> = {
+  req: renderRequestTab,
+  res: renderResponseTab,
+  raw: renderUsageTab,
+  msg: renderMessagesTab,
+};
+
+/** 按 Tab 惰性填充内容：同一个槽只填一次，重复切 Tab 直接复用已有 DOM */
+async function fillDetailTab(doc: Document, root: HTMLElement, tab: string, ts: string): Promise<void> {
+  const slot = root.querySelector('[data-content="' + tab + '-' + ts + '"]') as HTMLElement | null;
+  if (!slot || slot.getAttribute('data-filled') === '1') return;
+  slot.setAttribute('data-filled', '1');
+  slot.innerHTML = '';
+  const loading = detailEmpty(doc, '正在读取完整原文…');
+  slot.appendChild(loading);
+  let entry: any = null;
+  let blob: DetailBlob | null = null;
+  try {
+    entry = await repository.getHistoryEntry(ts);
+    const key = entry ? String(entry?.detailKey || '') : '';
+    if (key) {
+      if (detailBlobCache.has(key)) blob = detailBlobCache.get(key) || null;
+      else { blob = await getDetail(key); detailBlobCache.set(key, blob); }
+    }
+  } catch {}
+  // 异步回来时可能已换记录或列表已重绘：旧槽直接丢弃结果，不要往别人的抽屉里写
+  if ((slot as any).isConnected === false) return;
+  if (!entry) {
+    loading.textContent = '这条记录已经不存在了（可能刚被删除或超出保留窗口）。';
+    return;
+  }
+  slot.innerHTML = '';
+  const render = DETAIL_TAB_RENDERERS[tab] || renderRequestTab;
+  try { render(doc, slot, entry, blob); } catch (error) {
+    slot.appendChild(detailEmpty(doc, '原文渲染失败：' + String((error as any)?.message || error)));
+  }
+}
 function keepMainScrollPosition(doc: Document, fn: () => void): void {
   const scroller = doc.getElementById('aus-main') as HTMLElement | null;
   const top = scroller ? scroller.scrollTop : 0;
@@ -575,6 +895,8 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
   if (!host) return;
   const reopenDetailTs = activeHistoryDetailTs;
   resetHistoryDetailState(doc, true);
+  // 列表 DOM 整体重建，详情抽屉里的 JSON 树与原文缓存一并作废
+  clearDetailCache();
   const total = fullHist.length;
   if (!total) {
     // 空态的「清除筛选」用独立 id 并在 host 内局部查找：与工具栏「重置筛选」撞 id 时，
@@ -736,14 +1058,12 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
                 <button class="aus-tab-btn" data-tab="res" data-ts="${h.timestamp}" role="tab">完整响应</button>
                 <button class="aus-tab-btn" data-tab="raw" data-ts="${h.timestamp}" role="tab">Raw 用量</button>
                 <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" role="tab">消息内容</button>
+                <button class="aus-dt-wide-btn" type="button" data-ts="${h.timestamp}" title="把详情抽屉加宽，方便看长 JSON">加宽</button>
               </div>
-              <pre class="aus-tab-content aus-dt-pre" data-content="req-${h.timestamp}" style="display:block;">${esc(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : (h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : '（原文已清理，仅保留统计）'))}</pre>
-              <div class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;">
-                <pre class="aus-dt-pre">${esc(prettyFullResponse(h.fullResponse))}</pre>
-                ${h.fullResponse ? `<div class="aus-dt-rawbar"><button class="aus-res-raw-btn" data-ts="${h.timestamp}">查看原始完整数据</button></div><pre class="aus-res-raw aus-dt-pre aus-dt-pre-raw" data-ts="${h.timestamp}" style="display:none;">${esc(typeof h.fullResponse === 'string' ? h.fullResponse : JSON.stringify(h.fullResponse, null, 2))}</pre>` : ''}
-              </div>
-              <pre class="aus-tab-content aus-dt-pre" data-content="raw-${h.timestamp}" style="display:none;">${esc(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
-              <pre class="aus-tab-content aus-dt-pre" data-content="msg-${h.timestamp}" style="display:none;">${esc(h.messages && (h as any).messages.length ? JSON.stringify(h.messages, null, 2) : '（原文已清理——仅最近 5 条保留，其余仅统计可用）')}</pre>
+              <div class="aus-tab-content aus-dt-docs" data-content="req-${h.timestamp}" style="display:block;"></div>
+              <div class="aus-tab-content aus-dt-docs" data-content="res-${h.timestamp}" style="display:none;"></div>
+              <div class="aus-tab-content aus-dt-docs" data-content="raw-${h.timestamp}" style="display:none;"></div>
+              <div class="aus-tab-content aus-dt-docs" data-content="msg-${h.timestamp}" style="display:none;"></div>
       </div>
     </div>
   `;
@@ -782,17 +1102,18 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
       root.querySelectorAll('.aus-tab-content').forEach((c: any) => { c.style.display = 'none'; });
       const target = root.querySelector(`[data-content="${tab}-${ts}"]`) as HTMLElement | null;
       if (target) target.style.display = 'block';
+      // 原文按需读库：第一次切到某个 Tab 时才去详情库取，取到后挂在槽里复用
+      void fillDetailTab(doc, root, String(tab || 'req'), String(ts || ''));
     });
   });
-  host.querySelectorAll('.aus-res-raw-btn').forEach((btn: any) => {
+  // 加宽：只是给抽屉挂个 data-wide，宽度全在 style.css 里定，窄屏不加宽
+  host.querySelectorAll('.aus-dt-wide-btn').forEach((btn: any) => {
     btn.addEventListener('click', () => {
-      const ts = btn.getAttribute('data-ts');
-      const root = btn.closest('.aus-detail-panel') as HTMLElement | null;
-      const pre = root?.querySelector(`.aus-res-raw[data-ts="${ts}"]`) as HTMLElement | null;
-      if (!pre) return;
-      const show = pre.style.display === 'none';
-      pre.style.display = show ? 'block' : 'none';
-      btn.textContent = show ? '隐藏原始完整数据' : '查看原始完整数据';
+      const drawer = doc.getElementById('aus-history-detail') as HTMLElement | null;
+      if (!drawer) return;
+      const wide = drawer.getAttribute('data-wide') === '1';
+      if (wide) { drawer.removeAttribute('data-wide'); btn.removeAttribute('data-active'); }
+      else { drawer.setAttribute('data-wide', '1'); btn.setAttribute('data-active', '1'); }
     });
   });
   if (reopenDetailTs) {

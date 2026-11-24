@@ -1,5 +1,6 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import "./pricing-Bc-qEvy8.js";
+import "./detail-store-6x06kQ_p.js";
 //#region src/utils/device.ts
 /**
 * 设备类型判定（只回答一个问题：这台设备是不是「手指优先」的移动端）。

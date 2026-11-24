@@ -12,6 +12,7 @@ import { API_ERROR_MAX_CHARS, detectApiErrorPayload, apiErrorPayloadTag } from '
 import { ESTIMATE_VERSION, estimatePromptTokens, estimateTextTokens } from './token-estimate';
 import type { EntryMeta } from '../types/save';
 import { detectRequestOrigin, type RequestOrigin } from './request-origin';
+import { DETAIL_MAX_CHARS, putDetailRequest, putDetailResponse } from '../data/detail-store';
 
 let lastMessages: any[] = [];
 /** 本轮请求的完整 messages：只给输入侧估算用，绝不写进历史（历史仍存 lastMessages 的最近 10 条摘要） */
@@ -585,6 +586,17 @@ function installFetchCapture(): boolean {
           const rawInit: any = (args as any)[1] || {};
           const rawBody = typeof rawInit.body === 'string' ? rawInit.body : '';
           saveRequestStart({ at: startTime, method: rawInit.method || 'POST', url, headers: rawInit.headers, body: rawBody });
+          // 详情原文：最近 DETAIL_KEEP 条的完整请求体与脱敏后的请求头另存详情原文库，
+          // 历史热区只留摘要。这里拿到的是宿主交过来的原始 init，与请求日志同源。
+          try {
+            putDetailRequest({
+              requestId,
+              timestamp: startTime,
+              model: typeof requestModel === 'string' ? requestModel : null,
+              body: rawBody,
+              headers: rawInit.headers,
+            }).catch(() => {});
+          } catch {}
         } catch {}
         // 采集链路快照：只记录「请求已发出」，与后续是否入库无关
         try {
@@ -612,7 +624,19 @@ function installFetchCapture(): boolean {
             // 帧归一化：把任意 provider 的形状投影成 OpenAI/DeepSeek 形状，下游解析不再认识各家字段。
             // 每个请求一份状态（协议首帧锁定），只在这条 clone 旁路上起作用，原始响应照常透传。
             const frameNormalizer = createFrameNormalizer();
-            const parseAndProcess = (text: string, ttftVal: number, thinkTimeVal: number, streamed: boolean | null = null, rawText: string | null = null) => {
+            // 详情原文库用的响应累积：fullText 会被 STREAM_TEXT_LIMIT 截到尾部，
+            // 而详情页要的是完整原文，所以单独累积一份，按 DETAIL_MAX_CHARS 封顶。
+            let archiveText = '';
+            let archiveTruncated = false;
+            let responseArchived = false;
+            const pushArchive = (piece: string) => {
+              if (!piece || archiveTruncated) return;
+              const room = DETAIL_MAX_CHARS - archiveText.length;
+              if (piece.length <= room) { archiveText += piece; return; }
+              archiveText += piece.slice(0, Math.max(0, room));
+              archiveTruncated = true;
+            };
+            const parseAndProcess = (text: string, ttftVal: number, thinkTimeVal: number, streamed: boolean | null = null, rawText: string | null = null, archiveRaw: string | null = null) => {
             let data: any = null;
             let finishReason: string | null = null;
             try {
@@ -692,6 +716,21 @@ function installFetchCapture(): boolean {
               log.debug('fetch 捕获 usage', { model, hasUsage: !!usage, finishReason, streamed });
               try { processUsage(usage, model, msgs, startTime, fullReq, text, ttftVal, thinkTimeVal, finishReason, requestConnection, requestId, streamed); } catch (e) { log.error('fetch 用量记录失败 ' + ((e as any)?.message || e)); }
             }
+            // 详情原文归档：每次请求只写一次（流式收尾路径可能被调用两次）。
+            // 存上游原文而不是归一化投影；usage 解析不到时仍写响应，详情页至少能看到原始响应。
+            if (!responseArchived) {
+              responseArchived = true;
+              const archiveBody = typeof archiveRaw === 'string' && archiveRaw ? archiveRaw : (rawText ?? text);
+              try {
+                putDetailResponse({
+                  requestId,
+                  timestamp: startTime,
+                  model: (data as any)?.model || reqBody?.model || fullReq?.model || null,
+                  body: archiveBody,
+                  usage: (data as any)?.usage || null,
+                }).catch(() => {});
+              } catch {}
+            }
           };
           // 流式测量 TTFT 与思维链耗时：后台消费 clone 的 body 流，不阻塞原始响应透传
           try {
@@ -730,7 +769,7 @@ function installFetchCapture(): boolean {
                 try { patchRequestLog({ durationMs: endedAt, streamed }); } catch {}
                 // 优先解析归一化后的文本（能认 Gemini / Anthropic / Responses），
                 // 投影为空时退回原文；原文作为第 5 参传入，只用于展示
-                parseAndProcess(normText || fullText, ttft, safeThinkTime, streamed, fullText);
+                parseAndProcess(normText || fullText, ttft, safeThinkTime, streamed, fullText, archiveText);
               } catch {}
             };
             const scanThink = (chunk: string) => {
@@ -753,7 +792,7 @@ function installFetchCapture(): boolean {
                 // 首字延迟：相对请求发出时刻（startTime），而非 clone 流开始读取时刻
                 if (first && value && value.byteLength) { ttft = Date.now() - startTime; first = false; }
                 const piece = dec.decode(value, { stream: true });
-                fullText += piece; buf += piece;
+                fullText += piece; buf += piece; pushArchive(piece);
                 if (fullText.length > STREAM_TEXT_LIMIT) fullText = fullText.slice(-STREAM_TEXT_LIMIT);
                 const nl = buf.lastIndexOf('\n');
                 if (nl !== -1) {

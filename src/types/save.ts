@@ -5,6 +5,11 @@ export type HistoryEntry = {
   rawModel?: string | null;
   /** 内部请求关联标识，用于合并 fetch 与生成结束双路径 */
   requestId?: string | null;
+  /**
+   * 详情原文库键（即 requestId）。有值时详情页去 api_usage_detail_db 读完整请求体/
+   * 请求头/响应原文/raw 用量；为空或读不到（旧记录、归档失败、已被淘汰）时回退到本条记录内的摘要。
+   */
+  detailKey?: string | null;
   prompt_tokens: number;
   cache_hit_tokens: number;
   cache_miss_tokens: number;

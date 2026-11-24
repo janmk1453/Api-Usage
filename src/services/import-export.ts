@@ -37,6 +37,9 @@ function stripHistory(history: any[]) {
   return history.filter((h: any) => h && (h as any)._debug !== true).map((h: any) => {
     const c = { ...h };
     delete c.messages; delete c.fullRequest; delete c.fullResponse;
+    // detailKey 指向本机详情库（api_usage_detail_db）里的原文，导出文件里带上它只会
+    // 让导入方拿到一个本机不存在的键，所以一并剥掉
+    delete c.detailKey;
     return c;
   });
 }
@@ -131,7 +134,7 @@ export function normalizeImportData(raw: any): { data?: any; error?: string; ski
       priceType: cleanText(h.priceType) || 'old',
     };
     // raw_usage 走下面的专用分支（限量接收），这里先跳过，避免超大对象被通用拷贝带进来
-    const SKIP_IMPORT = new Set(['messages', 'fullRequest', 'fullResponse', 'raw_usage']);
+    const SKIP_IMPORT = new Set(['messages', 'fullRequest', 'fullResponse', 'raw_usage', 'detailKey']);
     for (const f of Object.keys(h)) {
       if (isUnsafeKey(f) || SKIP_IMPORT.has(f)) continue;
       if (nh[f] === undefined) nh[f] = sanitizeImportedValue((h as any)[f]);

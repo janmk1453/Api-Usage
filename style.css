@@ -1288,6 +1288,12 @@
   overflow: hidden;
   animation: ausDetailSlideRight 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
+/* 详情里的完整请求体 / 响应原文动辄几千行，窄抽屉读不动：
+   Tab 栏右侧的「加宽」按钮给抽屉开 data-wide，桌面放宽到两倍多宽并留出正文区。
+   窄屏那套（width:100% !important + 底部上滑）不受影响，按钮也直接隐藏。 */
+@media (min-width: 761px) {
+  #aus-history-detail[data-wide="1"] { width: clamp(460px, 58%, 1040px); }
+}
 #aus-history-detail-head {
   position: relative;
   flex-shrink: 0;
@@ -1511,6 +1517,196 @@
   animation: ausDetailTabIn 160ms ease;
 }
 .aus-dt-pre-raw { margin-top: 6px !important; }
+
+/* ===== 详情 JSON 树（请求参数 / 完整响应 / Raw 用量共用）=====
+   完整请求体与响应原文有几十万字符、几万个键，整段 JSON.stringify 塞进 <pre> 既没法读，
+   也会在打开详情的一瞬间建出几万个 DOM 节点把面板卡死。这里改成按需展开的树：
+   折叠的容器只占一行，展开才建子节点，且一次最多建 chunk 行。 */
+.aus-dt-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.aus-dt-tools-note {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--aus-fs-xs);
+  color: var(--ds-text-3);
+  line-height: 1.4;
+}
+.aus-dt-tool {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--ds-border);
+  border-radius: 999px;
+  background: var(--ds-card-inner);
+  color: var(--ds-text);
+  font-size: var(--aus-fs-sm);
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.aus-dt-tool:hover { background: var(--ds-card-hover); }
+.aus-dt-tool[data-active="1"] { background: var(--ds-black); color: var(--ds-black-text); }
+/* 块标题与右侧操作：标题固定宽度，说明文字可收缩，空隙把按钮推到右端 */
+.aus-dt-tools-title {
+  flex: 0 0 auto;
+  font-size: var(--aus-fs-sm);
+  font-weight: 600;
+  color: var(--ds-text);
+  line-height: 1.4;
+}
+.aus-dt-tools-gap { flex: 1 1 auto; }
+/* 详情抽屉里一个 Tab 可以有多段原文（请求体 + 请求头 / 合并响应 + 原始帧 + 原文） */
+.aus-dt-docs { display: block; min-width: 0; }
+.aus-dt-doc { min-width: 0; margin-top: 10px; }
+.aus-dt-docs > .aus-dt-doc:first-child { margin-top: 6px; }
+.aus-dt-hint {
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--ds-card-inner);
+  color: var(--ds-text-2);
+  font-size: var(--aus-fs-xs);
+  line-height: 1.5;
+}
+/* 默认收起的原文块：折叠时只占一行，展开才铺开 */
+.aus-dt-fold { margin-top: 10px; min-width: 0; }
+.aus-dt-fold-sum {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--ds-border);
+  border-radius: 8px;
+  background: var(--ds-card-inner);
+  color: var(--ds-text);
+  font-size: var(--aus-fs-sm);
+  line-height: 1.4;
+  cursor: pointer;
+  list-style: none;
+  transition: background-color 140ms ease;
+}
+.aus-dt-fold-sum::-webkit-details-marker { display: none; }
+.aus-dt-fold-sum::before { content: '\25B8'; color: var(--ds-text-3); font-size: 11px; line-height: 1; }
+.aus-dt-fold[open] > .aus-dt-fold-sum::before { content: '\25BE'; }
+.aus-dt-fold-sum:hover { background: var(--ds-card-hover); }
+.aus-dt-fold[open] > .aus-dt-fold-sum { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.aus-dt-fold-body { min-width: 0; padding: 0 0 2px; }
+/* Tab 栏右侧的「加宽」：桌面把抽屉撑到 1040px，窄屏不出现 */
+.aus-detail-panel .aus-dt-wide-btn {
+  margin-left: auto;
+  padding: 5px 10px;
+  border: 1px solid var(--ds-border);
+  border-radius: 999px;
+  background: var(--ds-card-inner);
+  color: var(--ds-text-2);
+  font-size: var(--aus-fs-sm);
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.aus-detail-panel .aus-dt-wide-btn:hover { background: var(--ds-card-hover); color: var(--ds-text); }
+.aus-detail-panel .aus-dt-wide-btn[data-active="1"] { background: var(--ds-black); color: var(--ds-black-text); font-weight: 600; }
+@media (max-width: 760px) {
+  #aus-panel .aus-dt-wide-btn { display: none; }
+  #aus-panel .aus-json-body { max-height: 46vh; }
+}
+@container ausbody (max-width: 760px) {
+  #aus-panel .aus-dt-wide-btn { display: none; }
+  #aus-panel .aus-json-body { max-height: 46vh; }
+}
+.aus-json {
+  margin-top: 6px;
+  background: var(--ds-card-inner);
+  border: 1px solid var(--ds-border);
+  border-radius: 10px;
+  overflow: hidden;
+  animation: ausDetailTabIn 160ms ease;
+}
+.aus-json-body {
+  max-height: 52vh;
+  overflow: auto;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
+  font-size: var(--aus-fs-xs);
+  line-height: 1.65;
+  tab-size: 2;
+  color: var(--ds-text);
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.aus-json-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 0 2px;
+  border-radius: 6px;
+}
+.aus-json-row:hover { background: var(--ds-card); }
+.aus-json-caret {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ds-text-3);
+  font-size: 10px;
+  line-height: 18px;
+  text-align: center;
+  cursor: pointer;
+}
+.aus-json-caret:hover { color: var(--ds-text); }
+.aus-json-caret[disabled] { cursor: default; opacity: 0.4; }
+.aus-json-pad { cursor: default; }
+.aus-json-key { flex: 0 0 auto; color: var(--ds-text-2); font-weight: 600; }
+.aus-json-sep { flex: 0 0 auto; color: var(--ds-text-3); }
+.aus-json-val {
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--ds-text);
+}
+.aus-json-val[data-json-act="expand-string"] {
+  color: var(--ds-text-2);
+  border-bottom: 1px dashed var(--ds-border-strong);
+  cursor: pointer;
+}
+.aus-json-val[data-json-act="expand-string"]:hover { color: var(--ds-text); }
+.aus-json-str-full { color: var(--ds-text); border-bottom: none; }
+.aus-json-row[data-kind="string"] .aus-json-val { color: var(--ds-string, var(--ds-text)); }
+.aus-json-row[data-kind="number"] .aus-json-val { color: var(--ds-number, var(--ds-text)); }
+.aus-json-row[data-kind="boolean"] .aus-json-val,
+.aus-json-row[data-kind="null"] .aus-json-val { color: var(--ds-text-3); }
+.aus-json-children { padding-left: 14px; }
+.aus-json-more {
+  display: block;
+  margin: 4px 0 4px 18px;
+  padding: 3px 10px;
+  border: 1px solid var(--ds-border);
+  border-radius: 999px;
+  background: var(--ds-card);
+  color: var(--ds-text-2);
+  font-size: var(--aus-fs-xs);
+  cursor: pointer;
+}
+.aus-json-more:hover { background: var(--ds-card-hover); color: var(--ds-text); }
+.aus-dt-empty {
+  margin-top: 6px;
+  padding: 14px 12px;
+  border-radius: 10px;
+  background: var(--ds-card-inner);
+  color: var(--ds-text-3);
+  font-size: var(--aus-fs-sm);
+  line-height: 1.65;
+}
 
 @keyframes ausDetailSlideRight {
   from { opacity: 0; transform: translateX(18px); }
@@ -2427,6 +2623,14 @@
 #aus-panel #aus-changelog *,
 #aus-panel .aus-cl-body,
 #aus-panel .aus-cl-body * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+/* 详情抽屉的 JSON 树与原文段落要能整段复制（请求体 / 请求头 / 响应原文 / 用量） */
+#aus-panel .aus-json-body,
+#aus-panel .aus-json-body *,
+#aus-panel .aus-dt-docs,
+#aus-panel .aus-dt-docs * {
   -webkit-user-select: text;
   user-select: text;
 }

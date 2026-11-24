@@ -1,3 +1,4 @@
+import { i as closeDetailDB, t as DETAIL_DB_NAME } from "./detail-store-6x06kQ_p.js";
 import { i as blockPersistentWrites, l as flushSaveHot, n as MODULE_NAME, s as closeDB, t as DB_NAME } from "./persistence-BmzJp2Zz.js";
 //#region src/services/wipe-data.ts
 /**
@@ -11,7 +12,8 @@ import { i as blockPersistentWrites, l as flushSaveHot, n as MODULE_NAME, s as c
 *  1) settings.json 的 extensionSettings[api_usage_stat]：钱包配置与价格规则、
 *     加密的钱包校准密钥 walletSecrets、匿名统计标识 telemetry、热记录（最近 2000 条）；
 *  2) IndexedDB api_usage_stat_db：冷历史、旧版迁移备份、写入失败时的降级副本；
-*  3) localStorage：全部 aus_ 前缀偏好键，以及旧版遗留的 ds_ 前缀行为开关。
+*  3) IndexedDB api_usage_detail_db：最近 5 条的完整请求体、脱敏请求头与响应原文；
+*  4) localStorage：全部 aus_ 前缀偏好键，以及旧版遗留的 ds_ 前缀行为开关。
 *
 * 硬约束：
 *  - 禁止 localStorage.clear()、禁止无差别删库，只按白名单与前缀判断；
@@ -95,6 +97,8 @@ async function wipeAllExtensionData(options = {}) {
 		settingsCleared: false,
 		databaseDeleted: false,
 		databaseBlocked: false,
+		detailDatabaseDeleted: false,
+		detailDatabaseBlocked: false,
 		localKeysRemoved: [],
 		errors: []
 	};
@@ -104,18 +108,32 @@ async function wipeAllExtensionData(options = {}) {
 		report.errors.push("flush: " + errText(err));
 	}
 	blockPersistentWrites();
+	const budget = Math.max(50, Math.floor((Number(options.timeoutMs) || 2500) / 2));
 	try {
 		await closeDB();
 	} catch (err) {
 		report.errors.push("close: " + errText(err));
 	}
 	try {
-		const res = await deleteDatabase(DB_NAME, Math.max(50, Number(options.timeoutMs) || 2500));
+		const res = await deleteDatabase(DB_NAME, budget);
 		report.databaseDeleted = res.deleted;
 		report.databaseBlocked = res.blocked;
 		if (!res.deleted) report.errors.push(res.blocked ? "idb-blocked" : "idb-failed");
 	} catch (err) {
 		report.errors.push("idb: " + errText(err));
+	}
+	try {
+		await closeDetailDB();
+	} catch (err) {
+		report.errors.push("close-detail: " + errText(err));
+	}
+	try {
+		const res = await deleteDatabase(DETAIL_DB_NAME, budget);
+		report.detailDatabaseDeleted = res.deleted;
+		report.detailDatabaseBlocked = res.blocked;
+		if (!res.deleted) report.errors.push(res.blocked ? "idb-detail-blocked" : "idb-detail-failed");
+	} catch (err) {
+		report.errors.push("idb-detail: " + errText(err));
 	}
 	try {
 		const ls = getStorage();

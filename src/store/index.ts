@@ -2,6 +2,7 @@ import { defaultSettings, type Settings } from '../types/settings';
 import type { HistoryEntry } from '../types/save';
 import { MAX_HISTORY, DETAIL_KEEP } from '../constants/pricing';
 import type { WalletConfig } from '../types/wallet';
+import { deleteDetail } from '../data/detail-store';
 
 export type State = {
   // 单一聚合（废弃多存档）
@@ -105,6 +106,10 @@ export function pruneHistoryDetails() {
       delete e.messages;
       delete e.fullRequest;
       delete e.fullResponse;
+      if (e.detailKey) {
+        deleteDetail(e.detailKey).catch(() => {});
+        delete e.detailKey;
+      }
     } else if (e.fullRequest && typeof e.fullRequest === 'object' && Array.isArray(e.fullRequest.messages)) {
       const keep: any = {};
       for (const k of ['model','stream','temperature','max_tokens','top_p','stream_options','chat_completion_source','endpoint']) if (e.fullRequest[k] !== undefined) keep[k]=e.fullRequest[k];

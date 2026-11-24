@@ -1,6 +1,7 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { D as initConnectionIdentity, O as resolveRuntimeConnectionContext, t as repository } from "./repository-Cez0rdrP.js";
+import { c as putDetailRequest, l as putDetailResponse, n as DETAIL_MAX_CHARS } from "./detail-store-6x06kQ_p.js";
+import { D as initConnectionIdentity, O as resolveRuntimeConnectionContext, t as repository } from "./repository-DlimuCOF.js";
 import { t as detectRequestOrigin } from "./request-origin-C9kLQ_0W.js";
 //#region src/services/include-usage.ts
 /**
@@ -1895,6 +1896,15 @@ function installFetchCapture() {
 						headers: rawInit.headers,
 						body: rawBody
 					});
+					try {
+						putDetailRequest({
+							requestId,
+							timestamp: startTime,
+							model: typeof requestModel === "string" ? requestModel : null,
+							body: rawBody,
+							headers: rawInit.headers
+						}).catch(() => {});
+					} catch {}
 				} catch {}
 				try {
 					noteCaptureStage("fetch-start", {
@@ -1930,7 +1940,20 @@ function installFetchCapture() {
 						const clone = res.clone();
 						const requestedStream = reqBody?.stream === true;
 						const frameNormalizer = createFrameNormalizer();
-						const parseAndProcess = (text, ttftVal, thinkTimeVal, streamed = null, rawText = null) => {
+						let archiveText = "";
+						let archiveTruncated = false;
+						let responseArchived = false;
+						const pushArchive = (piece) => {
+							if (!piece || archiveTruncated) return;
+							const room = DETAIL_MAX_CHARS - archiveText.length;
+							if (piece.length <= room) {
+								archiveText += piece;
+								return;
+							}
+							archiveText += piece.slice(0, Math.max(0, room));
+							archiveTruncated = true;
+						};
+						const parseAndProcess = (text, ttftVal, thinkTimeVal, streamed = null, rawText = null, archiveRaw = null) => {
 							let data = null;
 							let finishReason = null;
 							try {
@@ -2043,6 +2066,19 @@ function installFetchCapture() {
 									log.error("fetch 用量记录失败 " + (e?.message || e));
 								}
 							}
+							if (!responseArchived) {
+								responseArchived = true;
+								const archiveBody = typeof archiveRaw === "string" && archiveRaw ? archiveRaw : rawText ?? text;
+								try {
+									putDetailResponse({
+										requestId,
+										timestamp: startTime,
+										model: data?.model || reqBody?.model || fullReq?.model || null,
+										body: archiveBody,
+										usage: data?.usage || null
+									}).catch(() => {});
+								} catch {}
+							}
 						};
 						try {
 							const t0 = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
@@ -2083,7 +2119,7 @@ function installFetchCapture() {
 											streamed
 										});
 									} catch {}
-									parseAndProcess(normText || fullText, ttft, safeThinkTime, streamed, fullText);
+									parseAndProcess(normText || fullText, ttft, safeThinkTime, streamed, fullText, archiveText);
 								} catch {}
 							};
 							const scanThink = (chunk) => {
@@ -2108,6 +2144,7 @@ function installFetchCapture() {
 									const piece = dec.decode(value, { stream: true });
 									fullText += piece;
 									buf += piece;
+									pushArchive(piece);
 									if (fullText.length > STREAM_TEXT_LIMIT) fullText = fullText.slice(-1e6);
 									const nl = buf.lastIndexOf("\n");
 									if (nl !== -1) {

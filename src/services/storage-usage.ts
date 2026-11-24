@@ -5,6 +5,8 @@
  *  1. SillyTavern 设置（extensionSettings.api_usage_stat）—— 热数据：最近 2000 条历史 + 设置 + 汇总
  *     注：由酒馆统一序列化进其 settings.json，浏览器端拿不到落盘字节数，只能按 UTF-8 估算
  *  2. IndexedDB `api_usage_stat_db` / `kv` —— 冷历史、旧版迁移备份
+ *     另有 IndexedDB `api_usage_detail_db` / `detail_blobs` —— 最近 5 条的完整请求体、
+ *     脱敏请求头与响应原文（体积大但条数固定，单独统计）
  *  3. localStorage —— 零星小项（WebDAV 密码密文、峰值圆点位置、调试开关、更新检查时间、预测页偏好）
  *  4. 浏览器存储配额（navigator.storage.estimate）—— 全局参考，不是本扩展独占
  *
@@ -17,6 +19,7 @@
  */
 
 import { isMigrationBackupKey } from '../store/persistence';
+import { DETAIL_DB_NAME, detailStorageStats } from '../data/detail-store';
 
 const DB_NAME = 'api_usage_stat_db';
 const STORE_NAME = 'kv';
@@ -219,6 +222,43 @@ async function readIndexedDb(doc: Document): Promise<StorageItem[]> {
   }
 }
 
+/**
+ * 详情原文库：最近 5 条的完整请求体、脱敏请求头、响应原文。
+ *
+ * 与冷库不同，这里不 open 库——open 会在库不存在时创建一个空库，而统计页只是看看占用，
+ * 不该有副作用；先探测存在性，不存在就当作 0。
+ */
+async function readDetailStorage(timeoutMs: number): Promise<StorageItem[]> {
+  try {
+    const idb: any = (globalThis as any).indexedDB;
+    if (!idb || typeof idb.open !== 'function') return [];
+    if (typeof idb.databases === 'function') {
+      const list = await idb.databases();
+      const exists = Array.isArray(list) && list.some((d: any) => d && d.name === DETAIL_DB_NAME);
+      if (!exists) return [];
+    } else {
+      return [];
+    }
+    let timer: any = null;
+    const stats: any = await Promise.race([
+      detailStorageStats().catch(() => null),
+      new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), timeoutMs); }),
+    ]);
+    if (timer) { try { clearTimeout(timer); } catch {} }
+    if (!stats || !Number(stats.count)) return [];
+    return [{
+      key: 'idb-detail',
+      label: '详情原文（最近 5 条）',
+      // 库里存的是字符串，按字符数估算字节：JSON 键名与转义是 ASCII，正文多为中文，
+      // 两者混在一起时字符数是最接近量级的近似值
+      bytes: Math.max(0, Number(stats.chars) || 0),
+      detail: stats.count + ' 条完整请求体 / 脱敏请求头 / 响应原文，按字符数估算',
+    }];
+  } catch {
+    return [];
+  }
+}
+
 /** 热数据：酒馆 extensionSettings 中被序列化的 JSON 体积（UTF-8 估算） */
 export function estimateHotBytes(settings: any): number {
   if (settings == null) return 0;
@@ -263,6 +303,9 @@ export async function collectStorageReport(opts: CollectOptions = {}): Promise<S
     if (idbTimer) { try { clearTimeout(idbTimer); } catch {} }
   }
   items.push(...idbItems);
+
+  // 2b. 详情原文库（最近 5 条）：只统计，不创建
+  try { items.push(...await readDetailStorage(600)); } catch {}
 
   // 3. localStorage
   try { items.push(...readLocalStorage(doc)); } catch {}
