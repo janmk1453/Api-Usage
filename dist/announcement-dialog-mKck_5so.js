@@ -1,5 +1,5 @@
 import { t as esc } from "./date-Dsu8hrMO.js";
-import { m as APP_VERSION, r as markAnnouncementsRead, s as unreadAnnouncementsFor, t as fetchAnnouncements, u as formatChangelogDate } from "./announcement-C0F1SdP1.js";
+import { m as APP_VERSION, r as markAnnouncementsRead, s as unreadAnnouncementsFor, t as fetchAnnouncements, u as formatChangelogDate } from "./announcement-D04vHVjN.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
 //#region src/ui/announcement-dialog.ts
 var MASK_ID = "aus-an-mask";

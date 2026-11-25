@@ -10,7 +10,7 @@ import { a as getDisplayCurrency, i as formatMoney, o as getWalletExchangeRate, 
 import { r as on, t as DataEvents } from "./events-BD2MbRMW.js";
 import { a as listCaptureStages, c as readRecentTurns, i as captureDigest, l as readRequestLog, o as LOG_VALUE_LIMIT, s as clearRequestLog, t as installInterception, u as summarizeRequestLog } from "./interception-BWuR7JbM.js";
 import { r as registerRequestOriginSelf } from "./request-origin-C9kLQ_0W.js";
-import { a as readSeenAnnouncementIds, c as bindChangelog, d as renderChangelogCard, f as CHANGELOG, h as BUILD_NO, i as readCachedAnnouncements, l as changelogSectionsHTML, m as APP_VERSION, n as isAnnouncementActive, o as sortAnnouncements, p as APP_BUILD_TAG, t as fetchAnnouncements, u as formatChangelogDate } from "./announcement-C0F1SdP1.js";
+import { a as readSeenAnnouncementIds, c as bindChangelog, d as renderChangelogCard, f as CHANGELOG, h as BUILD_NO, i as readCachedAnnouncements, l as changelogSectionsHTML, m as APP_VERSION, n as isAnnouncementActive, o as sortAnnouncements, p as APP_BUILD_TAG, t as fetchAnnouncements, u as formatChangelogDate } from "./announcement-D04vHVjN.js";
 import { a as BALANCE_ADAPTERS, c as vendorById, l as vendorInitialFallback, n as queryBalance, o as resolveBalanceAdapter, r as queryWalletBalance, s as resolveVendor } from "./balance-DwMGDkBb.js";
 import { t as icon } from "./icons-BBwmzRpr.js";
 import { a as trackOpen, c as afterNextPaint, d as applyTheme, f as unwatchSystemTheme, i as initTelemetry, l as closeDropdownInstant, m as switchHTML, o as trackPage, p as watchSystemTheme, r as flushTelemetry, s as trackRender, t as renderSettings, u as closeDropdownThenPaint } from "./settings-C-sb4MRo.js";
@@ -17526,7 +17526,7 @@ function resetPanelState() {
 /** 打开面板时试弹未读公告（异步、失败静默；判定见 announcement-dialog.ts） */
 function maybeShowAnnouncements() {
 	try {
-		import("./announcement-dialog-CX4myBpJ.js").then((m) => m.maybeShowAnnouncementDialog()).catch(() => {});
+		import("./announcement-dialog-mKck_5so.js").then((m) => m.maybeShowAnnouncementDialog()).catch(() => {});
 	} catch {}
 }
 function openPanel() {
