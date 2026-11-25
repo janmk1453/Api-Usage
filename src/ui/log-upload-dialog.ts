@@ -10,7 +10,7 @@
  * 交互口径：
  * - 只有点「同意并上传」才发请求，取消/遮罩外点击都不发；
  * - 上传前先让用户选问题类型、写补充说明，再说清会上传什么、不收集什么；
- * - 最近三轮对话摘要在本地上是「正文前 400 字」，弹窗里给一个可取消勾选的开关；
+ * - 最近三轮对话摘要在本地上是「正文前 400 字」，弹窗里给一个默认关闭、需手动勾选的开关；
  * - 地址默认填项目自带的接收端，用户可改成自己的；
  * - 结果就地显示（成功/失败 + 服务端回复），失败不关窗，方便重试。
  */
@@ -156,7 +156,7 @@ function dialogHTML(input: {
     '<textarea class="aus-up-note" id="aus-up-note" rows="3" maxlength="' + FEEDBACK_NOTE_LIMIT + '" ' +
     'placeholder="什么时候、哪条对话、哪一轮；那次的模型或接入是什么；和你预期的差别在哪"></textarea>' +
 
-    '<label class="aus-up-check"><input type="checkbox" id="aus-up-include-chat" checked />' +
+    '<label class="aus-up-check"><input type="checkbox" id="aus-up-include-chat" />' +
     '<span>附带最近三轮对话正文（每轮前 400 字，用于还原上下文）</span></label>' +
 
     '<details class="aus-up-details">' +
@@ -168,7 +168,7 @@ function dialogHTML(input: {
     '<li><b>生成与结构化数据</b>：模型名称、请求端点、是否流式、finish_reason、用量（token 数）以及请求参数。</li>' +
     '<li><b>记录摘要</b>：最近 10 条历史记录的模型、token、费用与接入名称（<b>不含聊天正文</b>），以及「其他请求」探针里最近 20 条请求的模型、状态与错误。</li>' +
     '<li><b>指向证据</b>：从历史提示上传时，会为每一条被点名的异常（最多 8 条）带上那一轮的完整记录字段、前后各一条历史记录、同类请求最多 4 条，以及前后 2 分钟的控制台输出。</li>' +
-    '<li><b>最近对话</b>：最近三轮对话的角色、字数与前 400 字（上面可取消勾选）。</li>' +
+    '<li><b>最近对话</b>：最近三轮对话的角色、字数与前 400 字（默认不附带，勾选上面才会带上）。</li>' +
     '<li><b>脚本诊断</b>：最近 40 条控制台报错与未处理的 Promise 异常，可能含有酒馆或其他扩展打印的内容。</li>' +
     '<li><b>扩展与运行环境</b>：扩展名称与版本清单、本扩展版本、系统时区、屏幕与视口尺寸、当前对话名与角色名。</li>' +
     "</ul>" +
@@ -208,7 +208,8 @@ let currentProblem: FeedbackProblem = 'not-recorded';
 let uploadedCallback: ((keys: string[]) => void) | null = null;
 /** 本次弹窗点名的目标：设置页/日志页为空，历史提示为一条或多条 */
 let currentTargets: FeedbackTarget[] = [];
-let includeConversation = true;
+/** 默认不附带对话正文：由用户在弹窗里手动勾选后才带上（隐私优先） */
+let includeConversation = false;
 let uploading = false;
 
 export function closeLogUploadDialog(): void {
@@ -241,7 +242,7 @@ async function submit(mask: HTMLElement, appVersion: string): Promise<void> {
   }
   const note = readInput(mask, "#aus-up-note").slice(0, FEEDBACK_NOTE_LIMIT);
   const chatBox = mask.querySelector("#aus-up-include-chat") as HTMLInputElement | null;
-  includeConversation = chatBox ? chatBox.checked : true;
+  includeConversation = chatBox ? chatBox.checked : false;
   uploading = true;
   if (submitBtn) {
     submitBtn.disabled = true;
@@ -341,7 +342,7 @@ export function openLogUploadDialog(options: {
   currentTargets = list;
   uploadedCallback = typeof options.onUploaded === "function" ? options.onUploaded : null;
   currentProblem = problemForTargets(currentTargets);
-  includeConversation = true;
+  includeConversation = false;
   const panel = document.getElementById("aus-panel") || document.body;
   const mask = document.createElement("div");
   mask.id = MASK_ID;
