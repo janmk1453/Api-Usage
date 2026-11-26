@@ -3,7 +3,8 @@
  *
  * 只在「用户能明显感觉到不对」的情况下给出信号：
  * - zero-usage      记下来的用量全 0（费用必然错）
- * - estimated-usage 上游没给用量，已按本地估算补记（黄色轻提示，不是故障）
+ * - estimated-usage 上游没给用量，已按本地估算补记（黄色轻提示，不是故障；同一模型同一估算方法
+ *                   累计到 ESTIMATED_CLUSTER_MIN 轮才聚成一条，偶发漏回一次不打扰）
  * - missing-usage   常规对话的用量没取到、这一轮没进历史（同类连续出现或探针聚簇才提示；
  *                   上游错误被宿主包装成 200 而拒绝入库的轮次也归在这里，但原因写成 api-error）
  * - rate-anomaly    速率离谱（极高 / 极低），多半是耗时或流式判定出错
@@ -52,6 +53,11 @@ export interface HealthSignal {
   requestId?: string;
   /** 命中的探针 ID（「这类请求没被记账」时指向最新那一条作样本） */
   tapId?: string;
+  /**
+   * 这条信号代表多少轮：估算补记是多轮聚成一条，其余信号恒为 1（缺省按 1 计）。
+   * 只影响汇总条数（「本地估算补记 N 次」），不影响明细条数与忽略指纹。
+   */
+  count?: number;
 }
 
 /**
@@ -124,6 +130,11 @@ export const MISSING_CLUSTER_MIN = 2;
 export const INSTALL_FAIL_MIN = 3;
 /** 元信息缺失只检查最近这段时间的记录，避免旧数据一直报警 */
 export const META_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+/**
+ * 估算补记的提示门槛：上游偶尔漏回一次用量很常见（中途断网、代理丢字段、流式被截断），
+ * 单轮就弹提示等于把正常波动当故障；同一模型、同一估算方法累计这么多轮才提示一次。
+ */
+export const ESTIMATED_CLUSTER_MIN = 5;
 
 const KIND_TEXT: Record<HealthSignalKind, string> = {
   'zero-usage': '用量为 0',
@@ -157,6 +168,10 @@ function clipText(text: string, max = 120): string {
 export function scanHistoryHealth(history: any[], limit = HEALTH_HISTORY_SCAN, now = Date.now()): HealthSignal[] {
   const out: HealthSignal[] = [];
   if (!Array.isArray(history)) return out;
+  // 估算补记先按「模型 + 估算方法」攒起来，扫完再决定要不要提示：
+  // 断网、代理丢字段、流式被截断都会让上游漏回一次用量，这是正常波动而不是故障，
+  // 单轮就弹提示等于每断一次网报一次警；攒够 ESTIMATED_CLUSTER_MIN 轮才聚成一条。
+  const estimates = new Map<string, { at: number; model: string; method: string; historyTimestamp?: number; requestId?: string }[]>();
   const recent = history
     .slice()
     .sort((a, b) => (Number(b?.timestamp) || 0) - (Number(a?.timestamp) || 0))
@@ -175,19 +190,13 @@ export function scanHistoryHealth(history: any[], limit = HEALTH_HISTORY_SCAN, n
       historyTimestamp: at || undefined,
       requestId: String(entry?.requestId || '') || undefined,
     };
-    // 估算补记：轻提示，告诉用户这一轮的数字是本地算的
+    // 估算补记：先只登记，扫完按「模型 + 估算方法」看累计轮数（轻提示，不改数据的可信度口径）
     if (isEstimatedEntry(entry)) {
       const method = String((entry as any)?.estimateMethod || '');
-      out.push({
-        kind: 'estimated-usage',
-        at,
-        model,
-        reason: 'estimated',
-        signature: method || undefined,
-        severity: 'info',
-        ...loc,
-        detail: clipText(model + ' 这一轮上游未返回用量，已按本地估算补记' + (method ? '（' + method + '）' : '')),
-      });
+      const key = model + '|' + method;
+      const list = estimates.get(key) || [];
+      list.push({ at, model, method, ...loc });
+      estimates.set(key, list);
       continue;
     }
     if ((entry as any)?.modelFallback) {
@@ -227,6 +236,27 @@ export function scanHistoryHealth(history: any[], limit = HEALTH_HISTORY_SCAN, n
     } else if (rate < RATE_ANOMALY_LOW && completion >= RATE_LOW_MIN_OUTPUT) {
       out.push({ kind: 'rate-anomaly', at, model, reason: 'rate-low', severity: 'warn', ...loc, detail: clipText(model + ' 速率 ' + rate.toFixed(2) + ' token/s，明显偏低') });
     }
+  }
+  // 估算补记聚簇：同一模型、同一估算方法累计到门槛才提示一条，
+  // 明细指向最近那一轮（「上传这一条」拿到的就是最新样本），轮数记在 count 里供汇总用。
+  for (const list of estimates.values()) {
+    if (list.length < ESTIMATED_CLUSTER_MIN) continue;
+    const latest = list.reduce((a, b) => (b.at > a.at ? b : a));
+    out.push({
+      kind: 'estimated-usage',
+      at: latest.at,
+      model: latest.model,
+      reason: 'estimated',
+      signature: latest.method || undefined,
+      severity: 'info',
+      count: list.length,
+      historyTimestamp: latest.historyTimestamp,
+      requestId: latest.requestId,
+      detail: clipText(
+        latest.model + ' 有 ' + list.length + ' 轮上游未返回用量，已按本地估算补记'
+        + (latest.method ? '（' + latest.method + '）' : ''),
+      ),
+    });
   }
   return out;
 }
@@ -514,7 +544,9 @@ export function buildHealthReport(input: {
     'plugin-error': 0,
   };
   for (const sig of visible) {
-    if (counts[sig.kind] != null) counts[sig.kind] += 1;
+    // 估算补记是多轮聚成一条：汇总里报「本地估算补记 5 次」才对得上用户看到的轮数，
+    // 明细条数仍按信号条数（total / items）算。
+    if (counts[sig.kind] != null) counts[sig.kind] += Math.max(1, Number(sig.count) || 1);
   }
   const shown = visible.slice(0, limit);
   const warnCount = visible.filter((sig) => sig.severity !== 'info').length;

@@ -64,7 +64,8 @@ function severityOf(sig: HealthSignal): "info" | "warn" {
 }
 
 function headTitle(report: HealthReport): string {
-  if (report.infoOnly) return `最近有 ${report.total} 次记录是本地估算补记`;
+  // 估算补记按轮数聚簇成一条明细，标题要报实际轮数（counts 已按 count 加权），不是明细条数
+  if (report.infoOnly) return `最近有 ${report.counts["estimated-usage"] || report.total} 次记录是本地估算补记`;
   return `最近有 ${report.total} 次对话记录异常`;
 }
 

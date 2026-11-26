@@ -264,19 +264,75 @@ describe('信号 → 上传目标（指名道姓）', () => {
   });
 
   it('估算补记的轻提示同样可被点名（含估算方法与记录时间）', () => {
-    const signals = scanHistoryHealth([
-      entry({ timestamp: 1794719200000, usageSource: 'estimated', estimateMethod: 'char-heuristic-v1', prompt_tokens: 0 }),
-    ]);
+    const signals = scanHistoryHealth([0, 1, 2, 3, 4].map((i) =>
+      entry({ timestamp: 1794719200000 + i * 60000, usageSource: 'estimated', estimateMethod: 'char-heuristic-v1', prompt_tokens: 0 }),
+    ));
+    expect(signals).toHaveLength(1);
     const target = healthTargetOf(signals[0]);
     expect(signals[0].kind).toBe('estimated-usage');
-    expect(target.historyTimestamp).toBe(1794719200000);
+    // 聚簇后指向最近那一轮：上传这一条拿到的就是最新样本
+    expect(target.historyTimestamp).toBe(1794719200000 + 4 * 60000);
     expect(target.signature).toBe('char-heuristic-v1');
+  });
+
+  it('偶发漏回用量不提示，同一模型累计到 5 轮才聚成一条轻提示', () => {
+    const at = (i: number) => 1794719200000 + i * 60000;
+    const est = (i: number, over: Record<string, any> = {}) =>
+      entry({ timestamp: at(i), usageSource: 'estimated', estimateMethod: 'tavern-tokenizer', prompt_tokens: 0, ...over });
+    // 断网、代理丢字段、流式被截断都会偶尔漏一次用量：1～4 轮一律不打扰
+    expect(scanHistoryHealth([est(0)])).toHaveLength(0);
+    expect(scanHistoryHealth([est(0), est(1)])).toHaveLength(0);
+    expect(scanHistoryHealth([est(0), est(1), est(2), est(3)])).toHaveLength(0);
+    // 第 5 轮才提示，且只聚成一条，指向最近那一轮
+    const signals = scanHistoryHealth([est(0), est(1), est(2), est(3), est(4)]);
+    expect(signals).toHaveLength(1);
+    expect(signals[0].kind).toBe('estimated-usage');
+    expect(signals[0].count).toBe(5);
+    expect(signals[0].historyTimestamp).toBe(at(4));
+    expect(signals[0].detail).toContain('5 轮');
+    expect(signals[0].detail).toContain('tavern-tokenizer');
+  });
+
+  it('估算聚簇各算各的：换模型、换估算方法都不合并计数', () => {
+    const est = (i: number, over: Record<string, any> = {}) =>
+      entry({ timestamp: 1794719200000 + i * 60000, usageSource: 'estimated', estimateMethod: 'tavern-tokenizer', prompt_tokens: 0, ...over });
+    // 三个不同的「模型 + 方法」各 3 轮：分开数都不到门槛，不该提示
+    const split = [
+      est(0), est(1), est(2),
+      est(3, { estimateMethod: 'char-heuristic-v1' }),
+      est(4, { estimateMethod: 'char-heuristic-v1' }),
+      est(5, { estimateMethod: 'char-heuristic-v1' }),
+      est(6, { model: 'glm-5' }), est(7, { model: 'glm-5' }), est(8, { model: 'glm-5' }),
+    ];
+    expect(scanHistoryHealth(split)).toHaveLength(0);
+    // 同一个「模型 + 方法」补到 5 轮才出那一条
+    const hit = scanHistoryHealth(split.concat([est(9), est(10)]));
+    expect(hit).toHaveLength(1);
+    expect(hit[0].model).toBe('deepseek-flash');
+    expect(hit[0].count).toBe(5);
+  });
+
+  it('汇总按轮数计：标题与摘要都报 5 次，明细仍只列一条', () => {
+    const est = (i: number) =>
+      entry({ timestamp: 1794719200000 + i * 60000, usageSource: 'estimated', estimateMethod: 'tavern-tokenizer', prompt_tokens: 0 });
+    const report = buildHealthReport({ history: [0, 1, 2, 3, 4].map(est), stages: [], consoleEntries: [] });
+    expect(report.total).toBe(1);
+    expect(report.items).toHaveLength(1);
+    expect(report.counts['estimated-usage']).toBe(5);
+    expect(report.infoOnly).toBe(true);
+    expect(healthSummaryText(report)).toBe('本地估算补记 5 次');
   });
 
   it('用户主动停止的那一轮不报任何提示：没用量是预期，不是故障', () => {
     // 估算补记 + 用户中断：两者叠加时最容易被误报成「本地估算」警告
     const estimated = entry({ timestamp: 1794719400000, usageSource: 'estimated', interrupted: 'user', prompt_tokens: 0 });
     expect(scanHistoryHealth([estimated])).toHaveLength(0);
+    // 用户主动停止的估算轮次整条不参与聚簇：4 条停止 + 1 条真漏回，仍然不到门槛
+    const stopped = [0, 1, 2, 3].map((i) =>
+      entry({ timestamp: 1794719300000 + i * 60000, usageSource: 'estimated', interrupted: 'user', estimateMethod: 'tavern-tokenizer', prompt_tokens: 0 }),
+    );
+    const real = entry({ timestamp: 1794719400000, usageSource: 'estimated', estimateMethod: 'tavern-tokenizer', prompt_tokens: 0 });
+    expect(scanHistoryHealth(stopped.concat([real]))).toHaveLength(0);
     // 用量全 0 的用户中断记录同样静默
     const zero = entry({ timestamp: 1794719500000, interrupted: 'user', prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
     expect(scanHistoryHealth([zero])).toHaveLength(0);
@@ -285,9 +341,15 @@ describe('信号 → 上传目标（指名道姓）', () => {
   });
 
   it('上游中断导致的估算仍要提示：那是连接出了问题', () => {
-    const signals = scanHistoryHealth([
-      entry({ timestamp: 1794719600000, usageSource: 'estimated', interrupted: 'upstream', prompt_tokens: 0 }),
-    ]);
+    const signals = scanHistoryHealth([0, 1, 2, 3, 4].map((i) =>
+      entry({
+        timestamp: 1794719600000 + i * 60000,
+        usageSource: 'estimated',
+        interrupted: 'upstream',
+        estimateMethod: 'tavern-tokenizer',
+        prompt_tokens: 0,
+      }),
+    ));
     expect(signals).toHaveLength(1);
     expect(signals[0].kind).toBe('estimated-usage');
   });

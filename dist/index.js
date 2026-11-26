@@ -12947,7 +12947,8 @@ function classifyErrorText(input) {
 *
 * 只在「用户能明显感觉到不对」的情况下给出信号：
 * - zero-usage      记下来的用量全 0（费用必然错）
-* - estimated-usage 上游没给用量，已按本地估算补记（黄色轻提示，不是故障）
+* - estimated-usage 上游没给用量，已按本地估算补记（黄色轻提示，不是故障；同一模型同一估算方法
+*                   累计到 ESTIMATED_CLUSTER_MIN 轮才聚成一条，偶发漏回一次不打扰）
 * - missing-usage   常规对话的用量没取到、这一轮没进历史（同类连续出现或探针聚簇才提示；
 *                   上游错误被宿主包装成 200 而拒绝入库的轮次也归在这里，但原因写成 api-error）
 * - rate-anomaly    速率离谱（极高 / 极低），多半是耗时或流式判定出错
@@ -13013,6 +13014,7 @@ function clipText(text, max = 120) {
 function scanHistoryHealth(history, limit = 30, now = Date.now()) {
 	const out = [];
 	if (!Array.isArray(history)) return out;
+	const estimates = /* @__PURE__ */ new Map();
 	const recent = history.slice().sort((a, b) => (Number(b?.timestamp) || 0) - (Number(a?.timestamp) || 0)).slice(0, Math.max(1, limit));
 	for (const entry of recent) {
 		if (interruptKindOf(entry) === "user") continue;
@@ -13027,16 +13029,15 @@ function scanHistoryHealth(history, limit = 30, now = Date.now()) {
 		};
 		if (isEstimatedEntry(entry)) {
 			const method = String(entry?.estimateMethod || "");
-			out.push({
-				kind: "estimated-usage",
+			const key = model + "|" + method;
+			const list = estimates.get(key) || [];
+			list.push({
 				at,
 				model,
-				reason: "estimated",
-				signature: method || void 0,
-				severity: "info",
-				...loc,
-				detail: clipText(model + " 这一轮上游未返回用量，已按本地估算补记" + (method ? "（" + method + "）" : ""))
+				method,
+				...loc
 			});
+			estimates.set(key, list);
 			continue;
 		}
 		if (entry?.modelFallback) out.push({
@@ -13089,6 +13090,22 @@ function scanHistoryHealth(history, limit = 30, now = Date.now()) {
 			severity: "warn",
 			...loc,
 			detail: clipText(model + " 速率 " + rate.toFixed(2) + " token/s，明显偏低")
+		});
+	}
+	for (const list of estimates.values()) {
+		if (list.length < 5) continue;
+		const latest = list.reduce((a, b) => b.at > a.at ? b : a);
+		out.push({
+			kind: "estimated-usage",
+			at: latest.at,
+			model: latest.model,
+			reason: "estimated",
+			signature: latest.method || void 0,
+			severity: "info",
+			count: list.length,
+			historyTimestamp: latest.historyTimestamp,
+			requestId: latest.requestId,
+			detail: clipText(latest.model + " 有 " + list.length + " 轮上游未返回用量，已按本地估算补记" + (latest.method ? "（" + latest.method + "）" : ""))
 		});
 	}
 	return out;
@@ -13330,7 +13347,7 @@ function buildHealthReport(input = {}) {
 		"meta-missing": 0,
 		"plugin-error": 0
 	};
-	for (const sig of visible) if (counts[sig.kind] != null) counts[sig.kind] += 1;
+	for (const sig of visible) if (counts[sig.kind] != null) counts[sig.kind] += Math.max(1, Number(sig.count) || 1);
 	const shown = visible.slice(0, limit);
 	const warnCount = visible.filter((sig) => sig.severity !== "info").length;
 	return {
@@ -13390,7 +13407,7 @@ function severityOf(sig) {
 	return sig.severity === "info" ? "info" : "warn";
 }
 function headTitle(report) {
-	if (report.infoOnly) return `最近有 ${report.total} 次记录是本地估算补记`;
+	if (report.infoOnly) return `最近有 ${report.counts["estimated-usage"] || report.total} 次记录是本地估算补记`;
 	return `最近有 ${report.total} 次对话记录异常`;
 }
 function healthBarHTML(report) {
