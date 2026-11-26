@@ -57,4 +57,36 @@ describe('轮次收尾判定', () => {
     expect(outcome.kind).toBe('estimate');
     expect(outcome.reason).toBe('usage-all-zero-with-output');
   });
+
+  it('输出其实是上游错误提示：就算带了可用 usage 也丢弃', () => {
+    // 3.2.x 真机：TT 把上游 500 包成 200，错误文案被当成 128 字符输出按估算入库并计费。
+    // 「错误响应带 usage」是同一根因的另一种组合，比没有用量更隐蔽，必须一起挡住。
+    const outcome = decideTurnOutcome({
+      ...base,
+      hasUsage: true,
+      usageUsable: true,
+      hasOutput: true,
+      errorPayload: 'tauritavern-endpoint-status:128',
+    });
+    expect(outcome).toEqual({ kind: 'drop', interrupted: null, reason: 'api-error-payload' });
+  });
+
+  it('错误载荷优先于手动停止与流式错误：既不记中断、也不估算', () => {
+    const outcome = decideTurnOutcome({
+      ...base,
+      hasOutput: true,
+      pendingStop: true,
+      streamError: 'socket hang up',
+      errorPayload: 'tavern-api-error-title:31',
+    });
+    expect(outcome.kind).toBe('drop');
+    expect(outcome.interrupted).toBeNull();
+    expect(outcome.reason).toBe('api-error-payload');
+  });
+
+  it('没有错误载荷信号时判定行为不变', () => {
+    // 空串 / null 都当作「没有命中」，正常估算不受影响
+    expect(decideTurnOutcome({ ...base, hasOutput: true, errorPayload: '' }).kind).toBe('estimate');
+    expect(decideTurnOutcome({ ...base, hasOutput: true, errorPayload: null }).kind).toBe('estimate');
+  });
 });

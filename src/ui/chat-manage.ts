@@ -18,7 +18,7 @@ import { computeChatStats, type ChatSummaryRow } from '../data/computed';
 import { esc } from '../utils/date';
 import { formatMoney } from '../services/currency';
 import { switchHTML } from './switch';
-import { icon } from './icons';
+import { backButtonHTML } from './back-button';
 import {
   chatVisibilityKey,
   clearHiddenFor,
@@ -28,6 +28,7 @@ import {
   type ChatVisibilityTarget,
 } from './chat-visibility';
 import { paintChatManageBadge } from './chat-summary-table';
+import { formatToken, tokenUnitOf } from '../data/token-format';
 
 type Navigator = { go: () => void };
 
@@ -80,7 +81,7 @@ function shellHTML(): string {
     '<input id="aus-chat-manage-search" type="text" placeholder="搜索对话" value="' + esc(keyword) + '" />',
     '<button id="aus-chat-manage-reset" type="button" class="aus-chat-manage-btn">全部显示</button>',
     '<button id="aus-chat-manage-hide-all" type="button" class="aus-chat-manage-btn">全部隐藏</button>',
-    '<button id="aus-chat-manage-back" type="button" class="aus-chat-manage-btn" title="回到进入本页之前的页面">' + icon('chevron-left', 14) + '返回</button>',
+    backButtonHTML({ id: 'aus-chat-manage-back', title: '回到进入本页之前的页面' }),
     '</div>',
     '</div>',
     '<div id="aus-chat-manage-modes" data-mode="' + mode + '" role="tablist" aria-label="管理模式">',
@@ -99,7 +100,7 @@ function rowHTML(row: ChatSummaryRow, index: number): string {
   const hidden = isHiddenFor(mode, key);
   let costTxt = '¥' + row.cost.toFixed(4);
   try { costTxt = formatMoney(row.cost, 4); } catch {}
-  const meta = row.count + ' 轮 · ' + row.total.toLocaleString('zh-CN') + ' tokens · ' + costTxt;
+  const meta = row.count + ' 轮 · ' + formatToken(row.total, tokenUnitOf(state.settings)) + ' tokens · ' + costTxt;
   const aria = row.displayName + '：' + (mode === 'picker' ? '在「对话」下拉胶囊中展示' : '在按对话统计中展示');
   return [
     '<div class="aus-chat-manage-row" data-chat-row="' + esc(key) + '" data-chat-name="' + esc(row.displayName.toLowerCase()) + '" data-hidden="' + (hidden ? '1' : '0') + '">',
@@ -264,7 +265,7 @@ function bindShell(doc: Document): void {
 }
 
 /**
- * 渲染管理页：先用热数据（最近 50 条）立即出图，再异步用冷存储全量补全，
+ * 渲染管理页：先用热数据（热区最近 2000 条）立即出图，再异步用冷存储全量补全，
  * 避免打开页面时空白等待 IndexedDB（与概览「按对话统计」同一套补全思路）。
  */
 export async function renderChatManageView(): Promise<void> {

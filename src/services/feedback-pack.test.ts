@@ -95,6 +95,29 @@ describe('反馈诊断包', () => {
     expect(digest[0].model).toBe('m13');
   });
 
+  it('历史摘要带请求来源，日志里能核对角标与详情', () => {
+    state.history = [
+      {
+        timestamp: 9000,
+        model: 'hy4-flash',
+        requestOrigin: {
+          kind: 'extension',
+          id: '    at go (http://h/scripts/extensions/third-party/ST-BaiBai-Image/dist/index.js:3:21)',
+          label: 'ST-BaiBai-Image',
+        },
+      },
+      { timestamp: 8000, model: 'hy4-flash' },
+    ] as any;
+    const digest = historyDigest();
+    expect(digest[0].requestOrigin).toEqual({
+      kind: 'extension',
+      id: '    at go (http://h/scripts/extensions/third-party/ST-BaiBai-Image/dist/index.js:3:21)',
+      label: 'ST-BaiBai-Image',
+    });
+    // 旧记录没有来源字段，必须如实为 null，不能编一个默认值
+    expect(digest[1].requestOrigin).toBe(null);
+  });
+
   it('探针摘要与对账计数', () => {
     upsertTapRecord(makeTap('tap:1', { state: 'orphan', at: 1000 }));
     upsertTapRecord(makeTap('tap:2', { state: 'settled', settledBy: 'tokens', at: 2000 }));

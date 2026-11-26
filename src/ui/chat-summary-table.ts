@@ -13,6 +13,8 @@ import { bindSortableHeaders, paintSortHeader, sortRows, type SortState } from '
 import { esc } from '../utils/date';
 import { formatMoney } from '../services/currency';
 import { chatVisibilityKey, filterVisibleRows, readHiddenKeys } from './chat-visibility';
+import { state } from '../store/index';
+import { formatToken, tokenTitle, tokenUnitOf } from '../data/token-format';
 
 type ChatSortKey = 'count' | 'hit' | 'miss' | 'out' | 'total' | 'cost' | 'avgTokens' | 'avgHitRate';
 
@@ -75,6 +77,13 @@ export function renderChatSummaryTable(doc: Document, rows: ChatSummaryRow[]): v
     return;
   }
   const sorted = sortRows(visible, sortState, pickChatSortValue, (row) => row.displayName);
+  // Token 列统一走 data/token-format：开关开启时缩写并带 title 完整值
+  const unit = tokenUnitOf(state.settings);
+  const tokenCell = (value: number) => {
+    const text = formatToken(value, unit);
+    const full = tokenTitle(value, unit);
+    return full ? '<span title="' + full + ' tokens">' + text + '</span>' : text;
+  };
   tbody.innerHTML = sorted.map((r) => {
     const avgRate = r.avgHitRate > 0 ? r.avgHitRate.toFixed(1) + '%' : '—';
     const colorRate = r.avgHitRate >= 50 ? 'var(--ds-green)' : r.avgHitRate > 0 ? 'var(--ds-text)' : 'var(--ds-text-3)';
@@ -84,12 +93,12 @@ export function renderChatSummaryTable(doc: Document, rows: ChatSummaryRow[]): v
       '<tr style="border-bottom:1px solid var(--ds-card);">',
       '<td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;" title="' + esc(r.chatId || 'null') + '">' + esc(r.displayName) + '</td>',
       '<td style="padding:6px 8px;text-align:right;">' + r.count + '</td>',
-      '<td style="padding:6px 8px;text-align:right;color:#0BA25E;">' + r.hit.toLocaleString('zh-CN') + '</td>',
-      '<td style="padding:6px 8px;text-align:right;color:#DC2626;">' + r.miss.toLocaleString('zh-CN') + '</td>',
-      '<td style="padding:6px 8px;text-align:right;color:var(--aus-token-output);">' + r.out.toLocaleString('zh-CN') + '</td>',
-      '<td style="padding:6px 8px;text-align:right;font-weight:600;">' + r.total.toLocaleString('zh-CN') + '</td>',
+      '<td style="padding:6px 8px;text-align:right;color:#0BA25E;">' + tokenCell(r.hit) + '</td>',
+      '<td style="padding:6px 8px;text-align:right;color:#DC2626;">' + tokenCell(r.miss) + '</td>',
+      '<td style="padding:6px 8px;text-align:right;color:var(--aus-token-output);">' + tokenCell(r.out) + '</td>',
+      '<td style="padding:6px 8px;text-align:right;font-weight:600;">' + tokenCell(r.total) + '</td>',
       '<td style="padding:6px 8px;text-align:right;color:var(--ds-text);">' + costTxt + '</td>',
-      '<td style="padding:6px 8px;text-align:right;">' + Math.round(r.avgTokens).toLocaleString('zh-CN') + '</td>',
+      '<td style="padding:6px 8px;text-align:right;">' + tokenCell(Math.round(r.avgTokens)) + '</td>',
       '<td style="padding:6px 8px;text-align:right;color:' + colorRate + ';">' + avgRate + '</td>',
       '</tr>',
     ].join('');

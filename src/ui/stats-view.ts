@@ -21,11 +21,13 @@ import {
 } from '../data/computed';
 import { FOUR_OPTIONS, getFourDisplay } from './overview';
 import { historyRecordKey } from '../utils/history-key';
-import { toast } from '../utils/logger';
+import { repository } from '../data/repository';
 import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
 import { filterPickerRows } from './chat-visibility';
-import { closeDropdownInstant, closeDropdownThenPaint } from './dropdown-close';
+import { filterModelPickerRows, filterVisibleModelRows, hiddenModelCountFor } from './model-visibility';
+import { afterNextPaint, closeDropdownInstant, closeDropdownThenPaint } from './dropdown-close';
 import { REQUEST_TYPE_OPTIONS, requestTypeLabel, requestTypeTitle } from './request-type-filter';
+import { formatToken, tokenTitle, tokenUnitOf } from '../data/token-format';
 
 type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'custom' | 'all';
 // 默认时间维度：工具栏「重置筛选」与首次进入共用同一口径
@@ -33,17 +35,14 @@ const DEFAULT_RANGE: RangeKey = '30d';
 let currentRange: RangeKey = DEFAULT_RANGE;
 let customStart = '';
 let customEnd = '';
-let pickerOpen = false;
+// 下拉的展开状态不另存模块变量：一律读 DOM 的 inline display（见 isDropOpen）。
+// 曾用 pickerOpen / modelPickerOpen / chartYOpen 等变量记录，选中项走 closeDropdownInstant 直接关掉浮层时
+// 变量停在「打开」，于是下次点胶囊先被当成「关闭」，要按第二次才展开。
 let selectedModels: string[] = [];
-let modelPickerOpen = false;
 let selectedChat: string = STATS_FILTER_ALL;
-let chatPickerOpen = false;
 let selectedEndpoint: string = STATS_FILTER_ALL;
-let endpointPickerOpen = false;
 let selectedCredential: string = STATS_FILTER_ALL;
-let credentialPickerOpen = false;
 let selectedRequestType: string = STATS_FILTER_ALL;
-let typePickerOpen = false;
 let lastStatsHistory: any[] = [];
 
 // 五维筛选跨刷新记忆：时间维度/模型/对话/接入/密钥写入 localStorage，
@@ -85,12 +84,6 @@ function resetStatsFilters() {
   selectedEndpoint = STATS_FILTER_ALL;
   selectedCredential = STATS_FILTER_ALL;
   selectedRequestType = STATS_FILTER_ALL;
-  pickerOpen = false;
-  modelPickerOpen = false;
-  chatPickerOpen = false;
-  endpointPickerOpen = false;
-  credentialPickerOpen = false;
-  typePickerOpen = false;
   ['aus-range-dropdown', 'aus-model-dropdown', 'aus-chat-dropdown', 'aus-endpoint-dropdown', 'aus-credential-dropdown', 'aus-type-dropdown'].forEach((id) => {
     const el = doc.getElementById(id);
     if (el) el.style.display = 'none';
@@ -244,24 +237,36 @@ function renderModelPicker(modelsHist?: any[]) {
   const label = doc.getElementById('aus-model-label');
   if (!dropdown || !label) return;
   const models = getRecordedModels(modelsHist);
+  // 全量模型用于校验已选项；下拉只列出未被隐藏的（「模型展示管理」的「下拉选项」集合），
+  // 已选中的模型即使被隐藏也照旧参与统计。
   const validModels = new Set(models);
   selectedModels = selectedModels.filter((model) => validModels.has(model));
+  const visibleModels = filterModelPickerRows(models);
   const allSelected = selectedModels.length === 0;
   label.textContent = allSelected ? '全部' : selectedModels.length === 1 ? selectedModels[0] : `已选 ${selectedModels.length} 项`;
   label.title = allSelected ? '全部模型' : selectedModels.join('、');
   let html = `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${allSelected?'background:var(--ds-card);font-weight:600;':''}"><input type="checkbox" data-model-all ${allSelected?'checked':''} class="aus-checkbox" /><span>全部模型</span></label>`;
-  for (const m of models) {
+  for (const m of visibleModels) {
     const checked = selectedModels.includes(m);
     const active = checked ? 'background:var(--ds-card);font-weight:600;' : '';
     html += `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:var(--aus-fs-base);${active}"><input type="checkbox" data-model="${esc(m)}" ${checked?'checked':''} class="aus-checkbox" /><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m)}</span></label>`;
   }
-  if (!models.length) html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);">暂无模型</div>';
+  if (!visibleModels.length) {
+    html += '<div style="padding:8px 10px;color:var(--ds-text-3);font-size:var(--aus-fs-base);">'
+      + (models.length ? '模型已全部隐藏（可在「模型展示管理」中恢复）' : '暂无模型')
+      + '</div>';
+  }
+  // 模型筛选是多选：下拉保持展开，勾选后只就地重画勾选态（含胶囊文案），统计页留到下一帧再画。
+  // 重画前记下滚动位置，长模型列表不会在勾选时跳回顶部。
+  const dropdownScrollTop = dropdown.scrollTop;
   dropdown.innerHTML = html;
+  dropdown.scrollTop = dropdownScrollTop;
   const allInput = dropdown.querySelector('[data-model-all]') as HTMLInputElement | null;
   if (allInput) {
     allInput.onchange = () => {
       selectedModels = [];
-      closeDropdownThenPaint(dropdown, () => renderStatsView());
+      renderModelPicker(lastStatsHistory);
+      afterNextPaint(() => { void renderStatsView(); });
     };
   }
   dropdown.querySelectorAll('input[data-model]').forEach((el: any) => {
@@ -273,7 +278,8 @@ function renderModelPicker(modelsHist?: any[]) {
       } else {
         selectedModels = selectedModels.filter((item) => item !== model);
       }
-      closeDropdownThenPaint(dropdown, () => renderStatsView());
+      renderModelPicker(lastStatsHistory);
+      afterNextPaint(() => { void renderStatsView(); });
     };
   });
 }
@@ -316,7 +322,6 @@ function renderChatPicker(chatHist?: any[]) {
   dropdown.querySelectorAll('[data-chat]').forEach((el: any) => {
     el.onclick = () => {
       selectedChat = el.getAttribute('data-chat') || '__all__';
-      chatPickerOpen = false;
       // 先瞬时关掉浮层、下一帧再重建页面：否则关与重绘挤在同一个任务里，浮层要等整页重画完才消失
       closeDropdownThenPaint(dropdown, () => {
         renderChatPicker(chatHist);
@@ -351,7 +356,6 @@ function renderEndpointPicker(history?: any[]) {
     el.onclick = () => {
       selectedEndpoint = el.getAttribute('data-endpoint') || STATS_FILTER_ALL;
       selectedCredential = STATS_FILTER_ALL;
-      endpointPickerOpen = false;
       closeDropdownThenPaint(dropdown, () => renderStatsView());
     };
   });
@@ -381,7 +385,6 @@ function renderCredentialPicker(history?: any[], endpoint = selectedEndpoint) {
   dropdown.querySelectorAll('[data-credential]').forEach((el: any) => {
     el.onclick = () => {
       selectedCredential = el.getAttribute('data-credential') || STATS_FILTER_ALL;
-      credentialPickerOpen = false;
       closeDropdownThenPaint(dropdown, () => renderStatsView());
     };
   });
@@ -404,7 +407,6 @@ function renderTypePicker() {
   dropdown.querySelectorAll('[data-request-type]').forEach((el: any) => {
     el.onclick = () => {
       selectedRequestType = el.getAttribute('data-request-type') || STATS_FILTER_ALL;
-      typePickerOpen = false;
       closeDropdownThenPaint(dropdown, () => renderStatsView());
     };
   });
@@ -428,35 +430,36 @@ export function positionFilterDropdown(btn: HTMLElement, dropdown: HTMLElement) 
   } catch {}
 }
 
+/** 下拉是否展开：只认 DOM 的 inline display（range 用 flex，其余用 block），不另存模块变量。 */
+function isDropOpen(drop: HTMLElement | null | undefined): boolean {
+  if (!drop) return false;
+  const display = drop.style.display;
+  return display === 'block' || display === 'flex';
+}
+
 function closeFilterDropdowns(except?: 'range' | 'model' | 'chat' | 'endpoint' | 'credential' | 'type') {
   const doc = getDoc();
   if (except !== 'range') {
-    pickerOpen = false;
     const el = doc.getElementById('aus-range-dropdown');
     if (el) el.style.display = 'none';
   }
   if (except !== 'model') {
-    modelPickerOpen = false;
     const el = doc.getElementById('aus-model-dropdown');
     if (el) el.style.display = 'none';
   }
   if (except !== 'chat') {
-    chatPickerOpen = false;
     const el = doc.getElementById('aus-chat-dropdown');
     if (el) el.style.display = 'none';
   }
   if (except !== 'endpoint') {
-    endpointPickerOpen = false;
     const el = doc.getElementById('aus-endpoint-dropdown');
     if (el) el.style.display = 'none';
   }
   if (except !== 'credential') {
-    credentialPickerOpen = false;
     const el = doc.getElementById('aus-credential-dropdown');
     if (el) el.style.display = 'none';
   }
   if (except !== 'type') {
-    typePickerOpen = false;
     const el = doc.getElementById('aus-type-dropdown');
     if (el) el.style.display = 'none';
   }
@@ -468,10 +471,10 @@ function bindPicker() {
   const dropdown = doc.getElementById('aus-range-dropdown');
   if (btn && dropdown) {
     btn.onclick = () => {
-      pickerOpen = !pickerOpen;
+      const willOpen = !isDropOpen(dropdown);
       closeFilterDropdowns('range');
-      dropdown.style.display = pickerOpen ? 'flex' : 'none';
-      if (pickerOpen) {
+      dropdown.style.display = willOpen ? 'flex' : 'none';
+      if (willOpen) {
         renderCalendar();
         positionFilterDropdown(btn as HTMLElement, dropdown as HTMLElement);
       }
@@ -481,7 +484,6 @@ function bindPicker() {
         const r = el.getAttribute('data-range') as RangeKey;
         currentRange = r;
         if (r !== 'custom') { customStart=''; customEnd=''; }
-        pickerOpen = false;
         // 标签先就地改字（浮层已消失，标签必须立刻跟上），页面重建推到下一帧
         updatePickerLabel();
         closeDropdownThenPaint(dropdown, () => renderStatsView());
@@ -492,10 +494,10 @@ function bindPicker() {
   const mDropdown = doc.getElementById('aus-model-dropdown');
   if (mBtn && mDropdown) {
     mBtn.onclick = () => {
-      modelPickerOpen = !modelPickerOpen;
+      const willOpen = !isDropOpen(mDropdown);
       closeFilterDropdowns('model');
-      mDropdown.style.display = modelPickerOpen ? 'block' : 'none';
-      if (modelPickerOpen) {
+      mDropdown.style.display = willOpen ? 'block' : 'none';
+      if (willOpen) {
         renderModelPicker(lastStatsHistory);
         positionFilterDropdown(mBtn as HTMLElement, mDropdown as HTMLElement);
       }
@@ -505,10 +507,10 @@ function bindPicker() {
   const cDropdown = doc.getElementById('aus-chat-dropdown');
   if (cBtn && cDropdown) {
     cBtn.onclick = () => {
-      chatPickerOpen = !chatPickerOpen;
+      const willOpen = !isDropOpen(cDropdown);
       closeFilterDropdowns('chat');
-      cDropdown.style.display = chatPickerOpen ? 'block' : 'none';
-      if (chatPickerOpen) {
+      cDropdown.style.display = willOpen ? 'block' : 'none';
+      if (willOpen) {
         (async () => {
           try {
             const h = await getHistoryForStats();
@@ -523,10 +525,10 @@ function bindPicker() {
   const eDropdown = doc.getElementById('aus-endpoint-dropdown');
   if (eBtn && eDropdown) {
     eBtn.onclick = () => {
-      endpointPickerOpen = !endpointPickerOpen;
+      const willOpen = !isDropOpen(eDropdown);
       closeFilterDropdowns('endpoint');
-      eDropdown.style.display = endpointPickerOpen ? 'block' : 'none';
-      if (endpointPickerOpen) {
+      eDropdown.style.display = willOpen ? 'block' : 'none';
+      if (willOpen) {
         renderEndpointPicker(lastStatsHistory);
         positionFilterDropdown(eBtn as HTMLElement, eDropdown as HTMLElement);
       }
@@ -536,10 +538,10 @@ function bindPicker() {
   const kDropdown = doc.getElementById('aus-credential-dropdown');
   if (kBtn && kDropdown) {
     kBtn.onclick = () => {
-      credentialPickerOpen = !credentialPickerOpen;
+      const willOpen = !isDropOpen(kDropdown);
       closeFilterDropdowns('credential');
-      kDropdown.style.display = credentialPickerOpen ? 'block' : 'none';
-      if (credentialPickerOpen) {
+      kDropdown.style.display = willOpen ? 'block' : 'none';
+      if (willOpen) {
         renderCredentialPicker(lastStatsHistory);
         positionFilterDropdown(kBtn as HTMLElement, kDropdown as HTMLElement);
       }
@@ -549,10 +551,10 @@ function bindPicker() {
   const tDropdown = doc.getElementById('aus-type-dropdown');
   if (tBtn && tDropdown) {
     tBtn.onclick = () => {
-      typePickerOpen = !typePickerOpen;
+      const willOpen = !isDropOpen(tDropdown);
       closeFilterDropdowns('type');
-      tDropdown.style.display = typePickerOpen ? 'block' : 'none';
-      if (typePickerOpen) {
+      tDropdown.style.display = willOpen ? 'block' : 'none';
+      if (willOpen) {
         renderTypePicker();
         positionFilterDropdown(tBtn as HTMLElement, tDropdown as HTMLElement);
       }
@@ -564,43 +566,25 @@ function bindPicker() {
       resetStatsFilters();
     };
   }
+  // 点外部关闭：只看浮层自己是否展开（点击浮层内部或胶囊本身不算外部）
+  const dropPairs: Array<[string, string]> = [
+    ['aus-range-dropdown', 'aus-range-btn'],
+    ['aus-model-dropdown', 'aus-model-btn'],
+    ['aus-chat-dropdown', 'aus-chat-btn'],
+    ['aus-endpoint-dropdown', 'aus-endpoint-btn'],
+    ['aus-credential-dropdown', 'aus-credential-btn'],
+    ['aus-type-dropdown', 'aus-type-btn'],
+  ];
   doc.addEventListener('click', (e: any) => {
     const t = e.target as HTMLElement;
-    if (pickerOpen && !t.closest('#aus-range-dropdown') && !t.closest('#aus-range-btn')) {
-      pickerOpen = false;
-      const d = doc.getElementById('aus-range-dropdown');
-      if (d) d.style.display = 'none';
-    }
-    if (modelPickerOpen && !t.closest('#aus-model-dropdown') && !t.closest('#aus-model-btn')) {
-      modelPickerOpen = false;
-      const d = doc.getElementById('aus-model-dropdown');
-      if (d) d.style.display = 'none';
-    }
-    if (chatPickerOpen && !t.closest('#aus-chat-dropdown') && !t.closest('#aus-chat-btn')) {
-      chatPickerOpen = false;
-      const d = doc.getElementById('aus-chat-dropdown');
-      if (d) d.style.display = 'none';
-    }
-    if (endpointPickerOpen && !t.closest('#aus-endpoint-dropdown') && !t.closest('#aus-endpoint-btn')) {
-      endpointPickerOpen = false;
-      const d = doc.getElementById('aus-endpoint-dropdown');
-      if (d) d.style.display = 'none';
-    }
-    if (credentialPickerOpen && !t.closest('#aus-credential-dropdown') && !t.closest('#aus-credential-btn')) {
-      credentialPickerOpen = false;
-      const d = doc.getElementById('aus-credential-dropdown');
-      if (d) d.style.display = 'none';
-    }
-    if (typePickerOpen && !t.closest('#aus-type-dropdown') && !t.closest('#aus-type-btn')) {
-      typePickerOpen = false;
-      const d = doc.getElementById('aus-type-dropdown');
-      if (d) d.style.display = 'none';
+    for (const [dropId, btnId] of dropPairs) {
+      const d = doc.getElementById(dropId) as HTMLElement | null;
+      if (!isDropOpen(d)) continue;
+      if (t.closest('#' + dropId) || t.closest('#' + btnId)) continue;
+      (d as HTMLElement).style.display = 'none';
     }
   });
 }
-
-let chartYOpen = false;
-let chartXOpen = false;
 
 function renderChartSelectors() {
   const doc = getDoc();
@@ -632,14 +616,22 @@ function renderChartSelectors() {
   const axisOpts = [ { v:'auto', l:'自动' }, { v:'all', l:'全部' }, { v:'hide', l:'隐藏' } ];
   yHtml += `<div style="padding:2px 8px 2px;font-size:var(--aus-fs-xs);color:var(--ds-text-3);font-weight:600;">轴标签</div>`;
   yHtml += `<div style="display:flex;gap:4px;flex-wrap:wrap;padding:2px 6px 8px;align-items:center;"><span style="font-size:var(--aus-fs-xs);color:var(--ds-text-3);">左右轴合计 &gt; 2 时默认隐藏叠加</span>${axisOpts.map(a => `<div data-axis-label="${a.v}" style="padding:4px 9px;border-radius:999px;border:1px solid var(--ds-border);font-size:var(--aus-fs-sm);cursor:pointer;${axisSel===a.v?'background:var(--ds-card);font-weight:600;':''}">${a.l}</div>`).join('')}</div>`;
+  // 重建下拉内容时保住滚动位置：Y 是多选、不再收起，用户滚到「费用」组勾选后列表不能自己跳回顶部
+  const yScrollTop = yDrop.scrollTop;
   yDrop.innerHTML = yHtml;
+  yDrop.scrollTop = yScrollTop;
   yDrop.querySelectorAll('input[data-ykey]').forEach((el: any)=>{
     el.onchange = () => {
-      toggleY(el.getAttribute('data-ykey') as any);
-      closeDropdownThenPaint(yDrop, () => {
-        renderChartSelectors();
-        renderStatsView();
-      });
+      const key = el.getAttribute('data-ykey') as any;
+      toggleY(key);
+      // 多选下拉保持展开：就地刷新这一行的勾选态与胶囊文案（toggleY 会拒绝取消最后一项，按结果回写），图表留到下一帧再画
+      const on = (getYSelected() as any[]).includes(key);
+      el.checked = on;
+      const row = el.closest('label') as HTMLElement | null;
+      if (row) row.style.background = on ? 'var(--ds-card)' : '';
+      const count = (getYSelected() as any[]).length;
+      if (yLabel) yLabel.textContent = count ? count + ' 项' : '选择';
+      afterNextPaint(() => { void renderStatsView(); });
     };
   });
   yDrop.querySelectorAll('[data-chart-type]').forEach((el: any)=>{
@@ -673,7 +665,6 @@ function renderChartSelectors() {
   xDrop.querySelectorAll('[data-xkey]').forEach((el:any)=>{
     el.onclick = () => {
       setXSelected(el.getAttribute('data-xkey') as any);
-      chartXOpen=false;
       closeDropdownThenPaint(xDrop, () => {
         renderChartSelectors();
         renderStatsView();
@@ -690,22 +681,24 @@ function bindChartSelectors() {
   const xDrop = doc.getElementById('aus-chart-x-dropdown');
   if (yBtn && yDrop) {
     yBtn.onclick = () => {
-      chartYOpen = !chartYOpen;
-      yDrop.style.display = chartYOpen ? 'block' : 'none';
-      if (chartYOpen) { const xD = doc.getElementById('aus-chart-x-dropdown'); if (xD) { xD.style.display='none'; chartXOpen=false; } renderChartSelectors(); }
+      const willOpen = !isDropOpen(yDrop);
+      yDrop.style.display = willOpen ? 'block' : 'none';
+      if (willOpen) { const xD = doc.getElementById('aus-chart-x-dropdown'); if (xD) xD.style.display='none'; renderChartSelectors(); }
     };
   }
   if (xBtn && xDrop) {
     xBtn.onclick = () => {
-      chartXOpen = !chartXOpen;
-      xDrop.style.display = chartXOpen ? 'block' : 'none';
-      if (chartXOpen) { const yD = doc.getElementById('aus-chart-y-dropdown'); if (yD) { yD.style.display='none'; chartYOpen=false; } renderChartSelectors(); }
+      const willOpen = !isDropOpen(xDrop);
+      xDrop.style.display = willOpen ? 'block' : 'none';
+      if (willOpen) { const yD = doc.getElementById('aus-chart-y-dropdown'); if (yD) yD.style.display='none'; renderChartSelectors(); }
     };
   }
   doc.addEventListener('click', (e:any)=>{
     const t = e.target as HTMLElement;
-    if (chartYOpen && !t.closest('#aus-chart-y-dropdown') && !t.closest('#aus-chart-y-btn')) { chartYOpen=false; const d=doc.getElementById('aus-chart-y-dropdown'); if(d) d.style.display='none'; }
-    if (chartXOpen && !t.closest('#aus-chart-x-dropdown') && !t.closest('#aus-chart-x-btn')) { chartXOpen=false; const d=doc.getElementById('aus-chart-x-dropdown'); if(d) d.style.display='none'; }
+    const yD = doc.getElementById('aus-chart-y-dropdown') as HTMLElement | null;
+    if (isDropOpen(yD) && !t.closest('#aus-chart-y-dropdown') && !t.closest('#aus-chart-y-btn')) (yD as HTMLElement).style.display = 'none';
+    const xD = doc.getElementById('aus-chart-x-dropdown') as HTMLElement | null;
+    if (isDropOpen(xD) && !t.closest('#aus-chart-x-dropdown') && !t.closest('#aus-chart-x-btn')) (xD as HTMLElement).style.display = 'none';
   });
   // 初始化即按已保存配置刷新胶囊文案（Y 项数、X 维度），刷新后不必点开下拉才对
   renderChartSelectors();
@@ -909,7 +902,8 @@ async function renderChart(filteredRaw: any[]) {
           else if (kind === 'duration') disp = Number(v).toFixed(2) + ' s';
           else if (kind === 'rate') disp = Math.round(Number(v)) + ' t/s';
           else if (kind === 'count') disp = Number(v).toLocaleString() + ' 次';
-          else disp = Number(v).toLocaleString() + ' ' + (meta?.unit || '');
+          // Token 类图例值跟随设置里的单位开关（Y 轴刻度不受影响）
+          else disp = formatToken(Number(v), tokenUnitOf(state.settings)) + ' ' + (meta?.unit || '');
           html += `<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:2px;"></span>${esc(p.seriesName)}<span style="margin-left:auto;font-weight:600;">${disp}</span></div>`;
         }
         return `<div style="padding:4px 2px;min-width:180px;">${html}</div>`;
@@ -966,6 +960,18 @@ function renderModelSummary(filtered: any[]) {
     const avgRateStr = e.rateCnt ? Math.round(e.rate / e.rateCnt) + ' t/s' : '—';
     return { m, count: e.count, hit: e.hit, miss: e.miss, out: e.out, total: e.total, cost: e.cost, avgCost, avgDurVal, avgRateVal, avgDurStr, avgRateStr };
   });
+  // 只列出未被隐藏的模型（「模型展示管理」的「表格展示」集合）：隐藏只影响这张表，
+  // 统计合计、图表与历史记录仍按全量历史计算。
+  const totalModels = list.length;
+  list = filterVisibleModelRows(list, (row) => row.m);
+  try {
+    const badge = doc.getElementById('aus-model-manage-count');
+    if (badge) {
+      const hiddenCount = hiddenModelCountFor('table');
+      badge.textContent = hiddenCount ? '已隐藏 ' + hiddenCount + ' 个' : '';
+      badge.style.display = hiddenCount ? '' : 'none';
+    }
+  } catch {}
   const sortKey = summarySort.key;
   if (sortKey) {
     const dir = summarySort.dir === 'asc' ? 1 : -1;
@@ -991,16 +997,23 @@ function renderModelSummary(filtered: any[]) {
   } else {
     list.sort((a, b) => a.m.localeCompare(b.m));
   }
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">'
+      + (totalModels ? '全部模型都已隐藏 · 点击右上角「管理模型」恢复显示' : '暂无数据')
+      + '</td></tr>';
+    return;
+  }
   const fmtC = (v:number)=>{ try{  return formatMoney(v||0,4);} catch{ return '¥'+(v||0).toFixed(4)+' CNY'; } };
+  // Token 列跟随单位开关，缩写态带 title 完整值
+  const tokCell = (v:number)=>{ const unit = tokenUnitOf(state.settings); const full = tokenTitle(v, unit); return full ? '<span title="'+full+' tokens">'+formatToken(v, unit)+'</span>' : formatToken(v, unit); };
   const rows = list.map(r => {
-     return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.hit.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${r.miss.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--aus-token-output);">${r.out.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${r.total.toLocaleString()}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${fmtC(r.cost)}</td><td style="padding:6px 8px;text-align:right;">${fmtC(r.avgCost)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
+     return `<tr style="border-bottom:1px solid var(--ds-card);"><td style="padding:6px 8px;text-align:left;color:var(--ds-text);font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${esc(r.m)}</td><td style="padding:6px 8px;text-align:right;">${r.count}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${tokCell(r.hit)}</td><td style="padding:6px 8px;text-align:right;color:#DC2626;">${tokCell(r.miss)}</td><td style="padding:6px 8px;text-align:right;color:var(--aus-token-output);">${tokCell(r.out)}</td><td style="padding:6px 8px;text-align:right;font-weight:600;">${tokCell(r.total)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text);">${fmtC(r.cost)}</td><td style="padding:6px 8px;text-align:right;">${fmtC(r.avgCost)}</td><td style="padding:6px 8px;text-align:right;color:var(--ds-text-2);">${r.avgDurStr}</td><td style="padding:6px 8px;text-align:right;color:#0BA25E;">${r.avgRateStr}</td></tr>`;
   }).join('');
   tbody.innerHTML = rows;
 }
 
 let cachedAllHistory: any[] | null = null;
 let allHistoryPromise: Promise<any[]> | null = null;
-let statsHistoryWarningShown = false;
 
 export function invalidateStatsCache() {
   cachedAllHistory = null;
@@ -1024,19 +1037,12 @@ async function getHistoryForStats(): Promise<any[]> {
   if (allHistoryPromise) return allHistoryPromise;
   allHistoryPromise = (async () => {
     try {
-      const mod: any = await import('../store/persistence');
-      if (mod.getAllHistory) {
-        const all = await mod.getAllHistory();
-        const result = all || hot;
-        cachedAllHistory = result;
-        return result;
-      }
-    } catch (error) {
-      if (!statsHistoryWarningShown) {
-        statsHistoryWarningShown = true;
-        toast('warning', '冷历史读取失败，当前统计可能只包含近期记录');
-      }
-      console.error('[Api-Usage] 全量历史读取失败', error);
+      const all = await repository.getAllHistory();
+      const result = all || hot;
+      cachedAllHistory = result;
+      return result;
+    } catch {
+      // 冷库读不出来时仓库层已提示一次（历史页另有常驻告警与重试入口），这里退回热区保证页面能画
     } finally {
       allHistoryPromise = null;
     }
@@ -1096,7 +1102,13 @@ export async function renderStatsView() {
   const reqEl = doc.getElementById('aus-stats-req');
   if (reqEl) reqEl.textContent = String(totalReq);
   const tokEl = doc.getElementById('aus-stats-tok');
-  if (tokEl) tokEl.textContent = totalTok.toLocaleString('zh-CN');
+  if (tokEl) {
+    const tokUnit = tokenUnitOf(state.settings);
+    tokEl.textContent = formatToken(totalTok, tokUnit);
+    const fullTok = tokenTitle(totalTok, tokUnit);
+    if (fullTok) tokEl.title = fullTok + ' tokens';
+    else tokEl.removeAttribute('title');
+  }
   renderStatsFour(summaryFiltered);
   renderModelSummary(summaryFiltered);
   renderModelPicker(allHistory);

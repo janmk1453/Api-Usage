@@ -132,6 +132,17 @@ function usageNumbersOf(raw: unknown): Record<string, number> | null {
  * 单条历史记录的详细摘要：除常规数字外，还带本轮「记录状态」相关字段
  * （估算 / 中断 / 模型名兜底 / 估算方法），这是排查记录问题的核心证据。
  */
+/**
+ * 请求来源摘要。历史角标与详情里的「请求来源」都来自这个字段，
+ * 不带它就没法从上传的日志验证「这条到底被判成扩展 / 脚本 / 对话」。
+ */
+function originDigest(origin: any): Record<string, unknown> | null {
+  if (!origin || typeof origin !== 'object') return null;
+  const kind = clip(origin.kind, 20);
+  if (!kind) return null;
+  return { kind, id: clip(origin.id, 240), label: clip(origin.label, 80) };
+}
+
 export function entryDigest(entry: any): Record<string, unknown> {
   return {
     timestamp: num(entry?.timestamp),
@@ -158,6 +169,7 @@ export function entryDigest(entry: any): Record<string, unknown> {
     credentialLabel: clip(entry?.credentialLabel, 80),
     pricingSource: clip(entry?.pricingSource, 40),
     usageSource: clip(entry?.usageSource, 20) || null,
+    requestOrigin: originDigest(entry?.requestOrigin),
     interrupted: clip(entry?.interrupted, 20) || null,
     interruptReason: clip(entry?.interruptReason, 200) || null,
     modelFallback: bool(entry?.modelFallback) || undefined,

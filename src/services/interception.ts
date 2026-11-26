@@ -3,14 +3,17 @@ import { repository } from '../data/repository';
 import { log } from '../utils/logger';
 import { initConnectionIdentity, resolveRuntimeConnectionContext, type HistoryConnection } from './connection-identity';
 import { isInjectableApiFormat, mergeIncludeUsage } from './include-usage';
-import { createThinkClock, scanThinkChunk, resolveThinkTime, reasoningTextOf, contentTextOf } from './think-timing';
+import { createThinkClock, scanThinkChunk, resolveThinkTime, reasoningTextOf, contentTextOf, judgeStreamedFromClock } from './think-timing';
 import { createFrameNormalizer } from './frame-normalizer';
 import { saveRequestStart, patchRequestLog, noteRecentTurns } from './request-log';
 import { noteCaptureStage, isZeroUsage, usageNumbers } from './capture-digest';
+import { fetchChainHas, fetchChainKind, describeFetchChain } from './fetch-chain';
 import { decideTurnOutcome } from './turn-outcome';
+import { API_ERROR_MAX_CHARS, detectApiErrorPayload, apiErrorPayloadTag } from './api-error-payload';
 import { ESTIMATE_VERSION, estimatePromptTokens, estimateTextTokens } from './token-estimate';
 import type { EntryMeta } from '../types/save';
 import { detectRequestOrigin, type RequestOrigin } from './request-origin';
+import { DETAIL_MAX_CHARS, putDetailRequest, putDetailResponse } from '../data/detail-store';
 
 let lastMessages: any[] = [];
 /** 本轮请求的完整 messages：只给输入侧估算用，绝不写进历史（历史仍存 lastMessages 的最近 10 条摘要） */
@@ -42,6 +45,8 @@ type TurnContext = {
   modelFallback: boolean;
   status: number;
   streamError: string | null;
+  /** 请求体字符数（消息 content 累计），诊断用：核对「抓到的 prompt 是不是这一轮的」 */
+  promptChars: number;
   /** 实测输出字符（正文 + 思维链） */
   outputChars: number;
   reasoningChars: number;
@@ -58,10 +63,17 @@ type TurnContext = {
   streamed: boolean | null;
   /** 响应读完的时刻；一个字节都没读到时保持 0。判定「刚结束的那一轮」用它 */
   endedAt: number;
+  /**
+   * 本轮「输出」其实是上游错误提示的识别结果（见 services/api-error-payload.ts）。
+   *
+   * 宿主把上游非 2xx 包装成 HTTP 200 + 正文时，响应里只有错误文案、没有任何模型内容；
+   * 有值就说明这一轮既不该按输出估算，也不该计费。
+   */
+  errorPayload: string | null;
   /** 本轮是否已经落库（正常路径或估算路径都算） */
   settled: boolean;
-  /** 落库来源：真实 usage 还是本地估算，决定结束事件还要不要覆盖 */
-  settledBy: 'usage' | 'estimated' | null;
+  /** 落库来源：真实 usage / 本地估算 / 明确拒绝（上游错误载荷），决定结束事件还要不要覆盖 */
+  settledBy: 'usage' | 'estimated' | 'rejected' | null;
   /**
    * 本轮自己在响应当里解析到的用量与结束原因。
    *
@@ -243,9 +255,9 @@ export function pickEndedTurn(model: string | null, includeSettled = true): Turn
 export function registerTurnForTest(patch: Partial<TurnContext>): TurnContext {
   const base: TurnContext = {
     startTime: Date.now(), requestId: null, model: null, modelFallback: false, status: 0,
-    streamError: null, outputChars: 0, reasoningChars: 0, fullResponse: null, fullRequest: null,
+    streamError: null, promptChars: 0, outputChars: 0, reasoningChars: 0, fullResponse: null, fullRequest: null,
     messages: [], promptMessages: [], connection: null, ttft: 0, thinkTime: 0, streamed: null,
-    endedAt: 0, settled: false, settledBy: null, usage: null, finishReason: null,
+    endedAt: 0, errorPayload: null, settled: false, settledBy: null, usage: null, finishReason: null,
     requestOrigin: null,
   };
   return registerTurn({ ...base, ...patch });
@@ -269,14 +281,41 @@ function metaForTurn(turn: TurnContext | null): EntryMeta | null {
   const interrupted = stopPending() ? 'user' : turn?.streamError ? 'upstream' : null;
   const modelFallback = turn?.modelFallback === true;
   const requestOrigin = turn?.requestOrigin || null;
+  // 字符数纯诊断用（核对「抓到的 prompt / 输出是不是这一轮的」），取不到就不写，不落一堆 0
+  const promptChars = Number(turn?.promptChars) || 0;
+  const outputChars = Number(turn?.outputChars) || 0;
   // 来源也要能单独把 meta 带出来：常规轮次没有中断标记，但来源照样要落库
-  if (!interrupted && !modelFallback && !requestOrigin) return null;
+  if (!interrupted && !modelFallback && !requestOrigin && !promptChars && !outputChars) return null;
   const meta: EntryMeta = { usageSource: 'upstream' };
   if (requestOrigin) meta.requestOrigin = requestOrigin;
   meta.interrupted = interrupted;
   if (interrupted) meta.interruptReason = interrupted === 'user' ? 'user-stop' : String(turn?.streamError || 'stream-error').slice(0, 200);
   if (modelFallback) meta.modelFallback = true;
+  if (promptChars > 0) meta.promptChars = promptChars;
+  if (outputChars > 0) meta.outputChars = outputChars;
   return meta;
+}
+
+/**
+ * 请求体字符数：消息 content 累计（数组形态取 text 段），文本补全取 prompt。
+ * 只用于诊断字段，不参与任何计价或估算口径。
+ */
+function countRequestChars(body: any): number {
+  try {
+    if (Array.isArray(body?.messages)) {
+      let total = 0;
+      for (const message of body.messages) {
+        const content = message?.content;
+        if (typeof content === 'string') total += content.length;
+        else if (Array.isArray(content)) {
+          for (const part of content) if (typeof part?.text === 'string') total += part.text.length;
+        }
+      }
+      return total;
+    }
+    if (typeof body?.prompt === 'string') return body.prompt.length;
+  } catch {}
+  return 0;
 }
 
 function turnMetaFor(startTime: number): EntryMeta | null {
@@ -307,6 +346,34 @@ function collectOutputText(raw: string): string {
     try { push(JSON.parse(payload)); } catch {}
   }
   return out.slice(0, 200_000);
+}
+
+/**
+ * 本轮输出是不是「上游错误提示被宿主包装成 200 正文」。
+ *
+ * 两个候选都试：投影后的正文（模型 content 的位置），以及上游原始响应
+ * （错误 JSON / 带错误文案的 SSE 原文）。命中返回稳定串（锚点:字符数），供判定层与诊断快照共用。
+ */
+function detectTurnErrorPayload(text: string, raw: string | null): string | null {
+  try {
+    // 便宜预筛：错误正文只有几十到几百字符。超长的那一侧直接不解析——
+    // 否则正常长回复每轮都要多跑一次 collectOutputText（长上下文下是几十万字符的 JSON 遍历）。
+    const bodyLen = String(text || '').length;
+    const rawLen = String(raw || '').length;
+    if (bodyLen > API_ERROR_MAX_CHARS && rawLen > API_ERROR_MAX_CHARS) return null;
+    if (bodyLen <= API_ERROR_MAX_CHARS) {
+      const fromBody = detectApiErrorPayload(collectOutputText(text || ''));
+      if (fromBody) return apiErrorPayloadTag(fromBody);
+    }
+    if (rawLen > 0 && rawLen <= API_ERROR_MAX_CHARS) {
+      // 上游直接回 {"error":{...}}：整段原始响应就是错误体
+      const fromRaw = detectApiErrorPayload(raw || '');
+      if (fromRaw) return apiErrorPayloadTag(fromRaw);
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function recentStreamTiming(maxAge = 60000): typeof lastStreamTiming {
@@ -428,11 +495,9 @@ function installFetchCapture(): boolean {
   try {
     const p: any = (window as any).parent || window;
     if (!p || typeof p.fetch !== 'function') return false;
-    if (isAusFetchPatch(p.fetch)) {
-      // 顶层已经是我们装的某一代（可能是宿主把它装回来了）：让它重新在岗，不新增任何一层
-      if ((p.fetch as any).__ausCaptureLayer === true) activateCapture(p.fetch);
-      return true;
-    }
+    // 在岗判定必须顺着链验证到 activeCapture 本人，不能只看顶层的标记布尔：
+    // 探针层把 __aus_patched 定义成「读内层」的 getter，内层采集代退役后它照样是 true。
+    if (captureInPlace(p)) return true;
     // 记下被包住的原始函数：bind 产物不继承自定义属性，读标记必须读它
     const prevFetchFn: any = p.fetch;
     // 层深是硬约束：宿主反复重绑时我们每跟一次就 +1 层，只靠「旧代直通」不会重复记账，
@@ -488,6 +553,7 @@ function installFetchCapture(): boolean {
           modelFallback: !(typeof requestModel === 'string' && requestModel),
           status: 0,
           streamError: null,
+          promptChars: countRequestChars(reqBody),
           outputChars: 0,
           reasoningChars: 0,
           fullResponse: null,
@@ -499,6 +565,7 @@ function installFetchCapture(): boolean {
           thinkTime: 0,
           streamed: null,
           endedAt: 0,
+          errorPayload: null,
           settled: false,
           settledBy: null,
           usage: null,
@@ -518,6 +585,17 @@ function installFetchCapture(): boolean {
           const rawInit: any = (args as any)[1] || {};
           const rawBody = typeof rawInit.body === 'string' ? rawInit.body : '';
           saveRequestStart({ at: startTime, method: rawInit.method || 'POST', url, headers: rawInit.headers, body: rawBody });
+          // 详情原文：最近 DETAIL_KEEP 条的完整请求体与脱敏后的请求头另存详情原文库，
+          // 历史热区只留摘要。这里拿到的是宿主交过来的原始 init，与请求日志同源。
+          try {
+            putDetailRequest({
+              requestId,
+              timestamp: startTime,
+              model: typeof requestModel === 'string' ? requestModel : null,
+              body: rawBody,
+              headers: rawInit.headers,
+            }).catch(() => {});
+          } catch {}
         } catch {}
         // 采集链路快照：只记录「请求已发出」，与后续是否入库无关
         try {
@@ -545,7 +623,19 @@ function installFetchCapture(): boolean {
             // 帧归一化：把任意 provider 的形状投影成 OpenAI/DeepSeek 形状，下游解析不再认识各家字段。
             // 每个请求一份状态（协议首帧锁定），只在这条 clone 旁路上起作用，原始响应照常透传。
             const frameNormalizer = createFrameNormalizer();
-            const parseAndProcess = (text: string, ttftVal: number, thinkTimeVal: number, streamed: boolean | null = null, rawText: string | null = null) => {
+            // 详情原文库用的响应累积：fullText 会被 STREAM_TEXT_LIMIT 截到尾部，
+            // 而详情页要的是完整原文，所以单独累积一份，按 DETAIL_MAX_CHARS 封顶。
+            let archiveText = '';
+            let archiveTruncated = false;
+            let responseArchived = false;
+            const pushArchive = (piece: string) => {
+              if (!piece || archiveTruncated) return;
+              const room = DETAIL_MAX_CHARS - archiveText.length;
+              if (piece.length <= room) { archiveText += piece; return; }
+              archiveText += piece.slice(0, Math.max(0, room));
+              archiveTruncated = true;
+            };
+            const parseAndProcess = (text: string, ttftVal: number, thinkTimeVal: number, streamed: boolean | null = null, rawText: string | null = null, archiveRaw: string | null = null) => {
             let data: any = null;
             let finishReason: string | null = null;
             try {
@@ -592,6 +682,9 @@ function installFetchCapture(): boolean {
               if (typeof resModel === 'string' && resModel) { turn.model = resModel; turn.modelFallback = false; }
               if (!turn.fullResponse) turn.fullResponse = rawText ?? text;
               if (!turn.endedAt) turn.endedAt = Date.now();
+              // 上游错误被包装成 200：正文里只有客户端拼的错误文案，记下来供判定层直接丢弃
+              const errorTag = detectTurnErrorPayload(text, rawText);
+              if (errorTag) turn.errorPayload = errorTag;
             } catch {}
             // 采集链路快照：响应解析完成，是否解析到用量、用量是否全 0
             try {
@@ -622,6 +715,21 @@ function installFetchCapture(): boolean {
               log.debug('fetch 捕获 usage', { model, hasUsage: !!usage, finishReason, streamed });
               try { processUsage(usage, model, msgs, startTime, fullReq, text, ttftVal, thinkTimeVal, finishReason, requestConnection, requestId, streamed); } catch (e) { log.error('fetch 用量记录失败 ' + ((e as any)?.message || e)); }
             }
+            // 详情原文归档：每次请求只写一次（流式收尾路径可能被调用两次）。
+            // 存上游原文而不是归一化投影；usage 解析不到时仍写响应，详情页至少能看到原始响应。
+            if (!responseArchived) {
+              responseArchived = true;
+              const archiveBody = typeof archiveRaw === 'string' && archiveRaw ? archiveRaw : (rawText ?? text);
+              try {
+                putDetailResponse({
+                  requestId,
+                  timestamp: startTime,
+                  model: (data as any)?.model || reqBody?.model || fullReq?.model || null,
+                  body: archiveBody,
+                  usage: (data as any)?.usage || null,
+                }).catch(() => {});
+              } catch {}
+            }
           };
           // 流式测量 TTFT 与思维链耗时：后台消费 clone 的 body 流，不阻塞原始响应透传
           try {
@@ -635,15 +743,9 @@ function installFetchCapture(): boolean {
             // 归一化后的 SSE 文本：与 fullText 一一对应，只用于解析 usage / 结束原因；
             // fullText 始终保持上游原文，历史详情与请求日志展示的都必须是它
             let normText = '';
-            // 假流式检测：统计承载正文的增量帧数
-            const judgeStreamed = (): boolean | null => {
-              // 请求未声明流式：明确非流式
-              if (!requestedStream) return false;
-              // 未观测到正文帧（可能是纯 usage 帧或异常响应）：未知，交给数值兜底
-              if (!thinkClock.contentFrames) return null;
-              // 真正的流式会持续吐出多帧正文；只有一帧说明上游一次性返回全文
-              return thinkClock.contentFrames > 1;
-            };
+            // 假流式检测：口径见 think-timing.ts#judgeStreamedFromClock
+            // （增量帧含正文 / 思维链 / 工具调用；工具调用响应没有 delta.content 也能判对）
+            const judgeStreamed = (): boolean | null => judgeStreamedFromClock(thinkClock, requestedStream);
             const finish = () => {
               try {
                 const endedAt = nowMs() - t0;
@@ -666,7 +768,7 @@ function installFetchCapture(): boolean {
                 try { patchRequestLog({ durationMs: endedAt, streamed }); } catch {}
                 // 优先解析归一化后的文本（能认 Gemini / Anthropic / Responses），
                 // 投影为空时退回原文；原文作为第 5 参传入，只用于展示
-                parseAndProcess(normText || fullText, ttft, safeThinkTime, streamed, fullText);
+                parseAndProcess(normText || fullText, ttft, safeThinkTime, streamed, fullText, archiveText);
               } catch {}
             };
             const scanThink = (chunk: string) => {
@@ -689,7 +791,7 @@ function installFetchCapture(): boolean {
                 // 首字延迟：相对请求发出时刻（startTime），而非 clone 流开始读取时刻
                 if (first && value && value.byteLength) { ttft = Date.now() - startTime; first = false; }
                 const piece = dec.decode(value, { stream: true });
-                fullText += piece; buf += piece;
+                fullText += piece; buf += piece; pushArchive(piece);
                 if (fullText.length > STREAM_TEXT_LIMIT) fullText = fullText.slice(-STREAM_TEXT_LIMIT);
                 const nl = buf.lastIndexOf('\n');
                 if (nl !== -1) {
@@ -752,6 +854,12 @@ function installFetchCapture(): boolean {
     }
     patched.__ausCaptureDepth = depth;
     patched.__ausCaptureLayer = true;
+    // 链上下一层：供自愈守卫逐层验证「在岗那一代是否真的还挂在这里」
+    patched.__ausCaptureInner = prevFetchFn;
+    // 还原目标是「链上的下一层本身」而不是它的 bind 产物：bind 会丢自定义属性，
+    // 下一层若是探针，还原成 bind 产物等于把探针的在岗/内层记录全抹掉。
+    // 只在确认这一代真的装上之后才记，放弃安装的分支不能污染还原目标。
+    restoreTarget = prevFetchFn;
     activateCapture(patched);
     captureHealth.installed = true;
     captureHealth.generations += 1;
@@ -782,16 +890,26 @@ function noteInstallProblem(code: string, message: string, extra: Record<string,
  * 暴露在 window.__ausCapture.diagnostics()，也随采集日志一起上报。
  */
 export function captureDiagnostics() {
+  // 链现状一起给出来：真机「没记录」时第一眼要看的就是「顶层是谁、往下还有没有我们那一代」，
+  // 只有 installed/hasActive 两个布尔时，假在岗与「压根没装上」在诊断信息里长得一模一样。
+  let fetchChain = 'unknown';
+  try {
+    const p: any = (window as any).parent || window;
+    fetchChain = describeFetchChain(p?.fetch) + (activeCapture ? '>active' : '>active:none');
+  } catch {}
   return {
     ...captureHealth,
     backoffMs: guardBackoff,
     hasActive: !!activeCapture,
     guardMs: FETCH_GUARD_MS,
+    fetchChain,
   };
 }
 
 let interceptionInstalled = false;
 let rawFetchRef: any = null;
+/** 卸载还原目标：被包住的下一层原函数（不带 bind），保住它自己的标记与身份 */
+let restoreTarget: any = null;
 let messageReceivedHandler: any = null;
 
 /**
@@ -838,13 +956,50 @@ const captureHealth = {
   installed: false,
   generations: 0,
   failures: 0,
+  /** 检测到「顶层带标记但在岗代不在链上」的次数：不改判据的话这里永远是 0，采集却已失聪 */
+  staleFlags: 0,
   depth: 0,
   lastError: null as string | null,
   lastInstallAt: 0,
 };
 
-function isAusFetchPatch(fn: any): boolean {
-  return typeof fn === 'function' && (fn as any).__aus_patched === true;
+/**
+ * 采集包装「在岗」判定：顺着链验证，不认任何标记布尔。
+ *
+ * 3.2.3 真机事故的根因就在这里——探针层为了让两边守卫不互相对套，把 __aus_patched
+ * 定义成「读内层」的 getter；宿主重载后内层采集代退役，这个 getter 恒为 true，
+ * 而 __ausCaptureLayer 又不在探针层上。老判据两边都不满足就不会重装：4s 自愈守卫
+ * 每轮都 early return，「没记录」持续几小时，而诊断包里既没有 install-failed 也没有 fetch-start。
+ *
+ * 现在只认一件事：链上还能不能摸到 activeCapture 本人。摸不到就必须重装。
+ */
+function captureInPlace(p: any): boolean {
+  const top: any = p?.fetch;
+  if (typeof top !== 'function') return false;
+  // 顶层就是我们的某一代采集层（宿主可能把旧代装回来了）：就地复用，不新增层
+  if ((top as any).__ausCaptureLayer === true) {
+    activateCapture(top);
+    return true;
+  }
+  // 没有在岗代（卸载后 / 从未装上）一律判不在岗，守卫必须重装
+  return fetchChainHas(top, activeCapture);
+}
+
+/** 假在岗留痕节流：守卫 4s 一轮，快照缓冲只有 CAPTURE_MAX 条，不能每轮都写 */
+const STALE_REPORT_MS = 60_000;
+let lastStaleReportAt = 0;
+
+/**
+ * 假在岗留痕：顶层带着我们的标记，却摸不到在岗那一代。
+ * 只写采集快照与计数，不写 install-failed——安装并没有失败，写那条会让健康信号误报成插件报错。
+ */
+function noteStaleCapture(top: any): void {
+  captureHealth.staleFlags += 1;
+  const now = Date.now();
+  if (now - lastStaleReportAt < STALE_REPORT_MS) return;
+  lastStaleReportAt = now;
+  const chain = describeFetchChain(top) + (activeCapture ? '' : '>active:none');
+  try { noteCaptureStage('guard-recovered', { model: '', requestId: '', reason: 'stale:' + chain }); } catch {}
 }
 
 function resetGuardBackoff(): void {
@@ -862,11 +1017,10 @@ function ensureFetchCapture() {
   try {
     const p: any = (window as any).parent || window;
     if (!p || typeof p.fetch !== 'function') return;
-    if (isAusFetchPatch(p.fetch)) {
-      // 顶层是我们装的某一代：被宿主装回来的旧代直接复用在岗，不新增层
-      if ((p.fetch as any).__ausCaptureLayer === true) activateCapture(p.fetch);
-      return;
-    }
+    // 在岗判定改为「顺着链摸到 activeCapture」，标记布尔不再作数
+    if (captureInPlace(p)) return;
+    // 顶层还带着我们的标记却摸不到在岗代 = 假在岗：这是以前完全静默的那种故障，必须先留痕
+    if (fetchChainKind(p.fetch) !== 'other') noteStaleCapture(p.fetch);
     if (Date.now() < nextInstallAllowedAt) return;
     if (installFetchCapture()) resetGuardBackoff();
     else growGuardBackoff();
@@ -921,7 +1075,13 @@ export function installInterception() {
     }
     try {
       const p: any = (window as any).parent || window;
-      if (p?.fetch && !(p.fetch as any).__aus_patched) rawFetchRef = p.fetch.bind(p);
+      // 只把「既不是采集层、也不是探针层」的原始 fetch 记为兜底还原目标。
+      // 以前只看 __aus_patched，而探针层把这个标记透传成 true 的反面也有陷阱：
+      // 顶层是探针时会拿探针的 bind 产物当还原目标，卸载后就留下半残的一层。
+      if (p?.fetch && fetchChainKind(p.fetch) === 'other') {
+        rawFetchRef = p.fetch.bind(p);
+        restoreTarget = p.fetch;
+      }
     } catch {}
     es.on(et.GENERATION_ENDED, onGenerationEnded);
     // GENERATION_STOPPED 只在酒馆支持时挂，用于区分「用户主动中断」与「上游故障」
@@ -957,8 +1117,11 @@ export function uninstallInterception() {
     }
     try {
       const p: any = (window as any).parent || window;
-      if (p && rawFetchRef && (p.fetch as any).__aus_patched) {
-        p.fetch = rawFetchRef;
+      // 只在「顶层确实是我们这一代采集层」时还原顶层。
+      // 顶层若是探针或宿主包装，整层摘掉会连它们一起抹掉，留下「外面还带着采集标记、
+      // 里面采集已经没了」的假在岗现场——这正是 3.2.3 那次几小时静默的成因。
+      if (p && (p.fetch as any)?.__ausCaptureLayer === true && restoreTarget) {
+        p.fetch = restoreTarget;
       }
     } catch {}
     // 卸载后不许任何残留层再记账
@@ -1241,14 +1404,39 @@ async function settleTurnWithoutUsage(source: 'generation-ended' | 'stop', opts:
   const rawResponse = turn?.fullResponse || '';
   const outputText = collectOutputText(rawResponse);
   const hasOutput = !!outputText.trim() || !!turn && (turn.outputChars > 0 || turn.reasoningChars > 0);
+  // 有输出也要先看「这输出是不是模型写的」：TT 把上游 500 包成 200，正文就是错误提示。
+  // turn 上抓到的优先（fetch 解析时就判过），抓不到再按响应原文补判一次。
+  const errorPayload = turn?.errorPayload || detectTurnErrorPayload(rawResponse, rawResponse);
   const outcome = decideTurnOutcome({
     hasUsage: false,
     usageUsable: false,
     hasOutput,
     pendingStop: stopPending(),
     streamError: turn?.streamError || null,
+    errorPayload,
   });
   if (outcome.kind === 'drop') {
+    // 上游错误被宿主包装成 200：这一轮没有任何模型内容，既不能按输出估算，也不能计费。
+    // 用独立阶段 entry-rejected 记一条（不混进 event-drop「对话未写入历史」的统计口径），
+    // 历史保持干净，而「撞了多少次上游错误、命中哪个锚点、状态码多少」在诊断包里仍查得到。
+    if (outcome.reason === 'api-error-payload') {
+      log.debug('本轮输出是上游错误提示，拒绝入库', { source, errorPayload, status: turn?.status ?? null });
+      try {
+        noteCaptureStage('entry-rejected', {
+          model,
+          requestId: requestId || '',
+          streamed: turn?.streamed ?? null,
+          usageFound: false,
+          usageZero: false,
+          reason: 'api-error-payload:' + String(errorPayload || 'unknown') + ':status=' + String(turn?.status ?? ''),
+        });
+      } catch {}
+      if (turn) {
+        turn.settled = true;
+        turn.settledBy = 'rejected';
+      }
+      return;
+    }
     log.debug('本轮无输出，静默不记录', { source, reason: outcome.reason });
     // 用户自己点了停止、而模型还没吐出任何内容：这不是采集故障，也不是上游异常，
     // 只是这一轮本来就没有可统计的东西。用独立原因标记，健康提示里跳过它，
@@ -1333,6 +1521,32 @@ async function settleTurnWithoutUsage(source: 'generation-ended' | 'stop', opts:
 }
 
 export function processUsage(usage: any, model: string, messages: any[], startTime: number, fullRequest: any = null, fullResponse: any = null, ttft = 0, thinkTime = 0, finishReason: string | null = null, connection: HistoryConnection | null = null, requestId: string | null = null, streamed: boolean | null = null, meta: EntryMeta | null = null) {
+  // 上游错误被宿主包装成 200：正文只有错误提示，这一轮没有任何模型内容。
+  // 哪怕响应里带了 usage（比 4.1 节的组合更隐蔽）也拒绝入库，只留一条诊断快照。
+  try {
+    const errTurn = turnByRequestId(requestId) || currentTurn(startTime);
+    // 兜底：事件路径先于 fetch 解析到达时 turn.errorPayload 还没写上，用原始响应再判一次
+    // （超长响应在 detectTurnErrorPayload 的预筛里就直接返回 null，不产生遍历开销）
+    const errTag = errTurn ? errTurn.errorPayload || detectTurnErrorPayload(errTurn.fullResponse || '', null) : null;
+    if (errTurn && errTag) {
+      errTurn.settled = true;
+      errTurn.settledBy = 'rejected';
+      log.debug('本轮输出是上游错误提示，拒绝入库', { requestId, errorPayload: errTag, status: errTurn.status });
+      try {
+        noteCaptureStage('entry-rejected', {
+          model,
+          requestId: requestId || '',
+          streamed,
+          usageFound: !!usage,
+          usageZero: isZeroUsage(usage),
+          usage: usageNumbers(usage),
+          finishReason,
+          reason: 'api-error-payload:' + errTag + ':status=' + String(errTurn.status ?? ''),
+        });
+      } catch {}
+      return;
+    }
+  } catch {}
   // 主路径 usage 多来自 ST，可能缺 reasoning_tokens；从最近 fetch 的估算值补上
   try {
     const fp: any = lastFetchUsage;

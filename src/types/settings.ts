@@ -82,6 +82,11 @@ export type Settings = {
   mobileCompatUi: boolean;
   webdav: WebdavSettings;
   historyScope: HistoryScope;
+  /**
+   * Token 数字缩写：true 时概览 / 统计 / 历史 / 预测的 Token 数显示成 1.2K、3.4M、1.1B；
+   * false（默认）显示完整千分位。小于一万不缩写。图表 Y 轴不受此开关影响。
+   */
+  tokenUnitCompact: boolean;
   overviewFour: OverviewFourKey[];
   statsFour: StatsFourKey[];
   modelsPricingCollapsed?: boolean;
@@ -117,6 +122,7 @@ export const defaultSettings = (): Settings => ({
   mobileCompatUi: mobileDeviceHint(),
   webdav: { url: 'https://dav.jianguoyun.com/dav/', username: '', path: '', proxy: '' },
   historyScope: 'all',
+  tokenUnitCompact: false,
   overviewFour: ['avg_cost', 'avg_tokens', 'avg_duration', 'avg_rate', 'avg_input_tokens', 'avg_output_tokens', 'avg_hit_rate', 'max_total'],
   statsFour: ['avg_cost', 'avg_tokens', 'avg_think_ratio', 'truncation_rate'],
   modelsPricingCollapsed: true,

@@ -90,6 +90,25 @@ describe('发起方判定', () => {
     expect(stackTopFrame(stack)).toContain('MVU/index.js');
   });
 
+  it('扩展只是把 fetch 包了一层时，主对话仍判酒馆', () => {
+    // 真实场景：酒馆助手 / 预设脚本会 monkey-patch fetch，包装帧落在发送帧的**内层**。
+    // 旧规则「取第一个 third-party 帧」会把 yuzuki-Memory 这种包装器认成发起者，
+    // 同一条请求在历史页显示「对话」、在探针页显示「扩展」，两边对不上。
+    const stack = [
+      'Error',
+      '    at tapFetch (http://h/scripts/extensions/third-party/Api-Usage/request-tap/capture.js:1:1)',
+      '    at patched (http://h/scripts/extensions/third-party/yuzuki-Memory/dist/index.js:12:3)',
+      '    at sendOpenAIRequest (http://h/scripts/openai.js:3138:9)',
+      '    at Generate (http://h/script.js:4290:5)',
+    ].join('\n');
+    expect(actorFromStack(stack)).toMatchObject({ kind: 'tavern', label: '酒馆主窗' });
+  });
+
+  it('srcdoc 里的用户脚本直接打请求时判脚本', () => {
+    const stack = ['Error', '    at go (about:srcdoc:1:16)'].join('\n');
+    expect(actorFromStack(stack)).toMatchObject({ kind: 'script' });
+  });
+
   it('没有扩展帧时返回 null，交给上下文兜底', () => {
     expect(actorFromStack('Error\n    at x (http://h/app.js:1:1)')).toBeNull();
     expect(actorFromStack('')).toBeNull();

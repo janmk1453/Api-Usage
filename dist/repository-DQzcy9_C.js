@@ -1,10 +1,11 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { i as state, o as defaultSettings, r as getSelectedSave, s as mobileDeviceHint } from "./store-CVamS-ER.js";
+import { i as state, o as defaultSettings, r as getSelectedSave, s as mobileDeviceHint } from "./store-NBl_hgTZ.js";
 import { a as HIDDEN_PRICING_MODELS, c as PRICE_HISTORY, l as PRICING, r as DEFAULT_PEAK_HOURS, s as MAX_HISTORY, t as DEFAULT_CONTEXT_LIMIT } from "./pricing-Bc-qEvy8.js";
-import { _ as saveHot, a as clearHistoryCold, f as loadHistoryCold, g as saveHistoryCold, h as saveExtensionSettings, l as getAllHistory, p as loadHot, r as appendHistoryCold, u as getExtensionSettings, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
+import { a as deleteDetail, r as clearDetailStore } from "./detail-store-CqNNEAWB.js";
+import { _ as saveExtensionSettings, b as historyRecordKey, f as getExtensionSettings, h as loadHot, m as loadHistoryCold, o as clearHistoryCold, r as appendHistoryCold, u as getAllHistory, v as saveHistoryCold, y as saveHot } from "./persistence-BmzJp2Zz.js";
 import { a as isUnsafeKey, c as localDay, i as isPeakHour$1, n as isChinaHoliday, o as isValidDayKey, r as isExtraOffDay, s as isWeekendDay } from "./date-Dsu8hrMO.js";
-import { o as getWalletExchangeRate } from "./currency-Dr655frw.js";
+import { o as getWalletExchangeRate } from "./currency-WNr8ECMS.js";
 import { n as emit, t as DataEvents } from "./events-BD2MbRMW.js";
 //#region src/types/wallet.ts
 var DEEPSEEK_WALLET_ID = "wallet:deepseek-official";
@@ -1799,6 +1800,21 @@ function notifyStorageFailure(error) {
 	storageFailureNotified = true;
 	toast("warning", "冷历史写入失败，统计可能不完整；请检查浏览器存储空间");
 }
+/** 冷库读取失败的提示节流：一次故障会被多个页面同时触发，别刷屏 */
+var COLD_READ_NOTIFY_INTERVAL_MS = 6e5;
+var coldReadNotifiedAt = 0;
+/**
+* 冷库（IndexedDB）读不出来时的兜底提示。
+* 失败会被上层 catch（概览 / 统计 / 导出各自有 fallback），所以这里先主动说一句，
+* 否则用户只会看到「更早的记录不见了」却没有任何解释；历史页另有常驻告警条与重试入口。
+*/
+function notifyColdReadFailure(error) {
+	log.error("全量历史读取失败（含冷库）", error);
+	const now = Date.now();
+	if (coldReadNotifiedAt && now - coldReadNotifiedAt < COLD_READ_NOTIFY_INTERVAL_MS) return;
+	coldReadNotifiedAt = now;
+	toast("warning", `更早的历史记录没能读出来：列表与统计只含最近 ${MAX_HISTORY} 条，可在历史记录页重试`);
+}
 function numericPrice(value, fallback) {
 	const n = typeof value === "number" ? value : parseFloat(String(value));
 	return Number.isFinite(n) ? n : fallback;
@@ -2296,7 +2312,7 @@ function fnv1a(hash, text) {
 }
 function safeAppVersion() {
 	try {
-		return "3.2.3";
+		return "3.2.4";
 	} catch {
 		return "";
 	}
@@ -2397,6 +2413,7 @@ function normalizeSettings(incoming) {
 	merged.extraOffDays = Array.isArray(merged.extraOffDays) ? Array.from(new Set(merged.extraOffDays.filter((day) => isValidDayKey(day)))).sort() : def.extraOffDays;
 	if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
 	if (!merged.historyScope) merged.historyScope = def.historyScope;
+	if (typeof merged.tokenUnitCompact !== "boolean") merged.tokenUnitCompact = false;
 	if (!merged.theme) merged.theme = def.theme;
 	if (typeof merged.modelsPricingCollapsed !== "boolean") merged.modelsPricingCollapsed = true;
 	if (typeof merged.mobileCompatUi !== "boolean") merged.mobileCompatUi = mobileDeviceHint();
@@ -2497,6 +2514,10 @@ function pruneDetails() {
 			delete e.messages;
 			delete e.fullRequest;
 			delete e.fullResponse;
+			if (e.detailKey) {
+				deleteDetail(e.detailKey).catch(() => {});
+				delete e.detailKey;
+			}
 		} else if (e.fullRequest && typeof e.fullRequest === "object" && Array.isArray(e.fullRequest.messages)) e.fullRequest = sanitizeFullRequest(e.fullRequest);
 	}
 }
@@ -2568,8 +2589,29 @@ var repository = {
 	async getColdHistory() {
 		return loadHistoryCold();
 	},
+	/**
+	* 按时间戳取单条记录（热区优先，没有再查冷库）。
+	* 详情抽屉用它回退展示旧摘要：列表模板里只放得下稀疏字段，完整原文在详情库里，需要先找到 detailKey。
+	*/
+	async getHistoryEntry(timestamp) {
+		const ts = Number(timestamp);
+		if (!Number.isFinite(ts)) return null;
+		const hot = (state.history || []).find((entry) => Number(entry?.timestamp) === ts);
+		if (hot) return hot;
+		try {
+			return (await loadHistoryCold() || []).find((entry) => Number(entry?.timestamp) === ts) || null;
+		} catch (error) {
+			notifyColdReadFailure(error);
+			return null;
+		}
+	},
 	async getAllHistory() {
-		return getAllHistory();
+		try {
+			return await getAllHistory();
+		} catch (error) {
+			notifyColdReadFailure(error);
+			throw error;
+		}
 	},
 	async deleteHistoryByFilter(filter = {}) {
 		const start = filter.start && isValidDayKey(filter.start) ? filter.start : "";
@@ -2594,6 +2636,11 @@ var repository = {
 		});
 		const removed = Math.max(0, (all || []).length - remains.length);
 		if (!removed) return 0;
+		for (const entry of all || []) {
+			if (remains.indexOf(entry) !== -1) continue;
+			const key = entry?.detailKey;
+			if (key) deleteDetail(key).catch(() => {});
+		}
 		await this.replaceAll({ history: remains }, { clearCold: true });
 		await this.recalcAll();
 		await rebuildAggregates();
@@ -2710,7 +2757,7 @@ var repository = {
 					const modelObservation = observeModel(wallet, model, nowTs);
 					if (modelObservation.changed) wallet.updatedAt = nowTs;
 					if (modelObservation.model?.source === "discovered" && modelObservation.model.price.priceConfigured !== true && !!wallet.catalogProvider) try {
-						import("./pricing-sync-BqDgbeJS.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
+						import("./pricing-sync-AcemdDRp.js").then((n) => n.a).then((module) => module.syncPricingFromModelsDev({ silent: true })).then(() => this.recalcWallet(wallet.id)).catch(() => {});
 					} catch {}
 				}
 				wallet.lastUsedAt = nowTs;
@@ -2900,6 +2947,7 @@ var repository = {
 		lu.chatId = chatId;
 		lu.chatName = chatName;
 		lu.requestId = requestId;
+		lu.detailKey = requestId ? String(requestId) : null;
 		if (connection) {
 			lu.sourceType = connection.sourceType;
 			lu.endpointId = connection.endpointId;
@@ -2918,6 +2966,7 @@ var repository = {
 			cache_hit_tokens: hit,
 			cache_miss_tokens: miss,
 			requestId,
+			detailKey: requestId ? String(requestId) : null,
 			completion_tokens: comp,
 			total_tokens: total,
 			input_cost: lu.input_cost,
@@ -3266,6 +3315,7 @@ var repository = {
 				if (options.clearCold) await clearHistoryCold();
 				state.history = h;
 			}
+			if (!h.length) clearDetailStore().catch(() => {});
 		} else if (options.clearCold) await clearHistoryCold();
 		if (next.total_tokens !== void 0) state.total_tokens = next.total_tokens;
 		if (next.total_cost !== void 0) state.total_cost = next.total_cost;

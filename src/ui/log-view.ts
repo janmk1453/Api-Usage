@@ -2,12 +2,14 @@
  * 问题反馈 / 请求日志页（设置 → 问题反馈 / 请求日志）
  *
  * 展示最近一轮对话请求的标头、正文与响应元数据，并提供「上传反馈」入口；
- * 同时是历史记录页问题提示的开关所在（总开关 + 恢复已忽略的问题）。
+ * 同时是历史记录页问题提示的开关所在（总开关 + 恢复已忽略的问题），
+ * 也是「其他请求」探针验证页的入口（原在历史记录页工具栏）。
  *
  * 只读展示：数据由 services/request-log.ts 在 fetch 捕获层旁路写入，
  * 与本页无关——本页只负责渲染，绝不参与统计口径。
  */
 import { icon } from './icons';
+import { backButtonHTML } from './back-button';
 import { switchHTML } from './switch';
 import { APP_VERSION } from '../constants/version';
 import { openLogUploadDialog } from './log-upload-dialog';
@@ -250,6 +252,28 @@ function healthPrefsHTML(): string {
 }
 
 let goBack: (() => void) | null = null;
+let goTap: (() => void) | null = null;
+
+/**
+ * 顶部工具条（纯函数，便于单测）：说明 / 上传反馈 / 其他请求 / 刷新 / 清空 / 返回。
+ * 「其他请求」是探针账本的技术验证页，原先挂在历史记录页工具栏，现在并到这一页 ——
+ * 两者都是「出了问题当场看的现场证据」，放一起比散在两个页面里好找。
+ * 返回按钮与另外两个二级页同一来源（`backButtonHTML`）、同一位置（组内最右）。
+ */
+export function logTopHTML(summary: string): string {
+  return (
+    '<div class="aus-log-top">' +
+    '<div class="aus-log-desc">只保留最近一轮对话请求，默认只在当前浏览器本地保存。密钥已打码。<span class="aus-log-desc-state" id="aus-log-state">' + esc(summary) + '</span></div>' +
+    '<div class="aus-log-actions">' +
+    '<button type="button" class="aus-log-link is-upload" data-log-action="upload">' + icon('menu', 14) + '上传反馈</button>' +
+    '<button type="button" class="aus-log-link" data-log-action="tap" title="查看探针采到的非常规对话请求（技术验证，数据隔离、不进统计）">' + icon('chevron-right', 14) + '其他请求</button>' +
+    '<button type="button" class="aus-log-link" data-log-action="refresh">' + icon('refresh', 14) + '刷新</button>' +
+    '<button type="button" class="aus-log-link" data-log-action="clear">' + icon('close', 14) + '清空</button>' +
+    backButtonHTML({ id: 'aus-log-back', data: { 'data-log-action': 'back' } }) +
+    '</div>' +
+    '</div>'
+  );
+}
 
 export function renderLogView(): void {
   if (typeof document === 'undefined') return;
@@ -257,16 +281,7 @@ export function renderLogView(): void {
   if (!host) return;
   const record = readRequestLog();
   const summary = summarizeRequestLog(record);
-  host.innerHTML =
-    '<div class="aus-log-top">' +
-    '<button type="button" class="aus-log-link aus-log-back" data-log-action="back" aria-label="返回设置">' + icon('chevron-left', 14) + '返回</button>' +
-    '<div class="aus-log-desc">只保留最近一轮对话请求，默认只在当前浏览器本地保存。密钥已打码。<span class="aus-log-desc-state" id="aus-log-state">' + esc(summary) + '</span></div>' +
-    '<div class="aus-log-actions">' +
-    '<button type="button" class="aus-log-link is-upload" data-log-action="upload">' + icon('menu', 14) + '上传反馈</button>' +
-    '<button type="button" class="aus-log-link" data-log-action="refresh">' + icon('refresh', 14) + '刷新</button>' +
-    '<button type="button" class="aus-log-link" data-log-action="clear">' + icon('close', 14) + '清空</button>' +
-    '</div>' +
-    '</div>' +
+  host.innerHTML = logTopHTML(summary) +
     '<div class="aus-log-advice">遇到对话没被记录、token 或费用明显不对时，建议在问题刚复现、还没进行下一轮对话时就点「上传反馈」——日志只保留最近一轮请求，继续聊下去会把出问题的那一轮覆盖掉。</div>' +
     healthPrefsHTML() +
     '<div id="aus-log-content">' + logBodyHTML(record) + '</div>';
@@ -299,6 +314,11 @@ function bind(host: HTMLElement): void {
     if (action === 'back') {
       resetClear();
       if (goBack) goBack();
+      return;
+    }
+    if (action === 'tap') {
+      resetClear();
+      if (goTap) goTap();
       return;
     }
     if (action === 'upload') {
@@ -354,6 +374,7 @@ function bind(host: HTMLElement): void {
   });
 }
 
-export function initLogView(options?: { go?: () => void }): void {
+export function initLogView(options?: { go?: () => void; goTap?: () => void }): void {
   if (options?.go) goBack = options.go;
+  if (options?.goTap) goTap = options.goTap;
 }

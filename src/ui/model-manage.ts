@@ -1,0 +1,325 @@
+/**
+ * 模型展示管理页（`data-view="model-manage"`）。
+ *
+ * 入口两处，都进同一个页面：统计页「模型汇总」标题右侧、设置页「模型展示」设置项。
+ * 页面本身是扁平同级视图，底栏布局下由 `nav-model.ts#CHILD_PARENT` 归到「统计」tab
+ * （`panel.ts` 记录进入前的来源页并注入 `initModelManageView`，页内返回 / 顶栏返回箭头
+ * / 底栏 pop-root 都回到来源页）。
+ *
+ * 页面管两件事，两套独立的隐藏集合（`model-visibility.ts`）：
+ * - 「表格展示」：该模型是否出现在统计页「模型汇总」表里；
+ * - 「下拉选项」：该模型是否出现在统计页 / 历史页 / 趋势预测页的「模型」下拉里。
+ * 两者都只改展示，不删数据、不参与任何统计口径——历史记录、统计合计、预测与能耗评分
+ * 依旧按全量历史计算。
+ */
+import { state } from '../store/index';
+import { repository } from '../data/repository';
+import { esc } from '../utils/date';
+import { formatMoney } from '../services/currency';
+import { switchHTML } from './switch';
+import { formatToken, tokenUnitOf } from '../data/token-format';
+import { backButtonHTML } from './back-button';
+import {
+  clearHiddenModelsFor,
+  isModelHiddenFor,
+  modelVisibilityKey,
+  setAllModelsHiddenFor,
+  setModelHiddenFor,
+  type ModelVisibilityTarget,
+} from './model-visibility';
+
+type Navigator = { go: () => void };
+
+let navigator: Navigator | null = null;
+/** 切页导航回调由 panel.ts 注册（避免 model-manage 反向 import panel 造成循环依赖） */
+export function initModelManageView(opts: Navigator): void {
+  navigator = opts;
+}
+
+function getDoc(): Document { return (window.parent as any)?.document ?? document; }
+
+/** 一个模型的用量摘要（管理页只用来排序与展示，不参与统计） */
+export interface ModelUsageRow {
+  /** 模型键（trim 后，空名字统一为 unknown，见 modelVisibilityKey） */
+  model: string;
+  /** 轮次 */
+  count: number;
+  /** 总 Tokens */
+  total: number;
+  /** 总费用（本币） */
+  cost: number;
+}
+
+/**
+ * 汇总历史里的模型用量（纯函数，便于单测）。只统计出现过的模型，按轮次倒序、同轮次按名字排序；
+ * 空模型名归到 `unknown` 一行，与统计页「模型汇总」的分组口径一致，这样那一行也能单独隐藏。
+ */
+export function modelUsageRows(history: readonly any[]): ModelUsageRow[] {
+  const map = new Map<string, ModelUsageRow>();
+  for (const entry of history || []) {
+    const key = modelVisibilityKey(entry?.model);
+    const row = map.get(key);
+    const total = Number(entry?.total_tokens) || 0;
+    const cost = Number(entry?.cost) || 0;
+    if (row) {
+      row.count += 1;
+      row.total += total;
+      row.cost += cost;
+    } else {
+      map.set(key, { model: key, count: 1, total, cost });
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => (b.count - a.count) || a.model.localeCompare(b.model, 'zh-CN'));
+}
+
+/** 搜索关键词（只在本页内过滤显示，不进存储） */
+let keyword = '';
+/** 最近一次聚合结果，供搜索、模式切换与重绘复用 */
+let rows: ModelUsageRow[] = [];
+/** 当前管理模式：表格展示 / 下拉选项（只在本次会话内记忆） */
+let mode: ModelVisibilityTarget = 'table';
+/** 渲染令牌：热数据先画、冷数据补全，快速切页时丢弃过期结果 */
+let renderToken = 0;
+
+const MODES: Array<{ key: ModelVisibilityTarget; label: string; title: string; desc: string }> = [
+  {
+    key: 'table',
+    label: '表格展示',
+    title: '控制哪些模型出现在统计页「模型汇总」表格',
+    desc: '只控制「模型汇总」表格里是否列出该模型：隐藏不会删除任何数据，概览、统计合计、历史记录与趋势预测仍按全部历史计算。',
+  },
+  {
+    key: 'picker',
+    label: '下拉选项',
+    title: '控制哪些模型出现在各页「模型」下拉',
+    desc: '只控制统计页、历史页与趋势预测页的「模型」下拉里是否列出该模型：隐藏不会删除任何数据，已选中的模型仍照旧参与计算。',
+  },
+];
+
+function modeInfo(): { key: ModelVisibilityTarget; label: string; title: string; desc: string } {
+  return MODES.find((m) => m.key === mode) || MODES[0];
+}
+
+function shellHTML(): string {
+  // 模板只写结构：布局、内距、收缩规则全部放 style.css，避免内联宽度在窄屏撑宽整页。
+  const info = modeInfo();
+  return [
+    '<div id="aus-model-manage-head">',
+    '<div class="aus-model-manage-lead">',
+    '<div class="aus-model-manage-title">模型展示管理</div>',
+    '<div class="aus-model-manage-desc" id="aus-model-manage-desc">' + esc(info.desc) + '</div>',
+    '</div>',
+    '<div id="aus-model-manage-tools">',
+    '<input id="aus-model-manage-search" type="text" placeholder="搜索模型" value="' + esc(keyword) + '" />',
+    '<button id="aus-model-manage-reset" type="button" class="aus-model-manage-btn">全部显示</button>',
+    '<button id="aus-model-manage-hide-all" type="button" class="aus-model-manage-btn">全部隐藏</button>',
+    backButtonHTML({ id: 'aus-model-manage-back', title: '回到进入本页之前的页面' }),
+    '</div>',
+    '</div>',
+    '<div id="aus-model-manage-modes" data-mode="' + mode + '" role="tablist" aria-label="管理模式">',
+    '<span class="aus-model-manage-mode-thumb" aria-hidden="true"></span>',
+    MODES.map((m) => '<button type="button" class="aus-model-manage-mode" role="tab" data-manage-mode="' + m.key + '" data-active="' + (m.key === mode ? '1' : '0') + '" aria-selected="' + (m.key === mode ? 'true' : 'false') + '" title="' + esc(m.title) + '">' + esc(m.label) + '</button>').join(''),
+    '</div>',
+    '<div class="ds-card aus-model-manage-card">',
+    '<div id="aus-model-manage-list"></div>',
+    '</div>',
+    '<div id="aus-model-manage-foot"></div>',
+  ].join('');
+}
+
+function rowHTML(row: ModelUsageRow, index: number): string {
+  const key = modelVisibilityKey(row.model);
+  const hidden = isModelHiddenFor(mode, key);
+  let costTxt = '¥' + row.cost.toFixed(4);
+  try { costTxt = formatMoney(row.cost, 4); } catch {}
+  const meta = row.count + ' 轮 · ' + formatToken(row.total, tokenUnitOf(state.settings)) + ' tokens · ' + costTxt;
+  const aria = row.model + '：' + (mode === 'picker' ? '在「模型」下拉中展示' : '在模型汇总中展示');
+  return [
+    '<div class="aus-model-manage-row" data-model-row="' + esc(key) + '" data-model-name="' + esc(row.model.toLowerCase()) + '" data-hidden="' + (hidden ? '1' : '0') + '">',
+    '<div class="aus-model-manage-main">',
+    '<div class="aus-model-manage-name" title="' + esc(row.model) + '">' + esc(row.model) + '</div>',
+    '<div class="aus-model-manage-meta">' + meta + '</div>',
+    '</div>',
+    '<span class="aus-model-manage-state" data-state>' + (hidden ? '已隐藏' : '展示中') + '</span>',
+    switchHTML('aus-model-sw-' + index, { checked: !hidden, ariaLabel: aria }),
+    '</div>',
+  ].join('');
+}
+
+function applyKeywordFilter(doc: Document): void {
+  const list = doc.getElementById('aus-model-manage-list');
+  if (!list) return;
+  const kw = keyword.trim().toLowerCase();
+  list.querySelectorAll('[data-model-row]').forEach((el: any) => {
+    const name = el.getAttribute('data-model-name') || '';
+    el.style.display = !kw || name.includes(kw) ? '' : 'none';
+  });
+}
+
+function paintFoot(doc: Document): void {
+  const foot = doc.getElementById('aus-model-manage-foot');
+  if (!foot) return;
+  const total = rows.length;
+  const hidden = rows.filter((r) => isModelHiddenFor(mode, modelVisibilityKey(r.model))).length;
+  const where = mode === 'picker' ? '「模型」下拉' : '「模型汇总」表';
+  foot.textContent = total
+    ? '共 ' + total + ' 个模型 · 已隐藏 ' + hidden + ' 个' + (hidden ? '（隐藏项不会出现在' + where + '中）' : '')
+    : '暂无模型数据';
+}
+
+/** 重画列表（数据、模式或显隐变更后调用） */
+function paintList(doc: Document): void {
+  const list = doc.getElementById('aus-model-manage-list');
+  if (!list) return;
+  if (!rows.length) {
+    list.innerHTML = '<div style="padding:20px 16px;text-align:center;color:var(--ds-text-3);font-size:var(--aus-fs-sm);">暂无可管理的模型，产生用量记录后即可在此设置</div>';
+    paintFoot(doc);
+    return;
+  }
+  list.innerHTML = rows.map((row, i) => rowHTML(row, i)).join('');
+  applyKeywordFilter(doc);
+  paintFoot(doc);
+}
+
+/**
+ * 滑块定位：按当前选中按钮的实测几何写入 position/size（与底栏指示胶囊同一套思路）。
+ * 不假设两项等宽、也不写死 50%，改文案、换字号、改内距都不会错位；首次定位关过渡，避免从左侧飞过来。
+ */
+function paintModeThumb(doc: Document): void {
+  const wrap = doc.getElementById('aus-model-manage-modes') as HTMLElement | null;
+  if (!wrap) return;
+  const btn = wrap.querySelector('[data-manage-mode="' + mode + '"]') as HTMLElement | null;
+  const thumb = wrap.querySelector('.aus-model-manage-mode-thumb') as HTMLElement | null;
+  if (!btn || !thumb) return;
+  const wr = wrap.getBoundingClientRect();
+  const br = btn.getBoundingClientRect();
+  // 页面还没显示（display:none）时量不到尺寸，等下次渲染再定位
+  if (!wr.width || !br.width) { thumb.style.opacity = '0'; return; }
+  thumb.style.opacity = '1';
+  thumb.style.width = Math.round(br.width) + 'px';
+  thumb.style.height = Math.round(br.height) + 'px';
+  const next = 'translate3d(' + Math.round(br.left - wr.left) + 'px,' + Math.round(br.top - wr.top) + 'px,0)';
+  const first = wrap.getAttribute('data-ready') !== '1';
+  if (first) {
+    const prev = thumb.style.transition;
+    thumb.style.transition = 'none';
+    thumb.style.transform = next;
+    void thumb.offsetWidth;
+    thumb.style.transition = prev;
+    wrap.setAttribute('data-ready', '1');
+  } else {
+    thumb.style.transform = next;
+  }
+}
+
+/** 窗口尺寸变化（含窄屏断点切换内距）后重新贴合；同一容器只绑一次 */
+function bindModeThumbResize(doc: Document): void {
+  const wrap = doc.getElementById('aus-model-manage-modes') as HTMLElement | null;
+  if (!wrap || wrap.getAttribute('data-thumb-resize') === '1') return;
+  wrap.setAttribute('data-thumb-resize', '1');
+  try {
+    (doc.defaultView as any)?.addEventListener('resize', () => {
+      try { paintModeThumb(doc); } catch {}
+    });
+  } catch {}
+}
+
+/** 切换管理模式：重画描述、滑块与其选中态，再重画整张列表 */
+function paintMode(doc: Document): void {
+  const desc = doc.getElementById('aus-model-manage-desc');
+  if (desc) desc.textContent = modeInfo().desc;
+  const wrap = doc.getElementById('aus-model-manage-modes');
+  if (wrap) wrap.setAttribute('data-mode', mode);
+  // 只在本页的分段控件里认领，避免命中对话展示管理页里的同名 [data-manage-mode]
+  wrap?.querySelectorAll('[data-manage-mode]').forEach((el: any) => {
+    const on = el.getAttribute('data-manage-mode') === mode;
+    el.setAttribute('data-active', on ? '1' : '0');
+    el.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  try { paintModeThumb(doc); } catch {}
+  paintList(doc);
+}
+
+/** 绑定 shell 内的按钮与列表事件（幂等：只在首次构建 shell 时绑定一次） */
+function bindShell(doc: Document): void {
+  const list = doc.getElementById('aus-model-manage-list');
+  list?.addEventListener('change', (e: any) => {
+    const input = e.target as HTMLInputElement;
+    if (!input || input.type !== 'checkbox') return;
+    const rowEl = input.closest('[data-model-row]') as HTMLElement | null;
+    const key = rowEl?.getAttribute('data-model-row') || '';
+    if (!key) return;
+    setModelHiddenFor(mode, key, !input.checked);
+    if (rowEl) {
+      rowEl.setAttribute('data-hidden', input.checked ? '0' : '1');
+      const stateEl = rowEl.querySelector('[data-state]') as HTMLElement | null;
+      if (stateEl) stateEl.textContent = input.checked ? '展示中' : '已隐藏';
+    }
+    paintFoot(doc);
+  });
+  // 点行内空白也切换（触屏与鼠标都好用）；点开关本身走 label 原生行为，不重复处理
+  list?.addEventListener('click', (e: any) => {
+    const target = e.target as HTMLElement;
+    if (!target || target.closest('label.aus-switch')) return;
+    const rowEl = target.closest('[data-model-row]') as HTMLElement | null;
+    if (!rowEl) return;
+    const input = rowEl.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
+    if (!input) return;
+    input.checked = !input.checked;
+    input.dispatchEvent(new (doc.defaultView as any).Event('change', { bubbles: true }));
+  });
+  const search = doc.getElementById('aus-model-manage-search') as HTMLInputElement | null;
+  search?.addEventListener('input', () => {
+    keyword = search.value || '';
+    applyKeywordFilter(doc);
+  });
+  doc.getElementById('aus-model-manage-reset')?.addEventListener('click', () => {
+    clearHiddenModelsFor(mode);
+    paintList(doc);
+  });
+  doc.getElementById('aus-model-manage-hide-all')?.addEventListener('click', () => {
+    setAllModelsHiddenFor(mode, rows.map((row) => modelVisibilityKey(row.model)), true);
+    paintList(doc);
+  });
+  doc.getElementById('aus-model-manage-back')?.addEventListener('click', () => {
+    try { navigator?.go(); } catch {}
+  });
+  doc.getElementById('aus-model-manage-modes')?.querySelectorAll('[data-manage-mode]').forEach((el: any) => {
+    el.addEventListener('click', () => {
+      const next = el.getAttribute('data-manage-mode') as ModelVisibilityTarget;
+      if (next !== 'table' && next !== 'picker') return;
+      if (next === mode) return;
+      mode = next;
+      paintMode(doc);
+    });
+  });
+}
+
+/**
+ * 渲染管理页：先用热数据（热区最近 2000 条）立即出图，再异步用冷存储全量补全，
+ * 避免打开页面时空白等待 IndexedDB（与对话展示管理同一套补全思路）。
+ */
+export async function renderModelManageView(): Promise<void> {
+  const doc = getDoc();
+  const host = doc.getElementById('aus-model-manage-body');
+  if (!host) return;
+  if (!host.firstChild) {
+    host.innerHTML = shellHTML();
+    try { bindShell(doc); } catch {}
+    try { bindModeThumbResize(doc); } catch {}
+    try { paintModeThumb(doc); } catch {}
+  } else {
+    paintMode(doc);
+  }
+  const token = ++renderToken;
+  const hot = (state.history || []) as any[];
+  rows = modelUsageRows(hot);
+  paintList(doc);
+  try {
+    const all = await repository.getAllHistory();
+    if (token !== renderToken) return;
+    if (!all || !all.length || all.length <= hot.length) return;
+    rows = modelUsageRows(all);
+    paintList(doc);
+  } catch {}
+}

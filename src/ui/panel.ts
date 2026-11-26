@@ -1,8 +1,9 @@
 import { APP_VERSION, BUILD_NO } from '../constants/version';
+import { MAX_HISTORY } from '../constants/pricing';
 import { state, getSelectedSave, getHistoryForDisplay, getCurrentChatIdForStore } from '../store/index';
 import { esc, localDay, localTimeHM } from '../utils/date';
 import { isTruncatedOf } from '../utils/finish';
-import { saveHot } from '../store/persistence';
+import { saveHot, getColdReadFailure, clearColdReadFailure } from '../store/persistence';
 import { queryBalance } from '../services/balance';
 import { bindImportExport } from '../services/import-export';
 import { renderSettings } from './settings';
@@ -15,8 +16,8 @@ import {
   childParentOf,
   isChildView,
   isSettingsChild,
-  parentTabOf,
   resolveTabTap,
+  tabOfView,
   viewTitle,
 } from './nav-model';
 import type { AppView } from './nav-model';
@@ -26,9 +27,11 @@ import { renderForecastView, initForecastView } from './forecast-view';
 import { disposeForecastCharts } from './forecast-chart';
 import { renderWalletView } from './wallet-view';
 import { initChatManageView, renderChatManageView } from './chat-manage';
+import { initModelManageView, renderModelManageView } from './model-manage';
 import { initTapView, renderTapView } from './tap-view';
 import { initLogView, renderLogView } from './log-view';
 import { renderHistoryHealthBar } from './history-health-bar';
+import { coldReadWarnHTML, COLD_WARN_HOST_ID, COLD_WARN_RETRY_ID } from './cold-read-warn';
 import { historyBadgeOf, shouldShowStateBadge } from './history-badge';
 import { sourceBadgeOf, originTextOf } from './source-badge';
 import { REQUEST_TYPE_OPTIONS, requestTypeLabel } from './request-type-filter';
@@ -39,11 +42,13 @@ import { helpViewHTML } from './help-view';
 import { chartCardHTML } from './chart-picker';
 import { hideAllChartTooltips } from './chart-tooltip';
 import { filterPickerRows } from './chat-visibility';
+import { filterModelPickerRows } from './model-visibility';
 import { backDebug } from './back-debug';
 import { afterNextPaint, closeDropdownInstant } from './dropdown-close';
 import { BACK_GUARD_DEPTH, nextGuardState, readGuardDepth, stripGuardState } from './back-guard';
 import { mobileDeviceHint } from '../utils/device';
 import { bindChangelog, renderChangelogCard } from './changelog';
+import { bindAnnouncementCard, refreshAnnouncementCard, renderAnnouncementCard } from './announcement-card';
 import { bindAboutBrandTap, maybeShowChangelogDialog, openChangelogDialog } from './changelog-dialog';
 import { readFilterPrefs, writeFilterPrefs } from './filter-prefs';
 import { initPillState } from './pill';
@@ -51,6 +56,11 @@ import { applyTheme } from '../services/theme';
 import { DataEvents, on as onDataEvent } from '../data/events';
 import { formatMoney, getDisplayCurrency } from '../services/currency';
 import { repository } from '../data/repository';
+import { formatToken, tokenTitle, tokenUnitOf } from '../data/token-format';
+import { getDetail } from '../data/detail-store';
+import type { DetailBlob, DetailSide } from '../data/detail-store';
+import { createJsonTree, jsonParseSafe } from './json-tree';
+import type { JsonTreeHandle } from './json-tree';
 import { trackOpen, trackPage, trackRender, flushTelemetry } from '../services/telemetry';
 import {
   STATS_FILTER_ALL,
@@ -126,12 +136,14 @@ function prettyFullResponse(resp: any): string {
 let panelCreated = false;
 let panelOpen = false;
 let currentView: AppView = 'overview';
-/** 「设置」下最近打开的二级页（窄屏点回「设置」tab 时恢复到上次位置） */
-let settingsChildView: AppView | null = null;
 /** 「对话展示管理」的来源页：进入前记录的视图，页内「返回」与顶栏返回箭头都回到这里 */
 let chatManageOrigin: AppView = 'overview';
 /** 「问题反馈 / 请求日志」的来源页：设置页与历史记录页两个入口共用，返回时各回各家 */
 let logOrigin: AppView = 'settings';
+/** 「其他请求」的来源页：只从请求日志页进入，返回时回到日志页（再回它自己的来源） */
+let tapOrigin: AppView = 'log';
+/** 「模型展示管理」的来源页：统计页「模型汇总」与设置页两处入口共用，返回时各回各家 */
+let modelManageOrigin: AppView = 'stats';
 /** 当前导航高亮键：窄屏二级页归到「设置」，桌面为视图本身 */
 let currentNavKey: AppView = 'overview';
 let collapsed = false;
@@ -152,7 +164,13 @@ export function refreshUI() {
       try {  totalCostEl.textContent = formatMoney(s.total_cost || 0, 4); } catch { totalCostEl.textContent = '¥' + (s.total_cost || 0).toFixed(4) + ' CNY'; }
     }
     const tokEl = doc.getElementById('aus-total-tokens');
-    if (tokEl) tokEl.textContent = (s.total_tokens || 0).toLocaleString('zh-CN') + ' tokens';
+    if (tokEl) {
+      const headUnit = tokenUnitOf(state.settings);
+      tokEl.textContent = formatToken(s.total_tokens || 0, headUnit) + ' tokens';
+      const headFull = tokenTitle(s.total_tokens || 0, headUnit);
+      if (headFull) tokEl.title = headFull + ' tokens';
+      else tokEl.removeAttribute('title');
+    }
     renderHistory(doc, s);
     renderOverview();
     renderStatsView();
@@ -304,12 +322,14 @@ function renderHistoryFilterDropdown(
 function renderHistoryFilters(history: any[]) {
   historyFilterBase = history || [];
   const doc = getDoc();
+  // 全量模型选项用于取值校验与标签回显；下拉里只列未被隐藏的（「模型展示管理」的「下拉选项」集合）
   const models = Array.from(new Set(historyFilterBase.map((entry) => String(entry?.model || '').trim()).filter(Boolean)))
     .sort((a, b) => a.localeCompare(b, 'zh-CN'))
     .map((id) => ({ id, label: id }));
   if (historyFilters.model !== STATS_FILTER_ALL && !models.some((option) => option.id === historyFilters.model)) {
     historyFilters.model = STATS_FILTER_ALL;
   }
+  const visibleModels = filterModelPickerRows(models, (option) => option.id);
   // 全量对话选项用于取值校验与名称回显；下拉里只列未被隐藏的（「对话展示管理」的「下拉选项」集合）
   const chatOptions = getHistoryChatOptions(historyFilterBase);
   // 「当前对话」是动态项，不要求出现在已记录对话列表里
@@ -364,7 +384,7 @@ function renderHistoryFilters(history: any[]) {
     closeHistoryFilterDropdownsInstant();
     afterNextPaint(() => renderHistory(doc, getSelectedSave()));
   });
-  renderHistoryFilterDropdown('model', historyFilters.model, models, '暂无模型', (value) => {
+  renderHistoryFilterDropdown('model', historyFilters.model, visibleModels, models.length ? '模型已全部隐藏（可在「模型展示管理」中恢复）' : '暂无模型', (value) => {
     historyFilters.model = value;
     historyPage = 1;
     closeHistoryFilterDropdownsInstant();
@@ -415,6 +435,16 @@ function filteredHistoryForDisplay(history: any[]): any[] {
   });
 }
 
+/**
+ * 历史页「重置筛选 / 清除筛选」的唯一实现：五维回全部、关掉下拉、按新条件重画（顺带落盘偏好）。
+ * 工具栏与空态两枚按钮都调这里，避免两份逻辑漂移。
+ */
+function applyHistoryFilterReset(doc: Document): void {
+  resetHistoryFilters();
+  closeHistoryFilterDropdowns();
+  renderHistory(doc, getSelectedSave());
+}
+
 function bindHistoryFilters(doc: Document) {
   const controls: Array<[HistoryFilterKind, string]> = [
     ['requestType', '#aus-history-type-btn'],
@@ -436,15 +466,11 @@ function bindHistoryFilters(doc: Document) {
       positionFilterDropdown(button, dropdown);
     };
   }
-  // 顶部筛选「重置筛选」：五维恢复为全部、分页回第一页，并随 renderHistoryFilters 落盘
-  const historyResetBtn = doc.getElementById('aus-history-filter-reset');
-  if (historyResetBtn) {
-    historyResetBtn.onclick = () => {
-      resetHistoryFilters();
-      closeHistoryFilterDropdowns();
-      renderHistory(doc, getSelectedSave());
-    };
-  }
+  // 顶部筛选「重置筛选」：五维恢复为全部、分页回第一页，并随 renderHistoryFilters 落盘。
+  // 查询必须限定在工具栏内：空态那枚「清除筛选」曾经共用同一个 id，而它在文档里更靠后，
+  // 全局 getElementById 永远命中工具栏这枚，空态按钮拿不到任何点击处理（点了没反应）。
+  const historyResetBtn = doc.querySelector('#aus-history-filter-host #aus-history-filter-reset') as HTMLElement | null;
+  if (historyResetBtn) historyResetBtn.onclick = () => applyHistoryFilterReset(doc);
   doc.addEventListener('click', (event: any) => {
     const target = event.target as HTMLElement;
     if (!target.closest('#aus-history-filter-host')) closeHistoryFilterDropdowns();
@@ -533,12 +559,328 @@ function openHistoryDetail(doc: Document, panel: HTMLElement, btn: HTMLElement) 
   drawer.style.display = 'flex';
   const content = doc.getElementById('aus-content-body') as HTMLElement | null;
   if (content) content.classList.add('has-history-detail');
+  // 打开时先填默认激活的「请求参数」；其余 Tab 等切过去再读
+  void fillDetailTab(doc, panel, 'req', ts);
 }
 
 /**
  * 在重绘列表期间保持 #aus-main 的滚动位置不变：翻页、异步补齐全量数据都只换内容，
  * 不允许把页面滚到别处（旧实现用 scrollIntoView 把列表拽回顶部）。
  */
+/* ── 详情抽屉：完整请求体 / 请求头 / 完整响应 / Raw 用量 ───────────────────────
+ * 这些原文单个就可能有数 MB，热区 JSON 里只放得下摘要；完整原文存在独立的详情库
+ * （src/data/detail-store.ts），只在打开详情或切换 Tab 时才按需读取。
+ * 读到的原文挂成可折叠 JSON 树：一棵树只建一次，重复切 Tab 不重建。
+ */
+
+/** 详情原文缓存：键是详情库的 key，重绘历史列表时整体失效 */
+const detailBlobCache = new Map<string, DetailBlob | null>();
+/** 已挂载的 JSON 树句柄：重绘时统一销毁，避免旧节点上的事件委托残留 */
+let detailTreeHandles: JsonTreeHandle[] = [];
+
+function releaseDetailTrees(): void {
+  for (const handle of detailTreeHandles) {
+    try { handle.destroy(); } catch {}
+  }
+  detailTreeHandles = [];
+}
+
+/** 重绘历史列表前调用：DOM 会被整体替换，树句柄与原文缓存一起作废 */
+function clearDetailCache(): void {
+  releaseDetailTrees();
+  detailBlobCache.clear();
+}
+
+function detailHint(doc: Document, text: string): HTMLElement {
+  const el = doc.createElement('div');
+  el.className = 'aus-dt-hint';
+  el.textContent = text;
+  return el;
+}
+
+function detailEmpty(doc: Document, text: string): HTMLElement {
+  const el = doc.createElement('div');
+  el.className = 'aus-dt-empty';
+  el.textContent = text;
+  return el;
+}
+
+/** 一段原文的字数说明；归档时被上限截断的记录要显性说明，不能让人以为是完整数据 */
+function detailSideNote(side: DetailSide | null | undefined): string {
+  if (!side) return '';
+  const chars = Number(side.chars) || (typeof side.body === 'string' ? side.body.length : 0);
+  return chars.toLocaleString() + ' 字符' + (side.truncated ? '（已达单条上限，尾部未保存）' : '');
+}
+
+interface DetailBlock {
+  wrap: HTMLElement;
+  bar: HTMLElement;
+}
+
+/** 详情块：一行工具条（标题 + 说明 + 右侧操作）+ 内容区 */
+function makeDetailBlock(doc: Document, parent: HTMLElement, title?: string, note?: string): DetailBlock {
+  const wrap = doc.createElement('div');
+  wrap.className = 'aus-dt-doc';
+  const bar = doc.createElement('div');
+  bar.className = 'aus-dt-tools';
+  if (title) {
+    const t = doc.createElement('span');
+    t.className = 'aus-dt-tools-title';
+    t.textContent = title;
+    bar.appendChild(t);
+  }
+  if (note) {
+    const n = doc.createElement('span');
+    n.className = 'aus-dt-tools-note';
+    n.textContent = note;
+    bar.appendChild(n);
+  }
+  const gap = doc.createElement('span');
+  gap.className = 'aus-dt-tools-gap';
+  bar.appendChild(gap);
+  wrap.appendChild(bar);
+  parent.appendChild(wrap);
+  return { wrap, bar };
+}
+
+function addDetailTool(doc: Document, bar: HTMLElement, label: string, onClick: () => void): HTMLElement {
+  const btn = doc.createElement('button');
+  btn.type = 'button';
+  btn.className = 'aus-dt-tool';
+  btn.textContent = label;
+  btn.addEventListener('click', onClick);
+  bar.appendChild(btn);
+  return btn;
+}
+
+function addCopyTool(doc: Document, bar: HTMLElement, getText: () => string): void {
+  const btn = addDetailTool(doc, bar, '复制', () => {
+    const text = getText();
+    const clip = (globalThis as any).navigator?.clipboard;
+    if (!clip?.writeText) return;
+    clip.writeText(text).then(() => {
+      btn.textContent = '已复制';
+      setTimeout(() => { btn.textContent = '复制'; }, 1500);
+    }).catch(() => {});
+  });
+}
+
+function addDownloadTool(doc: Document, bar: HTMLElement, getText: () => string, filename: string): void {
+  addDetailTool(doc, bar, '下载', () => {
+    try {
+      const blob = new Blob([getText()], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = doc.createElement('a');
+      a.href = url;
+      a.download = filename;
+      doc.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => { try { URL.revokeObjectURL(url); } catch {} }, 4000);
+    } catch {}
+  });
+}
+
+interface DetailMountOptions {
+  title?: string;
+  note?: string;
+  filename?: string;
+}
+
+/** 挂一棵可折叠 JSON 树，配展开 / 收起 / 复制 / 下载 */
+function mountDetailJson(doc: Document, parent: HTMLElement, value: unknown, options: DetailMountOptions = {}): void {
+  const { bar } = makeDetailBlock(doc, parent, options.title, options.note);
+  const ref: { handle: JsonTreeHandle | null } = { handle: null };
+  addDetailTool(doc, bar, '展开全部', () => { try { ref.handle?.expandAll(); } catch {} });
+  addDetailTool(doc, bar, '收起全部', () => { try { ref.handle?.collapseAll(); } catch {} });
+  const textOf = (): string => {
+    if (ref.handle) { try { return ref.handle.rawText(); } catch {} }
+    try { return JSON.stringify(value, null, 2); } catch { return String(value); }
+  };
+  addCopyTool(doc, bar, textOf);
+  if (options.filename) addDownloadTool(doc, bar, textOf, options.filename);
+  const handle = createJsonTree(doc, value, { expandDepth: 1 });
+  ref.handle = handle;
+  detailTreeHandles.push(handle);
+  parent.appendChild(handle.element);
+}
+
+/** 挂一段等宽纯文本（非 JSON 的原文走这里，复制 / 下载仍拿全量） */
+function mountDetailText(doc: Document, parent: HTMLElement, text: string, options: DetailMountOptions = {}): void {
+  const { wrap, bar } = makeDetailBlock(doc, parent, options.title, options.note);
+  addCopyTool(doc, bar, () => text);
+  if (options.filename) addDownloadTool(doc, bar, () => text, options.filename);
+  const pre = doc.createElement('pre');
+  pre.className = 'aus-dt-pre';
+  pre.textContent = text;
+  wrap.appendChild(pre);
+}
+
+/** 默认收起的折叠块（details 原生折叠，展开时才真正铺开内容） */
+function mountDetailFold(doc: Document, parent: HTMLElement, title: string, note: string, fill: (host: HTMLElement) => void): void {
+  const fold = doc.createElement('details');
+  fold.className = 'aus-dt-fold';
+  const sum = doc.createElement('summary');
+  sum.className = 'aus-dt-fold-sum';
+  sum.textContent = note ? title + ' · ' + note : title;
+  fold.appendChild(sum);
+  parent.appendChild(fold);
+  const host = doc.createElement('div');
+  host.className = 'aus-dt-fold-body';
+  fold.appendChild(host);
+  fill(host);
+}
+
+/** 把 SSE 原文逐帧拆成可折叠的 JSON 数组；不是 SSE 就返回 null */
+function parseSseFrames(raw: string): unknown[] | null {
+  const frames: unknown[] = [];
+  let touched = false;
+  for (const line of String(raw || '').split('\n')) {
+    const t = line.trim();
+    if (!t.startsWith('data:')) continue;
+    touched = true;
+    const payload = t.slice(5).trim();
+    if (!payload || payload === '[DONE]') { frames.push(payload || '[DONE]'); continue; }
+    const parsed = jsonParseSafe(payload);
+    frames.push(parsed.ok ? parsed.value : payload);
+  }
+  return touched ? frames : null;
+}
+
+function renderRequestTab(doc: Document, slot: HTMLElement, entry: any, blob: DetailBlob | null): void {
+  const bodySide = blob?.request || null;
+  const headSide = blob?.requestHeaders || null;
+  const stamp = String(entry?.timestamp || '');
+  if (!bodySide && !headSide) {
+    slot.appendChild(detailHint(doc, '这条记录没有归档完整原文（早于本次更新，或已超出最近 5 条的保留窗口），下面是当时保存的摘要。'));
+    const legacy = entry?.fullRequest;
+    if (legacy) mountDetailJson(doc, slot, legacy, { title: '请求参数摘要', filename: 'request-' + stamp + '.json' });
+    else if (entry?.raw_usage) mountDetailJson(doc, slot, entry.raw_usage, { title: 'Raw 用量', filename: 'usage-' + stamp + '.json' });
+    else slot.appendChild(detailEmpty(doc, '（原文已清理，仅保留统计）'));
+    return;
+  }
+  if (bodySide) {
+    const parsed = jsonParseSafe(bodySide.body);
+    if (parsed.ok) {
+      mountDetailJson(doc, slot, parsed.value, { title: '请求体', note: detailSideNote(bodySide), filename: 'request-' + stamp + '.json' });
+    } else {
+      mountDetailText(doc, slot, bodySide.body, { title: '请求体（原文，非 JSON）', note: detailSideNote(bodySide), filename: 'request-' + stamp + '.txt' });
+    }
+  } else {
+    slot.appendChild(detailHint(doc, '这条记录只归档了请求头，没有请求体。'));
+  }
+  if (headSide) {
+    mountDetailFold(doc, slot, '请求头（密钥已打码）', detailSideNote(headSide), (host) => {
+      const parsed = jsonParseSafe(headSide.body);
+      if (parsed.ok) mountDetailJson(doc, host, parsed.value, { filename: 'request-headers-' + stamp + '.json' });
+      else mountDetailText(doc, host, headSide.body, {});
+    });
+  }
+}
+
+function renderResponseTab(doc: Document, slot: HTMLElement, entry: any, blob: DetailBlob | null): void {
+  const side = blob?.response || null;
+  const summary = typeof entry?.fullResponse === 'string'
+    ? entry.fullResponse
+    : (entry?.fullResponse ? JSON.stringify(entry.fullResponse) : '');
+  const raw = (side && side.body) ? side.body : summary;
+  const stamp = String(entry?.timestamp || '');
+  if (!raw) {
+    slot.appendChild(detailEmpty(doc, '（原文已清理——仅最近 5 条保留，其余仅统计可用）'));
+    return;
+  }
+  if (!side) {
+    slot.appendChild(detailHint(doc, '这条记录只有当时保存的响应摘要（可能已截断），完整原文没有归档。'));
+  }
+  const chars = raw.length.toLocaleString() + ' 字符';
+  mountDetailText(doc, slot, prettyFullResponse(raw), {
+    title: '合并后的响应',
+    note: chars,
+    filename: 'response-merged-' + stamp + '.txt',
+  });
+  const frames = parseSseFrames(raw);
+  if (frames) {
+    mountDetailFold(doc, slot, '原始响应帧', frames.length + ' 帧', (host) => {
+      mountDetailJson(doc, host, frames, { note: '逐帧保留上游原字段', filename: 'response-frames-' + stamp + '.json' });
+    });
+  }
+  mountDetailFold(doc, slot, '响应原文', chars, (host) => {
+    mountDetailText(doc, host, raw, { filename: 'response-raw-' + stamp + '.txt' });
+  });
+}
+
+function renderUsageTab(doc: Document, slot: HTMLElement, entry: any, blob: DetailBlob | null): void {
+  const usage = (blob && blob.usage !== null && blob.usage !== undefined) ? blob.usage : (entry?.raw_usage ?? null);
+  if (usage === null || usage === undefined) {
+    slot.appendChild(detailEmpty(doc, '（这条记录没有可用的 Raw 用量）'));
+    return;
+  }
+  if (!blob?.usage) slot.appendChild(detailHint(doc, '这条记录没有归档用量原对象，下面是热区里保存的摘要。'));
+  mountDetailJson(doc, slot, usage, { title: 'Raw 用量（上游原对象）', filename: 'usage-' + String(entry?.timestamp || '') + '.json' });
+}
+
+function renderMessagesTab(doc: Document, slot: HTMLElement, entry: any, blob: DetailBlob | null): void {
+  const stamp = String(entry?.timestamp || '');
+  let messages: unknown = null;
+  if (blob?.request?.body) {
+    const parsed = jsonParseSafe(blob.request.body);
+    if (parsed.ok) {
+      const list = (parsed.value as any)?.messages;
+      if (Array.isArray(list) && list.length) messages = list;
+    }
+  }
+  const fromArchive = messages !== null;
+  if (!fromArchive) messages = entry?.messages || null;
+  if (messages === null || messages === undefined) {
+    slot.appendChild(detailEmpty(doc, '（原文已清理——仅最近 5 条保留，其余仅统计可用）'));
+    return;
+  }
+  const count = Array.isArray(messages) ? messages.length : 0;
+  if (fromArchive) {
+    mountDetailJson(doc, slot, messages, { title: '完整消息列表（来自归档请求体）', note: count + ' 条', filename: 'messages-' + stamp + '.json' });
+  } else {
+    slot.appendChild(detailHint(doc, '这条记录没有归档请求体，下面是当时保存的截断版本（每条正文最多 600 字）。'));
+    mountDetailJson(doc, slot, messages, { title: '消息列表（截断摘要）', note: count + ' 条', filename: 'messages-' + stamp + '.json' });
+  }
+}
+
+const DETAIL_TAB_RENDERERS: Record<string, (doc: Document, slot: HTMLElement, entry: any, blob: DetailBlob | null) => void> = {
+  req: renderRequestTab,
+  res: renderResponseTab,
+  raw: renderUsageTab,
+  msg: renderMessagesTab,
+};
+
+/** 按 Tab 惰性填充内容：同一个槽只填一次，重复切 Tab 直接复用已有 DOM */
+async function fillDetailTab(doc: Document, root: HTMLElement, tab: string, ts: string): Promise<void> {
+  const slot = root.querySelector('[data-content="' + tab + '-' + ts + '"]') as HTMLElement | null;
+  if (!slot || slot.getAttribute('data-filled') === '1') return;
+  slot.setAttribute('data-filled', '1');
+  slot.innerHTML = '';
+  const loading = detailEmpty(doc, '正在读取完整原文…');
+  slot.appendChild(loading);
+  let entry: any = null;
+  let blob: DetailBlob | null = null;
+  try {
+    entry = await repository.getHistoryEntry(ts);
+    const key = entry ? String(entry?.detailKey || '') : '';
+    if (key) {
+      if (detailBlobCache.has(key)) blob = detailBlobCache.get(key) || null;
+      else { blob = await getDetail(key); detailBlobCache.set(key, blob); }
+    }
+  } catch {}
+  // 异步回来时可能已换记录或列表已重绘：旧槽直接丢弃结果，不要往别人的抽屉里写
+  if ((slot as any).isConnected === false) return;
+  if (!entry) {
+    loading.textContent = '这条记录已经不存在了（可能刚被删除或超出保留窗口）。';
+    return;
+  }
+  slot.innerHTML = '';
+  const render = DETAIL_TAB_RENDERERS[tab] || renderRequestTab;
+  try { render(doc, slot, entry, blob); } catch (error) {
+    slot.appendChild(detailEmpty(doc, '原文渲染失败：' + String((error as any)?.message || error)));
+  }
+}
 function keepMainScrollPosition(doc: Document, fn: () => void): void {
   const scroller = doc.getElementById('aus-main') as HTMLElement | null;
   const top = scroller ? scroller.scrollTop : 0;
@@ -560,15 +902,15 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
   if (!host) return;
   const reopenDetailTs = activeHistoryDetailTs;
   resetHistoryDetailState(doc, true);
+  // 列表 DOM 整体重建，详情抽屉里的 JSON 树与原文缓存一并作废
+  clearDetailCache();
   const total = fullHist.length;
   if (!total) {
-    host.innerHTML = `<div style="text-align:center;padding:24px;color:var(--ds-text-3);font-size:var(--aus-fs-base);line-height:1.8;">当前筛选无记录<br/><button id="aus-history-filter-reset" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">清除筛选</button></div>`;
-    const reset = doc.getElementById('aus-history-filter-reset') as HTMLButtonElement | null;
-    if (reset) reset.onclick = () => {
-      resetHistoryFilters();
-      closeHistoryFilterDropdowns();
-      renderHistory(doc, getSelectedSave());
-    };
+    // 空态的「清除筛选」用独立 id 并在 host 内局部查找：与工具栏「重置筛选」撞 id 时，
+    // 全局 getElementById 会命中文档里更靠前的工具栏那枚，这枚按钮就永远没有点击处理。
+    host.innerHTML = `<div style="text-align:center;padding:24px;color:var(--ds-text-3);font-size:var(--aus-fs-base);line-height:1.8;">当前筛选无记录<br/><button id="aus-history-empty-reset" style="margin-top:8px;padding:6px 12px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">清除筛选</button></div>`;
+    const reset = host.querySelector('#aus-history-empty-reset') as HTMLButtonElement | null;
+    if (reset) reset.onclick = () => applyHistoryFilterReset(doc);
     return;
   }
   const totalPages = Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE));
@@ -596,6 +938,10 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
     const hps = hp.toFixed(1), mps = mp.toFixed(1), ops = op.toFixed(1);
     const fmtMoney = (v:number,d=4)=>{ try{  return formatMoney(v||0,d);} catch{ return '¥'+(v||0).toFixed(d)+' CNY'; } };
     const c4 = fmtMoney(h.cost||0,4); const c6 = fmtMoney(h.cost||0,6); const in6 = fmtMoney(h.input_cost||0,6); const out6 = fmtMoney(h.output_cost||0,6);
+    // Token 数字跟随设置里的单位开关；卡片头与列表末位带 title 完整值，详情块用纯文本
+    const tokUnit = tokenUnitOf(state.settings);
+    const tok = (v: number) => formatToken(v, tokUnit);
+    const tokT = (v: number) => { const full = tokenTitle(v, tokUnit); return full ? `<span title="${full} tokens">${formatToken(v, tokUnit)}</span>` : formatToken(v, tokUnit); };
     // 记录状态徽标：中断（黄/红）> 估算（黄）> Agent（绿）> 常规（灰）
     const isAgentRecord = String((h as any).origin || '') === 'agent';
     const agentTurnCount = Number((h as any).agentModelTurns) || 0;
@@ -640,7 +986,7 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
       <div class="aus-history-card-head" style="display:flex;justify-content:space-between;align-items:center;">
         <div class="aus-history-card-main" style="min-width:0;flex:1;">
           <div class="aus-history-card-title" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ds-text);white-space:nowrap;overflow:hidden;">${sourceBadgeHTML}${stateBadgeHTML}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(h.model)} · ${esc(localTimeHM(h.timestamp))}</span></div>
-          <div style="color:var(--ds-text-2);margin-top:2px;">${h.prompt_tokens || 0} in · ${h.completion_tokens || 0} out · <span title="${esc(rateTitle(h))}">${rateText(h)}</span></div>
+          <div style="color:var(--ds-text-2);margin-top:2px;">${tokT(h.prompt_tokens || 0)} in · ${tokT(h.completion_tokens || 0)} out · <span title="${esc(rateTitle(h))}">${rateText(h)}</span></div>
         </div>
         <div class="aus-history-card-actions" style="text-align:right;flex-shrink:0;margin-left:8px;display:flex;gap:6px;align-items:center;">
           <div class="aus-history-card-cost">
@@ -664,7 +1010,7 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
           <span style="display:inline-flex;align-items:center;gap:4px;"><span class="aus-token-dot" style="background:var(--aus-token-miss);"></span><b style="color:var(--ds-text);font-weight:600;">${mps}%</b> 未命中</span>
           <span style="display:inline-flex;align-items:center;gap:4px;"><span class="aus-token-dot" style="background:var(--aus-token-output);"></span><b style="color:var(--ds-text);font-weight:600;">${ops}%</b> 输出</span>
         </div>
-        <span style="color:var(--ds-text-2);">${total.toLocaleString()}t</span>
+        <span style="color:var(--ds-text-2);">${tokT(total)}t</span>
       </div>
       <div class="aus-detail-panel" data-detail="${h.timestamp}" style="display:none;">
               <div class="aus-dt-row">
@@ -702,11 +1048,11 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
                     <div style="width:${op}%;background:var(--aus-token-output);"></div>
                   </div>
                   <div class="aus-dt-grid">
-                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-hit);"></span>缓存命中</span><span class="aus-dt-val">${(h.cache_hit_tokens||0).toLocaleString()}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-miss);"></span>缓存未命中</span><span class="aus-dt-val">${(h.cache_miss_tokens||0).toLocaleString()}${estTag}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-output);"></span>输出 Token</span><span class="aus-dt-val">${(h.completion_tokens||0).toLocaleString()}${estTag}</span></div>
-                    <div class="aus-dt-item"><span class="aus-dt-label">总 Token</span><span class="aus-dt-val is-strong">${(h.total_tokens||0).toLocaleString()}${estTag}</span></div>
-                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">思维链 Token</span><span class="aus-dt-val">${h.thinkTokens||0}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-hit);"></span>缓存命中</span><span class="aus-dt-val">${tok(h.cache_hit_tokens||0)}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-miss);"></span>缓存未命中</span><span class="aus-dt-val">${tok(h.cache_miss_tokens||0)}${estTag}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label"><span class="aus-token-dot" style="background:var(--aus-token-output);"></span>输出 Token</span><span class="aus-dt-val">${tok(h.completion_tokens||0)}${estTag}</span></div>
+                    <div class="aus-dt-item"><span class="aus-dt-label">总 Token</span><span class="aus-dt-val is-strong">${tok(h.total_tokens||0)}${estTag}</span></div>
+                    <div class="aus-dt-item is-wide"><span class="aus-dt-label">思维链 Token</span><span class="aus-dt-val">${tok(h.thinkTokens||0)}</span></div>
                   </div>
                 </section>
                 <section class="aus-dt-block">
@@ -723,14 +1069,12 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
                 <button class="aus-tab-btn" data-tab="res" data-ts="${h.timestamp}" role="tab">完整响应</button>
                 <button class="aus-tab-btn" data-tab="raw" data-ts="${h.timestamp}" role="tab">Raw 用量</button>
                 <button class="aus-tab-btn" data-tab="msg" data-ts="${h.timestamp}" role="tab">消息内容</button>
+                <button class="aus-dt-wide-btn" type="button" data-ts="${h.timestamp}" title="把详情抽屉加宽，方便看长 JSON">加宽</button>
               </div>
-              <pre class="aus-tab-content aus-dt-pre" data-content="req-${h.timestamp}" style="display:block;">${esc(h.fullRequest ? JSON.stringify(h.fullRequest, null, 2) : (h.raw_usage ? JSON.stringify(h.raw_usage, null, 2) : '（原文已清理，仅保留统计）'))}</pre>
-              <div class="aus-tab-content" data-content="res-${h.timestamp}" style="display:none;">
-                <pre class="aus-dt-pre">${esc(prettyFullResponse(h.fullResponse))}</pre>
-                ${h.fullResponse ? `<div class="aus-dt-rawbar"><button class="aus-res-raw-btn" data-ts="${h.timestamp}">查看原始完整数据</button></div><pre class="aus-res-raw aus-dt-pre aus-dt-pre-raw" data-ts="${h.timestamp}" style="display:none;">${esc(typeof h.fullResponse === 'string' ? h.fullResponse : JSON.stringify(h.fullResponse, null, 2))}</pre>` : ''}
-              </div>
-              <pre class="aus-tab-content aus-dt-pre" data-content="raw-${h.timestamp}" style="display:none;">${esc(JSON.stringify(h.raw_usage || {}, null, 2))}</pre>
-              <pre class="aus-tab-content aus-dt-pre" data-content="msg-${h.timestamp}" style="display:none;">${esc(h.messages && (h as any).messages.length ? JSON.stringify(h.messages, null, 2) : '（原文已清理——仅最近 5 条保留，其余仅统计可用）')}</pre>
+              <div class="aus-tab-content aus-dt-docs" data-content="req-${h.timestamp}" style="display:block;"></div>
+              <div class="aus-tab-content aus-dt-docs" data-content="res-${h.timestamp}" style="display:none;"></div>
+              <div class="aus-tab-content aus-dt-docs" data-content="raw-${h.timestamp}" style="display:none;"></div>
+              <div class="aus-tab-content aus-dt-docs" data-content="msg-${h.timestamp}" style="display:none;"></div>
       </div>
     </div>
   `;
@@ -769,17 +1113,18 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
       root.querySelectorAll('.aus-tab-content').forEach((c: any) => { c.style.display = 'none'; });
       const target = root.querySelector(`[data-content="${tab}-${ts}"]`) as HTMLElement | null;
       if (target) target.style.display = 'block';
+      // 原文按需读库：第一次切到某个 Tab 时才去详情库取，取到后挂在槽里复用
+      void fillDetailTab(doc, root, String(tab || 'req'), String(ts || ''));
     });
   });
-  host.querySelectorAll('.aus-res-raw-btn').forEach((btn: any) => {
+  // 加宽：只是给抽屉挂个 data-wide，宽度全在 style.css 里定，窄屏不加宽
+  host.querySelectorAll('.aus-dt-wide-btn').forEach((btn: any) => {
     btn.addEventListener('click', () => {
-      const ts = btn.getAttribute('data-ts');
-      const root = btn.closest('.aus-detail-panel') as HTMLElement | null;
-      const pre = root?.querySelector(`.aus-res-raw[data-ts="${ts}"]`) as HTMLElement | null;
-      if (!pre) return;
-      const show = pre.style.display === 'none';
-      pre.style.display = show ? 'block' : 'none';
-      btn.textContent = show ? '隐藏原始完整数据' : '查看原始完整数据';
+      const drawer = doc.getElementById('aus-history-detail') as HTMLElement | null;
+      if (!drawer) return;
+      const wide = drawer.getAttribute('data-wide') === '1';
+      if (wide) { drawer.removeAttribute('data-wide'); btn.removeAttribute('data-active'); }
+      else { drawer.setAttribute('data-wide', '1'); btn.setAttribute('data-active', '1'); }
     });
   });
   if (reopenDetailTs) {
@@ -789,7 +1134,35 @@ function renderHistoryInner(doc: Document, fullHist: any[]) {
   }
 }
 
+/**
+ * 冷库读取失败告警条（#aus-history-cold 是独立容器，不受运行健康提示条的总开关影响）。
+ * 读不出来时列表与统计都只剩热区那 MAX_HISTORY 条，必须说明白并给重试入口。
+ */
+function renderColdReadWarn(doc: Document): void {
+  const host = doc.getElementById(COLD_WARN_HOST_ID);
+  if (!host) return;
+  const failure = getColdReadFailure();
+  if (!failure) {
+    host.innerHTML = '';
+    host.style.display = 'none';
+    return;
+  }
+  host.style.display = 'block';
+  host.innerHTML = coldReadWarnHTML(failure, MAX_HISTORY);
+  const retry = doc.getElementById(COLD_WARN_RETRY_ID) as HTMLButtonElement | null;
+  if (retry) {
+    retry.onclick = () => {
+      // 先清失败标记再重载：读取成功会自己把状态清空，仍失败则告警条重新亮起
+      clearColdReadFailure();
+      invalidateHistoryCache();
+      historyLoading = false;
+      try { refreshUI(); } catch {}
+    };
+  }
+}
+
 function renderHistory(doc: Document, s: any) {
+  renderColdReadWarn(doc);
   const host = doc.getElementById('aus-history');
   if (!host) return;
   // 顶部健康提示：最近有「用量为 0 / 没取到用量 / 速率离谱 / 扩展报错」才显示
@@ -828,7 +1201,7 @@ function renderHistory(doc: Document, s: any) {
   try { if (!curChatId) curChatId = (globalThis as any).SillyTavern?.getContext?.().getCurrentChatId?.() || null; } catch {}
   const scopeKey = scope === 'current' ? `current:${curChatId||''}` : 'all';
   if (historyCacheScope !== scopeKey) { historyPage = 1; historyCacheScope = scopeKey; historyFullCache = null; }
-  // 同步先渲染：若已有全量缓存则直接用缓存分页，否则用热数据分页（30条），避免一次渲染2000条
+  // 同步先渲染：若已有全量缓存就直接按 30 条/页切缓存，否则先用热区（最近 2000 条）顶上，避免一次渲染上万条
   let fullForRender: any[] = hist;
   if (historyFullCache && historyFullCache.length > hist.length) fullForRender = historyFullCache;
   renderHistoryFilters(fullForRender);
@@ -840,9 +1213,8 @@ function renderHistory(doc: Document, s: any) {
   historyLoading = true;
   (async () => {
     try {
-      const mod: any = await import('../store/persistence');
-      if (!mod.getAllHistory) return;
-      const all: any[] = await mod.getAllHistory();
+      // 走 repository 而非直接读 persistence：仓库层会在失败时记录原因并提示一次
+      const all: any[] = await repository.getAllHistory();
       if (!all || !all.length) return;
       let full = all;
       try {
@@ -857,7 +1229,10 @@ function renderHistory(doc: Document, s: any) {
         renderHistoryFilters(full);
         renderHistoryInner(doc, filteredHistoryForDisplay(full));
       });
-    } catch {} finally { historyLoading = false; }
+    } catch {
+      // 冷库读不出来：仓库层已提示一次，这里补一条常驻告警（带重试），别让列表静默变短
+      try { renderColdReadWarn(doc); } catch {}
+    } finally { historyLoading = false; }
   })();
 }
 
@@ -1253,7 +1628,9 @@ function paintNavState(doc: Document, bottom: boolean, animate: boolean): void {
   // 「对话展示管理」与「请求日志」没有自己的导航项：底栏高亮跟着进入前的来源页走
   // （对话展示管理从设置进入就高亮「设置」，请求日志从历史进入就高亮「历史」）
   const navSource = viewSourceOf(currentView);
-  currentNavKey = bottom || !isSettingsChild(currentView) ? parentTabOf(navSource) : navSource;
+  // 二级页按「进入来源链」解析到真正的根 tab：其他请求 ← 请求日志 ← 历史 / 设置。
+  // 只取 parentTabOf(viewSourceOf(view)) 会在两级嵌套时停在中间的日志页上（进而恒算成「设置」）。
+  currentNavKey = bottom || !isSettingsChild(currentView) ? tabOf(currentView) : navSource;
   try {
     doc.querySelectorAll('#aus-sidebar [data-nav]').forEach((el: any) => {
       const v = el.getAttribute('data-nav');
@@ -1268,22 +1645,21 @@ function paintNavState(doc: Document, bottom: boolean, animate: boolean): void {
 /**
  * 底栏 tab 点击语义：
  * - 桌面端（底栏不显示）直接切页；
- * - 窄屏换 tab → 切页（回到「设置」时恢复上次的二级页）；
+ * - 窄屏换 tab → 切到该 tab 的**根页**（不记忆上次停留的二级页）；
  * - 窄屏重复点当前 tab → 二级页回根页，已在根页则回到顶部。
  */
 function handleBottomTabTap(target: AppView): void {
   const doc = getDoc();
   // 底栏不显示（桌面 / 移动端兼容 UI 关闭）时它就是普通切页
   if (!bottomNavActive(doc)) { switchView(target); return; }
-  // 「对话展示管理」「请求日志」没有自己的 tab：归属要按进入前的来源页算（从趋势进 → 趋势、从设置进 → 设置），
-  // 与 paintNavState 的底栏高亮保持同一口径；否则点「概览」会被误判成重复点当前 tab，只回上一页。
-  const currentTab = parentTabOf(viewSourceOf(currentView));
+  // 「对话展示管理」「请求日志」「其他请求」没有自己的 tab：归属要按进入前的来源页算
+  // （从趋势进 → 趋势、从设置进 → 设置、其他请求 → 请求日志的来源页），
+  // 与 paintNavState 的底栏高亮共用 tabOf，否则点「概览」会被误判成重复点当前 tab，只回上一页。
+  const currentTab = tabOf(currentView);
   const action = resolveTabTap(target, currentView, isChildView(currentView), currentTab);
-  if (action === 'switch') {
-    const to = target === 'settings' && settingsChildView ? settingsChildView : target;
-    switchView(to);
-    return;
-  }
+  // 换 tab 一律进入该 tab 的根页：设置下的二级页（钱包 / 使用说明 / 关于）只能从设置主页的入口进，
+  // 不按「上次停在哪个二级页」恢复 —— 否则「关于 → 历史 → 设置」会直接落回关于页，用户以为设置列表进不去。
+  if (action === 'switch') { switchView(target); return; }
   // 二级页重复点当前 tab：回到自己的父级根页（设置二级页 → 设置、对话展示管理 → 概览）
   if (action === 'pop-root') { switchView(returnFromChild()); return; }
   try {
@@ -1335,18 +1711,28 @@ function syncMobileSidebar(doc: Document): void {
 
 /**
  * 视图的真实归属页：没有自己导航项的二级页按进入前的来源页算。
- * 「对话展示管理」（概览/趋势/设置三处入口）与「请求日志」（设置/历史两处入口）都走这里。
+ * 「对话展示管理」（概览/趋势/设置三处入口）、「请求日志」（设置/历史两处入口）与
+ * 「其他请求」（请求日志页一处入口）都走这里；后者的来源是日志页，故归属要再回溯一层（见 tabOf）。
  */
 function viewSourceOf(view: AppView): AppView {
   if (view === 'chat-manage') return chatManageOrigin;
+  if (view === 'model-manage') return modelManageOrigin;
   if (view === 'log') return logOrigin;
+  if (view === 'tap') return tapOrigin;
   return view;
 }
 
-/** 二级页「返回」目标：对话展示管理与请求日志回到进入前的来源页，其余回到自己的父级根页 */
+/** 视图最终归属的底栏 tab：按「进入来源链」解析到底（其他请求 ← 请求日志 ← 历史 / 设置） */
+function tabOf(view: AppView): AppView {
+  return tabOfView(view, viewSourceOf);
+}
+
+/** 二级页「返回」目标：对话展示管理 / 请求日志 / 其他请求回到进入前的来源页，其余回到自己的父级根页 */
 function returnFromChild(): AppView {
   if (currentView === 'chat-manage') return chatManageOrigin;
+  if (currentView === 'model-manage') return modelManageOrigin;
   if (currentView === 'log') return logOrigin;
+  if (currentView === 'tap') return tapOrigin;
   return childParentOf(currentView) ?? 'settings';
 }
 
@@ -1362,14 +1748,23 @@ function openRequestLog(from: AppView): void {
   switchView('log');
 }
 
+/** 进入「模型展示管理」页并记住来源（统计页「模型汇总」标题右侧与设置页两处入口共用） */
+function openModelManage(from: AppView): void {
+  modelManageOrigin = from;
+  switchView('model-manage');
+}
+
+/** 进入「其他请求」页并记住来源（请求日志页工具栏唯一入口，返回时回到日志页） */
+function openTap(from: AppView): void {
+  tapOrigin = from;
+  switchView('tap');
+}
+
 function switchView(view: AppView, opts?: { track?: boolean; back?: boolean }) {
   // 切页时先把图表悬浮窗收掉：页面隐藏后浮层仍留在 DOM 里，回到该页会“凭空”浮着一张旧卡片
   try { hideAllChartTooltips(); } catch {}
   const prevView = currentView;
   currentView = view;
-  // 「设置」下的二级页记忆：点回设置 tab 时恢复到上次位置；主动切回设置根页（重复点 tab / 返回箭头）则清空
-  if (isSettingsChild(view)) settingsChildView = view;
-  else if (view === 'settings') settingsChildView = null;
   // 离开钱包页时收起所有已展开的钱包，下次进入保持默认收起
   if (prevView === 'wallet' && view !== 'wallet') {
     try { repository.collapseAllWallets(); } catch {}
@@ -1421,8 +1816,10 @@ function switchView(view: AppView, opts?: { track?: boolean; back?: boolean }) {
       else if (view === 'wallet') Promise.resolve(renderWalletView()).catch(() => {});
       else if (view === 'history') { const s = getSelectedSave(); if (s) renderHistory(doc, s); }
       else if (view === 'chat-manage') Promise.resolve(renderChatManageView()).catch(() => {});
+      else if (view === 'model-manage') Promise.resolve(renderModelManageView()).catch(() => {});
       else if (view === 'tap') renderTapView();
       else if (view === 'log') renderLogView();
+      else if (view === 'about') Promise.resolve(refreshAnnouncementCard(doc)).catch(() => {});
     } catch {}
   };
   // 底栏布局下切到别的页时，先把指示胶囊送上轨道（原因见 renderAfterPillStart 注释）；
@@ -1582,7 +1979,7 @@ export function createPanel() {
                 <span style="color:var(--ds-text-2);">悬停查看日期</span>
               </div>
             </div>
-            <div id="aus-chat-summary-overview" class="ds-card" style="margin-top:12px;overflow:auto;">
+            <div id="aus-chat-summary-overview" class="ds-card" style="margin-top:12px;">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
                 <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">按对话统计</div>
                 <div style="display:flex;align-items:center;gap:8px;min-width:0;">
@@ -1590,15 +1987,20 @@ export function createPanel() {
                   <button id="aus-chat-manage-btn" type="button" class="aus-manage-chat-btn" title="设置哪些对话出现在按对话统计表与各页「对话」下拉中（不影响数据统计）">${icon('menu', 14)}管理对话</button>
                 </div>
               </div>
-              <table style="width:100%;border-collapse:collapse;font-size:var(--aus-fs-sm);white-space:nowrap;min-width:720px;">
+              <div class="aus-table-scroll" data-scroll-x="1">
+                <table style="width:100%;border-collapse:collapse;font-size:var(--aus-fs-sm);white-space:nowrap;min-width:720px;">
                 <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">对话</th><th data-sort-key="count" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">轮次<span class="aus-sort-ind"></span></th><th data-sort-key="hit" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">命中<span class="aus-sort-ind"></span></th><th data-sort-key="miss" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">未命中<span class="aus-sort-ind"></span></th><th data-sort-key="out" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输出<span class="aus-sort-ind"></span></th><th data-sort-key="total" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总 Tokens<span class="aus-sort-ind"></span></th><th data-sort-key="cost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总费用<span class="aus-sort-ind"></span></th><th data-sort-key="avgTokens" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均 Token/轮<span class="aus-sort-ind"></span></th><th data-sort-key="avgHitRate" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均命中率<span class="aus-sort-ind"></span></th></tr></thead>
                 <tbody id="aus-chat-summary-tbody"><tr><td colspan="9" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
-              </table>
+                </table>
+              </div>
               <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;">默认按总 Tokens 倒序，点击表头可切换排序 · 数据来源为全部历史（不受统计页筛选影响）· 点「管理对话」可隐藏不常看的对话</div>
             </div>
             </div>
            <div data-view="chat-manage" style="display:none;">
              <div id="aus-chat-manage-body"></div>
+           </div>
+           <div data-view="model-manage" style="display:none;">
+             <div id="aus-model-manage-body"></div>
            </div>
            <div data-view="tap" style="display:none;">
              <div id="aus-tap-root"></div>
@@ -1644,7 +2046,7 @@ export function createPanel() {
                 <div id="aus-credential-btn" class="aus-pill"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon('chevron-down', 14)}</div>
                 <div id="aus-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
-              <div id="aus-stats-filter-reset" class="aus-filter-reset" title="重置筛选" aria-label="重置筛选" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);font-size:var(--aus-fs-base);cursor:pointer;margin-left:auto;">${icon('refresh', 14)}<span>重置筛选</span></div>
+              <div id="aus-stats-filter-reset" class="aus-filter-reset" title="重置筛选" aria-label="重置筛选" style="display:flex;align-items:center;gap:6px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);cursor:pointer;margin-left:auto;">${icon('refresh', 14)}<span>重置筛选</span></div>
             </div>
             <div id="aus-stats-three" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
               <div class="ds-card"><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">消费金额</div><div id="aus-stats-cost" style="font-size:22px;font-weight:700;color:var(--ds-text);margin-top:6px;">¥0.00 CNY</div></div>
@@ -1652,12 +2054,20 @@ export function createPanel() {
               <div class="ds-card"><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);">Tokens</div><div id="aus-stats-tok" style="font-size:22px;font-weight:700;color:var(--ds-text);margin-top:6px;">0</div></div>
             </div>
             <div id="aus-stats-four" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px;"></div>
-            <div id="aus-model-summary" class="ds-card" style="margin-top:12px;overflow:auto;">
-              <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:8px;">模型汇总</div>
-              <table style="width:100%;border-collapse:collapse;font-size:var(--aus-fs-sm);white-space:nowrap;">
+            <div id="aus-model-summary" class="ds-card" style="margin-top:12px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+                <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">模型汇总</div>
+                <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                  <span id="aus-model-manage-count" style="display:none;font-size:var(--aus-fs-xs);color:var(--ds-text-3);white-space:nowrap;"></span>
+                  <button id="aus-model-manage-btn" type="button" class="aus-manage-chat-btn" title="设置哪些模型出现在模型汇总表与各页「模型」下拉中（不影响数据统计）">${icon('menu', 14)}管理模型</button>
+                </div>
+              </div>
+              <div class="aus-table-scroll" data-scroll-x="1">
+                <table style="width:100%;border-collapse:collapse;font-size:var(--aus-fs-sm);white-space:nowrap;">
                 <thead><tr style="color:var(--ds-text-2);border-bottom:1px solid var(--ds-border);text-align:right;"><th style="text-align:left;padding:6px 8px;">模型</th><th data-sort-key="count" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">调用次数<span class="aus-sort-ind"></span></th><th data-sort-key="hit" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输入(命中)<span class="aus-sort-ind"></span></th><th data-sort-key="miss" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输入(未命中)<span class="aus-sort-ind"></span></th><th data-sort-key="out" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">输出<span class="aus-sort-ind"></span></th><th data-sort-key="total" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总 Tokens<span class="aus-sort-ind"></span></th><th data-sort-key="cost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">总成本<span class="aus-sort-ind"></span></th><th data-sort-key="avgCost" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均成本<span class="aus-sort-ind"></span></th><th data-sort-key="avgDur" title="点击排序" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均耗时<span class="aus-sort-ind"></span></th><th data-sort-key="avgRate" title="点击排序 · 含非流式/首字缺失记录的估算值" style="padding:6px 8px;cursor:pointer;user-select:none;white-space:nowrap;">平均速率<span class="aus-sort-ind"></span></th></tr></thead>
                 <tbody id="aus-summary-tbody"><tr><td colspan="10" style="text-align:center;padding:16px;color:var(--ds-text-3);">暂无数据</td></tr></tbody>
-              </table>
+                </table>
+              </div>
             </div>
             <div style="margin-top:12px;">
               ${chartCardHTML({ title: '自定义图表', chartId: 'aus-stats-chart', height: 300, pills: [
@@ -1783,6 +2193,7 @@ export function createPanel() {
             <div id="aus-wallet"></div>
           </div>
           <div data-view="history" style="display:none;">
+            <div id="${COLD_WARN_HOST_ID}" style="display:none;"></div>
             <div id="aus-history-health" style="display:none;"></div>
             <div id="aus-history-filter-host" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;position:relative;flex-wrap:wrap;">
               <div class="aus-stats-filter">
@@ -1805,9 +2216,8 @@ export function createPanel() {
                 <div id="aus-history-credential-btn" class="aus-pill"><span style="color:var(--ds-text-2);">API 密钥</span><span id="aus-history-credential-label" style="font-weight:600;color:var(--ds-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">全部</span>${icon('chevron-down', 14)}</div>
                 <div id="aus-history-credential-dropdown" style="display:none;position:absolute;top:40px;left:0;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:260px;overflow:auto;padding:8px;"></div>
               </div>
-              <div id="aus-history-filter-reset" class="aus-filter-reset" title="重置筛选" aria-label="重置筛选" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);font-size:var(--aus-fs-base);cursor:pointer;margin-left:auto;">${icon('refresh', 14)}<span>重置筛选</span></div>
-              <button id="aus-history-tap-btn" type="button" class="aus-pill aus-pill-sm" title="查看探针采到的非常规对话请求（技术验证，数据隔离、不进统计）">其他请求</button>
-              <button id="aus-history-log-btn" type="button" class="aus-pill aus-pill-sm" title="查看最近一轮请求的标头、正文与响应元数据（与设置页「问题反馈 / 请求日志」是同一页）">请求日志</button>
+              <div id="aus-history-filter-reset" class="aus-filter-reset" title="重置筛选" aria-label="重置筛选" style="display:flex;align-items:center;gap:6px;border:1px solid var(--ds-border);border-radius:999px;background:transparent;color:var(--ds-text-2);cursor:pointer;margin-left:auto;">${icon('refresh', 14)}<span>重置筛选</span></div>
+              <button id="aus-history-log-btn" type="button" class="aus-pill" title="问题反馈：查看最近一轮请求的标头、正文与响应元数据（与设置页「问题反馈」是同一页）">反馈</button>
             </div>
             <div id="aus-diff" class="ds-card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">缓存断点</span><button id="aus-diff-fullscreen" style="padding:4px 8px;border:1px solid var(--ds-border);border-radius:6px;background:var(--ds-card-inner);color:var(--ds-text);font-size:var(--aus-fs-sm);cursor:pointer;">全屏</button></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">在历史中各选一条 旧/新 对比，橙/绿高亮即发散点</div></div>
             <div id="aus-history"></div>
@@ -1854,6 +2264,7 @@ export function createPanel() {
                 </div>
                 <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);">可选择 main（稳定）或 dev（测试）分支获取更新，默认 main；更新完成后自动刷新网页。</div>
               </div>
+              ${renderAnnouncementCard()}
               ${renderChangelogCard()}
             </div>
           </div>
@@ -1941,16 +2352,19 @@ export function createPanel() {
   doc.getElementById('aus-panel')?.addEventListener('click', (e: any) => {
     const target = e.target as HTMLElement | null;
     if (target?.closest?.('#aus-settings-chat-manage')) openChatManage('settings');
+    if (target?.closest?.('#aus-settings-model-manage')) openModelManage('settings');
     if (target?.closest?.('#aus-settings-request-log')) openRequestLog('settings');
   });
   // 页内「返回」按钮：回到进入前的来源页
   initChatManageView({ go: () => switchView(chatManageOrigin) });
-  // 历史记录工具栏「其他请求」：进技术验证页（挂在历史下，返回箭头与底栏高亮都按子页处理）
-  doc.getElementById('aus-history-tap-btn')?.addEventListener('click', () => switchView('tap'));
+  // 两处入口都进同一个「模型展示管理」页：统计页「模型汇总」标题右侧与设置页「模型展示」设置项
+  doc.getElementById('aus-model-manage-btn')?.addEventListener('click', () => openModelManage('stats'));
+  initModelManageView({ go: () => switchView(modelManageOrigin) });
   // 历史记录工具栏「请求日志」：与设置页「问题反馈 / 请求日志」同一个页面，返回时回到历史记录页
   doc.getElementById('aus-history-log-btn')?.addEventListener('click', () => openRequestLog('history'));
-  initTapView({ go: () => switchView('history') });
-  initLogView({ go: () => switchView(returnFromChild()) });
+  // 「其他请求」的入口在请求日志页工具栏：页内返回 / 顶栏返回箭头 / 底栏 pop-root 统一回日志页
+  initTapView({ go: () => switchView(returnFromChild()) });
+  initLogView({ go: () => switchView(returnFromChild()), goTap: () => openTap('log') });
   const applyCollapsed = (v: boolean) => {
     collapsed = v;
     const sb = doc.getElementById('aus-sidebar') as HTMLElement | null;
@@ -2040,6 +2454,7 @@ export function createPanel() {
   renderSettings(doc);
   bindHistoryCompare();
   bindChangelog(doc);
+  bindAnnouncementCard(doc);
   // 开发者自测入口：关于页「API用量统计」标题连点十次唤出更新弹窗（不写已读版本）
   bindAboutBrandTap(doc, () => {
     openChangelogDialog({ currentVersion: APP_VERSION, onOpenAll: () => switchView('about'), markSeen: false });
@@ -2289,6 +2704,11 @@ export function resetPanelState() {
   try { releaseBackGuard(); } catch {}
 }
 
+/** 打开面板时试弹未读公告（异步、失败静默；判定见 announcement-dialog.ts） */
+function maybeShowAnnouncements(): void {
+  try { import('./announcement-dialog').then(m => m.maybeShowAnnouncementDialog()).catch(() => {}); } catch {}
+}
+
 export function openPanel() {
   const doc = getDoc();
   panelOpenStartTs = nowTs();
@@ -2330,7 +2750,17 @@ export function openPanel() {
   // （全新安装不弹；已弹过的版本不再重复，判定见 changelog-dialog.ts）
   try {
     setTimeout(() => {
-      try { maybeShowChangelogDialog({ onOpenAll: () => switchView('about') }); } catch {}
+      let changelogShown = false;
+      try {
+        changelogShown = maybeShowChangelogDialog({
+          onOpenAll: () => switchView('about'),
+          // 更新弹窗关掉之后接着看公告：一次只出一个弹窗，但两个都不漏
+          onClose: () => setTimeout(maybeShowAnnouncements, 300),
+        });
+      } catch {}
+      // 更新弹窗这一轮已经出来就先不叠公告，等它关掉（上面的 onClose 会再试）
+      if (changelogShown) return;
+      maybeShowAnnouncements();
     }, 320);
   } catch {}
 }

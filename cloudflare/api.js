@@ -54,6 +54,8 @@ const DEVICE_BASE_COLUMNS = `device_id, first_seen, last_seen, app_version, brow
  */
 function deviceSelectSql(columns) {
   const optional = [];
+  // app_build 与 run_ms_total 都是后加列，未跑迁移的库上整条查询会失败，按档位降级
+  if (columns.build) optional.push('app_build');
   if (columns.run) optional.push('run_ms_total');
   if (columns.tt) optional.push('tt_version');
   if (columns.theme) optional.push('theme_mode');
@@ -68,8 +70,10 @@ FROM device
 `;
 }
 
-// 档位顺序：优先「运行时长 + 全部扩展列」，逐级去掉后加的列，最后一档与旧库列集合一致
+// 档位顺序：优先「构建号 + 运行时长 + 全部扩展列」，逐级去掉后加的列，最后一档与旧库列集合一致
 const DEVICE_SELECT_SQLS = [
+  deviceSelectSql({ build: true, run: true, tt: true, theme: true }),
+  deviceSelectSql({ build: true, run: true, tt: true, theme: false }),
   deviceSelectSql({ run: true, tt: true, theme: true }),
   deviceSelectSql({ run: true, tt: true, theme: false }),
   deviceSelectSql({ run: true, tt: false, theme: false }),
@@ -308,6 +312,8 @@ async function buildSummary(env) {
     historyCount: historyCountCurve(deviceRows.map((row) => row?.history_count)),
     // 版本项给足上限：刚发布的版本设备很少，截得太短会让「最新版」直接从列表里消失
     versions: tally(deviceRows.map((row) => row?.app_version), { limit: 40 }),
+    // 构建号分布：同一版本号重发多个构建时，用来看各构建的实际采用情况
+    builds: tally(deviceRows.map((row) => row?.app_build), { limit: 40 }),
     env: envBreakdown(deviceRows),
     durationHistogram: durationHistogram(deviceRows.map((row) => row?.dur_ms_total)),
   };

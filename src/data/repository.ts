@@ -14,6 +14,7 @@ import { isUnsafeKey, isValidDayKey, localDay } from '../utils/date';
 import { isTruncatedFinish, isTruncatedOf } from '../utils/finish';
 import { log, toast } from '../utils/logger';
 import { turnFingerprint, usageFingerprint, messageDigest } from './fingerprint';
+import { clearDetailStore, deleteDetail } from './detail-store';
 import { mobileDeviceHint } from '../utils/device';
 import { computeTokenRate, estimateTokenRate, measureTokenRate, normalizeTtft, sanitizeHistoryTiming, sanitizeRate, type RateEstimateSource } from './token-rate';
 import { normalizeConnectionEndpoint, type HistoryConnection } from '../services/connection-identity';
@@ -334,6 +335,23 @@ function notifyStorageFailure(error: unknown): void {
   if (storageFailureNotified) return;
   storageFailureNotified = true;
   toast('warning', '冷历史写入失败，统计可能不完整；请检查浏览器存储空间');
+}
+
+/** 冷库读取失败的提示节流：一次故障会被多个页面同时触发，别刷屏 */
+const COLD_READ_NOTIFY_INTERVAL_MS = 10 * 60 * 1000;
+let coldReadNotifiedAt = 0;
+
+/**
+ * 冷库（IndexedDB）读不出来时的兜底提示。
+ * 失败会被上层 catch（概览 / 统计 / 导出各自有 fallback），所以这里先主动说一句，
+ * 否则用户只会看到「更早的记录不见了」却没有任何解释；历史页另有常驻告警条与重试入口。
+ */
+function notifyColdReadFailure(error: unknown): void {
+  log.error('全量历史读取失败（含冷库）', error);
+  const now = Date.now();
+  if (coldReadNotifiedAt && now - coldReadNotifiedAt < COLD_READ_NOTIFY_INTERVAL_MS) return;
+  coldReadNotifiedAt = now;
+  toast('warning', `更早的历史记录没能读出来：列表与统计只含最近 ${MAX_HISTORY} 条，可在历史记录页重试`);
 }
 
 function numericPrice(value: unknown, fallback: number): number {
@@ -1013,6 +1031,8 @@ export function normalizeSettings(incoming: any): any {
     : def.extraOffDays;
   if (!Array.isArray(merged.customModels)) merged.customModels = def.customModels;
   if (!merged.historyScope) merged.historyScope = def.historyScope;
+  // Token 缩写开关：老数据没有这个键，缺省与默认值一致（false = 完整千分位），非布尔也纠正
+  if (typeof merged.tokenUnitCompact !== 'boolean') merged.tokenUnitCompact = false;
   if (!merged.theme) merged.theme = def.theme;
   if (typeof merged.modelsPricingCollapsed !== 'boolean') merged.modelsPricingCollapsed = true;
   // 移动端兼容 UI：默认值只按设备类型决定一次（utils/device.ts）——移动端默认开启底栏，
@@ -1080,6 +1100,11 @@ function pruneDetails() {
       delete e.messages;
       delete e.fullRequest;
       delete e.fullResponse;
+      // 原文库只服务最近 DETAIL_KEEP 条：掉出窗口就同步删，避免占用偷偷留在库里
+      if (e.detailKey) {
+        deleteDetail(e.detailKey).catch(() => {});
+        delete e.detailKey;
+      }
     } else {
       // 保留前 DETAIL_KEEP 条的完整响应/请求；fullRequest 裁剪 messages 防止大对象落盘
       if (e.fullRequest && typeof e.fullRequest === 'object' && Array.isArray(e.fullRequest.messages)) {
@@ -1158,7 +1183,32 @@ export const repository = {
 
   async getColdHistory() { return loadHistoryCold(); },
 
-  async getAllHistory() { return getAllHistory(); },
+  /**
+   * 按时间戳取单条记录（热区优先，没有再查冷库）。
+   * 详情抽屉用它回退展示旧摘要：列表模板里只放得下稀疏字段，完整原文在详情库里，需要先找到 detailKey。
+   */
+  async getHistoryEntry(timestamp: number | string): Promise<any | null> {
+    const ts = Number(timestamp);
+    if (!Number.isFinite(ts)) return null;
+    const hot = (state.history || []).find((entry: any) => Number(entry?.timestamp) === ts);
+    if (hot) return hot;
+    try {
+      const cold = await loadHistoryCold();
+      return (cold || []).find((entry: any) => Number(entry?.timestamp) === ts) || null;
+    } catch (error) {
+      notifyColdReadFailure(error);
+      return null;
+    }
+  },
+
+  async getAllHistory() {
+    try {
+      return await getAllHistory();
+    } catch (error) {
+      notifyColdReadFailure(error);
+      throw error;
+    }
+  },
 
   async deleteHistoryByFilter(filter: HistoryDeleteFilter = {}): Promise<number> {
     const start = filter.start && isValidDayKey(filter.start) ? filter.start : '';
@@ -1183,6 +1233,12 @@ export const repository = {
     });
     const removed = Math.max(0, (all || []).length - remains.length);
     if (!removed) return 0;
+    // 被删记录若还挂在原文库里，一起清掉（只删命中的 key，不碰别人的）
+    for (const entry of all || []) {
+      if (remains.indexOf(entry) !== -1) continue;
+      const key = (entry as any)?.detailKey;
+      if (key) deleteDetail(key).catch(() => {});
+    }
     await this.replaceAll({ history: remains } as any, { clearCold: true });
     await this.recalcAll();
     await rebuildAggregates();
@@ -1501,6 +1557,7 @@ export const repository = {
     const chatName = getCurrentChatName();
     (lu as any).chatId = chatId; (lu as any).chatName = chatName;
     lu.requestId = requestId;
+    (lu as any).detailKey = requestId ? String(requestId) : null;
     if (connection) {
       lu.sourceType = connection.sourceType;
       lu.endpointId = connection.endpointId;
@@ -1515,6 +1572,7 @@ export const repository = {
     const entry: any = {
       timestamp: lu.timestamp, model, rawModel: rawModel !== model ? rawModel : null, prompt_tokens: hit + miss, cache_hit_tokens: hit, cache_miss_tokens: miss,
       requestId,
+      detailKey: requestId ? String(requestId) : null,
       completion_tokens: comp, total_tokens: total, input_cost: lu.input_cost, output_cost: lu.output_cost,
       cost: lu.cost, cache_hit_rate: (hit + miss) > 0 ? (hit / (hit + miss) * 100) : 0, priceType: lu.priceType,
       raw_usage: usage, messages: (messages || []).map(clampMessage), duration, ttft: lu.ttft, thinkTime, thinkTokens, tokenRate: lu.tokenRate, rateEstimated: lu.rateEstimated ?? null, fullRequest, fullResponse: safeResponse,
@@ -1863,6 +1921,8 @@ export const repository = {
         if (options.clearCold) await clearHistoryCold();
         state.history = h as any;
       }
+      // 全量替换成空历史（清空 / 导入空包）时，原文库也一起清，别留孤儿数据
+      if (!h.length) clearDetailStore().catch(() => {});
     } else if (options.clearCold) {
       await clearHistoryCold();
     }

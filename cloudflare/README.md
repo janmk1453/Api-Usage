@@ -20,6 +20,7 @@
 | `migrate-tt-version.sql` | 已有库补充 `device.tt_version` TauriTavern 版本号列（不改动既有数据，未执行时 Worker 自动降级并保留 `st_version`） |
 | `migrate-device-metrics.sql` | 已有库补充 `device.history_count` 与 `device.telemetry_off` 两列（未执行时 Worker 自动回退旧列集合，不影响上报） |
 | `migrate-theme-mode.sql` | 已有库补充 `device.theme_mode` 颜色模式列（light / dark / auto，未执行时 Worker 自动降级为不写该列，不影响上报） |
+| `migrate-app-build.sql` | 已有库补充 `device.app_build` 构建号列（同一版本号重发多个构建时用于区分，未执行时 Worker 自动降级为不写该列） |
 | `wrangler.toml` | Worker 配置模板（D1 绑定、Cron、文本模块规则）；`database_id` 保持占位符，真实值放本地 `wrangler.local.toml` |
 | `dashboard.html` | 看板页（单文件零依赖，自绘 SVG 图表），作为文本模块打包进 Worker |
 | `dashboard.test.js` | 看板模板与注入测试：占位符唯一、无外部资源、六视图结构与 `serializeBoot` 转义 |
@@ -114,6 +115,18 @@ npx wrangler d1 execute api_usage_stat --remote --file cloudflare/migrate-tt-ver
 - 该列只在 TauriTavern 宿主下由客户端上报（取宿主 `/version` 的 `tauriVersion`），上游 SillyTavern 不产生该字段，因此分布只统计真正上报过的设备。
 - **未执行迁移也不会影响上报**：Worker 的降级链为「完整列 → 无 `tt_version` 但保留 `st_version` → 旧列集合」，`/collect` 始终返回 `204`。
 - 历史行保持 `NULL` 直到该设备下次上报，无法回溯补采。
+
+### 已有库升级（新增构建号列）
+
+看板「软件版本」中的「构建号分布」依赖 `device.app_build`：同一版本号（如 3.2.3）可能先后重发多个构建（b2 → b4），只有构建号能区分各自的实际采用量。
+
+```bash
+npx wrangler d1 execute api_usage_stat --remote --file cloudflare/migrate-app-build.sql
+```
+
+- 该列来自客户端上报的 `build`（`manifest.json#build_no`）；旧版扩展不上报，记为「未知」。
+- **未执行迁移也不会影响上报**：Worker 先尝试带 `app_build` 的语句，失败后自动降级为不带该列的语句，`/collect` 始终返回 `204`。
+- 推荐顺序：先跑迁移，再部署新版 Worker；反过来也能工作，只是构建号要等迁移后才落库。
 
 > 仓库内的 `wrangler.toml` 只保留占位符，请不要把真实的 `database_id`、账号 ID、API Token 等信息写进任何被提交的文件；`wrangler.local.toml` 与 `.dev.vars` 已在 `.gitignore` 中忽略。
 

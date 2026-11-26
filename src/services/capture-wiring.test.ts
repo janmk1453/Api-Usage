@@ -57,6 +57,35 @@ describe('采集包装：单实例 + 旧代退役', () => {
   });
 });
 
+/**
+ * 上游错误被宿主包装成 200 的拒绝链（3.2.x 线上故障）。
+ *
+ * 重现条件在真机的上游 500（TT 的 Rust 后端把错误当 SSE 正文回 200），单测无法复现 fetch 链，
+ * 所以用源码断言钉住三处接线：解析时记载荷、结算时传载荷、入库前先看载荷。
+ */
+describe('上游错误被包装成 200：拒绝入库而不是按输出估算', () => {
+  it('响应解析阶段记下错误载荷', () => {
+    expect(interceptionSrc).toContain("from './api-error-payload';");
+    expect(interceptionSrc).toContain('detectApiErrorPayload');
+    expect(interceptionSrc).toContain('function detectTurnErrorPayload(');
+    expect(interceptionSrc).toContain('const errorTag = detectTurnErrorPayload(text, rawText);');
+    expect(interceptionSrc).toContain('if (errorTag) turn.errorPayload = errorTag;');
+  });
+
+  it('无用量结算与正常入库两条路都先看载荷', () => {
+    expect(interceptionSrc).toContain('const errorPayload = turn?.errorPayload || detectTurnErrorPayload(rawResponse, rawResponse);');
+    expect(interceptionSrc).toContain('streamError: turn?.streamError || null,\n    errorPayload,');
+    expect(interceptionSrc).toContain('if (errTurn && errTag) {');
+  });
+
+  it('拒绝的轮次留诊断快照，且不混进「对话未写入历史」', () => {
+    expect(interceptionSrc).toContain("noteCaptureStage('entry-rejected'");
+    expect(interceptionSrc).toContain("reason: 'api-error-payload:'");
+    expect(interceptionSrc).toContain("turn.settledBy = 'rejected';");
+    expect(interceptionSrc).not.toContain("noteCaptureStage('event-drop', { model, requestId: requestId || '', reason: 'api-error-payload'");
+  });
+});
+
 describe('探针包装：按代际令牌判退役', () => {
   it('XHR 探针：安全读文本 + 首字节 + 中止也收尾', () => {
     // responseType 非 text 时读 responseText 会抛 InvalidStateError，老代码等于永远拿不到 usage
@@ -108,5 +137,48 @@ describe('探针包装：按代际令牌判退役', () => {
 
   it('卸载后残留的探针层一律作废', () => {
     expect(captureSrc).toContain('try { if (activeTapByWin.get(w) === cur?.fetch) activeTapByWin.delete(w); } catch {}');
+  });
+});
+
+/**
+ * 采集守卫的「假在岗」（3.2.3 真机事故）。
+ *
+ * 现象：一次重载后采集再也没记过任何一轮，持续几个小时；诊断包里 0 条 fetch-start、
+ * 0 条 install-failed，只有越来越密的 turn-unmatched / event-drop。
+ * 根因：守卫用 __aus_patched 布尔判在岗，而探针层把这个标记定义成「读内层」的 getter，
+ * 内层采集代退役后它恒为 true、探针层又没有 __ausCaptureLayer —— 两条分支都不命中，
+ * 4s 自愈守卫每轮都 early return：不重装，也不告警。
+ */
+describe('采集守卫：只认链上在岗代，不认标记布尔', () => {
+  it('在岗判定必须顺着链摸到 activeCapture 本体', () => {
+    expect(interceptionSrc).toContain("import { fetchChainHas, fetchChainKind, describeFetchChain } from './fetch-chain';");
+    expect(interceptionSrc).toContain('return fetchChainHas(top, activeCapture);');
+    // 老判据必须彻底消失，否则守卫会再次静默早退
+    expect(interceptionSrc).not.toContain('function isAusFetchPatch(');
+    expect(interceptionSrc).not.toContain('if (isAusFetchPatch(p.fetch))');
+    // 顶层就是我们的某一代采集层时复用在岗，不新增层
+    expect(interceptionSrc).toContain('if ((top as any).__ausCaptureLayer === true) {');
+  });
+
+  it('两边都要记录「被包住的下一层」，否则无法验证在岗', () => {
+    expect(interceptionSrc).toContain('patched.__ausCaptureInner = prevFetchFn;');
+    expect(captureSrc).toContain('(tapFetch as any).__ausTapInner = prevFetchFn;');
+    // 探针夹在中间时层深不能断，否则采集的层深上限永远数不到顶
+    expect(captureSrc).toContain('(tapFetch as any).__ausCaptureDepth = Number((prevFetchFn as any).__ausCaptureDepth) || 0;');
+  });
+
+  it('假在岗必须留痕，且不能混成安装失败', () => {
+    expect(interceptionSrc).toContain('staleFlags: 0,');
+    expect(interceptionSrc).toContain("noteCaptureStage('guard-recovered'");
+    expect(interceptionSrc).toContain('function noteStaleCapture(');
+    // 安装并没有失败：写 install-failed 会让健康信号误报成插件报错，install-failed 只能有一个调用点
+    const installFailedHits = interceptionSrc.split("noteCaptureStage('install-failed'").length - 1;
+    expect(installFailedHits).toBe(1);
+  });
+
+  it('卸载只还原自己那一代，不把压在上面的探针一起摘掉', () => {
+    expect(interceptionSrc).toContain('let restoreTarget: any = null;');
+    expect(interceptionSrc).toContain('restoreTarget = prevFetchFn;');
+    expect(interceptionSrc).toContain('if (p && (p.fetch as any)?.__ausCaptureLayer === true && restoreTarget) {');
   });
 });

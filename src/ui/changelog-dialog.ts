@@ -164,6 +164,8 @@ export interface OpenChangelogOptions {
   currentVersion?: string;
   /** 点「查看全部更新」后在关闭弹窗的同时跳到关于页 */
   onOpenAll?: (() => void) | null;
+  /** 弹窗关闭后回调（自动弹窗用它接着检查公告：一次只出一个，但两个都不漏） */
+  onClose?: (() => void) | null;
   /** 打开即写已读标识（默认 true）；开发者手势传 false */
   markSeen?: boolean;
 }
@@ -195,7 +197,12 @@ export function openChangelogDialog(options: OpenChangelogOptions = {}): boolean
   // 打开即记已读：用户中途刷新页面也不会反复弹同一次构建
   if (options.markSeen !== false) writeSeenVersion(APP_BUILD_TAG);
 
-  const close = () => { try { mask.remove(); } catch { /* 已移除 */ } };
+  const close = () => {
+    try { mask.remove(); } catch { /* 已移除 */ }
+    if (typeof options.onClose === 'function') {
+      try { options.onClose(); } catch { /* 关闭后的回调失败不影响关闭本身 */ }
+    }
+  };
   mask.addEventListener('click', (ev: Event) => {
     const target = ev.target as HTMLElement | null;
     if (!target) return;
@@ -216,7 +223,7 @@ export function openChangelogDialog(options: OpenChangelogOptions = {}): boolean
  * 面板打开时调用：只有「更新后的第一次」才弹。
  * 已读标识（版本号|构建号）与「有没有使用痕迹」都由 localStorage 判定，不读 settings。
  */
-export function maybeShowChangelogDialog(options: { onOpenAll?: (() => void) | null } = {}): boolean {
+export function maybeShowChangelogDialog(options: { onOpenAll?: (() => void) | null; onClose?: (() => void) | null } = {}): boolean {
   // 只弹当前构建号对应的那一条：构建号递增了却没写条目 → 静默不弹
   const entry = changelogEntryForBuild(BUILD_NO);
   const seen = readSeenVersion();
@@ -228,7 +235,13 @@ export function maybeShowChangelogDialog(options: { onOpenAll?: (() => void) | n
     }
   } catch { /* 隐私模式：按全新安装处理 */ }
   if (!shouldShowChangelog(seen, APP_BUILD_TAG, !!entry, looksLikeExistingUser(keys))) return false;
-  return openChangelogDialog({ entry, currentVersion: APP_VERSION, onOpenAll: options.onOpenAll, markSeen: true });
+  return openChangelogDialog({
+    entry,
+    currentVersion: APP_VERSION,
+    onOpenAll: options.onOpenAll,
+    onClose: options.onClose,
+    markSeen: true,
+  });
 }
 
 /** 关于页标题「API用量统计」连点十次 → 打开弹窗（开发者自测，不写已读版本） */

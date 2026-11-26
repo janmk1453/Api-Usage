@@ -8,6 +8,7 @@
  *    是不是对话完全交给对账结果（见 match.ts）判定。
  */
 
+import { originFromStack } from '../request-origin';
 import type { TapActorKind, TapAttribution } from './types';
 
 export type { TapActorKind, TapAttribution };
@@ -47,17 +48,23 @@ export function actorFromLocation(input: { frameSrc?: string | null; href?: stri
   return { kind: 'unknown', id, label: id.split('/').filter(Boolean).pop() || '未知来源' };
 }
 
-/** 从调用栈里找扩展路径（比上下文更细：能定位到具体插件，即使补丁装在主窗上） */
+/**
+ * 从调用栈判定发起方（探针侧的唯一口径）。
+ *
+ * 这里不再自己扫栈，直接复用历史记录用的 services/request-origin.ts#originFromStack：
+ * 探针页和历史页对「同一条请求是谁发的」必须给出同一个答案，否则一次主对话会在
+ * 探针里显示成「扩展 yuzuki-Memory」、在历史里显示成「对话」，互相打脸。
+ *
+ * 旧实现在这里「取第一个 third-party 帧」，而酒馆助手 / 预设脚本常把 fetch 包一层
+ * （包装帧在发送帧内层），于是主对话的扩展包装器被误认成发起者——这就是两套规则的时代。
+ */
 export function actorFromStack(stack: string): TapActor | null {
   if (!stack) return null;
-  for (const raw of stack.split('\n')) {
-    const line = raw.trim();
-    if (!line) continue;
-    // 跳过探针自身的帧，否则永远匹配到自己
-    if (line.indexOf('request-tap') !== -1) continue;
-    const plugin = pluginNameFromPath(line);
-    if (plugin) return { kind: 'plugin', id: line, label: plugin };
-  }
+  const origin = originFromStack(stack);
+  if (!origin) return null;
+  if (origin.kind === 'extension') return { kind: 'plugin', id: origin.id, label: origin.label };
+  if (origin.kind === 'script') return { kind: 'script', id: origin.id, label: origin.label };
+  if (origin.kind === 'tavern') return { kind: 'tavern', id: 'tavern', label: '酒馆主窗' };
   return null;
 }
 

@@ -43,6 +43,21 @@ describe('历史记录去重键', () => {
       .not.toBe(historyRecordKey(agentEntry));
   });
 
+  it('同毫秒同 token 的两条真实请求靠 requestId 区分', () => {
+    const first = { ...base, requestId: 'req:1000:1' };
+    const second = { ...base, requestId: 'req:1000:2' };
+    expect(historyRecordKey(second)).not.toBe(historyRecordKey(first));
+    // 同一条请求的热区副本与冷库副本必须仍然算出同一个键
+    expect(historyRecordKey({ ...first })).toBe(historyRecordKey(first));
+  });
+
+  it('旧记录没有 requestId 时键完全不变（跨设备合并不受影响）', () => {
+    expect(historyRecordKey({ ...base, requestId: '' })).toBe(historyRecordKey(base));
+    expect(historyRecordKey({ ...base, requestId: null })).toBe(historyRecordKey(base));
+    expect(historyRecordKey({ ...base, requestId: undefined })).toBe(historyRecordKey(base));
+    expect(historyRecordKey({ ...base, requestId: '   ' })).toBe(historyRecordKey(base));
+  });
+
   it('无 agentRunId 的常规记录保持原有键（行为不变）', () => {
     expect(historyRecordKey({ ...base, origin: 'chat' })).toBe(historyRecordKey(base));
     expect(historyRecordKey({ ...base, agentRunId: '' })).toBe(historyRecordKey(base));

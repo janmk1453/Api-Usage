@@ -35,7 +35,7 @@ SillyTavern 原生扩展 `API用量统计`（清单 `api-usage-stat`），由酒
 - **语言**：TypeScript 5，`strict`；`tsconfig.include = ["src", "global.d.ts"]`。
 - **图表**：ECharts 6 按需引入（`echarts/core` + Bar/Line + Grid/Tooltip/Legend/CanvasRenderer），动态分包随 `dist/` 提交。`Y` 17 项（Token / 费用 / 请求与性能 / 比率四组）×`X` 5 维度（轮次 / 每小时 / 每日 / 每周 / 每月），渲染按 `Y.kind` 分流：`token` 堆叠柱、`cost/duration/rate/percent` 曲线（右侧独立轴，百分比 0–100）、`count` 柱；费用轴按币种换算。
 - **样式**：无框架。`[data-extension="api-usage-stat"][data-ds-theme="light|dark"]` 隔离宿主 `SmartTheme`；`style.css` 是**手写样式源**（非产物，留在根目录，`manifest.css` 指向它，Vite 不产 CSS）——四套同名变量 + `services/theme.ts` 切换 + 设置页胶囊下拉；默认 `light`。
-- **存储**：`extensionSettings[api_usage_stat]` 热 `50` 条 + IndexedDB `api_usage_stat_db` 冷分页（`MAX_HISTORY = 2000`，超出自动回冷库）；钱包配置 / 忽略列表 / `overviewWalletId` / `overviewWalletManuallySet` 随热设置持久化；**钱包校准密钥**单独存 `extensionSettings.walletSecrets`（XOR 混淆，不参与导出 / WebDAV）；**匿名统计**的匿名标识与待发数据单独存 `extensionSettings.telemetry`（不进 `state.settings`，因而不参与导出、导入与同步）。
+- **存储**：`extensionSettings[api_usage_stat]` 热区最近 `MAX_HISTORY = 2000` 条 + IndexedDB `api_usage_stat_db` 冷库（单键 `cold_history` 存整份 JSON，读取时全量合并，**没有分页**；热区超出 2000 条自动回冷库）；钱包配置 / 忽略列表 / `overviewWalletId` / `overviewWalletManuallySet` 随热设置持久化；**钱包校准密钥**单独存 `extensionSettings.walletSecrets`（XOR 混淆，不参与导出 / WebDAV）；**匿名统计**的匿名标识与待发数据单独存 `extensionSettings.telemetry`（不进 `state.settings`，因而不参与导出、导入与同步）。
 - **最低版本**：`manifest.minimum_client_version 1.11.0`；hooks 机制要 1.17.0、`clean` 钩子要 1.18.0；API 密钥条目编号要 `>= 1.14.0`（更早版本归入「未识别密钥」）。
 
 ## 目录
@@ -64,8 +64,8 @@ Api-Usage/
 | `constants/` | `pricing.ts`（`PRICING`/`DEFAULT_PEAK_HOURS`/`MAX_HISTORY`/`DETAIL_KEEP`/`STORAGE_KEYS`/`PRICE_HISTORY`/`FLASH_PRICE_CUTOFF`）、`holidays.ts`、`changelog.ts`（用户手动维护）、`version.ts` |
 | `types/` | `save.ts`（`HistoryEntry`）、`settings.ts`、`wallet.ts`、`agent.ts` |
 | `data/` | ★ 唯一数据通路：`repository`（写）、`computed`（算）、`wallets`（钱包纯逻辑）、`fingerprint`、`sample-quality`（统计口径）、`token-rate`、`events`、`types` |
-| `store/` | `index.ts` + `persistence.ts`：单一历史聚合、热 50 + 冷库、`DB_NAME`、迁移备份 |
-| `services/` | 采集与业务：`interception`、`request-origin`、`think-timing`、`turn-outcome`、`token-estimate`、`connection-identity`、`pricing`/`pricing-sync`、`model-match`、`currency`、`balance`、`wallet-secrets`、`plan-quota`、`import-export`、`sync`、`update`/`update-policy`、`telemetry`、`storage-usage`、`wipe-data`/`wipe-hooks`、`theme`、`debug`、`logger` |
+| `store/` | `index.ts` + `persistence.ts`：单一历史聚合、热区最近 2000 条 + 冷库单键整份 JSON、`DB_NAME`、迁移备份 |
+| `services/` | 采集与业务：`interception`、`request-origin`、`think-timing`、`turn-outcome`、`token-estimate`、`connection-identity`、`pricing`/`pricing-sync`、`model-match`、`currency`、`balance`、`wallet-secrets`、`plan-quota`、`import-export`、`sync`、`update`/`update-policy`、`telemetry`、`storage-usage`、`wipe-data`/`wipe-hooks`、`theme`、`debug`、`logger`、`announcement`（公告：拉取 / 已读 / 版本与有效期过滤；公告文件在远端 `announce` 分支） |
 | `services/request-tap/` | 请求探针账本：`capture`/`match`/`classify`/`store`/`types`/`index` |
 | `services/message-cost/` | 聊天消息头元信息：`match`（消息↔记录配对）/`render`/`settings-row`（注入宿主设置页）/`index` |
 | `services/`（诊断） | `health-signals`、`health-prefs`、`error-classify`、`console-ring`、`capture-digest`、`frame-normalizer`、`log-sanitize`、`log-upload`、`feedback-pack`、`request-log`、`include-usage` |
@@ -73,10 +73,10 @@ Api-Usage/
 | `stats/` | `forecast-series`（预测核心）、`forecast`（旧 API 兼容）、`model-efficiency`、`energyScore` |
 | `ui/`（页面） | `panel`（骨架 / 视图切换 / 历史与详情 / 底栏）、`overview`、`stats-view`、`forecast-view`、`wallet-view`、`settings`、`help-view`、`log-view`、`tap-view`、`chat-manage` |
 | `ui/`（图表） | `chart-config`、`chart-picker`（卡片骨架）、`chart-prefs`、`chart-time`、`chart-bar`、`chart-tooltip`、`extra-charts`、`model-trends`、`forecast-chart`、`heatmap`、`range-zoom` |
-| `ui/`（交互） | `pill`、`source-badge`、`dropdown-placement`、`dropdown-close`、`switch`、`icons`、`nav-model`、`sort-header`、`filter-prefs`、`request-type-filter`、`chat-visibility`、`back-guard`、`history-badge`、`history-health-bar`、`log-upload-dialog`、`storage-usage-card`、`wallet-plan`、`wallet-sync-preview`、`peak-dot`、`compare`、`changelog`、`changelog-dialog`、`rate-text`、`vendor-icons`、`back-debug`（临时工具） |
+| `ui/`（交互） | `pill`、`source-badge`、`dropdown-placement`、`dropdown-close`、`switch`、`icons`、`nav-model`、`sort-header`、`filter-prefs`、`request-type-filter`、`chat-visibility`、`back-guard`、`history-badge`、`history-health-bar`、`log-upload-dialog`、`storage-usage-card`、`wallet-plan`、`wallet-sync-preview`、`peak-dot`、`compare`、`changelog`、`changelog-dialog`、`announcement-dialog`、`rate-text`、`vendor-icons`、`back-debug`（临时工具） |
 | `utils/` | `device`（设备判定单一来源）、`date`、`crypto`（XOR）、`history-key`、`finish`、`logger` |
 
-`cloudflare/`：`worker.js`（路由 + cron 清理 + Cache API）、`api.js`、`boot.js`、`summary.js`、`payload.js`、`log-payload.js`、`dashboard.html`、`schema.sql`、`schema-request-log.sql`、9 个 `migrate-*.sql`（`device-totals` / `hourly` / `st-version` / `device-metrics` / `theme-mode` / `backfill-device-totals` / `legacy-dur-to-run` / `run-ms` / `tt-version`）、`vendor/echarts.min.js`（自托管 full 构建）、`scripts/build-preview.mjs`、`wrangler.toml`、`README.md`、`*.test.js`。
+`cloudflare/`：`worker.js`（路由 + cron 清理 + Cache API）、`api.js`、`boot.js`、`summary.js`、`payload.js`、`log-payload.js`、`dashboard.html`、`schema.sql`、`schema-request-log.sql`、10 个 `migrate-*.sql`（`device-totals` / `hourly` / `st-version` / `device-metrics` / `theme-mode` / `backfill-device-totals` / `legacy-dur-to-run` / `run-ms` / `tt-version` / `app-build`）、`vendor/echarts.min.js`（自托管 full 构建）、`scripts/build-preview.mjs`、`wrangler.toml`、`README.md`、`*.test.js`。
 
 
 ## 开发流程
@@ -95,6 +95,8 @@ npm run verify:ci   # 版本单源、清单路径、引用链、孤立产物
 - **入口、面板与安卓返回键**：魔法棒入口、8 视图切换、`aus-view-in` 动画与「一次返回关面板」的硬约束见 `src/ui/AGENTS.md`。
 - **CI 与 Pages 工作流**：触发条件、作业顺序与预览边界见 `.github/AGENTS.md`。
 - **本地自检不连网**：`npm run verify:ci` 已覆盖版本单源、`manifest` 的 `js/css/i18n` 路径、从入口出发的 import 引用链、孤立产物。
+- **测试分层（写用例前先定位层次）**：① 纯逻辑行为测试——`src/data/`、`src/utils/`、`src/stats/` 与 `services/*` 里的纯函数直接调、断言返回值；② 外部世界替身流程测试——`services/update-flow.test.ts`、`services/request-tap/store.test.ts`、`store/index.test.ts`：只替身 fetch / localStorage / fake document / `fake-indexeddb`，配合 `vi.resetModules()` + `vi.stubGlobal()` 隔离模块级状态，断言用户能看到的结果（提示文案、发出的请求体、落盘键、徽标与横幅）；③ 源码契约守护——`*-wiring.test.ts` 用 `?raw` 字符串断言，只守「难复现又必须成立的结构」（fetch 包装必须最外层、代际自愈、退避），不得用来代替行为测试。
+- **测试禁忌**：只断言 mock 被调用过、断言私有实现细节（内部变量名 / 私有函数）、把 `toBeTruthy()` / `toBeDefined()` 当主断言（弱断言只能作为「后续要取用这个值」的过渡）。断言前先核对实现语义——`listTapRecords()` 返回的是浅拷贝、`shouldForceUpdate` 的 minVersion 是「远端达到才强制」的下限、`checkUpdate` 的版本兜底只在宿主不返回 `isUpToDate` 时才可达，都曾按直觉写错。
 
 ## 铁律
 

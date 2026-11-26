@@ -1,7 +1,27 @@
+import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
 import { t as esc } from "./date-Dsu8hrMO.js";
 //#region src/services/update.ts
-var CURRENT_VERSION = "3.2.3";
+var update_exports = /* @__PURE__ */ __exportAll({
+	checkUpdate: () => checkUpdate,
+	extensionFolderName: () => extensionFolderName,
+	extensionNameCandidates: () => extensionNameCandidates,
+	extensionNameHint: () => extensionNameHint,
+	extensionScopeFromList: () => extensionScopeFromList,
+	extensionScopeHint: () => extensionScopeHint,
+	getUpdateBranch: () => getUpdateBranch,
+	maybeAutoCheck: () => maybeAutoCheck,
+	normalizePolicy: () => normalizePolicy,
+	probeForcedUpdateAtStartup: () => probeForcedUpdateAtStartup,
+	remoteSources: () => remoteSources,
+	scheduleReloadForUpdate: () => scheduleReloadForUpdate,
+	setUpdateBranch: () => setUpdateBranch,
+	shouldForceUpdate: () => shouldForceUpdate,
+	syncUpdateIndicators: () => syncUpdateIndicators,
+	updateSelf: () => updateSelf,
+	versionProbePlan: () => versionProbePlan
+});
+var CURRENT_VERSION = "3.2.4";
 var REPO = "janmk1453/Api-Usage";
 var EXTENSION_FOLDER = "Api-Usage";
 /** 自动检查节流：每 10 分钟内首次打开面板才真正联网检查一次 */
@@ -44,6 +64,12 @@ function setUpdateBranch(branch) {
 * 实测（国内家宽）raw 与 cdn.jsdelivr.net 均不可达时，gh-proxy.com / gh-proxy.org /
 * fastly.jsdelivr.net / jsd.onmicrosoft.cn 通常仍可用，故两梯队都放了多个来源，先到先得。
 * query 串带时间戳，用于绕开浏览器与中间层缓存。
+*/
+/**
+* 生成某个分支 / 标签下同一份文件的多源镜像列表。
+*
+* `branch` 故意放宽成 `string` 而不限于 `UpdateBranch`：公告走独立的 `announce` 分支，
+* 那里只有一份静态 JSON，与「检查更新读 main / dev」是两件事。
 */
 function remoteSources(path, branch) {
 	const t = Date.now();
@@ -1035,4 +1061,4 @@ function maybeAutoCheck() {
 	} catch {}
 }
 //#endregion
-export { checkUpdate, getUpdateBranch, maybeAutoCheck, probeForcedUpdateAtStartup, setUpdateBranch, syncUpdateIndicators, updateSelf };
+export { update_exports as n, remoteSources as t };

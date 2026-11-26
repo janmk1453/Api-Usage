@@ -3,8 +3,10 @@
  *
  * 只在「用户能明显感觉到不对」的情况下给出信号：
  * - zero-usage      记下来的用量全 0（费用必然错）
- * - estimated-usage 上游没给用量，已按本地估算补记（黄色轻提示，不是故障）
- * - missing-usage   常规对话的用量没取到、这一轮没进历史（同类连续出现或探针聚簇才提示）
+ * - estimated-usage 上游没给用量，已按本地估算补记（黄色轻提示，不是故障；同一模型同一估算方法
+ *                   累计到 ESTIMATED_CLUSTER_MIN 轮才聚成一条，偶发漏回一次不打扰）
+ * - missing-usage   常规对话的用量没取到、这一轮没进历史（同类连续出现或探针聚簇才提示；
+ *                   上游错误被宿主包装成 200 而拒绝入库的轮次也归在这里，但原因写成 api-error）
  * - rate-anomaly    速率离谱（极高 / 极低），多半是耗时或流式判定出错
  * - meta-missing    模型名或耗时缺失，只能用兜底值
  * - plugin-error    本扩展自身功能报错（网络/汇率/更新等无关报错不算）
@@ -51,6 +53,11 @@ export interface HealthSignal {
   requestId?: string;
   /** 命中的探针 ID（「这类请求没被记账」时指向最新那一条作样本） */
   tapId?: string;
+  /**
+   * 这条信号代表多少轮：估算补记是多轮聚成一条，其余信号恒为 1（缺省按 1 计）。
+   * 只影响汇总条数（「本地估算补记 N 次」），不影响明细条数与忽略指纹。
+   */
+  count?: number;
 }
 
 /**
@@ -123,6 +130,11 @@ export const MISSING_CLUSTER_MIN = 2;
 export const INSTALL_FAIL_MIN = 3;
 /** 元信息缺失只检查最近这段时间的记录，避免旧数据一直报警 */
 export const META_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+/**
+ * 估算补记的提示门槛：上游偶尔漏回一次用量很常见（中途断网、代理丢字段、流式被截断），
+ * 单轮就弹提示等于把正常波动当故障；同一模型、同一估算方法累计这么多轮才提示一次。
+ */
+export const ESTIMATED_CLUSTER_MIN = 5;
 
 const KIND_TEXT: Record<HealthSignalKind, string> = {
   'zero-usage': '用量为 0',
@@ -156,6 +168,10 @@ function clipText(text: string, max = 120): string {
 export function scanHistoryHealth(history: any[], limit = HEALTH_HISTORY_SCAN, now = Date.now()): HealthSignal[] {
   const out: HealthSignal[] = [];
   if (!Array.isArray(history)) return out;
+  // 估算补记先按「模型 + 估算方法」攒起来，扫完再决定要不要提示：
+  // 断网、代理丢字段、流式被截断都会让上游漏回一次用量，这是正常波动而不是故障，
+  // 单轮就弹提示等于每断一次网报一次警；攒够 ESTIMATED_CLUSTER_MIN 轮才聚成一条。
+  const estimates = new Map<string, { at: number; model: string; method: string; historyTimestamp?: number; requestId?: string }[]>();
   const recent = history
     .slice()
     .sort((a, b) => (Number(b?.timestamp) || 0) - (Number(a?.timestamp) || 0))
@@ -174,19 +190,13 @@ export function scanHistoryHealth(history: any[], limit = HEALTH_HISTORY_SCAN, n
       historyTimestamp: at || undefined,
       requestId: String(entry?.requestId || '') || undefined,
     };
-    // 估算补记：轻提示，告诉用户这一轮的数字是本地算的
+    // 估算补记：先只登记，扫完按「模型 + 估算方法」看累计轮数（轻提示，不改数据的可信度口径）
     if (isEstimatedEntry(entry)) {
       const method = String((entry as any)?.estimateMethod || '');
-      out.push({
-        kind: 'estimated-usage',
-        at,
-        model,
-        reason: 'estimated',
-        signature: method || undefined,
-        severity: 'info',
-        ...loc,
-        detail: clipText(model + ' 这一轮上游未返回用量，已按本地估算补记' + (method ? '（' + method + '）' : '')),
-      });
+      const key = model + '|' + method;
+      const list = estimates.get(key) || [];
+      list.push({ at, model, method, ...loc });
+      estimates.set(key, list);
       continue;
     }
     if ((entry as any)?.modelFallback) {
@@ -227,6 +237,27 @@ export function scanHistoryHealth(history: any[], limit = HEALTH_HISTORY_SCAN, n
       out.push({ kind: 'rate-anomaly', at, model, reason: 'rate-low', severity: 'warn', ...loc, detail: clipText(model + ' 速率 ' + rate.toFixed(2) + ' token/s，明显偏低') });
     }
   }
+  // 估算补记聚簇：同一模型、同一估算方法累计到门槛才提示一条，
+  // 明细指向最近那一轮（「上传这一条」拿到的就是最新样本），轮数记在 count 里供汇总用。
+  for (const list of estimates.values()) {
+    if (list.length < ESTIMATED_CLUSTER_MIN) continue;
+    const latest = list.reduce((a, b) => (b.at > a.at ? b : a));
+    out.push({
+      kind: 'estimated-usage',
+      at: latest.at,
+      model: latest.model,
+      reason: 'estimated',
+      signature: latest.method || undefined,
+      severity: 'info',
+      count: list.length,
+      historyTimestamp: latest.historyTimestamp,
+      requestId: latest.requestId,
+      detail: clipText(
+        latest.model + ' 有 ' + list.length + ' 轮上游未返回用量，已按本地估算补记'
+        + (latest.method ? '（' + latest.method + '）' : ''),
+      ),
+    });
+  }
   return out;
 }
 
@@ -236,9 +267,36 @@ function dropReasonOf(rec: any): string {
 }
 
 /**
+ * 滑动窗口聚簇：同一条原因在 MISSING_CLUSTER_MS 内出现 MISSING_CLUSTER_MIN 次才算「多次」。
+ * 偶发一次不打扰用户，返回第一个达标窗口的末条记录。
+ */
+function firstCluster(list: any[]): { latest: any } | null {
+  const sorted = list.slice().sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
+  let clusterStart = 0;
+  for (let i = 0; i < sorted.length; i += 1) {
+    while (i - clusterStart + 1 > MISSING_CLUSTER_MIN && (Number(sorted[i].at) || 0) - (Number(sorted[clusterStart].at) || 0) > MISSING_CLUSTER_MS) {
+      clusterStart += 1;
+    }
+    if (i - clusterStart + 1 === MISSING_CLUSTER_MIN) return { latest: sorted[i] };
+  }
+  return null;
+}
+
+/** entry-rejected 的 reason 形如 api-error-payload:<锚点>:<字符数>:status=<状态码> */
+function rejectedPartsOf(rec: any): { marker: string; status: string } {
+  const reason = String(rec?.reason || '');
+  return {
+    marker: reason.split(':')[1] || 'unknown',
+    status: (reason.match(/status=(\d+)/) || [])[1] || '',
+  };
+}
+
+/**
  * 扫采集链路快照：
  * - 事件层丢弃：同类（模型 + 原因）在窗口内出现至少 MISSING_CLUSTER_MIN 次才算「多次未计入」，
  *   偶发单次不打扰用户；
+ * - 上游错误被宿主包装成 200：历史刻意不留记录（那一轮没有模型内容），但同类连续出现
+ *   要按「上游返回错误」提示，避免用户误以为是扩展把数据弄丢了；
  * - 入库失败：功能报错，带错误签名用于「忽略同类」。
  * （fetch-parse 的全 0、turn-estimated / turn-interrupted 都会在历史里体现，这里不重复报。）
  */
@@ -256,9 +314,21 @@ export function scanCaptureHealth(stages = listCaptureStages()): HealthSignal[] 
     if (id) settledRequests.add(id);
   }
   const drops = new Map<string, any[]>();
+  // 上游错误被包装成 200 而拒绝入库的轮次：历史里刻意不留记录（正确，那一轮确实没有模型内容），
+  // 但用户需要知道「这是上游报错」而不是扩展丢数据，所以单独聚簇提示。
+  const rejects = new Map<string, any[]>();
   for (const rec of stages) {
     if (!rec) continue;
-    if (rec.stage === 'event-drop') {
+    if (rec.stage === 'entry-rejected') {
+      // 同一请求后来又正常入库（宿主重试成功）就不该再提示上游报错
+      const reqId = String(rec.requestId || '');
+      if (reqId && settledRequests.has(reqId)) continue;
+      const { marker, status } = rejectedPartsOf(rec);
+      const key = (rec.model || '') + '|' + status + '|' + marker;
+      const list = rejects.get(key) || [];
+      list.push(rec);
+      rejects.set(key, list);
+    } else if (rec.stage === 'event-drop') {
       // 用户主动停止造成的空轮次不是故障（与历史记录层「用户中断不产生健康提示」同一口径），
       // 这类丢弃连估算都无从下手，本来就不该写历史，更不该弹告警
       if (dropReasonOf(rec) === 'user-stop-no-output') continue;
@@ -299,29 +369,36 @@ export function scanCaptureHealth(stages = listCaptureStages()): HealthSignal[] 
     });
   }
   for (const [key, list] of drops) {
+    const hit = firstCluster(list);
+    if (!hit) continue;
     const [model, reason] = key.split('|');
-    const sorted = list.slice().sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
-    // 滑动窗口聚簇：窗口内达到阈值才报一条
-    let clusterStart = 0;
-    for (let i = 0; i < sorted.length; i += 1) {
-      while (i - clusterStart + 1 > MISSING_CLUSTER_MIN && (Number(sorted[i].at) || 0) - (Number(sorted[clusterStart].at) || 0) > MISSING_CLUSTER_MS) {
-        clusterStart += 1;
-      }
-      if (i - clusterStart + 1 === MISSING_CLUSTER_MIN) {
-        const count = i - clusterStart + 1;
-        const latest = sorted[i];
-        out.push({
-          kind: 'missing-usage',
-          at: Number(latest.at) || 0,
-          model,
-          reason: 'missing',
-          signature: reason,
-          severity: 'warn',
-          detail: clipText((model || '未知模型') + ' 连续 ' + count + ' 轮没有取到用量，这些对话未写入历史'),
-        });
-        break;
-      }
-    }
+    out.push({
+      kind: 'missing-usage',
+      at: Number(hit.latest.at) || 0,
+      model,
+      reason: 'missing',
+      signature: reason,
+      severity: 'warn',
+      detail: clipText((model || '未知模型') + ' 连续 ' + MISSING_CLUSTER_MIN + ' 轮没有取到用量，这些对话未写入历史'),
+    });
+  }
+  for (const [key, list] of rejects) {
+    const hit = firstCluster(list);
+    if (!hit) continue;
+    const [model, status, marker] = key.split('|');
+    out.push({
+      kind: 'missing-usage',
+      at: Number(hit.latest.at) || 0,
+      model,
+      reason: 'api-error',
+      signature: status ? 'http-' + status : marker,
+      severity: 'warn',
+      detail: clipText(
+        (model || '未知模型') + ' 连续 ' + MISSING_CLUSTER_MIN + ' 轮上游返回错误'
+        + (status ? '（HTTP ' + status + '）' : '')
+        + '，这些轮次没有模型内容、未计入历史',
+      ),
+    });
   }
   return out;
 }
@@ -467,7 +544,9 @@ export function buildHealthReport(input: {
     'plugin-error': 0,
   };
   for (const sig of visible) {
-    if (counts[sig.kind] != null) counts[sig.kind] += 1;
+    // 估算补记是多轮聚成一条：汇总里报「本地估算补记 5 次」才对得上用户看到的轮数，
+    // 明细条数仍按信号条数（total / items）算。
+    if (counts[sig.kind] != null) counts[sig.kind] += Math.max(1, Number(sig.count) || 1);
   }
   const shown = visible.slice(0, limit);
   const warnCount = visible.filter((sig) => sig.severity !== 'info').length;

@@ -6,7 +6,10 @@ import { readFileSync } from 'node:fs';
 const manifest = JSON.parse(readFileSync(new URL('./manifest.json', import.meta.url), 'utf8'));
 
 export default defineConfig({
-  define: { __APP_VERSION__: JSON.stringify(String(manifest.version || '')) },
+  define: {
+    __APP_VERSION__: JSON.stringify(String(manifest.version || '')),
+    __BUILD_NO__: JSON.stringify(String(manifest.build_no ?? 0)),
+  },
   plugins: [
     {
       // cloudflare/worker.js 通过 Text 模块导入看板页（wrangler.toml 的 rules 已声明），

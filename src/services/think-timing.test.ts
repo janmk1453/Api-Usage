@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { createFrameNormalizer } from './frame-normalizer';
 import {
   contentTextOf,
   createThinkClock,
+  hasToolCallDelta,
+  judgeStreamedFromClock,
   reasoningTextOf,
   resolveThinkTime,
   scanThinkChunk,
@@ -88,6 +91,82 @@ describe('scanThinkChunk / resolveThinkTime', () => {
     scanThinkChunk(clock, 'event: ping\n: keep-alive\ndata: {broken\ndata: [DONE]', 300);
     expect(clock.startAt).toBeNull();
     expect(clock.contentFrames).toBe(0);
+    expect(clock.sseFrames).toBe(0);
     expect(resolveThinkTime(clock, 400)).toBe(0);
+  });
+});
+
+describe('真假流式判定（judgeStreamedFromClock）', () => {
+  const toolCall = (index: number, args = '') => ({ index, type: 'function', function: { name: 'get_weather', arguments: args } });
+
+  it('纯工具调用流：没有正文帧也能判成真流式', () => {
+    const clock = createThinkClock();
+    scanThinkChunk(clock, sse([
+      deepseek({ role: 'assistant', content: null, tool_calls: [toolCall(0)] }),
+      deepseek({ tool_calls: [{ index: 0, function: { arguments: '{"city":' } }] }),
+      deepseek({ tool_calls: [{ index: 0, function: { arguments: '"杭州"}' } }] }),
+    ]), 500);
+    expect(clock.contentFrames).toBe(0);
+    expect(clock.deltaFrames).toBe(3);
+    expect(judgeStreamedFromClock(clock, true)).toBe(true);
+  });
+
+  it('工具调用被一次性塞进一帧：判为非流式', () => {
+    const clock = createThinkClock();
+    scanThinkChunk(clock, sse([deepseek({ content: null, tool_calls: [toolCall(0, '{"city":"杭州"}')] })]), 800);
+    expect(clock.deltaFrames).toBe(1);
+    expect(judgeStreamedFromClock(clock, true)).toBe(false);
+  });
+
+  it('只有 usage 末帧的 SSE：判为未知，交给数值兜底', () => {
+    const clock = createThinkClock();
+    scanThinkChunk(clock, sse([{ choices: [], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } }]), 900);
+    expect(clock.sseFrames).toBe(1);
+    expect(clock.deltaFrames).toBe(0);
+    expect(judgeStreamedFromClock(clock, true)).toBeNull();
+  });
+
+  it('请求声明流式但上游回了整段 JSON：没有任何 SSE 帧，判为非流式', () => {
+    const clock = createThinkClock();
+    scanThinkChunk(clock, '{"choices":[{"message":{"content":"一次性返回"}}]}', 900);
+    expect(clock.sseFrames).toBe(0);
+    expect(judgeStreamedFromClock(clock, true)).toBe(false);
+  });
+
+  it('请求未声明流式：直接判为非流式', () => {
+    const clock = createThinkClock();
+    scanThinkChunk(clock, sse([deepseek({ content: '一' }), deepseek({ content: '二' })]), 300);
+    expect(judgeStreamedFromClock(clock, false)).toBe(false);
+  });
+
+  it('多帧思维链同样算流式增量', () => {
+    const clock = createThinkClock();
+    scanThinkChunk(clock, sse([deepseek({ reasoning_content: '想' })]), 400);
+    scanThinkChunk(clock, sse([deepseek({ reasoning_content: '继续想' })]), 900);
+    expect(clock.deltaFrames).toBe(2);
+    expect(judgeStreamedFromClock(clock, true)).toBe(true);
+  });
+
+  it('经过帧归一化投影后，工具调用帧既不丢失也不被误判', () => {
+    const sseText = [
+      'data: ' + JSON.stringify({ choices: [{ index: 0, delta: { role: 'assistant', tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'get_weather', arguments: '' } }] } }] }),
+      'data: ' + JSON.stringify({ choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: '{"city":"杭州"}' } }] } }] }),
+      'data: ' + JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] }),
+      'data: ' + JSON.stringify({ choices: [], usage: { prompt_tokens: 20, completion_tokens: 8, total_tokens: 28 } }),
+      'data: [DONE]',
+    ].join('\n');
+    const projected = createFrameNormalizer().projectSse(sseText);
+    const clock = createThinkClock();
+    scanThinkChunk(clock, projected, 600);
+    expect(clock.deltaFrames).toBe(2);
+    expect(clock.contentFrames).toBe(0);
+    expect(judgeStreamedFromClock(clock, true)).toBe(true);
+  });
+
+  it('Anthropic input_json_delta 与 Gemini functionCall 都算工具增量', () => {
+    expect(hasToolCallDelta({ type: 'content_block_delta', delta: { type: 'input_json_delta', partial_json: '{' } })).toBe(true);
+    expect(hasToolCallDelta({ candidates: [{ content: { parts: [{ functionCall: { name: 'f' } }] } }] })).toBe(true);
+    expect(hasToolCallDelta(deepseek({ content: '正文' }))).toBe(false);
+    expect(hasToolCallDelta({ choices: [{ delta: { tool_calls: [] } }] })).toBe(false);
   });
 });

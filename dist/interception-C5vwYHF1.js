@@ -1,6 +1,8 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
-import { D as initConnectionIdentity, O as resolveRuntimeConnectionContext, t as repository } from "./repository-BTkiTZ1e.js";
+import { c as putDetailRequest, l as putDetailResponse, n as DETAIL_MAX_CHARS } from "./detail-store-CqNNEAWB.js";
+import { D as initConnectionIdentity, O as resolveRuntimeConnectionContext, t as repository } from "./repository-DQzcy9_C.js";
+import { t as detectRequestOrigin } from "./request-origin-C9kLQ_0W.js";
 //#region src/services/include-usage.ts
 /**
 * 流式 usage 注入的纯逻辑：把 stream_options.include_usage 合并进用户/预设自定义的请求体参数。
@@ -141,7 +143,9 @@ function createThinkClock() {
 		startAt: null,
 		endAt: null,
 		lastReasoningAt: null,
-		contentFrames: 0
+		contentFrames: 0,
+		deltaFrames: 0,
+		sseFrames: 0
 	};
 }
 function textOf(value) {
@@ -184,6 +188,26 @@ function contentTextOf$1(record) {
 	return "";
 }
 /**
+* 一帧里是否有工具调用增量。
+* 工具调用响应里没有 delta.content，若只数正文帧就会把正常的一次流式调用判成「未知」。
+* 覆盖 OpenAI tool_calls、Anthropic input_json_delta / tool_use 起始块、Gemini functionCall。
+*/
+function hasToolCallDelta(record) {
+	if (!record || typeof record !== "object") return false;
+	for (const carrier of frameCarriers(record)) {
+		if (!carrier || typeof carrier !== "object") continue;
+		const calls = carrier.tool_calls;
+		if (Array.isArray(calls) && calls.length > 0) return true;
+		const type = carrier.type;
+		if (type === "input_json_delta" || type === "tool_use_delta") return true;
+		const block = carrier.content_block;
+		if (block && typeof block === "object" && block.type === "tool_use") return true;
+	}
+	const parts = record?.candidates?.[0]?.content?.parts;
+	if (Array.isArray(parts) && parts.some((part) => part && typeof part === "object" && part.functionCall)) return true;
+	return false;
+}
+/**
 * 扫一段已是完整行的 SSE 文本（可含多行），更新时钟。
 * @param at 该段数据的相对时刻（ms）；同段内的帧共用同一时刻，粒度足够
 */
@@ -200,6 +224,7 @@ function scanThinkChunk(clock, chunk, at) {
 			continue;
 		}
 		if (!record || typeof record !== "object") continue;
+		clock.sseFrames = (clock.sseFrames || 0) + 1;
 		const reasoning = reasoningTextOf(record);
 		if (reasoning) {
 			if (clock.startAt == null) clock.startAt = at;
@@ -212,7 +237,24 @@ function scanThinkChunk(clock, chunk, at) {
 			clock.contentChars = (clock.contentChars || 0) + content.length;
 			if (clock.startAt != null && clock.endAt == null) clock.endAt = at;
 		}
+		if (reasoning || content || hasToolCallDelta(record)) clock.deltaFrames = (clock.deltaFrames || 0) + 1;
 	}
+}
+/**
+* 真假流式判定（单一来源）。
+* - 未声明 stream：false
+* - 增量帧 > 1：true
+* - 增量帧 = 1：false（上游把全文塞进一帧，含单帧工具调用）
+* - 零增量帧且没有任何 SSE 帧：false（上游无视 stream:true，直接回整段 JSON）
+* - 零增量帧但收到过 SSE 帧：null（只有 usage / 心跳，观测不足，交给数值兜底）
+*/
+function judgeStreamedFromClock(clock, requestedStream) {
+	if (!requestedStream) return false;
+	const frames = clock?.deltaFrames || 0;
+	if (frames > 1) return true;
+	if (frames === 1) return false;
+	if (!(clock?.sseFrames || 0)) return false;
+	return null;
 }
 /**
 * 结算思维链耗时（ms）。
@@ -1083,7 +1125,9 @@ var CAPTURE_STAGE_SET = /* @__PURE__ */ new Set([
 	"turn-estimated",
 	"turn-interrupted",
 	"turn-unmatched",
-	"install-failed"
+	"entry-rejected",
+	"install-failed",
+	"guard-recovered"
 ]);
 var USAGE_KEYS = [
 	"prompt_tokens",
@@ -1218,6 +1262,45 @@ function captureDigest(limit = 24) {
 		return out;
 	});
 }
+/** 这一层是我们哪一类包装：只认身份标记，不代表它还在岗 */
+function fetchChainKind(fn) {
+	if (typeof fn !== "function") return "other";
+	if (fn.__ausCaptureLayer === true) return "capture";
+	if (fn.__ausTapActive === true) return "tap";
+	return "other";
+}
+/** 取链上的下一层；宿主的包装不记录下一层，返回 null 表示到头 */
+function fetchChainInner(fn) {
+	if (typeof fn !== "function") return null;
+	const inner = fn["__ausCaptureInner"] || fn["__ausTapInner"];
+	return typeof inner === "function" ? inner : null;
+}
+/**
+* 从 top 起沿链找 target（含 top 本身），最多 maxHops 跳。
+* target 为空表示「没有任何在岗层」——守卫必须据此重装，不能当成在岗。
+*/
+function fetchChainHas(top, target, maxHops = 8) {
+	if (!target) return false;
+	let node = top;
+	for (let hop = 0; hop <= maxHops; hop++) {
+		if (!node) return false;
+		if (node === target) return true;
+		node = fetchChainInner(node);
+	}
+	return false;
+}
+/** 链上各层种类的可读描述（诊断用），例如 'tap>capture'、'other' */
+function describeFetchChain(top, maxHops = 8) {
+	const parts = [];
+	let node = top;
+	for (let hop = 0; hop <= maxHops; hop++) {
+		if (typeof node !== "function") break;
+		parts.push(fetchChainKind(node));
+		node = fetchChainInner(node);
+		if (!node) break;
+	}
+	return parts.length ? parts.join(">") : "empty";
+}
 //#endregion
 //#region src/services/turn-outcome.ts
 /** 本次生成结果 → 处置决定；调用方只按 kind 分派，不再自己拼条件 */
@@ -1227,6 +1310,11 @@ function decideTurnOutcome(signals) {
 	const hasOutput = signals.hasOutput === true;
 	const pendingStop = signals.pendingStop === true;
 	const streamError = signals.streamError ? String(signals.streamError) : null;
+	if (signals.errorPayload ? String(signals.errorPayload) : null) return {
+		kind: "drop",
+		interrupted: null,
+		reason: "api-error-payload"
+	};
 	if (usable) {
 		const interrupted = pendingStop ? "user" : streamError ? "upstream" : null;
 		return {
@@ -1255,6 +1343,42 @@ function decideTurnOutcome(signals) {
 		interrupted: null,
 		reason: hasUsage ? "usage-all-zero-with-output" : "no-usage-with-output"
 	};
+}
+/**
+* 顺序即优先级：TT 模板最稳定，界面文案随语言变，上游 JSON 只在整段透传时出现。
+* 三条都锚在行首，句中引用一律不认；模板前的 provider 名只允许 ASCII 字母数字与常见分隔符
+* （"Custom OpenAI"、"Google AI Studio" 这类），中文句子开头因此不会误命中。
+*/
+var MARKERS = [
+	{
+		id: "tauritavern-endpoint-status",
+		test: /^[A-Za-z0-9 ._\-()]{0,80}?endpoint failed with status\s+\d{3}\b/i
+	},
+	{
+		id: "tavern-api-error-title",
+		test: /^\[API\s*(?:错误|Error|錯誤)\]/i
+	},
+	{
+		id: "upstream-error-json",
+		test: /^\{\s*"error"\s*:\s*\{[^}]*"message"/i
+	}
+];
+/**
+* 这段文本是不是「上游错误提示被当成模型输出」。
+* 命中返回锚点与长度，不命中返回 null（空文本、超长文本一律不认）。
+*/
+function detectApiErrorPayload(text) {
+	const t = String(text ?? "").trim();
+	if (!t || t.length > 1200) return null;
+	for (const marker of MARKERS) if (marker.test.test(t)) return {
+		marker: marker.id,
+		chars: t.length
+	};
+	return null;
+}
+/** 判定结果的稳定串（写进 capture 快照的 reason，供诊断包按锚点统计） */
+function apiErrorPayloadTag(match) {
+	return match ? match.marker + ":" + match.chars : null;
 }
 //#endregion
 //#region src/services/token-estimate.ts
@@ -1359,148 +1483,6 @@ async function estimateTextTokens(text, options = {}) {
 /** 输入侧估算：按整轮 messages 拍平后的文本计数 */
 async function estimatePromptTokens(messages) {
 	return estimateTextTokens(messagesText(messages));
-}
-//#endregion
-//#region src/services/request-origin.ts
-/** 酒馆第三方扩展的固定挂载路径 */
-var THIRD_PARTY = "/scripts/extensions/third-party/";
-/**
-* 自身帧标记。默认值兜底目录名，运行期再用 registerRequestOriginSelf 补真实 URL；
-* 只用于「排除自己」，不参与任何来源判定。
-*/
-var SELF_MARKERS = ["api-usage"];
-var SELF_FRAME_CLIP = 220;
-/**
-* 酒馆「发送脚本」：真正执行 fetch 的那两个文件。聊天补全走
-* openai.js#sendOpenAIRequest，文本补全走 textgen-settings.js#generateTextGenWithStreaming，
-* 全站只此两处，所以文件级判断就够、不必认函数名（改名 / 压缩都不影响）。
-*/
-var SEND_SCRIPTS = ["/scripts/openai.js", "/scripts/textgen-settings.js"];
-/** 酒馆主链脚本（含发送脚本）：仅用于「认不出扩展/脚本时兜底判酒馆」 */
-var TAVERN_SCRIPTS = [
-	"/script.js",
-	...SEND_SCRIPTS,
-	"/scripts/extensions.js"
-];
-/** 从一段路径里取出扩展目录名：.../third-party/<name>/... → <name> */
-function pluginNameFromPath(path) {
-	if (!path) return null;
-	const idx = path.indexOf(THIRD_PARTY);
-	if (idx === -1) return null;
-	return path.slice(idx + 32).split(/[/?#]/)[0] || null;
-}
-/** 注册自身脚本地址（由入口调用）；取不到 URL 时静默忽略，兜底标记仍然生效 */
-function registerRequestOriginSelf(url) {
-	try {
-		const name = pluginNameFromPath(String(url || ""));
-		if (!name) return;
-		const marker = name.toLowerCase();
-		if (!SELF_MARKERS.includes(marker)) SELF_MARKERS.push(marker);
-	} catch {}
-}
-function clip(text) {
-	return String(text || "").slice(0, SELF_FRAME_CLIP);
-}
-function isSelfFrame(line) {
-	const lower = line.toLowerCase();
-	for (const marker of SELF_MARKERS) if (marker && lower.indexOf(marker) !== -1) return true;
-	return false;
-}
-/**
-* 脚本帧：酒馆助手（JS-Slash-Runner）把用户脚本塞进 srcdoc / blob iframe 里跑，
-* 栈帧只留得下 about:srcdoc 或 blob: 前缀，定位不到具体脚本文件。
-* 这是「脚本」与「扩展」的分界线：认得出扩展目录就是扩展，只剩这类帧就是脚本。
-*/
-function isScriptFrame(line) {
-	return line.indexOf("about:srcdoc") !== -1 || line.indexOf("about:blank") !== -1 || line.indexOf("blob:") !== -1;
-}
-function frameHas(line, scripts) {
-	for (const script of scripts) if (line.indexOf(script) !== -1) return true;
-	return false;
-}
-function isSendFrame(line) {
-	return frameHas(line, SEND_SCRIPTS);
-}
-function isTavernFrame(line) {
-	return frameHas(line, TAVERN_SCRIPTS);
-}
-/** 抓栈深度：默认 10 帧常常够不到「扩展 → 酒馆 Generate → fetch」的起点 */
-var MAX_STACK_FRAMES = 50;
-/**
-* 从调用栈判定发起方；认不出返回 null。
-*
-* 判据以「酒馆发送帧」为锚点（栈内层在前、外层在后，下标小 = 更靠 fetch）：
-* - 有发送帧：只有排在它**外面**的扩展 / 脚本帧才算发起者（扩展经 Generate 转发、脚本调酒馆 API）；
-*   排在它里面的只是包装 fetch，判酒馆。
-* - 无发送帧：请求不经过酒馆发送函数，任何扩展帧都是自己直连（酒馆帧只是触发它的 UI 事件）。
-* 这三种形态已用无头 Chrome 实测过，详见文件头的约束 2。
-*/
-function originFromStack(stack) {
-	const frames = [];
-	for (const raw of String(stack || "").split("\n")) {
-		const line = raw.trim();
-		if (!line) continue;
-		if (line.startsWith("Error")) continue;
-		if (isSelfFrame(line)) continue;
-		frames.push(line);
-	}
-	let sendInner = -1;
-	let tavernInner = -1;
-	let extensionOuter = -1;
-	let extensionFrame = "";
-	let scriptOuter = -1;
-	let scriptFrame = "";
-	for (let i = 0; i < frames.length; i += 1) {
-		const line = frames[i];
-		if (sendInner === -1 && isSendFrame(line)) sendInner = i;
-		else if (tavernInner === -1 && isTavernFrame(line)) tavernInner = i;
-		if (pluginNameFromPath(line)) {
-			extensionOuter = i;
-			extensionFrame = line;
-		}
-		if (isScriptFrame(line)) {
-			scriptOuter = i;
-			scriptFrame = line;
-		}
-	}
-	const pickExtension = () => ({
-		kind: "extension",
-		id: clip(extensionFrame),
-		label: pluginNameFromPath(extensionFrame) || ""
-	});
-	const pickScript = () => ({
-		kind: "script",
-		id: clip(scriptFrame),
-		label: "iframe 脚本"
-	});
-	const tavern = () => ({
-		kind: "tavern",
-		id: "tavern",
-		label: "酒馆主界面"
-	});
-	if (sendInner !== -1) {
-		if (extensionOuter > sendInner) return pickExtension();
-		if (scriptOuter > sendInner) return pickScript();
-		return tavern();
-	}
-	if (extensionOuter !== -1) return pickExtension();
-	if (scriptOuter !== -1) return pickScript();
-	if (tavernInner !== -1) return tavern();
-	return null;
-}
-/** 现场抓栈判定：必须在 fetch 包装的同步段调用，任何 await 之后栈就断了 */
-function detectRequestOrigin() {
-	const previous = Error.stackTraceLimit;
-	try {
-		Error.stackTraceLimit = MAX_STACK_FRAMES;
-		return originFromStack(String((/* @__PURE__ */ new Error()).stack || ""));
-	} catch {
-		return null;
-	} finally {
-		try {
-			Error.stackTraceLimit = previous;
-		} catch {}
-	}
 }
 //#endregion
 //#region src/services/interception.ts
@@ -1667,13 +1649,38 @@ function metaForTurn(turn) {
 	const interrupted = stopPending() ? "user" : turn?.streamError ? "upstream" : null;
 	const modelFallback = turn?.modelFallback === true;
 	const requestOrigin = turn?.requestOrigin || null;
-	if (!interrupted && !modelFallback && !requestOrigin) return null;
+	const promptChars = Number(turn?.promptChars) || 0;
+	const outputChars = Number(turn?.outputChars) || 0;
+	if (!interrupted && !modelFallback && !requestOrigin && !promptChars && !outputChars) return null;
 	const meta = { usageSource: "upstream" };
 	if (requestOrigin) meta.requestOrigin = requestOrigin;
 	meta.interrupted = interrupted;
 	if (interrupted) meta.interruptReason = interrupted === "user" ? "user-stop" : String(turn?.streamError || "stream-error").slice(0, 200);
 	if (modelFallback) meta.modelFallback = true;
+	if (promptChars > 0) meta.promptChars = promptChars;
+	if (outputChars > 0) meta.outputChars = outputChars;
 	return meta;
+}
+/**
+* 请求体字符数：消息 content 累计（数组形态取 text 段），文本补全取 prompt。
+* 只用于诊断字段，不参与任何计价或估算口径。
+*/
+function countRequestChars(body) {
+	try {
+		if (Array.isArray(body?.messages)) {
+			let total = 0;
+			for (const message of body.messages) {
+				const content = message?.content;
+				if (typeof content === "string") total += content.length;
+				else if (Array.isArray(content)) {
+					for (const part of content) if (typeof part?.text === "string") total += part.text.length;
+				}
+			}
+			return total;
+		}
+		if (typeof body?.prompt === "string") return body.prompt.length;
+	} catch {}
+	return 0;
 }
 /** 从响应原文里抽出助手输出文本（正文 + 思维链），只用于本地估算 token */
 function collectOutputText(raw) {
@@ -1703,6 +1710,30 @@ function collectOutputText(raw) {
 		} catch {}
 	}
 	return out.slice(0, 2e5);
+}
+/**
+* 本轮输出是不是「上游错误提示被宿主包装成 200 正文」。
+*
+* 两个候选都试：投影后的正文（模型 content 的位置），以及上游原始响应
+* （错误 JSON / 带错误文案的 SSE 原文）。命中返回稳定串（锚点:字符数），供判定层与诊断快照共用。
+*/
+function detectTurnErrorPayload(text, raw) {
+	try {
+		const bodyLen = String(text || "").length;
+		const rawLen = String(raw || "").length;
+		if (bodyLen > 1200 && rawLen > 1200) return null;
+		if (bodyLen <= 1200) {
+			const fromBody = detectApiErrorPayload(collectOutputText(text || ""));
+			if (fromBody) return apiErrorPayloadTag(fromBody);
+		}
+		if (rawLen > 0 && rawLen <= 1200) {
+			const fromRaw = detectApiErrorPayload(raw || "");
+			if (fromRaw) return apiErrorPayloadTag(fromRaw);
+		}
+		return null;
+	} catch {
+		return null;
+	}
 }
 function recentStreamTiming(maxAge = 6e4) {
 	try {
@@ -1810,10 +1841,7 @@ function installFetchCapture() {
 	try {
 		const p = window.parent || window;
 		if (!p || typeof p.fetch !== "function") return false;
-		if (isAusFetchPatch(p.fetch)) {
-			if (p.fetch.__ausCaptureLayer === true) activateCapture(p.fetch);
-			return true;
-		}
+		if (captureInPlace(p)) return true;
 		const prevFetchFn = p.fetch;
 		const depth = (Number(prevFetchFn.__ausCaptureDepth) || 0) + 1;
 		if (depth > MAX_CAPTURE_DEPTH) {
@@ -1870,6 +1898,7 @@ function installFetchCapture() {
 					modelFallback: !(typeof requestModel === "string" && requestModel),
 					status: 0,
 					streamError: null,
+					promptChars: countRequestChars(reqBody),
 					outputChars: 0,
 					reasoningChars: 0,
 					fullResponse: null,
@@ -1881,6 +1910,7 @@ function installFetchCapture() {
 					thinkTime: 0,
 					streamed: null,
 					endedAt: 0,
+					errorPayload: null,
 					settled: false,
 					settledBy: null,
 					usage: null,
@@ -1903,6 +1933,15 @@ function installFetchCapture() {
 						headers: rawInit.headers,
 						body: rawBody
 					});
+					try {
+						putDetailRequest({
+							requestId,
+							timestamp: startTime,
+							model: typeof requestModel === "string" ? requestModel : null,
+							body: rawBody,
+							headers: rawInit.headers
+						}).catch(() => {});
+					} catch {}
 				} catch {}
 				try {
 					noteCaptureStage("fetch-start", {
@@ -1938,7 +1977,20 @@ function installFetchCapture() {
 						const clone = res.clone();
 						const requestedStream = reqBody?.stream === true;
 						const frameNormalizer = createFrameNormalizer();
-						const parseAndProcess = (text, ttftVal, thinkTimeVal, streamed = null, rawText = null) => {
+						let archiveText = "";
+						let archiveTruncated = false;
+						let responseArchived = false;
+						const pushArchive = (piece) => {
+							if (!piece || archiveTruncated) return;
+							const room = DETAIL_MAX_CHARS - archiveText.length;
+							if (piece.length <= room) {
+								archiveText += piece;
+								return;
+							}
+							archiveText += piece.slice(0, Math.max(0, room));
+							archiveTruncated = true;
+						};
+						const parseAndProcess = (text, ttftVal, thinkTimeVal, streamed = null, rawText = null, archiveRaw = null) => {
 							let data = null;
 							let finishReason = null;
 							try {
@@ -1995,6 +2047,8 @@ function installFetchCapture() {
 								}
 								if (!turn.fullResponse) turn.fullResponse = rawText ?? text;
 								if (!turn.endedAt) turn.endedAt = Date.now();
+								const errorTag = detectTurnErrorPayload(text, rawText);
+								if (errorTag) turn.errorPayload = errorTag;
 							} catch {}
 							try {
 								const parsedUsage = data?.usage || null;
@@ -2049,6 +2103,19 @@ function installFetchCapture() {
 									log.error("fetch 用量记录失败 " + (e?.message || e));
 								}
 							}
+							if (!responseArchived) {
+								responseArchived = true;
+								const archiveBody = typeof archiveRaw === "string" && archiveRaw ? archiveRaw : rawText ?? text;
+								try {
+									putDetailResponse({
+										requestId,
+										timestamp: startTime,
+										model: data?.model || reqBody?.model || fullReq?.model || null,
+										body: archiveBody,
+										usage: data?.usage || null
+									}).catch(() => {});
+								} catch {}
+							}
 						};
 						try {
 							const t0 = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
@@ -2057,11 +2124,7 @@ function installFetchCapture() {
 							let fullText = "";
 							const thinkClock = createThinkClock();
 							let normText = "";
-							const judgeStreamed = () => {
-								if (!requestedStream) return false;
-								if (!thinkClock.contentFrames) return null;
-								return thinkClock.contentFrames > 1;
-							};
+							const judgeStreamed = () => judgeStreamedFromClock(thinkClock, requestedStream);
 							const finish = () => {
 								try {
 									const endedAt = nowMs() - t0;
@@ -2093,7 +2156,7 @@ function installFetchCapture() {
 											streamed
 										});
 									} catch {}
-									parseAndProcess(normText || fullText, ttft, safeThinkTime, streamed, fullText);
+									parseAndProcess(normText || fullText, ttft, safeThinkTime, streamed, fullText, archiveText);
 								} catch {}
 							};
 							const scanThink = (chunk) => {
@@ -2118,6 +2181,7 @@ function installFetchCapture() {
 									const piece = dec.decode(value, { stream: true });
 									fullText += piece;
 									buf += piece;
+									pushArchive(piece);
 									if (fullText.length > STREAM_TEXT_LIMIT) fullText = fullText.slice(-1e6);
 									const nl = buf.lastIndexOf("\n");
 									if (nl !== -1) {
@@ -2182,6 +2246,8 @@ function installFetchCapture() {
 		}
 		patched.__ausCaptureDepth = depth;
 		patched.__ausCaptureLayer = true;
+		patched.__ausCaptureInner = prevFetchFn;
+		restoreTarget = prevFetchFn;
 		activateCapture(patched);
 		captureHealth.installed = true;
 		captureHealth.generations += 1;
@@ -2224,15 +2290,22 @@ function noteInstallProblem(code, message, extra = {}) {
 * 暴露在 window.__ausCapture.diagnostics()，也随采集日志一起上报。
 */
 function captureDiagnostics() {
+	let fetchChain = "unknown";
+	try {
+		fetchChain = describeFetchChain((window.parent || window)?.fetch) + (activeCapture ? ">active" : ">active:none");
+	} catch {}
 	return {
 		...captureHealth,
 		backoffMs: guardBackoff,
 		hasActive: !!activeCapture,
-		guardMs: FETCH_GUARD_MS
+		guardMs: FETCH_GUARD_MS,
+		fetchChain
 	};
 }
 var interceptionInstalled = false;
 var rawFetchRef = null;
+/** 卸载还原目标：被包住的下一层原函数（不带 bind），保住它自己的标记与身份 */
+var restoreTarget = null;
 var messageReceivedHandler = null;
 /**
 * 当前「在岗」的那一代采集包装。
@@ -2274,12 +2347,51 @@ var captureHealth = {
 	installed: false,
 	generations: 0,
 	failures: 0,
+	/** 检测到「顶层带标记但在岗代不在链上」的次数：不改判据的话这里永远是 0，采集却已失聪 */
+	staleFlags: 0,
 	depth: 0,
 	lastError: null,
 	lastInstallAt: 0
 };
-function isAusFetchPatch(fn) {
-	return typeof fn === "function" && fn.__aus_patched === true;
+/**
+* 采集包装「在岗」判定：顺着链验证，不认任何标记布尔。
+*
+* 3.2.3 真机事故的根因就在这里——探针层为了让两边守卫不互相对套，把 __aus_patched
+* 定义成「读内层」的 getter；宿主重载后内层采集代退役，这个 getter 恒为 true，
+* 而 __ausCaptureLayer 又不在探针层上。老判据两边都不满足就不会重装：4s 自愈守卫
+* 每轮都 early return，「没记录」持续几小时，而诊断包里既没有 install-failed 也没有 fetch-start。
+*
+* 现在只认一件事：链上还能不能摸到 activeCapture 本人。摸不到就必须重装。
+*/
+function captureInPlace(p) {
+	const top = p?.fetch;
+	if (typeof top !== "function") return false;
+	if (top.__ausCaptureLayer === true) {
+		activateCapture(top);
+		return true;
+	}
+	return fetchChainHas(top, activeCapture);
+}
+/** 假在岗留痕节流：守卫 4s 一轮，快照缓冲只有 CAPTURE_MAX 条，不能每轮都写 */
+var STALE_REPORT_MS = 6e4;
+var lastStaleReportAt = 0;
+/**
+* 假在岗留痕：顶层带着我们的标记，却摸不到在岗那一代。
+* 只写采集快照与计数，不写 install-failed——安装并没有失败，写那条会让健康信号误报成插件报错。
+*/
+function noteStaleCapture(top) {
+	captureHealth.staleFlags += 1;
+	const now = Date.now();
+	if (now - lastStaleReportAt < STALE_REPORT_MS) return;
+	lastStaleReportAt = now;
+	const chain = describeFetchChain(top) + (activeCapture ? "" : ">active:none");
+	try {
+		noteCaptureStage("guard-recovered", {
+			model: "",
+			requestId: "",
+			reason: "stale:" + chain
+		});
+	} catch {}
 }
 function resetGuardBackoff() {
 	guardBackoff = FETCH_GUARD_MS;
@@ -2299,10 +2411,8 @@ function ensureFetchCapture() {
 	try {
 		const p = window.parent || window;
 		if (!p || typeof p.fetch !== "function") return;
-		if (isAusFetchPatch(p.fetch)) {
-			if (p.fetch.__ausCaptureLayer === true) activateCapture(p.fetch);
-			return;
-		}
+		if (captureInPlace(p)) return;
+		if (fetchChainKind(p.fetch) !== "other") noteStaleCapture(p.fetch);
 		if (Date.now() < nextInstallAllowedAt) return;
 		if (installFetchCapture()) resetGuardBackoff();
 		else growGuardBackoff();
@@ -2357,7 +2467,10 @@ function installInterception() {
 		if (interceptionInstalled) return true;
 		try {
 			const p = window.parent || window;
-			if (p?.fetch && !p.fetch.__aus_patched) rawFetchRef = p.fetch.bind(p);
+			if (p?.fetch && fetchChainKind(p.fetch) === "other") {
+				p.fetch.bind(p);
+				restoreTarget = p.fetch;
+			}
 		} catch {}
 		es.on(et.GENERATION_ENDED, onGenerationEnded);
 		if (et.GENERATION_STOPPED) try {
@@ -2409,7 +2522,7 @@ function uninstallInterception() {
 		}
 		try {
 			const p = window.parent || window;
-			if (p && rawFetchRef && p.fetch.__aus_patched) p.fetch = rawFetchRef;
+			if (p && p.fetch?.__ausCaptureLayer === true && restoreTarget) p.fetch = restoreTarget;
 		} catch {}
 		activeCapture = null;
 		captureHealth.installed = false;
@@ -2665,14 +2778,39 @@ async function settleTurnWithoutUsage(source, opts = {}) {
 	const requestId = turn?.requestId || null;
 	const rawResponse = turn?.fullResponse || "";
 	const outputText = collectOutputText(rawResponse);
+	const hasOutput = !!outputText.trim() || !!turn && (turn.outputChars > 0 || turn.reasoningChars > 0);
+	const errorPayload = turn?.errorPayload || detectTurnErrorPayload(rawResponse, rawResponse);
 	const outcome = decideTurnOutcome({
 		hasUsage: false,
 		usageUsable: false,
-		hasOutput: !!outputText.trim() || !!turn && (turn.outputChars > 0 || turn.reasoningChars > 0),
+		hasOutput,
 		pendingStop: stopPending(),
-		streamError: turn?.streamError || null
+		streamError: turn?.streamError || null,
+		errorPayload
 	});
 	if (outcome.kind === "drop") {
+		if (outcome.reason === "api-error-payload") {
+			log.debug("本轮输出是上游错误提示，拒绝入库", {
+				source,
+				errorPayload,
+				status: turn?.status ?? null
+			});
+			try {
+				noteCaptureStage("entry-rejected", {
+					model,
+					requestId: requestId || "",
+					streamed: turn?.streamed ?? null,
+					usageFound: false,
+					usageZero: false,
+					reason: "api-error-payload:" + String(errorPayload || "unknown") + ":status=" + String(turn?.status ?? "")
+				});
+			} catch {}
+			if (turn) {
+				turn.settled = true;
+				turn.settledBy = "rejected";
+			}
+			return;
+		}
 		log.debug("本轮无输出，静默不记录", {
 			source,
 			reason: outcome.reason
@@ -2777,6 +2915,32 @@ async function settleTurnWithoutUsage(source, opts = {}) {
 }
 function processUsage(usage, model, messages, startTime, fullRequest = null, fullResponse = null, ttft = 0, thinkTime = 0, finishReason = null, connection = null, requestId = null, streamed = null, meta = null) {
 	try {
+		const errTurn = turnByRequestId(requestId) || currentTurn(startTime);
+		const errTag = errTurn ? errTurn.errorPayload || detectTurnErrorPayload(errTurn.fullResponse || "", null) : null;
+		if (errTurn && errTag) {
+			errTurn.settled = true;
+			errTurn.settledBy = "rejected";
+			log.debug("本轮输出是上游错误提示，拒绝入库", {
+				requestId,
+				errorPayload: errTag,
+				status: errTurn.status
+			});
+			try {
+				noteCaptureStage("entry-rejected", {
+					model,
+					requestId: requestId || "",
+					streamed,
+					usageFound: !!usage,
+					usageZero: isZeroUsage(usage),
+					usage: usageNumbers(usage),
+					finishReason,
+					reason: "api-error-payload:" + errTag + ":status=" + String(errTurn.status ?? "")
+				});
+			} catch {}
+			return;
+		}
+	} catch {}
+	try {
 		const fp = lastFetchUsage;
 		const sameTurn = !fp?.requestId || !requestId || fp.requestId === requestId;
 		if (fp?.usage && sameTurn && Date.now() - lastFetchTime < 5e3) {
@@ -2836,4 +3000,4 @@ function recalcAllCosts() {
 	return repository.recalcAll();
 }
 //#endregion
-export { captureDigest as a, clearRequestLog as c, summarizeRequestLog as d, registerRequestOriginSelf as i, readRecentTurns as l, interception_exports as n, listCaptureStages as o, recalcAllCosts as r, LOG_VALUE_LIMIT as s, installInterception as t, readRequestLog as u };
+export { listCaptureStages as a, readRecentTurns as c, captureDigest as i, readRequestLog as l, interception_exports as n, LOG_VALUE_LIMIT as o, recalcAllCosts as r, clearRequestLog as s, installInterception as t, summarizeRequestLog as u };

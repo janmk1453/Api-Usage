@@ -5,11 +5,12 @@ import { t as log } from "./logger-8RGXnvfI.js";
 /**
 * 历史记录去重键：兼容旧记录缺少钱包字段的情况。
 * 优先使用 endpointId，钱包记录与迁移前记录才能保持同一身份。
+* 有 requestId 时再追加一项：同毫秒、同模型、同 token 的两条真实请求靠它区分。
 */
 function historyRecordKey(entry) {
 	const agentRunId = typeof entry?.agentRunId === "string" ? entry.agentRunId.trim() : "";
 	if (agentRunId) return JSON.stringify(["agent", agentRunId]);
-	return JSON.stringify([
+	const parts = [
 		Number(entry?.timestamp) || 0,
 		String(entry?.model || ""),
 		Number(entry?.total_tokens) || 0,
@@ -18,12 +19,16 @@ function historyRecordKey(entry) {
 		Number(entry?.completion_tokens) || 0,
 		String(entry?.endpointId || entry?.walletId || ""),
 		String(entry?.credentialId || "")
-	]);
+	];
+	const requestId = typeof entry?.requestId === "string" ? entry.requestId.trim() : "";
+	if (requestId) parts.push(requestId);
+	return JSON.stringify(parts);
 }
 //#endregion
 //#region src/store/persistence.ts
 /**
-* 分页存储：extensionSettings(热) + IndexedDB + 旧 LS/TavernHelper 迁移
+* 两层存储：extensionSettings(热，最近 MAX_HISTORY 条) + IndexedDB 单键 cold_history(冷，整份 JSON)
+* + 旧 LS/TavernHelper 迁移
 * 已废弃多存档，迁移时将所有旧 saves 合并为单一历史
 */
 var persistence_exports = /* @__PURE__ */ __exportAll({
@@ -32,11 +37,13 @@ var persistence_exports = /* @__PURE__ */ __exportAll({
 	MODULE_NAME: () => MODULE_NAME,
 	appendHistoryCold: () => appendHistoryCold,
 	blockPersistentWrites: () => blockPersistentWrites,
+	clearColdReadFailure: () => clearColdReadFailure,
 	clearHistoryCold: () => clearHistoryCold,
 	closeDB: () => closeDB,
 	deleteMigrationBackups: () => deleteMigrationBackups,
 	flushSaveHot: () => flushSaveHot,
 	getAllHistory: () => getAllHistory,
+	getColdReadFailure: () => getColdReadFailure,
 	getExtensionSettings: () => getExtensionSettings,
 	isMigrationBackupKey: () => isMigrationBackupKey,
 	listMigrationBackupKeys: () => listMigrationBackupKeys,
@@ -276,7 +283,7 @@ function loadLegacy(key) {
 	}
 }
 /**
-* 写盘闸门：数据已被清除时置位，避免节流保存把设置又写回 settings.json。
+* 写盘闸门：数据已被清除时置位，避免 300ms 延迟保存（防抖）把设置又写回 settings.json。
 * 只在卸载清理（onClean 钩子）里打开，正常使用期间始终为 false。
 */
 var writesBlocked = false;
@@ -541,14 +548,40 @@ async function loadHot() {
 	await migrateIfNeeded();
 	return getExtensionSettings();
 }
+/**
+* 冷库（IndexedDB 单键 cold_history）是 MAX_HISTORY 之外记录的唯一来源。
+* 读取失败时历史页 / 统计 / 导出会悄悄退化成只剩热区，所以这里把失败原因留在模块里，
+* 供 UI 解释「列表为什么变短」并给重试入口——失败不能只写一条日志就被调用方吞掉。
+* 读取成功（含「键不存在」）时自动清空，重试成功后告警条会自己消失。
+*/
+var coldReadFailure = null;
+function getColdReadFailure() {
+	return coldReadFailure ? { ...coldReadFailure } : null;
+}
+function clearColdReadFailure() {
+	coldReadFailure = null;
+}
+function describeReadError(error) {
+	if (error instanceof Error && error.message) return error.message;
+	const text = String(error ?? "");
+	return text && text !== "[object Object]" ? text : "未知错误";
+}
 async function readHistoryColdRaw() {
 	try {
 		const raw = await dbGet("cold_history");
-		if (!raw) return [];
+		if (!raw) {
+			coldReadFailure = null;
+			return [];
+		}
 		const parsed = JSON.parse(raw);
 		if (!Array.isArray(parsed)) throw new Error("冷历史格式无效");
+		coldReadFailure = null;
 		return parsed;
 	} catch (error) {
+		coldReadFailure = {
+			message: describeReadError(error),
+			at: Date.now()
+		};
 		log.error("冷历史读取失败", error);
 		throw error;
 	}
@@ -627,4 +660,4 @@ async function getAllHistory() {
 	return dedup;
 }
 //#endregion
-export { saveHot as _, clearHistoryCold as a, flushSaveHot as c, isMigrationBackupKey as d, loadHistoryCold as f, saveHistoryCold as g, saveExtensionSettings as h, blockPersistentWrites as i, getAllHistory as l, persistence_exports as m, MODULE_NAME as n, closeDB as o, loadHot as p, appendHistoryCold as r, deleteMigrationBackups as s, DB_NAME as t, getExtensionSettings as u, historyRecordKey as v };
+export { saveExtensionSettings as _, clearColdReadFailure as a, historyRecordKey as b, deleteMigrationBackups as c, getColdReadFailure as d, getExtensionSettings as f, persistence_exports as g, loadHot as h, blockPersistentWrites as i, flushSaveHot as l, loadHistoryCold as m, MODULE_NAME as n, clearHistoryCold as o, isMigrationBackupKey as p, appendHistoryCold as r, closeDB as s, DB_NAME as t, getAllHistory as u, saveHistoryCold as v, saveHot as y };

@@ -10,14 +10,21 @@ import { formatMoney, getDisplayCurrency } from '../services/currency';
 import { repository } from '../data/repository';
 import { closeDropdownThenPaint } from './dropdown-close';
 import { placeDropdownRelativeToHost } from './dropdown-placement';
+import { historyBreakdownHTML, spendBreakdownHTML } from './overview-breakdown';
+import { formatToken, tokenTitle, tokenUnitOf } from '../data/token-format';
+import type { TokenUnit } from '../data/token-format';
 
 function getDoc(): Document {
   return (window.parent as any)?.document ?? document;
 }
 
-function fmt(n: number) { return n.toLocaleString('zh-CN'); }
-function CNY(n: number) {
-  try {  return formatMoney(n, 4); } catch { return '¥' + n.toFixed(4) + ' CNY'; }
+// Token 数字口径统一走 data/token-format：开关关闭时是完整千分位，开启时是 K/M/B 缩写。
+// 缩写态额外带 title（完整值），悬停可核对，避免把缩写当成精确数。
+function tokenUnit(): TokenUnit { return tokenUnitOf(state.settings); }
+function tokenText(n: number): string { return formatToken(n, tokenUnit()); }
+function tokenHtml(n: number): string {
+  const full = tokenTitle(n, tokenUnit());
+  return full ? `<span title="${full} tokens">${tokenText(n)}</span>` : tokenText(n);
 }
 function moneyHtml(cny: number, digits = 4): string {
   try {
@@ -79,7 +86,7 @@ export function getFourDisplay(key: OverviewFourKey, v: any): { title:string; ht
   const title = FOUR_LABEL_MAP.get(key) || key;
   switch (key) {
     case 'avg_cost': return { title, html: moneyHtml(v.avgCost||0, 4) };
-    case 'avg_tokens': return { title, html: `${Math.round(v.avgTokens||0).toLocaleString('zh-CN')}` };
+    case 'avg_tokens': return { title, html: tokenHtml(Math.round(v.avgTokens||0)) };
     case 'avg_duration': return { title, html: `${(v.avgDuration||0).toFixed(1)} <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);font-weight:400;">s</span>` };
     case 'avg_ttft': {
       const has = (v.avgTtft||0) > 0;
@@ -90,16 +97,16 @@ export function getFourDisplay(key: OverviewFourKey, v: any): { title:string; ht
       return { title, html: has ? `${Math.round(v.avgRate)} <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);font-weight:400;">t/s</span>` : `<span style="color:var(--ds-text-3);">—</span>` };
     }
     case 'avg_input_cost': return { title, html: moneyHtml(v.avgInputCost||0, 4) };
-    case 'avg_input_tokens': return { title, html: `${Math.round(v.avgInputTokens||0).toLocaleString('zh-CN')}` };
+    case 'avg_input_tokens': return { title, html: tokenHtml(Math.round(v.avgInputTokens||0)) };
     case 'avg_output_cost': return { title, html: moneyHtml(v.avgOutputCost||0, 4) };
-    case 'avg_output_tokens': return { title, html: `${Math.round(v.avgOutputTokens||0).toLocaleString('zh-CN')}` };
+    case 'avg_output_tokens': return { title, html: tokenHtml(Math.round(v.avgOutputTokens||0)) };
     case 'avg_think_time': {
       const has = (v.avgThinkTime||0) > 0;
       return { title, html: has ? `${(v.avgThinkTime).toFixed(1)} <span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);font-weight:400;">s</span>` : `<span style="color:var(--ds-text-3);">—</span>` };
     }
     case 'avg_think_tokens': {
       const has = (v.avgThinkTokens||0) > 0;
-      return { title, html: has ? `${Math.round(v.avgThinkTokens).toLocaleString('zh-CN')}` : `<span style="color:var(--ds-text-3);">—</span>` };
+      return { title, html: has ? tokenHtml(Math.round(v.avgThinkTokens)) : `<span style="color:var(--ds-text-3);">—</span>` };
     }
     case 'avg_hit_rate': {
       const has = (v.avgHitRate||0) > 0;
@@ -110,9 +117,9 @@ export function getFourDisplay(key: OverviewFourKey, v: any): { title:string; ht
       if (val == null) return { title, html: `<span style="color:var(--ds-text-3);">—</span>` };
       return { title, html: `${val.toFixed(1)}<span style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);font-weight:400;">%</span>` };
     }
-    case 'max_output': return { title, html: `${(v.maxOutput||0).toLocaleString('zh-CN')}` };
-    case 'max_input': return { title, html: `${(v.maxInput||0).toLocaleString('zh-CN')}` };
-    case 'max_total': return { title, html: `${(v.maxTotal||0).toLocaleString('zh-CN')}` };
+    case 'max_output': return { title, html: tokenHtml(v.maxOutput||0) };
+    case 'max_input': return { title, html: tokenHtml(v.maxInput||0) };
+    case 'max_total': return { title, html: tokenHtml(v.maxTotal||0) };
     case 'avg_think_ratio': {
       const has = (v.avgThinkRatio||0) > 0 || (v.rounds||0) > 0;
       const val = v.avgThinkRatio||0;
@@ -298,32 +305,33 @@ export function renderOverview(fullHistory?: any[]) {
     try {  costEl.textContent = formatMoney(v.totalCost, 4); } catch { costEl.textContent = '¥' + v.totalCost.toFixed(4) + ' CNY'; }
   }
   const tokEl = doc.getElementById('aus-total-tokens');
-  if (tokEl) tokEl.textContent = fmt(v.totalTokens) + ' tokens';
+  if (tokEl) {
+    tokEl.textContent = tokenText(v.totalTokens) + ' tokens';
+    const fullTokens = tokenTitle(v.totalTokens, tokenUnit());
+    if (fullTokens) tokEl.title = fullTokens + ' tokens';
+    else tokEl.removeAttribute('title');
+  }
+
+  // 两块明细卡：结构、分项口径与文案统一由 ui/overview-breakdown.ts 产出，
+  // 排版与配色只在 style.css 的「概览页：历史消耗 / 支出明细」段（.aus-ovm-*）。
+  const breakdownInput = {
+    totalTokens: v.totalTokens,
+    hit: v.hit,
+    miss: v.miss,
+    output: v.output,
+    totalCost: v.totalCost,
+    inputCost: v.inputCost,
+    outputCost: v.outputCost,
+    savings: v.savings,
+    hitRate: v.hitRate,
+  };
+  const breakdownText = { fmt: (value: number) => tokenHtml(value), money: (value: number) => moneyHtml(value) };
 
   const histHost = doc.getElementById('aus-overview-history');
-  if (histHost) {
-    histHost.innerHTML = `
-      <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:8px;">历史消耗</div>
-      <div style="display:grid;gap:10px;font-size:var(--aus-fs-sm);">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">Token 历史消耗</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-text);">${fmt(v.totalTokens)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输入（命中缓存）</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-green);">${fmt(v.hit)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输入（未命中缓存）</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-red);">${fmt(v.miss)} tokens</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;"><span style="color:var(--ds-text-2);">输出</span><span style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--aus-token-output);">${fmt(v.output)} tokens</span></div>
-      </div>
-    `;
-  }
+  if (histHost) histHost.innerHTML = historyBreakdownHTML(breakdownInput, breakdownText);
 
   const spendHost = doc.getElementById('aus-overview-spend');
-  if (spendHost) {
-    spendHost.innerHTML = `
-      <div style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);margin-bottom:8px;">支出明细</div>
-      <div style="display:grid;gap:10px;font-size:var(--aus-fs-sm);">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:var(--ds-text-2);padding-top:3px;">预计节省</span><span style="text-align:right;"><div style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-green);">${CNY(v.savings)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:1px;">${fmt(v.hit)} tokens</div></span></div>
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:var(--ds-text-2);padding-top:3px;">支出在输入</span><span style="text-align:right;"><div style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-text);">${CNY(v.inputCost)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:1px;">${fmt(v.hit + v.miss)} tokens</div></span></div>
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;"><span style="color:var(--ds-text-2);padding-top:3px;">支出在输出</span><span style="text-align:right;"><div style="font-weight:600;font-size:var(--aus-fs-base);font-variant-numeric:tabular-nums;color:var(--ds-text);">${CNY(v.outputCost)}</div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:1px;">${fmt(v.output)} tokens</div></span></div>
-      </div>
-    `;
-  }
+  if (spendHost) spendHost.innerHTML = spendBreakdownHTML(breakdownInput, breakdownText);
 
   const fourHost = doc.getElementById('aus-overview-four');
   if (fourHost) {
@@ -371,12 +379,10 @@ function renderChatSummaryOverview(fullHistory?: any[]) {
   const hotRows = computeChatStats(fullHistory);
   renderChatSummaryTable(doc, hotRows);
   if (fullHistory) return;
-  // 若存在冷存储全量（IndexedDB），异步补全以确保按对话统计完整（hot 仅 50 条）
+  // 若存在冷存储全量（IndexedDB），异步补全以确保按对话统计完整（hot 为最近 2000 条，可能仍不含更早的冷库记录）
   (async () => {
     try {
-      const mod: any = await import('../store/persistence');
-      if (!mod.getAllHistory) return;
-      const all: any[] = await mod.getAllHistory();
+      const all: any[] = await repository.getAllHistory();
       if (!all || all.length <= (state.history?.length || 0)) return;
       const fullRows = computeChatStats(all);
       // 避免无变化时重复渲染

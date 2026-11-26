@@ -14,7 +14,9 @@
  * - turn-estimated  上游没给 usage，按输出本地估算后补记
  * - turn-interrupted 用户停止或上游中断，靠估算补记并标注中断
  * - turn-unmatched  生成结束事件对不上任何请求轮次（按无主轮次估算补记，见 interception）
+ * - entry-rejected  输出其实是上游错误提示（宿主把非 2xx 包成 200），明确拒绝入库
  * - install-failed  采集包装安装失败（层深上限 / 安装期间被替换 / 异常），采集可能失聪
+ * - guard-recovered 自愈守卫发现「顶层带着我们的标记、却摸不到在岗那一代」（假在岗）并重装
  */
 export type CaptureStage =
   | 'fetch-start'
@@ -25,7 +27,9 @@ export type CaptureStage =
   | 'turn-estimated'
   | 'turn-interrupted'
   | 'turn-unmatched'
-  | 'install-failed';
+  | 'entry-rejected'
+  | 'install-failed'
+  | 'guard-recovered';
 
 export interface CaptureRecord {
   at: number;
@@ -60,7 +64,11 @@ const CAPTURE_STAGE_SET = new Set<string>([
   'turn-interrupted',
   // 采集失聪的两种现场：漏掉它们，刷新后从落盘镜像读回时会被静默丢弃
   'turn-unmatched',
+  // 上游错误被宿主包装成 200：不进历史，但诊断包要能查到撞了多少次
+  'entry-rejected',
   'install-failed',
+  // 假在岗自愈：真机事故里守卫一直误判「采集还在岗」，这条是唯一能看见它的痕迹
+  'guard-recovered',
 ]);
 
 const USAGE_KEYS = [

@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS device (
   first_seen INTEGER NOT NULL,
   last_seen INTEGER NOT NULL,
   app_version TEXT,
+  -- 扩展构建号（manifest.json#build_no）：同一版本号重发多个构建时用于区分采用率
+  app_build TEXT,
   st_version TEXT,
   tt_version TEXT,
   history_count INTEGER NOT NULL DEFAULT 0,

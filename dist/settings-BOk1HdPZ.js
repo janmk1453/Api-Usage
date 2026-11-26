@@ -1,41 +1,16 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
-import { i as state } from "./store-CVamS-ER.js";
+import { i as state } from "./store-NBl_hgTZ.js";
 import { a as HIDDEN_PRICING_MODELS, l as PRICING, p as WEBDAV_SYNC_FILE, r as DEFAULT_PEAK_HOURS } from "./pricing-Bc-qEvy8.js";
-import { _ as saveHot, d as isMigrationBackupKey, h as saveExtensionSettings, s as deleteMigrationBackups, u as getExtensionSettings, v as historyRecordKey } from "./persistence-DeIFgZp8.js";
 import { r as toast, t as log } from "./logger-8RGXnvfI.js";
-import { C as mergeWalletCollections, a as decryptKey, f as getPricing$1, o as encryptKey, p as isDeepSeekOfficialModel, t as repository, u as calcCost } from "./repository-BTkiTZ1e.js";
+import { o as detailStorageStats } from "./detail-store-CqNNEAWB.js";
+import { _ as saveExtensionSettings, b as historyRecordKey, c as deleteMigrationBackups, f as getExtensionSettings, p as isMigrationBackupKey, y as saveHot } from "./persistence-BmzJp2Zz.js";
+import { C as mergeWalletCollections, a as decryptKey, f as getPricing$1, o as encryptKey, p as isDeepSeekOfficialModel, t as repository, u as calcCost } from "./repository-DQzcy9_C.js";
 import { a as isUnsafeKey, o as isValidDayKey, t as esc, u as CN_HOLIDAY_COVERAGE_LABEL } from "./date-Dsu8hrMO.js";
-import { a as getDisplayCurrency, r as fetchLiveRate } from "./currency-Dr655frw.js";
-import { r as recalcAllCosts } from "./interception-DwJ2kGGX.js";
-import { i as saveApiKey } from "./balance-4Vm-ReTn.js";
-import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-BqDgbeJS.js";
-//#region src/ui/icons.ts
-var PATHS = {
-	overview: "<rect width=\"7\" height=\"9\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"9\" x=\"14\" y=\"12\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"3\" y=\"16\" rx=\"1\"/>",
-	stats: "<path d=\"M3 3v16a2 2 0 0 0 2 2h16\"/><path d=\"M18 17V9\"/><path d=\"M13 17V5\"/><path d=\"M8 17v-3\"/>",
-	history: "<path d=\"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8\"/><path d=\"M3 3v5h5\"/><path d=\"M12 7v5l4 2\"/>",
-	forecast: "<path d=\"M16 7h6v6\"/><path d=\"m22 7-8.5 8.5-5-5L2 17\"/>",
-	wallet: "<path d=\"M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1\"/><path d=\"M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4\"/>",
-	settings: "<path d=\"M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>",
-	help: "<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3\"/><path d=\"M12 17h.01\"/>",
-	about: "<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 16v-4\"/><path d=\"M12 8h.01\"/>",
-	"chevron-down": "<path d=\"m6 9 6 6 6-6\"/>",
-	"chevron-up": "<path d=\"m18 15-6-6-6 6\"/>",
-	"chevron-left": "<path d=\"m15 18-6-6 6-6\"/>",
-	"chevron-right": "<path d=\"m9 18 6-6-6-6\"/>",
-	refresh: "<path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/>",
-	close: "<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>",
-	menu: "<path d=\"M4 6h16\"/><path d=\"M4 12h16\"/><path d=\"M4 18h16\"/>",
-	brand: "<rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"4\"/><path d=\"M8 15v-3\"/><path d=\"M12 15V9\"/><path d=\"M16 15v-2\"/>"
-};
-/**
-* 生成内联 SVG；尺寸默认 20px、线宽 1.9，颜色继承 currentColor。
-* 用 inline-block + vertical-align 保证既能进 flex 容器居中，也能跟在文字旁边不换行。
-*/
-function icon(name, size = 20, strokeWidth = 1.9) {
-	return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:inline-block;vertical-align:middle;flex-shrink:0;">${PATHS[name]}</svg>`;
-}
-//#endregion
+import { a as getDisplayCurrency, r as fetchLiveRate } from "./currency-WNr8ECMS.js";
+import { r as recalcAllCosts } from "./interception-C5vwYHF1.js";
+import { i as saveApiKey } from "./balance-DsYy25W5.js";
+import { t as icon } from "./icons-BBwmzRpr.js";
+import { i as isSyncedCustomModel, n as buildSyncPlan, o as removeSyncedModels, r as fetchModelsDevCatalog, s as syncPricingFromModelsDev } from "./pricing-sync-AcemdDRp.js";
 //#region src/ui/switch.ts
 function escAttr(value) {
 	return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -45,7 +20,8 @@ function switchHTML(id, opts = {}) {
 	const checked = opts.checked ? " checked" : "";
 	const disabled = opts.disabled ? " disabled" : "";
 	const aria = opts.ariaLabel ? ` aria-label="${escAttr(opts.ariaLabel)}"` : "";
-	return `<label class="${cls}"><input type="checkbox" id="${escAttr(id)}" role="switch"${checked}${disabled}${aria} /><span class="aus-switch-track" aria-hidden="true"></span><span class="aus-switch-thumb" aria-hidden="true"></span></label>`;
+	const data = opts.data ? Object.keys(opts.data).map((key) => ` ${escAttr(key)}="${escAttr(String(opts.data[key]))}"`).join("") : "";
+	return `<label class="${cls}"><input type="checkbox" id="${escAttr(id)}" role="switch"${checked}${disabled}${aria}${data} /><span class="aus-switch-track" aria-hidden="true"></span><span class="aus-switch-thumb" aria-hidden="true"></span></label>`;
 }
 //#endregion
 //#region src/services/sync.ts
@@ -169,6 +145,7 @@ function stripHistory(history) {
 		delete c.messages;
 		delete c.fullRequest;
 		delete c.fullResponse;
+		delete c.detailKey;
 		return c;
 	});
 }
@@ -482,9 +459,11 @@ function syncThemeWatcher() {
 * 存储占用统计：统计本扩展在各类存储中占用的空间。
 *
 * 本扩展的数据实际分布在四个地方（见 store/persistence.ts）：
-*  1. SillyTavern 设置（extensionSettings.api_usage_stat）—— 热数据：最近 50 条历史 + 设置 + 汇总
+*  1. SillyTavern 设置（extensionSettings.api_usage_stat）—— 热数据：最近 2000 条历史 + 设置 + 汇总
 *     注：由酒馆统一序列化进其 settings.json，浏览器端拿不到落盘字节数，只能按 UTF-8 估算
 *  2. IndexedDB `api_usage_stat_db` / `kv` —— 冷历史、旧版迁移备份
+*     另有 IndexedDB `api_usage_detail_db` / `detail_blobs` —— 最近 5 条的完整请求体、
+*     脱敏请求头与响应原文（体积大但条数固定，单独统计）
 *  3. localStorage —— 零星小项（WebDAV 密码密文、峰值圆点位置、调试开关、更新检查时间、预测页偏好）
 *  4. 浏览器存储配额（navigator.storage.estimate）—— 全局参考，不是本扩展独占
 *
@@ -730,6 +709,38 @@ async function readIndexedDb(doc) {
 		} catch {}
 	}
 }
+/**
+* 详情原文库：最近 5 条的完整请求体、脱敏请求头、响应原文。
+*
+* 与冷库不同，这里不 open 库——open 会在库不存在时创建一个空库，而统计页只是看看占用，
+* 不该有副作用；先探测存在性，不存在就当作 0。
+*/
+async function readDetailStorage(timeoutMs) {
+	try {
+		const idb = globalThis.indexedDB;
+		if (!idb || typeof idb.open !== "function") return [];
+		if (typeof idb.databases === "function") {
+			const list = await idb.databases();
+			if (!(Array.isArray(list) && list.some((d) => d && d.name === "api_usage_detail_db"))) return [];
+		} else return [];
+		let timer = null;
+		const stats = await Promise.race([detailStorageStats().catch(() => null), new Promise((resolve) => {
+			timer = setTimeout(() => resolve(null), timeoutMs);
+		})]);
+		if (timer) try {
+			clearTimeout(timer);
+		} catch {}
+		if (!stats || !Number(stats.count)) return [];
+		return [{
+			key: "idb-detail",
+			label: "详情原文（最近 5 条）",
+			bytes: Math.max(0, Number(stats.chars) || 0),
+			detail: stats.count + " 条完整请求体 / 脱敏请求头 / 响应原文，按字符数估算"
+		}];
+	} catch {
+		return [];
+	}
+}
 /** 热数据：酒馆 extensionSettings 中被序列化的 JSON 体积（UTF-8 估算） */
 function estimateHotBytes(settings) {
 	if (settings == null) return 0;
@@ -768,6 +779,9 @@ async function collectStorageReport(opts = {}) {
 		} catch {}
 	}
 	items.push(...idbItems);
+	try {
+		items.push(...await readDetailStorage(600));
+	} catch {}
 	try {
 		items.push(...readLocalStorage(doc));
 	} catch {}
@@ -884,7 +898,7 @@ function bodyHtml(r) {
     </div>`);
 	}
 	parts.push(`<div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:9px;line-height:1.6;">
-    历史记录按最近 50 条保存在酒馆设置中，更早的进入浏览器 IndexedDB；设置为 UTF-8 估算体积，与实际落盘大小可能略有差异。旧版迁移备份是升级前的一次性快照，现有数据已迁移完成，确认无误后可点「清理」删除（不影响历史、设置与钱包）。
+    历史记录按最近 2000 条保存在酒馆设置中，更早的进入浏览器 IndexedDB；设置为 UTF-8 估算体积，与实际落盘大小可能略有差异。最近 5 条的完整请求体、打码后的请求头与响应原文单独放在浏览器 IndexedDB（详情原文），不进导入导出与云同步，也不单独提供清理入口——卸载扩展时随其它数据一并删除。旧版迁移备份是升级前的一次性快照，现有数据已迁移完成，确认无误后可点「清理」删除（不影响历史、设置与钱包）。
   </div>`);
 	return parts.join("");
 }
@@ -1325,7 +1339,18 @@ var inFlight = false;
 var bound = false;
 function appVersion() {
 	try {
-		return String("3.2.3");
+		return String("3.2.4");
+	} catch {
+		return "";
+	}
+}
+/**
+* 构建号：manifest.json#build_no → __BUILD_NO__。
+* 版本号相同、只递增构建号重发时，只有它能区分两次发布（旧版客户端不上报该字段）。
+*/
+function appBuild() {
+	try {
+		return String("6");
 	} catch {
 		return "";
 	}
@@ -1719,6 +1744,7 @@ function buildPayload(identity, incoming, pending, now, final = false) {
 		ts: now,
 		tz: roundTz(-new Date(now).getTimezoneOffset() / 60),
 		app: appVersion(),
+		build: appBuild(),
 		env,
 		s: {
 			opens: Math.max(0, Number(merged.opens) || 0),
@@ -2059,16 +2085,31 @@ function renderSettings(doc) {
       <!-- 历史显示范围 -->
       <div class="ds-card" style="position:relative;"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">历史显示范围</span><div id="aus-history-scope-btn" class="aus-pill"><span style="color:var(--ds-text-2);">范围</span><span id="aus-history-scope-label" style="font-weight:600;color:var(--ds-text);">全部历史</span>${icon("chevron-down", 14)}</div></div><div id="aus-history-scope-dropdown" style="display:none;position:absolute;top:44px;right:12px;z-index:10;background:var(--ds-card-inner);border:1px solid var(--ds-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:160px;padding:8px;"></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;">调整历史记录页的默认展示范围</div></div>
 
+      <!-- Token 数字单位：只影响显示，不改数据、不进导出值 -->
+      <div class="ds-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">数字单位缩写</span>${switchHTML("aus-token-unit", {
+		checked: s.tokenUnitCompact === true,
+		ariaLabel: "数字单位缩写"
+	})}</div>
+        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">使用 K、M、B 为单位</div>
+      </div>
+
       <!-- 对话展示：控制按对话统计表与各页「对话」下拉胶囊里展示哪些对话（只影响显示） -->
       <div class="ds-card">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">对话展示</span><button id="aus-settings-chat-manage" type="button" class="aus-manage-chat-btn" title="管理对话在表格与下拉胶囊中的显示">${icon("menu", 14)}管理对话</button></div>
         <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">管理哪些对话出现在概览列表与「对话」下拉胶囊中；只影响显示隐藏，不影响数据统计</div>
       </div>
 
+      <!-- 模型展示：控制模型汇总表与各页「模型」下拉胶囊里展示哪些模型（只影响显示） -->
+      <div class="ds-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">模型展示</span><button id="aus-settings-model-manage" type="button" class="aus-manage-chat-btn" title="管理模型在汇总表与下拉胶囊中的显示">${icon("menu", 14)}管理模型</button></div>
+        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">管理哪些模型出现在「模型汇总」表与「模型」下拉胶囊中；只影响显示隐藏，不影响数据统计与预测</div>
+      </div>
+
       <!-- 请求日志：最近一轮对话请求的标头 / 正文 / 响应元数据（只在本机保存） -->
       <div class="ds-card">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">问题反馈 / 请求日志</span><button id="aus-settings-request-log" type="button" class="aus-manage-chat-btn" title="查看最近一轮对话请求的标头、正文与响应元数据">${icon("menu", 14)}查看</button></div>
-        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">保留最近一轮对话请求发出的标头、正文与响应元数据，用于排查「这轮为什么没记录」；也是历史记录页问题提示的开关所在。只在本机保存，密钥已打码，可随时清空</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">问题反馈 / 请求日志</span><button id="aus-settings-request-log" type="button" class="aus-manage-chat-btn" title="打开问题反馈页：查看最近一轮对话请求的标头、正文与响应元数据">${icon("menu", 14)}问题反馈</button></div>
+        <div style="font-size:var(--aus-fs-sm);color:var(--ds-text-2);margin-top:6px;line-height:1.6;">保留最近一轮对话请求发出的标头、正文与响应元数据，用于问题定位</div>
       </div>
 
       <!-- API 密钥 -->
@@ -2083,7 +2124,7 @@ function renderSettings(doc) {
       </div>
 
       <!-- 高峰时段 -->
-      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">新钱包默认峰谷时段</span><button id="aus-btn-add-peak-hour" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加</button></div><div id="aus-peak-hours-list" style="display:grid;gap:6px;margin-top:8px;"></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;line-height:1.6;">支持跨天（如 22:00-02:00）；钱包页可分别覆盖时段和周末规则。<br />DeepSeek 官方规则：周一至周五（不含中国法定节假日）9:00-12:00、14:00-18:00 为高峰，其余时段（含周末和法定节假日全天）为空闲；调休上班的周末同样按空闲计费。</div><div style="margin-top:10px;"><div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">额外空闲日期</div><textarea id="aus-extra-off-days" rows="3" placeholder="每行一个日期，如 2027-01-01" style="width:100%;margin-top:6px;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);resize:vertical;box-sizing:border-box;"></textarea><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:4px;">内置法定节假日数据覆盖 ${CN_HOLIDAY_COVERAGE_LABEL}；超出范围的日期可按 YYYY-MM-DD 每行一条补充，全天按空闲计费。</div></div></div>
+      <div class="ds-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-size:var(--aus-fs-base);font-weight:600;color:var(--ds-text);">新钱包默认峰谷时段</span><button id="aus-btn-add-peak-hour" style="padding:6px 10px;border:1px solid var(--ds-border);border-radius:999px;background:var(--ds-card-inner);font-size:var(--aus-fs-sm);cursor:pointer;">+ 添加</button></div><div id="aus-peak-hours-list" style="display:grid;gap:6px;margin-top:8px;"></div><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:6px;line-height:1.6;">支持跨天（如 22:00-02:00）；钱包页可分别覆盖时段和周末规则。</div><div style="margin-top:10px;"><div style="font-size:var(--aus-fs-sm);font-weight:600;color:var(--ds-text);">额外空闲日期</div><textarea id="aus-extra-off-days" rows="3" placeholder="每行一个日期，如 2027-01-01" style="width:100%;margin-top:6px;padding:7px 8px;border:1px solid var(--ds-border);border-radius:8px;background:var(--ds-card-inner);font-size:var(--aus-fs-base);resize:vertical;box-sizing:border-box;"></textarea><div style="font-size:var(--aus-fs-sm);color:var(--ds-text-3);margin-top:4px;">内置法定节假日数据覆盖 ${CN_HOLIDAY_COVERAGE_LABEL}；超出范围的日期可按 YYYY-MM-DD 每行一条补充，全天按空闲计费。</div></div></div>
 
       <!-- 匿名使用统计（默认开启，可随时关闭） -->
       <div class="ds-card">
@@ -2184,6 +2225,8 @@ function renderSettings(doc) {
 	if (telemetryCb) telemetryCb.checked = s.telemetryEnabled !== false;
 	const mobileUiCb = doc.getElementById("aus-mobile-compat-ui");
 	if (mobileUiCb) mobileUiCb.checked = s.mobileCompatUi !== false;
+	const tokenUnitCb = doc.getElementById("aus-token-unit");
+	if (tokenUnitCb) tokenUnitCb.checked = s.tokenUnitCompact === true;
 	renderTelemetryStatus(doc);
 	doc.getElementById("aus-peak-dot").checked = state.settings.peakDot !== false;
 	doc.getElementById("aus-balance-interval").value = String(s.balanceInterval ?? 10);
@@ -2349,7 +2392,7 @@ function renderSettings(doc) {
 		state.settings.balanceInterval = parseInt(e.target.value) || 10;
 		saveHot({ settings: state.settings });
 		try {
-			import("./balance-4Vm-ReTn.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
+			import("./balance-DsYy25W5.js").then((n) => n.t).then((m) => m.restartBalanceTimer?.());
 		} catch {}
 	};
 	if (dbgCb) dbgCb.onchange = () => {
@@ -2393,8 +2436,8 @@ function renderSettings(doc) {
 		const clearBtn = doc.getElementById("aus-btn-debug-clear");
 		if (clearBtn) clearBtn.onclick = async () => {
 			try {
-				const { repository } = await import("./repository-BTkiTZ1e.js").then((n) => n.n);
-				const { state: st } = await import("./store-CVamS-ER.js").then((n) => n.a);
+				const { repository } = await import("./repository-DQzcy9_C.js").then((n) => n.n);
+				const { state: st } = await import("./store-NBl_hgTZ.js").then((n) => n.a);
 				await repository.replaceAll({ history: (st.history || []).filter((h) => h._debug !== true) });
 				await repository.recalcAll();
 				await repository.rebuildAggregates();
@@ -2442,6 +2485,14 @@ function renderSettings(doc) {
 		saveHot({ settings: state.settings });
 		try {
 			import("./index.js").then((n) => n.t).then((m) => m.applyMobileNavMode()).catch(() => {});
+		} catch {}
+	};
+	const tokenUnitToggle = doc.getElementById("aus-token-unit");
+	if (tokenUnitToggle) tokenUnitToggle.onchange = (e) => {
+		state.settings.tokenUnitCompact = !!e.target.checked;
+		saveHot({ settings: state.settings });
+		try {
+			import("./index.js").then((n) => n.t).then((m) => m.refreshUI()).catch(() => {});
 		} catch {}
 	};
 	const telemetryReset = doc.getElementById("aus-telemetry-reset");
@@ -2540,8 +2591,8 @@ function renderSettings(doc) {
 					closeDropdownInstant(intervalDrop);
 					if (intervalLabel) intervalLabel.textContent = intervalMap[el.getAttribute("data-interval")] || el.getAttribute("data-interval");
 					try {
-						import("./pricing-sync-BqDgbeJS.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
-						import("./currency-Dr655frw.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
+						import("./pricing-sync-AcemdDRp.js").then((n) => n.a).then((m) => m.restartPricingSyncTimer?.());
+						import("./currency-WNr8ECMS.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 					} catch {}
 				};
 			});
@@ -2570,7 +2621,7 @@ function renderSettings(doc) {
 			state.settings.pricingSync.useLiveRate = liveEl.checked;
 			saveHot({ settings: state.settings });
 			try {
-				import("./currency-Dr655frw.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
+				import("./currency-WNr8ECMS.js").then((n) => n.n).then((m) => m.restartRateTimer?.());
 			} catch {}
 		};
 		const fetchBtn = doc.getElementById("aus-fetch-rate");
@@ -3040,4 +3091,4 @@ function fillDebugModelSelect(doc) {
 	sel.value = state.settings.debugModel;
 }
 //#endregion
-export { trackOpen as a, afterNextPaint as c, applyTheme as d, unwatchSystemTheme as f, icon as h, initTelemetry as i, closeDropdownInstant as l, switchHTML as m, settings_exports as n, trackPage as o, watchSystemTheme as p, flushTelemetry as r, trackRender as s, renderSettings as t, closeDropdownThenPaint as u };
+export { trackOpen as a, afterNextPaint as c, applyTheme as d, unwatchSystemTheme as f, initTelemetry as i, closeDropdownInstant as l, switchHTML as m, settings_exports as n, trackPage as o, watchSystemTheme as p, flushTelemetry as r, trackRender as s, renderSettings as t, closeDropdownThenPaint as u };

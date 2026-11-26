@@ -222,6 +222,9 @@ type Reader = () => Promise<{ usage: TapUsage | null; ttft: number }>;
 function finalize(ctx: Ctx, status: number | null, reader?: Reader, error: string | null = null): void {
   const endedAt = Date.now();
   const rec = toRecord(ctx, endedAt, status, error);
+  // 有 reader 说明响应体还要继续读：此刻的 durationMs 只是首字节耗时，
+  // 对账必须等它变 true（见 index.ts#reconcilePending），否则流式请求会被判成 too-short。
+  rec.bodyDone = !reader;
   upsertTapRecord(rec);
   if (!reader) return;
   reader()
@@ -235,6 +238,7 @@ function finalize(ctx: Ctx, status: number | null, reader?: Reader, error: strin
         usage: r.usage,
         usageMissing: !r.usage,
         ttftMs: r.ttft,
+        bodyDone: true,
       };
       // usage 迟到：先前按「没用量」判成孤儿的，usage 到手后重新排队，让对账再判一次
       if (r.usage) {
@@ -249,7 +253,7 @@ function finalize(ctx: Ctx, status: number | null, reader?: Reader, error: strin
       }
       patchTapRecord(rec.id, patch);
     })
-    .catch(() => { patchTapRecord(rec.id, { usageMissing: true }); });
+    .catch(() => { patchTapRecord(rec.id, { usageMissing: true, bodyDone: true }); });
 }
 
 /** 读 fetch 响应 clone：顺带量首字延迟；只读，不消费原响应 */
@@ -358,17 +362,26 @@ function patchWindow(w: any): void {
       );
     };
     // 标记角色：自己是探针，同时把「里面已经包过采集」的事实一并透传，
-    // 免得采集守卫（isAusFetchPatch）把探针包装当成没装过、再包一层，两边无限对套。
+    // 免得采集守卫把探针包装当成没装过、再包一层，两边无限对套。
     (tapFetch as any)[PATCH_FLAG] = true;
     (tapFetch as any).__ausTapActive = true;
-    // 采集标记用 getter 动态读取：宿主随时会重绑 fetch，安装时快照的布尔值会过期，
-    // 一旦过期采集守卫就以为采集还在岗，再也不会自愈（采集彻底失聪）。
+    // 采集标记用 getter 动态读取：宿主随时会重绑 fetch，安装时快照的布尔值会过期。
+    //
+    // 注意：这个 getter 只说明「我当时包住的下一层带过采集标记」，不等于采集还活着。
+    // 因此采集守卫不再用 __aus_patched 布尔判在岗（3.2.3 真机事故：宿主重载后内层采集代退役、
+    // 顶层只剩这层 getter 恒为 true，守卫每次都误判「已在岗」而永不重装，采集彻底失聪且零告警），
+    // 改为顺着下面的 __ausTapInner 往下摸、真的摸到在岗那一代才算数。
     try {
       Object.defineProperty(tapFetch, '__aus_patched', {
         configurable: true,
         get: () => (prevFetchFn as any).__aus_patched === true,
       });
     } catch {}
+    // 给采集守卫留的「链上下一层」：不做代理、不放 getter，就是被包住的那只函数本身，
+    // 守卫据此逐层验证在岗代是否真的还挂在链上。
+    (tapFetch as any).__ausTapInner = prevFetchFn;
+    // 层深跨探针层继承：探针夹在中间时若断掉计数，采集的层深上限就永远数不到顶
+    (tapFetch as any).__ausCaptureDepth = Number((prevFetchFn as any).__ausCaptureDepth) || 0;
     const prevActive: any = activeTapByWin.get(w);
     if (prevActive && prevActive !== tapFetch) {
       // 旧代退役：清掉在岗标记，免得它在下一次 scanFrames 里被误认成「已经装好」

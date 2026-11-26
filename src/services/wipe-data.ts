@@ -7,17 +7,19 @@
  *
  * 清理面（只动本扩展自己的东西）：
  *  1) settings.json 的 extensionSettings[api_usage_stat]：钱包配置与价格规则、
- *     加密的钱包校准密钥 walletSecrets、匿名统计标识 telemetry、热记录 50 条；
+ *     加密的钱包校准密钥 walletSecrets、匿名统计标识 telemetry、热记录（最近 2000 条）；
  *  2) IndexedDB api_usage_stat_db：冷历史、旧版迁移备份、写入失败时的降级副本；
- *  3) localStorage：全部 aus_ 前缀偏好键，以及旧版遗留的 ds_ 前缀行为开关。
+ *  3) IndexedDB api_usage_detail_db：最近 5 条的完整请求体、脱敏请求头与响应原文；
+ *  4) localStorage：全部 aus_ 前缀偏好键，以及旧版遗留的 ds_ 前缀行为开关。
  *
  * 硬约束：
  *  - 禁止 localStorage.clear()、禁止无差别删库，只按白名单与前缀判断；
- *  - 清理前先 flush 再关写闸门，避免 300ms 节流保存把设置写回去；
+ *  - 清理前先 flush 再关写闸门，避免 300ms 延迟保存（防抖）把设置写回去；
  *  - 删库前先关连接并处理 onblocked（另一个标签页开着酒馆时会挡住删除），
  *    酒馆给钩子的超时是 5s，这里最多等 2.5s，超时按失败返回但继续清其它面。
  */
 import { DB_NAME, MODULE_NAME, blockPersistentWrites, closeDB, flushSaveHot } from '../store/persistence';
+import { DETAIL_DB_NAME, closeDetailDB } from '../data/detail-store';
 
 /** localStorage 里需要精确匹配删除的旧版键（aus_ 前缀另外统一扫描） */
 export const WIPE_LOCAL_KEYS: readonly string[] = [
@@ -42,6 +44,8 @@ export interface WipeReport {
   settingsCleared: boolean;
   databaseDeleted: boolean;
   databaseBlocked: boolean;
+  detailDatabaseDeleted: boolean;
+  detailDatabaseBlocked: boolean;
   localKeysRemoved: string[];
   errors: string[];
 }
@@ -104,6 +108,8 @@ export async function wipeAllExtensionData(options: { timeoutMs?: number } = {})
     settingsCleared: false,
     databaseDeleted: false,
     databaseBlocked: false,
+    detailDatabaseDeleted: false,
+    detailDatabaseBlocked: false,
     localKeysRemoved: [],
     errors: [],
   };
@@ -113,14 +119,28 @@ export async function wipeAllExtensionData(options: { timeoutMs?: number } = {})
   blockPersistentWrites();
 
   // 2) IndexedDB：冷历史、迁移备份、降级副本
+  // 两个库各占一半预算：酒馆给钩子的超时只有 5s，串行删两个库不能各等满 2.5s
+  const budget = Math.max(50, Math.floor((Number(options.timeoutMs) || 2500) / 2));
   try { await closeDB(); } catch (err) { report.errors.push('close: ' + errText(err)); }
   try {
-    const res = await deleteDatabase(DB_NAME, Math.max(50, Number(options.timeoutMs) || 2500));
+    const res = await deleteDatabase(DB_NAME, budget);
     report.databaseDeleted = res.deleted;
     report.databaseBlocked = res.blocked;
     if (!res.deleted) report.errors.push(res.blocked ? 'idb-blocked' : 'idb-failed');
   } catch (err) {
     report.errors.push('idb: ' + errText(err));
+  }
+
+  // 2b) IndexedDB api_usage_detail_db：详情原文单独一个库（不能塞进 api_usage_stat_db，
+  // 那个库的版本号必须保持 1，否则旧版 open(DB,1) 会抛 VersionError 让冷历史全丢）
+  try { await closeDetailDB(); } catch (err) { report.errors.push('close-detail: ' + errText(err)); }
+  try {
+    const res = await deleteDatabase(DETAIL_DB_NAME, budget);
+    report.detailDatabaseDeleted = res.deleted;
+    report.detailDatabaseBlocked = res.blocked;
+    if (!res.deleted) report.errors.push(res.blocked ? 'idb-detail-blocked' : 'idb-detail-failed');
+  } catch (err) {
+    report.errors.push('idb-detail: ' + errText(err));
   }
 
   // 3) localStorage：先收集键名再删，避免边遍历边删导致漏项

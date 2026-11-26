@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clipValue, jsonTreeHTML, logBodyHTML, logTimeText } from './log-view';
+import { clipValue, jsonTreeHTML, logBodyHTML, logTimeText, logTopHTML } from './log-view';
 import type { RequestLogRecord } from '../services/request-log';
 
 function record(overrides: Partial<RequestLogRecord> = {}): RequestLogRecord {
@@ -67,6 +67,36 @@ describe('log-view：JSON 树', () => {
     const html = jsonTreeHTML({ a: { b: { c: 'deep' } } });
     expect(html).toContain('deep');
     expect((html.match(/aus-log-children/g) || []).length).toBe(3);
+  });
+});
+
+describe('log-view：顶部工具条', () => {
+  it('四枚动作齐全，并带上「其他请求」入口', () => {
+    const html = logTopHTML('200 · 1832ms');
+    expect(html).toContain('data-log-action="back"');
+    expect(html).toContain('data-log-action="upload"');
+    expect(html).toContain('data-log-action="tap"');
+    expect(html).toContain('其他请求');
+    expect(html).toContain('data-log-action="refresh"');
+    expect(html).toContain('data-log-action="clear"');
+    expect(html).toContain('200 · 1832ms');
+  });
+
+  it('返回按钮在动作组内、排在「清空」之后（三页统一贴最右）', () => {
+    const html = logTopHTML('200 · 1832ms');
+    const actionsStart = html.indexOf('aus-log-actions');
+    const clearIdx = html.indexOf('data-log-action="clear"');
+    const backIdx = html.indexOf('data-aus-back="1"');
+    expect(actionsStart).toBeGreaterThan(-1);
+    expect(clearIdx).toBeGreaterThan(actionsStart);
+    expect(backIdx).toBeGreaterThan(clearIdx);
+    expect(html).toContain('id="aus-log-back"');
+    expect(html).toContain('data-log-action="back"');
+  });
+
+  it('摘要文案做 HTML 转义', () => {
+    expect(logTopHTML('<script>x</script>')).not.toContain('<script>x</script>');
+    expect(logTopHTML('<b>x</b>')).toContain('&lt;b&gt;x&lt;/b&gt;');
   });
 });
 
