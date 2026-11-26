@@ -1042,6 +1042,16 @@
 /* 例外：模型汇总表块面透明 + 表格全宽横滑，去描边后会彻底失去块的边界，
    因此这一块单独把 1px 描边要回来（只改颜色，宽度沿用 .ds-card 的 1px，尺寸不变）。 */
 #aus-model-summary { border-color: var(--ds-border); }
+/* 宽表横滑：滚动只发生在卡片内的表体容器（.aus-table-scroll）里，标题行与「管理…」按钮留在容器外，
+   左右滑动表格时标题不跟着位移（移动端真机反馈）。滚动条样式复用块内滚动条段：data-scroll-x。 */
+#aus-panel .aus-table-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  min-width: 0;
+  max-width: 100%;
+}
 /* 安全区（全面屏底部） */
 #aus-main { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
 /* 触控目标 */
@@ -1162,7 +1172,11 @@
   #aus-extra-charts > .ds-card, #aus-model-trends > .ds-card { min-width: 0 !important; max-width: 100% !important; overflow: visible !important; }
   /* 图表容器自身再加一层 hidden 约束，确保 ECharts canvas 不把父卡片撑开 */
   #aus-extra-charts [id^="aus-chart-"], #aus-model-trends [id^="aus-chart-"] { overflow: hidden !important; max-width: 100% !important; box-sizing: border-box !important; }
-  #aus-model-summary { overflow-x: auto !important; overflow-y: hidden !important; }
+  /* 模型汇总 / 按对话统计：卡片自身不横滑，标题行与「管理」按钮因此固定；横滑交给卡片内的表体容器 */
+  #aus-model-summary,
+  #aus-chat-summary-overview { overflow: hidden !important; }
+  #aus-model-summary .aus-table-scroll,
+  #aus-chat-summary-overview .aus-table-scroll { overflow-x: auto !important; overflow-y: hidden !important; -webkit-overflow-scrolling: touch !important; overscroll-behavior-x: contain !important; }
   #aus-heatmap-card-overview { overflow: hidden !important; }
   #aus-heatmap-card-overview > div { overflow: visible !important; }
   /* 所有胶囊下拉统一提升层级，避免被相邻卡片覆盖 */
@@ -1200,15 +1214,13 @@
   /* 8 块兜底覆盖：确保 repeat(4) 不被上面误命中，保持 2 列 */
   [data-view="overview"] [style*="grid-template-columns:repeat(4"],
   [data-view="overview"] #aus-overview-four[style*="grid-template-columns"] { grid-template-columns: repeat(2, 1fr) !important; }
-  /* 表格及数据块横向滑动而非超出 — 类似模型汇总的 overflow 容器 */
-  #aus-model-summary { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
-  #aus-model-summary table { min-width: 720px !important; }
+  /* 表格及数据块横向滑动而非超出 — 滚动容器是卡片内的 .aus-table-scroll（见上方 1175 处规则） */
+  #aus-model-summary .aus-table-scroll table { min-width: 720px !important; }
   /* 用量概览的数据块（历史消耗/支出明细）块内滑动；四小块保持 overflow:visible 以显示下拉 */
   #aus-overview-history,
   #aus-overview-spend { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
-  /* 概览页「按对话统计」：与模型汇总同款块内横滑（概览 .ds-card 的 overflow:hidden !important 会裁掉 720px 表） */
-  #aus-chat-summary-overview { overflow-x: auto !important; overflow-y: hidden !important; -webkit-overflow-scrolling: touch !important; overscroll-behavior-x: contain !important; }
-  #aus-chat-summary-overview table { min-width: 720px !important; }
+  /* 概览页「按对话统计」：同款——卡片 hidden、表体容器横滑，标题行与「管理对话」不随表格位移 */
+  #aus-chat-summary-overview .aus-table-scroll table { min-width: 720px !important; }
   #aus-overview-four .ds-card, #aus-stats-four .ds-card { overflow: visible !important; }
   #aus-overview-history > div,
   #aus-overview-spend > div { min-width: 0 !important; }
@@ -2692,8 +2704,8 @@
 
 /* ── 块内横向滚动条：细、低调，浅色/深色一致（沿用 --ds-scrollbar） ── */
 #aus-heatmap-scroll-overview,
-#aus-model-summary,
-#aus-chat-summary-overview,
+#aus-model-summary .aus-table-scroll,
+#aus-chat-summary-overview .aus-table-scroll,
 #aus-overview-history,
 #aus-overview-spend,
 #aus-wallet div[style*="overflow-x:auto"],
@@ -2702,8 +2714,8 @@
   scrollbar-color: var(--ds-scrollbar) transparent;
 }
 #aus-heatmap-scroll-overview::-webkit-scrollbar,
-#aus-model-summary::-webkit-scrollbar,
-#aus-chat-summary-overview::-webkit-scrollbar,
+#aus-model-summary .aus-table-scroll::-webkit-scrollbar,
+#aus-chat-summary-overview .aus-table-scroll::-webkit-scrollbar,
 #aus-overview-history::-webkit-scrollbar,
 #aus-overview-spend::-webkit-scrollbar,
 #aus-wallet div[style*="overflow-x:auto"]::-webkit-scrollbar,
@@ -2712,8 +2724,8 @@
   width: 6px;
 }
 #aus-heatmap-scroll-overview::-webkit-scrollbar-track,
-#aus-model-summary::-webkit-scrollbar-track,
-#aus-chat-summary-overview::-webkit-scrollbar-track,
+#aus-model-summary .aus-table-scroll::-webkit-scrollbar-track,
+#aus-chat-summary-overview .aus-table-scroll::-webkit-scrollbar-track,
 #aus-overview-history::-webkit-scrollbar-track,
 #aus-overview-spend::-webkit-scrollbar-track,
 #aus-wallet div[style*="overflow-x:auto"]::-webkit-scrollbar-track,
@@ -2721,8 +2733,8 @@
   background: transparent;
 }
 #aus-heatmap-scroll-overview::-webkit-scrollbar-thumb,
-#aus-model-summary::-webkit-scrollbar-thumb,
-#aus-chat-summary-overview::-webkit-scrollbar-thumb,
+#aus-model-summary .aus-table-scroll::-webkit-scrollbar-thumb,
+#aus-chat-summary-overview .aus-table-scroll::-webkit-scrollbar-thumb,
 #aus-overview-history::-webkit-scrollbar-thumb,
 #aus-overview-spend::-webkit-scrollbar-thumb,
 #aus-wallet div[style*="overflow-x:auto"]::-webkit-scrollbar-thumb,
@@ -2733,8 +2745,8 @@
   background-clip: padding-box;
 }
 #aus-heatmap-scroll-overview::-webkit-scrollbar-thumb:hover,
-#aus-model-summary::-webkit-scrollbar-thumb:hover,
-#aus-chat-summary-overview::-webkit-scrollbar-thumb:hover,
+#aus-model-summary .aus-table-scroll::-webkit-scrollbar-thumb:hover,
+#aus-chat-summary-overview .aus-table-scroll::-webkit-scrollbar-thumb:hover,
 #aus-overview-history::-webkit-scrollbar-thumb:hover,
 #aus-overview-spend::-webkit-scrollbar-thumb:hover,
 #aus-wallet div[style*="overflow-x:auto"]::-webkit-scrollbar-thumb:hover,
