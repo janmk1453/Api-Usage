@@ -631,6 +631,8 @@ function patchWindow(w) {
 				get: () => prevFetchFn.__aus_patched === true
 			});
 		} catch {}
+		tapFetch.__ausTapInner = prevFetchFn;
+		tapFetch.__ausCaptureDepth = Number(prevFetchFn.__ausCaptureDepth) || 0;
 		const prevActive = activeTapByWin.get(w);
 		if (prevActive && prevActive !== tapFetch) try {
 			prevActive.__ausTapActive = false;

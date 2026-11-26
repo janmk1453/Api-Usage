@@ -7,6 +7,7 @@ import { createThinkClock, scanThinkChunk, resolveThinkTime, reasoningTextOf, co
 import { createFrameNormalizer } from './frame-normalizer';
 import { saveRequestStart, patchRequestLog, noteRecentTurns } from './request-log';
 import { noteCaptureStage, isZeroUsage, usageNumbers } from './capture-digest';
+import { fetchChainHas, fetchChainKind, describeFetchChain } from './fetch-chain';
 import { decideTurnOutcome } from './turn-outcome';
 import { API_ERROR_MAX_CHARS, detectApiErrorPayload, apiErrorPayloadTag } from './api-error-payload';
 import { ESTIMATE_VERSION, estimatePromptTokens, estimateTextTokens } from './token-estimate';
@@ -494,11 +495,9 @@ function installFetchCapture(): boolean {
   try {
     const p: any = (window as any).parent || window;
     if (!p || typeof p.fetch !== 'function') return false;
-    if (isAusFetchPatch(p.fetch)) {
-      // 顶层已经是我们装的某一代（可能是宿主把它装回来了）：让它重新在岗，不新增任何一层
-      if ((p.fetch as any).__ausCaptureLayer === true) activateCapture(p.fetch);
-      return true;
-    }
+    // 在岗判定必须顺着链验证到 activeCapture 本人，不能只看顶层的标记布尔：
+    // 探针层把 __aus_patched 定义成「读内层」的 getter，内层采集代退役后它照样是 true。
+    if (captureInPlace(p)) return true;
     // 记下被包住的原始函数：bind 产物不继承自定义属性，读标记必须读它
     const prevFetchFn: any = p.fetch;
     // 层深是硬约束：宿主反复重绑时我们每跟一次就 +1 层，只靠「旧代直通」不会重复记账，
@@ -855,6 +854,12 @@ function installFetchCapture(): boolean {
     }
     patched.__ausCaptureDepth = depth;
     patched.__ausCaptureLayer = true;
+    // 链上下一层：供自愈守卫逐层验证「在岗那一代是否真的还挂在这里」
+    patched.__ausCaptureInner = prevFetchFn;
+    // 还原目标是「链上的下一层本身」而不是它的 bind 产物：bind 会丢自定义属性，
+    // 下一层若是探针，还原成 bind 产物等于把探针的在岗/内层记录全抹掉。
+    // 只在确认这一代真的装上之后才记，放弃安装的分支不能污染还原目标。
+    restoreTarget = prevFetchFn;
     activateCapture(patched);
     captureHealth.installed = true;
     captureHealth.generations += 1;
@@ -885,16 +890,26 @@ function noteInstallProblem(code: string, message: string, extra: Record<string,
  * 暴露在 window.__ausCapture.diagnostics()，也随采集日志一起上报。
  */
 export function captureDiagnostics() {
+  // 链现状一起给出来：真机「没记录」时第一眼要看的就是「顶层是谁、往下还有没有我们那一代」，
+  // 只有 installed/hasActive 两个布尔时，假在岗与「压根没装上」在诊断信息里长得一模一样。
+  let fetchChain = 'unknown';
+  try {
+    const p: any = (window as any).parent || window;
+    fetchChain = describeFetchChain(p?.fetch) + (activeCapture ? '>active' : '>active:none');
+  } catch {}
   return {
     ...captureHealth,
     backoffMs: guardBackoff,
     hasActive: !!activeCapture,
     guardMs: FETCH_GUARD_MS,
+    fetchChain,
   };
 }
 
 let interceptionInstalled = false;
 let rawFetchRef: any = null;
+/** 卸载还原目标：被包住的下一层原函数（不带 bind），保住它自己的标记与身份 */
+let restoreTarget: any = null;
 let messageReceivedHandler: any = null;
 
 /**
@@ -941,13 +956,50 @@ const captureHealth = {
   installed: false,
   generations: 0,
   failures: 0,
+  /** 检测到「顶层带标记但在岗代不在链上」的次数：不改判据的话这里永远是 0，采集却已失聪 */
+  staleFlags: 0,
   depth: 0,
   lastError: null as string | null,
   lastInstallAt: 0,
 };
 
-function isAusFetchPatch(fn: any): boolean {
-  return typeof fn === 'function' && (fn as any).__aus_patched === true;
+/**
+ * 采集包装「在岗」判定：顺着链验证，不认任何标记布尔。
+ *
+ * 3.2.3 真机事故的根因就在这里——探针层为了让两边守卫不互相对套，把 __aus_patched
+ * 定义成「读内层」的 getter；宿主重载后内层采集代退役，这个 getter 恒为 true，
+ * 而 __ausCaptureLayer 又不在探针层上。老判据两边都不满足就不会重装：4s 自愈守卫
+ * 每轮都 early return，「没记录」持续几小时，而诊断包里既没有 install-failed 也没有 fetch-start。
+ *
+ * 现在只认一件事：链上还能不能摸到 activeCapture 本人。摸不到就必须重装。
+ */
+function captureInPlace(p: any): boolean {
+  const top: any = p?.fetch;
+  if (typeof top !== 'function') return false;
+  // 顶层就是我们的某一代采集层（宿主可能把旧代装回来了）：就地复用，不新增层
+  if ((top as any).__ausCaptureLayer === true) {
+    activateCapture(top);
+    return true;
+  }
+  // 没有在岗代（卸载后 / 从未装上）一律判不在岗，守卫必须重装
+  return fetchChainHas(top, activeCapture);
+}
+
+/** 假在岗留痕节流：守卫 4s 一轮，快照缓冲只有 CAPTURE_MAX 条，不能每轮都写 */
+const STALE_REPORT_MS = 60_000;
+let lastStaleReportAt = 0;
+
+/**
+ * 假在岗留痕：顶层带着我们的标记，却摸不到在岗那一代。
+ * 只写采集快照与计数，不写 install-failed——安装并没有失败，写那条会让健康信号误报成插件报错。
+ */
+function noteStaleCapture(top: any): void {
+  captureHealth.staleFlags += 1;
+  const now = Date.now();
+  if (now - lastStaleReportAt < STALE_REPORT_MS) return;
+  lastStaleReportAt = now;
+  const chain = describeFetchChain(top) + (activeCapture ? '' : '>active:none');
+  try { noteCaptureStage('guard-recovered', { model: '', requestId: '', reason: 'stale:' + chain }); } catch {}
 }
 
 function resetGuardBackoff(): void {
@@ -965,11 +1017,10 @@ function ensureFetchCapture() {
   try {
     const p: any = (window as any).parent || window;
     if (!p || typeof p.fetch !== 'function') return;
-    if (isAusFetchPatch(p.fetch)) {
-      // 顶层是我们装的某一代：被宿主装回来的旧代直接复用在岗，不新增层
-      if ((p.fetch as any).__ausCaptureLayer === true) activateCapture(p.fetch);
-      return;
-    }
+    // 在岗判定改为「顺着链摸到 activeCapture」，标记布尔不再作数
+    if (captureInPlace(p)) return;
+    // 顶层还带着我们的标记却摸不到在岗代 = 假在岗：这是以前完全静默的那种故障，必须先留痕
+    if (fetchChainKind(p.fetch) !== 'other') noteStaleCapture(p.fetch);
     if (Date.now() < nextInstallAllowedAt) return;
     if (installFetchCapture()) resetGuardBackoff();
     else growGuardBackoff();
@@ -1024,7 +1075,13 @@ export function installInterception() {
     }
     try {
       const p: any = (window as any).parent || window;
-      if (p?.fetch && !(p.fetch as any).__aus_patched) rawFetchRef = p.fetch.bind(p);
+      // 只把「既不是采集层、也不是探针层」的原始 fetch 记为兜底还原目标。
+      // 以前只看 __aus_patched，而探针层把这个标记透传成 true 的反面也有陷阱：
+      // 顶层是探针时会拿探针的 bind 产物当还原目标，卸载后就留下半残的一层。
+      if (p?.fetch && fetchChainKind(p.fetch) === 'other') {
+        rawFetchRef = p.fetch.bind(p);
+        restoreTarget = p.fetch;
+      }
     } catch {}
     es.on(et.GENERATION_ENDED, onGenerationEnded);
     // GENERATION_STOPPED 只在酒馆支持时挂，用于区分「用户主动中断」与「上游故障」
@@ -1060,8 +1117,11 @@ export function uninstallInterception() {
     }
     try {
       const p: any = (window as any).parent || window;
-      if (p && rawFetchRef && (p.fetch as any).__aus_patched) {
-        p.fetch = rawFetchRef;
+      // 只在「顶层确实是我们这一代采集层」时还原顶层。
+      // 顶层若是探针或宿主包装，整层摘掉会连它们一起抹掉，留下「外面还带着采集标记、
+      // 里面采集已经没了」的假在岗现场——这正是 3.2.3 那次几小时静默的成因。
+      if (p && (p.fetch as any)?.__ausCaptureLayer === true && restoreTarget) {
+        p.fetch = restoreTarget;
       }
     } catch {}
     // 卸载后不许任何残留层再记账

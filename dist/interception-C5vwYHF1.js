@@ -1,7 +1,7 @@
 import { pn as __exportAll } from "./graphic-BAx7jeh4.js";
 import { t as log } from "./logger-8RGXnvfI.js";
 import { c as putDetailRequest, l as putDetailResponse, n as DETAIL_MAX_CHARS } from "./detail-store-CqNNEAWB.js";
-import { D as initConnectionIdentity, O as resolveRuntimeConnectionContext, t as repository } from "./repository-DnkYxMgW.js";
+import { D as initConnectionIdentity, O as resolveRuntimeConnectionContext, t as repository } from "./repository-DQzcy9_C.js";
 import { t as detectRequestOrigin } from "./request-origin-C9kLQ_0W.js";
 //#region src/services/include-usage.ts
 /**
@@ -1126,7 +1126,8 @@ var CAPTURE_STAGE_SET = /* @__PURE__ */ new Set([
 	"turn-interrupted",
 	"turn-unmatched",
 	"entry-rejected",
-	"install-failed"
+	"install-failed",
+	"guard-recovered"
 ]);
 var USAGE_KEYS = [
 	"prompt_tokens",
@@ -1260,6 +1261,45 @@ function captureDigest(limit = 24) {
 		if (rec.reason) out.reason = rec.reason;
 		return out;
 	});
+}
+/** 这一层是我们哪一类包装：只认身份标记，不代表它还在岗 */
+function fetchChainKind(fn) {
+	if (typeof fn !== "function") return "other";
+	if (fn.__ausCaptureLayer === true) return "capture";
+	if (fn.__ausTapActive === true) return "tap";
+	return "other";
+}
+/** 取链上的下一层；宿主的包装不记录下一层，返回 null 表示到头 */
+function fetchChainInner(fn) {
+	if (typeof fn !== "function") return null;
+	const inner = fn["__ausCaptureInner"] || fn["__ausTapInner"];
+	return typeof inner === "function" ? inner : null;
+}
+/**
+* 从 top 起沿链找 target（含 top 本身），最多 maxHops 跳。
+* target 为空表示「没有任何在岗层」——守卫必须据此重装，不能当成在岗。
+*/
+function fetchChainHas(top, target, maxHops = 8) {
+	if (!target) return false;
+	let node = top;
+	for (let hop = 0; hop <= maxHops; hop++) {
+		if (!node) return false;
+		if (node === target) return true;
+		node = fetchChainInner(node);
+	}
+	return false;
+}
+/** 链上各层种类的可读描述（诊断用），例如 'tap>capture'、'other' */
+function describeFetchChain(top, maxHops = 8) {
+	const parts = [];
+	let node = top;
+	for (let hop = 0; hop <= maxHops; hop++) {
+		if (typeof node !== "function") break;
+		parts.push(fetchChainKind(node));
+		node = fetchChainInner(node);
+		if (!node) break;
+	}
+	return parts.length ? parts.join(">") : "empty";
 }
 //#endregion
 //#region src/services/turn-outcome.ts
@@ -1801,10 +1841,7 @@ function installFetchCapture() {
 	try {
 		const p = window.parent || window;
 		if (!p || typeof p.fetch !== "function") return false;
-		if (isAusFetchPatch(p.fetch)) {
-			if (p.fetch.__ausCaptureLayer === true) activateCapture(p.fetch);
-			return true;
-		}
+		if (captureInPlace(p)) return true;
 		const prevFetchFn = p.fetch;
 		const depth = (Number(prevFetchFn.__ausCaptureDepth) || 0) + 1;
 		if (depth > MAX_CAPTURE_DEPTH) {
@@ -2209,6 +2246,8 @@ function installFetchCapture() {
 		}
 		patched.__ausCaptureDepth = depth;
 		patched.__ausCaptureLayer = true;
+		patched.__ausCaptureInner = prevFetchFn;
+		restoreTarget = prevFetchFn;
 		activateCapture(patched);
 		captureHealth.installed = true;
 		captureHealth.generations += 1;
@@ -2251,15 +2290,22 @@ function noteInstallProblem(code, message, extra = {}) {
 * 暴露在 window.__ausCapture.diagnostics()，也随采集日志一起上报。
 */
 function captureDiagnostics() {
+	let fetchChain = "unknown";
+	try {
+		fetchChain = describeFetchChain((window.parent || window)?.fetch) + (activeCapture ? ">active" : ">active:none");
+	} catch {}
 	return {
 		...captureHealth,
 		backoffMs: guardBackoff,
 		hasActive: !!activeCapture,
-		guardMs: FETCH_GUARD_MS
+		guardMs: FETCH_GUARD_MS,
+		fetchChain
 	};
 }
 var interceptionInstalled = false;
 var rawFetchRef = null;
+/** 卸载还原目标：被包住的下一层原函数（不带 bind），保住它自己的标记与身份 */
+var restoreTarget = null;
 var messageReceivedHandler = null;
 /**
 * 当前「在岗」的那一代采集包装。
@@ -2301,12 +2347,51 @@ var captureHealth = {
 	installed: false,
 	generations: 0,
 	failures: 0,
+	/** 检测到「顶层带标记但在岗代不在链上」的次数：不改判据的话这里永远是 0，采集却已失聪 */
+	staleFlags: 0,
 	depth: 0,
 	lastError: null,
 	lastInstallAt: 0
 };
-function isAusFetchPatch(fn) {
-	return typeof fn === "function" && fn.__aus_patched === true;
+/**
+* 采集包装「在岗」判定：顺着链验证，不认任何标记布尔。
+*
+* 3.2.3 真机事故的根因就在这里——探针层为了让两边守卫不互相对套，把 __aus_patched
+* 定义成「读内层」的 getter；宿主重载后内层采集代退役，这个 getter 恒为 true，
+* 而 __ausCaptureLayer 又不在探针层上。老判据两边都不满足就不会重装：4s 自愈守卫
+* 每轮都 early return，「没记录」持续几小时，而诊断包里既没有 install-failed 也没有 fetch-start。
+*
+* 现在只认一件事：链上还能不能摸到 activeCapture 本人。摸不到就必须重装。
+*/
+function captureInPlace(p) {
+	const top = p?.fetch;
+	if (typeof top !== "function") return false;
+	if (top.__ausCaptureLayer === true) {
+		activateCapture(top);
+		return true;
+	}
+	return fetchChainHas(top, activeCapture);
+}
+/** 假在岗留痕节流：守卫 4s 一轮，快照缓冲只有 CAPTURE_MAX 条，不能每轮都写 */
+var STALE_REPORT_MS = 6e4;
+var lastStaleReportAt = 0;
+/**
+* 假在岗留痕：顶层带着我们的标记，却摸不到在岗那一代。
+* 只写采集快照与计数，不写 install-failed——安装并没有失败，写那条会让健康信号误报成插件报错。
+*/
+function noteStaleCapture(top) {
+	captureHealth.staleFlags += 1;
+	const now = Date.now();
+	if (now - lastStaleReportAt < STALE_REPORT_MS) return;
+	lastStaleReportAt = now;
+	const chain = describeFetchChain(top) + (activeCapture ? "" : ">active:none");
+	try {
+		noteCaptureStage("guard-recovered", {
+			model: "",
+			requestId: "",
+			reason: "stale:" + chain
+		});
+	} catch {}
 }
 function resetGuardBackoff() {
 	guardBackoff = FETCH_GUARD_MS;
@@ -2326,10 +2411,8 @@ function ensureFetchCapture() {
 	try {
 		const p = window.parent || window;
 		if (!p || typeof p.fetch !== "function") return;
-		if (isAusFetchPatch(p.fetch)) {
-			if (p.fetch.__ausCaptureLayer === true) activateCapture(p.fetch);
-			return;
-		}
+		if (captureInPlace(p)) return;
+		if (fetchChainKind(p.fetch) !== "other") noteStaleCapture(p.fetch);
 		if (Date.now() < nextInstallAllowedAt) return;
 		if (installFetchCapture()) resetGuardBackoff();
 		else growGuardBackoff();
@@ -2384,7 +2467,10 @@ function installInterception() {
 		if (interceptionInstalled) return true;
 		try {
 			const p = window.parent || window;
-			if (p?.fetch && !p.fetch.__aus_patched) rawFetchRef = p.fetch.bind(p);
+			if (p?.fetch && fetchChainKind(p.fetch) === "other") {
+				p.fetch.bind(p);
+				restoreTarget = p.fetch;
+			}
 		} catch {}
 		es.on(et.GENERATION_ENDED, onGenerationEnded);
 		if (et.GENERATION_STOPPED) try {
@@ -2436,7 +2522,7 @@ function uninstallInterception() {
 		}
 		try {
 			const p = window.parent || window;
-			if (p && rawFetchRef && p.fetch.__aus_patched) p.fetch = rawFetchRef;
+			if (p && p.fetch?.__ausCaptureLayer === true && restoreTarget) p.fetch = restoreTarget;
 		} catch {}
 		activeCapture = null;
 		captureHealth.installed = false;
