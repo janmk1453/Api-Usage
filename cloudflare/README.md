@@ -6,12 +6,15 @@
 
 | 文件 | 作用 |
 | --- | --- |
-| `worker.js` | Worker 入口：`POST /collect`、`GET /dashboard`、`GET /api/summary`、`GET /api/trend`、`GET /health`，以及每月清理的定时任务 |
+| `worker.js` | Worker 入口：`POST /collect`、`POST /api/log`、`GET /dashboard`、`GET /api/summary`、`GET /api/trend`、`GET /api/digest`、`GET /health`，以及每月清理 + 每日日报两个定时任务 |
 | `api.js` | 看板只读聚合层：设备/日/小时/今日/累计/渲染耗时查询、`buildSummary`、`buildTrend`、`buildBootPayload`、`respondWithCache`；不碰写入，可被离线预览脚本直接复用 |
 | `boot.js` | 看板模板注入（纯函数）：`serializeBoot` 转义、`renderDashboard` 替换占位符、`BUILD_ID` 构建标识 |
 | `summary.js` | 看板聚合纯函数（日期与小时基准、趋势窗口归一、计数截断、时长分桶、渲染耗时估算、环境画像），`summary.test.js` 覆盖 |
 | `payload.js` | 上报体白名单校验与数值钳制（纯函数，`payload.test.js` 覆盖） |
 | `worker.test.js` | Worker 接口测试：鉴权、`/collect` 契约、看板首屏注入、总计/趋势口径、定时清理 |
+| `mail.js` | 邮件模板与发信适配（纯函数）：反馈提醒与每日总结的纯文本 / 内联样式 HTML、千分位与环比格式化、`send_email` 绑定优先的 `sendMail` |
+| `mail.test.js` | 邮件文案与发信适配测试：格式化边界、HTML 转义、绑定失败降级 |
+| `worker-mail.test.js` | 邮件触发链路测试：反馈入库提醒、当天条数上限、日报 Cron 分流、`/api/digest` 预览与补发 |
 | `schema.sql` | D1 建表脚本（`device` 设备维度汇总 + `device_daily` 逐设备日数据 + `device_hourly` 逐设备小时数据），新库直接执行 |
 | `migrate-device-totals.sql` | 已有库的一次性迁移与回填脚本（新增累计列并用 `device_daily` 回填） |
 | `migrate-backfill-device-totals.sql` | 只做累计列回填与校验（可安全重复执行），用于「列已存在」或需要重新回填时 |
@@ -53,6 +56,8 @@ npx wrangler secret put DASHBOARD_TOKEN
 cd cloudflare
 npx wrangler deploy -c wrangler.local.toml
 ```
+
+> 需要邮件通知时，先确认账户已在 **Email Service → Email Sending** onboard 发信域名（`MAIL_FROM` 的域名），且收件地址在 **Email Routing → Destination addresses** 已验证——免费计划只能发给已验证地址。绑定与变量见下方「邮件通知」。
 
 ### 已有库升级（新增反馈日志表）
 
@@ -189,6 +194,7 @@ npx wrangler d1 execute api_usage_stat --remote --file cloudflare/migrate-app-bu
 | `POST /api/log` | 公开的反馈日志上传（历史页提示条 / 请求日志页 / 设置页「上传反馈」），成功返回 `{"ok":true,"id":N}`；限流为单 IP 每分钟 6 条、单 IP 每天 40 条、全站每天 800 条，超限 `429`；`request_log` 表未建时返回 `503`；上传体支持 schema 1–4（1 单条记录、2 加反馈说明与诊断、3 加点名目标与现场证据、4 逐条点名多条），未知 schema 或字段不合法返回 `400` 并回显错误码 `bad_schema/bad_kind/bad_record/bad_body`；核对版本不一致时先升级并重新 `wrangler deploy` 接收端 |
 | `GET /api/logs` | 口令：最近 50 条反馈日志摘要（不含请求正文） |
 | `GET /api/log/view?id=N` | 口令：按 id 取回完整上报体 |
+| `GET /api/digest?day=YYYY-MM-DD&send=1` | 口令：日报预览；`send=1` 立即发送（补发某天）；`day` 缺省为昨天（北京时间） |
 | `GET /api/summary` | 总计、当日、累计用户序列、面板累计、版本分布、环境画像、时长直方图；支持 `?force=1` |
 | `GET /api/trend?from=YYYY-MM-DD&to=YYYY-MM-DD&parts=daily\|render\|both` | 每日趋势（不重复用户 / 打开次数 / 使用时长 / 面板明细）与按版本渲染耗时；支持 `?force=1` |
 | `GET /api/trend?bucket=hour&from=YYYY-MM-DDTHH&to=YYYY-MM-DDTHH&parts=daily` | 小时粒度趋势（同上指标，X 轴为北京时间整点，缺失小时补 0，另返回累计用户序列）；缺省窗口为最近 24 小时，最长 180 天；支持 `?force=1` |
@@ -196,6 +202,48 @@ npx wrangler d1 execute api_usage_stat --remote --file cloudflare/migrate-app-bu
 | `GET /health` | 健康检查，无需口令 |
 
 除 `/collect`、`/health` 与 `POST /api/log` 外都需要 HTTP Basic 口令（用户名任意，口令为 `DASHBOARD_TOKEN`）。
+
+## 邮件通知
+
+接收端支持两类邮件，都走 Cloudflare Email Service 的 Workers `send_email` 绑定：**Workers 免费计划可用，但只能发给账户内已验证的目标地址**；每日发信额度按账户信誉动态调整（新账号较低），超限时绑定返回 `E_DAILY_LIMIT_EXCEEDED`。
+
+| 邮件 | 触发时机 | 内容 |
+| --- | --- | --- |
+| 反馈提醒 | `POST /api/log` 入库成功后 | 问题类型、用户补充说明、反馈编号、上报版本、请求模型、上游状态、请求地址、北京时间与看板链接；当天只提醒前 20 条 |
+| 每日总结 | 每天 UTC 16:00（北京 0 点）的 Cron | 统计「昨天」：日活设备、前日日活与环比、新增设备、累计设备、会话 / 打开次数、使用时长与人均、运行时长、反馈条数、7 日均日活、当日活跃版本 Top 6 |
+
+配置（`wrangler.toml` 已带默认值，改收件人时三处一起改）：
+
+```toml
+[[send_email]]
+name = "EMAIL"
+destination_address = "2855564331@qq.com"
+
+[vars]
+MAIL_TO = "2855564331@qq.com"
+MAIL_FROM = "noreply@janmk.us.ci"
+PANEL_URL = "https://stat.janmk.us.ci/dashboard"
+```
+
+1. 发信域名先在 **Email Service → Email Sending** onboard（本仓库用 `janmk.us.ci`，DNS 里的 `cf-bounce` MX / SPF / DKIM 就是这条链路）；
+2. `MAIL_FROM` 必须属于该已 onboard 域名；
+3. 收件地址在 **Email Routing → Destination addresses** 完成验证；
+4. `destination_address` 把绑定锁死到单一收件人，换人时同步改 `MAIL_TO`。
+
+部署后自测（口令同看板）：
+
+```bash
+# 只看口径与文案，不发信
+curl -u 'user:你的口令' 'https://stat.janmk.us.ci/api/digest?day=2026-11-27'
+# 真发一封（补发某天）
+curl -u 'user:你的口令' 'https://stat.janmk.us.ci/api/digest?day=2026-11-27&send=1'
+```
+
+没配 `[[send_email]]`、也没有 `MAIL_API_TOKEN` / `MAIL_ACCOUNT_ID` 时，`sendMail` 返回 `skipped`；发信失败只写一条 `console`，不会改变上传与上报的返回结果。
+
+### CPU 与调用次数
+
+日报只有一次 `db.batch`（7 条聚合查询）与一次模板拼接：版本 Top 6、日活、新增、7 日均值都由 SQL 聚合，JS 侧不做循环统计与排序，模板生成为亚毫秒级，远低于 Workers 免费版 10ms CPU 限制；反馈提醒同样只多一次 `COUNT` 与一次字符串拼接。Cron 每天只多 1 次调用。
 
 ## 本地调试
 
@@ -246,6 +294,7 @@ Cloudflare 免费额度（2026 年 4 月官方文档）：Workers **10 万请求
 | 读取行数 | 总计与画像走 `device` 表一次全表读（行数 = 设备数）；趋势按 `day` / `hour` 索引范围扫描（行数 = 桶数 × 桶内活跃设备） | 单次冷加载 ≈ 设备数 + 日活 + 2 × 窗口桶数 × 桶内活跃设备 |
 | 缓存 | `/dashboard`、`/api/summary` 与 `/api/trend` 走 Cache API 600 秒 | 重复查看、切换范围与粒度都不会重复扫表；「刷新」按钮才强制重查 |
 | 保留期 | 每月 1 号清理超过 730 天的逐设备日数据与超过 180 天的逐设备小时数据（设备维度汇总长期保留） | 长期占用远低于 5 GB |
+| 邮件 | 反馈提醒每天最多 20 封（当天第 21 条起静默）、日报每天 1 封 | 每天至多 21 封，远低于账户动态发信额度 |
 
 读量估算：日活 5000、累计设备 2 万、趋势窗口 30 天时，单次冷加载约 `2 万 + 0.5 万 + 2 × 15 万 ≈ 33 万行`，配合 10 分钟缓存远低于 500 万行/天。若日后 30 天窗口的单次读行数逼近 100 万，可再加一层按日汇总表（本期未做）。
 

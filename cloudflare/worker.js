@@ -22,7 +22,7 @@
 import dashboardHtml from './dashboard.html';
 import { MAX_BODY_BYTES, normalizePayload } from './payload.js';
 import { MAX_LOG_BODY_BYTES, normalizeLogUpload } from './log-payload.js';
-import { beijingDayKey, beijingHourKey } from './summary.js';
+import { beijingDayKey, beijingHourKey, isDayKey } from './summary.js';
 import {
   DEVICE_BASE_COLUMNS,
   TOTAL_COLUMNS,
@@ -34,6 +34,7 @@ import {
   respondWithCache,
 } from './api.js';
 import { renderDashboard } from './boot.js';
+import { PANEL_URL_DEFAULT, buildDailyMail, buildErrorMail, sendMail } from './mail.js';
 
 /** 逐设备日数据保留天数（设备维度汇总表长期保留） */
 const RETENTION_DAYS = 730;
@@ -48,6 +49,10 @@ const LOG_RATE_PER_DAY = 40;
 const LOG_RATE_GLOBAL_DAY = 800;
 const MINUTE_MS = 60000;
 const DAY_MS = 86400000;
+/** 日报 cron：UTC 16:00 = 北京次日 0 点；与每月清理按 event.cron 分流 */
+const DAILY_CRON = '0 16 * * *';
+/** 错误反馈邮件每日上限：只提醒当天前 N 条，避免被刷爆邮箱与免费发信额度 */
+const MAX_ERROR_MAILS_PER_DAY = 20;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -354,7 +359,7 @@ export default {
     }
     if (path === '/collect') return handleCollect(request, env);
     // 请求日志上传：面向扩展用户的公开接口，写入前有体积、字段与限流三道闸
-    if (path === '/api/log') return handleLogUpload(request, env);
+    if (path === '/api/log') return handleLogUpload(request, env, ctx);
     if (path === '/health') {
       return jsonResponse({ ok: true, time: Date.now() }, { status: 200, headers: noStore() });
     }
@@ -364,10 +369,22 @@ export default {
     if (path === '/api/trend') return handleTrend(request, env);
     if (path === '/api/logs') return handleLogList(request, env);
     if (path === '/api/log/view') return handleLogDetail(request, env);
+    if (path === '/api/digest') return handleDigest(request, env);
     return new Response('Not Found', { status: 404 });
   },
 
+  /**
+   * 定时任务按 cron 分流：
+   *   - 每日 0 点（北京）发日报，正文含日活 / 新增 / 环比等聚合；
+   *   - 其余（每月 1 号 03:00 UTC）清理过期数据。
+   * 全部塞进 waitUntil，不阻塞调度器返回。
+   */
   async scheduled(event, env, ctx) {
+    const cron = String(event?.cron || '');
+    if (cron === DAILY_CRON) {
+      ctx.waitUntil(sendDailyDigest(env, event?.scheduledTime));
+      return;
+    }
     ctx.waitUntil(prune(env));
   },
 };
@@ -596,7 +613,7 @@ async function insertLog(db, value, ipHash, now, bytes) {
   return Number(res?.meta?.last_row_id || 0);
 }
 
-async function handleLogUpload(request, env) {
+async function handleLogUpload(request, env, ctx) {
   if (request.method !== 'POST') return logText('只接受 POST 上传。', 405);
   const declared = Number(request.headers.get('content-length') || 0);
   if (Number.isFinite(declared) && declared > MAX_LOG_BODY_BYTES) {
@@ -629,7 +646,155 @@ async function handleLogUpload(request, env) {
   } catch {
     return logText('上传暂不可用：接收端存储尚未就绪，请稍后重试。', 503);
   }
+  // 入库成功才提醒，且不阻塞响应：发信失败只写日志，不影响用户看到的「上传成功」
+  if (ctx && typeof ctx.waitUntil === 'function') {
+    ctx.waitUntil(notifyErrorReport(env, normalized.value, id, now));
+  }
   return logJson({ ok: true, id });
+}
+
+/* ---------------------------------- 邮件通知 ---------------------------------- */
+
+/** 看板地址：优先取 vars 里的 PANEL_URL，缺省用邮件模块的默认值 */
+function mailPanelUrl(env) {
+  const configured = String(env?.PANEL_URL || '').trim();
+  return configured || PANEL_URL_DEFAULT;
+}
+
+/**
+ * 反馈入库后的邮件提醒。
+ * 先用一次 COUNT 做当天节流，再交给 mail.js 拼模板发信；
+ * 任何失败都吞掉并写一条 console，绝不影响用户上传的结果。
+ */
+async function notifyErrorReport(env, value, id, now) {
+  try {
+    if (!env?.DB) return;
+    if (!(await allowErrorMail(env.DB, now))) return;
+    const message = buildErrorMail({
+      id,
+      receivedAt: now,
+      report: value.report,
+      record: value.record,
+      appVersion: value.appVersion,
+      panelUrl: mailPanelUrl(env),
+    });
+    const result = await sendMail(env, message);
+    console.log(JSON.stringify({ event: 'mail_feedback', id, ok: !!result.ok, via: result.via || '', error: result.error || '' }));
+  } catch (error) {
+    console.warn('mail_feedback_failed ' + ((error && error.message) || String(error)));
+  }
+}
+
+/** 当天反馈条数不超过上限才提醒（当天第 21 条起静默，防刷邮箱与发信额度） */
+async function allowErrorMail(db, now) {
+  const dayStart = Date.parse(beijingDayKey(now) + 'T00:00:00+08:00');
+  try {
+    const res = await db.prepare('SELECT COUNT(*) AS c FROM request_log WHERE received_at >= ?1').bind(dayStart).all();
+    const row = Array.isArray(res?.results) ? res.results[0] : null;
+    return (Number(row?.c) || 0) <= MAX_ERROR_MAILS_PER_DAY;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 日报数据：一次 batch 取齐（日活 / 前日 / 新增 / 累计 / 版本 / 反馈 / 7 日均值）。
+ * 聚合全部下推给 SQL，JS 只拼模板，守住 Workers 免费版 10ms CPU。
+ */
+async function loadDailyMetrics(db, day, prevDay) {
+  const dayStart = Date.parse(day + 'T00:00:00+08:00');
+  const dayEnd = dayStart + DAY_MS;
+  const weekStart = beijingDayKey(dayStart - 6 * DAY_MS);
+  const results = await db.batch([
+    db.prepare('SELECT COUNT(*) AS devices, COALESCE(SUM(sessions), 0) AS sessions, COALESCE(SUM(opens), 0) AS opens, COALESCE(SUM(dur_ms), 0) AS active_ms, COALESCE(SUM(run_ms), 0) AS run_ms FROM device_daily WHERE day = ?1').bind(day),
+    db.prepare('SELECT COUNT(*) AS devices FROM device_daily WHERE day = ?1').bind(prevDay),
+    db.prepare('SELECT COUNT(*) AS devices FROM device WHERE first_day = ?1').bind(day),
+    db.prepare('SELECT COUNT(*) AS devices FROM device'),
+    db.prepare("SELECT app_version AS version, COUNT(*) AS devices FROM device_daily WHERE day = ?1 AND app_version <> '' GROUP BY app_version ORDER BY devices DESC LIMIT 6").bind(day),
+    db.prepare('SELECT COUNT(*) AS reports FROM request_log WHERE received_at >= ?1 AND received_at < ?2').bind(dayStart, dayEnd),
+    db.prepare('SELECT AVG(dau) AS avg_dau FROM (SELECT COUNT(*) AS dau FROM device_daily WHERE day >= ?1 AND day <= ?2 GROUP BY day)').bind(weekStart, day),
+  ]);
+  const rowsOf = (index) => {
+    const item = Array.isArray(results) ? results[index] : null;
+    return Array.isArray(item?.results) ? item.results : [];
+  };
+  const firstOf = (index) => rowsOf(index)[0] || {};
+  const summary = firstOf(0);
+  const versions = rowsOf(4)
+    .map((row) => ({ version: String(row?.version || ''), count: Number(row?.devices) || 0 }))
+    .filter((item) => item.count > 0);
+  return {
+    dau: Number(summary.devices) || 0,
+    prevDau: Number(firstOf(1).devices) || 0,
+    newDevices: Number(firstOf(2).devices) || 0,
+    totalDevices: Number(firstOf(3).devices) || 0,
+    sessions: Number(summary.sessions) || 0,
+    opens: Number(summary.opens) || 0,
+    activeMs: Number(summary.active_ms) || 0,
+    runMs: Number(summary.run_ms) || 0,
+    feedbacks: Number(firstOf(5).reports) || 0,
+    sevenDayAvgDau: Number(firstOf(6).avg_dau) || 0,
+    versions,
+  };
+}
+
+/** 准备日报邮件：day 缺省取「昨天」（按北京时间）；手填 day 时按该天统计 */
+async function buildDigest(env, scheduledTime, day) {
+  if (!env?.DB) return { ok: false, error: 'storage_unavailable' };
+  const now = Number(scheduledTime) > 0 ? Number(scheduledTime) : Date.now();
+  let targetDay = String(day || '');
+  if (targetDay) {
+    if (!isDayKey(targetDay)) return { ok: false, error: 'bad_day' };
+  } else {
+    targetDay = beijingDayKey(now - DAY_MS);
+  }
+  const prevDay = beijingDayKey(Date.parse(targetDay + 'T00:00:00+08:00') - DAY_MS);
+  let metrics;
+  try {
+    metrics = await loadDailyMetrics(env.DB, targetDay, prevDay);
+  } catch (error) {
+    return { ok: false, error: 'query_failed', detail: (error && error.message) || String(error) };
+  }
+  const message = buildDailyMail({ day: targetDay, prevDay, metrics, panelUrl: mailPanelUrl(env) });
+  return { ok: true, day: targetDay, prevDay, metrics, message };
+}
+
+/** 定时日报：数据 → 模板 → 发信；整体 try 包裹，失败的这一天不补发 */
+async function sendDailyDigest(env, scheduledTime) {
+  try {
+    const digest = await buildDigest(env, scheduledTime);
+    if (!digest.ok) {
+      console.warn('mail_daily_skipped ' + digest.error);
+      return;
+    }
+    const result = await sendMail(env, digest.message);
+    console.log(JSON.stringify({ event: 'mail_daily', day: digest.day, ok: !!result.ok, via: result.via || '', error: result.error || '' }));
+  } catch (error) {
+    console.warn('mail_daily_failed ' + ((error && error.message) || String(error)));
+  }
+}
+
+/** 口令保护的自测入口：GET /api/digest 预览，?day=YYYY-MM-DD 指定统计日，?send=1 真发 */
+async function handleDigest(request, env) {
+  if (request.method !== 'GET') return logJson({ ok: false, error: 'method_not_allowed' }, 405);
+  const url = new URL(request.url);
+  const day = String(url.searchParams.get('day') || '');
+  const digest = await buildDigest(env, Date.now(), day);
+  if (!digest.ok) {
+    const status = digest.error === 'bad_day' ? 400 : digest.error === 'storage_unavailable' ? 503 : 500;
+    return logJson({ ok: false, error: digest.error, detail: digest.detail || '' }, status);
+  }
+  const payload = {
+    ok: true,
+    day: digest.day,
+    prevDay: digest.prevDay,
+    subject: digest.message.subject,
+    metrics: digest.metrics,
+    text: digest.message.text,
+  };
+  if (url.searchParams.get('send') !== '1') return logJson(payload);
+  const result = await sendMail(env, digest.message);
+  return logJson({ ...payload, ok: !!result.ok, mail: result }, result.ok ? 200 : 502);
 }
 
 /* 下面两个接口都在口令保护之内：列表只回摘要，详情按 id 取回完整上报体。 */
